@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { servers } from './support/cli';
-import { redeemLink } from './support/browser';
+import { openQuickStart, redeemLink } from './support/browser';
 import { createWorkspaceWithSlug } from './support/workspace';
 
 // The inbox panes keep to their own columns (Paper "15 Inbox": I5-a nothing open, I1-a a conversation, M-I2 a
-// conversation on a phone): nothing open shows no reply box and no details, the setup guide stays over the list,
-// and the conversation's header keeps its labels on one line.
+// conversation on a phone): nothing open shows no reply box and no details, Quick start's checklist ends inside the
+// list column, nothing floats over the rows, and the conversation's header keeps its labels on one line.
 const base = servers.main;
 const headers = { Origin: base };
 
@@ -72,11 +72,10 @@ const linesOf = (locator: Locator) => locator.evaluate((element) => {
 test.describe('at 1440 px', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('with nothing open the inbox and Mentions show no reply box and no details, and the open setup guide stays over the list', async ({ page }) => {
+  test('with nothing open the inbox and Mentions show no reply box and no details, and the Quick start checklist ends inside the list column', async ({ page }) => {
     await newWorkspace(page, 'Empty Panes');
     await page.goto(`${base}/`);
-    const guide = page.getByRole('region', { name: 'Finish setting up' });
-    await expect(guide).toBeVisible();
+    const guide = await openQuickStart(page);
     const center = page.locator('.conversation-center');
     await expect(center).toContainText('Nothing to open here.');
     await expect(page.getByLabel('Message body')).toHaveCount(0);
@@ -87,8 +86,9 @@ test.describe('at 1440 px', () => {
     expect.soft(Math.round((await box(center)).x + (await box(center)).width), 'the thread pane runs to the right edge of the inbox')
       .toBe(Math.round((await box(page.locator('.inbox-shell'))).x + (await box(page.locator('.inbox-shell'))).width));
     const open = await box(guide);
-    expect.soft(open.x + open.width, 'the open guide ends inside the list column').toBeLessThanOrEqual(list.x + list.width + 0.5);
+    expect.soft(open.x + open.width, 'the open checklist ends inside the list column').toBeLessThanOrEqual(list.x + list.width + 0.5);
     await page.screenshot({ path: test.info().outputPath('inbox-nothing-open-1440.png') });
+    await page.keyboard.press('Escape');
 
     await page.goto(`${base}/mentions`);
     await expect(page.getByRole('region', { name: 'Mentions' })).toBeVisible();
@@ -97,7 +97,7 @@ test.describe('at 1440 px', () => {
     await page.screenshot({ path: test.info().outputPath('mentions-nothing-open-1440.png') });
   });
 
-  test('a conversation keeps its form and address on one line, the guide never hides a row, and the search box shows its whole placeholder', async ({ page }) => {
+  test('a conversation keeps its form and address on one line, nothing floats over a row, and the search box shows its whole placeholder', async ({ page }) => {
     const suffix = await newWorkspace(page, 'Header Panes');
     await formConversations(page, suffix, 10);
     await page.goto(`${base}/`);
@@ -133,20 +133,17 @@ test.describe('at 1440 px', () => {
     expect.soft(pillBox.height, 'the pill is one line high, not stretched to an oval').toBeLessThanOrEqual(22);
     expect.soft(Math.abs((pillBox.y + pillBox.height / 2) - (contactBox.y + contactBox.height / 2)), 'the address sits beside the pill').toBeLessThanOrEqual(2);
 
-    // Folded, the guide sits under the list's last row, never over a row.
-    const launcher = page.getByRole('button', { name: /Finish setting up/ });
-    await expect(launcher).toBeVisible();
+    // Nothing floats over the list: the point at the foot of the list's last row on screen is that row's own.
     const scroll = await box(page.locator('.conversation-scroll'));
-    expect.soft((await box(launcher)).y, 'the folded guide sits below the list rows').toBeGreaterThanOrEqual(scroll.y + scroll.height - 0.5);
+    expect.soft(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('.conversation-item')), { x: scroll.x + 24, y: scroll.y + scroll.height - 12 }),
+      'the foot of the list shows a row, not a floating guide').toBe(true);
     await page.screenshot({ path: test.info().outputPath('conversation-1440.png') });
 
-    // Open, it stays inside the list column.
-    await launcher.click();
-    const guide = page.getByRole('region', { name: 'Finish setting up' });
-    await expect(guide).toBeVisible();
+    // Quick start's checklist stays inside the list column, never over the conversation.
+    const guide = await openQuickStart(page);
     const list = await box(page.locator('.list-pane'));
     const open = await box(guide);
-    expect.soft(open.x + open.width, 'the open guide ends inside the list column').toBeLessThanOrEqual(list.x + list.width + 0.5);
+    expect.soft(open.x + open.width, 'the open checklist ends inside the list column').toBeLessThanOrEqual(list.x + list.width + 0.5);
     await page.screenshot({ path: test.info().outputPath('conversation-guide-open-1440.png') });
   });
 });
@@ -182,17 +179,16 @@ test.describe('at 390 px', () => {
     }), 'the notice shows all its words').toBe(true);
     await page.screenshot({ path: test.info().outputPath('conversation-390.png') });
 
-    // The list: once scrolled to its end, the folded guide leaves the last row in sight.
+    // The list: once scrolled to its end, nothing floats over the last row.
     await page.goto(`${base}/`);
     const rows = page.locator('.conversation-scroll > .conversation-item');
     await expect(rows).toHaveCount(10);
     await page.screenshot({ path: test.info().outputPath('inbox-list-390.png') });
-    const launcher = page.getByRole('button', { name: /Finish setting up/ });
-    await expect(launcher).toBeVisible();
     await rows.last().scrollIntoViewIfNeeded();
     for (let turn = 0; turn < 4; turn++) await page.mouse.wheel(0, 2000);
-    await expect.poll(async () => (await box(rows.last())).y + (await box(rows.last())).height, { message: 'the last row ends above the folded guide' })
-      .toBeLessThanOrEqual((await box(launcher)).y + 0.5);
+    const last = await box(rows.last());
+    expect.soft(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.conversation-item') !== null, { x: last.x + 24, y: last.y + last.height / 2 }),
+      'the last row is in sight, with nothing over it').toBe(true);
     await page.screenshot({ path: test.info().outputPath('inbox-list-end-390.png') });
   });
 });

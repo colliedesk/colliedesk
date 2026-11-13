@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
-import { redeemLink } from './support/browser';
+import { openQuickStart, redeemLink } from './support/browser';
 
 // The setup guide and the setup flow's email step each need data and chunks. They must be asked for together:
 // a request that leaves only after another one came back costs a round trip on every visit from far away.
@@ -31,16 +31,15 @@ async function slowNetwork(page: Page) {
   await session.send('Network.emulateNetworkConditions', { offline: false, latency: roundTrip, downloadThroughput: -1, uploadThroughput: -1 });
 }
 
-test('the setup guide asks for its data and its chunk together, and the email step asks for its list and its chunks together', async ({ page }) => {
+test('Quick start asks for its data and its checklist chunk together, and the email step asks for its list and its chunks together', async ({ page }) => {
   const suffix = uniqueSuffix();
   await redeemLink(page, createWorkspace(`Parallel Desk ${suffix}`, `admin-${suffix}@acme.example`, baseURL));
   await slowNetwork(page);
 
-  // The inbox: the guide's data is not asked for after the session, and its chunk not after the data.
+  // Any page: Quick start's data is not asked for after the session, and its checklist chunk not after the data.
   const inbox = record(page);
   await page.goto(baseURL);
-  const guide = page.getByRole('region', { name: 'Finish setting up' });
-  await expect(guide).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: /^Quick start/ })).toBeVisible();
   const me = first(inbox, /\/api\/v1\/auth\/me$/);
   const setup = first(inbox, /\/api\/v1\/workspace\/setup$/);
   const checklist = first(inbox, /setup-checklist-.*\.js$/);
@@ -50,7 +49,8 @@ test('the setup guide asks for its data and its chunk together, and the email st
   expect(setup!.started, 'setup data left before the session came back').toBeLessThan(me!.finished!);
   expect(checklist!.started, 'the chunk left before the data came back').toBeLessThan(setup!.finished!);
 
-  // The email step of the setup flow: opened from the guide, everything it needs leaves at the click.
+  // The email step of the setup flow: opened from Quick start, everything it needs leaves at the click.
+  const guide = await openQuickStart(page);
   const email = record(page);
   const clicked = Date.now();
   await guide.getByRole('link', { name: /Receive customer email/ }).click();

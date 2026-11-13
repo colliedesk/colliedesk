@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { servers, uniqueSuffix } from './support/cli';
-import { redeemLink } from './support/browser';
+import { openQuickStart, redeemLink } from './support/browser';
 import { FakeFreshdesk, fixture } from './support/fake-freshdesk';
 import { createWorkspaceWithSlug } from './support/workspace';
 
@@ -18,8 +18,8 @@ test('in-app freshdesk import: an admin reads the account, imports it in the bac
   await fake.start();
   try {
     await redeemLink(page, workspace.url);
-    // The empty inbox leads an admin to the import, on its step of the setup flow.
-    await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Import from Freshdesk/ }).click();
+    // Quick start leads an admin to the import, on its step of the setup flow.
+    await (await openQuickStart(page)).getByRole('link', { name: /Import from Freshdesk/ }).click();
     await expect(page).toHaveURL(`${baseURL}/setup/import`);
     await expect(page.getByRole('heading', { name: 'Import from Freshdesk', level: 1 })).toBeVisible();
 

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { servers } from './support/cli';
-import { expectIdentityVisible, redeemLink } from './support/browser';
+import { expectIdentityVisible, openQuickStart, redeemLink } from './support/browser';
 import { createWorkspaceWithSlug } from './support/workspace';
 
 // A narrow window (a phone browser that does not report a touch pointer, or a small desktop window)
@@ -30,7 +30,11 @@ async function newDesk(page: Page, label: string): Promise<void> {
 test('on a 375 px screen the empty inbox steps, the composer, every email setup step and the settings sections are tap-sized', async ({ page }) => {
   await newDesk(page, 'Narrow Desk');
   await page.goto(`${servers.main}/`);
-  await expectTapSized(page.getByRole('region', { name: 'Finish setting up' }), 'setup guide rows and Hide');
+  // The top row's Quick start and pen, the top bar's search icon, then the rows of Quick start and Skip these.
+  await expectTapSized(page.getByRole('navigation', { name: 'Main' }), 'Quick start and the pen', '.quick-start-button, .sidebar-new');
+  await expectTapSized(page.locator('.app-topbar'), 'the search icon and Help');
+  await expectTapSized(await openQuickStart(page), 'Quick start rows and Skip these');
+  await page.keyboard.press('Escape');
 
   const headers = { Origin: servers.main };
   const contact = await page.request.post(`${servers.main}/api/v1/contacts`, { headers, data: { name: 'Narrow Customer', email: `narrow-${Date.now()}@example.com` } });
@@ -92,8 +96,7 @@ test('on a 375 px screen the Mentions tabs and Mark all read are tap-sized, and 
   const lines = await page.locator('.inbox-shell').evaluate((shell, below) => [shell, ...Array.from(shell.querySelectorAll<HTMLElement>('*'))].flatMap((element) => {
     const style = getComputedStyle(element);
     const box = element.getBoundingClientRect();
-    // The setup guide floats over the page; its own rows are not lines of the list.
-    if (box.width === 0 || box.height === 0 || element.closest('.setup-dock')) return [];
+    if (box.width === 0 || box.height === 0) return [];
     const drawn = (side: 'Top' | 'Bottom') => parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== 'none' && style[`border${side}Color`] !== 'rgba(0, 0, 0, 0)';
     const name = `${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}`;
     return [...(drawn('Top') && box.top > below ? [`${name} top at ${Math.round(box.top)}`] : []), ...(drawn('Bottom') && box.bottom > below ? [`${name} bottom at ${Math.round(box.bottom)}`] : [])];
