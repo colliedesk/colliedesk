@@ -80,8 +80,7 @@ test('freshdesk import: reconcile OK with exact counts, tickets searchable with 
     expect(all.items).toHaveLength(1); // 300 imported + 1 pre-import = 301 = 3 full pages + 1
 
     // In the inbox: search finds the ticket, the row shows the original date with its year.
-    await page.reload();
-    await page.getByRole('searchbox', { name: 'Search conversations' }).fill(fixture.searchableWord);
+    await page.goto(`${baseURL}/?search=${encodeURIComponent(fixture.searchableWord)}&status=all`);
     const row = page.getByRole('button', { name: /Fixture ticket 42: parcel stuck in Rotterdam/ });
     await expect(row).toHaveCount(1);
     // The row's time is the customer's follow-up (18:10), not the agent's answer after it (18:20) or the last change.

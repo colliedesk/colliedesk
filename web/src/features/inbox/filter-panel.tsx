@@ -29,6 +29,8 @@ export interface FilterPartProps {
   conversations?: Conversation[];
   // The signed-in agent: listed as Me, never a second time under their name.
   currentAgentId?: string;
+  // Sort before Filter, as the one-row list toolbar draws them; beside the search box Filter comes first.
+  sortFirst?: boolean;
 }
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
@@ -109,18 +111,21 @@ export function FilterBar(props: FilterPartProps) {
   const sort = query.sort ?? defaultSort;
   const active = menuKeys.filter((key) => has(query, key)).length
     + (!has(query, 'created_after') && has(query, 'created_before') ? 1 : 0) + (!has(query, 'updated_after') && has(query, 'updated_before') ? 1 : 0);
+  // An icon with the order in its tip; the native list of orders opens over it.
+  const sortPick = <label className="sort-pick" data-tip={`${messages.inboxSort}: ${text.sorts[sort as keyof typeof text.sorts] ?? sort}`}><ArrowUpDownIcon />
+    <select className="sort-field" aria-label={messages.inboxSort} value={sort} onChange={(event) => set('sort', event.currentTarget.value === defaultSort ? undefined : event.currentTarget.value)}>
+      {offeredSorts.concat(offeredSorts.includes(sort) ? [] : [sort]).map((value) => <option key={value} value={value}>{text.sorts[value as keyof typeof text.sorts] ?? value}</option>)}
+    </select></label>;
+  // The menu keeps its place among the children either way, so it stays open when the layout changes under it.
   return (
     <>
+      {props.sortFirst && sortPick}
       <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut} onToggle={(event) => { if (event.currentTarget.open) setOpened(true); }}>
         <summary data-tip={messages.filter}><FilterIcon /><span className="sr-only">{messages.filter}</span>
           {active > 0 && <span className="filter-count" aria-label={messages.filtersActive(active)}>{active}</span>}</summary>
         <div className="filter-popover" role="group" aria-label={messages.filter}><FilterPanel {...props} opened={opened} /></div>
       </details>
-      {/* An icon with the order in its tip; the native list of orders opens over it. */}
-      <label className="sort-pick" data-tip={`${messages.inboxSort}: ${text.sorts[sort as keyof typeof text.sorts] ?? sort}`}><ArrowUpDownIcon />
-        <select className="sort-field" aria-label={messages.inboxSort} value={sort} onChange={(event) => set('sort', event.currentTarget.value === defaultSort ? undefined : event.currentTarget.value)}>
-          {offeredSorts.concat(offeredSorts.includes(sort) ? [] : [sort]).map((value) => <option key={value} value={value}>{text.sorts[value as keyof typeof text.sorts] ?? value}</option>)}
-        </select></label>
+      {!props.sortFirst && sortPick}
     </>
   );
 }

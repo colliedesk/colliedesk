@@ -69,7 +69,7 @@ for (const width of [1440, 1280]) {
     await page.locator('.list-pane').screenshot({ path: test.info().outputPath(`list-${width}.png`) });
 
     // A search adds All and Closed (I4-a): five tabs never squeeze their words together; the row scrolls instead.
-    await page.getByRole('searchbox', { name: 'Search conversations' }).fill('Question');
+    await page.goto(`${servers.main}/?search=Question&status=all`);
     await expect(status.getByRole('radio')).toHaveCount(5);
     for (const gap of await gapsOf()) expect.soft(gap, 'space between two of five tabs').toBeGreaterThanOrEqual(12);
     await page.locator('.list-pane').screenshot({ path: test.info().outputPath(`list-search-${width}.png`) });

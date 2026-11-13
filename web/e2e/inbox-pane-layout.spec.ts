@@ -105,8 +105,12 @@ test.describe('at 1440 px', () => {
     await expect(rows).toHaveCount(10);
 
     // The search box reads "Search conversations" in full: its placeholder's box (inside the input) is as wide as
-    // the words.
+    // the words. It shows empty while a filter is on (every conversation here came through a web form), beside the
+    // Filter count.
+    await page.goto(`${base}/?channel=web_form`);
+    await expect(rows).toHaveCount(10);
     const search = page.getByRole('searchbox', { name: 'Search conversations' });
+    await expect(search).toHaveValue('');
     const words = await search.evaluate((input: HTMLInputElement) => {
       const style = getComputedStyle(input);
       const context = document.createElement('canvas').getContext('2d')!;

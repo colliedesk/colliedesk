@@ -36,8 +36,10 @@ beforeAll(async () => {
 test('shows the dense inbox filters and three-pane conversation workspace', async () => {
   render(<InboxPage />);
   const filters = screen.getByRole('search', { name: /inbox/i });
-  expect(screen.getByRole('searchbox', { name: /search conversations/i })).toBeInTheDocument();
+  // At rest the list is one row: the status tabs, then Sort and Filter; the search box opens from the app's Search.
+  expect(within(filters).queryByRole('searchbox')).not.toBeInTheDocument();
   expect(within(filters).getByRole('radiogroup', { name: 'Status' })).toBeInTheDocument();
+  expect(within(filters).getByRole('combobox', { name: 'Sort' })).toBeInTheDocument();
   fireEvent.click(within(filters).getByText('Filter'));
   await screen.findByRole('checkbox', { name: 'Urgent' });
   const menu = within(filters).getByRole('group', { name: 'Filter' });
@@ -254,7 +256,7 @@ test('an empty filtered list offers a way out that clears every filter back to t
   // The inbox follows the filters in the address; this stands in for it.
   function Routed() {
     const [query, setQuery] = useState<InboxQuery>({});
-    return <InboxPage conversations={[]} filtered query={query} onQuery={(next) => { setQuery(next); onQuery(next); }} />;
+    return <InboxPage conversations={[]} filtered query={query} searchSignal={1} onQuery={(next) => { setQuery(next); onQuery(next); }} />;
   }
   render(<Routed />);
   fireEvent.change(screen.getByRole('searchbox', { name: /search conversations/i }), { target: { value: 'refund' } });
@@ -592,8 +594,8 @@ test('the list header leaves the page title and New conversation to the app fram
 
 test('Search in the sidebar puts the focus in the inbox search box', () => {
   const { rerender } = render(<InboxPage conversations={[conversation]} searchSignal={0} />);
-  const box = screen.getByRole('searchbox', { name: 'Search conversations' });
-  expect(box).not.toHaveFocus();
+  // At rest there is no search box; the sidebar's Search opens it with the focus in it.
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   rerender(<InboxPage conversations={[conversation]} searchSignal={1} />);
   expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveFocus();
 });

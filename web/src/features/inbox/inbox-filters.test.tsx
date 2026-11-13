@@ -155,7 +155,8 @@ test('every active filter shows as a chip that removes it, and Clear all goes ba
   expect(onChange).toHaveBeenLastCalledWith({});
   expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
   expect(screen.getByRole('radio', { name: 'Open' })).toBeChecked();
-  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveValue('');
+  // Nothing is filtered any more, so the list is back on its one row, without the search box.
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
 });
 
 // The address updates after a navigation, a moment after each key. Typed text must not jump back meanwhile.
@@ -188,7 +189,8 @@ test('text typed faster than the address updates is kept, and a change from else
 // A form inside a form is invalid HTML: the browser submits the outer one natively (a full page load to
 // /?view-scope=on) and the saved view is never saved. The filters are a search region, not a form.
 test('the filters are not a form, so the forms of the views menu submit on their own', () => {
-  render(<InboxFilters tags={tags} query={{}} views={<form aria-label="Save view form" />} />);
+  // The views menu sits beside the search box, which a search shows.
+  render(<InboxFilters tags={tags} query={{ search: 'refund', status: 'all' }} views={<form aria-label="Save view form" />} />);
   expect(screen.getByRole('search', { name: 'Inbox' })).toBeInTheDocument();
   expect(screen.getByRole('form', { name: 'Save view form' }).parentElement?.closest('form')).toBeNull();
 });
@@ -221,11 +223,78 @@ test('a sort set by a link that the menu does not offer still shows as chosen', 
   expect(sort).toHaveValue('created_asc');
 });
 
-test('search and Filter come before the status tabs in tab order, as they do on screen', () => {
-  render(<Harness />);
+// The list starts on one row: the status tabs, then Sort and Filter on the right. The search box and the chips show
+// only while a search or a filter is on, so what a person reads first are the tabs.
+const follows = (first: Node, next: Node) => Boolean(first.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+test('at rest the list shows no search box: the status tabs come first, then Sort and Filter, on screen and for Tab', async () => {
+  render(<InboxFilters tags={tags} query={{}} views={<details aria-label="Saved views" />} />);
+  await screen.findByRole('option', { name: 'Due first' });
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
+  // The saved views sit beside the search box (the sidebar lists them at rest).
+  expect(screen.queryByRole('group', { name: 'Saved views' })).not.toBeInTheDocument();
+  const order = [screen.getAllByRole('radio')[0], screen.getByRole('combobox', { name: 'Sort' }), screen.getByText('Filter')];
+  for (let index = 1; index < order.length; index++) expect(follows(order[index - 1], order[index])).toBe(true);
+});
+
+test('a search in the address shows the search box with its words above the status tabs, with Filter, Sort and the views beside it', () => {
+  render(<InboxFilters tags={tags} query={{ search: 'hana', status: 'all' }} views={<details aria-label="Saved views" />} />);
   const search = screen.getByRole('searchbox', { name: 'Search conversations' });
-  const firstTab = screen.getAllByRole('radio')[0];
-  expect(search.compareDocumentPosition(firstTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(search).toHaveValue('hana');
+  const order = [search, screen.getByText('Filter'), screen.getByRole('combobox', { name: 'Sort' }), screen.getByRole('group', { name: 'Saved views' }), screen.getAllByRole('radio')[0]];
+  for (let index = 1; index < order.length; index++) expect(follows(order[index - 1], order[index])).toBe(true);
+  expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
+});
+
+test('a filter shows the search box and the Filter count above the tabs, and the chips below them', async () => {
+  render(<Harness initial={{ priority: 'urgent', assignee: 'me' }} />);
+  const search = screen.getByRole('searchbox', { name: 'Search conversations' });
+  expect(search).toHaveValue('');
+  expect(screen.getByLabelText('2 filters active')).toBeInTheDocument();
+  const chips = await screen.findByRole('list', { name: 'Active filters' });
+  expect(follows(search, screen.getAllByRole('radio')[0])).toBe(true);
+  expect(follows(screen.getAllByRole('radio')[0], chips)).toBe(true);
+});
+
+// The app's Search (the sidebar today, the top bar's search later) asks the list for its search box.
+function SearchHarness({ onChange }: { onChange?: (query: InboxQuery) => void }) {
+  const [query, setQuery] = useState<InboxQuery>({});
+  const [signal, setSignal] = useState(0);
+  return <><button type="button" onClick={() => setSignal((count) => count + 1)}>App search</button>
+    <InboxFilters tags={tags} query={query} focusSignal={signal} onChange={(next) => { setQuery(next); onChange?.(next); }} /></>;
+}
+const openSearch = () => fireEvent.click(screen.getByRole('button', { name: 'App search' }));
+
+test('the app\'s Search opens the search box with the focus in it, and the words typed search every status', async () => {
+  const onChange = vi.fn();
+  render(<SearchHarness onChange={onChange} />);
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  openSearch();
+  const search = screen.getByRole('searchbox', { name: 'Search conversations' });
+  expect(search).toHaveFocus();
+  fireEvent.change(search, { target: { value: 'invoice' } });
+  await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ search: 'invoice', status: 'all' }));
+});
+
+test('an empty search box closes again on Escape, leaving the focus on the chosen tab, or when the focus leaves the filters', () => {
+  render(<><SearchHarness /><button type="button">Elsewhere</button></>);
+  openSearch();
+  fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Search conversations' }), { key: 'Escape' });
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: 'Open' })).toHaveFocus();
+  openSearch();
+  fireEvent.blur(screen.getByRole('searchbox', { name: 'Search conversations' }), { relatedTarget: screen.getByRole('button', { name: 'Elsewhere' }) });
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+});
+
+test('a search box with words in it stays open when the focus leaves it', () => {
+  render(<><SearchHarness /><button type="button">Elsewhere</button></>);
+  openSearch();
+  const search = screen.getByRole('searchbox', { name: 'Search conversations' });
+  fireEvent.change(search, { target: { value: 'refund' } });
+  fireEvent.blur(search, { relatedTarget: screen.getByRole('button', { name: 'Elsewhere' }) });
+  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveValue('refund');
 });
 
 test('the Filter menu closes when keyboard focus leaves it and on Escape', async () => {
@@ -244,7 +313,8 @@ test('the Filter menu closes when keyboard focus leaves it and on Escape', async
 
 test('searching from the default Open view searches every status, like Freshdesk does', async () => {
   const onChange = vi.fn();
-  render(<Harness onChange={onChange} />);
+  render(<SearchHarness onChange={onChange} />);
+  openSearch();
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search conversations' }), { target: { value: 'invoice' } });
   await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ search: 'invoice', status: 'all' }));
   expect(screen.getByRole('radio', { name: 'All' })).toBeChecked();
@@ -252,8 +322,9 @@ test('searching from the default Open view searches every status, like Freshdesk
 
 test('a status the agent picked stays when they search', async () => {
   const onChange = vi.fn();
-  render(<Harness onChange={onChange} />);
+  render(<SearchHarness onChange={onChange} />);
   fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
+  openSearch();
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search conversations' }), { target: { value: 'invoice' } });
   await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ status: 'pending', search: 'invoice' }));
 });
@@ -262,7 +333,8 @@ test('typing a word sends one search after the pause, not one per key', async ()
   vi.useFakeTimers();
   try {
     const onChange = vi.fn();
-    render(<Harness onChange={onChange} />);
+    render(<SearchHarness onChange={onChange} />);
+    openSearch();
     const search = screen.getByRole('searchbox', { name: 'Search conversations' });
     for (const text of ['r', 're', 'ref', 'refu', 'refun', 'refund']) {
       fireEvent.change(search, { target: { value: text } });

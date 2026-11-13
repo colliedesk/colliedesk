@@ -111,6 +111,10 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 - The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every
   status but Spam. When nothing is open but the workspace has conversations, the list says so instead of
   showing the new-workspace steps.
+- The top of the list is one row: the **Status** tabs, then **Sort** and **Filter** on the right. While you
+  search or a filter is on, the search box takes a row of its own above the tabs, with **Filter**, **Sort** and
+  **Views** beside it, and the chips of the filters show below the tabs. When the tabs do not fit beside the icons,
+  they scroll sideways.
 - Pick a **Status** tab, and narrow further with **Filter** and **Sort**; see [Filter and sort](#filter-and-sort)
   below. **Open**, **Pending** and **Resolved** are always there. **All** and **Closed** join them while you search
   or a filter is on, and **Spam** once it holds a conversation.
@@ -118,7 +122,11 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
   on; the numbers follow the filters on screen. While you search, the tab counts the results when they fit
   on one page. The API gives the same numbers with `counts=true` on `GET /api/v1/conversations`
   (`status_counts`).
-- **Search conversations** matches the subject, message text and the customer's name and email, in every status but Spam unless you picked a
+- Start a search with **Search** (from any page, **Ctrl K**, or **⌘K** on a Mac). The list then shows its search
+  box, **Search conversations**, above the status tabs, with your words in it, for as long as the search is on;
+  refine the words there, or select its **×** to clear the search. An empty box closes again when you press
+  **Esc** or move on.
+- A search matches the subject, message text and the customer's name and email, in every status but Spam unless you picked a
   status tab first, so imported closed tickets are found; the view stays on **All** after you clear
   the search. Characters such as `%` and `_` are matched
   literally.
@@ -185,7 +193,8 @@ another year does not. Search words that are a code find that conversation, ahea
 
 ## Filter and sort
 
-**Filter** (the funnel icon next to the search box) holds every filter. Ticking several values of one filter shows
+**Filter** (the funnel icon at the right of the status tabs; next to the search box while you search or a filter
+is on) holds every filter. Ticking several values of one filter shows
 conversations with any of them; each filter you add narrows the list further.
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me**, each other teammate, or **Unassigned**.
@@ -210,7 +219,8 @@ conversations with any of them; each filter you add narrows the list further.
   status (`organization=`).
 
 Each active filter shows as a chip under the status tabs; select its **x** to remove it, or **Clear all**
-to go back to **Open**. The Filter button counts the filters that are on.
+to go back to **Open**. While a filter is on, the search box shows above the tabs, and the Filter button is
+filled and counts the filters that are on.
 
 A link can set filters that the menu does not list. They work and show as chips:
 `awaiting=customer` (**Waiting on the customer**: the newest message is your team's reply),
@@ -235,7 +245,9 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 
 ## Saved views
 
-**Views** (the bookmark icon next to Sort) keeps sets of filters under a name.
+**Views** (the bookmark icon next to Sort, beside the search box) keeps sets of filters under a name. It shows
+while you search or a filter is on; with neither, open the search box with **Search** to reach it. The sidebar
+lists your views at all times.
 - Set the filters, sort and search you want, then under **Save these filters** type a name, choose **Only
   me** or **Everyone in the workspace**, and select **Save view**.
 - Select a view to open its filters. The view that matches the list on screen is marked.
@@ -309,7 +321,7 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   ticks every row of this page (**Select all on this page**; a dash means some are ticked), how many are
   selected of the rows on the page (**3 of 23 selected**) and a row of icon buttons; hover or focus one to see its name:
   **Resolve** (one press), **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
-  **Tags**, **Spam** and **Clear selection**. The title, search and filters stay in view. There is no bulk delete.
+  **Tags**, **Spam** and **Clear selection**. Sort, Filter and, while it shows, the search box stay in view. There is no bulk delete.
   In the **Spam** tab the bar offers **Not spam** in place of **Resolve** and **Set status**; see [Spam](#spam).
 - With a conversation in the selection whose status may tell its customer (one of a Zalo OA, or one a
   Zalo message was moved into), **Tell customers** sits before the icons, ticked for each new selection: **Resolve** and **Set status** then tell each
