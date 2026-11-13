@@ -113,10 +113,18 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   preview); Data and billing: Data, Plan and billing. A page is its serif title, one line saying what it
   holds, then its sections (`SettingsFrame`, `settings-frame.tsx`). The menu lists pages, never a section of
   another page, and a page shows only when the person can see one of its sections. `/settings` opens Account;
-  on a phone it is the menu itself, and each page shows **All settings** (back to it) where the menu was, as
-  the inbox list and a conversation take turns. An old `/settings#…-heading` link opens the page that holds
-  that section (`settings-anchors.ts`). The help center's settings are the knowledge base's Settings tab.
-  Not built yet: the design's own settings sidebar with **Back to app** in place of the app rail.
+  on a phone it is the menu itself, and each page shows **‹ Settings** (named "All settings") above its title,
+  as the inbox list and a conversation take turns; a channel page's own "Back to channels" is then its one
+  back link. An old `/settings#…-heading` link opens the page that holds that section (`settings-anchors.ts`).
+  The help center's settings are the knowledge base's Settings tab and keep the app's sidebar.
+  On a wide screen Settings takes the sidebar: **Back to app** (and Esc) at its head, the menu under it, the
+  account row at its foot, and none of the app's places (`app-shell.tsx`, `back-to-app.tsx`). Traps: each
+  page still draws its own menu from what its roles show, into the sidebar's slot (`SettingsMenuSlot` in
+  `settings-nav.tsx`), so a page tested alone keeps its menu inline; the top bar, not the sidebar, names the
+  workspace and the person there (the sidebar has no workspace row); Back to app goes to the last address
+  outside `/settings` kept in `sessionStorage`, the inbox when none; Esc never leaves while a text field,
+  select, dialog or menu has it; folded, the sidebar keeps only the Back to app arrow. A test or a page that
+  needs the app's places from Settings goes through Back to app first.
 - Setup flow (`/setup`, owner decision 30/10/2026: Linear's onboarding, adapted): one step per screen, full
   screen on `--surface-1` without the rail, one centred column of 36 rem. It is the one exception to "no narrow
   centred column", because a single focused task is all the screen holds. A sticky header keeps the mark, the
