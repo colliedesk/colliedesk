@@ -219,8 +219,6 @@ features/settings/settings-messages.ts:settingsMessages.webFormDescription	95
 features/settings/settings-messages.ts:settingsMessages.workspaceNameHelp	189
 features/settings/targets/targets-messages.ts:targetsMessages.alertsLead	124
 features/settings/targets/targets-messages.ts:targetsMessages.alertsOff	72
-features/settings/targets/targets-messages.ts:targetsMessages.noHolidays	65
-features/settings/targets/targets-messages.ts:targetsMessages.onLead	92
 features/settings/targets/targets-messages.ts:targetsMessages.targetsLead	81
 features/settings/targets/targets-messages.ts:targetsMessages.targetsNote	126
 features/settings/web-form-section.tsx:embedMessages.codeHelp	187

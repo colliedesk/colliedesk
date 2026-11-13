@@ -1,10 +1,9 @@
 import { useId, useState } from 'react';
-import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ChangedElsewhereError, InvalidRequestError } from '../../../api/client';
+import { api } from '../../../api/client';
 import { channelsApi } from '../../../api/channels';
-import { responseTargetsApi, responseTargetsSchema, weekdays } from '../../../api/response-targets';
-import type { ResponseTargets, ResponseTargetsChange, Weekday } from '../../../api/response-targets';
+import { responseTargetsApi, weekdays } from '../../../api/response-targets';
+import type { ResponseTargets, Weekday } from '../../../api/response-targets';
 import { messages } from '../../../messages';
 import { useBillingShown } from '../../billing/billing-shown';
 import { saveState, useSaveFeedback } from '../save-feedback';
@@ -14,57 +13,18 @@ import { TimezoneSelect } from '../timezone-select';
 import { targetsMessages as m } from './targets-messages';
 import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoken, targetProblem, units, warnProblem } from './target-duration';
 import type { Duration, Unit } from './target-duration';
+import { OffCard } from './targets-off-card';
+import { Card, cardState, fieldErrors, useSave, withoutStamp } from './targets-shared';
 import { can } from '../../../lib/can';
 import '../../../ui/controls.css';
 import './targets.css';
 
-// Settings → Response targets: one document the server keeps whole. Each card edits its part and saves
-// the document with the rest as it was read; admins change it, agents read it.
+// Settings → Response targets: one document the server keeps whole. While measuring is off the page is one
+// card; on, each card edits its part and saves the document with the rest as it was read. Admins change it,
+// agents read it.
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
 type Priority = (typeof priorities)[number];
-
-function fieldErrors(error: unknown): Record<string, string> {
-  if (!(error instanceof InvalidRequestError)) return {};
-  const fields = error.detail?.fields;
-  return fields && typeof fields === 'object' ? Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
-}
-
-// What a PUT takes: the document without what only the server writes or what is the reader's own, with the
-// version it was read at (updated_at): a save after someone else's is refused, 409 changed_elsewhere.
-const withoutStamp = ({ enabled_at: _enabled, my_alert_email: _mine, ...rest }: ResponseTargets): ResponseTargetsChange => rest;
-
-// A card's save state: someone else's save in between is said in words of this page.
-const cardState = (save: Parameters<typeof saveState>[0]) => {
-  const state = saveState(save);
-  return save.isError && save.error instanceof ChangedElsewhereError ? { ...state, error: m.changedElsewhere } : state;
-};
-
-function useSave() {
-  const client = useQueryClient();
-  return useMutation({
-    // Refused for someone else's save: the page shows theirs; what is being typed stays (the cards keep an edited form).
-    onError: (error) => {
-      if (!(error instanceof ChangedElsewhereError)) return;
-      const current = responseTargetsSchema.safeParse(error.detail?.current);
-      if (current.success) client.setQueryData<ResponseTargets>(['response-targets'], (old) => ({ ...current.data, my_alert_email: current.data.my_alert_email ?? old?.my_alert_email }));
-      else void client.invalidateQueries({ queryKey: ['response-targets'] });
-    },
-    mutationFn: (value: ResponseTargetsChange) => responseTargetsApi.set(value),
-    // A save answers the workspace's document; the reader's own email choice is not in it, so it is kept.
-    onSuccess: (saved) => {
-      client.setQueryData<ResponseTargets>(['response-targets'], (current) => ({ ...saved, my_alert_email: saved.my_alert_email ?? current?.my_alert_email }));
-      void client.invalidateQueries({ queryKey: ['conversations'] });
-    },
-  });
-}
-
-function Card({ id, title, lead, children }: { id: string; title: string; lead?: string; children: ReactNode }) {
-  return <section className="settings-card" aria-labelledby={id}>
-    <div className="section-heading"><h2 id={id}>{title}</h2>{lead && <p>{lead}</p>}</div>
-    <div className="settings-body">{children}</div>
-  </section>;
-}
 
 export function TargetsRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -84,6 +44,7 @@ export function TargetsRoute() {
         {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
         {doc.isPending ? <div className="tg-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
           : doc.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void doc.refetch()}>{m.tryAgain}</button></p>
+          : !doc.data.enabled ? <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} />
           : <>
               <OnCard doc={doc.data} canManage={isAdmin} />
               <HoursCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} />
