@@ -717,11 +717,11 @@ span.kb-article-open { opacity: 0.35; }
 /* ── Design pass (Paper "19 Help center", H1-a … H5-b). Values from the design's own nodes; tokens only. ──
    The page: 32 px top, 40 px sides, content at most 1020 px wide. Title and the page's actions on one row,
    the section tabs under them on a hairline, then the work area. */
-.kb-articles-page, .media-page, .kb-languages-page { gap: var(--space-6); padding: var(--space-8) 40px var(--space-6); }
+.kb-articles-page, .media-page, .kb-languages-page, .kb-settings-page { gap: var(--space-6); padding: var(--space-8) 40px var(--space-6); }
 /* The design's content width; one variable so a shared layout width can replace it in one place. */
 .kb-frame { --kb-content-max: 1020px; }
 /* Not the visually hidden live regions (.sr-only): a full width made them overflow the page on a phone. */
-:is(.kb-articles-page, .media-page, .kb-languages-page) > :not(.sr-only) { width: 100%; max-width: var(--kb-content-max); }
+:is(.kb-articles-page, .media-page, .kb-languages-page, .kb-settings-page) > :not(.sr-only) { width: 100%; max-width: var(--kb-content-max); }
 .kb-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title actions" "tabs tabs"; align-items: start; gap: var(--space-6) var(--space-4); }
 .kb-head .kb-page-title { grid-area: title; font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
 .kb-head .kb-head-actions { grid-area: actions; margin-left: 0; }
@@ -779,7 +779,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-article-status .kb-dot-status { color: var(--text-1); font-size: var(--fs-small); line-height: 20px; }
 .kb-article-status .kb-dot-status::before { display: none; }
 .kb-article-status .kb-dot-status[data-status="draft"] { color: var(--text-2); }
-.kb-article-status small { font-size: var(--fs-label); }
+.kb-article-status small { overflow: visible; font-size: var(--fs-label); text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
 .kb-article-when { font-size: var(--fs-small); }
 .kb-article-open { color: var(--text-3); }
 .kb-article-open svg, .kb-order svg { width: 14px; height: 14px; }
@@ -910,7 +910,7 @@ span.kb-article-open { opacity: 0.35; }
 
 /* Phone and touch: the design pass above is sized for a mouse; fingers keep 44 px and the page its phone margins. */
 @media (max-width: 44rem) {
-  .kb-articles-page, .media-page, .kb-languages-page { gap: var(--space-4); padding: var(--space-3) var(--space-4) var(--space-6); }
+  .kb-articles-page, .media-page, .kb-languages-page, .kb-settings-page { gap: var(--space-4); padding: var(--space-3) var(--space-4) var(--space-6); }
   .kb-head { gap: var(--space-3); }
   .kb-sections a { min-height: var(--touch); }
   .kb-frame .segmented label, .kb-tabs button { min-height: var(--touch); }
