@@ -692,9 +692,14 @@ func AddChannelRow(ctx context.Context, tx pgx.Tx, workspaceID string, kind chan
 
 // ListChannels describes the workspace's live channels, oldest first.
 func (s *Store) ListChannels(ctx context.Context, workspaceID string, includeRemoved bool) ([]ChannelPublic, error) {
+	return s.listChannels(ctx, workspaceID, includeRemoved, "")
+}
+
+// listChannels is ListChannels of one type only; empty is every type.
+func (s *Store) listChannels(ctx context.Context, workspaceID string, includeRemoved bool, kind string) ([]ChannelPublic, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]ChannelPublic, error) {
-		rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+` FROM channels WHERE workspace_id=$1 AND ($2 OR deleted_at IS NULL)
-			ORDER BY deleted_at IS NOT NULL,created_at,id`, workspaceID, includeRemoved)
+		rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+` FROM channels WHERE workspace_id=$1 AND ($2 OR deleted_at IS NULL) AND ($3='' OR type=$3)
+			ORDER BY deleted_at IS NOT NULL,created_at,id`, workspaceID, includeRemoved, kind)
 		if err != nil {
 			return nil, fmt.Errorf("list channels: %w", err)
 		}

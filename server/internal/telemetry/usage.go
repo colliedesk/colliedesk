@@ -28,7 +28,7 @@ type usage struct {
 // The claim is taken before sending: a failed send skips that day rather than retrying.
 // On Colliedesk Cloud the per-workspace snapshots are read in the same transaction.
 // Only aggregates leave the transaction.
-func claimUsage(ctx context.Context, db *database.DB, cloud bool) (usage, bool, error) {
+func claimUsage(ctx context.Context, db *database.DB, cloud bool, emailState emailStateFunc) (usage, bool, error) {
 	var u usage
 	claimed := false
 	err := db.Privileged(ctx, database.PrivilegeTelemetry, func(tx pgx.Tx) error {
@@ -63,7 +63,7 @@ func claimUsage(ctx context.Context, db *database.DB, cloud bool) (usage, bool, 
 		if err != nil || !cloud {
 			return err
 		}
-		u.snapshots, err = readSnapshots(ctx, tx, time.Now())
+		u.snapshots, err = readSnapshots(ctx, tx, time.Now(), emailState)
 		return err
 	})
 	return u, claimed, err
