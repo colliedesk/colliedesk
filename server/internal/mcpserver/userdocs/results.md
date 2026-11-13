@@ -4,6 +4,10 @@
 for the last 30 days (the default) or the last 7. Every number is a link: it opens the inbox on the
 conversations it counts, in any status, so you can check it. Every role can read the page.
 
+Each row is a metric's name, its number and one short line. The ⓘ beside the name says how the
+number is counted and which days it covers. Until you import from Freshdesk (or Help Scout) the
+page describes Colliedesk alone: there is no "before" column and nothing to compare.
+
 The numbers are worked out in the background, never while you wait: the page says when they were
 last updated (usually within the hour). Nothing on the page changes your conversations.
 
@@ -63,18 +67,21 @@ customer wrote again (even just "thanks!") or a teammate reopened it.
 **Conversations per week.** Conversations in the window divided by its weeks, or by the weeks since
 your first conversation if that came later. Until a customer has started a conversation in
 Colliedesk (right after you move), there is no weekly number and nothing to compare: the page says
-so instead of showing "100% fewer".
+so instead of showing "100% fewer". While less than a week of conversations exists, the row shows
+the count ("3 conversations") and how many days it has so far, not a weekly rate that would only
+extrapolate them.
 
 **Handle time.** The time your team logged on a conversation in Freshdesk, added up, for the
 resolved conversations; the median. Colliedesk does not record time yet
 ([issue #119](https://github.com/colliedesk/colliedesk/issues/119)).
 
 **Small samples.** A median, a 90th percentile or a reopen rate needs at least 5 conversations; with
-fewer the page says "Too few" and how many there are.
+fewer the row says what it needs and how many there are so far, for example "Needs 5 answered
+conversations · 0 so far".
 
 **Status history.** Colliedesk records every status change since your server was updated to a
 version with this page (or since the workspace was created). A window that needs resolutions from
-before that says on which day it will be available.
+before that says "From" the day it will be available, and the day its status history must start.
 
 ## AI drafts
 
