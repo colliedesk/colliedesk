@@ -361,3 +361,20 @@ test('without any AI the summary says the drafts step has nothing to do, and /se
   const row = screen.getByRole('list', { name: 'Setup steps' }).querySelectorAll('li')[2];
   expect(row).toHaveTextContent('Turn on AI draftsNothing to do: no built-in AI on this server');
 });
+
+test('the hours line says what the preset will set and names the hours the server gives, so Settings and setup never disagree', async () => {
+  const sent = serve({ setup: progress({}, undefined, { kept: false, day_minutes: 540, hours: week('10:00', '19:00') }) });
+  open('/setup/reply_targets');
+  expect(await title('Choose when a reply is due')).toBeInTheDocument();
+  expect(await screen.findByText('Will set these business hours: Monday to Friday, 10:00 to 19:00, Europe/Berlin')).toBeInTheDocument();
+  fireEvent.click(flow().getByRole('button', { name: 'Use Same day' }));
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0].body).toMatchObject({ hours: week('10:00', '19:00') });
+});
+
+test('hours already saved are named as the hours in effect, not as something the preset sets', async () => {
+  serve({ setup: progress({}, undefined, { kept: true, day_minutes: 540, hours: week('08:00', '17:00') }), doc: () => ({ ...targetsDoc, hours: week('08:00', '17:00') }) });
+  open('/setup/reply_targets');
+  expect(await title('Choose when a reply is due')).toBeInTheDocument();
+  expect(await screen.findByText('Business hours in effect, kept by the preset: Monday to Friday, 08:00 to 17:00, Europe/Berlin')).toBeInTheDocument();
+});

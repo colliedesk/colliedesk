@@ -4,6 +4,7 @@ import { responseTargetsApi } from '../../api/response-targets';
 import type { ResponseTargets, ResponseTargetsChange } from '../../api/response-targets';
 import type { ReplyTargetPreset, ReplyTargetPresetKey, SetupProgress } from '../../api/schemas';
 import { messages } from '../../messages';
+import { hoursText, startingHours } from '../../lib/business-hours';
 import { MailIcon } from '../../ui/icons';
 import { failureReason } from './failure-reason';
 import { FlowActions } from './setup-flow-actions';
@@ -21,7 +22,7 @@ const priorities = ['urgent', 'high', 'normal', 'low'] as const;
 // version it was read at, so someone else's save in between is refused rather than overwritten.
 function presetDocument(doc: ResponseTargets, preset: ReplyTargetPreset, fallback: ResponseTargetsChange['hours']): ResponseTargetsChange {
   const { enabled_at: _enabled, my_alert_email: _mine, ...rest } = doc;
-  const hours = doc.hours.some((day) => day.open) ? doc.hours : fallback;
+  const { hours } = startingHours(doc.hours, fallback);
   return { ...rest, enabled: true, hours, targets: preset.targets, warn_before_minutes: 30 };
 }
 
@@ -113,7 +114,7 @@ export function ReplyTargetsStep({ state, setup, zone, importState, moves }: {
         {presets.map((item) => <Preset key={item.key} preset={item} day={day} selected={item.key === chosen} tag={item.key === suggestion.preset ? tag : undefined} onSelect={() => setPicked(item.key)} />)}
       </fieldset>
       <p className="setup-small">{m.dayNote(spokenMinutes(day))}</p>
-      <p className="setup-hours"><span>{ownHours ? m.ownHours(timezone) : m.hours(timezone, fromBrowser)}</span><a href="/settings/targets">{m.change}</a></p>
+      <p className="setup-hours"><span>{ownHours ? m.ownHours(hoursText(hours), timezone) : m.hours(hoursText(hours), timezone, fromBrowser)}</span><a href="/settings/targets">{m.change}</a></p>
       <TodayExample preset={preset} hours={hours} />
       {worked && <p className="setup-small">{worked}</p>}
       <p className="setup-small">{m.startsNote}</p>
