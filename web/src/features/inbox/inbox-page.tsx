@@ -290,6 +290,11 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
     wide.addEventListener('change', onChange);
     return () => wide.removeEventListener('change', onChange);
   }, []);
+  // With nothing open the thread pane says why in one line; a reply box and details would belong to no one. A
+  // conversation named by the address is on its way (or failed) and says nothing yet; a mention opens its
+  // conversation beside the Mentions list.
+  const emptyText = selected || threadOpen || conversationFailed ? undefined
+    : otherList ? messages.selectConversation : loading || failed ? undefined : messages.nothingToOpen;
   return (
     <main className="inbox-shell" data-view={threadOpen ? 'thread' : 'list'} data-details-open={detailsOpen}>
       {otherList ? <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={otherList.label}>
@@ -328,7 +333,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
       <div className="conversation-center panel">
         <TimelinePanel currentAgentId={currentAgentId} noticesFailed={noticesFailed} canManageChannels={canManageChannels} conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
           afterFirstCustomerMessage={aiTriage && selected ? <AITriageSlot placement="timeline" conversationId={selected.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
-            currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} /> : undefined} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
+            currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} /> : undefined} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} emptyText={emptyText} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           before={selected && <Part part={messageMovesPart} render={(part) => <part.MessageMovesLog key={selected.id} conversation={selected} timeline={timeline}
             timezone={timezone} currentAgentId={currentAgentId} agentNames={agentNames} />} />}
           messageLabel={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageIntakeLabel conversation={selected} message={item} />} />)}
@@ -336,30 +341,32 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           messageMenu={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageMoveMenu conversation={selected} message={item} timeline={timeline} timezone={timezone} />} />)}
           viewers={openViewers} onSetStatus={selected && onSetStatus ? (status, options) => onSetStatus(selected.id, status, options) : undefined}
           onSpam={selected && onSpam ? (spam) => applySpam([selected.id], spam) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
-        {outboundNotice && <p role="status" className="composer-notice"><span className="composer-notice-text" title={outboundNotice}>{outboundNotice}</span>
-          {canManageChannels && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
-        {sendsFrom && <p className="composer-from">{sendsFrom}</p>}
-        {selected && answerGoesToMailbox(replyMailbox) && <p className="composer-from">{messages.answerGoesToMailbox}</p>}
-        {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
-        {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
-          onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
-        <EarlierDrafts key={selected?.id} drafts={earlierDrafts} timezone={timezone} onRestore={onRestoreDraft} nextBefore={earlierDraftsNext} onLoadOlder={onLoadOlderDrafts} />
-        {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
-        <ReplyComposer key={draftKey ?? selected?.id} disabled={!selected} noReplies={noReplies} draftKey={draftKey} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
-          latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}
-          latestCustomerMessage={latestCustomerMessage}
-          savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
-          canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
-          // Send and resolve is offered while there is something to resolve; a resolved or closed one is reopened from the header.
-          onResolve={selected && onSetStatus && (selected.status === 'open' || selected.status === 'pending') ? () => onSetStatus(selected.id, 'resolved') : undefined}
-          resolveTells={selected && noticesOf(selected)?.includes('resolved') ? selected.channel_ref?.name ?? messages.theChannel : undefined}
-          aiDraftsFor={aiDrafts && selected ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId}
-          findSent={selected && onFindSent ? (key) => onFindSent(selected.id, key) : undefined} teammates={teammates} />
+        {selected && <>
+          {outboundNotice && <p role="status" className="composer-notice"><span className="composer-notice-text" title={outboundNotice}>{outboundNotice}</span>
+            {canManageChannels && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
+          {sendsFrom && <p className="composer-from">{sendsFrom}</p>}
+          {answerGoesToMailbox(replyMailbox) && <p className="composer-from">{messages.answerGoesToMailbox}</p>}
+          {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
+          {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
+            onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
+          <EarlierDrafts key={selected.id} drafts={earlierDrafts} timezone={timezone} onRestore={onRestoreDraft} nextBefore={earlierDraftsNext} onLoadOlder={onLoadOlderDrafts} />
+          {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
+          <ReplyComposer key={draftKey ?? selected.id} noReplies={noReplies} draftKey={draftKey} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
+            latestReplyNumber={!timelineLoading ? latestReply : undefined} timezone={timezone}
+            latestCustomerMessage={latestCustomerMessage}
+            savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
+            canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
+            // Send and resolve is offered while there is something to resolve; a resolved or closed one is reopened from the header.
+            onResolve={onSetStatus && (selected.status === 'open' || selected.status === 'pending') ? () => onSetStatus(selected.id, 'resolved') : undefined}
+            resolveTells={noticesOf(selected)?.includes('resolved') ? selected.channel_ref?.name ?? messages.theChannel : undefined}
+            aiDraftsFor={aiDrafts ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId}
+            findSent={onFindSent ? (key) => onFindSent(selected.id, key) : undefined} teammates={teammates} />
+        </>}
       </div>
-      <DetailsPanel autofix={autofix} conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate} aiTriage={aiTriage} onTriageApplied={onTriageApplied} currentAgentId={currentAgentId} canManage={canManage} onTriageWaiting={setTriageWaiting}
+      {selected && <DetailsPanel autofix={autofix} conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate} aiTriage={aiTriage} onTriageApplied={onTriageApplied} currentAgentId={currentAgentId} canManage={canManage} onTriageWaiting={setTriageWaiting}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined}
         onShowContactConversations={onQuery ? (contact) => onQuery({ contact, status: 'all' }) : undefined}
-        onShowOrganizationConversations={onQuery ? (organization) => onQuery({ organization, status: 'all' }) : undefined} />
+        onShowOrganizationConversations={onQuery ? (organization) => onQuery({ organization, status: 'all' }) : undefined} />}
       {guide}
     </main>
   );

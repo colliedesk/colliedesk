@@ -97,7 +97,7 @@ test('a ticket opened by its address asks for its messages and time entries at o
 
 // A ticket opened by its address that is not in the list shows nothing of another ticket: not its header, not its
 // composer. A reply typed under the wrong header would go to the wrong customer.
-test('a ticket opened by address that is not in the list never shows another ticket\'s header, and its composer stays disabled, while its detail is missing', async () => {
+test('a ticket opened by address that is not in the list never shows another ticket\'s header, and offers no reply box, while its detail is missing', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
   testRouter.params = { conversationId: bravo.id };
@@ -118,7 +118,7 @@ test('a ticket opened by address that is not in the list never shows another tic
     await waitFor(() => expect(api.messages).toHaveBeenCalledWith(bravo.id));
     await screen.findByRole('button', { name: /alpha conversation/i }); // the list has arrived, the detail has not
     expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
-    for (const box of screen.getAllByLabelText('Message body')) expect(box).toBeDisabled(); // nothing can be sent yet
+    expect(screen.queryByLabelText('Message body')).toBeNull(); // nothing can be sent yet: there is no reply box
     expect(api.messages).not.toHaveBeenCalledWith(alpha.id);
     resolveDetail(bravo);
     expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
@@ -149,7 +149,7 @@ test('a ticket whose detail fails to load never gets a usable composer, and noth
     await waitFor(() => expect(api.conversation).toHaveBeenCalledWith(bravo.id));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
-    for (const box of screen.getAllByLabelText('Message body')) expect(box).toBeDisabled();
+    expect(screen.queryByLabelText('Message body')).toBeNull();
     expect(api.createMessage).not.toHaveBeenCalled();
   } finally {
     testRouter.params = {};

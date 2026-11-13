@@ -11,8 +11,11 @@
 .filter-bar { position: relative; display: flex; align-items: center; gap: var(--space-1); }
 .search-field { position: relative; display: block; flex: 1 1 auto; min-width: 0; margin-right: var(--space-1); }
 .search-field svg { position: absolute; top: 50%; left: 10px; translate: 0 -50%; color: var(--text-3); pointer-events: none; }
-.search-field input { width: 100%; padding-left: 32px; border-color: transparent; background: var(--surface-2); }
+/* A narrower list cuts the placeholder with an ellipsis. */
+.search-field input { width: 100%; padding-left: 32px; border-color: transparent; background: var(--surface-2); text-overflow: ellipsis; }
 .search-field input:hover:not(:disabled) { border-color: transparent; background: var(--surface-3); }
+/* An empty box has nothing to clear: its placeholder gets the clear button's room, so it reads in full. */
+.search-field input:placeholder-shown::-webkit-search-cancel-button { display: none; }
 .filter-menu { position: static; }
 .filter-menu summary {
   min-height: var(--control, 32px); display: inline-flex; align-items: center; gap: var(--space-2); list-style: none; cursor: pointer;
@@ -218,7 +221,14 @@
 .timeline-panel { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .timeline-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-4) var(--space-6); }
 .timeline-header h2 { font-size: var(--fs-body); font-weight: 600; line-height: 24px; letter-spacing: 0; }
-.timeline-meta { display: flex; gap: var(--space-3); margin-top: var(--space-1); }
+/* One meta line (I1-a): the reference, the clock and the channel keep their size; the customer's address gives way
+   with an ellipsis instead of wrapping under them. */
+.timeline-meta { display: flex; align-items: center; gap: var(--space-3); min-width: 0; margin-top: var(--space-1); }
+.timeline-meta > :is(.ref-copy, .sla-mark, .channel-pill) { flex: none; }
+.timeline-meta > .timeline-contact { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Nothing open (I5-a): one line in the middle of the pane, which takes the details' column too. */
+.timeline-panel > .timeline-empty { grid-row: 1 / -1; align-self: center; justify-self: center; margin: 0; padding: var(--space-4); color: var(--text-2); text-align: center; }
+@media (min-width: 80rem) { .inbox-shell:not(:has(> .details-panel)) > .conversation-center { grid-column: 2 / -1; } }
 .details-toggle, .drawer-close, .thread-back { display: none; }
 .timeline-header > div:first-of-type { flex: 1 1 14rem; min-width: 0; }
 /* Resolve (or Reopen) and Show details stay together; on a narrow thread they move under the title. */
@@ -1248,6 +1258,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
     mask-image: linear-gradient(to right, #000 calc(100% - var(--space-4)), transparent); }
   .timeline-meta::-webkit-scrollbar { display: none; }
   .timeline-meta > * { flex: none; }
+  /* The address gives way with an ellipsis, clear of the faded edge. */
+  .timeline-meta > .timeline-contact { flex: 0 1 auto; margin-right: var(--space-4); }
   .timeline-actions > .status-button, .timeline-actions > .status-split { grid-column: 3 / 5; grid-row: 2; justify-self: end; }
   .timeline-header:has(.spam-button) h2 { grid-column: 2 / 3; }
   .timeline-actions > .spam-button { grid-column: 3; grid-row: 1; width: var(--touch); height: var(--touch); padding: 0; justify-content: center;
@@ -1299,12 +1311,10 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .send-icon svg { width: 18px; height: 18px; }
   /* Who the reply goes from is said when the agent writes one. */
   .conversation-center:has(.composer-card[data-compact="true"]) > .composer-from { display: none; }
-  /* That replies are not emailed takes one line, its link (Open Settings) kept beside it; the whole sentence is its
-     title and what a screen reader reads. */
-  .conversation-center > .composer-notice:has(> .composer-notice-text) { display: flex; align-items: center; gap: var(--space-2); justify-self: stretch; min-width: 0;
-    padding-block: 0; font-size: var(--fs-small); }
-  .composer-notice-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .conversation-center > .composer-notice > .link-action { flex: none; display: inline-flex; align-items: center; min-height: var(--touch); }
+  /* That replies are not emailed runs edge to edge in label type and wraps, its link (Open Settings) after the
+     words, so the reason reads in full in two short lines and the messages keep the screen. */
+  .conversation-center > .composer-notice:has(> .composer-notice-text) { justify-self: stretch; width: auto; margin-inline: 0; border-inline: 0; border-radius: 0;
+    padding-block: var(--space-1); font-size: var(--fs-label); line-height: 16px; }
   .timeline-panel { overflow: hidden; }
 }
 /* The keyboard is up (interactive-widget=resizes-content in index.html makes the page that short): while the agent

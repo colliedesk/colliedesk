@@ -31,6 +31,8 @@ interface TimelinePanelProps {
   // The ticket an address names could not be loaded: say so, and offer to try again.
   loadFailed?: boolean;
   onRetryLoad?: () => void;
+  // With no conversation open, nothing loading and nothing failed: the one line the pane shows instead.
+  emptyText?: string;
   timezone: string;
   onRetryDelivery?: (messageId: string) => void;
   detailsOpen?: boolean;
@@ -115,7 +117,7 @@ function SpamButton({ spam, onSpam }: { spam: boolean; onSpam: (spam: boolean) =
     {spam ? <BanIcon /> : <RotateCcwIcon />}<span className={spam ? 'spam-button-label' : undefined}>{spam ? messages.spam : messages.notSpam}</span></button>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, emptyText, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
   // A role that reads conversations but not their messages is told so instead of waiting for them.
   const readsMessages = useHolds()('messages:read');
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
@@ -128,12 +130,23 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
   const [opened, setOpened] = useState<string | null>(null);
   const openMedia = useCallback((attachmentId: string) => { mediaViewerPart.preload(); setOpened(attachmentId); }, []);
   const closeMedia = useCallback(() => setOpened(null), []);
+  const back = onBack && <button type="button" className="thread-back" onClick={onBack}><ChevronLeftIcon /><span className="thread-back-label">{messages.backToInbox}</span></button>;
+  // Nothing open (I5-a): no title and no actions for a conversation that does not exist, only the way back on a
+  // phone and one line in the middle of the pane.
+  if (!conversation && items.length === 0 && !loading && !loadFailed) {
+    return (
+      <section className="timeline-panel" aria-label={messages.timeline}>
+        {back && <header className="timeline-header">{back}</header>}
+        {emptyText && <p className="timeline-empty">{emptyText}</p>}
+      </section>
+    );
+  }
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
-        {onBack && <button type="button" className="thread-back" onClick={onBack}><ChevronLeftIcon /><span className="thread-back-label">{messages.backToInbox}</span></button>}
+        {back}
         <div>
-          <h2>{conversation?.subject ?? messages.selectConversation}</h2>
+          {conversation && <h2>{conversation.subject}</h2>}
           {conversation && <div className="timeline-meta">{ownRef(conversation) && <span className="ref-copy"><span className="conv-ref">{ownRef(conversation)}</span>
             <CopyButton value={ownRef(conversation) ?? ''} className="icon-button" label={messages.copyReference(ownRef(conversation) ?? '')}><CopyIcon /></CopyButton></span>}
             {/* Status and priority are in the details; the line says what is pressing and who wrote (I1-a). */}

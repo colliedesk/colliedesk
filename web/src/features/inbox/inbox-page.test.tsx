@@ -50,6 +50,12 @@ test('shows the dense inbox filters and three-pane conversation workspace', asyn
   expect(within(filters).getByRole('combobox', { name: 'Sort' })).toBeInTheDocument();
   expect(screen.getByRole('region', { name: /conversation list/i })).toBeInTheDocument();
   expect(screen.getByRole('region', { name: /timeline/i })).toBeInTheDocument();
+});
+
+// The details and the reply box belong to the conversation that is open.
+test('an open conversation shows its details and its reply box beside the thread', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} />);
+  expect(screen.getByRole('region', { name: /timeline/i })).toBeInTheDocument();
   expect(screen.getByRole('complementary', { name: /conversation details/i })).toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: /message body/i })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /^private note$/i }));
@@ -126,11 +132,11 @@ test('tells the agent when replies will not be emailed', () => {
   expect(screen.queryByRole('button', { name: 'Open Settings' })).not.toBeInTheDocument();
 });
 
-test('the notice keeps its words in a line of their own beside Open Settings, so a phone can show it on one line with the link', () => {
+test('the notice keeps its words in a line of their own beside Open Settings, so a phone can wrap them beside the link', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." canManageChannels />);
   const words = screen.getByText('Outgoing email is not configured on this server.');
   expect(words).toHaveClass('composer-notice-text');
-  // Cut short on a phone, the whole sentence is still its title (and what a screen reader reads).
+  // The whole sentence is also its title (and what a screen reader reads).
   expect(words).toHaveAttribute('title', 'Outgoing email is not configured on this server.');
   expect(within(screen.getByRole('status')).getByRole('link', { name: 'Open Settings' })).toBeInTheDocument();
 });
@@ -269,6 +275,45 @@ test('a list that failed to load says so and offers a retry, never "Get started"
   expect(screen.getByRole('alert')).toHaveTextContent('Conversations could not be loaded.');
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
   expect(onRetry).toHaveBeenCalled();
+});
+
+// Paper I5-a: with nothing open the thread pane says so in one line; a reply box and details would belong to no one.
+function expectNothingOpen() {
+  expect(screen.queryByRole('textbox', { name: /message body/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send reply' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('complementary', { name: /conversation details/i })).not.toBeInTheDocument();
+}
+
+test('an empty inbox shows no reply box and no details, only that there is nothing to open', () => {
+  render(<InboxPage conversations={[]} outboundNotice="Replies are not emailed yet." sendsFrom="Sends from support@acme.com" />);
+  expectNothingOpen();
+  expect(within(screen.getByRole('region', { name: /timeline/i })).getByText('Nothing to open here.')).toBeInTheDocument();
+  expect(screen.queryByText('Select a conversation to read its timeline.')).not.toBeInTheDocument();
+  // The notices about replies belong to the reply box, which is not there.
+  expect(screen.queryByText('Replies are not emailed yet.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Sends from support@acme.com')).not.toBeInTheDocument();
+});
+
+test('while the list loads, after it failed, or while a linked conversation loads, nothing is open', () => {
+  const { rerender } = render(<InboxPage conversations={[]} loading />);
+  expectNothingOpen();
+  expect(screen.queryByText('Nothing to open here.')).not.toBeInTheDocument();
+  rerender(<InboxPage conversations={[]} failed />);
+  expectNothingOpen();
+  expect(screen.queryByText('Nothing to open here.')).not.toBeInTheDocument();
+  rerender(<InboxPage conversations={[conversation]} threadOpen onBack={() => {}} timelineLoading />);
+  expectNothingOpen();
+  rerender(<InboxPage conversations={[conversation]} conversationFailed onRetryConversation={() => {}} />);
+  expectNothingOpen();
+  expect(screen.getByRole('alert')).toHaveTextContent('This conversation could not be loaded.');
+});
+
+test('Mentions with no conversation open shows no reply box and no details', () => {
+  render(<InboxPage otherList={{ label: 'Mentions', content: <p>No mentions</p> }} />);
+  expectNothingOpen();
+  expect(screen.getByRole('region', { name: 'Mentions' })).toBeInTheDocument();
+  // A mention opens its conversation beside the list.
+  expect(within(screen.getByRole('region', { name: /timeline/i })).getByText('Select a conversation to read its timeline.')).toBeInTheDocument();
 });
 
 test('the list of a results number that was refreshed says so and leads back to Results', () => {
