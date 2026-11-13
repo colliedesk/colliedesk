@@ -1,5 +1,6 @@
-import type { SetupStepKey } from '../../api/schemas';
-import { nothingToDo } from './setup-steps';
+import type { SetupProgress, SetupStepKey } from '../../api/schemas';
+import type { Permissions } from '../../lib/can';
+import { nothingToDo, visibleSteps } from './setup-steps';
 
 type Step = { key: SetupStepKey; state: string };
 
@@ -26,3 +27,14 @@ export const firstOpenStep = (steps: Step[]): SetupStepKey | 'done' =>
 // The address after a step (the summary after the last) and before it (none before the first).
 export const nextPath = (steps: Step[], index: number) => stepPath(steps[index + 1]?.key ?? 'done');
 export const previousPath = (steps: Step[], index: number) => (index > 0 ? stepPath(steps[index - 1].key) : undefined);
+
+// The steps that bring customers into an empty inbox: the address they write to, or the history to move over. The
+// first answer to a customer waits for their first email, so an empty inbox never offers it.
+const fillsInbox: readonly SetupStepKey[] = ['email', 'import'];
+
+// emptyInboxStep is the step the empty inbox offers as its button: the first of those the person may take whose own
+// part is not done. A connected address that waits for its first email is done; the import is the next way in.
+export function emptyInboxStep(progress: SetupProgress | undefined, me: Permissions): 'email' | 'import' | undefined {
+  const step = progress && visibleSteps(progress, me).find((candidate) => fillsInbox.includes(candidate.key) && !ownPartIsDone(candidate));
+  return step?.key === 'email' || step?.key === 'import' ? step.key : undefined;
+}

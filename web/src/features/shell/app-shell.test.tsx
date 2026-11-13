@@ -175,6 +175,16 @@ test('the sidebar head names the workspace beside the logo, and the person at it
   expect(screen.getAllByRole('region', { name: 'Signed in as' })).toHaveLength(1);
 });
 
+test('the workspace name in the sidebar head is named in full, on hover and on keyboard focus, however much of it fits', () => {
+  localStorage.removeItem(sidebarStorageKey);
+  render(<AppShell me={{ ...me, workspace: { ...me.workspace, name: 'Northwind Outdoors' } }}><p>inbox</p></AppShell>);
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  const name = within(rail).getByRole('group', { name: 'Northwind Outdoors' });
+  expect(name).toHaveAttribute('data-tip', 'Northwind Outdoors');
+  expect(name).toHaveAttribute('tabindex', '0');
+  expect(name).toHaveTextContent('Northwind Outdoors');
+});
+
 test('folded into its rail, the sidebar leaves the workspace and the address to the top bar', () => {
   localStorage.setItem(sidebarStorageKey, JSON.stringify({ width: 248, collapsed: true }));
   render(<AppShell me={me} page={{ title: 'Inbox', icon: null }}><p>inbox</p></AppShell>);

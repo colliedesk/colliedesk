@@ -485,20 +485,20 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
             aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)${resolveTells ? messages.sendAndResolveTells(resolveTells) : ''}`} onClick={() => submit(true)}>
             {messages.sendAndResolve}</button>}
           {/* The one-line box on a phone keeps a private note one press away, as its tab is when the box is open. */}
-          {compact && kind === 'outgoing' && <button type="button" className="compact-note" disabled={disabled} aria-label={messages.writeNote}
+          {compact && kind === 'outgoing' && <button type="button" className="compact-note" disabled={disabled} aria-label={messages.writeNote} data-tip={messages.writeNote}
             onClick={() => { setKind('note'); field.current?.focus(); }}><LockIcon /></button>}
           {/* Attach is the first tool; the chosen files and their notes take a line above the row (components.css). */}
           <span className="composer-tools-start" aria-hidden="true" />
           <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
-          {maySavedReplies && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
+          {maySavedReplies && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} data-tip={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
             <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>}
-          {mayArticles && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} title={messages.articles}
+          {mayArticles && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} data-tip={messages.articles}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
             <BookIcon /><span className="tool-label">{messages.articles}</span></button>}
           {aiDraftsFor && (
-            <button type="button" className="saved-reply-button ai-tool" disabled={disabled} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
+            <button type="button" className="saved-reply-button ai-tool" disabled={disabled} data-tip={messages.draftWithAI} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
               onClick={() => { if (!(assist && drafting)) setAssist((open) => !open); }}>
               <SparklesIcon /><span className="tool-label">{assist && drafting ? messages.drafting : messages.draftWithAI}</span>
               {assistPart.status === 'ready' && !assist && !aiDraft && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
@@ -507,7 +507,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           {!aiDraftsFor && aiDraftsOff && canManage && (
             // Its name says what it is (the app's own Settings link keeps the name "Settings"); how to turn
             // drafts on is its description.
-            <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} title={messages.aiDraftsOffAdmin}>
+            <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} aria-description={messages.aiDraftsOffAdmin} data-tip={messages.aiDraftsOffAdmin}>
               <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></a>)}
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}

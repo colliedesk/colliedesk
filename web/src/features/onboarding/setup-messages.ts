@@ -18,6 +18,8 @@ export const setupMessages = {
     invite: 'Invite your team',
     first_reply: 'Answer your first email',
   } satisfies Record<SetupStepKey, string>,
+  // The empty inbox's button for the step it offers.
+  emptyInboxAction: { email: 'Connect your support email', import: 'Import from Freshdesk' } satisfies Record<'email' | 'import', string>,
   // Minutes it takes, shown while a step is still to do.
   time: { email: '5 min', import: '10 min', ai_drafts: '1 min', reply_targets: '1 min', invite: '1 min', first_reply: '2 min' } satisfies Record<SetupStepKey, string>,
   // The words under a step's title, by the state the server reports. Unknown states say nothing.

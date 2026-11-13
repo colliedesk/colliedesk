@@ -143,7 +143,8 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, foot
         <nav className="app-rail" aria-label={messages.mainNavigation}>
           <div className="rail-head">
             {brand}
-            {session && <strong className="workspace-name">{session.workspace.name}</strong>}
+            {/* The name takes the room the head has; what does not fit is told in full on hover and focus, and by name. */}
+            {session && <span className="workspace-name" role="group" tabIndex={0} aria-label={session.workspace.name} data-tip={session.workspace.name}><strong>{session.workspace.name}</strong></span>}
             {session && quickStart}
             {session && onNewConversation && <button type="button" className="sidebar-new" aria-label={messages.newConversation} data-tip={messages.newConversation}
               data-opens="new-conversation" onClick={onNewConversation}><PenIcon /></button>}

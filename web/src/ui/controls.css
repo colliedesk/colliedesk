@@ -58,7 +58,7 @@ button[aria-selected="true"] > .seg-count { background: var(--text-1); color: va
 .form-dialog > header p { color: var(--text-3); font-size: var(--fs-small); }
 .form-dialog-body p { color: var(--text-2); font-size: var(--fs-small); }
 .form-dialog .field input { width: 100%; }
-.form-dialog-footer { align-items: center; justify-content: flex-end; }
+.form-dialog-footer { align-items: center; justify-content: flex-start; }
 .field-note { font-size: var(--fs-label); }
 .field .field-note.error-copy { color: var(--danger); }
 .field-bad input { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }

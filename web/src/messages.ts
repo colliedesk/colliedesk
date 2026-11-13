@@ -308,6 +308,8 @@ export const messages = {
   preferences: 'Preferences',
   contact: 'Contact',
   customer: 'Customer',
+  // The top bar's name for a customer's page.
+  customers: 'Customers',
   // A property with no value, such as a conversation without tags.
   none: 'None',
   tags: 'Tags',
