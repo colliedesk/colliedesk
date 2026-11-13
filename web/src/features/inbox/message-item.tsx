@@ -42,7 +42,7 @@ function AutomatedResponse(props: MessageItemProps) {
   const { item } = props;
   const from = item.origin?.from ?? item.author_name ?? messages.someone;
   return (
-    <div className="message-event">
+    <div className="message-event" data-message-id={item.id}>
       <button type="button" className="message-event-row" aria-expanded={open} title={open ? messages.collapseAutomatedResponse : messages.expandAutomatedResponse}
         onClick={() => setOpen(!open)}>
         <span className="message-event-chevron" aria-hidden="true">›</span>
