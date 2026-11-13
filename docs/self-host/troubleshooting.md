@@ -21,6 +21,32 @@ The server applies database migrations when it starts, so a failed migration or 
 `DATABASE_URL` shows here first. Startup warnings, for example about `trusted_proxies`, are here
 too.
 
+## See which MCP tools an AI app called
+
+Every call of an MCP tool (`/mcp` and `/mcp/operator`) writes one line to the server log:
+
+```sh
+docker compose logs server | grep "mcp tool call"
+```
+
+This line stays in your server log. It is not telemetry: the server sends it nowhere.
+
+| Field | Meaning |
+|---|---|
+| `workspace` | The workspace id. Empty on `/mcp/operator`. |
+| `tool` | The tool name, for example `colliedesk_inbox_search`. |
+| `token` | `oauth` (an AI app connected with OAuth, for example the Claude connector), `agent_token` (a token a person made in Settings → External AI agents) or `operator`. |
+| `outcome` | `ok`; `agent_request` (filed for a person to approve, nothing ran yet); `refused` (a planned refusal the AI app reads, for example a missing permission); `error` (an unexpected failure). |
+| `error_type` | Empty when `outcome` is `ok` or `agent_request`. Otherwise one of `no_bearer`, `invalid_arguments`, `permission_missing`, `person_only`, `token_invalid`, `workspace_locked`, `plan_refused`, `forbidden`, `not_found`, `conflict`, `rejected`, `rate_limited`, `unavailable`, `too_large`, `refused` (another planned refusal), `internal`, `panic`. |
+| `duration_ms` | How long the call took. |
+| `request_id` | The `X-Request-Id` of the MCP request (see [request ids](../user/problem-reports.md#request-ids)). |
+
+`ok`, `agent_request` and `refused` lines are `INFO`. An `error` line is `ERROR` and also has
+`error`, the cause; it is the only line for that failure.
+
+The line never has the arguments, the answer, message text, a customer's or team member's name or
+email address, the token or its label.
+
 ## A screen says a feature "is not set up on this server"
 
 The app never shows server variable names to the people using a workspace; it tells them to ask
