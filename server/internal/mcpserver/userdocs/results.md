@@ -113,7 +113,7 @@ next to the baseline, last week's volume and the AI drafts, with a link to the p
 never customer names or messages. Each of them turns it off (or on again) for themselves with **Email
 me on Mondays**; the email has the same link at the bottom. A workspace with no numbers yet gets no
 email. It needs the server's outgoing mail settings ([self-host email](../self-host/email.md)); without
-them the page says so.
+them the page says so and shows no switch, and your choice shows again once the server can send.
 
 ## For AI agents
 

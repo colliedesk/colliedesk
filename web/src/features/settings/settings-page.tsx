@@ -64,8 +64,6 @@ interface SettingsPageProps {
   savedRepliesSection?: ReactNode;
   // numbersSection is the conversation number series; everyone who reads conversations sees it.
   numbersSection?: ReactNode;
-  // showHelpCenterLink points to the help center's settings, in the Help center area.
-  showHelpCenterLink?: boolean;
   // showInvites is false for a person whose roles may not read the team (team:read).
   showInvites?: boolean;
   // mcpAddress is this server's MCP address, which Connected AI apps tells a person to add in their app.
@@ -89,7 +87,6 @@ export function SettingsPage(props: SettingsPageProps) {
       {page === 'general' && <>
         {canManageWorkspace && <GeneralSection {...props} />}
         {numbersSection}
-        {props.showHelpCenterLink && <p className="muted-copy">{settingsMessages.helpCenterMoved} <a href="/knowledge/settings">{settingsMessages.openHelpCenterSettings}</a></p>}
       </>}
       {page === 'members' && <>
         {teamSection}
@@ -123,7 +120,7 @@ function AccountSections({ sessions = [], timezone, displayName = '', email, dis
 
 function GeneralSection({ workspaceName = '', workspaceNameSave, onSetWorkspaceName, workspaceTimezone = 'UTC', workspaceTimezoneSave, onSetWorkspaceTimezone }: SettingsPageProps) {
   return <section className="settings-card" aria-labelledby="general-heading">
-    <div className="section-heading"><h2 id="general-heading">{messages.general}</h2><p>{settingsMessages.generalDescription}</p></div>
+    <div className="section-heading"><h2 id="general-heading" className="sr-only">{messages.general}</h2><p>{settingsMessages.generalDescription}</p></div>
     <div className="settings-body settings-rows">
       <NameForm label={messages.workspaceName} saveLabel={settingsMessages.saveWorkspaceName} hint={settingsMessages.workspaceNameHelp}
         value={workspaceName} canManage save={workspaceNameSave} onSave={onSetWorkspaceName} minLength={2} maxLength={60} />

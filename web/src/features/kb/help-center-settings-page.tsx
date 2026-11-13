@@ -7,8 +7,7 @@ import { kbMessages } from './kb-messages';
 import { KBHead } from './kb-ui';
 
 // Knowledge base → Settings (/knowledge/settings): whether the help center is public, its title, domain, brand
-// and Search Console. It was a section of Settings; it lives beside the articles it publishes now (#528), and
-// Settings → General links here.
+// and Search Console. It was a section of Settings; it lives beside the articles it publishes now (#528).
 export function HelpCenterSettingsRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   return (
