@@ -4,6 +4,7 @@
 // so the console's first bundle carries none of it and an English console waits for nothing.
 import type { am } from './ai-provider-messages';
 import type { cloudMessages } from './cloud-messages';
+import type { pm } from './page-messages';
 
 export type Lang = 'en' | 'vi';
 const key = 'colliedesk.operator.lang';
@@ -12,7 +13,7 @@ export let lang: Lang = 'en';
 
 // The words of the lazy parts in the chosen language, kept here until their part loads and reads them.
 // coded rewrites an API answer's coded texts in the chosen language (codes.ts); English has none.
-export const lazyWords: { am?: Translation<typeof am>; cloud?: Translation<typeof cloudMessages>; coded?: (body: Record<string, unknown>) => void } = {};
+export const lazyWords: { am?: Translation<typeof am>; cloud?: Translation<typeof cloudMessages>; pm?: Translation<typeof pm>; coded?: (body: Record<string, unknown>) => void } = {};
 
 export function pickLang(): Lang {
   try {

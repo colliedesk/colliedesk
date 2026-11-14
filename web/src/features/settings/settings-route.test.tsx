@@ -435,6 +435,8 @@ test('an admin finds the import and Export all data on Data', async () => {
   show('admin', [], DataRoute);
   expect(await screen.findByRole('heading', { level: 1, name: 'Data' })).toBeInTheDocument();
   expect(await screen.findByRole('button', { name: 'Export all data' })).toBeInTheDocument();
+  // What the ZIP holds is the tip of the heading, not a line under it.
+  expect(screen.getByRole('button', { name: 'About Export all data' })).toHaveAccessibleDescription('It holds every conversation, contact, tag, note and attachment.');
   expect(await screen.findByRole('heading', { level: 2, name: 'Connect your Freshdesk account' })).toBeInTheDocument();
   // The import was a page of its own; in Data it has the page's title, the settings menu and one main landmark.
   expect(screen.getByText('Import from Freshdesk')).toBeInTheDocument();
