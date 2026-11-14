@@ -1,8 +1,9 @@
 # Web app design
 
-Decisions behind the look of `web/`. The brand is **ink, paper and one orange** (ink and paper: owner
-decision 19/10/2026, replacing Blue Merle; the orange: 24/10/2026): neutral grey surfaces, ink for text and
-the primary action, one orange (`#c2410c`, the coat of a sable collie) for Colliedesk itself, and colour
+Decisions behind the look of `web/`. The brand is **paper, ink and the Collie orange** (ink and paper: owner
+decision 19/10/2026, replacing Blue Merle; the orange: 24/10/2026; the orange as the app's brand colour:
+15/11/2026, because the ink-only app read as washed out): neutral grey surfaces, ink for text, the orange
+(`#c2410c`, the coat of a sable collie) for the logo, the primary action, links and the active mark, and colour
 elsewhere only where it carries meaning (status, focus, private notes). Light is the default theme and
 dark is an opt-in. The app and the colliedesk.com site share one set of tokens.
 
@@ -11,13 +12,14 @@ dark is an opt-in. The app and the colliedesk.com site share one set of tokens.
 Chosen from 20 researched directions after measuring nine helpdesk home pages (research and evidence:
 https://design.hclabs.co, owner only). The site direction is "price ledger"; the app follows the same rules.
 
-1. **Paper and ink.** Surfaces, lines and text are neutral grey with no hue; the primary action is ink
-   (`#171717` light, `#fafafa` dark). `web/scripts/check-contrast.test.mjs` fails when a grey, a text
-   token or the primary action carries a hue.
-2. **One orange, and colour means something.** The orange is Colliedesk's own: the logo tile, and on
-   colliedesk.com the price (the promise). It is never a button, link, chip, badge or warning, so it stays
-   rare enough to remember; the primary action stays ink, which reads calm and trustworthy.
-   `web/scripts/brand-rules.test.mjs` fails when any app file other than the tokens and the mark names it.
+1. **Paper and ink.** Surfaces, lines and text are neutral grey with no hue; the primary action is the Collie
+   orange (`#c2410c` light, `#fb8a4a` dark, owner 15/11/2026). `web/scripts/check-contrast.test.mjs` fails when a
+   grey or a text token carries a hue, or when the primary action is not the orange.
+2. **One orange, and colour means something.** The orange is Colliedesk's own: the logo tile, the primary
+   button, links, and the mark of the active place (the rail and settings icon, the open conversation's edge,
+   the chosen status tab); on colliedesk.com the price (the promise). It is never a chip, badge or warning.
+   Stylesheets reach it only through `--accent*`: `web/scripts/brand-rules.test.mjs` fails when any app file other
+   than the tokens and the mark names the hex.
    Status (open blue, pending amber, resolved green, urgent red), Urgent priority (red arrow and word), focus
    (amber) and private notes (amber) keep their colours; nothing else is coloured. High is an arrow and grey
    text, never the warning orange (it sat 8° of hue from the brand and made a High ticket look like the logo).
@@ -169,7 +171,7 @@ the Clerk form.) Do not create a second palette.
 | Surfaces | `--surface-0` page and rail, `--surface-1` list, panels, cards, `--surface-2` hover, `--surface-3` active rail item and tag, `--surface-inverse` tooltip | Separate layers by surface step first. Add shadow only to floating layers. |
 | Lines | `--line` hairline dividers and panel edges, `--line-control` secondary button outline, `--line-strong` input borders | Inputs keep `--line-strong` (3:1). Buttons are identified by their label, but their outline is about 2.3:1 so they do not look faded (owner feedback 16/10/2026: buttons looked washed out at 1.5:1). |
 | Text | `--text-1` primary, `--text-2` secondary, `--text-3` meta and labels, `--text-inverse` on the tooltip | `--text-3` is the lowest text tone. |
-| Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile` (orange `#c2410c`, the one brand hue), `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on ink `#171717`. Dark: near-black on `#fafafa`. `--accent-text` is ink; inline links are underlined. |
+| Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile` (orange `#c2410c`, the one brand hue, also `--accent`), `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on the orange `#c2410c`. Dark: near-black on `#fb8a4a`. `--accent-text` is the darker orange `#9a3412` in light; inline links are underlined. |
 | Focus and note | `--focus`, `--focus-ring`, `--note-bg`, `--note-line`, `--note-text` | Amber means focus, private notes and the pending status (`--pending`), and nothing else. Warnings use `--warn`. |
 | Status | `--danger`, `--warn`, `--ok`, `--open`, `--pending` and `*-soft` backgrounds | A dot or icon plus a word. Never colour alone. `--warn` marks a warning (unverified sender, help center off, SLA under 2 h), never a priority: High is a dark neutral chip (`--text-2` with `--surface-1` text) and its arrow. |
 | Avatars | `--avatar-lightness`, `--avatar-chroma`, `--avatar-text-lightness`, `--avatar-text-chroma` with a per-person `--avatar-hue` | See Rules: the hue tells people apart, low chroma, never on status. |
@@ -230,11 +232,13 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 
 ## Rules
 
-- Controls are 32 px with a mouse and 44 px on touch (`--control` switches on `pointer: coarse`;
-  rail links, status tabs and list rows also grow to 44 px below 44 rem).
+- Controls are 32 px with a mouse and 44 px on touch (`--control` is 32 px on `:root` and switches on `pointer: coarse`;
+  rail links, status tabs and list rows also grow to 44 px below 44 rem). Every button, field and tab takes
+  `--control`, never its own height (owner 15/11/2026: 7 heights from 19 to 40 px had crept in); every app page
+  title is `--fs-heading` (26 px). `brand-rules.test.mjs` checks both.
 - A reference is an id: mono, `--text-3` in the list (`--text-2` in the header), never a fill (`.conv-ref`).
 - A response target is a clock mark and words: `--warn` due soon, `--danger` overdue, never a fill (`.sla-mark`).
-- Three button shapes only: primary (`--accent`, ink), secondary (white with a light outline and a small
+- Three button shapes only: primary (`--accent`, the orange), secondary (white with a light outline and a small
   shadow), danger (red text).
 - Focus is an amber outline, 2 px wide with a 2 px gap (`:focus-visible`). The gap is required:
   amber on `--accent` is low contrast in both themes, so the ring never touches a primary button. In the scrolling
@@ -374,10 +378,10 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--text-3` #636363 | `--surface-1` #ffffff | 6.01 | 4.5 | text |
 | `--text-3` #636363 | `--surface-2` #f4f4f4 | 5.46 | 4.5 | text |
 | `--text-3` #636363 | `--surface-3` #ebebeb | 5.04 | 4.5 | text |
-| `--accent-text` #171717 | `--surface-0` #fafafa | 17.18 | 4.5 | text |
-| `--accent-text` #171717 | `--surface-1` #ffffff | 17.93 | 4.5 | text |
-| `--accent-text` #171717 | `--surface-2` #f4f4f4 | 16.30 | 4.5 | text |
-| `--accent-text` #171717 | `--surface-3` #ebebeb | 15.04 | 4.5 | text |
+| `--accent-text` #9a3412 | `--surface-0` #fafafa | 7.00 | 4.5 | text |
+| `--accent-text` #9a3412 | `--surface-1` #ffffff | 7.31 | 4.5 | text |
+| `--accent-text` #9a3412 | `--surface-2` #f4f4f4 | 6.64 | 4.5 | text |
+| `--accent-text` #9a3412 | `--surface-3` #ebebeb | 6.13 | 4.5 | text |
 | `--danger` #c0261b | `--surface-0` #fafafa | 5.69 | 4.5 | text |
 | `--danger` #c0261b | `--surface-1` #ffffff | 5.94 | 4.5 | text |
 | `--danger` #c0261b | `--surface-2` #f4f4f4 | 5.40 | 4.5 | text |
@@ -390,22 +394,28 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--ok` #11703d | `--surface-1` #ffffff | 6.16 | 4.5 | text |
 | `--ok` #11703d | `--surface-2` #f4f4f4 | 5.60 | 4.5 | text |
 | `--ok` #11703d | `--surface-3` #ebebeb | 5.17 | 4.5 | text |
-| `--accent-text` #171717 | `--accent-soft` #efefef | 15.59 | 4.5 | link on selected row |
+| `--accent-text` #9a3412 | `--accent-soft` #efefef | 6.35 | 4.5 | link on selected row |
 | `--text-1` #171717 | `--accent-soft` #efefef | 15.59 | 4.5 | selected row |
 | `--text-3` #636363 | `--accent-soft` #efefef | 5.22 | 4.5 | meta on selected row |
-| `--on-accent` #ffffff | `--accent` #171717 | 17.93 | 4.5 | primary button |
-| `--on-accent` #ffffff | `--accent-hover` #3d3d3d | 10.86 | 4.5 | primary button hover |
+| `--on-accent` #ffffff | `--accent` #c2410c | 5.18 | 4.5 | primary button |
+| `--on-accent` #ffffff | `--accent-hover` #9a3412 | 7.31 | 4.5 | primary button hover |
 | `--text-inverse` #ffffff | `--surface-inverse` #171717 | 17.93 | 4.5 | tooltip |
 | `--note-text` #7f5200 | `--note-bg` #fff6e0 | 6.27 | 4.5 | private note label |
 | `--text-1` #171717 | `--note-bg` #fff6e0 | 16.66 | 4.5 | private note body |
 | `--danger` #c0261b | `--danger-soft` #fdeceb | 5.20 | 4.5 | urgent chip |
+| `--surface-1` #ffffff | `--text-2` #4d4d4d | 8.45 | 4.5 | high priority chip |
 | `--text-1` #171717 | `--danger-soft` #fdeceb | 15.69 | 4.5 | error card body |
 | `--warn` #a3460a | `--warn-soft` #fdf0e5 | 5.46 | 4.5 | high chip |
 | `--ok` #11703d | `--ok-soft` #e6f5ec | 5.47 | 4.5 | sent badge, reconcile footer |
 | `--text-2` #4d4d4d | `--ok-soft` #e6f5ec | 7.50 | 4.5 | reconcile footer body |
-| `--accent-text` #171717 | `--ok-soft` #e6f5ec | 15.91 | 4.5 | reconcile footer link |
+| `--accent-text` #9a3412 | `--ok-soft` #e6f5ec | 6.48 | 4.5 | reconcile footer link |
 | `--on-brand-panel` #fafafa | `--brand-panel` #0a0a0a | 18.97 | 4.5 | sign-in brand side |
 | `--on-brand-panel-2` #a3a3a3 | `--brand-panel` #0a0a0a | 7.85 | 4.5 | sign-in brand side, secondary |
+| `--ok` #11703d | `--brand-panel` #0a0a0a | 3.21 | 3 | operator console band dot |
+| `--warn` #a3460a | `--brand-panel` #0a0a0a | 3.24 | 3 | operator console band dot |
+| `--danger` #c0261b | `--brand-panel` #0a0a0a | 3.33 | 3 | operator console band dot |
+| `--text-1` #171717 | `--warn-soft` #fdf0e5 | 16.03 | 4.5 | operator console trial strip |
+| `--text-1` #171717 | `--danger-soft` #fdeceb | 15.69 | 4.5 | operator console refused strip |
 | `--pending` #a3730f | `--surface-1` #ffffff | 4.19 | 3 | pending dot |
 | `--open` #2d62b3 | `--surface-1` #ffffff | 5.98 | 3 | open dot |
 | `--focus` #b86e00 | `--surface-0` #fafafa | 3.82 | 3 | focus ring |
@@ -415,7 +425,7 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--line-strong` #858585 | `--surface-0` #fafafa | 3.54 | 3 | input border |
 | `--line-strong` #858585 | `--surface-1` #ffffff | 3.69 | 3 | input border |
 | `--line-strong` #858585 | `--surface-2` #f4f4f4 | 3.35 | 3 | input border |
-| `--accent` #171717 | `--surface-1` #ffffff | 17.93 | 3 | selected bar, active tab |
+| `--accent` #c2410c | `--surface-1` #ffffff | 5.18 | 3 | selected bar, active tab |
 
 ### dark
 
@@ -433,10 +443,10 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--text-3` #a3a3a3 | `--surface-1` #141414 | 7.30 | 4.5 | text |
 | `--text-3` #a3a3a3 | `--surface-2` #1c1c1c | 6.76 | 4.5 | text |
 | `--text-3` #a3a3a3 | `--surface-3` #262626 | 6.00 | 4.5 | text |
-| `--accent-text` #fafafa | `--surface-0` #0a0a0a | 18.97 | 4.5 | text |
-| `--accent-text` #fafafa | `--surface-1` #141414 | 17.65 | 4.5 | text |
-| `--accent-text` #fafafa | `--surface-2` #1c1c1c | 16.33 | 4.5 | text |
-| `--accent-text` #fafafa | `--surface-3` #262626 | 14.50 | 4.5 | text |
+| `--accent-text` #fb8a4a | `--surface-0` #0a0a0a | 8.33 | 4.5 | text |
+| `--accent-text` #fb8a4a | `--surface-1` #141414 | 7.75 | 4.5 | text |
+| `--accent-text` #fb8a4a | `--surface-2` #1c1c1c | 7.17 | 4.5 | text |
+| `--accent-text` #fb8a4a | `--surface-3` #262626 | 6.37 | 4.5 | text |
 | `--danger` #f2837a | `--surface-0` #0a0a0a | 7.83 | 4.5 | text |
 | `--danger` #f2837a | `--surface-1` #141414 | 7.28 | 4.5 | text |
 | `--danger` #f2837a | `--surface-2` #1c1c1c | 6.74 | 4.5 | text |
@@ -449,22 +459,28 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--ok` #6fcf97 | `--surface-1` #141414 | 9.69 | 4.5 | text |
 | `--ok` #6fcf97 | `--surface-2` #1c1c1c | 8.97 | 4.5 | text |
 | `--ok` #6fcf97 | `--surface-3` #262626 | 7.96 | 4.5 | text |
-| `--accent-text` #fafafa | `--accent-soft` #222222 | 15.24 | 4.5 | link on selected row |
+| `--accent-text` #fb8a4a | `--accent-soft` #222222 | 6.69 | 4.5 | link on selected row |
 | `--text-1` #fafafa | `--accent-soft` #222222 | 15.24 | 4.5 | selected row |
 | `--text-3` #a3a3a3 | `--accent-soft` #222222 | 6.31 | 4.5 | meta on selected row |
-| `--on-accent` #0a0a0a | `--accent` #fafafa | 18.97 | 4.5 | primary button |
-| `--on-accent` #0a0a0a | `--accent-hover` #e0e0e0 | 15.00 | 4.5 | primary button hover |
+| `--on-accent` #0a0a0a | `--accent` #fb8a4a | 8.33 | 4.5 | primary button |
+| `--on-accent` #0a0a0a | `--accent-hover` #fdba8c | 11.86 | 4.5 | primary button hover |
 | `--text-inverse` #0a0a0a | `--surface-inverse` #fafafa | 18.97 | 4.5 | tooltip |
 | `--note-text` #f2cd8a | `--note-bg` #2a2213 | 10.38 | 4.5 | private note label |
 | `--text-1` #fafafa | `--note-bg` #2a2213 | 15.05 | 4.5 | private note body |
 | `--danger` #f2837a | `--danger-soft` #3a1c1b | 6.10 | 4.5 | urgent chip |
+| `--surface-1` #141414 | `--text-2` #d4d4d4 | 12.43 | 4.5 | high priority chip |
 | `--text-1` #fafafa | `--danger-soft` #3a1c1b | 14.77 | 4.5 | error card body |
 | `--warn` #f19a55 | `--warn-soft` #3a2615 | 6.47 | 4.5 | high chip |
 | `--ok` #6fcf97 | `--ok-soft` #13291e | 8.10 | 4.5 | sent badge, reconcile footer |
 | `--text-2` #d4d4d4 | `--ok-soft` #13291e | 10.39 | 4.5 | reconcile footer body |
-| `--accent-text` #fafafa | `--ok-soft` #13291e | 14.75 | 4.5 | reconcile footer link |
+| `--accent-text` #fb8a4a | `--ok-soft` #13291e | 6.48 | 4.5 | reconcile footer link |
 | `--on-brand-panel` #fafafa | `--brand-panel` #141414 | 17.65 | 4.5 | sign-in brand side |
 | `--on-brand-panel-2` #a3a3a3 | `--brand-panel` #141414 | 7.30 | 4.5 | sign-in brand side, secondary |
+| `--ok` #6fcf97 | `--brand-panel` #141414 | 9.69 | 3 | operator console band dot |
+| `--warn` #f19a55 | `--brand-panel` #141414 | 8.33 | 3 | operator console band dot |
+| `--danger` #f2837a | `--brand-panel` #141414 | 7.28 | 3 | operator console band dot |
+| `--text-1` #fafafa | `--warn-soft` #3a2615 | 13.71 | 4.5 | operator console trial strip |
+| `--text-1` #fafafa | `--danger-soft` #3a1c1b | 14.77 | 4.5 | operator console refused strip |
 | `--pending` #c9a35a | `--surface-1` #141414 | 7.78 | 3 | pending dot |
 | `--open` #79a8ff | `--surface-1` #141414 | 7.77 | 3 | open dot |
 | `--focus` #f0b44c | `--surface-0` #0a0a0a | 10.69 | 3 | focus ring |
@@ -474,4 +490,4 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--line-strong` #787878 | `--surface-0` #0a0a0a | 4.48 | 3 | input border |
 | `--line-strong` #787878 | `--surface-1` #141414 | 4.17 | 3 | input border |
 | `--line-strong` #787878 | `--surface-2` #1c1c1c | 3.86 | 3 | input border |
-| `--accent` #fafafa | `--surface-1` #141414 | 17.65 | 3 | selected bar, active tab |
+| `--accent` #fb8a4a | `--surface-1` #141414 | 7.75 | 3 | selected bar, active tab |

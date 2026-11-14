@@ -7,7 +7,7 @@
 /* The public page of a share link has no sidebar: its column sits in the middle (Paper RP1-b). */
 .results-page.results-shared { justify-items: center; }
 .results-title { min-width: 0; flex: 1 1 32rem; }
-.results-title h1 { font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
+.results-title h1 { font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
 .results-title p { margin-top: var(--space-1); color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
 .results-title .results-muted { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); color: var(--text-3); font-size: var(--fs-small); line-height: 20px; }
 .results-muted { margin: 0; color: var(--text-3); font-size: var(--fs-small); }

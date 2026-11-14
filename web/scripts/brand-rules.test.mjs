@@ -179,3 +179,38 @@ test('the email setup wizard styles only its own steps, never the setup guide ro
   const bare = read('channels/email/email-setup.css').split('\n').filter((line) => /(^|[\s,])\.setup-step(?![-\w])/.test(line) && !/:where\(\.setup-steps\) > \.setup-step/.test(line));
   expect(bare).toEqual([]);
 });
+
+// One control height (design.md, Rules): every button, field and tab is --control, 32 px with a mouse and 44 px by
+// touch (owner 15/11/2026: "chỗ to chỗ nhỏ"). These rules once set 28, 36, 40 px or no height at all.
+test('frame controls and tabs take the one control height', () => {
+  const layout = read('styles/layout.css');
+  const components = read('styles/components.css');
+  for (const [css, selector] of [[layout, '.sidebar-toggle'], [layout, '.topbar-search']]) expect(rule(css, selector)).not.toMatch(/--control:/);
+  expect(rule(layout, '.sidebar-toggle')).toMatch(/width:\s*var\(--control\)/);
+  expect(rule(layout, '.rail-avatar')).toMatch(/height:\s*var\(--control\)/);
+  expect(rule(components, '.status-tabs label')).toMatch(/min-height:\s*var\(--control\)/);
+  expect(rule(read('ui/controls.css'), '.seg-tabs-underline button')).toMatch(/min-height:\s*var\(--control\)/);
+  expect(rule(read('features/inbox/mentions.css'), '.mentions-tab')).toMatch(/min-height:\s*var\(--control\)/);
+  // --control is 32 px on :root and 44 px by touch, so a bare var(--control) is a real height everywhere.
+  expect(read('styles/base-plain.css')).toMatch(/:root\s*\{\s*--control:\s*32px;\s*\}/);
+});
+
+// One page title size: every app page title is --fs-heading (26 px). The setup flow and the sign-in panel are
+// full-screen moments with their own display size.
+test('app page titles take the one heading size', () => {
+  for (const [file, selector] of [['styles/layout.css', '.settings-page > header h1'], ['styles/layout.css', '.list-title h1'],
+    ['features/results/results.css', '.results-title h1'], ['features/review/review.css', '.review-page > header h1'],
+    ['features/contacts/contacts.css', '.contact-page .contact-name-row h1'], ['features/shell/locked.css', 'main.locked-screen > header h1'],
+    ['features/autofix/autofix.css', '.af-page-head h1']]) {
+    expect(rule(read(file), selector), `${file} ${selector}`).toMatch(/font:\s*500 var\(--fs-heading\)/);
+  }
+});
+
+// The active place carries the brand: the current rail item and settings item have an orange icon, the open
+// conversation an orange edge, the chosen status tab orange words.
+test('the active place is marked in the brand colour', () => {
+  const layout = read('styles/layout.css');
+  expect(rule(layout, '.rail-link[aria-current="page"] svg')).toMatch(/color:\s*var\(--accent\)/);
+  expect(rule(read('styles/components.css'), '.conversation-row[aria-current="true"]')).toMatch(/box-shadow:\s*inset 2px 0 var\(--accent\)/);
+  expect(rule(read('styles/components.css'), '.status-tabs label:has(input:checked)')).toMatch(/color:\s*var\(--accent-text\)/);
+});

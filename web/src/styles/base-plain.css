@@ -93,6 +93,7 @@ button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--
 
 /* Touch screens and windows 480 px wide or less keep 44 px targets; a mouse on a wider window gets the
    denser 32 px controls. Every rule that sizes for a finger uses the same media query. */
+:root { --control: 32px; }
 @media (pointer: coarse), (max-width: 30rem) { :root { --control: var(--touch); } }
 
 /* Tooltip for icon-only controls: the control keeps its aria-label, data-tip is the sighted copy. */

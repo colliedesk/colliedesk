@@ -14,11 +14,11 @@
 @media (pointer: coarse), (max-width: 30rem) { .seg-tabs button { --control: var(--touch); min-height: var(--touch); } }
 /* Underline tabs: text, the open one with a 2 px line under it (a mark, not colour alone), counts small beside the name. */
 .seg-tabs-underline { gap: var(--space-4); border: 0; border-radius: 0; background: none; padding: 0; }
-.seg-tabs-underline button { min-height: 36px; border-radius: 0; background: none; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; }
+.seg-tabs-underline button { min-height: var(--control); border-radius: 0; background: none; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; }
 .seg-tabs-underline button:hover:not(:disabled) { background: none; color: var(--text-1); }
 .seg-tabs-underline button[aria-selected="true"], .seg-tabs-underline button[aria-selected="true"]:hover { background: none; color: var(--text-1); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
 .seg-tabs-underline button:focus-visible { outline-offset: -2px; }
-@media (pointer: coarse), (max-width: 30rem) { .seg-tabs-underline button { min-height: var(--touch); } }   /* after the 36 px above, so a finger still gets 44 */
+@media (pointer: coarse), (max-width: 30rem) { .seg-tabs-underline button { min-height: var(--touch); } }   /* a finger gets 44 */
 @media (prefers-reduced-motion: reduce) { .seg-tabs button { transition: none; } }
 @media (forced-colors: active) { .seg-tabs button[aria-selected="true"] { outline: 2px solid Highlight; } }
 @media (max-width: 30rem) { .seg-tabs button { padding: 0 var(--space-2); } }

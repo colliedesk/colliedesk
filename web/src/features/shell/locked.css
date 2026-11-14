@@ -9,7 +9,7 @@ main.settings-page.locked-screen {
 }
 main.locked-screen > * { margin: 0; }
 main.locked-screen > header { display: flex; flex-direction: column; gap: var(--space-1); max-width: none; margin: 0; }
-main.locked-screen > header h1 { margin: 0; font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
+main.locked-screen > header h1 { margin: 0; font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
 main.locked-screen > header p { margin: 0; color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
 main.locked-screen > .purchase-stack { max-width: none; gap: var(--space-6); }
 main.locked-screen .button-row { margin: 0; }
