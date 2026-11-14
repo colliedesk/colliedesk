@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { InvalidRequestError } from '../../api/client';
 import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { useSaveFeedback } from '../settings/save-feedback';
 import { kbApi } from './kb-api';
 import { HelpCenterDomainSection } from './help-center-domain';
@@ -65,16 +66,18 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
   return <>
     <p role="status" className="saved-state" data-on={on ? 'true' : 'false'}>{on ? kbMessages.helpCenterOn : kbMessages.helpCenterOff}</p>
     <p className="muted-copy">{kbMessages.helpCenterAddress} <a href={settings.data.url} target="_blank" rel="noopener noreferrer">{settings.data.url}</a></p>
-    <p className="muted-copy" data-on={portal ? 'true' : 'false'}>{portal ? kbMessages.portalOn : kbMessages.portalOff}
-      {portal && <> {kbMessages.portalAddress} <a href={portalURL} target="_blank" rel="noopener noreferrer">{portalURL}</a></>}</p>
+    <p className="muted-copy" data-on={portal ? 'true' : 'false'}>{portal ? kbMessages.portalOn : kbMessages.portalOff}</p>
+    {portal && <p className="muted-copy" data-quiet="value">{kbMessages.portalAddress} <a href={portalURL} target="_blank" rel="noopener noreferrer">{portalURL}</a></p>}
     {canManage
       ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate({ enabled, title: title.trim(), portalEnabled }); }}>
           <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{kbMessages.helpCenterEnable}</span></label>
           <div className="field"><label htmlFor="help-center-title">{kbMessages.helpCenterTitle}</label>
             <input id="help-center-title" value={title} maxLength={200} placeholder={workspaceName} aria-describedby="help-center-title-help" onChange={(event) => { feedback.touch(); setTitle(event.target.value); }} />
             <small id="help-center-title-help" className="muted-copy">{kbMessages.helpCenterTitleHelp}</small></div>
-          <label className="field-inline"><input type="checkbox" checked={portalEnabled} onChange={(event) => { feedback.touch(); setPortalEnabled(event.target.checked); }} /><span>{kbMessages.portalEnable}</span></label>
-          <small className="muted-copy">{kbMessages.portalHelp}</small>
+          <div className="heading-with-tip">
+            <label className="field-inline"><input type="checkbox" checked={portalEnabled} onChange={(event) => { feedback.touch(); setPortalEnabled(event.target.checked); }} /><span>{kbMessages.portalEnable}</span></label>
+            <HelpTip label={kbMessages.portalEnable} text={kbMessages.portalHelp} />
+          </div>
           <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(kbMessages.saveHelpCenter)}</button>
             {feedback.status}</span>
         </form>
