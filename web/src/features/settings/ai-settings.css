@@ -229,6 +229,8 @@
 .aic-chats { container-type: inline-size; display: grid; gap: var(--space-3); padding: var(--space-4); min-width: 0; }
 .aic-chats-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .aic-chats-head h2 { margin: 0 auto 0 0; font-size: var(--fs-body); }
+.aic-chats-head > .heading-with-tip { margin: 0 auto 0 0; }
+.aic-chats-head .heading-with-tip h2 { margin: 0; }
 .aic-empty { margin: 0; }
 .aic-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
 .aic-table th, .aic-table td { padding: var(--space-2) var(--space-3); border-top: 1px solid var(--line); text-align: left; vertical-align: top; }

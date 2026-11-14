@@ -377,7 +377,7 @@ test('an agent does not see Export all data', async () => {
 test('Data tells a person who may neither import nor export that admins do it', async () => {
   show('agent', [], DataRoute);
   await screen.findByRole('heading', { level: 1, name: 'Data' });
-  expect(await screen.findByText('Only a workspace admin can import. Ask an admin to import your Freshdesk account.')).toBeInTheDocument();
+  expect(await screen.findByText('Only a workspace admin can import. Ask one to do it.')).toBeInTheDocument();
   expect(screen.getByText('Only workspace admins can export all data.')).toBeInTheDocument();
 });
 

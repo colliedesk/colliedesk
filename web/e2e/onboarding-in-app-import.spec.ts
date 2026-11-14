@@ -24,7 +24,7 @@ test('in-app freshdesk import: an admin reads the account, imports it in the bac
     await expect(page.getByRole('heading', { name: 'Import from Freshdesk', level: 1 })).toBeVisible();
 
     await page.getByLabel('Freshdesk address').fill('acme.freshdesk.com');
-    await page.getByLabel('API key of a Freshdesk admin').fill(apiKey);
+    await page.getByLabel('API key of a Freshdesk admin', { exact: true }).fill(apiKey);
     await page.getByRole('button', { name: 'Read account' }).click();
     await expect(page.getByRole('heading', { name: 'Found in acme.freshdesk.com' })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole('row', { name: /Tickets/ })).toContainText(`at least ${fixture.tickets - 1}`);
