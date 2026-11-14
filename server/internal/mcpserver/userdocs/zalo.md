@@ -72,6 +72,9 @@ The channel's page then has four tabs of its own, before AI and History:
 
 Everyone with `channels:read` sees the same tabs; changing them needs `channels:update`.
 
+Each row of these tabs shows its name and one short line. The ⓘ beside a name holds the longer explanation:
+what the OA does with the setting, and why. Open it with a hover, a tap or the keyboard; Escape closes it.
+
 **Pause processing**, at the top of the channel's page (admins), asks first, then keeps every message
 Zalo delivers and opens nothing, adds nothing and sends nothing until **Resume processing**: what arrived
 is then handled in order by the channel's rules. While paused the channel reads **Processing paused**,

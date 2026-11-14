@@ -558,12 +558,12 @@ test('closing resolved conversations by themselves is a number of hours, empty o
   view(<Tabs.messages channel={channel({}, { effective_settings: { notices: { status_closed: 'Đã đóng {ref}.' } } })} canManage timezone="UTC" />);
   const hours = screen.getByLabelText('Close resolved conversations after');
   expect(hours).toHaveValue(null);
-  expect(hours).toHaveAccessibleDescription(/Resolved conversations stay resolved until someone closes them\./);
+  expect(hours).toHaveAccessibleDescription(/Resolved conversations stay resolved until closed\./);
   fireEvent.change(hours, { target: { value: '1' } });
-  expect(hours).toHaveAccessibleDescription(/stays resolved for 1 hour closes by itself, and the customer is told with “When set to Closed”\./);
+  expect(hours).toHaveAccessibleDescription(/Closes after 1 hour resolved; the customer is told\./);
   fireEvent.change(screen.getByLabelText('When set to Closed'), { target: { value: '' } });
   fireEvent.change(hours, { target: { value: '48' } });
-  expect(hours).toHaveAccessibleDescription(/stays resolved for 48 hours closes by itself, quietly: “When set to Closed” is empty\./);
+  expect(hours).toHaveAccessibleDescription(/Closes after 48 hours resolved, quietly\./);
   fireEvent.change(hours, { target: { value: '721' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
   expect(hours).toHaveAccessibleDescription(/A whole number of hours, from 0 to 720\./);
@@ -574,17 +574,17 @@ test('closing resolved conversations by themselves is a number of hours, empty o
   expect(channelsApi.update.mock.calls[0][1].settings.auto_close_hours).toBe(48);
 });
 
-test('changing the hours while closing is on says it also applies to conversations resolved since, and when fewer closes them now', () => {
+test('changing the hours while closing is on says what saving will close when fewer hours reach back further', () => {
   view(<Tabs.messages channel={channel({}, { settings: { auto_close_hours: 48 }, effective_settings: { auto_close_hours: 48, notices: { status_closed: 'Đã đóng.' } } })} canManage timezone="UTC" />);
   const hours = screen.getByLabelText('Close resolved conversations after');
   expect(hours).toHaveValue(48);
-  expect(hours).not.toHaveAccessibleDescription(/also applies/);
+  expect(hours).toHaveAccessibleDescription(/A new number also applies to conversations resolved since it was turned on\./);
   fireEvent.change(hours, { target: { value: '72' } });
-  expect(hours).toHaveAccessibleDescription(/The new number also applies to conversations resolved since this was turned on\.$/);
+  expect(hours).not.toHaveAccessibleDescription(/Saving closes/);
   fireEvent.change(hours, { target: { value: '24' } });
-  expect(hours).toHaveAccessibleDescription(/Those already resolved for 24 hours or more close, and their customers are told, within minutes of saving\./);
+  expect(hours).toHaveAccessibleDescription(/Saving closes conversations already resolved for 24 hours and tells their customers\./);
   fireEvent.change(screen.getByLabelText('When set to Closed'), { target: { value: '' } });
-  expect(hours).toHaveAccessibleDescription(/Those already resolved for 24 hours or more close within minutes of saving\./);
+  expect(hours).toHaveAccessibleDescription(/Saving closes conversations already resolved for 24 hours\./);
 });
 
 test('Reopened is said when the team reopens too', () => {
@@ -598,4 +598,99 @@ test('an agent reads the status notices and the closing rule', () => {
   expect(row('When set to Resolved')).toHaveTextContent('Đã xử lý.');
   expect(row('When set to Pending')).toHaveTextContent('—');
   expect(row('Close resolved conversations after')).toHaveTextContent('48 hours');
+});
+
+// Quiet by default (docs/internals/design.md): a row keeps its label and one short line; the how and why sit in a tip.
+const tip = (label: string) => screen.getByRole('button', { name: `About ${label}` });
+
+test('connect keeps a field to its label: what the name and the OA id are is in a tip', () => {
+  view(<Connect canManage timezone="UTC" create={vi.fn()} />);
+  expect(tip('Name')).toHaveAccessibleDescription('Tells this OA apart in the inbox and in Settings. Leave it empty to use the type’s name.');
+  expect(screen.getByLabelText('Name')).toHaveAccessibleDescription(/Tells this OA apart/);
+  expect(tip('OA ID')).toHaveAccessibleDescription('The Official Account’s id, in Zalo for Developers → your app → Official Account.');
+  expect(screen.queryByText(/Tells this OA apart/, { selector: '.field-note' })).toBeNull();
+});
+
+test('Connection says each step in one line and keeps the background in the tip of its block', async () => {
+  view(<Tabs.connection channel={channel()} canManage timezone="UTC" />);
+  expect(screen.getByText('Colliedesk serves Zalo’s verification file for you.')).toBeInTheDocument();
+  expect(tip('Domain verification')).toHaveAccessibleDescription('Zalo takes the webhook URL only on a verified address. Colliedesk serves the file, so there is no DNS change or upload.');
+  expect(screen.getByText('In your Zalo app → Webhook, paste this address.')).toBeInTheDocument();
+  expect(tip('Webhook URL')).toHaveAccessibleDescription('Events of other OAs on the same app are acknowledged and ignored.');
+  expect(screen.getByText('Stored encrypted, never shown again.')).toBeInTheDocument();
+  expect(tip('Secrets')).toHaveAccessibleDescription('Replacing one takes effect at once; removing the channel erases them all.');
+  expect(screen.getByText('The code each conversation of this OA gets.')).toBeInTheDocument();
+  expect(tip('References')).toHaveAccessibleDescription('The customer can send it back to reopen the conversation. Codes already given never change.');
+  expect(screen.getByRole('link', { name: 'Manage number series in Settings → Conversation numbers' })).toHaveAttribute('href', '/settings/general#numbers-heading');
+  expect(tip('Processing')).toHaveAccessibleDescription(/^Pause, at the top of this page, keeps every message from Zalo.*Turning the channel off is different/);
+  expect(tip('Verification code')).toHaveAccessibleDescription(/The part of zalo_verifier<code>\.html between zalo_verifier and \.html/);
+  expect(screen.getByLabelText('Verification code')).toHaveAccessibleDescription(/The part of zalo_verifier<code>\.html/);
+});
+
+test('the tokens dialog asks for the newest pair in one line and says in a tip what happens to the held one', async () => {
+  view(<Tabs.connection channel={channel()} canManage timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Add tokens' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Add the tokens of Hảo Đạt OA' });
+  expect(within(dialog).getByText('Copy the newest pair: a refresh token works only once.')).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'About Refresh token' })).toHaveAccessibleDescription('The one Colliedesk holds stops working when another tool refreshes it.');
+});
+
+test('Groups and Staff open with one line each and keep what the lists mean in a tip', async () => {
+  view(<Tabs.groups channel={channel()} canManage timezone="UTC" />);
+  expect(await screen.findByText('No group has written to the OA yet. Add it to a Zalo group.')).toBeInTheDocument();
+  expect(screen.getByText('Link each group to the customer it belongs to.')).toBeInTheDocument();
+  expect(tip('Zalo groups')).toHaveAccessibleDescription(/^Messages in a group are gathered into cards in Review.*Link each group to file its requests under the right customer\.$/);
+  expect(tip('Zalo groups')).toHaveAccessibleDescription(/A group shows here after its first message\./);
+});
+
+test('linking a group says in one line whose conversations change, and the organization field keeps its how in a tip', async () => {
+  channelsApi.threads.mockResolvedValue({ items: [thread('group', 'group:8821004410')], next_cursor: null });
+  view(<Tabs.groups channel={channel()} canManage timezone="UTC" />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Link…' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Link “Group 8821004410” to an organization' });
+  expect(within(dialog).getByText('New conversations belong to it; earlier ones keep theirs.')).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'About Organization' })).toHaveAccessibleDescription('As your contacts’ organization is written, for example in the inbox filter. At most 200 characters.');
+});
+
+test('Staff says whose messages these are in one line, and the add dialog asks for one message first in a tip', async () => {
+  view(<Tabs.staff channel={channel()} canManage timezone="UTC" />);
+  expect(screen.getByText('Messages from these accounts are your team’s.')).toBeInTheDocument();
+  expect(tip('Staff accounts')).toHaveAccessibleDescription('In a group they never open a request, and what they write there is the team’s.');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Add staff account' })[0]);
+  const dialog = await screen.findByRole('dialog', { name: 'Add staff account' });
+  expect(within(dialog).getByText('Pick a person who wrote to the OA, or paste a user id.')).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'About Or paste a Zalo user id' })).toHaveAccessibleDescription('Ask the teammate to send the OA one message first, so their account shows in the list.');
+});
+
+test('Messages keeps each box to its label and a count; what a notice is for is in its tip', () => {
+  view(<Tabs.messages channel={channel()} canManage timezone="UTC" />);
+  expect(screen.getByText('What a customer can type to the OA, in a chat or a group.')).toBeInTheDocument();
+  expect(tip('Phrase matching')).toHaveAccessibleDescription(/^Allow one typo forgives one wrong letter.*Exact is the whole message, accents kept, in any case\.$/);
+  expect(screen.getByText('Sent by the OA; not counted as your team’s first reply.')).toBeInTheDocument();
+  expect(tip('When a customer sends only the command')).toHaveAccessibleDescription(/^Asks what the request is about when “Open a request” comes with nothing before it\./);
+  expect(tip('When a customer asks for help')).toHaveAccessibleDescription(/^Sent for the Help command, in a chat or a group;/);
+  expect(tip('When a resolved or closed conversation is reopened')).toHaveAccessibleDescription(/^\{ref\} is its code\. Sent when the customer’s Reopen command reopens it/);
+  expect(tip('When Reopen names a code from before Colliedesk')).toHaveAccessibleDescription(/^\{old_ref\} is the code they typed/);
+  expect(screen.getByLabelText('When a customer asks for help')).toHaveAccessibleDescription(/0 \/ 1,000/);
+});
+
+test('the status notices, the closing rule and the question each say one line and keep the rest in a tip', () => {
+  view(<Tabs.messages channel={channel({}, { settings: { auto_close_hours: 48 }, effective_settings: { auto_close_hours: 48, notices: { status_closed: 'Đã đóng.' } } })} canManage timezone="UTC" />);
+  expect(screen.getByText('Sent in the conversation’s chat when its status changes.')).toBeInTheDocument();
+  expect(tip('When a conversation’s status changes')).toHaveAccessibleDescription(/^One to one, as a reply to the customer’s first message\./);
+  expect(screen.getByText('Hours; empty or 0 means never.')).toBeInTheDocument();
+  expect(tip('Close resolved conversations after')).toHaveAccessibleDescription(/^Clock hours, not business hours, from the resolve or the customer’s last message/);
+  fireEvent.change(screen.getByLabelText('Close resolved conversations after'), { target: { value: '24' } });
+  expect(screen.getByText('Saving closes conversations already resolved for 24 hours and tells their customers.')).toBeInTheDocument();
+  expect(tip('Question')).toHaveAccessibleDescription(/^Name the Confirm and Cancel phrases/);
+  fireEvent.click(screen.getByRole('switch', { name: 'Ask the customer to confirm' }));
+  expect(screen.getByText('Seconds of silence.')).toBeInTheDocument();
+  expect(tip('Wait for the customer to stop writing')).toHaveAccessibleDescription('Waited before the question and before asking for a description.');
+});
+
+test('asking before opening says what it does in a tip, and in one line when it can never be asked', () => {
+  view(<Tabs.messages channel={channel()} canManage timezone="UTC" />);
+  expect(tip('Ask the customer to confirm')).toHaveAccessibleDescription(/^A request opens as soon as the customer is done writing; nothing is asked\./);
+  expect(screen.getByRole('switch', { name: 'Ask the customer to confirm' })).toHaveAccessibleDescription(/nothing is asked/);
+  expect(screen.getByText('Never asked: each chat opens a conversation.')).toBeInTheDocument();
 });

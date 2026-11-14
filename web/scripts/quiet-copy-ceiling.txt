@@ -21,39 +21,6 @@ channels/help_chat/panels.tsx:m.instructionsHint + channels/help_chat/panels.tsx
 channels/help_chat/panels.tsx:m.nameHint	80
 channels/help_chat/panels.tsx:m.originsHint	106
 channels/web_form/panels.tsx:formMessages.nameHint	80
-channels/zalo/panels.tsx:autoCloseSentence	114
-channels/zalo/zalo-messages.ts:zaloMessages.addStaffHelp	126
-channels/zalo/zalo-messages.ts:zaloMessages.askDescriptionHint + channels/zalo/zalo-messages.ts:zaloMessages.count	117
-channels/zalo/zalo-messages.ts:zaloMessages.autoCloseHint	247
-channels/zalo/zalo-messages.ts:zaloMessages.commandsLead	61
-channels/zalo/zalo-messages.ts:zaloMessages.confirmSentence + channels/zalo/zalo-messages.ts:zaloMessages.confirmNeedsCommand	488
-channels/zalo/zalo-messages.ts:zaloMessages.groupsLead	301
-channels/zalo/zalo-messages.ts:zaloMessages.helpNoticeHint + channels/zalo/zalo-messages.ts:zaloMessages.count	133
-channels/zalo/zalo-messages.ts:zaloMessages.linkHelp	78
-channels/zalo/zalo-messages.ts:zaloMessages.manageSeries	62
-channels/zalo/zalo-messages.ts:zaloMessages.matchHelp	166
-channels/zalo/zalo-messages.ts:zaloMessages.nameHint	88
-channels/zalo/zalo-messages.ts:zaloMessages.noGroups	109
-channels/zalo/zalo-messages.ts:zaloMessages.noticesLead	71
-channels/zalo/zalo-messages.ts:zaloMessages.oaIDHint	80
-channels/zalo/zalo-messages.ts:zaloMessages.organizationHint	99
-channels/zalo/zalo-messages.ts:zaloMessages.processingHelp	263
-channels/zalo/zalo-messages.ts:zaloMessages.questionHint + channels/zalo/zalo-messages.ts:zaloMessages.count	90
-channels/zalo/zalo-messages.ts:zaloMessages.receivedHint + channels/zalo/zalo-messages.ts:zaloMessages.unmatchedHint + channels/zalo/zalo-messages.ts:zaloMessages.count	115
-channels/zalo/zalo-messages.ts:zaloMessages.referencesLead	124
-channels/zalo/zalo-messages.ts:zaloMessages.reopenLegacyHint + channels/zalo/zalo-messages.ts:zaloMessages.count	145
-channels/zalo/zalo-messages.ts:zaloMessages.reopenNotFoundHint + channels/zalo/zalo-messages.ts:zaloMessages.unmatchedHint + channels/zalo/zalo-messages.ts:zaloMessages.count	178
-channels/zalo/zalo-messages.ts:zaloMessages.reopenNotedHint + channels/zalo/zalo-messages.ts:zaloMessages.unmatchedHint + channels/zalo/zalo-messages.ts:zaloMessages.count	99
-channels/zalo/zalo-messages.ts:zaloMessages.reopenedHint + channels/zalo/zalo-messages.ts:zaloMessages.unmatchedHint + channels/zalo/zalo-messages.ts:zaloMessages.count	230
-channels/zalo/zalo-messages.ts:zaloMessages.secondsOfSilence	76
-channels/zalo/zalo-messages.ts:zaloMessages.secretsLead	113
-channels/zalo/zalo-messages.ts:zaloMessages.staffLead	129
-channels/zalo/zalo-messages.ts:zaloMessages.statusLead	298
-channels/zalo/zalo-messages.ts:zaloMessages.tokensHelp	126
-channels/zalo/zalo-messages.ts:zaloMessages.unmatchedAllOpen + channels/zalo/zalo-messages.ts:zaloMessages.count	76
-channels/zalo/zalo-messages.ts:zaloMessages.verificationCodeHint	111
-channels/zalo/zalo-messages.ts:zaloMessages.verificationLead	118
-channels/zalo/zalo-messages.ts:zaloMessages.webhookLead	130
 features/auth/oauth-consent-messages.ts:oauthConsentMessages.changes	113
 features/auth/oauth-consent-messages.ts:oauthConsentMessages.otherWorkspaceSelfHost	102
 features/auth/oauth-consent-messages.ts:oauthConsentMessages.unverifiedName	61

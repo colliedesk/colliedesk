@@ -54,3 +54,5 @@
 }
 /* A pick's radios keep their own size: the dialog stretches a field's inputs to its width. */
 .form-dialog .zl-pick input[type="radio"] { flex: none; width: auto; }
+/* A label with a tip after it reads like a label without one (.field > label in base-plain.css). */
+.field > .heading-with-tip > .field-label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
