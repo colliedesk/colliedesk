@@ -14,7 +14,7 @@ center), `export` and `share` (data leaves the workspace), `purge` (no way back)
 `create_tokens` (people's access). Some permissions are marked as reaching outside the workspace:
 they touch a customer, the public or another service.
 
-There are 62 permissions. **Admin** holds them all; **Agent** holds the 42 below that are not marked
+There are 66 permissions. **Admin** holds them all; **Agent** holds the 46 below that are not marked
 *Admin only*.
 
 | Resource | Permissions |
@@ -26,6 +26,7 @@ There are 62 permissions. **Admin** holds them all; **Agent** holds the 42 below
 | Tags | `tags:read`, `tags:create`, `tags:update`, `tags:delete` |
 | Saved replies | `saved_replies:read`, `saved_replies:create`, `saved_replies:update`, `saved_replies:delete` |
 | Saved views | `saved_views:read`, `saved_views:create`, `saved_views:update`, `saved_views:delete` |
+| Macros | `macros:read`, `macros:create`, `macros:update`, `macros:delete` |
 | Knowledge base articles | `kb_articles:read`, `kb_articles:create`, `kb_articles:update`, `kb_articles:delete`, `kb_articles:publish` |
 | Knowledge base media | `kb_media:read`, `kb_media:create`, `kb_media:update`, `kb_media:delete`; Admin only: `kb_media:purge` |
 | Help center | `help_center:read`; Admin only: `help_center:update` |
@@ -52,9 +53,12 @@ Every workspace has two built-in roles:
 
 - **Admin** holds every permission, including ones added in later releases. It cannot be renamed,
   changed or deleted.
-- **Agent** starts with the 42 permissions above. You can rename it and change its permissions, and
-  **Reset to default** puts the original 42 back. It cannot be deleted: new invites start with it.
-  A permission added in a later release does not join Agent by itself; the release notes say so.
+- **Agent** starts with the 46 permissions above. You can rename it and change its permissions, and
+  **Reset to default** puts the original 46 back. It cannot be deleted: new invites start with it.
+  A permission added in a later release does not join Agent by itself, unless that release says so.
+  Macros did: the four `macros` permissions were added to Agent, because every agent uses them the
+  way they use saved replies. A workspace that had already changed its Agent role did not gain them;
+  add the four there if those agents should manage macros.
 
 To make a role, choose **New role**, give it a name (up to 60 characters) and an optional
 description, and tick its permissions; **Start from** copies another role's permissions to begin

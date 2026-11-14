@@ -100,6 +100,23 @@ const savedReplyFields = {
   created_at: z.string().datetime(), updated_at: z.string().datetime(), last_change: savedReplyChangeSchema.nullable(),
 };
 export const savedReplySchema = z.object(savedReplyFields) satisfies z.ZodType<Generated<'SavedReply'>>;
+export const macroActionsSchema = z.object({
+  status: z.enum(['open', 'pending', 'resolved', 'closed']).optional(),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+  set_assignee: z.boolean().optional(),
+  assignee_id: z.string().uuid().nullable().optional(),
+  add_tag_ids: z.array(z.string().uuid()).optional(),
+  remove_tag_ids: z.array(z.string().uuid()).optional(),
+}) satisfies z.ZodType<Generated<'MacroActions'>>;
+export const macroSchema = z.object({
+  id: z.string().uuid(), title: z.string(), body: z.string(), scope: z.enum(['personal', 'shared']),
+  owner_agent_id: z.string().uuid().nullable(), actions: macroActionsSchema,
+  created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  deleted_at: z.string().datetime().nullable(), purges_at: z.string().datetime().nullable(),
+}) satisfies z.ZodType<Generated<'Macro'>>;
+export const macroListSchema = z.object({ items: z.array(macroSchema) }) satisfies z.ZodType<JsonResponse<'listMacros', 200>>;
+export type Macro = z.infer<typeof macroSchema>;
+export type MacroActions = z.infer<typeof macroActionsSchema>;
 export const trashedSavedReplySchema = z.object({
   ...savedReplyFields, deleted_at: z.string().datetime(), deleted_by: savedReplyPersonSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedSavedReply'>>;
@@ -167,6 +184,15 @@ export const conversationSchema = z.object({
   // What the customer wrote last, one line: lists only, and missing when the customer never wrote.
   latest_customer_message: z.object({ excerpt: z.string(), created_at: z.string().datetime() }).optional(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
+export const macroResultSchema = z.object({
+  application: z.object({
+    id: z.string().uuid(), macro_id: z.string().uuid().nullable(), title: z.string(), body: z.string(),
+    created_at: z.string().datetime(), undone_at: z.string().datetime().nullable(),
+    restored: z.array(z.enum(['status', 'priority', 'assignee', 'tags'])),
+    kept: z.array(z.enum(['status', 'priority', 'assignee', 'tags'])),
+  }),
+  conversation: conversationSchema,
+}) satisfies z.ZodType<Generated<'MacroResult'>>;
 export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
 export const messageDeliverySchema = z.object({
   status: deliveryStatusSchema, attempts: z.number().int().min(0), last_error: z.string().nullable(), sent_at: nullableDate, reason_code: z.string().nullable().optional(), retryable: z.boolean().optional(),

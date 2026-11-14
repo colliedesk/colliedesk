@@ -282,7 +282,30 @@ func exportSavedReplies(ctx context.Context, tx pgx.Tx, workspaceID string, sink
 	if err := exportSavedReplyVersions(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
-	return exportSavedViews(ctx, tx, workspaceID, sink)
+	if err := exportSavedViews(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
+	return exportMacros(ctx, tx, workspaceID, sink)
+}
+
+func exportMacros(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,title,body,scope,owner_agent_id::text,actions,created_by_agent_id::text,created_at,updated_at,deleted_at,deleted_by_agent_id::text
+		FROM macros WHERE workspace_id=$1 ORDER BY id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export macros: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.Macro
+		if err := rows.Scan(&record.ID, &record.Title, &record.Body, &record.Scope, &record.OwnerAgentID, &record.Actions, &record.CreatedByAgentID, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
+			return fmt.Errorf("export macros: %w", err)
+		}
+		record.CreatedAt, record.UpdatedAt, record.DeletedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt), domain.UTCOptional(record.DeletedAt)
+		if err := sink.Macro(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export macros", rows)
 }
 
 // exportSavedViews writes every view of the workspace, every person's personal views and the trash

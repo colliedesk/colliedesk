@@ -142,11 +142,12 @@ Each is sent only after the action succeeded.
 | `inbox_filtered` | `filter`: the kind of filter changed: `status`, `priority`, `assignee`, `tag`, `contact`, `organization`, `awaiting`, `draft`, `delivery`, `source`, `channel`, `created`, `updated` or `sort`; never its value |
 | `inbox_searched` | `has_results` (the search words are never sent) |
 | `saved_reply_inserted` | none |
+| `macro_applied` | none |
 | `conversation_status_changed` | `to`: the new status |
 | `conversation_assigned` | `to_self` |
 | `bulk_action_applied` | `action`: `status`, `assign`, `add_tag` or `remove_tag`; `count` |
 | `reply_draft_decided` | `decision`: `sent` or `discarded`; sent when someone sends or discards a reply draft an AI made or an AI agent left |
-| `settings_section_opened` | `section`: the settings page opened from the settings menu: `account`, `general`, `members`, `channels`, `targets`, `ai`, `saved_replies`, `data` or `billing` (see [below](#settings-pages-before-and-after)) |
+| `settings_section_opened` | `section`: the settings page opened from the settings menu: `account`, `general`, `members`, `channels`, `targets`, `ai`, `saved_replies`, `macros`, `data` or `billing` (see [below](#settings-pages-before-and-after)) |
 | `workspace_export_requested` | none |
 | `onboarding_step_started` | `step`: `email`, `import`, `ai_drafts`, `reply_targets`, `invite` or `first_reply`; sent when someone selects a step of the [setup guide](setup-guide.md) |
 | `onboarding_step_completed` | `step`: as above; sent when the step turns done while the guide is shown |

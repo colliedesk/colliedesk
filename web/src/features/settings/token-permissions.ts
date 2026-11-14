@@ -37,6 +37,9 @@ export const tokenResources: ResourceInfo[] = [
   { resource: 'saved_views', label: 'Saved views', permissions: [
     p('saved_views:read', 'See saved inbox views.'), p('saved_views:create', 'Create views.'),
     p('saved_views:update', 'Edit views.'), p('saved_views:delete', 'Delete views and bring them back.')] },
+  { resource: 'macros', label: 'Macros', permissions: [
+    p('macros:read', 'See macros and their trash.'), p('macros:create', 'Create macros.'),
+    p('macros:update', 'Edit macros.'), p('macros:delete', 'Delete macros and bring them back.')] },
   { resource: 'kb_articles', label: 'Knowledge base articles', permissions: [
     p('kb_articles:read', 'See articles, collections, their trash and versions.'), p('kb_articles:create', 'Create articles and collections.'),
     p('kb_articles:update', 'Edit and order articles, restore versions, keep an article from AI.'),

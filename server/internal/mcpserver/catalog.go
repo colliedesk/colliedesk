@@ -43,6 +43,7 @@ func Catalog() []Spec {
 		savedRepliesListSpec(), savedReplyGetSpec(), savedReplyCreateSpec(), savedReplyUpdateSpec(), savedReplyDeleteSpec(),
 		savedReplyHistorySpec(), savedReplyVersionRestoreSpec(), savedRepliesTrashSpec(), savedReplyUndeleteSpec(),
 		savedViewsListSpec(), savedViewCreateSpec(), savedViewUpdateSpec(), savedViewDeleteSpec(), savedViewRestoreSpec(),
+		macrosListSpec(), macroSaveSpec(), macroDeleteSpec(), macroRestoreSpec(), macroApplySpec(), macroUndoSpec(),
 		kbCollectionsListSpec(), kbCollectionCreateSpec(), kbCollectionUpdateSpec(), kbCollectionDeleteSpec(), kbCollectionsTrashSpec(), kbCollectionUndeleteSpec(), kbOrderSetSpec(),
 		kbArticlesSearchSpec(), kbArticleGetSpec(), kbArticleCreateSpec(), kbArticleUpdateSpec(), kbArticleDeleteSpec(), kbArticlesTrashSpec(), kbArticleUndeleteSpec(),
 		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbArticleAIExcludeSpec(), kbArticleAIIncludeSpec(), kbImageUploadSpec(), kbImageGetSpec(),

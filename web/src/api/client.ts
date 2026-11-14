@@ -12,7 +12,7 @@ import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, cloudWorkspacesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, invitePreviewSchema, markMentionsResultSchema, mentionEmailSchema, mentionListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, macroListSchema, macroResultSchema, macroSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import { forgetSignOut, rememberSignOut } from '../lib/sign-out-intent';
 import type { Message, WorkspaceChoice } from './schemas';
@@ -494,6 +494,18 @@ export const api = {
   tags: () => request('/api/v1/tags', tagListSchema),
   createTag: (name: string, key: string) => request('/api/v1/tags', tagSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createTag'>({ name }) }),
   savedReplies: () => request('/api/v1/saved-replies', savedReplyListSchema),
+  macros: () => request('/api/v1/macros', macroListSchema),
+  trashedMacros: () => request('/api/v1/macros/trash', macroListSchema),
+  createMacro: (value: RequestBody<'createMacro'>, key: string) => request('/api/v1/macros', macroSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createMacro'>(value) }),
+  updateMacro: (id: string, value: RequestBody<'updateMacro'>) => request(`/api/v1/macros/${id}`, macroSchema, { method: 'PATCH', body: json<'updateMacro'>(value) }),
+  deleteMacro: (id: string, updatedAt: string) => request(`/api/v1/macros/${id}?${new URLSearchParams({ updated_at: updatedAt })}`, macroSchema, { method: 'DELETE' }),
+  restoreMacro: (id: string, key: string) => request(`/api/v1/macros/${id}/restore`, macroSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key } }),
+  applyMacro: (conversationId: string, macroId: string, key: string) => request(`/api/v1/conversations/${conversationId}/macros/${macroId}/apply`, macroResultSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key } }),
+  undoMacro: (conversationId: string, applicationId: string, key: string) => request(`/api/v1/conversations/${conversationId}/macro-applications/${applicationId}/undo`, macroResultSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key } }),
   createSavedReply: (title: string, body: string, key: string) => request('/api/v1/saved-replies', savedReplySchema,
     { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createSavedReply'>({ title, body }) }),
   updateSavedReply: (id: string, value: RequestBody<'updateSavedReply'>) => request(`/api/v1/saved-replies/${id}`, savedReplySchema, { method: 'PATCH', body: json<'updateSavedReply'>(value) }),

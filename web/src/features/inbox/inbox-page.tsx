@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Conversation, ConversationViewer, EmailChannelSettings, Message, SavedReply, SettableStatus, SpamResult, TeamMember, Tag, TimeEntry } from '../../api/schemas';
+import type { Conversation, ConversationViewer, EmailChannelSettings, Macro, Message, SavedReply, SettableStatus, SpamResult, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import { answerGoesToMailbox, MailSwitchLine } from './mail-switch';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
@@ -68,6 +68,11 @@ interface InboxPageProps {
   agentName?: string;
   onManageSavedReplies?: () => void;
   savedRepliesState?: 'loading' | 'failed' | 'ready';
+  macros?: Macro[];
+  macrosState?: 'loading' | 'failed' | 'ready';
+  onManageMacros?: () => void;
+  onApplyMacro?: (macro: Macro) => Promise<{ id: string; body: string; title: string }>;
+  onUndoMacro?: (applicationId: string) => Promise<unknown>;
   onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
   // Changes one conversation's status and settles when the server answered: the thread header and Send and resolve.
   // notify false sets it without telling the customer in their chat.
@@ -162,7 +167,7 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, searchSignal = 0, onTestMessage, nextStep, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false, otherList }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, macros, macrosState, onManageMacros, onApplyMacro, onUndoMacro, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, searchSignal = 0, onTestMessage, nextStep, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false, otherList }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
@@ -355,6 +360,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
             latestReplyNumber={!timelineLoading ? latestReply : undefined} timezone={timezone}
             latestCustomerMessage={latestCustomerMessage}
             savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
+            macros={macros} macrosState={macrosState} onManageMacros={onManageMacros} onApplyMacro={onApplyMacro} onUndoMacro={onUndoMacro}
             canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
             // Send and resolve is offered while there is something to resolve; a resolved or closed one is reopened from the header.
             onResolve={onSetStatus && (selected.status === 'open' || selected.status === 'pending') ? () => onSetStatus(selected.id, 'resolved') : undefined}

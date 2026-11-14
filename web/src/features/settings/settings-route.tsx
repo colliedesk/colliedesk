@@ -16,6 +16,7 @@ export { MembersRoute } from './members-route';
 export { FieldsRoute } from './fields-route';
 export type { MembersTab } from './settings-anchors';
 export { SavedRepliesRoute } from './saved-replies-route';
+export { MacrosRoute } from './macros-route';
 
 // SettingsIndexRoute is the menu itself as a page: /settings on a phone, where the menu and a page take
 // turns on the screen as the inbox list and a conversation do. A wider screen opens Account instead (app.tsx),

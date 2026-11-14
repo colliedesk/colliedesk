@@ -42,6 +42,11 @@ const (
 	PermSavedViewsUpdate = "saved_views:update"
 	PermSavedViewsDelete = "saved_views:delete"
 
+	PermMacrosRead   = "macros:read"
+	PermMacrosCreate = "macros:create"
+	PermMacrosUpdate = "macros:update"
+	PermMacrosDelete = "macros:delete"
+
 	PermKBArticlesRead    = "kb_articles:read"
 	PermKBArticlesCreate  = "kb_articles:create"
 	PermKBArticlesUpdate  = "kb_articles:update"
@@ -133,6 +138,10 @@ var tokenPermissions = []TokenPermission{
 	permission(PermSavedViewsCreate, false),
 	permission(PermSavedViewsUpdate, false),
 	permission(PermSavedViewsDelete, false),
+	permission(PermMacrosRead, false),
+	permission(PermMacrosCreate, false),
+	permission(PermMacrosUpdate, false),
+	permission(PermMacrosDelete, false),
 	permission(PermKBArticlesRead, false),
 	permission(PermKBArticlesCreate, false),
 	permission(PermKBArticlesUpdate, false),

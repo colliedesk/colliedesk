@@ -26,8 +26,9 @@ const (
 // agentRolePermissions is what the built-in Agent role starts with: everything the agent role could do
 // before roles (every permission below the admin tier of agent tokens), and team:create_tokens, since a
 // person only ever gives a token what they hold. Migration 20261102120000-roles writes the same list
-// (colliedesk_agent_role_permissions); TestTheAgentRoleStartsAsTheMigrationMadeIt keeps them equal.
-// A permission a later release adds does not join it: the workspace decides.
+// (colliedesk_agent_role_permissions); TestTheAgentRoleStartsAsTheMigrationMadeIt keeps them equal to
+// the latest definition of that function. A permission a later release adds does not join Agent unless
+// that release says so: macros did (20261114140000-macros), because every agent uses them.
 var agentRolePermissions = []string{
 	PermConversationsRead, PermConversationsUpdate, PermMessagesRead, PermMessagesNote, PermMessagesSend,
 	PermAIAssistRead, PermAIAssistCreate, PermContactsRead, PermContactsCreate, PermContactsUpdate, PermTagsRead,
@@ -37,7 +38,7 @@ var agentRolePermissions = []string{
 	PermKBArticlesDelete, PermKBArticlesPublish, PermKBMediaRead, PermKBMediaCreate, PermKBMediaUpdate,
 	PermKBMediaDelete, PermHelpCenterRead, PermResultsRead, PermProfileUpdate, PermTeamRead, PermChannelsRead,
 	PermAISettingsRead, PermAutofixRead, PermAutofixUpdate, PermAutofixSend, PermAutofixSettingsRead,
-	PermTeamCreateTokens,
+	PermTeamCreateTokens, PermMacrosRead, PermMacrosCreate, PermMacrosUpdate, PermMacrosDelete,
 }
 
 // AgentRolePermissions lists what the built-in Agent role starts with (and goes back to on a reset).

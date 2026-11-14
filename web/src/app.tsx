@@ -404,6 +404,8 @@ const fieldsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setti
   component: () => <SettingsChunkPage title={conversationFieldsTitle} render={({ FieldsRoute }) => <FieldsRoute />} /> });
 const savedRepliesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/saved-replies', loader: pageChunk(settingsRoutePart),
   component: () => <SettingsChunkPage title={messages.savedReplies} render={({ SavedRepliesRoute }) => <SavedRepliesRoute />} /> });
+const macrosRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/macros', loader: pageChunk(settingsRoutePart),
+  component: () => <SettingsChunkPage title={messages.macros} render={({ MacrosRoute }) => <MacrosRoute />} /> });
 // Agent requests were removed: an agent token acts at once when it holds the permission. An old bookmark opens the inbox.
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: () => <Navigate to="/" replace /> });
 // The tab and the channel filter of Review are in the address, so a link opens the same list.
@@ -648,7 +650,7 @@ const trialOfferRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, macrosRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 // Every router Link loads its page ahead when the pointer or the focus reaches it (plain links: lib/in-app-links.ts).
 export const router = createRouter({ routeTree, context: {}, defaultPreload: 'intent' });
 

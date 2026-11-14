@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
   announcePresence: vi.fn(async (_id: string, _body: unknown): Promise<{ viewers: unknown[]; heartbeat_seconds: number }> => ({ viewers: [], heartbeat_seconds: 5 })), leavePresence: vi.fn(async () => undefined),
   me: vi.fn(async () => ({ timezone: 'UTC', permissions: permissionsOf('agent') })), conversations: vi.fn(async () => ({ items: [], page: 1, page_size: 50 })), conversation: vi.fn(),
   agents: vi.fn(async () => ({ items: [] })), tags: vi.fn(async () => ({ items: [] })), messages: vi.fn(async () => ({ items: [] })),
-  timeEntries: vi.fn(async () => ({ items: [] })), savedReplies: vi.fn(async () => ({ items: [] })), config: vi.fn(),
+  timeEntries: vi.fn(async () => ({ items: [] })), savedReplies: vi.fn(async () => ({ items: [] })), macros: vi.fn(async () => ({ items: [] })), config: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null })), contacts: vi.fn(), agentRequests: vi.fn(async () => ({ items: [] })),
 }));
 vi.mock('../../api/client', () => ({ api, ReplyConflictError: class extends Error {} }));

@@ -404,6 +404,7 @@ sidebar lists your views at all times.
   and earlier drafts and their files go 90 days after they ended.
 - **Cc** (under the message box) copies colleagues of the customer on a reply; see [Copy other people on a reply](email-channel.md#copy-other-people-on-a-reply-cc).
 - **Insert saved reply** (or `/`) puts a [saved reply](saved-replies.md) into the box, with the customer's name and yours filled in. You can edit it before you send.
+- **Apply macro** puts a [macro](macros.md) into the box and, in the same step, sets the status, priority, assignee and tags it carries. You still send the reply yourself. **Undo** puts those fields back.
 - **Articles** puts a link to a published [knowledge base article](knowledge-base.md#link-an-article-in-a-reply) into the box: its title and its help center address on two lines.
 - **Add attachment** (the paperclip under the message box) attaches files to a reply or a private
   note. A message carries at most 10 files and 10 MiB in total. Each chosen file is listed with its

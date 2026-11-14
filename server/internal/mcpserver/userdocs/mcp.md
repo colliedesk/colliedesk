@@ -143,6 +143,12 @@ with `billing` and leave a note with a summary."
 | `colliedesk_saved_view_update` | Changes the name, the filters or who sees a view | `saved_views:update` |
 | `colliedesk_saved_view_delete` | Moves a view to the trash for 30 days; changes no conversation | `saved_views:delete` |
 | `colliedesk_saved_view_restore` | Takes a view out of the trash | `saved_views:delete` |
+| `colliedesk_macros_list` | Lists the macros this person can apply, or the ones in the trash | `macros:read` |
+| `colliedesk_macro_save` | Creates a macro or edits one, including its actions | `macros:create`, `macros:update` |
+| `colliedesk_macro_delete` | Moves a macro to the trash for 30 days | `macros:delete` |
+| `colliedesk_macro_restore` | Brings a macro out of the trash | `macros:delete` |
+| `colliedesk_macro_apply` | Fills a macro's reply and sets its status, priority, assignee and tags on a conversation | `conversations:update` |
+| `colliedesk_macro_undo` | Puts back the fields a macro changed, where they are still as the macro left them | `conversations:update` |
 | `colliedesk_kb_collections_list` | Lists the knowledge base collections (at most three levels deep) with how many articles each holds | `kb_articles:read` |
 | `colliedesk_kb_collection_create` | Adds a collection, at the top or inside another | `kb_articles:create` |
 | `colliedesk_kb_collection_update` | Renames, reorders or moves a collection | `kb_articles:update` |

@@ -545,7 +545,7 @@ test.each(movedAddresses)('the old address %s opens %s', async (from, to) => {
 
 // The addresses that stay, with the tab they name.
 test.each([['/settings/members?tab=people'], ['/settings/members?tab=invites'], ['/settings/members?tab=groups'], ['/settings/members?tab=advanced'],
-  ['/settings/ai?tab=built-in'], ['/settings/ai?tab=external'], ['/settings/fields'], ['/settings/channels'], ['/settings/targets'], ['/settings/saved-replies']])('%s stays where it is', async (address) => {
+  ['/settings/ai?tab=built-in'], ['/settings/ai?tab=external'], ['/settings/fields'], ['/settings/channels'], ['/settings/targets'], ['/settings/saved-replies'], ['/settings/macros']])('%s stays where it is', async (address) => {
   settingsServer();
   const router = open(address);
   await screen.findByRole('heading', { level: 1 });

@@ -2456,6 +2456,120 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/macros": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The macros the caller can apply: the ones shared with the workspace, then the caller's own personal macros, each group ordered by title ignoring case. A deleted macro is not listed (see `GET /api/v1/macros/trash`). The body keeps its variables unfilled. Another person's personal macro is not listed. */
+        get: operations["listMacros"];
+        put?: never;
+        /** @description Adds a macro. A personal macro is seen only by the person who saved it; a shared macro by everyone, and anyone with `macros:update` may change it. The title is unique ignoring case in that group (409 `duplicate_title`). A workspace holds at most 500 shared macros and a person at most 100 personal ones, not counting the trash (409 `macro_limit`). The body may be empty when actions are set. Variables `{{customer.name}}`, `{{requester.name}}`, `{{agent.name}}` and `{{ticket.id}}` are stored as written and filled in when the macro is applied. */
+        post: operations["createMacro"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macros/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Macros deleted in the last 30 days that the caller could see, newest deletion first. Each can be restored until `purges_at`. */
+        get: operations["listTrashedMacros"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macros/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Moves the macro to the trash for 30 days. Send the `updated_at` you read (409 `changed_elsewhere` when it was saved since). Deleting one already in the trash answers it unchanged. Conversations it was applied to are not changed. */
+        delete: operations["deleteMacro"];
+        options?: never;
+        head?: never;
+        /** @description Changes the title, the text, who sees the macro, or its actions. Send the `updated_at` you last read: if someone saved it since, nothing changes (409 `changed_elsewhere`). Only the owner sees a personal macro. Making a shared macro personal gives it to the caller. */
+        patch: operations["updateMacro"];
+        trace?: never;
+    };
+    "/api/v1/macros/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Brings a deleted macro back. One that is not in the trash is answered unchanged. 409 when a live macro of the same group now has its title, or the group is full. */
+        post: operations["restoreMacro"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/macros/{macroId}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                macroId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Applies one macro the caller can see to the conversation, in one step. The answer's `body` is the template with `{{customer.name}}`, `{{requester.name}}`, `{{agent.name}}` and `{{ticket.id}}` filled in, for the reply box; nothing is sent to the customer. Actions set the status, priority, assignee or tags. A status set here does not tell the customer. The application id is what undo sends. Another person's personal macro, or a macro in the trash, is 404. A repeat with the same Idempotency-Key returns the first application and applies nothing again. */
+        post: operations["applyMacro"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/macro-applications/{applicationId}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Puts back the status, priority, assignee and tags the application changed, where they are still as the macro left them. A field changed again since is left, and named in `kept`. Undoing again changes nothing. The reply text is not taken out of a message: applying never sent one. */
+        post: operations["undoMacro"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/saved-replies": {
         parameters: {
             query?: never;
@@ -7110,6 +7224,73 @@ export interface components {
              */
             purges_at: string | null;
         };
+        /** @enum {string} */
+        MacroScope: "personal" | "shared";
+        /** @description What applying the macro changes. A field left out is left as it is. `assignee_id` null, or `set_assignee` true without an id, clears the assignee. There is no group to assign to. */
+        MacroActions: {
+            /** @enum {string} */
+            status?: "open" | "pending" | "resolved" | "closed";
+            /** @enum {string} */
+            priority?: "low" | "normal" | "high" | "urgent";
+            set_assignee?: boolean;
+            /** Format: uuid */
+            assignee_id?: string | null;
+            add_tag_ids?: string[];
+            remove_tag_ids?: string[];
+        };
+        Macro: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            /** @description May hold {{customer.name}}, {{requester.name}}, {{agent.name}} and {{ticket.id}}. */
+            body: string;
+            scope: components["schemas"]["MacroScope"];
+            /** Format: uuid */
+            owner_agent_id: string | null;
+            actions: components["schemas"]["MacroActions"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            deleted_at: string | null;
+            /** Format: date-time */
+            purges_at: string | null;
+        };
+        MacroInput: {
+            title: string;
+            body?: string;
+            scope: components["schemas"]["MacroScope"];
+            actions?: components["schemas"]["MacroActions"];
+        };
+        MacroChange: {
+            /** Format: date-time */
+            updated_at: string;
+            title?: string;
+            body?: string;
+            scope?: components["schemas"]["MacroScope"];
+            actions?: components["schemas"]["MacroActions"];
+        };
+        MacroApplication: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            macro_id: string | null;
+            title: string;
+            /** @description The template with its variables filled in. */
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            undone_at: string | null;
+            restored: ("status" | "priority" | "assignee" | "tags")[];
+            /** @description Fields changed again since the macro, left as they are. */
+            kept: ("status" | "priority" | "assignee" | "tags")[];
+        };
+        MacroResult: {
+            application: components["schemas"]["MacroApplication"];
+            conversation: components["schemas"]["Conversation"];
+        };
         Workspace: {
             /** Format: uuid */
             id: string;
@@ -7300,7 +7481,7 @@ export interface components {
          * @description A permission a role or an agent token can hold, resource:action. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
          * @enum {string}
          */
-        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update" | "autofix_settings:manage_credentials";
+        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "macros:read" | "macros:create" | "macros:update" | "macros:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update" | "autofix_settings:manage_credentials";
         AgentToken: {
             /** @description Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again */
             token: string;
@@ -15872,6 +16053,248 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listMacros: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Macros */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Macro"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createMacro: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MacroInput"];
+            };
+        };
+        responses: {
+            /** @description The macro an earlier request with the same Idempotency-Key created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Macro"];
+                };
+            };
+            /** @description Created macro */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Macro"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    listTrashedMacros: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted macros */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Macro"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteMacro: {
+        parameters: {
+            query: {
+                updated_at: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The macro in the trash */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Macro"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateMacro: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MacroChange"];
+            };
+        };
+        responses: {
+            /** @description Updated macro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Macro"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreMacro: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restored macro, or the same answer as the first request with this Idempotency-Key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Macro"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    applyMacro: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+                macroId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The application and the conversation after it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MacroResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    undoMacro: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The application after undo, and the conversation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MacroResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listSavedReplies: {

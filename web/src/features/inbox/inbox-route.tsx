@@ -206,6 +206,15 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags, enabled: reads('tags:read') });
   // Fetched once and shared with Settings, so the picker opens from memory.
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies, enabled: reads('saved_replies:read') });
+  const macros = useQuery({ queryKey: ['macros'], queryFn: api.macros, enabled: reads('macros:read') });
+  const applyMacro = useCreateMutation({
+    create: ({ macroId }: { macroId: string }, key: string) => api.applyMacro(selected!.id, macroId, key),
+    onSuccess: () => { void client.invalidateQueries({ queryKey: ['conversations'] }); },
+  });
+  const undoMacro = useCreateMutation({
+    create: ({ applicationId }: { applicationId: string }, key: string) => api.undoMacro(selected!.id, applicationId, key),
+    onSuccess: () => { void client.invalidateQueries({ queryKey: ['conversations'] }); },
+  });
   // How replies leave is read for the mailbox the open conversation's replies leave from; the default
   // one for a conversation no channel carries yet. Replies that leave through another type (a chat
   // channel) have no mailbox to read.
@@ -368,6 +377,13 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings/saved-replies', '_blank', 'noopener'); }}
+    macros={macros.data?.items} macrosState={macros.isPending ? 'loading' : macros.isError ? 'failed' : 'ready'}
+    onManageMacros={() => { window.open('/settings/macros', '_blank', 'noopener'); }}
+    onApplyMacro={reads('macros:read') ? async (macro) => {
+      const result = await applyMacro.mutateAsync({ macroId: macro.id });
+      return { id: result.application.id, body: result.application.body, title: result.application.title };
+    } : undefined}
+    onUndoMacro={reads('macros:read') ? (applicationId) => undoMacro.mutateAsync({ applicationId }) : undefined}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
     defaultMailbox={defaultMailbox} replyMailbox={selected && (!repliesVia || repliesVia.type === 'email') ? emailChannel.data : undefined}
     outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}

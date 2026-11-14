@@ -4114,6 +4114,186 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/macros:
+    get:
+      operationId: listMacros
+      x-permission: macros:read
+      description: >
+        The macros the caller can apply: the ones shared with the workspace, then the caller's own
+        personal macros, each group ordered by title ignoring case. A deleted macro is not listed
+        (see `GET /api/v1/macros/trash`). The body keeps its variables unfilled. Another person's
+        personal macro is not listed.
+      responses:
+        '200':
+          description: Macros
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Macro'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createMacro
+      x-permission: macros:create
+      description: >
+        Adds a macro. A personal macro is seen only by the person who saved it; a shared macro by
+        everyone, and anyone with `macros:update` may change it. The title is unique ignoring case
+        in that group (409 `duplicate_title`). A workspace holds at most 500 shared macros and a
+        person at most 100 personal ones, not counting the trash (409 `macro_limit`). The body may
+        be empty when actions are set. Variables `{{customer.name}}`, `{{requester.name}}`,
+        `{{agent.name}}` and `{{ticket.id}}` are stored as written and filled in when the macro is
+        applied.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MacroInput'}
+      responses:
+        '201':
+          description: Created macro
+          content: {application/json: {schema: {$ref: '#/components/schemas/Macro'}}}
+        '200':
+          description: The macro an earlier request with the same Idempotency-Key created
+          content: {application/json: {schema: {$ref: '#/components/schemas/Macro'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/macros/trash:
+    get:
+      operationId: listTrashedMacros
+      x-permission: macros:read
+      description: >
+        Macros deleted in the last 30 days that the caller could see, newest deletion first. Each
+        can be restored until `purges_at`.
+      responses:
+        '200':
+          description: Deleted macros
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Macro'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/macros/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    patch:
+      operationId: updateMacro
+      x-permission: macros:update
+      description: >
+        Changes the title, the text, who sees the macro, or its actions. Send the `updated_at` you
+        last read: if someone saved it since, nothing changes (409 `changed_elsewhere`). Only the
+        owner sees a personal macro. Making a shared macro personal gives it to the caller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MacroChange'}
+      responses:
+        '200':
+          description: Updated macro
+          content: {application/json: {schema: {$ref: '#/components/schemas/Macro'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteMacro
+      x-permission: macros:delete
+      description: >
+        Moves the macro to the trash for 30 days. Send the `updated_at` you read (409
+        `changed_elsewhere` when it was saved since). Deleting one already in the trash answers it
+        unchanged. Conversations it was applied to are not changed.
+      parameters:
+        - {name: updated_at, in: query, required: true, schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: The macro in the trash
+          content: {application/json: {schema: {$ref: '#/components/schemas/Macro'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/macros/{id}/restore:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: restoreMacro
+      x-permission: macros:delete
+      description: >
+        Brings a deleted macro back. One that is not in the trash is answered unchanged. 409 when a
+        live macro of the same group now has its title, or the group is full.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: Restored macro, or the same answer as the first request with this Idempotency-Key
+          content: {application/json: {schema: {$ref: '#/components/schemas/Macro'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/conversations/{id}/macros/{macroId}/apply:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: macroId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: applyMacro
+      x-permission: conversations:update
+      description: >
+        Applies one macro the caller can see to the conversation, in one step. The answer's `body`
+        is the template with `{{customer.name}}`, `{{requester.name}}`, `{{agent.name}}` and
+        `{{ticket.id}}` filled in, for the reply box; nothing is sent to the customer. Actions set
+        the status, priority, assignee or tags. A status set here does not tell the customer. The
+        application id is what undo sends. Another person's personal macro, or a macro in the trash,
+        is 404. A repeat with the same Idempotency-Key returns the first application and applies
+        nothing again.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: The application and the conversation after it
+          content: {application/json: {schema: {$ref: '#/components/schemas/MacroResult'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/conversations/{id}/macro-applications/{applicationId}/undo:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: applicationId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: undoMacro
+      x-permission: conversations:update
+      description: >
+        Puts back the status, priority, assignee and tags the application changed, where they are
+        still as the macro left them. A field changed again since is left, and named in `kept`.
+        Undoing again changes nothing. The reply text is not taken out of a message: applying never
+        sent one.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: The application after undo, and the conversation
+          content: {application/json: {schema: {$ref: '#/components/schemas/MacroResult'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/saved-replies:
     get:
       operationId: listSavedReplies
@@ -10819,6 +10999,73 @@ components:
         updated_at: {type: string, format: date-time}
         deleted_at: {type: [string, 'null'], format: date-time}
         purges_at: {type: [string, 'null'], format: date-time, description: When a deleted view is removed for good.}
+    MacroScope:
+      type: string
+      enum: [personal, shared]
+    MacroActions:
+      type: object
+      description: >
+        What applying the macro changes. A field left out is left as it is. `assignee_id` null, or
+        `set_assignee` true without an id, clears the assignee. There is no group to assign to.
+      properties:
+        status: {type: string, enum: [open, pending, resolved, closed]}
+        priority: {type: string, enum: [low, normal, high, urgent]}
+        set_assignee: {type: boolean}
+        assignee_id: {type: [string, 'null'], format: uuid}
+        add_tag_ids: {type: array, maxItems: 50, items: {type: string, format: uuid}}
+        remove_tag_ids: {type: array, maxItems: 50, items: {type: string, format: uuid}}
+    Macro:
+      type: object
+      required: [id, title, body, scope, owner_agent_id, actions, created_at, updated_at, deleted_at, purges_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        body: {type: string, description: 'May hold {{customer.name}}, {{requester.name}}, {{agent.name}} and {{ticket.id}}.'}
+        scope: {$ref: '#/components/schemas/MacroScope'}
+        owner_agent_id: {type: [string, 'null'], format: uuid}
+        actions: {$ref: '#/components/schemas/MacroActions'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        deleted_at: {type: [string, 'null'], format: date-time}
+        purges_at: {type: [string, 'null'], format: date-time}
+    MacroInput:
+      type: object
+      required: [title, scope]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        body: {type: string, maxLength: 20000}
+        scope: {$ref: '#/components/schemas/MacroScope'}
+        actions: {$ref: '#/components/schemas/MacroActions'}
+    MacroChange:
+      type: object
+      required: [updated_at]
+      properties:
+        updated_at: {type: string, format: date-time}
+        title: {type: string, minLength: 1, maxLength: 200}
+        body: {type: string, maxLength: 20000}
+        scope: {$ref: '#/components/schemas/MacroScope'}
+        actions: {$ref: '#/components/schemas/MacroActions'}
+    MacroApplication:
+      type: object
+      required: [id, macro_id, title, body, created_at, undone_at, restored, kept]
+      properties:
+        id: {type: string, format: uuid}
+        macro_id: {type: [string, 'null'], format: uuid}
+        title: {type: string}
+        body: {type: string, description: The template with its variables filled in.}
+        created_at: {type: string, format: date-time}
+        undone_at: {type: [string, 'null'], format: date-time}
+        restored: {type: array, items: {type: string, enum: [status, priority, assignee, tags]}}
+        kept:
+          type: array
+          description: Fields changed again since the macro, left as they are.
+          items: {type: string, enum: [status, priority, assignee, tags]}
+    MacroResult:
+      type: object
+      required: [application, conversation]
+      properties:
+        application: {$ref: '#/components/schemas/MacroApplication'}
+        conversation: {$ref: '#/components/schemas/Conversation'}
     Workspace:
       type: object
       required: [id, slug, name, timezone]
@@ -11099,6 +11346,10 @@ components:
         - saved_views:create
         - saved_views:update
         - saved_views:delete
+        - macros:read
+        - macros:create
+        - macros:update
+        - macros:delete
         - kb_articles:read
         - kb_articles:create
         - kb_articles:update

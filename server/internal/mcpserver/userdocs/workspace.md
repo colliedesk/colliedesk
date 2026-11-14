@@ -22,7 +22,7 @@ you can use:
   roles, Admin and Agent; custom roles are under **Advanced**.
 - **Channels** (`/settings/channels`): a dot after its name means a channel needs attention. Each
   channel type, such as Email, opens from the Channels page, not from the menu.
-- **Response targets**, **Saved replies**.
+- **Response targets**, **Saved replies**, **[Macros](macros.md)**.
 - **AI & agents** (`/settings/ai`): two tabs, **Built-in AI** and **External AI agents**
   (`?tab=built-in`, `external`). Agent tokens are on **External AI agents**, a tab offered to people who
   make, revoke or hold agent tokens.
