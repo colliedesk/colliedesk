@@ -42,6 +42,15 @@ func TestADraftWarnsOfAMadeUpNumberInUnicodeForms(t *testing.T) {
 		"٠٩٨٧\u066c٦٥٤\u066c٣٢١",                                                                                   // Arabic thousands separator
 		"0987–654–321",                                                                                             // a dashed number of phone length
 		"12345-6789",                                                                                               // a dashed run that is no range
+		"0987-654-321",                                                                                             // the same with ASCII hyphens
+		"1900–1234",                                                                                                // a hotline in four and four digits
+		"1900-1234",
+		"1800–6789",
+		"1800-6789",
+		"2123–4567", // eight digits in two groups of four
+		"2123-4567",
+		"555–1234", // seven digits in three and four
+		"555-1234",
 	} {
 		got := numberWarnings("Call "+number+" for a refund. Thanks!", c)
 		if len(got) != 1 || got[0] != number {
@@ -89,6 +98,8 @@ func TestADraftDoesNotWarnOfOrdinaryFiguresInUnicodeForms(t *testing.T) {
 		"Teams with 100-500 tickets a month pick Growth.",
 		"It was released on 2026–11–15.",
 		"It was released on 2026-11-15.",
+		"Support is open 9–5 on weekdays.",
+		"Support is open 9-5 on weekdays.",
 		"A 100 m² room holds 2³ desks, see note ①.",
 		"It shipped on １５.１１, at 10:30.",
 		"Gói Growth giá 49 đô la cho 2.000 đơn hàng.",
