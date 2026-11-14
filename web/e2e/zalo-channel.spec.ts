@@ -140,8 +140,8 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   await page.goto(`${baseURL}/settings/general`);
   await page.getByRole('button', { name: 'Add a series' }).click();
   const add = page.getByRole('dialog', { name: 'Add a number series' });
-  await add.getByLabel('Name').fill(series);
-  await add.getByLabel('Code format').fill('CHD-{yyyy}-{n:04}');
+  await add.getByLabel('Name', { exact: true }).fill(series);
+  await add.getByLabel('Code format', { exact: true }).fill('CHD-{yyyy}-{n:04}');
   await add.getByLabel('Next number').fill('142');
   await add.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('list', { name: 'Number series' }).getByText(`Next: CHD-${year}-0142`)).toBeVisible();

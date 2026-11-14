@@ -106,7 +106,7 @@ test('Ctrl+S saves the typed name, the bar goes, and the server holds it; Discar
 test('the bar on General names the workspace name, and Save keeps it', async ({ page }) => {
   await newDesk(page, 'E2E one save general');
   await page.goto(`${baseURL}/settings/general`);
-  await page.getByLabel('Workspace name').fill('Northwind Support');
+  await page.getByLabel('Workspace name', { exact: true }).fill('Northwind Support');
   const bar = page.getByRole('region', { name: 'Unsaved changes' });
   await expect(bar).toContainText('Workspace name');
   await bar.getByRole('button', { name: 'Save' }).click();
