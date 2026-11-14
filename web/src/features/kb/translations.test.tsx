@@ -267,10 +267,10 @@ test('a translation of a draft article says it is not public yet in one line', a
     [`GET /api/v1/kb/articles/${ids.article}/translations/fr`]: () => json(200, translation({ original: { ...translation().original, status: 'draft' } })),
   });
   show(<TranslationRoute articleId={ids.article} locale="fr" />);
-  expect(await screen.findByText('The article is a draft: not public until it is published.')).toBeInTheDocument();
+  expect(await screen.findByText('This translation goes public once the article is published.')).toBeInTheDocument();
 });
 
-test('deleting a translation says it leaves the help center and the article stays in one line, and that it can be restored in a tip', async () => {
+test('deleting a translation says it can be restored for 30 days and the article stays in one line, and that it leaves the help center in a tip', async () => {
   serve({
     'GET /api/v1/auth/me': () => json(200, me),
     'GET /api/v1/help-center/languages': () => json(200, languages(true)),
@@ -282,6 +282,6 @@ test('deleting a translation says it leaves the help center and the article stay
   fireEvent.click(screen.getByRole('button', { name: 'More translation actions' }));
   fireEvent.click(screen.getByRole('menuitem', { name: 'Delete translation' }));
   const dialog = screen.getByRole('alertdialog');
-  expect(dialog).toHaveTextContent('It leaves the help center; the article stays.');
-  expect(within(dialog).getByRole('button', { name: 'About the trash' })).toHaveAccessibleDescription('It goes to the trash and can be restored for 30 days.');
+  expect(dialog).toHaveTextContent('Goes to the trash for 30 days; the article stays.');
+  expect(within(dialog).getByRole('button', { name: 'About the trash' })).toHaveAccessibleDescription('It leaves the help center at once.');
 });

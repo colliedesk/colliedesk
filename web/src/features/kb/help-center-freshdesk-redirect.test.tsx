@@ -101,5 +101,5 @@ test('a knowledge base too large to list says so in one line, and how old addres
   const box = (await screen.findByRole('textbox', { name: 'Snippet for the Freshdesk portal head' })).closest('.copy-field') as HTMLElement;
   expect(box).toHaveTextContent('Your knowledge base is too large to list in the snippet.');
   expect(within(box).getByRole('button', { name: 'About the address list' })).toHaveAccessibleDescription(
-    'It sends each old address by its id to the help center, which finds the new page.');
+    'The snippet sends each old address by its id to the help center, which finds the new page.');
 });

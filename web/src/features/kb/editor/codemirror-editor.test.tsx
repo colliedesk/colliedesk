@@ -390,3 +390,15 @@ test('the picker says what Insert waits for in one line, and why alt text matter
   expect(within(picker).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('Screen readers say nothing for an image without it.');
   expect(within(picker).getByRole('button', { name: 'Insert 1' })).toHaveAccessibleDescription(/Screen readers say nothing for an image without it/);
 });
+
+test('the video link field, while a refusal shows in place of the help, describes itself only with ids that are on the page', async () => {
+  await make('Intro');
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^YouTube or Vimeo link/ }));
+  const link = screen.getByRole('textbox', { name: 'YouTube or Vimeo link' });
+  fireEvent.change(link, { target: { value: 'https://evil.example/watch' } });
+  fireEvent.keyDown(link, { key: 'Enter' });
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  const missing = (link.getAttribute('aria-describedby') ?? '').split(/\s+/).filter((part) => part && !document.getElementById(part));
+  expect(missing).toEqual([]);
+});

@@ -128,12 +128,12 @@ function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDet
             <input value={name} maxLength={200} onChange={(event) => { setName(event.target.value); setState({}); }} />
           </label>
           <label className="field">{video ? mediaMessages.titleLabel : mediaMessages.altLabel}
-            <textarea value={alt} maxLength={500} rows={2} aria-describedby={`${id}-alt-help ${id}-alt-tip`} onChange={(event) => { setAlt(event.target.value); setState({}); }} />
+            <textarea value={alt} maxLength={500} rows={2} aria-describedby={video ? `${id}-alt-help` : `${id}-alt-help ${id}-alt-tip`} onChange={(event) => { setAlt(event.target.value); setState({}); }} />
           </label>
           <p className="kb-hint"><span id={`${id}-alt-help`}>{video ? mediaMessages.titleHelp : mediaMessages.altHelp}</span>
             {!video && <>{' '}<HelpTip label={mediaMessages.altLabel} text={mediaMessages.altTip} id={`${id}-alt-tip`} /></>}</p>
           <label className="media-keep">
-            <input type="checkbox" checked={kept} aria-describedby={`${id}-keep-help ${id}-keep-tip`} onChange={(event) => { setKept(event.target.checked); setState({}); }} />
+            <input type="checkbox" checked={kept} aria-describedby={live === 0 ? `${id}-keep-help ${id}-keep-tip` : `${id}-keep-help`} onChange={(event) => { setKept(event.target.checked); setState({}); }} />
             <span>{mediaMessages.keep}</span>
             <span className="kb-hint"><span id={`${id}-keep-help`}>{live > 0 ? mediaMessages.keepHelpInUse : mediaMessages.keepHelp}</span>
               {live === 0 && <>{' '}<HelpTip label={mediaMessages.keep} text={mediaMessages.keepTip} id={`${id}-keep-tip`} /></>}</span>

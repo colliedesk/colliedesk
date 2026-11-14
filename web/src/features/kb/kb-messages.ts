@@ -189,7 +189,7 @@ export const kbMessages = {
   publishAltTip: 'Screen readers say nothing for an image without alt text.',
   publishAnyway: 'Publish anyway',
   saveAnyway: 'Save anyway',
-  saveAltHelp: 'This article is published: a new image goes live at once.',
+  saveAltHelp: 'Published: an image without alt text goes live at once.',
   saveAltTip: 'Screen readers say nothing for an image without alt text. Add it now, or save as it is.',
   addAlt: 'Add alt text',
   addAltFor: (name: string) => `Add alt text to ${name}`,

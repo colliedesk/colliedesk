@@ -134,7 +134,7 @@ test('on the trial an admin verifies a domain, and the card says it serves there
     'POST /api/v1/help-center/domain/check': () => json(200, { ...active, awaiting_payment: true }),
   });
   open(true);
-  expect(await screen.findByText(/Set and verify now; it serves once you pay for a plan/)).toBeInTheDocument();
+  expect(await screen.findByText(/Set and verify now; the help center serves here once paid/)).toBeInTheDocument();
   fireEvent.change(screen.getByRole('textbox', { name: 'Host name' }), { target: { value: 'help.acme.example' } });
   fireEvent.click(screen.getByRole('button', { name: 'Set domain' }));
   expect(await screen.findByText(/help.acme.example is waiting for its DNS records/)).toHaveAttribute('role', 'status');
@@ -229,7 +229,7 @@ test('the records say what to do in one line, and what else to know in a tip, be
 test('a domain waiting for payment says when it serves in one line, and why in a tip', async () => {
   serve({ 'GET /api/v1/help-center/domain': () => json(200, { ...pending, awaiting_payment: true }) });
   open(true);
-  const line = (await screen.findByText(/^Set and verify now; it serves once you pay for a plan\./)).closest('p') as HTMLElement;
+  const line = (await screen.findByText(/^Set and verify now; the help center serves here once paid\./)).closest('p') as HTMLElement;
   expect(within(line).getByRole('button', { name: 'About the trial' })).toHaveAccessibleDescription(
     'Trial pages are hidden from search engines, and serving them on your domain would cost it its place in search results.');
 });

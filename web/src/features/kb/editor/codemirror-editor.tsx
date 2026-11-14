@@ -280,7 +280,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
         <div className="field md-video">
           <label htmlFor={`${id}-video-link`}>{kbMessages.videoLink}</label>
           <input ref={videoLink} id={`${id}-video-link`} type="url" inputMode="url" autoComplete="off" placeholder="https://www.youtube.com/watch?v=…"
-            aria-invalid={video.error ? true : undefined} aria-describedby={`${id}-video-help ${id}-video-tip`} onChange={() => { if (video.error) setVideo({ error: '' }); }}
+            aria-invalid={video.error ? true : undefined} aria-describedby={video.error ? `${id}-video-help` : `${id}-video-help ${id}-video-tip`} onChange={() => { if (video.error) setVideo({ error: '' }); }}
             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); insertVideo(); } }} />
           <small className={video.error ? 'error-copy' : 'kb-hint'} role={video.error ? 'alert' : undefined}>
             <span id={`${id}-video-help`}>{video.error || kbMessages.videoLinkHelp}</span>

@@ -281,3 +281,31 @@ test('the trash says when an item goes for good in one line and keeps the rest i
   expect(within(dialog).getByRole('region', { name: 'Deleted collections' })).toHaveTextContent('Deleted collections stay here for 30 days.');
   expect(within(dialog).getByRole('region', { name: 'Translations' })).toHaveTextContent('Deleted translations stay here for 30 days.');
 });
+
+test('restoring an article whose collection is in the trash shows the server\'s reason, not a general failure', async () => {
+  const trashed = { ...summary(9, 'Old pricing'), deleted_at: '2026-10-10T00:00:00Z', deleted_by: { agent_id: null, name: 'Ada' }, purges_at: '2026-11-09T00:00:00Z' };
+  serve({ ...base,
+    'GET /api/v1/kb/articles/trash': () => json(200, { items: [trashed], next_cursor: null }),
+    'GET /api/v1/kb/collections/trash': () => json(200, { items: [] }),
+    'GET /api/v1/kb/translations/trash': () => json(200, { items: [], next_cursor: null }),
+    'POST /api/v1/kb/articles/00000000-0000-4000-8000-000000000009/restore': () => refusal(409, 'collection_in_trash', 'The article\'s collection is in the trash; restore it first.') });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Trash' }));
+  const panel = await screen.findByRole('region', { name: 'Deleted articles' });
+  fireEvent.click(await within(panel).findByRole('button', { name: 'Restore Old pricing' }));
+  expect(await within(panel).findByRole('alert')).toHaveTextContent('The article\'s collection is in the trash; restore it first.');
+});
+
+test('restoring a collection whose parent is in the trash shows the server\'s reason, not a general failure', async () => {
+  const trashed = { ...collection(ids.billing, 'Billing', ids.guides), deleted_at: '2026-10-10T00:00:00Z', deleted_by: { agent_id: null, name: 'Ada' }, purges_at: '2026-11-09T00:00:00Z' };
+  serve({ ...base,
+    'GET /api/v1/kb/articles/trash': () => json(200, { items: [], next_cursor: null }),
+    'GET /api/v1/kb/collections/trash': () => json(200, { items: [trashed] }),
+    'GET /api/v1/kb/translations/trash': () => json(200, { items: [], next_cursor: null }),
+    [`POST /api/v1/kb/collections/${ids.billing}/restore`]: () => refusal(409, 'parent_in_trash', 'The parent collection is in the trash; restore it first.') });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Trash' }));
+  const panel = await screen.findByRole('region', { name: 'Deleted collections' });
+  fireEvent.click(await within(panel).findByRole('button', { name: 'Restore Billing' }));
+  expect(await within(panel).findByRole('alert')).toHaveTextContent('The parent collection is in the trash; restore it first.');
+});

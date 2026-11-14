@@ -18,7 +18,7 @@ export const domainMessages = {
   cutoverTip: 'Add only the TXT record and press Check now. Your visitors still reach Freshdesk. Change the CNAME afterwards, to the target below.',
   cutoverGuide: 'https://colliedesk.com/docs/knowledge-base#moving-from-freshdesk',
   learnMore: 'Learn more',
-  trial: 'Set and verify now; it serves once you pay for a plan.',
+  trial: 'Set and verify now; the help center serves here once paid.',
   trialLabel: 'the trial',
   trialTip: 'Trial pages are hidden from search engines, and serving them on your domain would cost it its place in search results.',
   verifiedUnpaid: (hostname: string) => `${hostname} is verified. The help center serves there once you pay for a plan; until then it stays on its own address.`,

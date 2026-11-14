@@ -26,7 +26,7 @@ export const freshdeskRedirectMessages = {
   mapped: (articles: number, folders: number, categories: number) => `It maps ${articles} ${articles === 1 ? 'article' : 'articles'}, ${folders} ${folders === 1 ? 'folder' : 'folders'} and ${categories} ${categories === 1 ? 'category' : 'categories'} to their new pages.`,
   notMapped: 'Your knowledge base is too large to list in the snippet.',
   notMappedLabel: 'the address list',
-  notMappedTip: 'It sends each old address by its id to the help center, which finds the new page.',
+  notMappedTip: 'The snippet sends each old address by its id to the help center, which finds the new page.',
   ownDomain: 'Your old help center had its own domain. Redirect it with a 301 at your DNS provider or web host to the new address; the new help center then answers every old path.',
   helpCenterOff: 'Turn the help center on first. The snippet sends readers to its address.',
   loadFailed: 'The old Freshdesk links could not be loaded.',

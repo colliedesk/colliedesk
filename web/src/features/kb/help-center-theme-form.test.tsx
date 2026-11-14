@@ -324,3 +324,18 @@ test('the custom CSS field says what it is for in one line, and what is refused 
   fireEvent.click(tip);
   expect(within(field).getByRole('link', { name: 'Learn more' })).toHaveAttribute('href', 'https://colliedesk.com/docs/knowledge-base#custom-css');
 });
+
+test('the custom CSS field, while a refusal shows in place of the help, describes itself only with ids that are on the page', async () => {
+  serve({
+    'GET /api/v1/help-center/theme': () => json(200, { ...saved, custom_css: 'a{color:red}' }),
+    'POST /api/v1/help-center/theme/preview': () => json(200, preview),
+    'PUT /api/v1/help-center/theme': () => cssRefusal('line 1, column 3: url() is not allowed'),
+  });
+  open(true);
+  const css = await screen.findByRole('textbox', { name: 'Custom CSS' });
+  fireEvent.change(css, { target: { value: 'a{background:url(x)}' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save brand' }));
+  await waitFor(() => expect(css).toHaveAttribute('aria-invalid', 'true'));
+  const missing = (css.getAttribute('aria-describedby') ?? '').split(/\s+/).filter((part) => part && !document.getElementById(part));
+  expect(missing).toEqual([]);
+});

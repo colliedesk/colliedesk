@@ -136,7 +136,7 @@ export const mediaMessages = {
   moveAllCount: (count: number) => `Move all ${count.toLocaleString('en')} to trash`,
   tickToMove: 'Tick the kept items to move.',
   confirmMoveHeading: (count: number) => `Move ${plural(count, 'item', 'items')} to the trash?`,
-  confirmBody: (bytes: number) => `${formatBytes(bytes)}. They stay in the trash for 30 days, restorable.`,
+  confirmBody: (bytes: number) => `${formatBytes(bytes)}. In the trash for 30 days; restore them there.`,
   keptGoToo: (count: number) => `${plural(count, 'kept item goes', 'kept items go')} too; restoring brings ${count === 1 ? 'it' : 'them'} back kept.`,
   keptChosen: (names: string[]) => `${names.length.toLocaleString('en')} ${names.length === 1 ? 'is' : 'are'} kept (${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''}); restoring brings ${names.length === 1 ? 'it' : 'them'} back kept.`,
   inDeletedArticle: (count: number) => `${count.toLocaleString('en')} ${count === 1 ? 'is' : 'are'} in a deleted article: restoring that article later shows a missing image until you restore ${count === 1 ? 'this item' : 'these items'} too.`,

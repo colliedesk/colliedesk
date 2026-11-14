@@ -667,6 +667,6 @@ test('the question before saving a published article says a new image goes live 
   await settle();
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   const asking = screen.getByRole('alertdialog', { name: '1 image has no alt text' });
-  expect(asking).toHaveTextContent('This article is published: a new image goes live at once.');
+  expect(asking).toHaveTextContent('Published: an image without alt text goes live at once.');
   expect(within(asking).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('Screen readers say nothing for an image without alt text. Add it now, or save as it is.');
 });

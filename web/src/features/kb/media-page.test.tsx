@@ -134,7 +134,7 @@ test('the unused page moves the chosen items to the trash after saying how much,
   expect(screen.getByText('3 selected')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Move 3 to trash' }));
   const dialog = screen.getByRole('alertdialog', { name: 'Move 3 items to the trash?' });
-  expect(dialog).toHaveTextContent('24.0 KiB. They stay in the trash for 30 days');
+  expect(dialog).toHaveTextContent('24.0 KiB. In the trash for 30 days; restore them there.');
   expect(dialog).toHaveTextContent('1 is in a deleted article');
   expect(dialog).toHaveTextContent('1 is kept (Screenshot 4); restoring brings it back kept.');
   fireEvent.click(within(dialog).getByRole('button', { name: 'Move 3 to trash' }));
@@ -498,4 +498,25 @@ test('the trash of the library says how long items stay in one line, and what ta
   const line = (await screen.findByText(/^Items stay here for 30 days/)).closest('p') as HTMLElement;
   expect(line).toHaveTextContent('Items stay here for 30 days and count toward your storage.');
   expect(within(line).getByRole('button', { name: 'About Trash' })).toHaveAccessibleDescription('An article that names one again takes it out.');
+});
+
+// A control is described by ids; each of them must be in the page, or the description silently loses a part.
+const dangling = (root: HTMLElement) => Array.from(root.querySelectorAll('[aria-describedby]'))
+  .flatMap((element) => (element.getAttribute('aria-describedby') ?? '').split(/\s+/).filter((part) => part && !document.getElementById(part)));
+const usedBy = [{ id: id(9), number: 12, title: 'Getting started', status: 'published', in_trash: false, current: true }];
+
+test('a video\'s title field describes itself only with ids that are on the page', async () => {
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, articles: usedBy }) });
+  open('library', { item: id(2) });
+  const panel = await screen.findByRole('complementary', { name: 'Product tour' });
+  expect(within(panel).getByRole('textbox', { name: 'Title for screen readers' })).toBeInTheDocument();
+  expect(dangling(panel)).toEqual([]);
+});
+
+test('an image used by an article describes its keep switch only with ids that are on the page', async () => {
+  serve({ ...base, [`GET /api/v1/kb/media/${id(1)}/details`]: () => json(200, { ...item(1), articles: usedBy }) });
+  open('library', { item: id(1) });
+  const panel = await screen.findByRole('complementary', { name: 'Screenshot 1' });
+  expect(within(panel).getByRole('checkbox', { name: /Keep even when no article uses it/ })).toBeInTheDocument();
+  expect(dangling(panel)).toEqual([]);
 });
