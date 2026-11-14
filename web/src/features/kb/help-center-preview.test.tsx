@@ -134,6 +134,16 @@ test('a refused theme names no Retry: the refused field says what to change', as
   expect(result.current.retry).toBeUndefined();
 });
 
+test('a refusal that names no field is a failure to make the preview, with Retry', async () => {
+  vi.useFakeTimers();
+  serve({ 'POST /api/v1/help-center/theme/preview': () => json(400, { error: { code: 'invalid_request', message: 'Send page and theme.' } }) });
+  const { result } = renderHook(() => useThemePreview('home', {}));
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  expect(result.current.error).toBe('The preview could not be shown: the server could not make it.');
+  expect(result.current.refused).toBeUndefined();
+  expect(result.current.retry).toBeTypeOf('function');
+});
+
 test('the error offers Retry beside its cause, and a document made for another address says so', () => {
   const onRetry = vi.fn();
   const { unmount } = render(<HelpCenterPreview pending={false} error="The preview could not be shown: the server could not make it." onRetry={onRetry} page="home" onPage={() => {}} />);

@@ -295,6 +295,22 @@ test('a first preview the server fails to make says so with Retry, and Retry sho
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
+test('a preview made for another web address is not shown, says so, and Retry asks again', async () => {
+  let elsewhere = true;
+  const calls = serve({
+    'GET /api/v1/help-center/theme': () => json(200, saved),
+    'POST /api/v1/help-center/theme/preview': () => json(200, elsewhere ? { ...preview, html: preview.html.replaceAll(window.location.origin, 'https://app.example.com') } : preview),
+  });
+  open(true);
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('The preview could not be shown: it was made for another web address than this page.');
+  expect(screen.queryByTitle('Preview of the help center')).not.toBeInTheDocument();
+  elsewhere = false;
+  fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+  await screen.findByTitle('Preview of the help center');
+  expect(calls.filter((call) => call.method === 'POST')).toHaveLength(2);
+});
+
 test('a first preview refused for a field says so in the panel and beside that field', async () => {
   const message = 'The logo must be an image of the media library, outside its trash.';
   serve({
