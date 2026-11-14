@@ -88,7 +88,10 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const [problem, setProblem] = useState<string>();
   const [trashOpen, setTrashOpen] = useState(false);
   const closeTrash = () => setTrashOpen(false);
-  useEffect(() => { setForm(null); setConfirming(false); setProblem(undefined); }, [search.collection]);
+  const noCollections = collections.isSuccess && nodes.length === 0;
+  // Choosing another collection closes the forms, except the new collection form of a knowledge base with no
+  // collection: deleting the last one leaves it open, as in a knowledge base that never had one.
+  useEffect(() => { setForm(noCollections ? 'new' : null); setConfirming(false); setProblem(undefined); }, [search.collection]);
   const save = async (values: CollectionValues) => {
     if (form === 'edit' && selected) {
       const original = selected.collection;
@@ -154,9 +157,9 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
     return saved;
   };
   const names = new Map(nodes.map((node) => [node.collection.id, node.collection.name]));
-  const noCollections = collections.isSuccess && nodes.length === 0;
   // With no collection yet the new collection form opens by itself, as if New collection had been
-  // pressed: Cancel closes it and New collection opens it again.
+  // pressed: Cancel closes it and New collection opens it again. A collection that appears meanwhile (restored
+  // from the trash, made in another tab) leaves the form as the person left it.
   useEffect(() => { if (noCollections) setForm('new'); }, [noCollections]);
   const total = nodes.reduce((sum, node) => sum + node.collection.article_count, 0);
   // Published is not public while the help center is off: the page says so, and how to turn it on.
