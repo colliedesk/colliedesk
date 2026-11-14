@@ -13,15 +13,16 @@ function openAddProvider() {
   return { ...handlers, dialog: screen.getByRole('dialog', { name: 'Add a provider' }) };
 }
 
-test('Automatic runs says in one short line what the limits cover, and defines automatic in the tip of its first field', () => {
+test('Automatic runs says in one short line what the limits cover, and defines automatic in the tip beside its title', () => {
   page({ settings: triageOn() });
   openSheet('Triage suggestions');
   fireEvent.click(screen.getByRole('button', { name: 'Change the automatic limits' }));
   const dialog = screen.getByRole('dialog', { name: 'Automatic runs' });
   expect(within(dialog).getByText('Limits what Colliedesk starts, not what an agent asks for.')).toBeVisible();
-  const day = within(dialog).getByLabelText('A day (UTC)');
-  expect(day).toHaveAccessibleDescription('Work Colliedesk starts on its own, such as a suggestion for each new ticket.');
-  expect(within(dialog).getByRole('button', { name: 'About A day (UTC)' })).toHaveAccessibleDescription(/such as a suggestion for each new ticket/);
+  expect(within(dialog).getByRole('button', { name: 'About Automatic runs' })).toHaveAccessibleDescription('Work Colliedesk starts on its own, such as a suggestion for each new ticket.');
+  // The tip sits in the title's row, and the dialog is still named by the title alone.
+  expect(within(dialog).getByRole('heading', { name: 'Automatic runs' }).parentElement).toContainElement(within(dialog).getByRole('button', { name: 'About Automatic runs' }));
+  expect(within(dialog).queryByRole('button', { name: 'About A day (UTC)' })).toBeNull();
 });
 
 test('the daily drafts limit keeps its short line, and the order and the per-conversation cap sit in its tip', () => {

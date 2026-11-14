@@ -126,7 +126,7 @@ test('the first pass shows the recent tickets as the current step and the rest a
 
 test('a pause for Freshdesk’s rate limit is a quiet line that calls it normal', () => {
   page({ job: job({ state: 'running', phase: 'full', progress: { step: 'importing tickets', done: 25, total: 100, api_calls: 75, rate_limit_until: '2999-01-01T00:00:00Z', updated_at: '2026-10-22T08:05:00Z' } }) });
-  expect(screen.getByText(/^Paused until /)).toBeInTheDocument();
+  expect(screen.getByText(/^Freshdesk paused the import until .+; it resumes by itself\.$/)).toBeVisible();
   expect(screen.getByRole('button', { name: 'About Paused import' })).toHaveAccessibleDescription(/This is normal and automatic; the import continues by itself and the page can be closed\./);
 });
 
@@ -376,9 +376,9 @@ test('connecting leads with one line, and what the server does first is the head
 
 test('the API key says where to find it in one line, and how it is kept in its tip', () => {
   page();
-  expect(screen.getByText('Find it under Profile settings → Your API Key.')).toBeVisible();
+  expect(screen.getByText('Profile picture → Profile settings → Your API Key.')).toBeVisible();
   expect(screen.getByLabelText('API key of a Freshdesk admin')).toHaveAccessibleDescription(
-    /Find it under Profile settings → Your API Key\..*The key is encrypted on the server and erased when the import ends\./);
+    /Profile picture → Profile settings → Your API Key\..*The key is encrypted on the server and erased when the import ends\./);
 });
 
 test('the old help center address says when to fill it in one line, and what it changes in its tip', () => {

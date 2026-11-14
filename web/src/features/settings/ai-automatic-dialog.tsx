@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import type { AISettings } from '../../api/ai';
 import { Field } from '../../ui/dialog';
+import { HelpTip } from '../../ui/help-tip';
 import { TipField } from './tip-field';
 import { aiMessages as m } from './ai-messages';
 import { AIDialog as Dialog } from './ai-level-dialogs';
@@ -32,11 +33,11 @@ export function AutomaticDialog({ settings, onClose, onSave }: { settings: AISet
     if (refused) setError(refused.text); else onClose();
   };
   return (
-    <Dialog title={m.automaticHeading} help={m.automaticHelp} onClose={onClose} onSubmit={() => void submit()}
+    <Dialog title={m.automaticHeading} titleTip={<HelpTip label={m.automaticHeading} text={m.automaticWhy} />} help={m.automaticHelp} onClose={onClose} onSubmit={() => void submit()}
       footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={busy}>{m.save}</button></>}>
       {error && <p role="alert" className="error-copy">{error}</p>}
       <div className="ai-two">
-        <TipField label={m.perDay} tip={m.automaticWhy} id={`${id}-day`} error={bad.day}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={perDay} onChange={(event) => setPerDay(event.target.value)} autoFocus />}</TipField>
+        <Field label={m.perDay} id={`${id}-day`} error={bad.day}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={perDay} onChange={(event) => setPerDay(event.target.value)} autoFocus />}</Field>
         <Field label={m.perMinute} id={`${id}-minute`} error={bad.minute}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={1000} value={perMinute} onChange={(event) => setPerMinute(event.target.value)} />}</Field>
       </div>
       <TipField label={m.draftsPerDay} tip={m.draftsPerDayWhy} id={`${id}-drafts`} help={m.draftsPerDayHelp} error={bad.drafts}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={draftsPerDay}
