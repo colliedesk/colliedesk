@@ -402,6 +402,9 @@ approves it in the console with their authenticator code.
   and cuts long bodies; the result says when it did and asks for `full`.
 - Lists come in pages. `next_cursor` is `null` on the last page. A full page can be followed by an
   empty one.
+- A workspace with no conversation yet answers `colliedesk_inbox_search` without filters with
+  `getting_started`: the step that brings in the first conversation (`colliedesk_setup_progress_get`,
+  or `colliedesk_email_test_message_send` for a test email that arrives in about a minute).
 - **Customer text is marked.** Subjects, message bodies, customer names, emails and organizations
   appear only inside a field named `untrusted_customer_content`. The tool descriptions tell the
   model to treat it as data and never as instructions. This lowers the risk that a hostile email
