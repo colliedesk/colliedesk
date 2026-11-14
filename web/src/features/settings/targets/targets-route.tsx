@@ -16,7 +16,7 @@ import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoke
 import type { Duration, Unit } from './target-duration';
 import { OffCard } from './targets-off-card';
 import { Card, ZoneNote, cardState, fieldErrors, useCurrentDocument, useSave, withoutStamp } from './targets-shared';
-import { SettingsEditsProvider, useConfirmDrop, useInstantSave, useSaveChanges, useSettingsEdit, useUnsavedText } from '../settings-edits';
+import { Refused, SettingsEditsProvider, useConfirmDrop, useInstantSave, useSaveChanges, useSettingsEdit, useUnsavedText } from '../settings-edits';
 import { can } from '../../../lib/can';
 import '../../../ui/controls.css';
 import './targets.css';
@@ -87,7 +87,7 @@ function OnCard({ doc, canManage }: CardProps) {
   return <Card id={id} title={m.onHeading} lead={m.onLead}>
     {canManage
       ? <span className="button-row"><label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={save.isPending ? Boolean(save.variables?.enabled) : doc.enabled}
-          disabled={save.isPending} onChange={(event) => { if (!event.target.checked && !confirmDrop('targets-hours', 'targets-times', 'targets-applies')) return; feedback.touch(); void instant((enabled: boolean) => save.mutateAsync({ ...withoutStamp(current()), enabled }), event.target.checked, doc.enabled); }} /></span><span>{m.measure}</span></label>{feedback.status}</span>
+          disabled={save.isPending} onChange={(event) => { if (!event.target.checked && !confirmDrop('targets-hours', 'targets-times', 'targets-applies', 'targets-holiday')) return; feedback.touch(); void instant((enabled: boolean) => save.mutateAsync({ ...withoutStamp(current()), enabled }), event.target.checked, doc.enabled); }} /></span><span>{m.measure}</span></label>{feedback.status}</span>
       : <p>{doc.enabled ? m.yes : m.no}</p>}
   </Card>;
 }
@@ -121,7 +121,7 @@ function HoursCard({ doc, canManage, workspaceZone, myZone, refused }: CardProps
   useEffect(() => { if (typed && !changed) clear(); }, [typed, changed]);
   useSettingsEdit('targets-hours', canManage && changed ? { label: m.hoursHeading, discard: clear, save: () => {
     setChecked(true);
-    if (weekdays.some(bad)) return Promise.reject(new Error('invalid'));
+    if (weekdays.some(bad)) return Promise.reject(new Refused(m.endsBefore));
     return save.mutateAsync({ ...withoutStamp(current()), timezone: zone || null, hours: weekdays.map(byDay) });
   } } : undefined);
   if (!canManage) {
@@ -233,7 +233,7 @@ function TargetsCard({ doc, canManage, refused }: CardProps) {
   useEffect(() => { if (Object.keys(edits).length > 0 && !changed) setEdits({}); }, [edits, changed]);
   useSettingsEdit('targets-times', canManage && changed ? { label: m.targetsHeading, discard: () => { setEdits({}); setChecked(false); }, save: () => {
     setChecked(true);
-    if (bad()) return Promise.reject(new Error('invalid'));
+    if (bad()) return Promise.reject(new Refused(m.targetRule));
     // Checked above: each is whole minutes, or null for an empty target box.
     const minutes = (value: Duration) => minutesOf(value) ?? null;
     return save.mutateAsync({ ...withoutStamp(current()), warn_before_minutes: minutes(warn) ?? 0,
@@ -299,7 +299,7 @@ function AppliesCard({ doc, canManage, channels, refused }: CardProps & { channe
   useEffect(() => { if (chosenEdit !== undefined && !changed) setChosenEdit(undefined); }, [chosenEdit, changed]);
   useSettingsEdit('targets-applies', canManage && changed ? { label: m.appliesHeading, discard: () => { setChosenEdit(undefined); setChecked(false); }, save: () => {
     setChecked(true);
-    if (chosen.length === 0) return Promise.reject(new Error('invalid'));
+    if (chosen.length === 0) return Promise.reject(new Refused(m.pickOne));
     // Every channel is null: a channel added later is measured too.
     return save.mutateAsync({ ...withoutStamp(current()), channel_ids: chosen.length === every.length && every.every((item) => chosen.includes(item)) ? null : chosen });
   } } : undefined);

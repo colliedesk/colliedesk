@@ -4,6 +4,7 @@ import { useBlocker, useRouter } from '@tanstack/react-router';
 import { InvalidRequestError } from '../../api/client';
 import { settingsMessages } from './settings-messages';
 import { SaveBar, SavedToast } from './settings-save-bar';
+import { registerUnsavedProbe } from './unsaved-probe';
 
 // One save model for the Settings pages. A choice (a toggle, a pick from a list) saves when it is made and says so
 // with a toast that can undo it (useInstantSave). Text is typed first and saved together: each changed field
@@ -11,6 +12,9 @@ import { SaveBar, SavedToast } from './settings-save-bar';
 // page shows one bar naming them with Discard and Save (Ctrl/Cmd+S), and leaving the page with text not yet saved
 // asks once. Text that has its own button (a step that adds something) counts for that question too
 // (useUnsavedText). Moving between the tabs of one page is not leaving it.
+
+// Refused is what a field's save rejects with when it has words for the person (a value it will not send): the bar says them.
+export class Refused extends Error {}
 
 export interface SettingsEdit {
   // label names the field in the bar.
@@ -32,11 +36,12 @@ interface SettingsEdits {
   guard: (id: string, on: boolean) => void;
   dropDrafts: (prefix: string) => void;
   isUnsaved: (id: string) => boolean;
+  releaseGuards: () => void;
   version?: number;
 }
 
 // Outside a provider (a section drawn alone) nothing is collected; the field still edits, and nothing saves it.
-const Edits = createContext<SettingsEdits>({ register: () => undefined, announce: () => undefined, save: () => Promise.resolve(), touch: () => undefined, guard: () => undefined, dropDrafts: () => undefined, isUnsaved: () => false });
+const Edits = createContext<SettingsEdits>({ register: () => undefined, announce: () => undefined, save: () => Promise.resolve(), touch: () => undefined, guard: () => undefined, dropDrafts: () => undefined, isUnsaved: () => false, releaseGuards: () => undefined });
 
 // useSettingsEdit registers one field while it differs from what is saved: pass undefined while it does not.
 export function useSettingsEdit(id: string, edit: SettingsEdit | undefined): void {
@@ -79,6 +84,12 @@ export function useDraftIds(prefix: string): string[] {
 // useDropDrafts throws away the page's drafts whose id starts with prefix, once the person agreed to lose them.
 export function useDropDrafts(): (prefix: string) => void {
   return useContext(Edits).dropDrafts;
+}
+
+// useReleaseUnsaved is for a step that saves and then opens the next page itself: call it just before, so the text that was
+// being saved is not asked about on the way out.
+export function useReleaseUnsaved(): () => void {
+  return useContext(Edits).releaseGuards;
 }
 
 // useUnsavedText marks text that is typed and has its own button (adding a holiday, a support address, an invite) as
@@ -140,6 +151,8 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
   const touch = useCallback(() => setVersion((n) => n + 1), []);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ undo?: () => unknown; error?: string }>();
+  // Why the last Save stopped, with the name of the field: the field may be on a tab that is not shown.
+  const [failure, setFailure] = useState<{ label: string; message: string }>();
   const running = useRef(false);
   const register = useCallback((id: string, edit: SettingsEdit | undefined) => {
     if (edit) edits.current.set(id, edit); else edits.current.delete(id);
@@ -154,6 +167,7 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
     for (const id of [...drafts.current.keys()]) if (id.startsWith(prefix)) drafts.current.delete(id);
     touch();
   }, [touch]);
+  const releaseGuards = useCallback(() => { guards.current.clear(); touch(); }, [touch]);
   const isUnsaved = useCallback((id: string) => edits.current.has(id) || drafts.current.has(id) || guards.current.has(id), []);
   // The fields are saved one after the other: some pages keep one document that each save sends whole. A refusal
   // stops the run; that field says why and every field keeps what was typed.
@@ -161,15 +175,20 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
     if (running.current) return;
     running.current = true;
     setSaving(true);
+    setFailure(undefined);
+    let label = '';
     try {
-      for (const edit of [...edits.current.values()]) await edit.save();
+      for (const edit of [...edits.current.values()]) { label = edit.label; await edit.save(); }
       for (const [id, draft] of [...drafts.current]) {
+        label = draft.label;
         await (draft.save as (value: unknown) => unknown)(draft.value);
         drafts.current.delete(id);
         touch();
       }
       focusHeading();
-    } catch { /* the refused field shows its reason */ } finally {
+    } catch (error) {
+      setFailure({ label, message: error instanceof Refused || error instanceof InvalidRequestError ? error.message : settingsMessages.saveFailed });
+    } finally {
       running.current = false;
       setSaving(false);
     }
@@ -177,6 +196,7 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
   const discard = useCallback(() => {
     for (const edit of [...edits.current.values()]) edit.discard();
     drafts.current.clear();
+    setFailure(undefined);
     touch();
     focusHeading();
   }, [touch]);
@@ -195,6 +215,7 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
   const unsaved = changed || guards.current.size > 0;
   const dirty = useRef(unsaved);
   dirty.current = unsaved;
+  useEffect(() => registerUnsavedProbe(() => dirty.current), []);
 
   useEffect(() => {
     if (!changed) return;
@@ -214,14 +235,14 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const value = useMemo(() => ({ register, announce, save, drafts: drafts.current, touch, guard, dropDrafts, isUnsaved, version }), [register, announce, save, touch, guard, dropDrafts, isUnsaved, version]);
+  const value = useMemo(() => ({ register, announce, save, drafts: drafts.current, touch, guard, dropDrafts, isUnsaved, releaseGuards, version }), [register, announce, save, touch, guard, dropDrafts, isUnsaved, releaseGuards, version]);
   // Unit tests draw sections without a router; there is nowhere to leave to.
   const routed = Boolean(useRouter({ warn: false }));
   return <Edits.Provider value={value}>
     {children}
     {routed && <LeaveGuard dirty={dirty} />}
-    <p className="sr-only" aria-live="polite">{changed ? `${settingsMessages.unsavedChanges}: ${labels.join(', ')}` : ''}</p>
-    {changed && <SaveBar labels={labels} saving={saving} onDiscard={discard} onSave={() => void save()} />}
+    <p className="sr-only" aria-live="polite">{changed ? `${settingsMessages.unsavedChanges}: ${labels.join(', ')}.${failure ? ` ${failure.label}: ${failure.message}` : ''}` : ''}</p>
+    {changed && <SaveBar labels={labels} saving={saving} failure={changed ? failure : undefined} onDiscard={discard} onSave={() => void save()} />}
     {toast && <SavedToast raised={changed} error={toast.error} onUndo={toast.undo && (() => void undoToast())} onDismiss={() => setToast(undefined)} />}
   </Edits.Provider>;
 }

@@ -282,3 +282,19 @@ test('pressing Edit on another reply while one is being edited asks first; decli
   expect(screen.getByRole('form', { name: 'Edit Refund steps' })).toBeInTheDocument();
   expect(screen.queryByRole('form', { name: 'Edit Greeting' })).not.toBeInTheDocument();
 });
+
+
+test('a new reply being typed is not hidden and kept by pressing Edit on another row: it asks first, and agreeing drops the new form', () => {
+  vi.restoreAllMocks();
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+  render(<SavedRepliesSection replies={replies} {...handlers()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Greeting' }));
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('form', { name: 'Edit Greeting' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Title')).toHaveValue('Closing');
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Greeting' }));
+  expect(screen.getByRole('form', { name: 'Edit Greeting' })).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+});

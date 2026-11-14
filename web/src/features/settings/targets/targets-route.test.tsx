@@ -416,3 +416,15 @@ test('a holiday being typed has its own Add button and draws no bar, but closing
   await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
   expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
 });
+
+
+test('turning measuring off with a holiday half typed asks first too', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
+  show();
+  const holidays = await screen.findByRole('region', { name: 'Holidays' });
+  fireEvent.change(within(holidays).getByLabelText('Name'), { target: { value: 'Tết' } });
+  await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
+  fireEvent.click(screen.getByRole('switch', { name: 'Measure response targets' }));
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(responseTargetsApi.set).not.toHaveBeenCalled();
+});

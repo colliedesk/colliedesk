@@ -258,3 +258,18 @@ test('a spend limit typed on the Chat tab is kept when another tab is opened and
   await waitFor(() => expect(setCap).toHaveBeenCalledWith(12_500_000));
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull());
 });
+
+
+test('a spend limit that cannot be saved says why on the bar even when the Chat tab is not the one shown', async () => {
+  aiApi.chatUsage.mockResolvedValue(usage({ answer_limit: null, day_answer_limit: null, spent_micro_usd: 0, spent_percent: null }));
+  aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
+  const chat = slot({ slot: 'chat' as never, source: 'provider', model: 'claude-haiku-5-5', enabled: true, active: true, monthly_cap_micro_usd: null } as never);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AIPage isAdmin workspaceName="Northwind" timezone="UTC" showConsent={false} settings={settings({ slots: [chat] })} onSetChatCap={vi.fn()}
+    shown={{ general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: false, ai: true }}
+    onSetSlot={vi.fn()} onConsent={vi.fn()} onDismissConsent={vi.fn()} onCheck={vi.fn()} onAdd={vi.fn()} onListModels={vi.fn()} onSetKey={vi.fn()} onRemove={vi.fn()} onSetAutomatic={vi.fn()} onUsageMonth={vi.fn()} /></QueryClientProvider>);
+  fireEvent.click(screen.getByRole('tab', { name: 'AI chat' }));
+  fireEvent.change(await screen.findByRole('textbox', { name: /Monthly spend limit/ }), { target: { value: 'abc' } });
+  fireEvent.click(screen.getByRole('tab', { name: 'History' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(await within(screen.getByRole('region', { name: 'Unsaved changes' })).findByText(/Monthly spend limit.*: .*amount above 0/i)).toBeInTheDocument();
+});

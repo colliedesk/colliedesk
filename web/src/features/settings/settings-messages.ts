@@ -1,5 +1,7 @@
 import { conversationFieldsTitle } from './settings-anchors';
 
+import { leaveUnsavedQuestion } from './unsaved-probe';
+
 // Strings of the Settings sections other than the help center; they load with the Settings chunk, not with the first screen.
 export const settingsMessages = {
   notificationsLabel: 'Desktop notifications for new, assigned and customer-replied conversations',
@@ -106,7 +108,8 @@ export const settingsMessages = {
   unsavedChanges: 'Unsaved changes',
   discard: 'Discard',
   save: 'Save',
-  leaveUnsaved: 'You have unsaved changes. Leave anyway?',
+  leaveUnsaved: leaveUnsavedQuestion,
+  saveFailed: 'could not be saved',
   undoFailed: 'The change could not be undone. The value is as it was.',
   emailChannel: 'Email channel',
   supportAddress: 'Support address',

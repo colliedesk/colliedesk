@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { HelpTip } from '../../ui/help-tip';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
-import { useSaveChanges, useSettingsEdit, useUnsavedText } from './settings-edits';
+import { Refused, useSaveChanges, useSettingsEdit, useUnsavedText } from './settings-edits';
 import { settingsMessages } from './settings-messages';
 
 interface NameFormProps {
@@ -40,7 +40,7 @@ export function NameForm({ label, saveLabel, hint, tip, value, canManage, save, 
   useSettingsEdit(`name:${label}`, saveLabel !== undefined || !canManage || name.trim() === value.trim() ? undefined : { label, discard: () => setName(value),
     // The browser says what is wrong with a length it refuses, as a form would; the server judges the rest.
     save: () => {
-      if (input.current && !input.current.checkValidity()) { input.current.reportValidity(); return Promise.reject(new Error('invalid')); }
+      if (input.current && !input.current.checkValidity()) { input.current.reportValidity(); return Promise.reject(new Refused(input.current.validationMessage)); }
       return onSave?.(name.trim());
     } });
   // A step with its own button draws no bar, but a name typed in it counts for the question on leaving.

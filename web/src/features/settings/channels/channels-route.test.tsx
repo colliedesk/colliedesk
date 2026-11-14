@@ -402,7 +402,8 @@ test('a refused web form save shows the server message, not the generic failure'
   show(FORM);
   fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://changed.example.com' } });
   fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(screen.getByText(/Invalid origin "\*": use an exact origin/)).toBeInTheDocument());
+  // The field says it, and so does the bar.
+  await waitFor(() => expect(screen.getAllByText(/Invalid origin "\*": use an exact origin/).length).toBeGreaterThan(0));
 });
 
 test('the web form save holds the bar on Saving… until the server answers, so a second press sends nothing', async () => {

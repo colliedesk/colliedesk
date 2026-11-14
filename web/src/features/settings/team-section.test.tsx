@@ -298,3 +298,30 @@ test('opening another row\'s rename or a deactivation while a name is typed asks
   expect(screen.getByRole('textbox', { name: 'Display name of ann@example.com' })).toBeInTheDocument();
   expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
 });
+
+
+test('a rename the server refuses says why on the bar while the team list is not shown', async () => {
+  const onRename = vi.fn().mockRejectedValue(new InvalidRequestError('That name is taken.'));
+  function Tabs() {
+    const [shown, setShown] = useState(true);
+    return <><button type="button" onClick={() => setShown(!shown)}>Toggle</button>{shown && <TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />}</>;
+  }
+  render(<Tabs />);
+  fireEvent.click(within(row('Bob Builder')).getByRole('button', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(await within(screen.getByRole('region', { name: 'Unsaved changes' })).findByText('Rename Bob Builder: That name is taken.')).toBeInTheDocument();
+});
+
+test('a rename typed for a member the person can no longer manage does not open a form, and its draft goes', async () => {
+  function Page({ members }: { members: TeamMember[] }) {
+    return <TeamSection members={members} currentAgentId={admin.id} canManage timezone="UTC" onRename={vi.fn()} />;
+  }
+  const view = render(<Page members={[admin, ann, bob]} />);
+  fireEvent.click(within(row('Bob Builder')).getByRole('button', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  view.rerender(<Page members={[admin, ann, { ...bob, manageable: false }]} />);
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument());
+  expect(screen.queryByRole('textbox', { name: 'Display name of Bob Builder' })).not.toBeInTheDocument();
+});

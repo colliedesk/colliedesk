@@ -1,8 +1,9 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { SettingsEditsProvider, useConfirmDrop, useSettingsDraft, useSettingsEdit, useSettingsSaved, useUnsavedText } from './settings-edits';
+import { SettingsEditsProvider, Refused, useConfirmDrop, useReleaseUnsaved, useSettingsDraft, useSettingsEdit, useSettingsSaved, useUnsavedText } from './settings-edits';
+import { confirmDiscardUnsavedSettings } from './unsaved-probe';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -295,4 +296,61 @@ test('an action that would drop typed text asks first, and only moves on when th
   expect(screen.queryByText('Moved')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Move' }));
   expect(screen.getByText('Moved')).toBeInTheDocument();
+});
+
+
+function Releasing() {
+  useUnsavedText('typed', true);
+  const release = useReleaseUnsaved();
+  return <button type="button" onClick={release}>Release</button>;
+}
+
+test('a page that opens the next one itself, right after its own save, releases the typed text first so it is not asked about', async () => {
+  render(<SettingsEditsProvider><Releasing /></SettingsEditsProvider>);
+  await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
+  fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+  await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true));
+});
+
+test('a Save that fails says why on the bar, next to the field name, even when the field is on a tab that is not shown', async () => {
+  const onSave = vi.fn().mockRejectedValue(new Refused('Use a number such as 12.50.'));
+  render(<SettingsEditsProvider><Panels onSave={onSave} /></SettingsEditsProvider>);
+  type('Limit', 'abc');
+  fireEvent.click(screen.getByRole('button', { name: 'Switch' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Save/ }));
+  expect(await within(bar()!).findByText('Limit: Use a number such as 12.50.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+  expect(screen.queryByText('Limit: Use a number such as 12.50.')).not.toBeInTheDocument();
+});
+
+test('a Save that fails without words of its own says so in general terms', async () => {
+  render(<SettingsEditsProvider><Field label="A" onSave={() => Promise.reject(new Error('boom'))} /></SettingsEditsProvider>);
+  type('A', 'x');
+  fireEvent.click(screen.getByRole('button', { name: /^Save/ }));
+  expect(await within(bar()!).findByText('A: could not be saved')).toBeInTheDocument();
+});
+
+test('signing out asks about unsaved text through the same question, and only while something is unsaved', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+  expect(confirmDiscardUnsavedSettings()).toBe(true);
+  const { unmount } = render(<SettingsEditsProvider><Field label="A" /></SettingsEditsProvider>);
+  expect(confirmDiscardUnsavedSettings()).toBe(true);
+  expect(confirm).not.toHaveBeenCalled();
+  type('A', 'x');
+  await waitFor(() => expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument());
+  expect(confirmDiscardUnsavedSettings()).toBe(false);
+  expect(confirmDiscardUnsavedSettings()).toBe(true);
+  expect(confirm).toHaveBeenCalledWith('You have unsaved changes. Leave anyway?');
+  unmount();
+  expect(confirmDiscardUnsavedSettings()).toBe(true);
+});
+
+test('the bar tells the page how tall it is, so the toast stacks above it whatever its length', () => {
+  const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(88);
+  const { unmount } = render(<SettingsEditsProvider><Field label="A" /></SettingsEditsProvider>);
+  type('A', 'x');
+  expect(document.documentElement.style.getPropertyValue('--settings-save-bar-height')).toBe('88px');
+  unmount();
+  expect(document.documentElement.style.getPropertyValue('--settings-save-bar-height')).toBe('');
+  height.mockRestore();
 });

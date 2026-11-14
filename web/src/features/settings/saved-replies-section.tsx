@@ -5,7 +5,7 @@ import { formatDate } from '../../lib/format-date';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
 import { savedReplyMessages } from './saved-reply-messages';
-import { useConfirmDrop, useSaveChanges, useSettingsEdit } from './settings-edits';
+import { Refused, useConfirmDrop, useSaveChanges, useSettingsEdit } from './settings-edits';
 import { settingsMessages } from './settings-messages';
 import './saved-replies.css';
 
@@ -87,14 +87,14 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
   useSettingsEdit('saved-reply-new', typedReply ? { label: savedReplyMessages.newSavedReply,
     discard: () => { setTitle(''); setBody(''); setProblem(undefined); closeAdd(); },
     save: () => {
-      if (!title.trim() || !body.trim()) { setProblem(savedReplyMessages.titleAndTextRequired); return Promise.reject(new Error('invalid')); }
+      if (!title.trim() || !body.trim()) { setProblem(savedReplyMessages.titleAndTextRequired); return Promise.reject(new Refused(savedReplyMessages.titleAndTextRequired)); }
       return attempt(() => onCreate(title, body), () => { setTitle(''); setBody(''); closeAdd(); });
     } } : undefined);
   const editedReply = editing ? replies.find((item) => item.id === editing.id) : undefined;
   const changedReply = editing && editedReply && (editing.title !== editedReply.title || editing.body !== editedReply.body);
   useSettingsEdit('saved-reply-edit', changedReply ? { label: editedReply.title, discard: () => { setEditing(null); setProblem(undefined); },
     save: () => {
-      if (!editing.title.trim() || !editing.body.trim()) { setProblem(savedReplyMessages.titleAndTextRequired); return Promise.reject(new Error('invalid')); }
+      if (!editing.title.trim() || !editing.body.trim()) { setProblem(savedReplyMessages.titleAndTextRequired); return Promise.reject(new Refused(savedReplyMessages.titleAndTextRequired)); }
       return attempt(() => onUpdate(editedReply.id, { title: editing.title, body: editing.body, updated_at: editedReply.updated_at }), () => setEditing(null));
     } } : undefined);
   return (
@@ -135,7 +135,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
                     : <div className="saved-reply-actions">
                         <button type="button" aria-label={savedReplyMessages.savedReplyHistoryOf(reply.title)} aria-expanded={panel === reply.id}
                           onClick={(event) => (panel === reply.id ? closePanel() : openPanel(reply.id, event.currentTarget))}>{settingsMessages.history}</button>
-                        <button type="button" aria-label={savedReplyMessages.editSavedReplyName(reply.title)} onClick={() => { if (!confirmDrop('saved-reply-edit')) return; setProblem(undefined); setConfirming(null); setEditing({ id: reply.id, title: reply.title, body: reply.body }); }}>{messages.edit}</button>
+                        <button type="button" aria-label={savedReplyMessages.editSavedReplyName(reply.title)} onClick={() => { if (!confirmDrop('saved-reply-edit', 'saved-reply-new')) return; if (adding) { setTitle(''); setBody(''); closeAdd(); } setProblem(undefined); setConfirming(null); setEditing({ id: reply.id, title: reply.title, body: reply.body }); }}>{messages.edit}</button>
                         <button type="button" className="danger-action" aria-label={savedReplyMessages.deleteSavedReplyName(reply.title)} onClick={() => { setProblem(undefined); setConfirming(reply.id); }}>{settingsMessages.confirmDelete}</button>
                       </div>}
                   {panel === reply.id && <Suspense fallback={<p className="muted-copy">{savedReplyMessages.loadingSavedReplyHistory}</p>}>

@@ -12,7 +12,7 @@ import { Dialog, Field } from '../../ui/dialog';
 import { HelpTip } from '../../ui/help-tip';
 import { LockIcon, PlusIcon } from '../../ui/icons';
 import type { ChannelPanelProps, ConnectProps } from '../registry';
-import { useInstantSave, useSaveChanges, useSettingsEdit } from '../../features/settings/settings-edits';
+import { Refused, useInstantSave, useSaveChanges, useSettingsEdit } from '../../features/settings/settings-edits';
 import { settingsMessages } from '../../features/settings/settings-messages';
 import { TipField } from '../../features/settings/tip-field';
 import { zaloMessages as m } from './zalo-messages';
@@ -632,7 +632,7 @@ function MessagesForm({ channel, canManage, onDiscard }: ChannelPanelProps & { o
   const invalid = quietBad || waitBad || expireBad || questionBad || everyBad(helpEvery) || everyBad(unmatchedEvery) || autoCloseBad;
   useSettingsEdit('zalo-messages', canManage && unsaved ? { label: m.messagesLabel, discard: onDiscard, save: () => {
     setChecked(true);
-    if (invalid) return Promise.reject(new Error('invalid'));
+    if (invalid) return Promise.reject(new Refused(m.checkFields));
     return save.mutateAsync().then(() => setSavedAs(snapshot));
   } } : undefined);
   if (!canManage) {

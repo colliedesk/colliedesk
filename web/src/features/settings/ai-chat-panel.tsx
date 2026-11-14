@@ -8,7 +8,7 @@ import { Dialog } from '../../ui/dialog';
 import { HelpTip } from '../../ui/help-tip';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiChatMessages as m } from './ai-chat-messages';
-import { useSaveChanges, useSettingsDraft } from './settings-edits';
+import { Refused, useSaveChanges, useSettingsDraft } from './settings-edits';
 import './ai-settings.css';
 
 // The team's side of the help center's AI chat: the month's use (admins), the chats and a chat's
@@ -60,7 +60,7 @@ function CapForm({ slot, onSave }: { slot: AISlot; onSave: (cap: number | null) 
   const [value, setValue] = useSettingsDraft('ai-chat-cap', initial, { label: m.capLabel, save: (typed) => {
     const text = typed.trim();
     const amount = Number(text);
-    if (text !== '' && !(Number.isFinite(amount) && amount > 0)) { setState('invalid'); return Promise.reject(new Error('invalid')); }
+    if (text !== '' && !(Number.isFinite(amount) && amount > 0)) { setState('invalid'); return Promise.reject(new Refused(m.capInvalid)); }
     setState('saving');
     return onSave(text === '' ? null : Math.round(amount * 1e6)).then(() => setState('saved'), (error: unknown) => { setState('failed'); throw error; });
   } });

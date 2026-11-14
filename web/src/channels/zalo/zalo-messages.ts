@@ -227,6 +227,7 @@ export const zaloMessages = {
   askDescriptionHint: 'Asks what the request is about when “Open a request” comes with nothing before it. Leave empty to open it as it is.',
   questionHint: 'Name the Confirm and Cancel phrases, for example “Send OK to send it, or Hủy to cancel.”',
   messagesLabel: 'Messages',
+  checkFields: 'Check the fields marked in red.',
   messagesAdminsOnly: 'Only admins change what the OA says and the commands it understands.',
   none: '—',
 };

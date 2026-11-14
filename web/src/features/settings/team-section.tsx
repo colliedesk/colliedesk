@@ -37,9 +37,14 @@ export function TeamSection({ members, currentAgentId, canManage, roles = [], my
   const [renamingNow, setRenaming] = useState<string | null>(null);
   // A name typed on a tab that was left is still the page's: the form opens again on that row.
   const draftRows = useDraftIds('rename:');
-  const renaming = renamingNow ?? draftRows[0]?.slice('rename:'.length) ?? null;
+  const renameable = (id: string) => canManage && members.some((member) => member.id === id && member.manageable);
+  const draftRow = draftRows.map((id) => id.slice('rename:'.length)).find(renameable);
+  const renaming = (renamingNow && renameable(renamingNow) ? renamingNow : null) ?? draftRow ?? null;
   const confirmDrop = useConfirmDrop();
   const dropDrafts = useDropDrafts();
+  // A draft for someone the person can no longer rename (their role changed, they left) is not kept.
+  const stale = draftRows.filter((id) => !renameable(id.slice('rename:'.length))).join();
+  useEffect(() => { for (const id of stale ? stale.split(',') : []) dropDrafts(id); }, [stale]);
   // Opening another row's editor, or a question, closes the rename form: its typed name is not dropped without asking.
   const leaveRename = () => { if (renaming && !confirmDrop(`rename:${renaming}`)) return false; dropDrafts('rename:'); return true; };
   const [changing, setChanging] = useState<string | null>(null);
