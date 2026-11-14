@@ -21,6 +21,7 @@ Under **Connect your agent**, Settings shows these steps for Claude Desktop with
 2. Open it (double-click), or drag it onto **Settings → Extensions** in Claude Desktop, and choose
    **Install**.
 3. Fill in **Colliedesk address** (`https://desk.example.com`) and **Agent token**, and turn the extension on.
+   Claude Desktop keeps the token in your system's credential store.
 
 In a new chat, the tools menu lists Colliedesk.
 
