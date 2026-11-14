@@ -34,7 +34,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
 
     // Import in the app, in the background, until the reconcile report is ready and OK.
     await page.getByLabel('Freshdesk address').fill('acme.freshdesk.com');
-    await page.getByLabel('API key of a Freshdesk admin').fill(apiKey);
+    await page.getByLabel('API key of a Freshdesk admin', { exact: true }).fill(apiKey);
     await page.getByRole('button', { name: 'Read account' }).click();
     await expect(page.getByRole('heading', { name: 'Found in acme.freshdesk.com' })).toBeVisible({ timeout: 60_000 });
     await page.getByRole('button', { name: 'Start import' }).click();

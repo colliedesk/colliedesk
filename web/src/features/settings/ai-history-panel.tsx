@@ -1,5 +1,6 @@
 import type { AIEvent, AILevel } from '../../api/ai';
 import { formatDate } from '../../lib/format-date';
+import { HelpTip } from '../../ui/help-tip';
 import { aiMessages as m, slotLabel } from './ai-messages';
 import { levelName, scopeName } from './ai-levels';
 import { money } from './ai-level-dialogs';
@@ -79,6 +80,6 @@ export function History({ events, timezone }: { events: AIEvent[]; timezone: str
         : <ul className="ai-history">{events.map((event) => <li key={event.id}><time dateTime={event.created_at}>{formatDate(event.created_at, timezone)}</time>
           <span><b>{event.actor_name ?? m.someone}</b>{event.via_token && m.viaToken} {eventText(event)}</span></li>)}</ul>}
     </section>
-    <p className="help ai-help">{m.historyHelp}</p>
+    <p className="help ai-help">{m.historyHelp} <HelpTip label={m.tabHistory} text={m.historyWhy} /></p>
   </>;
 }

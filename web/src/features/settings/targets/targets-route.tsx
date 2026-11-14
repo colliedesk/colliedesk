@@ -9,12 +9,12 @@ import { useBillingShown } from '../../billing/billing-shown';
 import { saveState, useSaveFeedback } from '../save-feedback';
 import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
-import { TimezoneSelect } from '../timezone-select';
+import { TimezoneSelect, sameZone } from '../timezone-select';
 import { targetsMessages as m } from './targets-messages';
 import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoken, targetProblem, units, warnProblem } from './target-duration';
 import type { Duration, Unit } from './target-duration';
 import { OffCard } from './targets-off-card';
-import { Card, cardState, fieldErrors, useSave, withoutStamp } from './targets-shared';
+import { Card, ZoneNote, cardState, fieldErrors, useSave, withoutStamp } from './targets-shared';
 import { can } from '../../../lib/can';
 import '../../../ui/controls.css';
 import './targets.css';
@@ -35,6 +35,8 @@ export function TargetsRoute() {
   // Targets per channel need the channel list, which only a role that reads channels may ask for.
   const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list, enabled: can(me.data, 'channels:read') });
   const workspaceZone = me.data?.workspace.timezone ?? 'UTC';
+  // The zone of the reader's own dates (Reports, the inbox): the clock below may count in another.
+  const myZone = me.data?.timezone ?? workspaceZone;
   const live = channels.data?.items.filter((item) => !item.deleted_at) ?? [];
   // What the server refused when measuring was turned on, kept so the editor opens to fix it while still off.
   // Its words go as soon as the document changed (any card saved), the editor stays until measuring is on.
@@ -52,11 +54,11 @@ export function TargetsRoute() {
         {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
         {doc.isPending ? <div className="tg-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
           : doc.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void doc.refetch()}>{m.tryAgain}</button></p>
-          : !doc.data.enabled && !refusal ? <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />
+          : !doc.data.enabled && !refusal ? <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} myZone={myZone} onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />
           : <>
               {doc.data.enabled ? <OnCard doc={doc.data} canManage={isAdmin} />
-                : <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} repairing onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />}
-              <HoursCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} refused={refused} />
+                : <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} myZone={myZone} repairing onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />}
+              <HoursCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} myZone={myZone} refused={refused} />
               <HolidaysCard doc={doc.data} canManage={isAdmin} refused={refused} />
               <TargetsCard doc={doc.data} canManage={isAdmin} refused={refused} />
               <AlertsCard doc={doc.data} canManage={isAdmin} />
@@ -83,7 +85,7 @@ function OnCard({ doc, canManage }: CardProps) {
   </Card>;
 }
 
-function HoursCard({ doc, canManage, workspaceZone, refused }: CardProps & { workspaceZone: string }) {
+function HoursCard({ doc, canManage, workspaceZone, myZone, refused }: CardProps & { workspaceZone: string; myZone: string }) {
   // What is typed here lies over the document, field by field: a field nobody touched always shows the
   // document as it is now (after another card's save, or someone else's), a touched one keeps its words.
   const [zoneEdit, setZoneEdit] = useState<string>();
@@ -105,7 +107,7 @@ function HoursCard({ doc, canManage, workspaceZone, refused }: CardProps & { wor
     return <Card id={id} title={m.hoursHeading} lead={m.hoursLead}><dl className="tg-dl">
       <dt>{m.timezone}</dt><dd>{doc.timezone ?? m.workspaceZone(workspaceZone)}</dd>
       {weekdays.map((day) => <Row key={day} label={m.days[day]} value={byDay(day).open ? `${byDay(day).from}–${byDay(day).to}` : m.closed} />)}
-    </dl></Card>;
+    </dl><ZoneNote clock={doc.timezone ?? workspaceZone} mine={myZone} /></Card>;
   }
   return <Card id={id} title={m.hoursHeading} lead={m.hoursLead}>
     <form className="stacked-form" noValidate onSubmit={(event) => {
@@ -114,7 +116,9 @@ function HoursCard({ doc, canManage, workspaceZone, refused }: CardProps & { wor
       if (feedback.pending || weekdays.some(bad)) return;
       save.mutate({ ...withoutStamp(doc), timezone: zone || null, hours: weekdays.map(byDay) }, { onSuccess: () => { setZoneEdit(undefined); setDayEdits({}); } });
     }}>
-      <TimezoneSelect label={m.timezone} value={zone} emptyOption={m.workspaceZone(workspaceZone)} onChange={(next) => { feedback.touch(); setZoneEdit(next); }} />
+      <TimezoneSelect label={m.timezone} value={zone} emptyOption={m.workspaceZone(workspaceZone)} suggested={sameZone(myZone, workspaceZone) ? undefined : { zone: myZone, label: m.yourZone(myZone) }}
+        onChange={(next) => { feedback.touch(); setZoneEdit(next); }} />
+      <ZoneNote clock={doc.timezone ?? workspaceZone} mine={myZone} />
       {server.timezone && <span className="error-copy field-note" role="alert">{server.timezone}</span>}
       {server.hours && <p className="error-copy" role="alert">{server.hours}</p>}
       <p className="muted-copy" id={`${id}-midnight`}>{m.midnight}</p>
@@ -206,11 +210,11 @@ function TargetsCard({ doc, canManage, refused }: CardProps) {
   const edit = (key: string) => (next: Duration) => { feedback.touch(); setEdits((all) => ({ ...all, [key]: next })); };
   if (!canManage) {
     const read = (minutes: number | null) => (minutes === null ? m.none : spoken(minutes));
-    return <Card id={id} title={m.targetsHeading} lead={m.targetsReadLead}><dl className="tg-dl">
+    return <Card id={id} title={m.targetsHeading} lead={m.targetsReadLead} tip={m.targetsNote}><dl className="tg-dl">
       {priorities.map((priority) => <Row key={priority} label={priorityName(priority)}
         value={`${m.firstReply}: ${read(doc.targets[priority].first_response_minutes)} · ${m.resolve}: ${read(doc.targets[priority].resolution_minutes)}`} />)}
       <Row label={m.dueSoon} value={doc.warn_before_minutes === 0 ? m.noReminder : `${spoken(doc.warn_before_minutes)} ${m.beforeTarget}`} />
-    </dl><p className="muted-copy">{m.targetsNote}</p></Card>;
+    </dl></Card>;
   }
   // Checked on save; the limit is named in the unit the box shows.
   const targetError = (value: Duration) => (!checked ? undefined
@@ -226,7 +230,7 @@ function TargetsCard({ doc, canManage, refused }: CardProps) {
   };
   const warnError = server.warn_before_minutes ?? (!checked ? undefined
     : { rule: m.warnRule, max: m.warnMax(limitIn(maxWarnMinutes, warn.unit)), none: undefined }[warnProblem(warn) ?? 'none']);
-  return <Card id={id} title={m.targetsHeading} lead={m.targetsLead}>
+  return <Card id={id} title={m.targetsHeading} lead={m.targetsLead} tip={m.targetsNote}>
     <form className="stacked-form" noValidate onSubmit={(event) => {
       event.preventDefault();
       setChecked(true);
@@ -247,7 +251,6 @@ function TargetsCard({ doc, canManage, refused }: CardProps) {
           <DurationField id={`${id}-warn`} label={m.dueSoonLabel} unitLabel={m.dueSoonUnit} value={warn} errorId={warnError ? `${id}-warn-error` : undefined} onChange={edit('warn')} /><span>{m.beforeTarget}</span></span>
         {warnError && <span className="error-copy field-note" id={`${id}-warn-error`}>{warnError}</span>}
       </div>
-      <p className="muted-copy">{m.targetsNote}</p>
       <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveTargets)}</button>{feedback.status}</span>
     </form>
   </Card>;
@@ -299,7 +302,7 @@ function AlertsCard({ doc, canManage }: CardProps) {
   const id = useId();
   const workspaceOn = save.isPending ? Boolean(save.variables?.alert_email) : doc.alert_email;
   const meOn = mine.isPending ? Boolean(mine.variables) : doc.my_alert_email !== false;
-  return <Card id={id} title={m.alertsHeading} lead={m.alertsLead}>
+  return <Card id={id} title={m.alertsHeading} lead={m.alertsLead} tip={m.alertsWho}>
     {canManage
       ? <span className="button-row"><label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={workspaceOn} disabled={save.isPending}
           onChange={(event) => { feedback.touch(); save.mutate({ ...withoutStamp(doc), alert_email: event.target.checked }); }} /></span><span>{m.alertEmail}</span></label>{feedback.status}</span>

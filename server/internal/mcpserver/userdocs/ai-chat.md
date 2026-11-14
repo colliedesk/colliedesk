@@ -46,7 +46,7 @@ a day may use a tenth of each. It never uses the included AI of your team's feat
 When a limit is reached, customers see the help articles that match their question and **Talk to a
 person**, until the next day or month (UTC). On your own provider, or a server without plan limits,
 an admin can set a **monthly spend limit** for AI chat on the **AI chat** tab of **Settings → AI & agents**; empty is
-no limit. **Settings → AI & agents → AI chat** shows the month's answers, spend, chats, hand-offs and
+no limit, and the ⓘ beside the limit says what customers see past it. **Settings → AI & agents → AI chat** shows the month's answers, spend, chats, hand-offs and
 how many answers were rated helpful, with a warning at 80% and when answers are paused.
 
 Spend is counted at the server's prices (the setting `ai.server.prices`, see

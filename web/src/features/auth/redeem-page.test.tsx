@@ -13,14 +13,14 @@ test('explains passwordless access without rendering a login form', () => {
 test('shows cloud sign-in only when public config enables it', () => {
 	render(<RedeemPage token="" cloudEnabled cloudSignIn={<button type="button">Sign in</button>} />);
 	expect(screen.getByRole('button', { name: /^sign in$/i })).toBeInTheDocument();
-	expect(screen.getByText(/one-time link from your admin/i)).toBeInTheDocument();
+	expect(screen.getByText(/one-time link from an admin/i)).toBeInTheDocument();
 });
 
 test('cloud sign-in is titled as a sign-in with an emailed code, not as a link to open', () => {
 	render(<RedeemPage token="" cloudEnabled cloudSignIn={<div>form</div>} />);
 	expect(screen.getByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
 	expect(screen.getByText('Enter your work email and we will send you a one-time code.')).toBeInTheDocument();
-	expect(screen.getByText('Got a one-time link from your admin? Open it in this browser instead.')).toBeInTheDocument();
+	expect(screen.getByText('Got a one-time link from an admin? Open it in this browser.')).toBeInTheDocument();
 	expect(screen.queryByText(/open your secure link/i)).not.toBeInTheDocument();
 	expect(screen.queryByText(/one-time links instead of passwords/i)).not.toBeInTheDocument();
 });
@@ -100,7 +100,7 @@ test('a visitor from the trial link is greeted as a new team, with what happens 
 	expect(screen.getByRole('heading', { level: 1, name: 'Start your free trial' })).toBeInTheDocument();
 	expect(screen.getByText('14 days, no card needed. Enter your work email and we will send you a one-time code. Then you name your workspace and the trial starts.')).toBeInTheDocument();
 	expect(screen.getByText('Already have a workspace? The same form signs you in.')).toBeInTheDocument();
-	expect(screen.queryByText(/one-time link from your admin/i)).not.toBeInTheDocument();
+	expect(screen.queryByText(/one-time link from an admin/i)).not.toBeInTheDocument();
 });
 
 test('the trial title needs sign-up; without it the page stays a sign-in', () => {
@@ -118,7 +118,7 @@ test('a buy link wins over the trial link: the buyer pays, no trial wording', ()
 // cannot know which buttons the form shows and names none.
 test('the sign-up hint under the form names no sign-in provider', () => {
 	render(<RedeemPage token="" cloudEnabled signupEnabled cloudSignIn={<div>form</div>} />);
-	expect(screen.getByText('New to Colliedesk Cloud? Use the same form to start a 14-day free trial. No card needed.')).toBeInTheDocument();
+	expect(screen.getByText('New? Use this form to start a 14-day trial. No card needed.')).toBeInTheDocument();
 	expect(screen.queryByText(/google|microsoft/i)).not.toBeInTheDocument();
 });
 
@@ -139,7 +139,7 @@ test('a self-hosted server links the guarantees but not the status page of Colli
 
 test('where sign-up is on, the page links the terms, the privacy policy and the pricing with a short consent line', () => {
 	render(<RedeemPage token="" cloudEnabled signupEnabled trial cloudSignIn={<div>form</div>} />);
-	expect(screen.getByText(/By continuing you agree to the/)).toBeInTheDocument();
+	expect(screen.getByText(/By continuing you agree to the/)).toHaveTextContent(/^By continuing you agree to the Terms and Privacy Policy\.$/);
 	expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', 'https://colliedesk.com/terms');
 	expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute('href', 'https://colliedesk.com/privacy');
 	expect(screen.getByRole('link', { name: 'Pricing' })).toHaveAttribute('href', 'https://colliedesk.com/pricing');
@@ -152,10 +152,10 @@ test('a self-hosted server without sign-up shows no consent line', () => {
 
 test('the trial page says in one line what a workspace is', () => {
 	render(<RedeemPage token="" cloudEnabled signupEnabled trial cloudSignIn={<div>form</div>} />);
-	expect(screen.getByText(/A workspace is your team's account in Colliedesk/)).toBeInTheDocument();
+	expect(screen.getByText('A workspace is one shared name, such as Acme Support.')).toBeInTheDocument();
 });
 
 test('a new team is told in one line what a workspace is and what to name it', () => {
 	render(<RedeemPage token="" cloudEnabled signupEnabled trial cloudSignIn={<div>form</div>} />);
-	expect(screen.getByText('Your workspace is your team\'s shared inbox in Colliedesk; use your company name.')).toBeInTheDocument();
+	expect(screen.getByText('Your workspace is your team\'s inbox. Use your company name.')).toBeInTheDocument();
 });

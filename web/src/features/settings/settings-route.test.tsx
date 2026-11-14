@@ -354,6 +354,8 @@ test('an admin finds the import and Export all data on Data', async () => {
   show('admin', [], DataRoute);
   expect(await screen.findByRole('heading', { level: 1, name: 'Data' })).toBeInTheDocument();
   expect(await screen.findByRole('button', { name: 'Export all data' })).toBeInTheDocument();
+  // What the ZIP holds is the tip of the heading, not a line under it.
+  expect(screen.getByRole('button', { name: 'About Export all data' })).toHaveAccessibleDescription('It holds every conversation, contact, tag, note and attachment.');
   expect(await screen.findByRole('heading', { level: 2, name: 'Connect your Freshdesk account' })).toBeInTheDocument();
   // The import was a page of its own; in Data it has the page's title, the settings menu and one main landmark.
   expect(screen.getByText('Import from Freshdesk')).toBeInTheDocument();
@@ -375,7 +377,7 @@ test('an agent does not see Export all data', async () => {
 test('Data tells a person who may neither import nor export that admins do it', async () => {
   show('agent', [], DataRoute);
   await screen.findByRole('heading', { level: 1, name: 'Data' });
-  expect(await screen.findByText('Only a workspace admin can import. Ask an admin to import your Freshdesk account.')).toBeInTheDocument();
+  expect(await screen.findByText('Only a workspace admin can import. Ask one to do it.')).toBeInTheDocument();
   expect(screen.getByText('Only workspace admins can export all data.')).toBeInTheDocument();
 });
 

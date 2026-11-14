@@ -31,6 +31,8 @@ test('a signed-out visitor is told how to get back in instead of seeing an empty
 test('a signed-out visitor of a self-hosted instance keeps the pair hint', () => {
   render(<AppShell signedOut><p>inbox</p></AppShell>);
   expect(screen.getByText(/collie pair/)).toBeInTheDocument();
+  // The command is a value to copy, so it stands alone; the sentence before it stays short.
+  expect(screen.getByText('collie pair --workspace <slug> --email <your email>').tagName).toBe('CODE');
 });
 
 test('the workspace and the signed-in address sit in an always-visible bar, not in a tooltip', () => {

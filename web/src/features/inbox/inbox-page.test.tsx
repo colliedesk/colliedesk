@@ -317,10 +317,12 @@ test('Mentions with no conversation open shows no reply box and no details', () 
   expect(within(screen.getByRole('region', { name: /timeline/i })).getByText('Select a conversation to read its timeline.')).toBeInTheDocument();
 });
 
-test('the list of a results number that was refreshed says so and leads back to Results', () => {
+test('the list of a results number that was refreshed says so and leads back to Results', async () => {
   const onQuery = vi.fn();
   render(<InboxPage conversations={[]} failed="results_refreshed" query={{ status: 'all', result: '11111111-1111-4111-8111-111111111111:30d.first_response' }} onQuery={onQuery} filtered />);
   expect(screen.getByRole('alert')).toHaveTextContent('These numbers were refreshed. Open Reports again.');
+  // Why they were refreshed is the tip of the alert, not a paragraph under it.
+  expect(await screen.findByRole('button', { name: 'About refreshed numbers' })).toHaveAccessibleDescription(/Reports works its numbers out again every hour or so/);
   expect(screen.getByRole('link', { name: 'Open Reports' })).toHaveAttribute('href', '/results');
   expect(screen.queryByText('Conversations could not be loaded.')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));

@@ -26,6 +26,9 @@ the lock beside it: no provider yet, no provider picked for that feature (open i
 are not an admin. On a phone the tabs (Features, Providers, AI chat, Usage, History) scroll
 sideways, with a fade at the edge that hides some.
 
+A line that would only explain sits in the ⓘ beside the name instead. It opens on hover, on keyboard focus and by tap, and
+Escape closes it. **Automatic runs**, the models of a provider, **Usage** and **History** each have one.
+
 The [setup flow](setup-guide.md#setup-flow) offers one of them to a new team: its **Turn on AI drafts** step
 turns Reply drafts on with **Default for channels** set to **Suggest**, through the same call as Settings, so
 the consent is recorded the same way. It leaves triage suggestions off.

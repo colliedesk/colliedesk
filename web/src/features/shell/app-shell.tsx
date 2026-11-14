@@ -140,6 +140,7 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, foot
     ? <main className="redeem-page"><section className="redeem-panel">
         <p role="alert" className="error-copy">{messages.signedOut}</p>
         <p className="muted-copy">{messages.signedOutSelfHosted}</p>
+        <p><code>{messages.signedOutCommand}</code></p>
       </section></main>
     : lockedScreen ?? children;
   const toggle = <button type="button" className="sidebar-toggle" aria-label={toggleLabel} data-tip={toggleLabel} aria-expanded={!collapsed}
