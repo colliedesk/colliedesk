@@ -9,7 +9,7 @@ import { useInstantSave } from './settings-edits';
 
 // Preferences are per-browser choices, saved locally, except the mention email, which the server keeps for the person.
 // mentionEmail is the mention email setting, which reads and saves on the server (MentionEmailSetting).
-export function PreferencesSection({ setupGuideHidden = false, onSetSetupGuideHidden, mentionEmail }: { setupGuideHidden?: boolean; onSetSetupGuideHidden?: (hidden: boolean) => Promise<unknown> | void; mentionEmail?: ReactNode }) {
+export function PreferencesSection({ setupGuideHidden = false, onSetSetupGuideHidden, mentionEmail }: { setupGuideHidden?: boolean; onSetSetupGuideHidden?: (hidden: boolean, undo?: boolean) => Promise<unknown> | void; mentionEmail?: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(storedTheme);
   // Another tab saved a different theme: follow it, and show it as the choice.
   useEffect(() => onThemeChange((next) => { setTheme(next); applyTheme(next); }), []);
@@ -32,7 +32,7 @@ export function PreferencesSection({ setupGuideHidden = false, onSetSetupGuideHi
         <NotificationsSetting />
         {mentionEmail}
         {onSetSetupGuideHidden && <div className="field">
-          <label className="field-inline"><input type="checkbox" checked={!setupGuideHidden} onChange={(event) => void instant(onSetSetupGuideHidden, !event.target.checked, setupGuideHidden)} />
+          <label className="field-inline"><input type="checkbox" checked={!setupGuideHidden} onChange={(event) => void instant((hidden: boolean) => onSetSetupGuideHidden(hidden), !event.target.checked, setupGuideHidden, (hidden: boolean) => onSetSetupGuideHidden(hidden, true))} />
             <span>{settingsMessages.showSetupGuide}</span></label>
         </div>}
       </div>

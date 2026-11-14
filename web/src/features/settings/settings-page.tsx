@@ -39,7 +39,7 @@ interface SettingsPageProps {
   onSetDisplayName?: (name: string) => Promise<unknown> | void;
   // The setup guide in the inbox is this agent's choice, saved with the profile.
   setupGuideHidden?: boolean;
-  onSetSetupGuideHidden?: (hidden: boolean) => Promise<unknown> | void;
+  onSetSetupGuideHidden?: (hidden: boolean, undo?: boolean) => Promise<unknown> | void;
   displayNameSave?: SaveState;
   // The invite just created: its one-time link, or none when a repeat of the press came back without it.
   createdInvite?: { url?: string };

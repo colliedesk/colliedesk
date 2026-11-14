@@ -16,7 +16,7 @@ import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoke
 import type { Duration, Unit } from './target-duration';
 import { OffCard } from './targets-off-card';
 import { Card, ZoneNote, cardState, fieldErrors, useCurrentDocument, useSave, withoutStamp } from './targets-shared';
-import { SettingsEditsProvider, useInstantSave, useSaveChanges, useSettingsEdit } from '../settings-edits';
+import { SettingsEditsProvider, useConfirmDrop, useInstantSave, useSaveChanges, useSettingsEdit } from '../settings-edits';
 import { can } from '../../../lib/can';
 import '../../../ui/controls.css';
 import './targets.css';
@@ -81,11 +81,13 @@ function OnCard({ doc, canManage }: CardProps) {
   const feedback = useSaveFeedback({ ...cardState(save), saved: false });
   const current = useCurrentDocument(doc);
   const instant = useInstantSave();
+  // Turning measuring off takes the editing cards off the page: typed hours, times or scope are not dropped without asking.
+  const confirmDrop = useConfirmDrop();
   const id = useId();
   return <Card id={id} title={m.onHeading} lead={m.onLead}>
     {canManage
       ? <span className="button-row"><label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={save.isPending ? Boolean(save.variables?.enabled) : doc.enabled}
-          disabled={save.isPending} onChange={(event) => { feedback.touch(); void instant((enabled: boolean) => save.mutateAsync({ ...withoutStamp(current()), enabled }), event.target.checked, doc.enabled); }} /></span><span>{m.measure}</span></label>{feedback.status}</span>
+          disabled={save.isPending} onChange={(event) => { if (!event.target.checked && !confirmDrop('targets-hours', 'targets-times', 'targets-applies')) return; feedback.touch(); void instant((enabled: boolean) => save.mutateAsync({ ...withoutStamp(current()), enabled }), event.target.checked, doc.enabled); }} /></span><span>{m.measure}</span></label>{feedback.status}</span>
       : <p>{doc.enabled ? m.yes : m.no}</p>}
   </Card>;
 }

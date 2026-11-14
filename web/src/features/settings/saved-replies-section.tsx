@@ -5,7 +5,7 @@ import { formatDate } from '../../lib/format-date';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
 import { savedReplyMessages } from './saved-reply-messages';
-import { useSaveChanges, useSettingsEdit } from './settings-edits';
+import { useConfirmDrop, useSaveChanges, useSettingsEdit } from './settings-edits';
 import { settingsMessages } from './settings-messages';
 import './saved-replies.css';
 
@@ -77,6 +77,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
   // The form being filled or edited is the page's unsaved change: the bar names it, and leaving asks first. A refusal
   // keeps the form open with the server's reason, and stops the page's Save.
   const saveChanges = useSaveChanges();
+  const confirmDrop = useConfirmDrop();
   const attempt = async (action: () => Promise<unknown>, done: () => void) => {
     let saved = false;
     await run(async () => { await action(); saved = true; }, done);
@@ -134,7 +135,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
                     : <div className="saved-reply-actions">
                         <button type="button" aria-label={savedReplyMessages.savedReplyHistoryOf(reply.title)} aria-expanded={panel === reply.id}
                           onClick={(event) => (panel === reply.id ? closePanel() : openPanel(reply.id, event.currentTarget))}>{settingsMessages.history}</button>
-                        <button type="button" aria-label={savedReplyMessages.editSavedReplyName(reply.title)} onClick={() => { setProblem(undefined); setConfirming(null); setEditing({ id: reply.id, title: reply.title, body: reply.body }); }}>{messages.edit}</button>
+                        <button type="button" aria-label={savedReplyMessages.editSavedReplyName(reply.title)} onClick={() => { if (!confirmDrop('saved-reply-edit')) return; setProblem(undefined); setConfirming(null); setEditing({ id: reply.id, title: reply.title, body: reply.body }); }}>{messages.edit}</button>
                         <button type="button" className="danger-action" aria-label={savedReplyMessages.deleteSavedReplyName(reply.title)} onClick={() => { setProblem(undefined); setConfirming(reply.id); }}>{settingsMessages.confirmDelete}</button>
                       </div>}
                   {panel === reply.id && <Suspense fallback={<p className="muted-copy">{savedReplyMessages.loadingSavedReplyHistory}</p>}>

@@ -360,3 +360,49 @@ test('business hours after a refusal: a day touched here keeps its hours, the ot
   expect(within(hours).getByLabelText('Monday from')).toHaveValue('07:00');
   expect(within(hours).getByLabelText('Tuesday to')).toHaveValue('19:00');
 });
+
+
+test('turning measuring off with hours typed asks first; declining keeps the switch on and the typing', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+  show();
+  const hours = await screen.findByRole('region', { name: 'Business hours' });
+  fireEvent.change(within(hours).getByLabelText('Monday from'), { target: { value: '07:30' } });
+  fireEvent.click(screen.getByRole('switch', { name: 'Measure response targets' }));
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(responseTargetsApi.set).not.toHaveBeenCalled();
+  expect(within(hours).getByLabelText('Monday from')).toHaveValue('07:30');
+  expect(screen.getByRole('switch', { name: 'Measure response targets' })).toBeChecked();
+  fireEvent.click(screen.getByRole('switch', { name: 'Measure response targets' }));
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent()).toMatchObject({ enabled: false });
+});
+
+test('Undo after turning measuring off turns it on again from the toast, and says when the server refuses', async () => {
+  show();
+  await screen.findByRole('region', { name: 'Business hours' });
+  fireEvent.click(screen.getByRole('switch', { name: 'Measure response targets' }));
+  await screen.findByRole('region', { name: 'Response targets are off' });
+  responseTargetsApi.set.mockRejectedValueOnce(new mocks.InvalidRequestError('Business hours are not valid.'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+  expect(await screen.findByText('Business hours are not valid.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(sent()).toMatchObject({ enabled: true }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull());
+});
+
+test('Save with an invalid targets box stops the run: hours already saved stay saved, the refused card keeps its typing, and a holiday being typed is left alone', async () => {
+  show();
+  const hours = await screen.findByRole('region', { name: 'Business hours' });
+  const targets = screen.getByRole('region', { name: 'Targets' });
+  const holidays = screen.getByRole('region', { name: 'Holidays' });
+  fireEvent.change(within(hours).getByLabelText('Monday from'), { target: { value: '07:30' } });
+  typeIn(lowFirstBox(targets), '0', 'h');
+  fireEvent.change(within(holidays).getByLabelText('Name'), { target: { value: 'Tết' } });
+  await pressSave();
+  await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
+  expect(sent().hours[0]).toMatchObject({ day: 'mon', from: '07:30' });
+  expect(lowFirstBox(targets).value).toHaveAccessibleDescription('Use 1 minute or more, in whole minutes, or leave it empty for no target.');
+  expect(within(targets).getByLabelText('First reply target for Low, in business time')).toHaveValue(0);
+  expect(within(holidays).getByLabelText('Name')).toHaveValue('Tết');
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent('Targets');
+});

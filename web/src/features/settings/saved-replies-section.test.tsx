@@ -268,3 +268,17 @@ test('three fast clicks on Save add the saved reply once, with no false refusal'
   await waitFor(() => expect(screen.queryByLabelText('Title')).not.toBeInTheDocument());
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
+
+
+test('pressing Edit on another reply while one is being edited asks first; declining keeps the typed text', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+  render(<SavedRepliesSection replies={replies} {...handlers()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Greeting' }));
+  fireEvent.change(screen.getByLabelText('Text', { selector: 'form[aria-label="Edit Greeting"] textarea' }), { target: { value: 'My version' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Refund steps' }));
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText('Text', { selector: 'form[aria-label="Edit Greeting"] textarea' })).toHaveValue('My version');
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Refund steps' }));
+  expect(screen.getByRole('form', { name: 'Edit Refund steps' })).toBeInTheDocument();
+  expect(screen.queryByRole('form', { name: 'Edit Greeting' })).not.toBeInTheDocument();
+});
