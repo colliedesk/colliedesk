@@ -8,7 +8,7 @@ import { request } from '../../api/client';
 import { CopyButton } from '../../features/settings/copy-button';
 import { HelpTip } from '../../ui/help-tip';
 import { saveState, useSaveFeedback } from '../../features/settings/save-feedback';
-import { useSaveChanges, useSettingsEdit } from '../../features/settings/settings-edits';
+import { useSaveChanges, useSettingsEdit, useUnsavedText } from '../../features/settings/settings-edits';
 import { settingsMessages } from '../../features/settings/settings-messages';
 import type { SaveState } from '../../features/settings/save-feedback';
 import type { ChannelPanelProps, ConnectProps } from '../registry';
@@ -78,6 +78,8 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
   const suggestionsHint = useId();
   const instructionsHint = useId();
   const adding = nameField !== undefined;
+  // A chat being added has its own button, but what is typed in it counts when the page is left.
+  useUnsavedText('help-chat-add', adding && (greeting !== '' || suggestions.some((item) => item.trim() !== '') || instructions !== ''));
   const saveChanges = useSaveChanges();
   const value = () => ({ greeting: greeting.trim(), suggestions: suggestions.map((item) => item.trim()).filter(Boolean), instructions: instructions.trim() });
   // What would be saved, against what is saved: spaces at the ends and empty questions are not a change.
@@ -176,6 +178,7 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
 // Connect adds the chat, on, with what it says first; a name left empty is the type's.
 function Connect({ canManage, create }: ConnectProps) {
   const [name, setName] = useState('');
+  useUnsavedText('help-chat-name', name.trim() !== '');
   const save = useMutation({
     mutationFn: (value: { greeting: string; suggestions: string[]; instructions: string }) =>
       create({ ...(name.trim() ? { name: name.trim() } : {}), enabled: true, config: value }),

@@ -16,7 +16,7 @@ import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoke
 import type { Duration, Unit } from './target-duration';
 import { OffCard } from './targets-off-card';
 import { Card, ZoneNote, cardState, fieldErrors, useCurrentDocument, useSave, withoutStamp } from './targets-shared';
-import { SettingsEditsProvider, useConfirmDrop, useInstantSave, useSaveChanges, useSettingsEdit } from '../settings-edits';
+import { SettingsEditsProvider, useConfirmDrop, useInstantSave, useSaveChanges, useSettingsEdit, useUnsavedText } from '../settings-edits';
 import { can } from '../../../lib/can';
 import '../../../ui/controls.css';
 import './targets.css';
@@ -169,6 +169,8 @@ function HoursCard({ doc, canManage, workspaceZone, myZone, refused }: CardProps
 function HolidaysCard({ doc, canManage, refused }: CardProps) {
   const [date, setDate] = useState('');
   const [name, setName] = useState('');
+  // A holiday being typed has its own Add button, but counts when the page is left.
+  useUnsavedText('targets-holiday', date !== '' || name !== '');
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));

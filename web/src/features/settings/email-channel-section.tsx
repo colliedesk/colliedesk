@@ -12,6 +12,7 @@ import { CopyButton } from './copy-button';
 import { InboundURLGuide } from './inbound-url-guide';
 import { ServerDetails } from './server-details';
 import { NameForm } from './name-form';
+import { useUnsavedText } from './settings-edits';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 import { gmailPart } from './gmail-part';
@@ -63,6 +64,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
   const [slug, setSlug] = useState(workspaceSlug ?? '');
   useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
+  useUnsavedText('support-address', canManage && address !== (channel?.support_address ?? ''));
+  useUnsavedText('workspace-address-name', canManage && slug !== (workspaceSlug ?? ''));
   const addressError = useId();
   const addressField = useRef<HTMLInputElement>(null);
   const addressFeedback = useSaveFeedback(addressSave, addressError, addressField, address);

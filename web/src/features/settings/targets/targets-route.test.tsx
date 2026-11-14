@@ -406,3 +406,13 @@ test('Save with an invalid targets box stops the run: hours already saved stay s
   expect(within(holidays).getByLabelText('Name')).toHaveValue('Tết');
   expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent('Targets');
 });
+
+
+test('a holiday being typed has its own Add button and draws no bar, but closing the tab with it typed asks', async () => {
+  show();
+  const holidays = await screen.findByRole('region', { name: 'Holidays' });
+  expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true);
+  fireEvent.change(within(holidays).getByLabelText('Name'), { target: { value: 'Tết' } });
+  await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+});

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConflictError } from '../../api/client';
 import { channelsApi } from '../../api/channels';
 import type { WebFormSettings } from '../../api/schemas';
+import { useUnsavedText } from '../../features/settings/settings-edits';
 import { WebFormSection } from '../../features/settings/web-form-section';
 import { saveState } from '../../features/settings/save-feedback';
 import { HelpTip } from '../../ui/help-tip';
@@ -23,6 +24,7 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
 // A name left empty is the type's (Web form, Web form 2, …); one another form has is refused at the field.
 function Connect({ canManage, create }: ConnectProps) {
   const [name, setName] = useState('');
+  useUnsavedText('web-form-name', name.trim() !== '');
   // The name a refusal is about: its words show while the field holds it.
   const [sent, setSent] = useState('');
   const save = useMutation({

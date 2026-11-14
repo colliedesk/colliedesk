@@ -65,8 +65,19 @@ Every Settings page saves the same way.
 Leaving a page with text that is not saved asks once: "You have unsaved changes. Leave anyway?" It
 asks whichever way you leave: a link in the Settings menu, **Back to app**, Esc, your browser's Back
 button, or closing the tab. Choose to stay and the text is still in the field; choose to leave and it is
-dropped. Dialogs and steps that add something (invite people, create a token, add a channel) keep their
-own buttons.
+dropped. The same question covers text that has its own button: an invite email, a holiday, a support
+address, the name of a channel you are adding.
+
+Moving between the tabs of one page (People and Invites, Built-in AI and External agents, the tabs of the
+built-in AI) is not leaving it. Nothing is asked, and what you typed stays: the bar keeps naming it, and
+**Save** keeps it from any tab. Opening another row's editor, or turning **Measure response targets** off,
+while text is typed asks the same question first.
+
+After **Save** or **Discard** the focus moves to the page heading, and a screen reader hears when the bar
+appears and which fields it names. If **Undo** is refused, the toast says so and keeps **Undo**; the value
+stays as it is. Ctrl+S does nothing while a dialog is open. A name the server refuses (a rename on **Members**)
+keeps its form open with what you typed and the server's reason. Dialogs and steps that add something
+(invite people, create a token, add a channel) keep their own buttons.
 
 ## Rename the workspace
 

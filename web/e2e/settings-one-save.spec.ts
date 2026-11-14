@@ -143,3 +143,19 @@ test('a timezone picked from the list saves at once and Undo puts the previous o
   await page.getByRole('status').filter({ hasText: 'Saved' }).getByRole('button', { name: 'Undo' }).click();
   await expect.poll(async () => (await me(page)).timezone).toBe(before);
 });
+
+test('a rename typed on People survives the Invites tab and comes back open; clicks and arrow keys on a tab list never raise the question', async ({ page }) => {
+  await newDesk(page, 'E2E one save arrows');
+  await page.goto(`${baseURL}/settings/members`);
+  await page.getByRole('button', { name: /^Rename / }).first().click();
+  const name = page.getByRole('textbox', { name: /^Display name of / });
+  await name.fill('Typed name');
+  const asked = answers(page, false);
+  await page.getByRole('tab', { name: /^Invites/ }).click();
+  await expect(page.getByRole('region', { name: 'Unsaved changes' })).toContainText('Rename');
+  await page.getByRole('tab', { name: /^People/ }).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.getByRole('tab', { name: /^People/ }).click();
+  await expect(page.getByRole('textbox', { name: /^Display name of / })).toHaveValue('Typed name');
+  expect(asked).toHaveLength(0);
+});

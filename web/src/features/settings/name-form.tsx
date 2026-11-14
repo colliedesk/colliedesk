@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { HelpTip } from '../../ui/help-tip';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
-import { useSaveChanges, useSettingsEdit } from './settings-edits';
+import { useSaveChanges, useSettingsEdit, useUnsavedText } from './settings-edits';
 import { settingsMessages } from './settings-messages';
 
 interface NameFormProps {
@@ -43,6 +43,8 @@ export function NameForm({ label, saveLabel, hint, tip, value, canManage, save, 
       if (input.current && !input.current.checkValidity()) { input.current.reportValidity(); return Promise.reject(new Error('invalid')); }
       return onSave?.(name.trim());
     } });
+  // A step with its own button draws no bar, but a name typed in it counts for the question on leaving.
+  useUnsavedText(`name-step:${label}`, saveLabel !== undefined && canManage && name.trim() !== value.trim());
   if (!canManage) return <p><strong>{label}: </strong><span>{value}</span></p>;
   return (
     <form className="form-row" onSubmit={(event) => {

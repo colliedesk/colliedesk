@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { useUnsavedText } from '../../features/settings/settings-edits';
 import { useMutation } from '@tanstack/react-query';
 import { ConflictError } from '../../api/client';
 import { settingsMessages } from '../../features/settings/settings-messages';
@@ -14,6 +15,8 @@ export function AddressForm({ canManage, named = false, initial = '', save, onSa
   save: (input: AddressInput) => Promise<unknown>; onSaved?: () => void }) {
   const [name, setName] = useState('');
   const [address, setAddress] = useState(initial);
+  // Typed and not yet saved: leaving the page asks, though the form has its own button.
+  useUnsavedText('address-form', name !== '' || address !== initial);
   const mutation = useMutation({ mutationFn: () => save({ ...(named && name.trim() ? { name: name.trim() } : {}), address: address.trim() }), onSuccess: onSaved });
   const state = saveState(mutation);
   const errorID = useId();

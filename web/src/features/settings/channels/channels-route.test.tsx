@@ -991,3 +991,15 @@ test('adding a help chat or a web form says in one line what its name is for, an
   show('new/web_form');
   expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveAccessibleDescription('Names this form in the inbox and in Settings. Leave it empty to number it.');
 });
+
+
+test('a name typed while adding a help chat or a web form counts for closing the tab, though the form has its own button', async () => {
+  channelsApi.list.mockResolvedValue({ items: [], types: [{ type: 'help_chat', available: true, count: 0, default_channel_id: null }, ...types(0, 0)] });
+  show('new/help_chat');
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Shop chat' } });
+  await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
+  cleanup();
+  show('new/web_form');
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Contact form' } });
+  await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
+});
