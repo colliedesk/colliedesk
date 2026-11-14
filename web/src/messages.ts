@@ -300,8 +300,10 @@ export const messages = {
   members: 'Members',
   aiAndAgents: 'AI & agents',
   dataPage: 'Data',
-  // On a phone each settings page goes back to the list of them.
+  // On a phone each settings page goes back to the list of them: the link reads "Settings", and is named for what it opens.
   allSettings: 'All settings',
+  // Settings takes the sidebar; this leaves it for the page the person came from.
+  backToApp: 'Back to app',
   profile: 'Profile',
   saveName: 'Save name',
   general: 'General',

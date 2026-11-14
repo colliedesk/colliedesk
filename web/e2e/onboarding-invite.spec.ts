@@ -83,7 +83,7 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
 
   expect((await teammate.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(401);
   // Still on the page, the teammate keeps working: the first refused request signs the app out.
-  await teammate.getByRole('link', { name: 'Inbox' }).click();
+  await teammate.getByRole('link', { name: 'Back to app' }).click();
   await expect(teammate.getByRole('alert')).toContainText('You are signed out');
   await teammate.goto(baseURL);
   await expect(teammate.getByRole('alert')).toContainText('You are signed out');

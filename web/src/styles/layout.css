@@ -126,6 +126,10 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .app-shell[data-sidebar="collapsed"] .sidebar-toggle svg { transform: none; }
   .app-shell[data-sidebar="collapsed"] .sidebar-toggle[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
   .app-shell[data-sidebar="collapsed"] .rail-links { gap: var(--space-1); }
+  /* Folded, Settings keeps Back to app as an arrow; the menu waits for the sidebar to open again. */
+  .app-shell[data-sidebar="collapsed"] .settings-rail .sidebar-scroll { display: none; }
+  .app-shell[data-sidebar="collapsed"] .settings-exit { flex: none; width: 40px; height: 40px; justify-content: center; padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .settings-exit :is(span, kbd) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .app-shell[data-sidebar="collapsed"] .rail-link { position: relative; width: 40px; height: 40px; justify-content: center; padding: 0; }
   .app-shell[data-sidebar="collapsed"] .rail-link svg { width: 18px; height: 18px; }
   .app-shell[data-sidebar="collapsed"] .rail-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -189,7 +193,19 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 /* The sheet is the panel: a page that is a panel itself draws no second card inside it. */
 .app-content > .panel { border-radius: 0; box-shadow: none; }
 .settings-page > header { max-width: 84rem; margin-bottom: var(--space-6); }
-.settings-layout { max-width: 84rem; display: grid; grid-template-columns: 14.5rem minmax(0, 1fr); gap: var(--space-10); align-items: start; }
+/* The sheet holds the page alone: the menu is in the sidebar (settings-nav.tsx), or on a phone the page before it. */
+.settings-layout { max-width: 84rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+/* Settings in the sidebar: Back to app at the head (48px, as the workspace row it replaces), the menu under it. */
+.settings-rail-head { flex-direction: row; }
+.settings-exit { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); height: var(--control, 32px); padding: 0 var(--space-2); border-radius: var(--radius);
+  color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-decoration: none; }
+.settings-exit:hover { background: var(--surface-2); }
+.settings-exit svg { flex: none; width: 16px; height: 16px; }
+.settings-exit span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-exit kbd { flex: none; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--line); padding: 0 var(--space-1); color: var(--text-3); font: 500 var(--fs-label)/20px var(--font-mono); }
+.settings-rail .settings-nav { position: static; padding-top: var(--space-2); }
+/* The workspace, above the person: the foot is where Settings names who this browser acts as. */
+.settings-rail .sidebar-foot .workspace-name { flex: none; padding: var(--space-1) var(--space-2) 0; }
 /* A card puts its heading beside its controls only where both get room; the column it sits in decides, not the window. */
 .settings-sections { container-type: inline-size; }
 .settings-nav { position: sticky; top: 0; display: grid; gap: var(--space-4); }
@@ -375,6 +391,12 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 @media (max-width: 44rem) {
   .settings-layout > .settings-back { display: inline-flex; align-items: center; gap: var(--space-1); justify-self: start; min-height: var(--touch); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
   .settings-nav:not(.settings-nav-index) { display: none; }
+  /* A channel's own way back to Channels is the one back link of its page. */
+  .settings-layout:has(.ch-back) > .settings-back { display: none; }
+  /* The way back sits above the page's title (the title is the page's header, the link is inside its layout). */
+  .settings-page:has(> .settings-layout > .settings-back) { display: flex; flex-direction: column; }
+  .settings-page:has(> .settings-layout > .settings-back) > .settings-layout { display: contents; }
+  .settings-page > .settings-layout > .settings-back { order: -1; align-self: flex-start; margin-bottom: var(--space-2); }
   .settings-nav-index { display: grid; gap: var(--space-4); overflow: visible; padding-bottom: 0; mask-image: none; }
   .settings-nav-index > div { display: block; }
   .settings-nav-index .settings-group-label { display: block; }

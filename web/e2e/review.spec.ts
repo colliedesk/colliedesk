@@ -30,8 +30,8 @@ test('review: the rail counts the cards, a person opens one as a conversation, s
   ]);
   await waitForCards(page.request, origin, channel, 2);
 
-  // The rail shows Review with what waits once the summary is read again; a reload reads it now.
-  await page.reload();
+  // The rail shows Review with what waits once the summary is read again; opening the app reads it now.
+  await page.goto(origin);
   await page.getByRole('link', { name: 'Review, 2 waiting' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Review' })).toBeVisible();
   const minh = page.getByRole('article', { name: 'Minh' });

@@ -42,7 +42,7 @@ test('a private note asks a teammate with @: Mentions counts it, opening it mark
   await tu.screenshot({ path: testInfo.outputPath('i9b-receipt.png') });
 
   // Long sees the count in the sidebar, opens Mentions, then the row.
-  await long.goto(`${baseURL}/settings`);
+  await long.goto(`${baseURL}/knowledge`);
   const mentionsLink = long.getByRole('link', { name: 'Mentions, 1 unread' });
   await expect(mentionsLink).toBeVisible({ timeout: 15_000 });
   await mentionsLink.click();
