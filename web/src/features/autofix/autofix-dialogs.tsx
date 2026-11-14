@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { Dialog, Field } from '../../ui/dialog';
+import { HelpTip } from '../../ui/help-tip';
 import type { Fix } from './autofix-api';
 import { autofixMessages as m } from './autofix-messages';
 
 // CancelDialog says what cancelling does at the vendor before it happens: an issue is closed but a run may go on,
 // a pull request stays open.
 export function CancelDialog({ fix, busy, problem, onCancel, onClose }: { fix: Fix; busy: boolean; problem?: string; onCancel: () => void; onClose: () => void }) {
-  const help = fix.state === 'sending' ? m.cancelSendingHelp : fix.connector === 'cursor_api' ? m.cancelCursorHelp : m.cancelIssueHelp(fix.issue_number, fix.connector);
-  return <Dialog alert className="af-dialog" title={m.cancelTitle} help={fix.pr_number !== null ? `${help} ${m.cancelPRHelp}` : help} closeLabel={m.close} onClose={onClose} onSubmit={onCancel}
+  const issue = fix.state !== 'sending' && fix.connector !== 'cursor_api';
+  const help = fix.state === 'sending' ? m.cancelSendingHelp : fix.connector === 'cursor_api' ? m.cancelCursorHelp : m.cancelIssueHelp(fix.issue_number);
+  // The run that may go on and the pull request that stays open are the tip of the line, before the person confirms.
+  const details = [issue && m.cancelRunTip(fix.connector), fix.pr_number !== null && m.cancelPRHelp, m.cancelKept].filter(Boolean).join(' ');
+  return <Dialog alert className="af-dialog" title={m.cancelTitle} help={help} closeLabel={m.close} onClose={onClose} onSubmit={onCancel}
     footer={<><button type="button" className="af-ghost" onClick={onClose}>{m.keepIt}</button>
       <button type="submit" className="af-danger-solid" disabled={busy}>{m.cancelFix}</button></>}>
-    <p className="af-help">{m.cancelKeep}</p>
+    <p className="af-help">{m.cancelKeep}<HelpTip label={m.cancelTipLabel} text={details} /></p>
     {problem && <p role="alert" className="error-copy">{problem}</p>}
   </Dialog>;
 }

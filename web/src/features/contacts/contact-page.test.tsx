@@ -121,3 +121,12 @@ test('a click on the merge window\'s backdrop keeps the focus in it, so Escape c
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(opener).toHaveFocus();
 });
+
+test('the merge dialog asks for the other contact in one line, and says nothing is lost in a tip', () => {
+  api.contacts.mockResolvedValue({ items: [] });
+  wrap(<ContactPage contact={contact()} page={1} pageSize={25} onPage={vi.fn()} onMerge={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Merge a duplicate…' }));
+  const dialog = screen.getByRole('dialog', { name: 'Merge a duplicate into Mai Linh' });
+  expect(dialog).toHaveTextContent('Find the other contact of the same person.');
+  expect(within(dialog).getByRole('button', { name: 'About merging' })).toHaveAccessibleDescription('Nothing is deleted, and you can undo the merge here.');
+});

@@ -145,3 +145,11 @@ test('a trial sign-up without an intent keeps the questions required and outside
   expect(screen.queryByText(/\(optional\)/i)).not.toBeInTheDocument();
   expect(screen.getByRole('group', { name: 'What do you want Colliedesk to do for you first?' }).closest('details')).toBeNull();
 });
+
+test('the sign-up page explains itself in one short line, trial or payment', () => {
+  const { unmount } = render(<CloudSignup onCreate={vi.fn()} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
+  expect(screen.getByText('No workspace uses this email. 14-day free trial, no card.')).toBeInTheDocument();
+  unmount();
+  render(<CloudSignup onCreate={vi.fn()} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} buying />);
+  expect(screen.getByText('No workspace uses this email. Name it, then pay next.')).toBeInTheDocument();
+});

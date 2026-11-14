@@ -4,10 +4,10 @@ export const signupMessages = {
   retryCloudSignIn: 'Try cloud sign-in again',
   signingOut: 'Signing out…',
   signupHeading: 'Create your workspace',
-  signupExplanation: 'No workspace uses this email yet. Name your team\'s workspace to start a 14-day free trial. No card needed.',
+  signupExplanation: 'No workspace uses this email. 14-day free trial, no card.',
   startTrial: 'Start free trial',
   // A visitor who came from a website "buy" link pays right after naming the workspace, so no trial wording.
-  signupBuyingExplanation: 'No workspace uses this email yet. Name your team\'s workspace, then pay on the next screen.',
+  signupBuyingExplanation: 'No workspace uses this email. Name it, then pay next.',
   createWorkspaceAndPay: 'Create workspace and continue to payment',
   creatingWorkspace: 'Creating workspace…',
   signInToWorkspace: 'Sign in to your workspace',

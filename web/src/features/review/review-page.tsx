@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { IntakeGathering, IntakeStats } from '../../api/intake';
 import type { IntakeSummary } from '../../api/intake-summary';
 import { Choice } from '../../ui/choice';
+import { HelpTip } from '../../ui/help-tip';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { scopeName } from '../settings/ai-levels';
 import { reviewMessages as m } from './review-messages';
@@ -55,7 +56,7 @@ function StatsLine({ stats }: { stats: IntakeStats }) {
   if (stats.gatherings === 0) return <p className="review-stats muted-copy">{m.statsNone}</p>;
   const opened = (stats.by_state.created ?? 0) + (stats.by_state.attached ?? 0);
   return <p className="review-stats muted-copy"><span>{m.stats(stats.gatherings, opened)}</span>
-    {stats.ai_decisions > 0 && <span>{m.statsCorrected(stats.ai_corrected, stats.ai_decisions)}</span>}</p>;
+    {stats.ai_decisions > 0 && <HelpTip label={m.statsCorrectedLabel} text={m.statsCorrected(stats.ai_corrected, stats.ai_decisions)} />}</p>;
 }
 
 // ReviewPage is the intake queue of chat channels (docs/user/review.md): Waiting, what AI set aside, and
@@ -83,7 +84,7 @@ export function ReviewPage({ available, tab, onTab, filter, onFilter, scopes, wa
         </div>
         <p role="status" className="review-notice">{notice}</p>
         <section role="tabpanel" id={panelID('review', tab)} aria-labelledby={tabID('review', tab)} className="intake-list">
-          {tab === 'waiting' && decidingCount !== undefined && decidingCount > 0 && <p className="muted-copy">{m.deciding(decidingCount)}</p>}
+          {tab === 'waiting' && decidingCount !== undefined && decidingCount > 0 && <p className="muted-copy">{m.deciding(decidingCount)}<HelpTip label={m.decidingLabel} text={m.decidingWhy} /></p>}
           {loading && !items && <p role="status" className="empty-copy">{m.loading}</p>}
           {failed && <div className="empty-copy"><p role="alert" className="error-copy">{m.failed}</p>
             <button type="button" onClick={onRetry}>{m.tryAgain}</button></div>}

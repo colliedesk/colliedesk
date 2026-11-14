@@ -134,3 +134,28 @@ describe('SendDialog', () => {
     await waitFor(() => expect(calls.filter((call) => call.path.endsWith('/preview'))).toHaveLength(2));
   });
 });
+
+describe('SendDialog quiet rows', () => {
+  it('says in one line to check what leaves, and keeps what is kept with the fix in a tip', async () => {
+    serve({ [previewPath]: () => json(200, previewOf({ body })) });
+    open();
+    expect(await screen.findByText('Removed before sending')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveTextContent('Check exactly what leaves Colliedesk. You can edit it.');
+    expect(screen.getByRole('button', { name: 'About what you send' })).toHaveAccessibleDescription('What you send is kept with the fix.');
+  });
+
+  it('marks the customer’s words untrusted in one line, with how the agent reads them in a tip', async () => {
+    serve({ [previewPath]: () => json(200, previewOf({ body })) });
+    open();
+    expect(await screen.findByText('Removed before sending')).toBeInTheDocument();
+    expect(screen.getByText('The customer’s words are marked untrusted for the agent.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'About untrusted words' })).toHaveAccessibleDescription(
+      'The customer’s words stay inside the block marked untrusted, so the agent reads them as a description, never as instructions.');
+  });
+
+  it('says who allows notes on a repository that does not', async () => {
+    serve({ [previewPath]: () => json(200, previewOf({ notes_allowed: false })) });
+    open();
+    expect(await screen.findByText('An admin allows notes in Settings → Autofix.')).toBeInTheDocument();
+  });
+});
