@@ -25,3 +25,4 @@ agent_requests	status	20261102120000-roles.up.sql	Agent requests were removed: p
 agent_requests	decided_at	20261102120000-roles.up.sql	Agent requests were removed: pending ones close as expired at the upgrade
 agent_requests	reason	20261102120000-roles.up.sql	Agent requests were removed: pending ones say why they closed
 ai_drafts	*	20261102120000-roles.up.sql	Pending reply drafts of agent requests are copied in as written drafts so they stay on their conversation; the requests stay
+ai_retrieval_pending	*	20261114120000-ai-retrieval-indent.up.sql	Queues every resolved or closed conversation once more so retrieval rebuilds its past-conversation text with indented later lines (a customer can no longer write a Reply: line); rows are only added, the worker drains them and nothing is lost
