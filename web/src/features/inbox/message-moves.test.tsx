@@ -78,8 +78,9 @@ test('an email message moves to another conversation of its customer, never to i
 });
 
 test('moving every customer message can close the conversation; a refusal stays in the dialog', async () => {
-  moves.move.mockRejectedValue(new ConflictError('Someone replied in this conversation, so it cannot close; move the messages alone.', { code: 'source_has_activity' }));
-  view(<MessageMoveMenu conversation={conversation()} message={timeline[0]} timeline={timeline} timezone="UTC" />);
+  // Only the server knows a conversation was assigned by a person, so that refusal still arrives after the move is sent.
+  moves.move.mockRejectedValue(new ConflictError('Someone assigned this conversation, so it cannot close; move the messages alone.', { code: 'source_has_activity' }));
+  view(<MessageMoveMenu conversation={conversation()} message={timeline[0]} timeline={timeline.slice(0, 2)} timezone="UTC" />);
   fireEvent.click(screen.getByLabelText('Move this message', { selector: 'summary' }));
   fireEvent.click(screen.getByRole('button', { name: 'Move to another conversation…' }));
   const dialog = screen.getByRole('dialog');
@@ -142,7 +143,7 @@ test('a move made here keeps its warnings in its line', async () => {
   view(<MessageMovesLog conversation={conversation()} timeline={timeline} timezone="UTC" />);
   const log = await screen.findByRole('region', { name: 'Moves' });
   expect(log).toHaveTextContent('A teammate moved 1 message here from');
-  expect(log).toHaveTextContent('belongs to another customer');
+  expect(log).toHaveTextContent('Moved from another customer; replies reach only this one.');
 });
 
 test('a chat conversation nobody worked on offers to move all of it as no new request; a worked one does not', async () => {
@@ -218,4 +219,52 @@ test('a message the rules added says nothing of AI', async () => {
     <MessageIntakeWhy conversation={conversation({ channel: 'loopback' })} message={timeline[0]} timezone="UTC" /></>);
   expect(await screen.findByText('Opened: a new chat')).toBeInTheDocument();
   expect(screen.queryByRole('note', { name: 'Why AI added it' })).not.toBeInTheDocument();
+});
+
+test('the move dialog keeps each helper to one line; the tip of the messages sits beside the group name, not in it', async () => {
+  view(<MessageMoveMenu conversation={conversation()} message={timeline[1]} timeline={timeline} timezone="UTC" />);
+  await waitFor(() => expect(moves.intake).toHaveBeenCalledWith(HERE));
+  fireEvent.click(screen.getByLabelText('Move this message', { selector: 'summary' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Move to another conversation…' }));
+  const dialog = screen.getByRole('dialog', { name: 'Move to another conversation' });
+  expect(dialog).toHaveTextContent('Only customer messages move, with their files.');
+  expect(within(dialog).getByText('Subject, customer or text. Blank: this customer’s others.')).toBeInTheDocument();
+  // The group keeps its name whether or not the tip is open.
+  const tip = within(dialog).getByRole('button', { name: 'About the messages to move' });
+  expect(tip).toHaveAccessibleDescription('The team’s replies and notes stay here. Nothing is sent to the customer.');
+  expect(within(dialog).getByRole('group', { name: 'Messages to move' })).toBeInTheDocument();
+  fireEvent.click(tip);
+  expect(within(dialog).getByRole('tooltip')).toBeInTheDocument();
+  expect(within(dialog).getByRole('group', { name: 'Messages to move' })).toBeInTheDocument();
+  expect(within(dialog).queryByRole('group', { name: /About the messages to move/ })).not.toBeInTheDocument();
+});
+
+test('closing the conversation says its condition in the open, and is offered only when every customer message goes and nobody worked on it', async () => {
+  view(<MessageMoveMenu conversation={conversation()} message={timeline[1]} timeline={[timeline[0], timeline[1]]} timezone="UTC" />);
+  await waitFor(() => expect(moves.intake).toHaveBeenCalledWith(HERE));
+  fireEvent.click(screen.getByLabelText('Move this message', { selector: 'summary' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Move to another conversation…' }));
+  const dialog = screen.getByRole('dialog', { name: 'Move to another conversation' });
+  expect(within(dialog).queryByRole('checkbox', { name: /Close this conversation/ })).not.toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: /The printer jams/ }));
+  expect(within(dialog).getByRole('checkbox', { name: /Close this conversation/ })).toBeInTheDocument();
+  expect(within(dialog).getByText('Closes it if no one replied, wrote a note or assigned it.')).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'About closing this conversation' })).toHaveAccessibleDescription('It closes and points to where its messages went.');
+});
+
+test('a conversation someone already replied in does not offer to close it, since the move would be refused', async () => {
+  view(<MessageMoveMenu conversation={conversation()} message={timeline[1]} timeline={timeline} timezone="UTC" />);
+  await waitFor(() => expect(moves.intake).toHaveBeenCalledWith(HERE));
+  fireEvent.click(screen.getByLabelText('Move this message', { selector: 'summary' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Move to another conversation…' }));
+  const dialog = screen.getByRole('dialog', { name: 'Move to another conversation' });
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: /The printer jams/ }));
+  expect(within(dialog).queryByRole('checkbox', { name: /Close this conversation/ })).not.toBeInTheDocument();
+});
+
+test('a move from another channel says in one line where replies go', async () => {
+  client.setQueryData(['message-move-warnings', MOVE], ['other_channel']);
+  moves.list.mockResolvedValue({ items: [move({ from_conversation_id: THERE, to_conversation_id: HERE })] });
+  view(<MessageMovesLog conversation={conversation()} timeline={timeline} timezone="UTC" />);
+  expect(await screen.findByRole('region', { name: 'Moves' })).toHaveTextContent('Moved from another channel; replies use this channel.');
 });

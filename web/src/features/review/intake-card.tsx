@@ -4,6 +4,7 @@ import type { ChatItem, IntakeDecideInput, IntakeGathering, IntakeGatheringDetai
 import { formatDate } from '../../lib/format-date';
 import { PlainTextBody } from '../inbox/plain-text-body';
 import { Choice } from '../../ui/choice';
+import { HelpTip } from '../../ui/help-tip';
 import { AIDecisionWhy } from './ai-decision-why';
 import { AISuggestion } from './ai-suggestion';
 import { CandidatePicker } from './candidate-picker';
@@ -93,7 +94,7 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
       {/* A password in the messages: set aside for it, or AI held its suggestion back for it whatever else the card waits for. */}
       {(item.review_reason === 'credential' || item.suggestion?.not_applied_reason === 'credential') && waiting
         && <p className="notice notice-danger" role="note"><span>{m.credentialWarning}</span></p>}
-      {item.review_reason === 'lane_blocked' && waiting && <p className="muted-copy">{m.laneBlocked}</p>}
+      {item.review_reason === 'lane_blocked' && waiting && <p className="muted-copy">{m.laneBlocked}<HelpTip label={m.laneBlockedLabel(item.sender.name ?? m.someone)} text={m.laneBlockedWhy} /></p>}
       {/* A decided card whose messages a person took back out of their conversation keeps nothing to show. */}
       {!open && (item.item_count === 0 ? <p className="intake-preview muted-copy">{m.movedOut}</p>
         : !(item.files.length > 0 && onlyFileMarks(item.preview)) && <p className="intake-preview">{item.preview}</p>)}

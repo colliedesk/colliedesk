@@ -5,6 +5,7 @@ import { formatDate, formatDay, stampTitle } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { contactAddress, contactMessages } from './contact-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
+import { HelpTip } from '../../ui/help-tip';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { StatusLabel } from '../inbox/conversation-labels';
 import { ContactPicker } from './contact-picker';
@@ -211,7 +212,7 @@ function MergeDialog({ contact, onMerge, onClose }: { contact: ContactDetail; on
       <div className="dialog merge-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={dialogKeys(root, onClose)}>
         <h2 id={titleId}>{contactMessages.mergeTitle(contact.name)}</h2>
         {!duplicate && <>
-          <p className="muted-copy">{contactMessages.mergeIntro}</p>
+          <p className="muted-copy">{contactMessages.mergeIntro}<HelpTip label={contactMessages.mergeLabel} text={contactMessages.mergeSafe} /></p>
           <ContactPicker label={contactMessages.mergeSearch} excludeId={contact.id} autoFocus onPick={setDuplicate} />
           <div className="button-row"><button type="button" onClick={onClose}>{messages.cancel}</button></div>
         </>}

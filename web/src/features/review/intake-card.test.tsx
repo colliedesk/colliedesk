@@ -48,7 +48,7 @@ test('Add to a conversation sends the picked conversation; the rules target is p
 test('with no conversation to join, Add explains and cannot be sent', () => {
   render(<IntakeCard {...props({ open: true, detail: detail({ candidates: [] }) })} />);
   fireEvent.click(screen.getByRole('radio', { name: 'Add to a conversation' }));
-  expect(screen.getByText(/no open conversation here/)).toBeInTheDocument();
+  expect(screen.getByText('No open conversation for this customer. Create one.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Add to conversation' })).toBeDisabled();
 });
 
@@ -82,7 +82,8 @@ test('a card holding a password says so, and one behind another of its lane says
   expect(screen.queryByText(/Ask the customer to change it/)).not.toBeInTheDocument();
   rerender(<IntakeCard {...props({ item: gathering({ review_reason: 'lane_blocked' }) })} />);
   expect(screen.getByText('Waiting for the card above')).toBeInTheDocument();
-  expect(screen.getByText(/Deciding that one first keeps their messages in order/)).toBeInTheDocument();
+  expect(screen.getByText('An earlier card of this customer waits above.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Lan Nguyen’s earlier card' })).toHaveAccessibleDescription('Deciding that one first keeps their messages in order.');
 });
 
 test('a card of messages taken back from a conversation says so, and by whom when the server knows', () => {

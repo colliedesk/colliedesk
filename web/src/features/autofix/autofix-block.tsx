@@ -204,7 +204,7 @@ export function AutofixBlockView({ load, fix, target, customerName, timezone, no
   const rest = view.primary ? buttons.slice(1) : buttons;
   const cursor = fix.connector === 'cursor_api';
   const help = fix.state === 'merged' ? m.mergeHelp : fix.state === 'deployed' ? m.releasedHelp
-    : actions.has('retry') ? m.retryHelp(fix.attempt_no) : undefined;
+    : actions.has('retry') ? m.retryHelp : undefined;
   return (
     <section className="af-block panel" aria-label={m.heading} data-tone={view.tone}>
       {heading(<StateLabel tone={view.tone}>{view.badge}</StateLabel>, m.attempt(shortId(fix.id), fix.attempt_no))}
