@@ -23,8 +23,9 @@ you can use:
 - **Channels** (`/settings/channels`): a dot after its name means a channel needs attention. Each
   channel type, such as Email, opens from the Channels page, not from the menu.
 - **Response targets**, **Saved replies**.
-- **AI & agents** (`/settings/ai`): two tabs, **Built-in AI** and **External agents**
-  (`?tab=built-in`, `external`). Agent tokens are on **External agents**.
+- **AI & agents** (`/settings/ai`): two tabs, **Built-in AI** and **External AI agents**
+  (`?tab=built-in`, `external`). Agent tokens are on **External AI agents**, a tab offered to people who
+  make, revoke or hold agent tokens.
 - **Conversation fields** (`/settings/fields`): reserved, marked **Coming**. The page says what is
   coming.
 - **Data** (`/settings/data`): import from Freshdesk and export all data.
@@ -42,7 +43,7 @@ The help center's settings are in the knowledge base, under **Knowledge base →
 Settings page and keeps the app's sidebar. An old link keeps working and opens the page, tab or section
 that holds the content now: `/settings/profile`, `/settings/preferences` and `/settings/sessions` open
 Account; `/settings/numbers` opens General; `/settings/roles` and `/settings/members?tab=roles` open
-Members → Advanced; `/settings/agents` opens AI & agents, on the External agents tab; `/settings/import`,
+Members → Advanced; `/settings/agents` opens AI & agents, on the External AI agents tab; `/settings/import`,
 `/settings/export` and `/settings/import-freshdesk` open Data; `/settings/help-center` opens
 Knowledge base → Settings. So do links to a section of the old one-page Settings, such as
 `/settings#invites-heading`. On a phone, **Settings** shows the menu; open a page from it, and
