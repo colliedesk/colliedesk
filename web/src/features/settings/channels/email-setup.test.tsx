@@ -401,3 +401,77 @@ test('the confirmation is asked for only while step 2 is open: never on another 
   await screen.findByRole('group', { name: /Send replies from/ });
   expect(channelsApi.emailForwardingConfirmation).not.toHaveBeenCalled();
 });
+
+// Quiet by default: a step keeps one short line; the how and why wait in a help tip, the description of its button.
+const ownText = (element: Element) => Array.from(element.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent).join('').trim();
+
+test('the setup says in one short line what it does and, for a teammate, who to ask', async () => {
+  channelsApi.list.mockResolvedValue({ items: [], types: types(0) });
+  api.me.mockResolvedValue(me('agent'));
+  show('type/email');
+  const heading = await screen.findByRole('heading', { name: 'Connect your support email' });
+  const lines = Array.from(heading.parentElement?.querySelectorAll('p') ?? []).map((line) => line.textContent);
+  expect(lines).toContain('Each email becomes a conversation. About 5 minutes.');
+  expect(lines).toContain('Only an admin can connect email. Ask one to continue.');
+  for (const line of lines) expect(line?.length).toBeLessThanOrEqual(60);
+});
+
+test('step 2 on a server without a hosted address names the forwarder in one line; why one is needed is in its tip', async () => {
+  waitingChannel();
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { hosted_address: null }));
+  show(`${MAIN}/setup`, { step: 'forward' });
+  const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
+  fireEvent.click(within(forward).getByRole('tab', { name: 'Gmail' }));
+  const panel = within(forward).getByRole('tabpanel');
+  expect(ownText(panel.querySelector('p') as Element)).toBe('Gmail needs a forwarder.');
+  expect(within(panel).getByRole('button', { name: 'Set it up under Other / own server' })).toBeInTheDocument();
+  expect(within(panel).getByRole('button', { name: 'About Forwarder' }))
+    .toHaveAccessibleDescription('Gmail forwards to an email address. This server receives mail at an inbound URL instead, so a forwarder sits between them.');
+});
+
+test('Gmail\'s confirmation waits in one short line', async () => {
+  waitingChannel();
+  show(`${MAIN}/setup`, { step: 'forward' });
+  expect(await screen.findByText('Its code and link show here when it arrives.')).toBeInTheDocument();
+});
+
+test('step 3 asks to pick one in a line, and where the mailbox keeps the replies is in its tip', async () => {
+  waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
+  show(`${MAIN}/setup`, { step: 'replies' });
+  const replies = await screen.findByRole('group', { name: /Send replies from/ });
+  expect(within(replies).getByText('Pick one. Customers see replies from your own address.')).toBeInTheDocument();
+  expect(within(replies).getByRole('button', { name: 'About How replies leave' })).toHaveAccessibleDescription('Your mailbox keeps a copy of each reply in its Sent folder.');
+});
+
+test('the test message button has a tip that says what the message does, and no sentence under it', async () => {
+  waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
+  show(`${MAIN}/setup`, { step: 'test' });
+  const test4 = await screen.findByRole('group', { name: /Try it with a test message/ });
+  expect(within(test4).getByRole('button', { name: 'About Send yourself a test message' }))
+    .toHaveAccessibleDescription(/It arrives from your own address like a customer's email and opens a conversation\. Answer it: the reply is emailed to you/);
+  expect(Array.from(test4.querySelectorAll('.muted-copy')).map((line) => line.textContent)).not.toContain(expect.stringContaining('It arrives from your own address'));
+});
+
+test('how to disconnect an address is in the tip of the list heading, not on the page and not folded, with no second Manage link', async () => {
+  const main = { ...channel(MAIN, 'support@acme.com'), config: emailConfig('support@acme.com') };
+  channelsApi.list.mockResolvedValue({ items: [main], types: types(1) });
+  channelsApi.get.mockResolvedValue(main);
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { hosted_address: null }));
+  show('type/email');
+  await screen.findByRole('table', { name: 'Support addresses' });
+  expect(screen.getByRole('button', { name: 'About Support addresses' }))
+    .toHaveAccessibleDescription('To disconnect an address, select Manage on its row, then Disconnect email. Its conversations stay.');
+  expect(screen.getByRole('button', { name: 'About Support addresses' }).closest('details')).toBeNull();
+});
+
+test('the help tips of one setup page are named after their labels and none shares a name with another', async () => {
+  waitingChannel();
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { hosted_address: null }));
+  show(`${MAIN}/setup`, { step: 'forward' });
+  const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
+  fireEvent.click(within(forward).getByRole('tab', { name: 'Gmail' }));
+  const names = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')).filter((name): name is string => Boolean(name?.startsWith('About ')));
+  expect(names.length).toBeGreaterThan(0);
+  expect(new Set(names).size).toBe(names.length);
+  expect(names).toContain('About Forwarder');
+});

@@ -76,7 +76,7 @@ test('setup flow: a new admin connects email in place, skips the import, invites
 
   await expect(page).toHaveURL(`${baseURL}/setup/first_reply`);
   await expect(page.getByRole('heading', { level: 1, name: 'Answer your first email' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Send yourself a test message' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send yourself a test message', exact: true })).toBeVisible();
   // Back returns to the step before, as it was left.
   await flow.getByRole('link', { name: 'Back' }).click();
   await expect(page).toHaveURL(`${baseURL}/setup/invite`);
