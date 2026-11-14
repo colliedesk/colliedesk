@@ -72,7 +72,16 @@ type inboxOut struct {
 	NextCursor    *string           `json:"next_cursor"`
 	Timezone      string            `json:"timezone"`
 	Detail        string            `json:"detail"`
+	// GettingStarted is set only when the workspace has no conversation at all (see emptyWorkspaceNextStep).
+	GettingStarted string `json:"getting_started,omitempty"`
 }
+
+// emptyWorkspaceNextStep is what an unfiltered search of a workspace with no conversation answers next to
+// the empty list. Nothing reaches a new workspace until the team's mail does, and an AI app that only
+// lists the inbox would otherwise stop at an empty answer.
+const emptyWorkspaceNextStep = "This workspace has no conversations yet: nothing arrives until the team's support mail reaches it. " +
+	"Call colliedesk_setup_progress_get and help the person with the step it recommends. " +
+	"colliedesk_email_test_message_send opens a first conversation in about a minute, without touching the team's real mail."
 
 func inboxSearch(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[inboxArgs](arguments)
@@ -98,6 +107,8 @@ func inboxSearch(c *call, arguments map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// No filter, no search and no saved view filter: an empty first page means an empty workspace.
+	unfiltered := len(query) == 0
 	query.Set("page", strconv.Itoa(page))
 	query.Set("page_size", strconv.Itoa(args.Limit))
 	var found struct {
@@ -125,6 +136,9 @@ func inboxSearch(c *call, arguments map[string]any) (any, error) {
 	if len(found.Items) == args.Limit {
 		next := cursorOf(page+1, fingerprint)
 		out.NextCursor = &next
+	}
+	if unfiltered && page == 1 && len(found.Items) == 0 {
+		out.GettingStarted = emptyWorkspaceNextStep
 	}
 	return out, nil
 }

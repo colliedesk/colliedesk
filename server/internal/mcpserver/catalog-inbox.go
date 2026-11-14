@@ -52,7 +52,8 @@ func inboxSearchSpec() Spec {
 		Output: `{"type":"object","required":["conversations","count","next_cursor","timezone","detail"],"properties":{` +
 			`"conversations":{"type":"array","items":` + conversationRowSchema + `},"count":{"type":"integer"},` +
 			`"next_cursor":{"type":["string","null"],"description":"Pass it back to get the next page; null when there is no more."},` +
-			`"timezone":{"type":"string","description":"The workspace timezone (IANA). Timestamps are UTC."},"detail":{"type":"string"}}}`,
+			`"timezone":{"type":"string","description":"The workspace timezone (IANA). Timestamps are UTC."},"detail":{"type":"string"},` +
+			`"getting_started":{"type":"string","description":"Only when the workspace has no conversation at all: the step that brings in the first one."}}}`,
 		run: inboxSearch,
 	}
 }
