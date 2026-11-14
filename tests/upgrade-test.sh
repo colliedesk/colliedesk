@@ -240,13 +240,16 @@ restore_one_workspace() {
   (cd "$TMP" && sh "$ROOT/restore-workspace.sh" --workspace acme --database colliedesk.dump --attachments attachments.tar >"$TMP/restore.out" 2>&1) &&
     fail 'restore-workspace.sh replaced an existing workspace without --replace'
   grep -q -- 'add --replace' "$TMP/restore.out" || { cat "$TMP/restore.out" >&2; fail 'restore-workspace.sh did not say why it refused'; }
+  # The restore keeps the live lifecycle log (it outlives the workspace and is append-only): it may hold
+  # more milestones than the backup, and rows the scratch database wrote when it migrated the backup.
+  printf 'allow\tworkspace_events\t*\trestore-workspace.sh keeps the live log\n' >"$TMP/restore.allowed"
   for run in 1 2; do
     (cd "$TMP" && sh "$ROOT/restore-workspace.sh" --workspace acme --database colliedesk.dump --attachments attachments.tar --replace --keep-scratch >"$TMP/restore.out" 2>&1) ||
       { cat "$TMP/restore.out" >&2; fail "restore-workspace.sh failed (run $run)"; }
     CHECK_DB=colliedesk_restore
     check snapshot "$TMP/acme.backup" "$acme" || fail 'the scratch copy of the backup fails its check'
     CHECK_DB=colliedesk
-    check compare "$TMP/acme.after" "$acme" "$TMP/acme.backup" || fail "acme after restore-workspace.sh (run $run) differs from the backup"
+    check compare "$TMP/acme.after" "$acme" "$TMP/acme.backup" "$TMP/restore.allowed" || fail "acme after restore-workspace.sh (run $run) differs from the backup"
     grep -qx "owner${tab}conversations${tab}$acme${tab}$conversations" "$TMP/acme.after" ||
       fail "acme has not got its $conversations conversations back"
     check compare "$TMP/beta.after" "$beta" "$TMP/beta.before" || fail "restoring acme changed beta (run $run)"

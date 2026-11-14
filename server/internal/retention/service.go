@@ -141,6 +141,14 @@ func (s *Service) Candidates(ctx context.Context) ([]string, error) {
 	return s.candidates(ctx, now)
 }
 
+// nothingInForce is true for a workspace w with no subscription that pays and no complimentary plan in
+// force at $2: past its trial end, such a workspace is locked.
+const nothingInForce = `NOT EXISTS (SELECT 1 FROM workspace_billing b WHERE b.workspace_id = w.id
+		AND (b.ended_at IS NULL OR b.ended_at > $2)
+		AND (b.status IN ('active','trialing','past_due') OR (b.status = 'canceled' AND b.current_period_end > $2)))
+	AND NOT EXISTS (SELECT 1 FROM workspace_comp_plans c WHERE c.workspace_id = w.id
+		AND c.revoked_at IS NULL AND (c.until IS NULL OR c.until > $2))`
+
 func (s *Service) candidates(ctx context.Context, now time.Time) ([]string, error) {
 	cutoff := now.AddDate(-domain.RetentionYears, 0, 0).Add(domain.RetentionNoticeLead)
 	var ids []string
@@ -148,12 +156,7 @@ func (s *Service) candidates(ctx context.Context, now time.Time) ([]string, erro
 		rows, err := tx.Query(ctx, `SELECT w.id::text FROM workspaces w
 			WHERE w.retention_notice_sent_at IS NOT NULL
 			   OR EXISTS (SELECT 1 FROM workspace_retention_notices n WHERE n.workspace_id = w.id)
-			   OR (w.trial_ends_at <= $1
-			       AND NOT EXISTS (SELECT 1 FROM workspace_billing b WHERE b.workspace_id = w.id
-			           AND (b.ended_at IS NULL OR b.ended_at > $2)
-			           AND (b.status IN ('active','trialing','past_due') OR (b.status = 'canceled' AND b.current_period_end > $2)))
-			       AND NOT EXISTS (SELECT 1 FROM workspace_comp_plans c WHERE c.workspace_id = w.id
-			           AND c.revoked_at IS NULL AND (c.until IS NULL OR c.until > $2)))
+			   OR (w.trial_ends_at <= $1 AND `+nothingInForce+`)
 			ORDER BY w.created_at, w.id`, cutoff, now)
 		if err != nil {
 			return err
@@ -228,7 +231,8 @@ func (s *Service) Plan(ctx context.Context) ([]Item, error) {
 	return items, nil
 }
 
-// Run sends due notices, clears stale ones and deletes the workspaces that are due, then purges
+// Run records the trials that ended unpaid (recordEndedTrials), sends due notices, clears stale ones
+// and deletes the workspaces that are due, then purges
 // trash older than TrashWindow. A failure on one workspace is logged and returned at the end; the
 // others still run. It is safe to run again and from two processes at once.
 func (s *Service) Run(ctx context.Context) (Result, error) {
@@ -236,12 +240,15 @@ func (s *Service) Run(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	var failures []error
+	if err := s.recordEndedTrials(ctx, now); err != nil {
+		failures = append(failures, err)
+	}
 	ids, err := s.candidates(ctx, now)
 	if err != nil {
-		return Result{}, err
+		return Result{}, errors.Join(append(failures, err)...)
 	}
 	var result Result
-	var failures []error
 	for _, id := range ids {
 		if err := ctx.Err(); err != nil {
 			failures = append(failures, err)

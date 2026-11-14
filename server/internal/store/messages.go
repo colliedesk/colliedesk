@@ -13,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/milestones"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -442,6 +443,13 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		}
 	} else if kind == "outgoing" {
 		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID, cc); err != nil {
+			return domain.Message{}, err
+		}
+	}
+	// Recorded last: the first reply of a workspace holds the milestone's unique key until it commits, so
+	// two first replies must already be serialized by the outbound cap lock (enqueueReply) before this.
+	if kind == "outgoing" {
+		if err := milestones.RecordReply(ctx, tx, workspaceID, messageID); err != nil {
 			return domain.Message{}, err
 		}
 	}

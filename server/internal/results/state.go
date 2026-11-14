@@ -5,15 +5,18 @@ package results
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/milestones"
 	"github.com/jackc/pgx/v5"
 )
 
 // MarkImportFinished records that a full run of an import finished, in the importer's transaction.
 // The first source to finish becomes the baseline and its finish time the anchor, which no later run
 // moves; any run of that source (a re-run) marks the baseline to compute again with its status. A
-// run of another source changes nothing.
+// run of another source changes nothing. A run that finished OK also records the workspace's
+// import_finished milestone, once: the first OK finish wins.
 func MarkImportFinished(ctx context.Context, tx pgx.Tx, workspaceID, source, status, cause string, finishedAt time.Time) error {
 	var importStatus, importCause any
 	switch status {
@@ -35,6 +38,11 @@ func MarkImportFinished(ctx context.Context, tx pgx.Tx, workspaceID, source, sta
 			baseline_dirty=results_state.baseline_dirty OR results_state.baseline_source IS NULL OR results_state.baseline_source=EXCLUDED.baseline_source`,
 		workspaceID, source, finishedAt.UTC(), importStatus, importCause); err != nil {
 		return fmt.Errorf("mark the results baseline: %w", err)
+	}
+	// Only a run that finished OK brought the history in; FAILED and UNVERIFIED are not proven complete.
+	if status == "OK" {
+		importer, _, _ := strings.Cut(source, ":")
+		return milestones.Record(ctx, tx, workspaceID, milestones.ImportFinished, finishedAt, map[string]any{"importer": importer})
 	}
 	return nil
 }

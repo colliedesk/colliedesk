@@ -36,6 +36,7 @@ var privilegedCallSites = []string{
 	"internal/results/weekly_email.go: PrivilegeResultsClaim",
 	"internal/results/worker.go: PrivilegeResultsClaim",
 	"internal/retention/service.go: PrivilegeRetention",
+	"internal/retention/trial-ended.go: PrivilegeRetention",
 	"internal/serverconfig/preview.go: PrivilegeOperatorPreview",
 	"internal/serverconfig/store.go: PrivilegeServerConfig",
 	"internal/store/agent-requests.go: PrivilegeAgentRequestPrune",

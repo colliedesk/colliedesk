@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/milestones"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
@@ -70,6 +71,12 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email s
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO invite_roles(workspace_id,link_id,role_id) SELECT $1,$2,unnest($3::uuid[])`, principal.Workspace.ID, link.ID, ids); err != nil {
 		return domain.Invite{}, "", fmt.Errorf("invite roles: %w", err)
+	}
+	// An invite to someone who is not a member yet brings a teammate; one to a member changes their roles.
+	if memberID == "" {
+		if err := milestones.Record(ctx, tx, principal.Workspace.ID, milestones.TeammateInvited, link.CreatedAt, map[string]any{"invite_id": link.ID}); err != nil {
+			return domain.Invite{}, "", err
+		}
 	}
 	var invite domain.Invite
 	err = tx.QueryRow(ctx, `SELECT `+inviteColumns+`
