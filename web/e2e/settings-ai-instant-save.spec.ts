@@ -18,30 +18,47 @@ const model = createServer((request, response) => {
   });
 });
 
+test.describe.configure({ mode: 'serial' });
 test.beforeAll(async () => {
   await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve));
   chat = await startChatServer({ AI_ALLOW_PRIVATE_BASE_URLS: '1' });
 });
 test.afterAll(async () => { await chat?.stop(); model.close(); });
 
+let providerID = '';
 interface AIState { slots: { slot: string; enabled: boolean }[]; source_consents: { source_class: string }[] }
 const ai = async (page: Page): Promise<AIState> => (await (await page.request.get(`${chat.origin}/api/v1/ai`)).json()) as AIState;
 const slotOn = async (page: Page, name: string) => (await ai(page)).slots.find((slot) => slot.slot === name)?.enabled;
 
-// desk signs in as the admin of a new workspace with one chat channel and a provider, and returns the channel's id.
+// One workspace serves the file: every sign-in link counts toward the address's limit on refused links (30 a minute, shared by
+// the whole suite), so a test takes the session of the first one and starts from a known state.
+let session: Awaited<ReturnType<ReturnType<Page['context']>['cookies']>> | undefined;
+let channelID = '';
+
+// desk signs in as the admin of a workspace with one chat channel and a provider, every feature off and nothing agreed to,
+// and returns the channel's id.
 async function desk(page: Page): Promise<string> {
   const { origin } = chat;
-  const suffix = uniqueSuffix();
-  await redeemLink(page, createWorkspace(`AI instant ${suffix}`, `admin-${suffix}@example.com`, origin, chat.databaseURL));
-  const channel = await addLoopbackChannel(page.request, origin, `instant-${suffix}`);
-  const provider = await page.request.post(`${origin}/api/v1/ai/providers`, { headers: { Origin: origin },
-    data: { kind: 'openai_compatible', label: 'Office model', base_url: `http://127.0.0.1:${(model.address() as AddressInfo).port}/v1`, models: ['llama-4-scout'] } });
-  expect(provider.status(), await provider.text()).toBe(201);
-  const id = ((await provider.json()) as { id: string }).id;
-  for (const slot of ['draft', 'intake']) {
-    expect((await page.request.put(`${origin}/api/v1/ai/slots/${slot}`, { headers: { Origin: origin }, data: { source: 'provider', provider_id: id, model: 'llama-4-scout', enabled: false } })).status()).toBe(200);
+  const headers = { Origin: origin };
+  if (!session) {
+    const suffix = uniqueSuffix();
+    await redeemLink(page, createWorkspace(`AI instant ${suffix}`, `admin-${suffix}@example.com`, origin, chat.databaseURL));
+    channelID = await addLoopbackChannel(page.request, origin, `instant-${suffix}`);
+    const provider = await page.request.post(`${origin}/api/v1/ai/providers`, { headers,
+      data: { kind: 'openai_compatible', label: 'Office model', base_url: `http://127.0.0.1:${(model.address() as AddressInfo).port}/v1`, models: ['llama-4-scout'] } });
+    expect(provider.status(), await provider.text()).toBe(201);
+    providerID = ((await provider.json()) as { id: string }).id;
+    session = await page.context().cookies();
+  } else {
+    await page.context().addCookies(session);
   }
-  return channel;
+  for (const slot of ['draft', 'intake']) {
+    expect((await page.request.put(`${origin}/api/v1/ai/slots/${slot}`, { headers, data: { source: 'provider', provider_id: providerID, model: 'llama-4-scout', enabled: false } })).status()).toBe(200);
+  }
+  for (const source of ['images', 'contact_profile']) await page.request.delete(`${origin}/api/v1/ai/source-consents/${source}`, { headers });
+  expect((await page.request.put(`${origin}/api/v1/channels/${channelID}/ai/intake`, { headers, data: { scope: 'group', level: null } })).status()).toBe(200);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  return channelID;
 }
 
 test('a feature switch says Saved with Undo, and Undo puts the feature back', async ({ page }) => {
@@ -103,7 +120,7 @@ test('what intake may send besides the messages saves at once with Undo, and the
 test('a channel level picked on its AI tab says Saved with Undo, and Undo sends the level it had', async ({ page }) => {
   const channel = await desk(page);
   const { origin } = chat;
-  expect((await page.request.put(`${origin}/api/v1/ai/slots/intake`, { headers: { Origin: origin }, data: { source: 'provider', provider_id: ((await ai(page)) as unknown as { providers: { id: string }[] }).providers[0].id, model: 'llama-4-scout', enabled: true } })).status()).toBe(200);
+  expect((await page.request.put(`${origin}/api/v1/ai/slots/intake`, { headers: { Origin: origin }, data: { source: 'provider', provider_id: providerID, model: 'llama-4-scout', enabled: true } })).status()).toBe(200);
   const level = async () => {
     const levels = await (await page.request.get(`${origin}/api/v1/channels/${channel}/ai`)).json() as { scopes: { scope: string; slots: { slot: string; level: string | null }[] }[] };
     return levels.scopes.find((entry) => entry.scope === 'group')?.slots.find((item) => item.slot === 'intake')?.level ?? null;
