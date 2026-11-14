@@ -168,7 +168,9 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
   A link to a conversation that is not there (a wrong link, a conversation that was deleted or merged, or one
   of another workspace) says **Conversation not found**, with **Back to Inbox**. When the conversation is
   there but could not be loaded (the network or the server failed), the page says so and offers **Retry**.
-  The API answers `404 not_found` for every such id, also for something that is not an id.
+  `GET /api/v1/conversations/<id>` and `GET /api/v1/contacts/<id>` answer `404 not_found` for every such
+  id, also for something that is not an id. Other requests under such an id, for example its messages,
+  can answer `400 invalid_request` for something that is not an id.
 
 ## Conversation numbers
 
