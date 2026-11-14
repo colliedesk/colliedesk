@@ -17,7 +17,6 @@ import type { TokenPermission } from './api/schemas';
 import { useIntakeSummary } from './features/review/use-intake-summary';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { HandoffSignIn } from './features/auth/handoff-sign-in';
-import { OAuthConsent, oauthRequestFrom } from './features/auth/oauth-consent';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
 import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-intent';
 import { rememberSignupAttribution } from './lib/signup-attribution';
@@ -70,6 +69,8 @@ const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 // A trial offer link is opened once by a few admins: its page loads from its own chunk.
 const trialOfferPart = lazyPart(() => import('./features/auth/trial-offer-page'));
+// The consent page carries help tips, so it loads with its own chunk, not with the first screen.
+const oauthConsentPart = lazyPart(() => import('./features/auth/oauth-consent'));
 
 // pageChunk is the loader of a route whose page is a lazy part. Moving inside the app, it waits for the page's
 // chunk, so the router keeps the current page on screen, Settings nav included, until the next one can show:
@@ -600,9 +601,11 @@ const signInRoute = createRoute({
 const oauthAuthorizeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/oauth/authorize',
+  loader: pageChunk(oauthConsentPart),
   component: function OAuthAuthorize() {
     const { search, pathname } = window.location;
-    return <OAuthConsent request={oauthRequestFrom(new URLSearchParams(search))} here={pathname + search} />;
+    return <Part part={oauthConsentPart} failed={<main className="settings-page"><PartUnavailable /></main>}
+      render={({ OAuthConsent, oauthRequestFrom }) => <OAuthConsent request={oauthRequestFrom(new URLSearchParams(search))} here={pathname + search} />} />;
   },
 });
 
