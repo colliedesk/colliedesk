@@ -15,9 +15,6 @@ const baseURL = servers.cloud;
 const apiKey = 'fd-e2e-golden-path-key-never-shown';
 const provider = new IdentityProvider();
 
-test.beforeAll(async () => { await provider.start(); });
-test.afterAll(async () => { await provider.stop(); });
-
 test('golden path: a new team signs up on the cloud, imports Freshdesk in the app, reconcile OK, answers its first conversation by email', { tag: '@onboarding' }, async ({ page }) => {
   test.setTimeout(240_000);
   const suffix = uniqueSuffix();

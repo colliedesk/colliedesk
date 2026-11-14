@@ -12,9 +12,6 @@ const baseURL = servers.cloud;
 const database = databaseFor(baseURL);
 const provider = new IdentityProvider();
 
-test.beforeAll(async () => { await provider.start(); });
-test.afterAll(async () => { await provider.stop(); });
-
 test('cloud signup: a verified identity starts a trial, the same email cannot start a second one, the expired trial is locked and still exports', { tag: '@onboarding' }, async ({ page }) => {
   const suffix = uniqueSuffix();
   const email = `owner-${suffix}@example.com`;
