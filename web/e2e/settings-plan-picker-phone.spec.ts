@@ -9,9 +9,6 @@ import { signUp } from './support/signup';
 const baseURL = servers.cloud;
 const provider = new IdentityProvider();
 
-test.beforeAll(async () => { await provider.start(); });
-test.afterAll(async () => { await provider.stop(); });
-
 test('on a phone the plan card fills the screen, leads, and its interval choice and Choose button are touch targets', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const suffix = uniqueSuffix();

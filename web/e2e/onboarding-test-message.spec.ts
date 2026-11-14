@@ -11,9 +11,6 @@ import { signUp } from './support/signup';
 const baseURL = servers.cloud;
 const provider = new IdentityProvider();
 
-test.beforeAll(async () => { await provider.start(); });
-test.afterAll(async () => { await provider.stop(); });
-
 test('test message: a new cloud workspace sends itself a test message from the empty inbox, answers it on the trial, and the reply is delivered', { tag: '@onboarding' }, async ({ page }) => {
   const suffix = uniqueSuffix();
   const adminEmail = `owner-${suffix}@acme.example`;
