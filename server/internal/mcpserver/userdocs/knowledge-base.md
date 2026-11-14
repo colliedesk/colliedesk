@@ -299,7 +299,9 @@ history and of the [export](export.md), and are set through the API (`seo_title`
 `seo_description` on `POST` and `PATCH /api/v1/kb/articles`) and by AI agents
 (`colliedesk_kb_article_create`, `colliedesk_kb_article_update`). Changing them on a published
 article changes the help center, so it needs `kb_articles:publish` as well as `kb_articles:update`;
-without it the save is refused and names the permission.
+without it the save is refused and names the permission. A [Freshdesk import](import-freshdesk.md#knowledge-base)
+fills both from the article's Freshdesk search settings; one longer than these limits is left empty
+and stays in the export (`source_meta`).
 
 If a teammate (or an AI agent) saved the article after you opened it, your save is refused and
 nothing is overwritten. Your text stays on screen and you choose: **Save mine over theirs** (theirs

@@ -270,14 +270,15 @@ func TestUndoGivesBackThePrimaryLanguageAlsoAmongTheSupportedOnes(t *testing.T) 
 }
 
 // The report's "not imported by design" list must not deny what the import just wrote: the
-// translations and the translated category and folder names are imported and shown on the help center.
+// translations, the translated category and folder names and the search title and description
+// (seo_data) of articles and translations are imported and shown on the help center.
 func TestNotImportedListMatchesImportedTranslationsAndCollectionNames(t *testing.T) {
 	env := newImportEnv(t).withSolutions()
 	report := env.mustRun(t)
 	if report.KnowledgeBase.Translations.Imported == 0 || report.KnowledgeBase.CollectionNames.Imported == 0 {
 		t.Fatalf("fixture imported no translations or names: %+v %+v", report.KnowledgeBase.Translations, report.KnowledgeBase.CollectionNames)
 	}
-	const want = "Knowledge base: tags, views and votes of articles and translations, and an article's search title and description (seo_data), are kept only in source_meta"
+	const want = "Knowledge base: tags, views and votes of articles and translations are kept only in source_meta"
 	var kb []string
 	for _, line := range report.NotImported {
 		if strings.HasPrefix(line, "Knowledge base:") {

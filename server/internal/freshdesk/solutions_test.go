@@ -41,6 +41,7 @@ func fixtureArticle(fixture map[string]any, folder string, id float64) map[strin
 
 type storedArticle struct {
 	ID, Collection, Title, Slug, Body, Status, SourceHTML, Meta string
+	SEOTitle, SEODescription                                    string
 	Author                                                      *string
 	CreatedAt, UpdatedAt                                        time.Time
 	PublishedAt                                                 *time.Time
@@ -50,7 +51,7 @@ type storedArticle struct {
 func (e *importEnv) kbArticles(t *testing.T, workspaceID string) map[string]storedArticle {
 	t.Helper()
 	rows, err := e.pool.Query(context.Background(), `SELECT a.id::text,c.name,a.title,a.slug,a.body_md,a.status,COALESCE(a.source_html,''),COALESCE(a.source_meta::text,''),
-			COALESCE(a.source_meta->>'freshdesk_id',a.id::text),a.author_agent_id::text,a.created_at,a.updated_at,a.published_at
+			a.seo_title,a.seo_description,COALESCE(a.source_meta->>'freshdesk_id',a.id::text),a.author_agent_id::text,a.created_at,a.updated_at,a.published_at
 		FROM kb_articles a JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id WHERE a.workspace_id=$1`, workspaceID)
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +61,7 @@ func (e *importEnv) kbArticles(t *testing.T, workspaceID string) map[string]stor
 	for rows.Next() {
 		var item storedArticle
 		var key string
-		if err := rows.Scan(&item.ID, &item.Collection, &item.Title, &item.Slug, &item.Body, &item.Status, &item.SourceHTML, &item.Meta, &key, &item.Author,
+		if err := rows.Scan(&item.ID, &item.Collection, &item.Title, &item.Slug, &item.Body, &item.Status, &item.SourceHTML, &item.Meta, &item.SEOTitle, &item.SEODescription, &key, &item.Author,
 			&item.CreatedAt, &item.UpdatedAt, &item.PublishedAt); err != nil {
 			t.Fatal(err)
 		}
@@ -158,6 +159,10 @@ func TestSolutionsBecomeTheKnowledgeBaseWithOriginalTimestampsDraftsAndTranslati
 	}
 	if !strings.Contains(reset.SourceHTML, "<b>Settings</b>") || !strings.Contains(reset.Meta, `"tags": ["password", "login"]`) || !strings.Contains(reset.Meta, `"hits": 42`) {
 		t.Fatalf("article 101 source = %q meta = %s", reset.SourceHTML, reset.Meta)
+	}
+	// The article's search title and description (seo_data) become its own search fields; an article without them keeps the defaults.
+	if reset.SEOTitle != "Reset" || reset.SEODescription != "Steps to reset a forgotten password" || articles["102"].SEOTitle != "" || articles["102"].SEODescription != "" {
+		t.Fatalf("search fields: 101 = %q %q, 102 = %q %q", reset.SEOTitle, reset.SEODescription, articles["102"].SEOTitle, articles["102"].SEODescription)
 	}
 	if articles["102"].Status != "draft" || articles["103"].Status != "draft" || articles["105"].Collection != "Advanced / Deep" {
 		t.Fatalf("articles = %+v", articles)
@@ -420,6 +425,7 @@ func TestSolutionsRerunUpdatesFreshdeskChangesAndKeepsColliedeskEdits(t *testing
 			article["description"], article["updated_at"] = "<p>Changed in Freshdesk.</p>", "2024-06-01T10:00:00Z"
 		}
 		fixtureArticle(fixture, "11", 102)["status"] = 2.0
+		fixtureArticle(fixture, "11", 102)["seo_data"] = map[string]any{"meta_title": "Coming soon", "meta_description": "What ships next"}
 	})
 	report := env.mustRun(t)
 	after := env.kbArticles(t, env.workspaceID)
@@ -429,7 +435,8 @@ func TestSolutionsRerunUpdatesFreshdeskChangesAndKeepsColliedeskEdits(t *testing
 	if after["101"].Body != "Edited in Colliedesk." {
 		t.Fatalf("the Colliedesk edit was overwritten: %q", after["101"].Body)
 	}
-	if upcoming := after["102"]; upcoming.Body != "Changed in Freshdesk." || upcoming.Status != "published" || !upcoming.UpdatedAt.Equal(time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)) || upcoming.ID != before["102"].ID {
+	if upcoming := after["102"]; upcoming.Body != "Changed in Freshdesk." || upcoming.Status != "published" || !upcoming.UpdatedAt.Equal(time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)) || upcoming.ID != before["102"].ID ||
+		upcoming.SEOTitle != "Coming soon" || upcoming.SEODescription != "What ships next" {
 		t.Fatalf("article 102 = %+v", upcoming)
 	}
 }

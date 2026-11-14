@@ -211,10 +211,11 @@ func (r *run) kbImageNames(markup string) map[string][2]string {
 	return names
 }
 
-// seoField reads one of Freshdesk's search fields (seo_data), "" when it has none.
-func seoField(data map[string]any, key string) string {
-	value, _ := data[key].(string)
-	return value
+// seoFields reads the search title and description of Freshdesk's seo_data, "" for a field it lacks.
+func seoFields(data map[string]any) (title, description string) {
+	title, _ = data["meta_title"].(string)
+	description, _ = data["meta_description"].(string)
+	return title, description
 }
 
 // fitText makes text one line of at most limit characters, as the media library takes it.
@@ -399,8 +400,9 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 			author = &id
 		}
 	}
+	seoTitle, seoDescription := seoFields(article.SEOData)
 	input := store.KBImportArticle{CollectionID: collectionID, Title: article.Title, BodyMD: body, Status: status, AuthorAgentID: author,
-		SourceMeta: meta, SourceHTML: article.Description, CreatedAt: article.CreatedAt.UTC(), UpdatedAt: updated}
+		SEOTitle: seoTitle, SEODescription: seoDescription, SourceMeta: meta, SourceHTML: article.Description, CreatedAt: article.CreatedAt.UTC(), UpdatedAt: updated}
 	target := existing
 	if existing == "" {
 		target, err = store.ImportKBArticle(ctx, tx, r.workspaceID, input)
@@ -669,7 +671,7 @@ func (r *run) importKBTranslation(ctx context.Context, translation kbTranslation
 	if translation.Status == 2 {
 		status = domain.KBPublished
 	}
-	seoTitle, seoDescription := seoField(translation.SEOData, "meta_title"), seoField(translation.SEOData, "meta_description")
+	seoTitle, seoDescription := seoFields(translation.SEOData)
 	outcome, err := store.PutKBArticleTranslation(ctx, tx, r.workspaceID, articleID, store.KBImportTranslation{Locale: translation.language, Title: translation.Title,
 		BodyMD: body, Status: status, SEOTitle: seoTitle, SEODescription: seoDescription, SourceMeta: meta, SourceHTML: translation.Description,
 		CreatedAt: translation.CreatedAt.UTC(), UpdatedAt: updated})
