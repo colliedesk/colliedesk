@@ -49,12 +49,12 @@ test('response targets: an admin turns them on, a new conversation is due soon o
     await hours.getByLabel(`${day} from`).fill('00:00');
     await hours.getByLabel(`${day} to`).fill('23:59');
   }
-  await hours.getByRole('button', { name: 'Save business hours' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(hours.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   const targets = page.getByRole('region', { name: 'Targets' });
   await targets.getByLabel('First reply target for Normal, in business time').fill('1');
   await targets.getByLabel('Due soon, in business time before the target').fill('1');
-  await targets.getByRole('button', { name: 'Save targets' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(targets.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
 
   // A channel and a customer's message.
@@ -151,17 +151,17 @@ test('response targets off and on again: hours and targets saved earlier are kep
   await page.getByRole('button', { name: 'Turn on response targets' }).click();
   const hours = page.getByRole('region', { name: 'Business hours' });
   await hours.getByLabel('Monday from').fill('07:30');
-  await hours.getByRole('button', { name: 'Save business hours' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(hours.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   const targets = page.getByRole('region', { name: 'Targets' });
   await targets.getByLabel('First reply target for Normal, in business time').fill('3');
-  await targets.getByRole('button', { name: 'Save targets' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(targets.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   // Values on every part of the document, so a turn-on that dropped one would show.
   // The zone is committed on Enter, where the person stops.
   await hours.getByLabel('Time zone').selectOption('Europe/Paris');
   await hours.getByLabel('Time zone').press('Enter');
-  await hours.getByRole('button', { name: 'Save business hours' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(hours.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   // The Saved line of the first save may still be up: the API says when this one is stored.
   await expect.poll(async () => (await stored(page)).timezone).toBe('Europe/Paris');
@@ -172,7 +172,8 @@ test('response targets off and on again: hours and targets saved earlier are kep
   await expect(holidays.getByText('New Year')).toBeVisible();
   const alerts = page.getByRole('region', { name: 'Alerts' });
   await alerts.getByRole('switch', { name: 'Email reminders and overdue alerts' }).uncheck();
-  await expect(alerts.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
+  // A switch saves when it is flipped, and the page says so with a toast.
+  await expect(page.getByRole('status').filter({ hasText: 'Saved' }).filter({ has: page.getByRole('button', { name: 'Undo' }) })).toBeVisible();
   const before = await stored(page);
   expect(before).toMatchObject({ timezone: 'Europe/Paris', holidays: [{ date: '2027-01-01', name: 'New Year' }], alert_email: false });
 
@@ -207,7 +208,7 @@ test('response targets off: a channel deleted since is refused on turn-on, the e
   await page.getByRole('button', { name: 'Turn on response targets' }).click();
   const applies = page.getByRole('region', { name: 'Applies to' });
   await applies.getByRole('checkbox', { name: second.name, exact: true }).uncheck();
-  await applies.getByRole('button', { name: 'Save channels' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(applies.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   expect((await stored(page)).channel_ids).toEqual([first.id]);
   await page.getByRole('switch', { name: 'Measure response targets' }).uncheck();
@@ -230,7 +231,7 @@ test('response targets off: a channel deleted since is refused on turn-on, the e
 
   await scope.getByRole('checkbox', { name: /^Deleted channel/ }).uncheck();
   await scope.getByRole('checkbox', { name: second.name, exact: true }).check();
-  await scope.getByRole('button', { name: 'Save channels' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(scope.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   // The one live channel ticked is every channel.
   expect((await stored(page)).channel_ids).toBeNull();

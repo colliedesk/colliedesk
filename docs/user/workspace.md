@@ -26,7 +26,7 @@ While you are in Settings, its menu takes the place of the sidebar, under **Back
 the page alone. **Back to app** returns to the page you were on before Settings: the conversation you
 had open, or the inbox when there was none. **Esc** does the same when nothing on the page has the focus
 or when the focus is in the Settings menu. When the focus is in a page's own controls, or something is open
-(a dialog, a menu, the account menu, a role picker), Esc only closes that, so nothing you type is lost. You can still drag the sidebar's edge to
+(a dialog, a menu, the account menu, a role picker), Esc only closes that, so nothing you type is lost; with text not saved, Esc from the page itself asks the question below before it leaves. You can still drag the sidebar's edge to
 resize it, or fold it: folded, it keeps **Back to app** as an arrow, and the menu comes back when you
 open it again.
 
@@ -35,13 +35,32 @@ Settings page and keeps the app's sidebar. An old link to a section of Settings,
 `/settings#invites-heading`, opens the page that holds it now. On a phone, **Settings** shows the menu;
 open a page from it, and **‹ Settings** above its title goes back.
 
+## How Settings saves
+
+Every Settings page saves the same way.
+
+- **A choice saves when you make it.** A switch, a checkbox or a pick from a list (the theme, your
+  timezone, **Show the setup guide**, a switch on **Response targets**) is saved at once. The page says
+  **Saved** with **Undo** at its foot; **Undo** puts the previous value back with one request. The message
+  goes away by itself after a few seconds.
+- **Text waits for Save.** When you type in a field (a name, business hours, a list of sites), a bar
+  appears at the foot of the page. It says **Unsaved changes** and names the fields. **Save** keeps them
+  all (press Ctrl+S, or ⌘S on a Mac, or Enter in a one-line field); **Discard** puts them back as they
+  were. If the server refuses one, that field says why and the bar stays, so nothing you typed is lost.
+
+Leaving a page with text that is not saved asks once: "You have unsaved changes. Leave anyway?" It
+asks whichever way you leave: a link in the Settings menu, **Back to app**, Esc, your browser's Back
+button, or closing the tab. Choose to stay and the text is still in the field; choose to leave and it is
+dropped. Dialogs and steps that add something (invite people, create a token, add a channel) keep their
+own buttons.
+
 ## Rename the workspace
 
 Only people with `workspace:update` (the Admin role) can rename the workspace.
 
 1. Open **Settings → General**.
 2. Type the new name in **Workspace name**.
-3. Select **Save workspace name**. "Saved" appears next to the button.
+3. Select **Save** in the bar at the foot of the page. "Saved" appears next to the field.
 
 Everyone sees the new name the next time a screen loads. A name is 2 to 60 characters, as at
 sign-up. Spaces at the ends are removed. Line breaks and other control characters are refused. On
