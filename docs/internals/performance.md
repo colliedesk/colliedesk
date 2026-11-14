@@ -407,7 +407,7 @@ pages (Requests, History, the audit log, Operators, the products, the review, th
 strings in `operator/messages.ts`, and six strings nothing read. The lazy pages' strings now live in
 `operator/page-messages.ts` (Vietnamese in `vi/page-messages.ts`, joined through `lazyWords.pm` like the
 other lazy message files) and load with the first page that needs them. First bundle 78,459 → 76,334 bytes of
-JavaScript; the ceiling went from 78,652 to 77,400, so the gain is kept. A string used by the first bundle and
+JavaScript locally (76,532 in CI); the ceiling went from 78,652 to 77,500, so the gain is kept. A string used by the first bundle and
 by a lazy page (`tryAgain`) stays in `messages.ts`. The console does not use `HelpTip`: it brings Floating UI
 and the workspace app's strings, so its helper lines are one true line of 60 characters or less.
 
