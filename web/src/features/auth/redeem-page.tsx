@@ -66,7 +66,7 @@ export function RedeemPage({
           {(newTeam || buyer) && workspaces.length === 0 && <p className="muted-copy">{messages.cloudTrialSignInInstead}</p>}
           {!buyer && !newTeam && signupEnabled && workspaces.length === 0 && <p className="muted-copy">{messages.cloudNewHere}</p>}
           {!buyer && !newTeam && <p className="muted-copy">{messages.oneTimeLinkInstead}</p>}
-          {/* Where a visitor can start a workspace, the page says what they agree to and links the prices. */}
+          {/* Where a visitor can start a workspace, the page says what they agree to. */}
           {signupEnabled && <p className="muted-copy signin-consent">{messages.consentBefore}
             <a href={messages.termsURL} target="_blank" rel="noreferrer">{messages.consentTerms}</a>{messages.consentAnd}
             <a href={messages.privacyURL} target="_blank" rel="noreferrer">{messages.consentPrivacy}</a>.</p>}

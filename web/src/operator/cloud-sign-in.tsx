@@ -8,7 +8,6 @@ import type { SignInStep } from './api';
 import { CommandLine } from './copy';
 import { cloudMessages as c } from './cloud-messages';
 import { m } from './messages';
-import { pm } from './page-messages';
 
 // The console's cloud sign-in, a lazy part: the identity provider's form (the workspace app's ClerkSession) and
 // the hand-over of its token to POST /api/v1/operator/auth/cloud. Only the sign-in page loads it, under the

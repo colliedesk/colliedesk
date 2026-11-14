@@ -47,7 +47,7 @@ export const am: Translation<typeof en> = {
   fillPrices: (n: number) => `Dùng giá niêm yết cho ${n} mô hình`,
   noModelsYet: 'Hãy chọn mô hình ở trên trước.',
   allowanceTitle: 'Hạn mức hằng tháng',
-  allowanceHelp: 'Mức tối đa một workspace được chi mỗi tháng, tính bằng đô la Mỹ.',
+  allowanceHelp: 'Mức tối đa một workspace được chi cho nhà cung cấp này mỗi tháng UTC.',
   allowanceNone: 'Không giới hạn',
   allowanceWorkspace: 'Như nhau cho mọi workspace',
   allowanceAgent: 'Theo mỗi nhân viên đang hoạt động',

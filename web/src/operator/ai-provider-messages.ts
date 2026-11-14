@@ -48,7 +48,7 @@ const en = {
   fillPrices: (n: number) => `Use the listed price for ${n} ${n === 1 ? 'model' : 'models'}`,
   noModelsYet: 'Pick the models above first.',
   allowanceTitle: 'Monthly allowance',
-  allowanceHelp: 'The most a workspace may spend a month, in US dollars.',
+  allowanceHelp: 'Most a workspace may spend on this provider per UTC month.',
   allowanceNone: 'No limit',
   allowanceWorkspace: 'Same for every workspace',
   allowanceAgent: 'Per active agent',

@@ -37,7 +37,7 @@ export const messages = {
   openSecureLink: 'Open your secure link',
   redeemExplanation: 'Colliedesk uses one-time links instead of passwords.',
   requestLink: 'Ask your workspace admin for a pairing or invite link.',
-  oneTimeLinkInstead: 'Got a one-time link from your admin? Open it to sign in.',
+  oneTimeLinkInstead: 'Got a one-time link from an admin? Open it in this browser.',
   cloudSignInTitle: 'Sign in to Colliedesk',
   cloudSignInExplanation: 'Enter your work email and we will send you a one-time code.',
   // The website's "Start free trial" link (`intent=trial`): the same form, titled for a new team.
@@ -45,7 +45,7 @@ export const messages = {
   workspaceExplained: "Your workspace is your team's inbox. Use your company name.",
   cloudTrialExplanation: '14 days, no card needed. Enter your work email and we will send you a one-time code. Then you name your workspace and the trial starts.',
   cloudTrialSignInInstead: 'Already have a workspace? The same form signs you in.',
-  cloudTrialWorkspace: 'A shared name, such as Acme Support, for your whole team.',
+  cloudTrialWorkspace: 'A workspace is one shared name, such as Acme Support.',
   consentBefore: 'By continuing you agree to the ',
   consentTerms: 'Terms',
   consentAnd: ' and ',

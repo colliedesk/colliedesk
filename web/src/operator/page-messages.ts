@@ -35,7 +35,7 @@ const en = {
   revertNow: 'Revert now',
   confirmVersion: (v: number) => `Confirm v${v}`,
   revertTo: (v: number) => `Revert to v${v}`,
-  confirmTrialLead: 'It stays as an ordinary version, proven to work from here.',
+  confirmTrialLead: 'It stays as an ordinary version; this console works on it.',
   revertTrialLead: 'The version before the trial is saved again as newest.',
   trialDoubt: 'What this server saw since the trial started looks wrong (one client address for everyone, only refused cloud sign-ins, or a help center page that did not answer). Check before you keep it.',
   trialGone: 'That trial already ended. Nothing was changed.',

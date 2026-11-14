@@ -33,7 +33,7 @@ export const pm: Translation<typeof en> = {
   revertNow: 'Hoàn lại ngay',
   confirmVersion: (v: number) => `Xác nhận v${v}`,
   revertTo: (v: number) => `Hoàn lại v${v}`,
-  confirmTrialLead: 'Nó thành một phiên bản bình thường, đã chạy được từ trang này.',
+  confirmTrialLead: 'Nó thành một phiên bản bình thường; bảng điều khiển này chạy được với nó.',
   revertTrialLead: 'Phiên bản trước lúc chạy thử được lưu lại thành phiên bản mới nhất.',
   trialDoubt: 'Những gì máy chủ thấy từ lúc chạy thử có vẻ sai (mọi người cùng một địa chỉ client, đăng nhập cloud chỉ toàn bị từ chối, hoặc trang trung tâm trợ giúp không phản hồi). Hãy kiểm tra trước khi giữ.',
   trialGone: 'Bản chạy thử đó đã kết thúc. Không có gì thay đổi.',
