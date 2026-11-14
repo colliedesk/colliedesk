@@ -126,8 +126,8 @@ test('the first pass shows the recent tickets as the current step and the rest a
 
 test('a pause for Freshdesk’s rate limit is a quiet line that calls it normal', () => {
   page({ job: job({ state: 'running', phase: 'full', progress: { step: 'importing tickets', done: 25, total: 100, api_calls: 75, rate_limit_until: '2999-01-01T00:00:00Z', updated_at: '2026-10-22T08:05:00Z' } }) });
-  expect(screen.getByText(/This is normal and automatic/)).toBeInTheDocument();
-  expect(screen.getByText(/the import is paused until/)).toBeInTheDocument();
+  expect(screen.getByText(/^Freshdesk paused the import until .+; it resumes by itself\.$/)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'About Paused import' })).toHaveAccessibleDescription(/This is normal and automatic; the import continues by itself and the page can be closed\./);
 });
 
 test('a wait for Freshdesk says when the import tries again', () => {
@@ -364,4 +364,45 @@ test('a Free plan account hears that it has no API when Read account fails on it
   page({ job: job({ state: 'failed', phase: 'preview', error_code: 'freshdesk_plan_no_api', error_message: 'this Freshdesk plan has no API calls' }) });
   expect(screen.getByRole('heading', { name: 'Your Freshdesk plan has no API access' })).toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent('Start a 14-day trial of a higher Freshdesk plan, then try again during the trial.');
+});
+
+// Each row of the import keeps its label and one line of 60 characters or less; what it explained below that line is the
+// accessible description of the control it is about, in a help tip.
+test('connecting leads with one line, and what the server does first is the heading’s tip', () => {
+  page();
+  expect(screen.getByText('Nothing is written until you start the import.')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'About Connect your Freshdesk account' })).toHaveAccessibleDescription('First the server reads your account and shows what it found.');
+});
+
+test('the API key says where to find it in one line, and how it is kept in its tip', () => {
+  page();
+  expect(screen.getByText('Profile picture → Profile settings → Your API Key.')).toBeVisible();
+  expect(screen.getByLabelText('API key of a Freshdesk admin')).toHaveAccessibleDescription(
+    /Profile picture → Profile settings → Your API Key\..*The key is encrypted on the server and erased when the import ends\./);
+});
+
+test('the old help center address says when to fill it in one line, and what it changes in its tip', () => {
+  page();
+  expect(screen.getByText('Only if it had a domain of its own.')).toBeVisible();
+  expect(screen.getByLabelText('Old help center address (optional)')).toHaveAccessibleDescription(
+    /Only if it had a domain of its own\..*Its links in your articles and saved replies then point at the new help center too\./);
+});
+
+test('why the ticket count is "at least" is the tip of the Tickets note, which stays one line', () => {
+  page({ job: job() });
+  expect(screen.getByText('Archived tickets are counted in the report.')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'About Tickets' })).toHaveAccessibleDescription(
+    'Freshdesk does not count archived tickets ahead of time; the import finds them and the report counts them.');
+});
+
+test('a lost key says so in one line, and that the import goes on where it stopped is the heading’s tip', () => {
+  page({ job: job({ state: 'waiting_key', phase: 'full', has_key: false }) });
+  expect(screen.getByText('The server restarted and no longer holds the key.')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'About Enter the API key again' })).toHaveAccessibleDescription('The import goes on where it stopped.');
+});
+
+test('the request count stays its own line while the import is paused for Freshdesk', () => {
+  page({ job: job({ state: 'running', phase: 'full', progress: { step: 'importing tickets', done: 25, total: 100, api_calls: 75, rate_limit_until: '2999-01-01T00:00:00Z', updated_at: '2026-10-22T08:05:00Z' } }) });
+  expect(screen.getByText('75 requests to Freshdesk so far.')).toBeVisible();
+  expect(screen.getByText('You can close this page; the import keeps running.')).toBeVisible();
 });

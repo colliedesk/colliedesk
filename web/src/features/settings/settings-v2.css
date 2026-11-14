@@ -94,7 +94,7 @@
 .settings-v2 .import-connect { max-width: 34rem; gap: var(--space-2); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-5); }
 .settings-v2.import-page .settings-body > .import-connect { padding: var(--space-5); }
 .settings-v2 .import-connect label { color: var(--text-1); font-size: var(--fs-small); font-weight: 500; line-height: 20px; }
-.settings-v2 .import-connect label:not(:first-child) { margin-top: var(--space-2); }
+.settings-v2 .import-connect label:not(:first-child), .settings-v2 .import-connect .heading-with-tip:not(:first-child) { margin-top: var(--space-2); }
 .settings-v2 .import-connect small { font-size: var(--fs-label); line-height: 16px; }
 
 /* The ledger: a card table, 36px head, 48px rows, counts in the sans face, right-aligned. */
