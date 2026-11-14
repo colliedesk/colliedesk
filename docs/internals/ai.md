@@ -250,7 +250,9 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    from the retrieval rows. Warnings list emails, numbers of six digits or more and other customers'
    names in the draft that the conversation, subject and prompt do not hold. Numbers are compared as
    `foldPhones` writes them, the fold the help chat's filter uses, so a number in another script's
-   digits or with Unicode separators is caught; the warning shows it as the draft wrote it. The articles a ready draft
+   digits, as superscript, circled or keycap digits, or with Unicode separators is caught; the warning
+   shows it as the draft wrote it. A range or a date written with dashes (`chatRange`: `2024–2026`,
+   `100-500`, `2026-11-15`) is not listed. The articles a ready draft
    used are also rows of `ai_draft_sources`, for the article's monthly count: a containment search on
    `ai_drafts.sources` cannot use an index under row-level security (non-leakproof operator).
 4. **Refused before queueing.** `POST` answers 409 `ai_feature_off`, 402 `ai_allowance_reached` and 429

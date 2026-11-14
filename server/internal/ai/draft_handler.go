@@ -236,25 +236,37 @@ func digits(text string) string {
 // it, so the person finds it, and as its ASCII digits, to look for in the conversation.
 type draftNumber struct{ written, digits string }
 
-// draftNumbers are the numbers of text however their digits and separators are written. The text is
+// draftNumbers are the numbers of text however their digits and separators are written, leaving out
+// a range or a date written with dashes (chatRange). The text is
 // folded rune by rune and each folded byte remembers where its rune was, so a match is reported as the
 // draft wrote it ("０９８７６５４３２１", an invisible character inside it included).
 func draftNumbers(text string) []draftNumber {
 	var folded []byte
 	var from, to []int
+	last := 0 // bytes the last kept rune folded to
 	for at, r := range text {
 		f := foldPhoneRune(r)
+		_, size := utf8.DecodeRuneInString(text[at:])
 		if f < 0 {
+			// A combining mark belongs to the digit before it (the keycap of "1️⃣"), so it is reported with it.
+			if unicode.In(r, unicode.Mn, unicode.Me) {
+				for i := len(to) - last; i < len(to); i++ {
+					to[i] = at + size
+				}
+			}
 			continue
 		}
-		_, size := utf8.DecodeRuneInString(text[at:])
-		for range utf8.RuneLen(f) {
+		last = utf8.RuneLen(f)
+		for range last {
 			from, to = append(from, at), append(to, at+size)
 		}
 		folded = utf8.AppendRune(folded, f)
 	}
 	var numbers []draftNumber
 	for _, match := range numberPattern.FindAllIndex(folded, -1) {
+		if chatRange.Match(folded[match[0]:match[1]]) {
+			continue
+		}
 		numbers = append(numbers, draftNumber{
 			written: strings.TrimSpace(text[from[match[0]]:to[match[1]-1]]),
 			digits:  digits(string(folded[match[0]:match[1]])),

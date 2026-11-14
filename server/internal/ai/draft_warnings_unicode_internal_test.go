@@ -28,12 +28,20 @@ func TestADraftWarnsOfAMadeUpNumberInUnicodeForms(t *testing.T) {
 		"0987\u00b7654\u00b7321", // middle dot
 		"0987\u200b654\u200b321", // zero-width space
 		"0987\u00ad654\u00ad321", // soft hyphen
-		"\uff10\uff19\uff18\uff17\uff16\uff15\uff14\uff13\uff12\uff11",                                           // fullwidth digits
-		"\uff0b\uff18\uff14 \uff19\uff18\uff17 \uff16\uff15\uff14 \uff13\uff12\uff11",                            // fullwidth plus and digits
-		"\u0660\u0669\u0668\u0667\u0666\u0665\u0664\u0663\u0662\u0661",                                           // Arabic-Indic digits
-		"\u0966\u096f\u096e\u096d-\u096c\u096b\u096a-\u0969\u0968\u0967",                                         // Devanagari digits
-		"\U0001d7ce\U0001d7d7\U0001d7d6\U0001d7d5 \U0001d7d4\U0001d7d3\U0001d7d2 \U0001d7d1\U0001d7d0\U0001d7cf", // mathematical bold digits
-		"09\u0668\u0667\u00a0\uff16\uff15\uff14\u20133\uff121",                                                   // mixed scripts and separators
+		"\uff10\uff19\uff18\uff17\uff16\uff15\uff14\uff13\uff12\uff11",                                             // fullwidth digits
+		"\uff0b\uff18\uff14 \uff19\uff18\uff17 \uff16\uff15\uff14 \uff13\uff12\uff11",                              // fullwidth plus and digits
+		"\u0660\u0669\u0668\u0667\u0666\u0665\u0664\u0663\u0662\u0661",                                             // Arabic-Indic digits
+		"\u0966\u096f\u096e\u096d-\u096c\u096b\u096a-\u0969\u0968\u0967",                                           // Devanagari digits
+		"\U0001d7ce\U0001d7d7\U0001d7d6\U0001d7d5 \U0001d7d4\U0001d7d3\U0001d7d2 \U0001d7d1\U0001d7d0\U0001d7cf",   // mathematical bold digits
+		"09\u0668\u0667\u00a0\uff16\uff15\uff14\u20133\uff121",                                                     // mixed scripts and separators
+		"⁰⁹⁸⁷ ⁶⁵⁴ ³²¹",                                                                                             // superscript digits
+		"₀₉₈₇ ₆₅₄ ₃₂₁",                                                                                             // subscript digits
+		"⓪⑨⑧⑦ ⑥⑤④ ③②①",                                                                                             // circled digits
+		"0\u03329\u03328\u03327\u0332 6\u03325\u03324\u0332 3\u03322\u03321\u0332",                                 // combining low line after each digit
+		"0\ufe0f\u20e39\ufe0f\u20e38\ufe0f\u20e37\ufe0f\u20e36\ufe0f\u20e35\ufe0f\u20e34\ufe0f\u20e33\ufe0f\u20e3", // keycap emoji
+		"٠٩٨٧\u066c٦٥٤\u066c٣٢١",                                                                                   // Arabic thousands separator
+		"0987–654–321",                                                                                             // a dashed number of phone length
+		"12345-6789",                                                                                               // a dashed run that is no range
 	} {
 		got := numberWarnings("Call "+number+" for a refund. Thanks!", c)
 		if len(got) != 1 || got[0] != number {
@@ -75,6 +83,13 @@ func TestADraftDoesNotWarnOfOrdinaryFiguresInUnicodeForms(t *testing.T) {
 		"Version 2.14.3 fixed it, and v١.٢٤.١٠ too.",
 		"Order #4821 shipped on 15/11/2026.",
 		"Order #４８２１ shipped on ２０２６/１１/１５, in 3–5 days.",
+		"We supported 2024–2026 releases.",
+		"We supported 2024-2026 releases.",
+		"Teams with 100–500 tickets a month pick Growth.",
+		"Teams with 100-500 tickets a month pick Growth.",
+		"It was released on 2026–11–15.",
+		"It was released on 2026-11-15.",
+		"A 100 m² room holds 2³ desks, see note ①.",
 		"It shipped on １５.１１, at 10:30.",
 		"Gói Growth giá 49 đô la cho 2.000 đơn hàng.",
 	} {
