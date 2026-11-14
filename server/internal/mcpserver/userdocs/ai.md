@@ -22,7 +22,9 @@ its switch. The switch turns the feature on or off and saves at once, and the pa
 **Undo**, which puts the switch back as it was. Turning on **Chat intake** asks first: a panel says what goes
 to the model, who processes it and how to turn it off, and the feature stays off until you tick the agreement
 and choose **Agree and turn on**. The agreement is the act of turning the feature on, which the history
-records with who did it; pictures and the customer's profile have their own switches (below). The rest of the row opens the
+records with who did it. **Undo** after you turned chat intake off puts it back on at once, without the panel:
+you agreed to it moments before, and the history records the change; once the **Saved** message is gone, the
+switch asks again. Pictures and the customer's profile have their own switches (below). The rest of the row opens the
 feature's settings in a panel beside the list: its provider and model, its automatic runs, its **Default for
 channels** and the channels that differ. Choices in the panel save at once; **Done** closes it. Without a
 provider yet, one notice offers **Add provider** and the setup guide. A switch that is off has its reason in

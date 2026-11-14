@@ -133,8 +133,9 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   page is what keeps Esc from leaving Settings. Inside a `.data-list` row the list's own rules would clip the menu
   (`.data-list span` hides overflow) and make every `div` a grid cell, so `row-menu.css` overrides both; a new row
   that holds a menu keeps it as a direct child of the row or inside an element whose overflow is visible.
-- The Saved toast sits above an open side sheet (z-index 35 over the sheet's 30): a switch inside a sheet says Saved and its Undo
-  must be reachable. Turning chat intake on goes through `ai-intake-consent.tsx`: the agreement is the act of turning the
+- The Saved toast of a switch pressed inside an open side sheet is drawn inside the sheet (its `[data-sheet-toast]` slot, above the
+  footer, by a portal from `SettingsEditsProvider`): a sheet traps Tab and covers the page, so a toast outside it could not be
+  reached with the keyboard and, on a phone, would lie over the sheet's Done button. Turning chat intake on goes through `ai-intake-consent.tsx`: the agreement is the act of turning the
   feature on (the history says who did it). The server holds a consent record only for pictures and the customer's profile
   (`ai_source_consents`), so that step never says a consent was stored.
 - Setup flow (`/setup`, owner decision 30/10/2026: Linear's onboarding, adapted): one step per screen, full
