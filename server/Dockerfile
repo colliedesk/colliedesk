@@ -35,7 +35,7 @@ COPY --from=web /src/server/internal/webui/static/build ./internal/webui/static/
 ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=${VERSION}" -o /out/collie ./cmd/collie
 
-FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=go /out/collie /app/collie
 RUN mkdir -p /data/attachments && chown -R 65532:65532 /data
