@@ -76,7 +76,7 @@ export function ChannelsRoute({ path, search, navigate }: ChannelsRouteProps) {
   else if (first === 'new') content = <NewChannel {...page} type={second ?? ''} />;
   else if (first === 'type') content = carriesChannelState(search) ? <TypeShortcut {...page} type={second ?? ''} search={search} /> : <TypeHome {...page} type={second ?? ''} search={search} />;
   else if (second === 'setup') content = <ChannelSetup {...page} id={first} step={search.step} />;
-  else content = <ChannelPage {...page} id={first} tab={search.tab} search={search} />;
+  else content = <ChannelPage key={first} {...page} id={first} tab={search.tab} search={search} />;
   return (
     <main className="settings-page panel channels-settings">
       <header><h1>{typeHome?.label ?? m.heading}</h1><p>{typeHome?.description ?? m.description}</p></header>
@@ -286,10 +286,13 @@ function TypeShortcut({ type, search, navigate }: PageProps & { type: string; se
   return <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>;
 }
 
+// The typed text of the forms that add a channel: web form, help chat, email address.
+const addFormGuards = ['web-form-add', 'web-form-name', 'help-chat-add', 'help-chat-name', 'address-form'];
+
 // useCreate adds a channel of a type and opens it: its setup when guided, else its page.
 function useCreate(type: string | undefined, navigate: PageProps['navigate']) {
   const client = useQueryClient();
-  // The channel is saved: the page it opens is not a question about the text that made it.
+  // The channel is saved: the page it opens is not a question about the text that made it (and about nothing else).
   const release = useReleaseUnsaved();
   const createChannel = useCreateAction((input: Parameters<typeof channelsApi.create>[0], key: string) => channelsApi.create(input, key));
   return (guided: boolean): ConnectProps['create'] => async (input, beforeOpen) => {
@@ -297,7 +300,7 @@ function useCreate(type: string | undefined, navigate: PageProps['navigate']) {
     // The channel exists from here: what beforeOpen could not do shows on its page, never undoes it.
     await beforeOpen?.(created).catch(() => undefined);
     await client.invalidateQueries({ queryKey: ['channels'] });
-    release();
+    release(...addFormGuards);
     navigate(`${base}/${created.id}${guided ? '/setup' : ''}`, true);
     return created;
   };
@@ -348,7 +351,7 @@ function ChannelSetup({ id, step, navigate, isAdmin, timezone }: PageProps & { i
     <a href={`${base}/type/${ui.type}`} className="ch-back">{ui.label}</a>
     <Part part={ui.panels} failed={<PartUnavailable />} render={({ Setup }) => (Setup
       ? <Setup channel={channel} step={step} canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} />
-      : <ChannelPage id={id} navigate={navigate} isAdmin={isAdmin} timezone={timezone} search={{}} />)} />
+      : <ChannelPage key={id} id={id} navigate={navigate} isAdmin={isAdmin} timezone={timezone} search={{}} />)} />
   </>;
 }
 

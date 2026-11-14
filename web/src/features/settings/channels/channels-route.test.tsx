@@ -402,8 +402,9 @@ test('a refused web form save shows the server message, not the generic failure'
   show(FORM);
   fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://changed.example.com' } });
   fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
-  // The field says it, and so does the bar.
-  await waitFor(() => expect(screen.getAllByText(/Invalid origin "\*": use an exact origin/).length).toBeGreaterThan(0));
+  // The field says it (an alert beside it), and so does the bar.
+  expect(await screen.findByRole('alert')).toHaveTextContent(/Invalid origin "\*": use an exact origin/);
+  expect(within(screen.getByRole('region', { name: 'Unsaved changes' })).getByText(/Invalid origin "\*": use an exact origin/)).toBeInTheDocument();
 });
 
 test('the web form save holds the bar on Saving… until the server answers, so a second press sends nothing', async () => {
@@ -1029,4 +1030,29 @@ test('a channel tab left with text typed in it keeps the text and the bar: the p
   expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false);
   view.rerender(page('embed'));
   expect(screen.getByRole('textbox', { name: /Allowed origins/i })).toHaveValue('https://typed.example.com');
+});
+
+
+test('text typed on one channel never reaches another: going to channel B shows B\'s own text with no bar, and Save on B sends nothing of A\'s', async () => {
+  const A = '66666666-6666-4666-8666-666666666666';
+  const B = '77777777-7777-4777-8777-777777777777';
+  const chat = (id: string, name: string) => ({ ...channel('web_form', { id, type: 'help_chat', name }), config: { ...helpChatConfig, channel_id: id, greeting: '' } });
+  channelsApi.get.mockImplementation((id: string) => Promise.resolve(id === A ? chat(A, 'Chat A') : chat(B, 'Chat B')));
+  channelsApi.update.mockResolvedValue(chat(B, 'Chat B'));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = (id: string) => <QueryClientProvider client={client}><ChannelsRoute path={id} search={{ tab: 'setup' }} navigate={vi.fn()} /></QueryClientProvider>;
+  // B was opened before, so its page can draw at once, as it does when it is reached through an \"Open\" link.
+  client.setQueryData(['channel', B], chat(B, 'Chat B'));
+  const view = render(page(A));
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Greeting' }), { target: { value: 'Typed for A' } });
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
+  view.rerender(page(B));
+  await screen.findByRole('heading', { name: 'Chat B' });
+  expect(screen.getByRole('textbox', { name: 'Greeting' })).toHaveValue('');
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Greeting' }), { target: { value: 'Typed for B' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  expect(channelsApi.update).toHaveBeenCalledWith(B, { config: expect.objectContaining({ greeting: 'Typed for B' }) });
+  expect(JSON.stringify(channelsApi.update.mock.calls)).not.toContain('Typed for A');
 });

@@ -301,14 +301,19 @@ test('an action that would drop typed text asks first, and only moves on when th
 
 function Releasing() {
   useUnsavedText('typed', true);
+  useUnsavedText('elsewhere', true);
   const release = useReleaseUnsaved();
-  return <button type="button" onClick={release}>Release</button>;
+  return <><button type="button" onClick={() => release('typed')}>Release</button><button type="button" onClick={() => release('elsewhere')}>Release the rest</button></>;
 }
 
 test('a page that opens the next one itself, right after its own save, releases the typed text first so it is not asked about', async () => {
   render(<SettingsEditsProvider><Releasing /></SettingsEditsProvider>);
   await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
   fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+  // Only the named text is released: what is typed elsewhere on the page still counts.
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Release the rest' })).toBeInTheDocument());
+  expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Release the rest' }));
   await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true));
 });
 
@@ -362,7 +367,7 @@ test('releasing the typed text and opening the next page in the same handler is 
     useUnsavedText('typed', true);
     const release = useReleaseUnsaved();
     const navigate = useNavigate();
-    return <button type="button" onClick={() => { release(); void navigate({ to: '/settings/general' as never }); }}>Create</button>;
+    return <button type="button" onClick={() => { release('typed'); void navigate({ to: '/settings/general' as never }); }}>Create</button>;
   }
   const account = createRoute({ getParentRoute: () => root, path: '/settings/account', component: () => <SettingsEditsProvider><Step /></SettingsEditsProvider> });
   const general = createRoute({ getParentRoute: () => root, path: '/settings/general', component: () => <p>General page</p> });
@@ -373,4 +378,14 @@ test('releasing the typed text and opening the next page in the same handler is 
   await act(async () => { fireEvent.click(create); });
   await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'));
   expect(confirm).not.toHaveBeenCalled();
+});
+
+
+test('the reason a Save was refused goes as soon as a field is edited again', async () => {
+  render(<SettingsEditsProvider><Field label="A" onSave={() => Promise.reject(new Refused('Too long.'))} /></SettingsEditsProvider>);
+  type('A', 'x');
+  fireEvent.click(screen.getByRole('button', { name: /^Save/ }));
+  expect(await within(bar()!).findByText('A: Too long.')).toBeInTheDocument();
+  type('A', 'xy');
+  await waitFor(() => expect(screen.queryByText('A: Too long.')).not.toBeInTheDocument());
 });

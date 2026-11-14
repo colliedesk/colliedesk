@@ -51,7 +51,7 @@ export function ForwardingName() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const save = useMutation({ mutationFn: api.updateWorkspaceSlug,
     // On the workspace's own host the desk moves with the name: continue on the new host, without asking about the name just saved.
-    onSuccess: (renamed) => renamed.continue_url ? (release(), leaveTo(renamed.continue_url))
+    onSuccess: (renamed) => renamed.continue_url ? (release(`name-step:${settingsMessages.workspaceAddressName}`), leaveTo(renamed.continue_url))
       : Promise.all(['me', 'email-channel'].map((key) => client.invalidateQueries({ queryKey: [key] }))) });
   if (!me.data) return null;
   return <NameForm label={settingsMessages.workspaceAddressName} saveLabel={settingsMessages.saveAddressName} hint={settingsMessages.addressNameWarning} value={me.data.workspace.slug} canManage

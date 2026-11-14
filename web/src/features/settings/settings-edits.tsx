@@ -36,7 +36,7 @@ interface SettingsEdits {
   guard: (id: string, on: boolean) => void;
   dropDrafts: (prefix: string) => void;
   isUnsaved: (id: string) => boolean;
-  releaseGuards: () => void;
+  releaseGuards: (...ids: string[]) => void;
   version?: number;
 }
 
@@ -87,8 +87,8 @@ export function useDropDrafts(): (prefix: string) => void {
 }
 
 // useReleaseUnsaved is for a step that saves and then opens the next page itself: call it just before, so the text that was
-// being saved is not asked about on the way out.
-export function useReleaseUnsaved(): () => void {
+// being saved is not asked about on the way out. It releases the named ones only: text typed elsewhere on the page still counts.
+export function useReleaseUnsaved(): (...ids: string[]) => void {
   return useContext(Edits).releaseGuards;
 }
 
@@ -167,7 +167,7 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
     for (const id of [...drafts.current.keys()]) if (id.startsWith(prefix)) drafts.current.delete(id);
     touch();
   }, [touch]);
-  const releaseGuards = useCallback(() => { guards.current.clear(); touch(); }, [touch]);
+  const releaseGuards = useCallback((...ids: string[]) => { for (const id of ids) guards.current.delete(id); touch(); }, [touch]);
   const isUnsaved = useCallback((id: string) => edits.current.has(id) || drafts.current.has(id) || guards.current.has(id), []);
   // The fields are saved one after the other: some pages keep one document that each save sends whole. A refusal
   // stops the run; that field says why and every field keeps what was typed.
@@ -230,6 +230,14 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
     window.addEventListener('beforeunload', onUnload);
     return () => window.removeEventListener('beforeunload', onUnload);
   }, [unsaved, anythingUnsaved]);
+  // The reason a Save was refused is about what was typed: typing again takes it away.
+  useEffect(() => {
+    if (!failure) return;
+    const clear = () => setFailure(undefined);
+    document.addEventListener('input', clear, true);
+    document.addEventListener('change', clear, true);
+    return () => { document.removeEventListener('input', clear, true); document.removeEventListener('change', clear, true); };
+  }, [failure]);
   useEffect(() => {
     if (!toast || toast.error) return;
     const timer = setTimeout(() => setToast(undefined), toastMilliseconds);

@@ -16,7 +16,7 @@ export function AddressForm({ canManage, named = false, initial = '', save, onSa
   const release = useReleaseUnsaved();
   const [name, setName] = useState('');
   const [address, setAddress] = useState(initial);
-  const mutation = useMutation({ mutationFn: () => save({ ...(named && name.trim() ? { name: name.trim() } : {}), address: address.trim() }), onSuccess: () => { release(); onSaved?.(); } });
+  const mutation = useMutation({ mutationFn: () => save({ ...(named && name.trim() ? { name: name.trim() } : {}), address: address.trim() }), onSuccess: () => { release('address-form'); onSaved?.(); } });
   // Typed and not yet saved: leaving the page asks, though the form has its own button. Once the save is accepted the page it
   // opens next is not a question, so the text is released first.
   useUnsavedText('address-form', name !== '' || address !== initial);
