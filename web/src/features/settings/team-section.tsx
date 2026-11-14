@@ -4,6 +4,7 @@ import { RoleCheckboxes } from './role-checkboxes';
 import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { useSaveChanges, useSettingsEdit } from './settings-edits';
 import { settingsMessages } from './settings-messages';
 import { displayNameMaxLength } from './display-name-field';
 import './role-pickers.css';
@@ -206,13 +207,15 @@ function ChangeRoles({ member, roles, myPermissions, lastAdmin, isSelf, onCancel
 
 function RenameForm({ member, onCancel, onSave }: { member: TeamMember; onCancel: () => void; onSave: (name: string) => void }) {
   const [draft, setDraft] = useState(member.display_name);
+  // The typed name is the page's unsaved change: the bar names it, and leaving the page asks first.
+  const saveChanges = useSaveChanges();
+  useSettingsEdit(`rename:${member.id}`, draft.trim() !== member.display_name ? { label: settingsMessages.teamRenameName(nameOf(member)), save: () => onSave(draft.trim()), discard: onCancel } : undefined);
   return (
-    <form className="form-row team-rename" onSubmit={(event) => { event.preventDefault(); onSave(draft.trim()); }}>
+    <form className="form-row team-rename" onSubmit={(event) => { event.preventDefault(); void saveChanges(); }}>
       {/* The field opens because the person asked for it, so it takes focus at once. */}
       <input aria-label={settingsMessages.teamDisplayNameOf(nameOf(member))} value={draft} maxLength={displayNameMaxLength} placeholder={member.email} autoFocus
         onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); }} />
       <span className="button-row">
-        <button type="submit">{settingsMessages.teamSaveName}</button>
         <button type="button" onClick={onCancel}>{settingsMessages.teamCancel}</button>
       </span>
     </form>

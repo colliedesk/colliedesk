@@ -1,8 +1,14 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
 import { ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import type { SavedReply, SavedReplyVersion, TrashedSavedReply } from '../../api/schemas';
 import { SavedRepliesSection } from './saved-replies-section';
+import { SettingsEditsProvider } from './settings-edits';
+
+// The form being filled is saved by the page's Save, which the provider draws.
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: SettingsEditsProvider });
+const pressSave = () => fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
 const reply = (id: string, title: string, body: string): SavedReply => ({
   id, title, body, created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z', last_change: null,
@@ -47,12 +53,15 @@ test('any agent adds one; the form closes once it is saved', async () => {
   const actions = handlers();
   render(<SavedRepliesSection replies={[]} {...actions} />);
   fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
-  const add = screen.getByRole('button', { name: 'Add saved reply' });
-  expect(add).toBeDisabled();
+  // Nothing typed, nothing to save: the page has no Save bar yet.
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
-  expect(add).toBeDisabled();
+  // A title alone is not a reply: Save says what is missing and sends nothing.
+  pressSave();
+  expect(await screen.findByRole('alert')).toHaveTextContent('A saved reply needs a title and its text.');
+  expect(actions.onCreate).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks for writing.' } });
-  fireEvent.click(add);
+  pressSave();
   expect(actions.onCreate).toHaveBeenCalledWith('Closing', 'Thanks for writing.');
   await waitFor(() => expect(screen.queryByLabelText('Title')).not.toBeInTheDocument());
   // Focus returns in an effect after the form unmounts.
@@ -69,7 +78,7 @@ test('a refused add keeps what was typed and shows the server reason', async () 
   fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'greeting' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Again' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  pressSave();
   expect(await screen.findByRole('alert')).toHaveTextContent('A saved reply with this title already exists.');
   expect(screen.getByLabelText('Title')).toHaveValue('greeting');
   expect(screen.getByLabelText('Text')).toHaveValue('Again');
@@ -82,7 +91,7 @@ test('a failure without a reason from the server shows a generic message', async
   fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'A' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'B' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  pressSave();
   expect(await screen.findByRole('alert')).toHaveTextContent('The saved reply could not be saved. Try again.');
 });
 
@@ -97,7 +106,7 @@ test('editing opens the reply in a form, saves both fields, and cancel changes n
   expect(within(form).getByLabelText('Title')).toHaveValue('Greeting');
   expect(within(form).getByLabelText('Text')).toHaveValue('Hi {{customer.name}}');
   fireEvent.change(within(form).getByLabelText('Text'), { target: { value: 'Hello {{customer.name}}' } });
-  fireEvent.click(within(form).getByRole('button', { name: 'Save saved reply' }));
+  pressSave();
   expect(actions.onUpdate).toHaveBeenCalledWith('1', { title: 'Greeting', body: 'Hello {{customer.name}}', updated_at: '2026-10-15T00:00:00Z' });
   await waitFor(() => expect(screen.queryByRole('form', { name: 'Edit Greeting' })).not.toBeInTheDocument());
 });
@@ -107,7 +116,8 @@ test('a refused edit stays open with the reason', async () => {
   actions.onUpdate.mockRejectedValue(new InvalidRequestError('Send a new title, new text, or both.'));
   render(<SavedRepliesSection replies={replies} {...actions} />);
   fireEvent.click(screen.getByRole('button', { name: 'Edit Greeting' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Save saved reply' }));
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Greeting 2' } });
+  pressSave();
   expect(await screen.findByRole('alert')).toHaveTextContent('Send a new title, new text, or both.');
   expect(screen.getByRole('form', { name: 'Edit Greeting' })).toBeInTheDocument();
 });
@@ -140,7 +150,7 @@ test('an edit made from an older version is refused, says who won, and Reload sh
   render(<SavedRepliesSection replies={replies} {...actions} />);
   fireEvent.click(screen.getByRole('button', { name: 'Edit Greeting' }));
   fireEvent.change(screen.getByLabelText('Text', { selector: 'form[aria-label="Edit Greeting"] textarea' }), { target: { value: 'My version' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save saved reply' }));
+  pressSave();
   expect(await screen.findByRole('alert')).toHaveTextContent('changed by someone else');
   expect(screen.getByRole('form', { name: 'Edit Greeting' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
@@ -243,7 +253,7 @@ test('Trash loads more replies on demand', async () => {
   expect(within(panel).getByText('Newer')).toBeInTheDocument();
 });
 
-test('three fast clicks on Add saved reply add it once, with no false refusal', async () => {
+test('three fast clicks on Save add the saved reply once, with no false refusal', async () => {
   const actions = handlers();
   let finish: () => void = () => undefined;
   actions.onCreate.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
@@ -251,7 +261,7 @@ test('three fast clicks on Add saved reply add it once, with no false refusal', 
   fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks for writing.' } });
-  const add = screen.getByRole('button', { name: 'Add saved reply' });
+  const add = screen.getByRole('button', { name: 'Save' });
   act(() => { add.click(); add.click(); add.click(); });
   expect(actions.onCreate).toHaveBeenCalledTimes(1);
   await act(async () => { finish(); });

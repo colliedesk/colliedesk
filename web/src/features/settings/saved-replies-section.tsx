@@ -5,6 +5,7 @@ import { formatDate } from '../../lib/format-date';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
 import { savedReplyMessages } from './saved-reply-messages';
+import { useSaveChanges, useSettingsEdit } from './settings-edits';
 import { settingsMessages } from './settings-messages';
 import './saved-replies.css';
 
@@ -73,6 +74,28 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
       setBusy(false);
     }
   };
+  // The form being filled or edited is the page's unsaved change: the bar names it, and leaving asks first. A refusal
+  // keeps the form open with the server's reason, and stops the page's Save.
+  const saveChanges = useSaveChanges();
+  const attempt = async (action: () => Promise<unknown>, done: () => void) => {
+    let saved = false;
+    await run(async () => { await action(); saved = true; }, done);
+    if (!saved) throw new Error('refused');
+  };
+  const typedReply = adding && (title !== '' || body !== '');
+  useSettingsEdit('saved-reply-new', typedReply ? { label: savedReplyMessages.newSavedReply,
+    discard: () => { setTitle(''); setBody(''); setProblem(undefined); closeAdd(); },
+    save: () => {
+      if (!title.trim() || !body.trim()) { setProblem(savedReplyMessages.titleAndTextRequired); return Promise.reject(new Error('invalid')); }
+      return attempt(() => onCreate(title, body), () => { setTitle(''); setBody(''); closeAdd(); });
+    } } : undefined);
+  const editedReply = editing ? replies.find((item) => item.id === editing.id) : undefined;
+  const changedReply = editing && editedReply && (editing.title !== editedReply.title || editing.body !== editedReply.body);
+  useSettingsEdit('saved-reply-edit', changedReply ? { label: editedReply.title, discard: () => { setEditing(null); setProblem(undefined); },
+    save: () => {
+      if (!editing.title.trim() || !editing.body.trim()) { setProblem(savedReplyMessages.titleAndTextRequired); return Promise.reject(new Error('invalid')); }
+      return attempt(() => onUpdate(editedReply.id, { title: editing.title, body: editing.body, updated_at: editedReply.updated_at }), () => setEditing(null));
+    } } : undefined);
   return (
     <section className="settings-card saved-replies" aria-labelledby="saved-replies-heading">
       <div className="section-heading"><h2 id="saved-replies-heading" className="sr-only">{messages.savedReplies}</h2><p>{savedReplyMessages.savedRepliesDescription}</p></div>
@@ -81,11 +104,10 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
         {stale && <div className="saved-reply-bar"><button type="button" onClick={() => { setEditing(null); setProblem(undefined); setStale(false); onReload?.(); }}>{settingsMessages.reload}</button></div>}
         {!editing && !adding && <div className="saved-reply-bar"><button type="button" ref={newButton} className="new-saved-reply" onClick={() => { setProblem(undefined); setAdding(true); }}>{savedReplyMessages.newSavedReply}</button></div>}
         {!editing && adding && <form className="saved-reply-form" aria-label={savedReplyMessages.addSavedReply}
-          onSubmit={(event) => { event.preventDefault(); if (!busy) void run(() => onCreate(title, body), () => { setTitle(''); setBody(''); closeAdd(); }); }}>
+          onSubmit={(event) => { event.preventDefault(); if (!busy) void saveChanges(); }}>
           <label className="field"><span>{savedReplyMessages.savedReplyTitle}</span><input autoFocus value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></label>
           <label className="field"><span>{savedReplyMessages.savedReplyText}</span><textarea rows={4} value={body} maxLength={20000} onChange={(event) => setBody(event.target.value)} /></label>
           <div className="saved-reply-actions">
-            <button className="primary-action" type="submit" disabled={busy || !title.trim() || !body.trim()}>{savedReplyMessages.addSavedReply}</button>
             <button type="button" disabled={busy} onClick={() => { closeAdd(); setProblem(undefined); }}>{messages.cancel}</button>
           </div>
         </form>}
@@ -93,11 +115,10 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
           <li key={reply.id}>
             {editing?.id === reply.id
               ? <form className="saved-reply-form" aria-label={savedReplyMessages.editSavedReplyName(reply.title)}
-                  onSubmit={(event) => { event.preventDefault(); if (!busy) void run(() => onUpdate(reply.id, { title: editing.title, body: editing.body, updated_at: reply.updated_at }), () => setEditing(null)); }}>
+                  onSubmit={(event) => { event.preventDefault(); if (!busy) void saveChanges(); }}>
                   <label className="field"><span>{savedReplyMessages.savedReplyTitle}</span><input value={editing.title} maxLength={200} onChange={(event) => setEditing({ ...editing, title: event.target.value })} /></label>
                   <label className="field"><span>{savedReplyMessages.savedReplyText}</span><textarea rows={4} value={editing.body} maxLength={20000} onChange={(event) => setEditing({ ...editing, body: event.target.value })} /></label>
                   <div className="saved-reply-actions">
-                    <button className="primary-action" type="submit" disabled={busy || !editing.title.trim() || !editing.body.trim()}>{savedReplyMessages.saveSavedReply}</button>
                     <button type="button" disabled={busy} onClick={() => { setEditing(null); setProblem(undefined); }}>{messages.cancel}</button>
                   </div>
                 </form>

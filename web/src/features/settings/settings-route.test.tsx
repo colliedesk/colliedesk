@@ -232,7 +232,7 @@ test('a plain agent manages the shared saved replies and the list reloads after 
   api.savedReplies.mockResolvedValue({ items: [stored] });
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledWith('Closing', 'Thanks.', expect.stringMatching(/^[\x21-\x7e]{1,200}$/)));
   expect(await screen.findByText('Thanks.')).toBeInTheDocument();
   api.savedReplies.mockResolvedValue({ items: [] });
@@ -251,9 +251,9 @@ test('adding a saved reply again after a failed request names the same submit, s
   fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByRole('alert')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledTimes(2));
   const [first, second] = api.createSavedReply.mock.calls as unknown as [string, string, string][];
   expect(first[2]).toEqual(expect.any(String));

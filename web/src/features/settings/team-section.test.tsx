@@ -1,9 +1,14 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render as renderPlain, screen, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
 import type { Role, TeamMember } from '../../api/schemas';
 import { permissionsOf, roleOf, rolesOf } from '../../test-roles';
 import { settingsMessages } from './settings-messages';
+import { SettingsEditsProvider } from './settings-edits';
 import { TeamSection } from './team-section';
+
+// A rename is saved by the page's Save, which the provider draws.
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: SettingsEditsProvider });
 
 const member = (overrides: Partial<TeamMember> & Pick<TeamMember, 'id' | 'email'>): TeamMember => ({
   display_name: '', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0, ...overrides,
@@ -216,7 +221,7 @@ test('Escape on the lock tip closes the tip only: Change roles stays open with i
   expect(screen.getByRole('checkbox', { name: /Agent/ })).toBeChecked();
 });
 
-test('an admin renames a member from their row, and saving an empty name clears it', () => {
+test('an admin renames a member from their row, and saving an empty name clears it', async () => {
   const onRename = vi.fn();
   render(<TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />);
   fireEvent.click(within(row('Bob Builder')).getByRole('button', { name: 'Rename Bob Builder' }));
@@ -230,7 +235,8 @@ test('an admin renames a member from their row, and saving an empty name clears 
 
   fireEvent.click(screen.getByRole('button', { name: 'Rename Bob Builder' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: '' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  // The bar says Saving… until the first save is answered.
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   expect(onRename).toHaveBeenLastCalledWith(bob.id, '');
 });
 

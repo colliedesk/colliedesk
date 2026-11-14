@@ -54,7 +54,6 @@ export const settingsMessages = {
   teamRename: 'Rename',
   teamRenameName: (name: string) => `Rename ${name}`,
   teamDisplayNameOf: (name: string) => `Display name of ${name}`,
-  teamSaveName: 'Save',
   teamLastAdmin: 'The only active member with the Admin role keeps it. Give Admin to someone else first.',
   teamApplyRole: 'Apply',
   teamApplyRoleFor: (name: string) => `Apply role for ${name}`,
