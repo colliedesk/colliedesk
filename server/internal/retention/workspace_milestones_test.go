@@ -49,38 +49,50 @@ func (e *env) trialEnded(t *testing.T, id string) string {
 	return ""
 }
 
-// The trial's end is computed when the workspace is read; the retention pass writes it down, at the moment
-// the trial ended, for every trial that ran out unless a subscription or a complimentary plan was already
-// in force before that moment. Paying after the end does not undo it.
-func TestTheRetentionPassRecordsATrialThatEndedOnceAtItsEnd(t *testing.T) {
-	e := newEnv(t)
-	ended := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
-	// Beta locked, then paid in October of the next year (the helper's change time), before the pass ran.
-	paysLater := e.workspace(t, "Beta", "2026-11-01T00:00:00Z", "carl@beta.example")
-	periodEnd := at("2026-12-01T00:00:00Z")
-	e.pay(t, paysLater.ID, "sub_beta", "active", &periodEnd)
-	// Delta had a complimentary plan from before its trial ended; Epsilon a subscription the reconcile stored
-	// (no paid event) that was last changed before the trial ended.
-	comp := e.workspace(t, "Delta", "2026-11-01T00:00:00Z", "dev@delta.example")
-	reconciled := e.workspace(t, "Epsilon", "2026-11-01T00:00:00Z", "eve@epsilon.example")
+// webhook stores one billing event for a workspace, as the server stores it when it applies a delivery, and sets
+// the moment it arrived, which the tests choose.
+func (e *env) webhook(t *testing.T, id, subscription, status, eventType, received, modified string) {
+	t.Helper()
+	if _, err := e.store.ApplySubscription(context.Background(), id, "hook-"+subscription+"-"+eventType, eventType, domain.Subscription{
+		Plan: domain.PlanTeam, SubscriptionID: subscription, CustomerID: "cus_" + subscription, Status: status, ModifiedAt: at(modified)}); err != nil {
+		t.Fatal(err)
+	}
 	err := e.db.Privileged(context.Background(), database.PrivilegeMigrate, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(context.Background(), `INSERT INTO workspace_comp_plans(workspace_id,plan,granted_by,granted_at) VALUES($1,'team','owner','2026-10-10T00:00:00Z')`, comp.ID); err != nil {
-			return err
-		}
-		_, err := tx.Exec(context.Background(), `INSERT INTO workspace_billing(workspace_id,polar_subscription_id,plan,polar_customer_id,status,current_period_end,source_modified_at)
-			VALUES($1,'sub_eps','team','cus_eps','active','2027-12-01T00:00:00Z','2026-10-25T00:00:00Z')`, reconciled.ID)
+		_, err := tx.Exec(context.Background(), `UPDATE billing_webhook_events SET received_at=$3 WHERE workspace_id=$1 AND webhook_id=$2`, id, "hook-"+subscription+"-"+eventType, at(received))
 		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// The trial's end is computed when the workspace is read; the retention pass writes it down, at the moment
+// the trial ended, only when it is proven that nothing paid or complimentary was in force before that moment.
+// Paying after the end does not undo it; what cannot be proven is left unwritten.
+func TestTheRetentionPassRecordsATrialThatEndedOnceAtItsEnd(t *testing.T) {
+	e := newEnv(t)
+	ended := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	// Beta locked, then its subscription was created on 10 November: the first billing event the server saw is a
+	// subscription.created that arrived after the end.
+	paysLater := e.workspace(t, "Beta", "2026-11-01T00:00:00Z", "carl@beta.example")
+	e.webhook(t, paysLater.ID, "sub_beta", "incomplete", "subscription.created", "2026-11-10T09:00:00Z", "2026-11-10T09:00:00Z")
+	e.webhook(t, paysLater.ID, "sub_beta", "active", "subscription.active", "2026-11-10T09:01:00Z", "2026-11-10T09:01:00Z")
 	// Gamma paid during its trial and cancelled later: its trial did not end unpaid.
 	converted := e.workspace(t, "Gamma", "2026-11-01T00:00:00Z", "dana@gamma.example")
-	for _, change := range []struct{ status, modified string }{{"active", "2026-10-20T00:00:00Z"}, {"canceled", "2026-11-20T00:00:00Z"}} {
-		if _, err := e.store.ApplySubscription(context.Background(), converted.ID, "hook-gamma-"+change.status, "subscription.updated", domain.Subscription{
-			Plan: domain.PlanTeam, SubscriptionID: "sub_gamma", CustomerID: "cus_gamma", Status: change.status, ModifiedAt: at(change.modified)}); err != nil {
-			t.Fatal(err)
-		}
+	e.webhook(t, converted.ID, "sub_gamma", "active", "subscription.active", "2026-10-20T00:00:00Z", "2026-10-20T00:00:00Z")
+	e.webhook(t, converted.ID, "sub_gamma", "canceled", "subscription.canceled", "2026-11-20T00:00:00Z", "2026-11-20T00:00:00Z")
+	// Delta had a complimentary plan from before its trial ended.
+	comp := e.workspace(t, "Delta", "2026-11-01T00:00:00Z", "dev@delta.example")
+	// Epsilon's subscription was active before the end but reached the server only through the reconcile, after
+	// the end, and was last modified after it too: the stored rows cannot show when it started.
+	reconciled := e.workspace(t, "Epsilon", "2026-11-01T00:00:00Z", "eve@epsilon.example")
+	e.webhook(t, reconciled.ID, "sub_eps", "active", "reconcile", "2026-11-05T00:00:00Z", "2026-11-05T00:00:00Z")
+	err := e.db.Privileged(context.Background(), database.PrivilegeMigrate, func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(), `INSERT INTO workspace_comp_plans(workspace_id,plan,granted_by,granted_at) VALUES($1,'team','owner','2026-10-10T00:00:00Z')`, comp.ID)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	e.run(t, "2026-10-31T23:59:59Z")
@@ -95,13 +107,29 @@ func TestTheRetentionPassRecordsATrialThatEndedOnceAtItsEnd(t *testing.T) {
 	if got := e.trialEnded(t, paysLater.ID); got != "trial_ended 2026-11-01T00:00:00Z" {
 		t.Fatalf("a workspace that locked and paid later: %q, want trial_ended at 2026-11-01T00:00:00Z", got)
 	}
-	for name, id := range map[string]string{"complimentary plan from before the end": comp.ID, "reconciled subscription from before the end": reconciled.ID} {
+	for name, id := range map[string]string{
+		"a subscription paid during the trial":               converted.ID,
+		"a complimentary plan from before the end":           comp.ID,
+		"a reconciled subscription that may predate the end": reconciled.ID,
+	} {
 		if got := e.trialEnded(t, id); got != "" {
 			t.Fatalf("%s: %q, want no trial_ended", name, got)
 		}
 	}
-	if got := e.trialEnded(t, converted.ID); got != "" {
-		t.Fatalf("a workspace that paid during its trial: %q, want no trial_ended", got)
+}
+
+// A payment or a reconcile may still be on its way when a trial ends: only a trial that ended at least an hour
+// ago is decided.
+func TestATrialThatEndedMinutesAgoIsNotDecidedYet(t *testing.T) {
+	e := newEnv(t)
+	w := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	e.run(t, "2026-11-01T00:30:00Z")
+	if got := e.trialEnded(t, w.ID); got != "" {
+		t.Fatalf("30 minutes after the end: %q, want nothing yet", got)
+	}
+	e.run(t, "2026-11-01T01:01:00Z")
+	if got := e.trialEnded(t, w.ID); got != "trial_ended 2026-11-01T00:00:00Z" {
+		t.Fatalf("an hour after the end: %q, want trial_ended at 2026-11-01T00:00:00Z", got)
 	}
 }
 

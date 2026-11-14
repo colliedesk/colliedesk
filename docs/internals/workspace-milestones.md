@@ -19,10 +19,10 @@ happens, by one rule in one place. A later change to the raw rows does not move 
 |---|---|---|---|
 | `signed_up` | A workspace is created (cloud sign-up, `create-workspace`): `auth.insertWorkspaceTx` | `workspaces.created_at` | |
 | `first_customer_message` | A channel stores an incoming message (`store` channel ingest) | the message's `created_at` | imported history (`origin` set); messages without a channel (problem reports); mail refused by the sender check (`authentication` = `fail`); Gmail's forwarding confirmation (`forwarding-noreply@google.com`); mail from one of the workspace's own agents, which is how the test message (`POST /api/v1/channels/email/test-message`) arrives; a message that arrives in a conversation already marked spam (see Traps for the backfill) |
-| `import_finished` | A full import run finishes with status `OK` (`results.MarkImportFinished`: in-app jobs and the CLI, Freshdesk and Help Scout), in the same transaction as the results baseline marker | the run's finish time | `FAILED`, `UNVERIFIED`, recent-tickets slices, dry runs |
-| `first_reply` | A reply is stored and its delivery is queued (`store.createMessage`), or a failed delivery is retried and queued (`store.retryDelivery`) | the message's `created_at` | notes; imported replies; the channel's own notices (`notice_kind`); messages with neither an author nor an agent token; replies in a conversation whose contact is one of the workspace's agents (the answer to a test message); a reply saved with a failed delivery (channel off, removed or not connected, customer without an address), until a retry queues it |
+| `import_finished` | A full import run finishes with status `OK`. The in-app job writes it in the transaction that ends the job as finished (`importjobs` worker, `results.RecordImportFinished`); the command line, Freshdesk and Help Scout, writes it right after the run and returns the error if that fails | the run's finish time | `FAILED`, `UNVERIFIED`, recent-tickets slices, dry runs |
+| `first_reply` | A reply is stored and its delivery is queued (`store.createMessage`), or a failed delivery is retried and queued (`store.retryDelivery`) | when the reply was queued to leave: the outbox row's creation, which a retry sets again | notes; imported replies; the channel's own notices (`notice_kind`); messages with neither an author nor an agent token; replies in a conversation whose contact is one of the workspace's agents (the answer to a test message); a reply with no delivery row, or only a failed one (channel off, removed or not connected, customer without an address), until a retry queues it |
 | `teammate_invited` | An invite is created for someone who is not a member yet (`auth.CreateInvite`) | the invite's `created_at` | an invite to an existing member (it changes their roles) |
-| `trial_ended` | The retention pass sees a trial that has run out (`retention.recordEndedTrials`) | `trial_ends_at` | a workspace with a subscription or complimentary plan already in force at `trial_ends_at` |
+| `trial_ended` | The retention pass sees a trial that ended at least an hour ago and proves nothing paid or complimentary was in force before the end (`retention.recordEndedTrials`) | `trial_ends_at` | a workspace where that cannot be proven |
 | `paid` | An applied Polar event makes a subscription `active` (`store.ApplySubscription`: webhook and reconcile) | the subscription's `modified_at` | `trialing`, `past_due` |
 | `cancelled` | An applied event sets a subscription to end (`cancel_at_period_end`) or ends it (`canceled`) | the subscription's `modified_at` | the later end of a subscription already set to end |
 
@@ -46,15 +46,20 @@ list is server configuration that the database does not hold, so an absent key m
   later than its `cancelled_at` is paying again.
 - **A trial ends at read time.** `domain.NewAccess` decides the lock when a workspace is read; nothing
   writes it. The retention pass writes `trial_ended`: every hour and at start of `serve`, only where
-  billing is on (`serve` starts it only when billing is on, and logs "workspace retention is not running" when its
-  setup fails; a self-hosted install never records it). `at` is the exact `trial_ends_at`, not the time of the pass, and the milestone is
-  decided at that moment: a workspace that locked and paid later still gets it. A workspace gets none when
-  a `paid` event, a stored subscription last changed before the end and still running, or a complimentary
-  plan granted before the end and still in force at it, exists. The pass stops writing for a workspace once
-  it has a `trial_ended` row, so the first one stays. It records nothing while the server is down, so a
-  lock is recorded up to an hour late, and a server that never runs the pass (billing off) records none.
-  The migration does not backfill `trial_ended`: the database does not know whether billing is on. The
-  first retention pass after the upgrade records every trial that already ended.
+  billing is on (`serve` starts it only when billing is on, and logs "workspace retention is not running"
+  when its setup fails; a self-hosted install never records it). `at` is the exact `trial_ends_at`. The pass
+  decides a trial only once it ended at least an hour ago, to let a payment or a reconcile that was on its way
+  arrive. It writes only when it is **proven** that nothing paid or complimentary was in force before the end,
+  and writes nothing when unsure: a missing milestone is found by the operator's reconcile, a false one is
+  permanent. Proven means: no `paid` event dated before the end; no complimentary plan granted before it; and
+  either no stored subscription, or the first billing event the server ever stored for the workspace is a
+  `subscription.created` that arrived after the end. A stored subscription has no start time
+  (`source_modified_at` is its last change), and a reconcile can store one that began before the end, so
+  any subscription without that proof leaves its start unknown. A workspace that locked and paid later still
+  gets `trial_ended`. The pass stops writing for a workspace once it has a row. It records nothing while the
+  server is down or billing is off. The migration does not backfill `trial_ended`: the database does not
+  know whether billing is on. The first retention pass after the upgrade records every trial that already
+  ended and is proven.
 - **A test message is told apart by its sender.** The product writes it from the signed-in agent's own
   address. Any mail from an address of one of the workspace's agents is left out for the same reason.
   The repo uses the same rule for the trial's first-contact exception (`contactIsProvenAgent`).
@@ -66,6 +71,13 @@ list is server configuration that the database does not hold, so an absent key m
   spam (the status at arrival). The stored rows do not say what the status was then, and a conversation's
   status now can be a later decision, so the backfill does not exclude spam at all. A workspace whose first
   inbound message was spam can therefore differ between the backfill and the live rule.
+- **A refused milestone never changes an import.** For an in-app import the milestone is written in the
+  same transaction as the end of the job. If that write is refused, the whole end rolls back: the job is
+  not failed, its report is not lost, and it stays claimed until its lease runs out; the next run runs the
+  full pass again (the ledger skips what is done, so it is quick; the trial extension and the links are
+  written by every run) and ends the job, writing the milestone with it. A refusal that never goes away
+  keeps the job from ending until the crash guard gives it up, which says so in the job's error. The
+  command line is operator-facing: it returns the error after the run and the operator runs it again.
 - **Import time in the backfill.** An in-app import job keeps its own finish time: the backfill uses the
   first job that finished `OK`. An import run from the command line keeps no run record; only the results
   baseline's anchor, the finish of the first full run of that source, survives. The backfill uses it only
@@ -73,9 +85,12 @@ list is server configuration that the database does not hold, so an absent key m
   when an earlier run failed, the true first OK finish is later than the anchor and not stored.
 - **Billing in the backfill.** The log of each transition is not stored, only the last state of each
   subscription and the webhook ids. The backfill writes at most one `paid` and one `cancelled` per
-  workspace, from the subscriptions as stored now: a stale webhook the server stored but did not apply
-  makes no event, a subscription made active by the reconcile (no webhook) counts at the time it last
-  changed, and a revoke counts as a cancel. A cancel followed by a resume is not replayed.
+  workspace. `paid` comes from a subscription whose status is `active` now, or that has a
+  `subscription.active` webhook behind it (a webhook names no subscription, so it counts only for a
+  workspace with a single stored subscription, and never for one still `incomplete`). `past_due`,
+  `unpaid`, `paused` and `trialing` alone are no payment. A subscription made active by the reconcile (no
+  webhook) counts at the time it last changed, and a revoke counts as a cancel. A cancel followed by a
+  resume is not replayed.
 - **Self-host works the same.** Billing kinds and `trial_ended` never occur where billing is off.
 - **Deploy order.** The cloud runs `collie migrate && collie serve` in one container, and a compose
   update replaces the container, so the old binary does not serve while the migration runs. A rolling

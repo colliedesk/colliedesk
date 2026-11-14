@@ -210,14 +210,18 @@ func (r *run) finish(ctx context.Context, report *Report) (*Report, error) {
 	if options.DryRun {
 		return report, r.checkDryRunStorage(ctx, report)
 	}
-	// A full run finished: the results page measures its baseline from it, and an OK run is the workspace's
-	// import_finished milestone, written in the same transaction. The import is committed, so the report is
-	// returned with the error: the run fails loudly instead of leaving the workspace without its milestone,
-	// and a rerun marks both again.
+	// A full run finished: the results page measures its baseline from it; the next run marks it again when
+	// this fails. An OK run is also the workspace's import_finished milestone. The in-app job writes that with
+	// the end of its own record (MilestoneByCaller); from the command line the failure is returned, with the
+	// report, because the operator can run it again.
 	if options.Mode != ModeRecent {
 		if err := r.markResults(ctx, report.Status, report.UnverifiedCause()); err != nil {
 			log.Printf("freshdesk import: results baseline not marked for workspace %s: %v", options.WorkspaceSlug, err)
-			return report, fmt.Errorf("record the finished import: %w", err)
+		}
+		if report.Status == StatusOK && !options.MilestoneByCaller {
+			if err := r.recordFinished(ctx); err != nil {
+				return report, fmt.Errorf("record the finished import: %w", err)
+			}
 		}
 	}
 	// The import is already committed; a failed extension must not hide its report. A rerun retries.

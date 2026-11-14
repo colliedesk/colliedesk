@@ -9,15 +9,23 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// recordEndedTrials writes the trial_ended milestone of every workspace whose trial has run out, at the
-// moment the trial ended. A trial ends at read time (domain.NewAccess), so no write marks it; this pass,
-// which runs only where billing is on, is where the fact is first seen. The milestone is decided at the
-// trial's end, not at the time of the pass: a workspace that locked and paid later still gets it. Only a
-// workspace with a subscription or a complimentary plan already in force at the trial's end converted and
-// gets none: it has a paid event before that moment, or a stored subscription last changed before it and
-// still running (a reconcile may store one without a paid event), or a complimentary plan granted before it
-// and not revoked or expired by it. The first trial end recorded stays (a trial offer that reopens it
-// changes nothing).
+// trialDecisionGrace is how long a trial must have ended before its milestone is decided: a payment or a
+// reconcile that was already on its way when the trial ended reaches the server within it.
+const trialDecisionGrace = time.Hour
+
+// recordEndedTrials writes the trial_ended milestone of every workspace whose trial ended at least an hour
+// ago, at the moment the trial ended. A trial ends at read time (domain.NewAccess), so no write marks it; this
+// pass, which runs only where billing is on, is where the fact is first seen. It writes only when it is proven
+// that nothing paid or complimentary was in force before the end; when that cannot be shown it writes nothing,
+// because a missing milestone is found by the reconcile and a false one stays for good. A workspace that locked
+// and paid later still gets it. It is proven when:
+//   - no paid event is dated before the end, and no complimentary plan was granted before it; and
+//   - the workspace has no stored subscription, or the first billing event the server ever stored for it is a
+//     subscription.created that arrived after the end. A stored subscription has no start time (source_modified_at
+//     is its last change), and a reconcile or an update can store one that began before the end, so any other
+//     first event, or none, leaves its start unknown.
+//
+// The first trial end recorded stays (a trial offer that reopens it changes nothing).
 func (s *Service) recordEndedTrials(ctx context.Context, now time.Time) error {
 	err := s.config.DB.Privileged(ctx, database.PrivilegeRetention, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `INSERT INTO workspace_events(workspace_id,kind,at,source)
@@ -25,12 +33,12 @@ func (s *Service) recordEndedTrials(ctx context.Context, now time.Time) error {
 			WHERE w.trial_ends_at <= $1
 				AND NOT EXISTS (SELECT 1 FROM workspace_events e WHERE e.workspace_id = w.id AND e.kind = 'trial_ended')
 				AND NOT EXISTS (SELECT 1 FROM workspace_events p WHERE p.workspace_id = w.id AND p.kind = 'paid' AND p.at < w.trial_ends_at)
-				AND NOT EXISTS (SELECT 1 FROM workspace_billing b WHERE b.workspace_id = w.id AND b.source_modified_at < w.trial_ends_at
-					AND b.status IN ('active','trialing','past_due') AND (b.ended_at IS NULL OR b.ended_at > w.trial_ends_at))
-				AND NOT EXISTS (SELECT 1 FROM workspace_comp_plans c WHERE c.workspace_id = w.id AND c.granted_at < w.trial_ends_at
-					AND (c.revoked_at IS NULL OR c.revoked_at > w.trial_ends_at) AND (c.until IS NULL OR c.until > w.trial_ends_at))
+				AND NOT EXISTS (SELECT 1 FROM workspace_comp_plans c WHERE c.workspace_id = w.id AND c.granted_at <= w.trial_ends_at)
+				AND (NOT EXISTS (SELECT 1 FROM workspace_billing b WHERE b.workspace_id = w.id)
+					OR COALESCE((SELECT f.event_type = 'subscription.created' AND f.received_at > w.trial_ends_at
+						FROM billing_webhook_events f WHERE f.workspace_id = w.id ORDER BY f.received_at, f.webhook_id LIMIT 1), false))
 			ORDER BY w.trial_ends_at, w.id
-			ON CONFLICT (workspace_id, kind) WHERE kind NOT IN ('paid','cancelled') DO NOTHING`, now)
+			ON CONFLICT (workspace_id, kind) WHERE kind NOT IN ('paid','cancelled') DO NOTHING`, now.Add(-trialDecisionGrace))
 		return err
 	})
 	if err != nil {

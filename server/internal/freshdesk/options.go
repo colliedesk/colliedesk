@@ -70,6 +70,10 @@ type Options struct {
 	PaidStorageBytes int64
 	// PlansOnSale are the plans the server sells; a storage refusal names the next one with more storage.
 	PlansOnSale []string
+	// MilestoneByCaller leaves the import_finished milestone to the caller, which writes it in the transaction
+	// that ends its own record of the run (the in-app job). Without it the importer writes the milestone after
+	// the run and returns the error when that fails: the command line is operator-facing.
+	MilestoneByCaller bool
 	// Now is the clock of the trial extension; nil means time.Now.
 	Now func() time.Time
 

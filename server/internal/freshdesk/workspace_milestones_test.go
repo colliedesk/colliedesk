@@ -102,3 +102,16 @@ func TestAnImportWhoseFinishCannotBeRecordedReturnsTheError(t *testing.T) {
 		t.Fatalf("milestones after the rerun = %v, want one import_finished", got)
 	}
 }
+
+// The in-app job writes the milestone with the end of its own record: the importer then writes none, so a
+// refused milestone can never change how the run ends.
+func TestAnImportThatLeavesTheMilestoneToItsCallerWritesNone(t *testing.T) {
+	env := newImportEnv(t)
+	report, err := env.run(t, context.Background(), func(options *freshdesk.Options) { options.MilestoneByCaller = true })
+	if err != nil || report.Status != freshdesk.StatusOK {
+		t.Fatalf("run: %v %+v, want OK", err, report)
+	}
+	if got := env.milestones(t); len(got) != 0 {
+		t.Fatalf("milestones = %v, want none: the caller writes it", got)
+	}
+}

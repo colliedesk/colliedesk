@@ -58,14 +58,18 @@ const liveCustomerMessage = `m.kind='incoming' AND m.origin IS NULL AND m.channe
 	AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.workspace_id=m.workspace_id AND a.email=lower(m.email_meta->>'from'))
 	AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.workspace_id=m.workspace_id AND c.id=m.conversation_id AND c.status='spam')`
 
+// queuedAt is when the reply m was queued to leave Colliedesk: the created_at of its outbox row, which a retry
+// sets again. It is NULL for a reply with no outbox row or only a failed one (channel off, removed or not
+// connected, customer without an address, a type that carries no reply), which never left.
+const queuedAt = `(SELECT min(o.created_at) FROM channel_outbox o WHERE o.workspace_id=m.workspace_id AND o.message_id=m.id AND o.status<>'failed')`
+
 // teamReply is true for a message m that a person or an agent token wrote to a customer in Colliedesk
-// and that left it: not imported, not a note, not the channel's own notice, not saved with a failed
-// delivery (the channel is off, removed or not connected, or the customer has no address there; a retry
-// that queues it records it then), and not in a conversation whose customer is one of the workspace's
-// agents (the answer to a test message).
+// and that left it: not imported, not a note, not the channel's own notice, queued by a delivery that has not
+// failed (queuedAt), and not in a conversation whose customer is one of the workspace's agents (the answer to
+// a test message). A reply saved with a failed delivery is recorded when its retry queues it.
 const teamReply = `m.kind='outgoing' AND m.origin IS NULL AND m.notice_kind IS NULL
 	AND (m.author_agent_id IS NOT NULL OR m.agent_token_id IS NOT NULL)
-	AND NOT EXISTS (SELECT 1 FROM channel_outbox o WHERE o.workspace_id=m.workspace_id AND o.message_id=m.id AND o.status='failed')
+	AND ` + queuedAt + ` IS NOT NULL
 	AND NOT EXISTS (SELECT 1 FROM conversations c
 		JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
 		JOIN agents a ON a.workspace_id=c.workspace_id AND a.email=lower(k.email)
@@ -85,10 +89,11 @@ func RecordCustomerMessage(ctx context.Context, tx pgx.Tx, workspaceID, messageI
 }
 
 // RecordReply records the workspace's first reply when messageID, stored in tx with its outbox row, is one
-// (teamReply), at the time the message carries. Call it after the delivery is queued or has failed.
+// (teamReply), at the time the reply was queued to leave (queuedAt: for a retry, the retry's time). Call it
+// after the delivery is queued or has failed.
 func RecordReply(ctx context.Context, tx pgx.Tx, workspaceID, messageID string) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO workspace_events(workspace_id,kind,at,source,detail)
-		SELECT m.workspace_id,$2::text,m.created_at,'app',jsonb_build_object('message_id',m.id,'conversation_id',m.conversation_id)
+		SELECT m.workspace_id,$2::text,`+queuedAt+`,'app',jsonb_build_object('message_id',m.id,'conversation_id',m.conversation_id)
 		FROM messages m WHERE m.workspace_id=$1::uuid AND m.id=$3::uuid AND `+teamReply+` AND `+notRecordedYet+onConflict,
 		workspaceID, string(FirstReply), messageID); err != nil {
 		return fmt.Errorf("record milestone %s: %w", FirstReply, err)

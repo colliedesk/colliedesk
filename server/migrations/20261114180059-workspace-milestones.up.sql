@@ -110,21 +110,22 @@ FROM (
 ORDER BY f.workspace_id, f.at;
 
 -- A reply a person or an agent token wrote in Colliedesk that left it: not imported, not the channel's own
--- notice, not saved with a failed delivery (channel off, removed, not connected, no recipient), and not to a
--- conversation whose customer is one of the workspace's agents (the answer to a test message). A failed
--- delivery that a retry queued later is no longer failed and counts.
+-- notice, queued by a delivery that is not failed (a reply saved with a failed delivery, or with no outbox row,
+-- never left), and not to a conversation whose customer is one of the workspace's agents (the answer to a test
+-- message). Its time is when it was queued: the outbox row's creation, which a retry sets again.
 INSERT INTO workspace_events(workspace_id, kind, at, source, detail)
-SELECT DISTINCT ON (m.workspace_id) m.workspace_id, 'first_reply', m.created_at, 'backfill',
+SELECT DISTINCT ON (m.workspace_id) m.workspace_id, 'first_reply', q.at, 'backfill',
     jsonb_build_object('message_id', m.id, 'conversation_id', m.conversation_id)
 FROM messages m
-WHERE m.kind = 'outgoing' AND m.origin IS NULL AND m.notice_kind IS NULL AND m.created_at IS NOT NULL
+CROSS JOIN LATERAL (SELECT min(o.created_at) AS at FROM channel_outbox o
+    WHERE o.workspace_id = m.workspace_id AND o.message_id = m.id AND o.status <> 'failed') q
+WHERE m.kind = 'outgoing' AND m.origin IS NULL AND m.notice_kind IS NULL AND q.at IS NOT NULL
     AND (m.author_agent_id IS NOT NULL OR m.agent_token_id IS NOT NULL)
-    AND NOT EXISTS (SELECT 1 FROM channel_outbox o WHERE o.workspace_id = m.workspace_id AND o.message_id = m.id AND o.status = 'failed')
     AND NOT EXISTS (SELECT 1 FROM conversations c
         JOIN contacts k ON k.workspace_id = c.workspace_id AND k.id = c.contact_id
         JOIN agents a ON a.workspace_id = c.workspace_id AND a.email = lower(k.email)
         WHERE c.workspace_id = m.workspace_id AND c.id = m.conversation_id)
-ORDER BY m.workspace_id, m.created_at, m.id;
+ORDER BY m.workspace_id, q.at, m.id;
 
 -- An invite to someone who was not a member yet (an invite to a member names them in agent_id).
 INSERT INTO workspace_events(workspace_id, kind, at, source, detail)
@@ -137,20 +138,26 @@ ORDER BY workspace_id, created_at, id;
 -- server stored but did not apply: its subscription says otherwise) makes no event. The server records every
 -- transition; the stored rows keep only the last state, so the backfill writes at most one paid and one
 -- cancelled per workspace and a cancel followed by a resume is not replayed.
--- paid: a subscription that is, or ended after being, a paying one: status active, past_due, unpaid or
--- paused, or canceled with an active webhook behind it (a canceled one that never paid has none). Its time is
--- the first subscription.active webhook, else when the subscription last changed (applied by the reconcile).
--- A subscription that is only trialing or incomplete is no payment, whatever webhook arrived.
+-- paid, per subscription: a subscription whose status is active now, or one with a subscription.active webhook
+-- behind it. A webhook names no subscription, so it counts for a workspace with exactly one stored subscription;
+-- with several, only the ones active now count. past_due, unpaid, paused, trialing and incomplete alone are no
+-- payment, and a subscription still incomplete never became active, whatever webhook arrived. The time is the first subscription.active webhook of such a single-subscription workspace, else when
+-- the subscription last changed (a reconcile stores an active one without a webhook). The earliest of a
+-- workspace's subscriptions is its paid event.
 INSERT INTO workspace_events(workspace_id, kind, at, source)
-SELECT b.workspace_id, 'paid', min(COALESCE(b.first_active, b.source_modified_at)), 'backfill'
+SELECT b.workspace_id, 'paid', min(b.at), 'backfill'
 FROM (
-    SELECT s.workspace_id, s.status, s.source_modified_at,
-        (SELECT min(e.received_at) FROM billing_webhook_events e WHERE e.workspace_id = s.workspace_id AND e.event_type = 'subscription.active') AS first_active
+    SELECT s.workspace_id, COALESCE(a.first_active, s.source_modified_at) AS at, s.status
     FROM workspace_billing s
+    LEFT JOIN LATERAL (
+        SELECT min(e.received_at) AS first_active FROM billing_webhook_events e
+        WHERE e.workspace_id = s.workspace_id AND e.event_type = 'subscription.active'
+            AND (SELECT count(*) FROM workspace_billing n WHERE n.workspace_id = s.workspace_id) = 1
+    ) a ON true
+    WHERE s.status = 'active' OR (a.first_active IS NOT NULL AND s.status NOT IN ('incomplete', 'incomplete_expired'))
 ) b
-WHERE b.status IN ('active', 'past_due', 'unpaid', 'paused') OR (b.status = 'canceled' AND b.first_active IS NOT NULL)
 GROUP BY b.workspace_id
-ORDER BY min(COALESCE(b.first_active, b.source_modified_at)), b.workspace_id;
+ORDER BY min(b.at), b.workspace_id;
 
 -- cancelled: a subscription set to end at its period's end, or ended (status canceled, which a revoke and the
 -- reconcile also set). Its time is the first cancel or revoke webhook, else when the subscription ended or

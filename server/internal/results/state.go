@@ -15,8 +15,7 @@ import (
 // MarkImportFinished records that a full run of an import finished, in the importer's transaction.
 // The first source to finish becomes the baseline and its finish time the anchor, which no later run
 // moves; any run of that source (a re-run) marks the baseline to compute again with its status. A
-// run of another source changes nothing. A run that finished OK also records the workspace's
-// import_finished milestone, once: the first OK finish wins.
+// run of another source changes nothing.
 func MarkImportFinished(ctx context.Context, tx pgx.Tx, workspaceID, source, status, cause string, finishedAt time.Time) error {
 	var importStatus, importCause any
 	switch status {
@@ -39,12 +38,16 @@ func MarkImportFinished(ctx context.Context, tx pgx.Tx, workspaceID, source, sta
 		workspaceID, source, finishedAt.UTC(), importStatus, importCause); err != nil {
 		return fmt.Errorf("mark the results baseline: %w", err)
 	}
-	// Only a run that finished OK brought the history in; FAILED and UNVERIFIED are not proven complete.
-	if status == "OK" {
-		importer, _, _ := strings.Cut(source, ":")
-		return milestones.Record(ctx, tx, workspaceID, milestones.ImportFinished, finishedAt, map[string]any{"importer": importer})
-	}
 	return nil
+}
+
+// RecordImportFinished records the workspace's import_finished milestone for a full run that finished OK, once:
+// the first OK finish wins. It is separate from MarkImportFinished so that a caller writes it in the
+// transaction that ends its own record of the run (the in-app job), and a refused milestone never changes what
+// the run did or how it ended for the person who started it.
+func RecordImportFinished(ctx context.Context, tx pgx.Tx, workspaceID, source string, finishedAt time.Time) error {
+	importer, _, _ := strings.Cut(source, ":")
+	return milestones.Record(ctx, tx, workspaceID, milestones.ImportFinished, finishedAt, map[string]any{"importer": importer})
 }
 
 // MarkImportUndone forgets the baseline when its import is undone, in the undo's transaction: the
