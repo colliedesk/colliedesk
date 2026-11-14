@@ -292,6 +292,11 @@ a job (no imported-conversation count), keeping its state and code; the third `e
 the same write. A job found with `cancel_requested_at` (its cancelled end did not commit) ends `cancelled`
 without asking Freshdesk again.
 
+A preview's own end (`previewed`, with the Freshdesk agents it read in `import_people`) is the one
+end with other writes that does not wait: a `previewing` claim does not count toward `no_progress`, so a
+refused write would keep the claim and read Freshdesk again each lease, for ever. It fails at once with
+`end_failed` (`end_failures` 1), written with only the columns that end a job; the person asks again.
+
 ### Lease
 
 The claim crosses workspaces (`PrivilegeImportJobClaim`) and returns only ids; everything else runs

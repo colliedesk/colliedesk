@@ -9133,7 +9133,7 @@ components:
             API calls), freshdesk_unavailable, import_running_elsewhere, retrying_failed_items,
             storage_cap, knowledge_base_limit, key_unavailable, no_progress, end_failed (the server could
             not record the end of the import; it waits and tries again, then fails with what was imported
-            kept) or import_error.
+            kept; a preview whose result it could not record fails with it at once) or import_error.
         error_message: {type: [string, 'null']}
         imported_conversations:
           type: [integer, 'null']

@@ -288,6 +288,8 @@ If the server cannot record the end of an import (a database fault, not a Freshd
 says so and when the import tries again. After three tries the import stops with what it brought in kept
 and its reconcile report shown; start a new import to finish it (nothing is copied twice), or report the
 problem. An undo whose end cannot be recorded tries again the same way and removes nothing twice.
+A preview whose result cannot be recorded stops at once and says so: Freshdesk was read, nothing was
+imported, and **Try again** reads it again.
 
 **Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or
 undo it. Only one import or undo runs in a workspace at a time.
