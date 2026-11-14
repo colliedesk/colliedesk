@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { ReactNode } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AIChatSession, AIChatSummary, AIChatUsage } from '../../api/ai';
+import { SettingsEditsProvider } from './settings-edits';
 import { AIChatPanel, ChatTranscript } from './ai-chat-panel';
 import { permissionsOf, rolesOf } from '../../test-roles';
 import { AIChatSettingsRoute } from './ai-chat-route';
@@ -25,7 +26,7 @@ const usage = (change: Partial<AIChatUsage> = {}): AIChatUsage => ({
 
 function wrap(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{children}</QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><SettingsEditsProvider>{children}</SettingsEditsProvider></QueryClientProvider>);
 }
 
 beforeEach(() => {
@@ -114,14 +115,14 @@ test('on a workspace key an admin sets the monthly spend limit in dollars, and e
   wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, auto_parts: [] }} onSetCap={setCap} />);
   const field = await screen.findByRole('textbox', { name: 'Monthly spend limit (US dollars)' });
   fireEvent.change(field, { target: { value: 'ten' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save limit' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(setCap).not.toHaveBeenCalled();
   expect(field.getAttribute('aria-invalid')).toBe('true');
   fireEvent.change(field, { target: { value: '12.5' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save limit' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(setCap).toHaveBeenCalledWith(12_500_000));
   fireEvent.change(field, { target: { value: '' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save limit' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(setCap).toHaveBeenLastCalledWith(null));
 });
 

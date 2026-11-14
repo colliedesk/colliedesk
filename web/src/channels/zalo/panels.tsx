@@ -11,6 +11,8 @@ import { formatDate } from '../../lib/format-date';
 import { Dialog, Field } from '../../ui/dialog';
 import { LockIcon, PlusIcon } from '../../ui/icons';
 import type { ChannelPanelProps, ConnectProps } from '../registry';
+import { useInstantSave, useSaveChanges, useSettingsEdit } from '../../features/settings/settings-edits';
+import { settingsMessages } from '../../features/settings/settings-messages';
 import { zaloMessages as m } from './zalo-messages';
 import type { CommandAction, CommandMatch, SecretName } from './zalo-messages';
 import './zalo.css';
@@ -214,14 +216,15 @@ function References({ channel, canManage }: ChannelPanelProps) {
   // A code's {yyyy} is the year where the workspace is, not the agent's own time zone.
   const workspaceZone = useQuery({ queryKey: ['me'], queryFn: api.me }).data?.workspace.timezone ?? 'UTC';
   const current = text(record(channel.effective_settings).number_series) || 'default';
-  const [chosen, setChosen] = useState(current);
-  useEffect(() => setChosen(current), [current]);
   const reload = useReload(channel.id);
   const save = useMutation({
-    mutationFn: () => channelsApi.update(channel.id, { settings: { ...record(channel.settings), number_series: chosen } }),
+    mutationFn: (number_series: string) => channelsApi.update(channel.id, { settings: { ...record(channel.settings), number_series } }),
     onSuccess: () => reload(),
   });
-  const feedback = useSaveFeedback(saveState(save));
+  // A pick from the list saves at once; the page says Saved with an Undo.
+  const instant = useInstantSave();
+  const chosen = save.isPending ? save.variables : current;
+  const feedback = useSaveFeedback({ ...saveState(save), saved: false });
   const id = useId();
   const items = series.data?.items ?? [];
   const picked = items.find((item) => item.series === chosen);
@@ -230,13 +233,13 @@ function References({ channel, canManage }: ChannelPanelProps) {
   return <section className="zl-block" aria-labelledby={`${id}-refs`}><h3 id={`${id}-refs`}>{m.references}</h3>
     <p className="lead">{m.referencesLead}</p>
     {series.isError ? <p role="alert" className="error-copy">{m.seriesFailed} <button type="button" className="link-action" onClick={() => void series.refetch()}>{m.tryAgain}</button></p>
-      : canManage ? <form className="zl-series" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending && chosen !== current) save.mutate(); }}>
+      : canManage ? <form className="zl-series" onSubmit={(event) => event.preventDefault()}>
           <Field id={`${id}-series`} label={m.series} error={fieldErrors(save.error)['settings.number_series']} help={next ? m.nextReference(next) : undefined}>
-            {(props) => <select {...props} value={chosen} disabled={series.isPending} onChange={(event) => { feedback.touch(); setChosen(event.target.value); }}>
+            {(props) => <select {...props} value={chosen} disabled={series.isPending} onChange={(event) => { feedback.touch(); void instant(save.mutateAsync, event.target.value, current); }}>
               {(items.some((item) => item.series === current) ? items : [...items, { series: current, format: '' }]).map((item) =>
                 <option key={item.series} value={item.series}>{item.format ? `${label(item.series)} (${item.format})` : label(item.series)}</option>)}
             </select>}</Field>
-          <span className="button-row"><button type="submit" disabled={feedback.pending || chosen === current}>{feedback.saveLabel(m.saveSeries)}</button>{feedback.status}</span>
+          {feedback.status}
         </form>
       : <dl className="zl-dl"><dt>{m.series}</dt><dd>{label(current)}{next ? <> · <span className="mono">{m.nextReference(next)}</span></> : null}</dd></dl>}
     <p className="muted-copy"><a href="/settings/general#numbers-heading">{m.manageSeries}</a></p>
@@ -536,7 +539,13 @@ function nextSettings(channel: ChannelDetail, edits: { commands: Record<CommandA
   return next;
 }
 
-function Messages({ channel, canManage }: ChannelPanelProps) {
+// Messages remounts its form on Discard, which puts every field back to what the channel has.
+function Messages(props: ChannelPanelProps) {
+  const [version, setVersion] = useState(0);
+  return <MessagesForm key={version} {...props} onDiscard={() => setVersion((n) => n + 1)} />;
+}
+
+function MessagesForm({ channel, canManage, onDiscard }: ChannelPanelProps & { onDiscard: () => void }) {
   const effective = record(channel.effective_settings);
   const notices = record(effective.notices);
   const direct = record(record(effective.scopes).direct);
@@ -581,7 +590,10 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
       expireSeconds: expireTouched ? seconds(expire) * 60 : undefined }) }),
     onSuccess: () => reload(),
   });
-  const feedback = useSaveFeedback(saveState(save));
+  // Any change to a field marks the form as unsaved, which the page's Save bar names.
+  const [unsaved, setUnsaved] = useState(false);
+  const base = useSaveFeedback(saveState(save));
+  const feedback = { ...base, touch: () => { base.touch(); setUnsaved(true); } };
   const id = useId();
   const server = fieldErrors(save.error);
   // The quiet wait comes before the question and before asking for a description: it shows while either is used.
@@ -602,6 +614,13 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
     });
   };
   const commandError = (draft: Draft) => Object.entries(server).find(([field]) => field.startsWith(`settings.commands.${draft.key}`))?.[1];
+  const saveChanges = useSaveChanges();
+  const invalid = quietBad || waitBad || expireBad || questionBad || everyBad(helpEvery) || everyBad(unmatchedEvery) || autoCloseBad;
+  useSettingsEdit('zalo-messages', canManage && unsaved ? { label: m.messagesLabel, discard: onDiscard, save: () => {
+    setChecked(true);
+    if (invalid) return Promise.reject(new Error('invalid'));
+    return save.mutateAsync().then(() => setUnsaved(false));
+  } } : undefined);
   if (!canManage) {
     return <div className="settings-body">
       <p className="notice notice-plain" role="note"><span>{m.messagesAdminsOnly}</span></p>
@@ -627,7 +646,7 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
     </div>;
   }
   const edit = (action: CommandAction, change: Partial<Draft>) => { feedback.touch(); setCommands((all) => ({ ...all, [action]: { ...all[action], ...change } })); };
-  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); setChecked(true); if (!feedback.pending && !quietBad && !waitBad && !expireBad && !questionBad && !everyBad(helpEvery) && !everyBad(unmatchedEvery) && !autoCloseBad) save.mutate(); }}>
+  return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) void saveChanges(); }}>
     <section className="zl-block" aria-labelledby={`${id}-cmd`}><h3 id={`${id}-cmd`}>{m.commands}</h3>
       <p className="lead">{m.commandsLead}</p>
       <div className="zl-rows">
@@ -689,7 +708,7 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
       <Field id={`${id}-ask`} label={m.question} error={(checked && questionBad ? m.questionRequired : undefined) ?? server['settings.notices.ask_confirm']} help={`${m.questionHint} ${m.count(askConfirm.length, noticeMax)}`}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(askConfirm)} maxLength={noticeMax} value={askConfirm} onChange={(event) => { feedback.touch(); setAskConfirm(event.target.value); }} />}</Field>
     </section>
-    <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveMessages)}</button>{feedback.status}</span>
+    <span className="button-row">{feedback.pending ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}</span>
   </form>;
 }
 

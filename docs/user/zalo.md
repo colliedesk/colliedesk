@@ -59,8 +59,8 @@ The channel's page then has four tabs of its own, before AI and History:
    **Domain verification** takes the code Zalo gives to verify the webhook's address; see
    [Verify the webhook address](#verify-the-webhook-address).
    **References** picks the [number series](inbox.md#conversation-numbers) the OA's conversations are
-   numbered in and shows the code the next one gets (`CHD-2026-0143`); the series themselves are changed in
-   Settings → General → Conversation numbers.
+   numbered in and shows the code the next one gets (`CHD-2026-0143`). A pick saves at once and the page says
+   **Saved** with **Undo**; the series themselves are changed in Settings → General → Conversation numbers.
 2. **Groups**: every group that wrote to the OA (and every group linked before it did). **Link…** files the
    group under an organization, written as your contacts' organization is: a conversation of that group
    then names it. **Unlink** stops that for new conversations; earlier ones keep their organization.
@@ -133,7 +133,8 @@ other name below the prefix answers as an address the server does not have.
 
 ## The Messages tab
 
-**Save messages** saves the whole tab at once. Agents read it and change nothing.
+Typing in any field here shows the **Save** bar at the foot of the page; **Save** keeps the whole tab at once,
+and **Discard** puts every field back. Agents read it and change nothing.
 
 ### Commands
 

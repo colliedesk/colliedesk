@@ -7,6 +7,7 @@ import { formatDate, formatDay } from '../../lib/format-date';
 import { Dialog } from '../../ui/dialog';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiChatMessages as m } from './ai-chat-messages';
+import { useSaveChanges, useSettingsEdit } from './settings-edits';
 import './ai-settings.css';
 
 // The team's side of the help center's AI chat: the month's use (admins), the chats and a chat's
@@ -52,22 +53,26 @@ function Notices({ usage }: { usage: AIChatUsage }) {
 
 // CapForm sets the AI chat feature's own monthly spend limit, on a provider the workspace pays for.
 function CapForm({ slot, onSave }: { slot: AISlot; onSave: (cap: number | null) => Promise<unknown> }) {
-  const [value, setValue] = useState(slot.monthly_cap_micro_usd === null ? '' : dollars(slot.monthly_cap_micro_usd));
+  const initial = slot.monthly_cap_micro_usd === null ? '' : dollars(slot.monthly_cap_micro_usd);
+  const [value, setValue] = useState(initial);
+  // What the field held when it was last saved: a change from it waits for the page's Save.
+  const [baseline, setBaseline] = useState(initial);
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'invalid' | 'failed'>('idle');
   const id = useId();
-  const save = () => {
+  const saveChanges = useSaveChanges();
+  useSettingsEdit('ai-chat-cap', value.trim() !== baseline.trim() ? { label: m.capLabel, discard: () => { setValue(baseline); setState('idle'); }, save: () => {
     const text = value.trim();
     const amount = Number(text);
-    if (text !== '' && !(Number.isFinite(amount) && amount > 0)) { setState('invalid'); return; }
+    if (text !== '' && !(Number.isFinite(amount) && amount > 0)) { setState('invalid'); return Promise.reject(new Error('invalid')); }
     setState('saving');
-    onSave(text === '' ? null : Math.round(amount * 1e6)).then(() => setState('saved'), () => setState('failed'));
-  };
-  return <form className="aic-cap" onSubmit={(event) => { event.preventDefault(); if (state !== 'saving') save(); }}>
+    return onSave(text === '' ? null : Math.round(amount * 1e6)).then(() => { setBaseline(value); setState('saved'); }, (error: unknown) => { setState('failed'); throw error; });
+  } } : undefined);
+  return <form className="aic-cap" onSubmit={(event) => { event.preventDefault(); if (state !== 'saving') void saveChanges(); }}>
     <label className="field" htmlFor={id}><span>{m.capLabel}</span>
       <input id={id} inputMode="decimal" value={value} aria-invalid={state === 'invalid' ? true : undefined} aria-describedby={`${id}-hint`}
         onChange={(event) => { setValue(event.target.value); setState('idle'); }} /></label>
     <small id={`${id}-hint`} className="muted-copy">{state === 'invalid' ? m.capInvalid : m.capHint}</small>
-    <span className="button-row"><button type="submit" disabled={state === 'saving'}>{state === 'saving' ? m.capSaving : m.capSave}</button>
+    <span className="button-row">
       {state === 'saved' && <span role="status" className="muted-copy">{m.capSaved}</span>}
       {state === 'failed' && <span role="alert" className="error-copy">{m.capFailed}</span>}</span>
   </form>;

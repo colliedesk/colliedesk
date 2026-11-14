@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { request } from '../../api/client';
 import { CopyButton } from '../../features/settings/copy-button';
 import { saveState, useSaveFeedback } from '../../features/settings/save-feedback';
+import { useSaveChanges, useSettingsEdit } from '../../features/settings/settings-edits';
+import { settingsMessages } from '../../features/settings/settings-messages';
 import type { SaveState } from '../../features/settings/save-feedback';
 import type { ChannelPanelProps, ConnectProps } from '../registry';
 
@@ -18,6 +20,7 @@ const helpCenterSchema = z.object({ enabled: z.boolean(), url: z.string() });
 const helpCenter = () => request('/api/v1/help-center', helpCenterSchema);
 
 const m = {
+  surface: 'Greeting and questions',
   greeting: 'Greeting',
   greetingHint: 'Shown first when a chat starts, under “AI assistant · answers from your help articles”.',
   suggestions: 'Suggested questions',
@@ -29,8 +32,6 @@ const m = {
   instructions: 'Extra instructions',
   instructionsHint: 'The AI still answers only from published articles; instructions cannot add facts.',
   count: (n: number, max: number) => `${n.toLocaleString()} / ${max.toLocaleString()}`,
-  save: 'Save',
-  saveSite: 'Save sites',
   name: 'Name',
   nameHint: 'Tells this chat apart in the inbox and in Settings. Leave it empty to number it.',
   add: 'Add help chat',
@@ -52,8 +53,9 @@ interface SurfaceFormProps {
   config?: HelpChatConfig;
   canManage: boolean;
   save: SaveState;
-  label: string;
-  onSave: (value: { greeting: string; suggestions: string[]; instructions: string }) => void;
+  // label names the button that adds the chat; a chat that exists is saved by the page's Save.
+  label?: string;
+  onSave: (value: { greeting: string; suggestions: string[]; instructions: string }) => Promise<unknown> | void;
   nameField?: ReactNode;
 }
 
@@ -69,6 +71,12 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
   const greetingHint = useId();
   const suggestionsHint = useId();
   const instructionsHint = useId();
+  const adding = nameField !== undefined;
+  const saveChanges = useSaveChanges();
+  const value = () => ({ greeting: greeting.trim(), suggestions: suggestions.map((item) => item.trim()).filter(Boolean), instructions: instructions.trim() });
+  const changed = greeting !== (config?.greeting ?? '') || instructions !== (config?.instructions ?? '') || JSON.stringify(suggestions) !== JSON.stringify(config?.suggestions ?? []);
+  const discard = () => { setGreeting(config?.greeting ?? ''); setSuggestions(config?.suggestions ?? []); setInstructions(config?.instructions ?? ''); };
+  useSettingsEdit('help-chat-surface', !adding && canManage && changed ? { label: m.surface, save: () => onSave(value()), discard } : undefined);
   if (!canManage) {
     return <dl className="settings-body">
       <dt>{m.greeting}</dt><dd>{config?.greeting || '—'}</dd>
@@ -79,7 +87,8 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
   const change = (index: number, value: string) => { feedback.touch(); setSuggestions((list) => list.map((item, i) => (i === index ? value : item))); };
   return <form className="stacked-form settings-body" onSubmit={(event) => {
     event.preventDefault();
-    if (!feedback.pending) onSave({ greeting: greeting.trim(), suggestions: suggestions.map((item) => item.trim()).filter(Boolean), instructions: instructions.trim() });
+    if (feedback.pending) return;
+    if (adding) void onSave(value()); else void saveChanges();
   }}>
     {nameField}
     <label className="field"><span>{m.greeting}</span>
@@ -101,8 +110,8 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
       <textarea rows={4} value={instructions} maxLength={limits.instructions} aria-describedby={instructionsHint}
         onChange={(event) => { feedback.touch(); setInstructions(event.target.value); }} /></label>
     <small id={instructionsHint} className="muted-copy">{m.instructionsHint} {m.count(instructions.length, limits.instructions)}</small>
-    <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(label)}</button>
-      {feedback.status}</span>
+    <span className="button-row">{adding && <button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(label ?? '')}</button>}
+      {feedback.pending && !adding ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}</span>
   </form>;
 }
 
@@ -116,7 +125,7 @@ function useSave(channelID: string) {
 
 function Setup({ channel, canManage }: ChannelPanelProps) {
   const save = useSave(channel.id);
-  return <SurfaceForm config={channel.config as HelpChatConfig} canManage={canManage} save={saveState(save)} label={m.save} onSave={(value) => save.mutate(value)} />;
+  return <SurfaceForm config={channel.config as HelpChatConfig} canManage={canManage} save={saveState(save)} onSave={(value) => save.mutateAsync(value)} />;
 }
 
 // Embed is the sites that may frame the chat and the code that puts its button on them.
@@ -127,17 +136,19 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
   useEffect(() => setOrigins(config.widget_origins.join('\n')), [config.widget_origins]);
   const feedback = useSaveFeedback(saveState(save));
   const hint = useId();
+  const saveChanges = useSaveChanges();
+  useSettingsEdit('help-chat-origins', canManage && lines(origins).join('\n') !== config.widget_origins.join('\n')
+    ? { label: m.origins, save: () => save.mutateAsync({ widget_origins: lines(origins) }), discard: () => setOrigins(config.widget_origins.join('\n')) } : undefined);
   const center = useQuery({ queryKey: ['help-center', 'address'], queryFn: helpCenter });
   const home = center.data?.enabled ? center.data.url.replace(/\/$/, '') : undefined;
   const code = home ? `<script src="${home}/chat/widget.js" data-channel="${channel.id}" async></script>` : undefined;
   return <div className="settings-body">
     {canManage
-      ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate({ widget_origins: lines(origins) }); }}>
+      ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) void saveChanges(); }}>
           <label className="field"><span>{m.origins}</span>
             <textarea rows={3} value={origins} placeholder="https://shop.example.com" aria-describedby={hint} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
           <small id={hint} className="muted-copy">{m.originsHint}</small>
-          <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveSite)}</button>
-            {feedback.status}</span>
+          <span className="button-row">{feedback.pending ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}</span>
         </form>
       : <ul className="muted-copy">{config.widget_origins.map((origin) => <li key={origin}>{origin}</li>)}</ul>}
     {code && home

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import type { ReactElement } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { ChannelDetail } from '../../api/channels';
+import { SettingsEditsProvider } from '../../features/settings/settings-edits';
 
 // The Zalo OA channel's connect form and tabs (docs/user/zalo.md).
 const mocks = vi.hoisted(() => {
@@ -44,7 +45,7 @@ const thread = (kind: 'direct' | 'group', external: string, sender?: { value: st
 
 const view = (ui: ReactElement) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><SettingsEditsProvider>{ui}</SettingsEditsProvider></QueryClientProvider>);
 };
 
 beforeEach(() => {
@@ -312,7 +313,7 @@ test('messages saves the commands, notices and one-to-one answer as the whole of
   fireEvent.keyDown(within(cancel).getByLabelText('New phrase for Cancel'), { key: 'Enter' });
   fireEvent.change(screen.getByLabelText('Reply to a one-to-one message that is not a request'), { target: { value: 'Gõ “tạo phiếu” để tạo yêu cầu.' } });
   fireEvent.click(screen.getByLabelText('Answer such a message with this reply'));
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: {
     join_policy: { kind: 'never' },
@@ -334,7 +335,7 @@ test('asking before a one-to-one request opens sets the wait, the question and t
   expect(screen.getByLabelText('Wait for the customer to stop writing')).toHaveValue(10);
   expect(screen.getByLabelText('Open anyway after')).toHaveValue(60);
   fireEvent.change(screen.getByLabelText('Open anyway after'), { target: { value: '0' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   expect(screen.getByLabelText('Open anyway after')).toHaveAccessibleDescription(/1 to 3600/);
   expect(channelsApi.update).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText('Open anyway after'), { target: { value: '90' } });
@@ -350,7 +351,7 @@ test('asking before a one-to-one request opens sets the wait, the question and t
   fireEvent.change(within(confirm).getByLabelText('New phrase for Confirm'), { target: { value: 'ok' } });
   fireEvent.keyDown(within(confirm).getByLabelText('New phrase for Confirm'), { key: 'Enter' });
   expect(screen.getByLabelText('Match for Confirm')).toHaveValue('exact');
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   const sent = channelsApi.update.mock.calls[0][1].settings;
   // Confirm sets nothing about how long a request waits for its description.
@@ -372,12 +373,12 @@ test('a request waiting for its description is forgotten after the same minutes 
   expect(field).toHaveAccessibleDescription(/Groups use 20 seconds; saving sets both\./);
   // Saving something else leaves both as they are.
   fireEvent.change(screen.getByLabelText('When a request waiting for its description is forgotten'), { target: { value: 'Đã quá hạn.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update.mock.calls[0][1].settings.scopes).toBeUndefined();
   expect(channelsApi.update.mock.calls[0][1].settings.notices.expired).toBe('Đã quá hạn.');
   fireEvent.change(field, { target: { value: '45' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(2));
   expect(channelsApi.update.mock.calls[1][1].settings.scopes).toEqual({
     direct: { mode: 'commands', gather: { quiet_seconds: 10, expire_seconds: 2700 } },
@@ -410,7 +411,7 @@ test('the quiet wait shows while a description is asked for, even with the quest
   const quiet = screen.getByLabelText('Wait for the customer to stop writing');
   expect(quiet).toHaveAccessibleDescription(/before the question and before asking for a description/i);
   fireEvent.change(quiet, { target: { value: '5' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update.mock.calls[0][1].settings.scopes.direct).toEqual({ mode: 'commands', gather: { quiet_seconds: 5, confirm_seconds: 0 } });
 });
@@ -420,7 +421,7 @@ test('turning the question off keeps the gathering and sets its wait to 0', asyn
   view(<Tabs.messages channel={channel({}, { effective_settings: rules })} canManage timezone="UTC" />);
   fireEvent.click(screen.getByRole('switch', { name: 'Ask the customer to confirm' }));
   expect(screen.queryByLabelText('Open anyway after')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update.mock.calls[0][1].settings.scopes.direct).toEqual({ mode: 'commands', gather: { quiet_seconds: 10, confirm_seconds: 0 } });
 });
@@ -446,7 +447,7 @@ test('an agent reads the channel and changes nothing', async () => {
   expect(screen.queryByRole('button', { name: /Remove|Add/ })).toBeNull();
   staff.unmount();
   view(<Tabs.messages channel={channel(config)} canManage={false} timezone="UTC" />);
-  expect(screen.queryByRole('button', { name: 'Save messages' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
 });
 
 test('once the tokens are set, Connection no longer says what to do first', () => {
@@ -460,8 +461,8 @@ test('references: the channel picks its number series, sees the next code, and s
   const select = await screen.findByLabelText('Number series');
   await waitFor(() => expect(select).toHaveAccessibleDescription('Next reference: #13'));
   fireEvent.change(select, { target: { value: 'chd' } });
-  expect(select).toHaveAccessibleDescription(`Next reference: CHD-${year}-0143`);
-  fireEvent.click(screen.getByRole('button', { name: 'Save series' }));
+  // A pick from the list saves at once; the page says Saved with an Undo.
+  await waitFor(() => expect(select).toHaveAccessibleDescription(`Next reference: CHD-${year}-0143`));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(ID, { settings: { join_policy: { kind: 'never' }, number_series: 'chd' } }));
   expect(screen.getByRole('link', { name: /Settings → Conversation numbers/ })).toHaveAttribute('href', '/settings/general#numbers-heading');
 });
@@ -473,7 +474,7 @@ test('the reopen notices are saved with the others, and the received notice says
   fireEvent.change(screen.getByLabelText('When Reopen names a code from before Colliedesk'), { target: { value: 'Phiếu {old_ref} cũ, phiếu mới {ref}.' } });
   fireEvent.change(screen.getByLabelText('When a resolved or closed conversation is reopened'), { target: { value: 'Đã mở lại {ref}.' } });
   fireEvent.change(screen.getByLabelText('When Reopen names a conversation still open'), { target: { value: 'Đã ghi nhận vào {ref}.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update.mock.calls[0][1].settings.notices).toMatchObject({ reopen_not_found: 'Không tìm thấy {ref}.', reopen_legacy: 'Phiếu {old_ref} cũ, phiếu mới {ref}.',
     reopened: 'Đã mở lại {ref}.', reopen_noted: 'Đã ghi nhận vào {ref}.' });
@@ -500,7 +501,7 @@ test('the Help command and its answer are saved with the others; Help matches as
   fireEvent.keyDown(within(help).getByLabelText('New phrase for Help'), { key: 'Enter' });
   fireEvent.change(screen.getByLabelText('Match for Help'), { target: { value: 'words' } });
   fireEvent.change(screen.getByLabelText('When a customer asks for help'), { target: { value: 'Gõ “tạo phiếu” để tạo yêu cầu.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   const sent = channelsApi.update.mock.calls[0][1].settings;
   expect(sent.commands.help).toEqual({ action: 'help', match: 'words', phrases: ['Hỗ trợ'] });
@@ -512,12 +513,12 @@ test('how often the help and the unmatched reply go to one chat is set in second
   const helpEvery = screen.getByLabelText('Answer help in one chat at most every');
   expect(helpEvery).toHaveValue(300);
   fireEvent.change(helpEvery, { target: { value: '90000' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   expect(helpEvery).toHaveAccessibleDescription(/0 to 86400/);
   expect(channelsApi.update).not.toHaveBeenCalled();
   fireEvent.change(helpEvery, { target: { value: '0' } });
   fireEvent.change(screen.getByLabelText('Send the unmatched reply in one chat at most every'), { target: { value: '600' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update.mock.calls[0][1].settings.notices).toMatchObject({ help_every_seconds: 0, unmatched_every_seconds: 600 });
 });
@@ -539,7 +540,7 @@ test('what the OA says when the team sets a status is saved with the other notic
   expect(within(block).getByLabelText('When set to Closed')).toHaveAccessibleDescription(/Also sent when a conversation closes by itself/);
   fireEvent.change(within(block).getByLabelText('When set to Pending'), { target: { value: '  Đang chờ {subject}  ' } });
   fireEvent.change(within(block).getByLabelText('When set to Closed'), { target: { value: 'Đã đóng {ref}.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   const sent = channelsApi.update.mock.calls[0][1].settings;
   expect(sent.notices).toMatchObject({ status_pending: 'Đang chờ {subject}', status_resolved: 'Đã xử lý {ref}.', status_closed: 'Đã đóng {ref}.' });
@@ -550,7 +551,7 @@ test('the server refusing a status notice shows its words under that box', async
   channelsApi.update.mockRejectedValueOnce(new mocks.InvalidRequestError('Check the channel settings.', { fields: { 'settings.notices.status_pending': 'This notice cannot fill {name}.' } }));
   view(<Tabs.messages channel={channel()} canManage timezone="UTC" />);
   fireEvent.change(screen.getByLabelText('When set to Pending'), { target: { value: 'Chờ {name}' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(screen.getByLabelText('When set to Pending')).toHaveAccessibleDescription(/This notice cannot fill \{name\}\./));
 });
 
@@ -565,11 +566,11 @@ test('closing resolved conversations by themselves is a number of hours, empty o
   fireEvent.change(hours, { target: { value: '48' } });
   expect(hours).toHaveAccessibleDescription(/stays resolved for 48 hours closes by itself, quietly: “When set to Closed” is empty\./);
   fireEvent.change(hours, { target: { value: '721' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   expect(hours).toHaveAccessibleDescription(/A whole number of hours, from 0 to 720\./);
   expect(channelsApi.update).not.toHaveBeenCalled();
   fireEvent.change(hours, { target: { value: '48' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save messages' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update.mock.calls[0][1].settings.auto_close_hours).toBe(48);
 });
