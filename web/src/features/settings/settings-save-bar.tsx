@@ -11,8 +11,7 @@ interface SaveBarProps { labels: string[]; saving: boolean; onDiscard: () => voi
 // SaveBar floats at the foot of the page while text is unsaved: it names what changed, and never moves the page.
 export function SaveBar({ labels, saving, onDiscard, onSave }: SaveBarProps) {
   return <section className="settings-save-bar" aria-label={settingsMessages.unsavedChanges}>
-    <span className="settings-save-dot" aria-hidden="true" />
-    <p><strong>{settingsMessages.unsavedChanges}</strong><span> · {labels.join(', ')}</span></p>
+    <p><span className="settings-save-dot" aria-hidden="true" /><strong>{settingsMessages.unsavedChanges}</strong><span> · {labels.join(', ')}</span></p>
     <button type="button" disabled={saving} onClick={onDiscard}>{settingsMessages.discard}</button>
     <button type="button" className="primary-action" disabled={saving} aria-keyshortcuts="Control+S Meta+S" onClick={onSave}>
       {saving ? settingsMessages.saving : settingsMessages.save}{!saving && <kbd aria-hidden="true">{shortcut}</kbd>}</button>
