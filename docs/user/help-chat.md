@@ -66,6 +66,9 @@ question, whatever the page's language ([AI chat](ai-chat.md)).
    instructions cannot add facts).
 3. **Your site**: the sites that may embed the chat, one per line, and the code to copy.
 
+On a help chat that exists, a change to the greeting, the questions, the instructions or the sites waits for
+**Save** in the bar at the foot of the page; **Discard** puts them back.
+
 A workspace may have several help chats, for example one per site; the default one is the help
 center's chat page. Turn a help chat off with its switch; its settings stay.
 

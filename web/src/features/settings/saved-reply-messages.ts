@@ -10,7 +10,7 @@ export const savedReplyMessages = {
   savedReplyTitle: 'Title',
   savedReplyText: 'Text',
   addSavedReply: 'Add saved reply',
-  saveSavedReply: 'Save saved reply',
+  titleAndTextRequired: 'A saved reply needs a title and its text.',
   editSavedReplyName: (title: string) => `Edit ${title}`,
   deleteSavedReplyName: (title: string) => `Delete ${title}`,
   confirmDeleteSavedReply: (title: string) => `Move "${title}" to the trash? It can be restored for 30 days.`,

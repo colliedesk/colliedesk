@@ -12,6 +12,7 @@ import { EmailChannelSection, gmailPart } from '../../features/settings/email-ch
 import { GmailDataDisclosure, MicrosoftDataDisclosure } from '../../features/settings/gmail-connection';
 import type { MailboxReturn } from '../../features/settings/gmail-return';
 import { NameForm } from '../../features/settings/name-form';
+import { useReleaseUnsaved } from '../../features/settings/settings-edits';
 import { saveState } from '../../features/settings/save-feedback';
 import { settingsMessages } from '../../features/settings/settings-messages';
 import { HelpTip } from '../../ui/help-tip';
@@ -46,10 +47,11 @@ export function useRefetchOnActivity(channelID: string, active: boolean) {
 // changes them all, so it sits folded where the forwarding address is changed.
 export function ForwardingName() {
   const client = useQueryClient();
+  const release = useReleaseUnsaved();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const save = useMutation({ mutationFn: api.updateWorkspaceSlug,
-    // On the workspace's own host the desk moves with the name: continue on the new host.
-    onSuccess: (renamed) => renamed.continue_url ? leaveTo(renamed.continue_url)
+    // On the workspace's own host the desk moves with the name: continue on the new host, without asking about the name just saved.
+    onSuccess: (renamed) => renamed.continue_url ? (release(`name-step:${settingsMessages.workspaceAddressName}`), leaveTo(renamed.continue_url))
       : Promise.all(['me', 'email-channel'].map((key) => client.invalidateQueries({ queryKey: [key] }))) });
   if (!me.data) return null;
   return <NameForm label={settingsMessages.workspaceAddressName} saveLabel={settingsMessages.saveAddressName} hint={settingsMessages.addressNameWarning} value={me.data.workspace.slug} canManage

@@ -24,4 +24,5 @@ Colliedesk stores every time in UTC and shows it in your timezone.
 Both are lists of IANA timezones such as `America/New_York`, `Europe/London` or
 `Australia/Sydney`. There is no Save button: a choice is saved when you leave the list,
 press Enter, or stop on a zone for a moment, so browsing with the arrow keys does not save every
-zone you pass. "Saving…" and then "Saved", or the reason the save failed, appears next to it.
+zone you pass. "Saved" appears at the foot of the page with **Undo**, which puts the previous zone back;
+the reason a save failed appears next to the list.

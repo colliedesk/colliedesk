@@ -8,6 +8,7 @@ import { Dialog } from '../../ui/dialog';
 import { HelpTip } from '../../ui/help-tip';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiChatMessages as m } from './ai-chat-messages';
+import { Refused, useSaveChanges, useSettingsDraft } from './settings-edits';
 import './ai-settings.css';
 
 // The team's side of the help center's AI chat: the month's use (admins), the chats and a chat's
@@ -53,22 +54,24 @@ function Notices({ usage }: { usage: AIChatUsage }) {
 
 // CapForm sets the AI chat feature's own monthly spend limit, on a provider the workspace pays for.
 function CapForm({ slot, onSave }: { slot: AISlot; onSave: (cap: number | null) => Promise<unknown> }) {
-  const [value, setValue] = useState(slot.monthly_cap_micro_usd === null ? '' : dollars(slot.monthly_cap_micro_usd));
+  const initial = slot.monthly_cap_micro_usd === null ? '' : dollars(slot.monthly_cap_micro_usd);
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'invalid' | 'failed'>('idle');
-  const id = useId();
-  const save = () => {
-    const text = value.trim();
+  // The typed limit lives in the page, so opening another tab does not lose it, and the bar keeps naming it.
+  const [value, setValue] = useSettingsDraft('ai-chat-cap', initial, { label: m.capLabel, save: (typed) => {
+    const text = typed.trim();
     const amount = Number(text);
-    if (text !== '' && !(Number.isFinite(amount) && amount > 0)) { setState('invalid'); return; }
+    if (text !== '' && !(Number.isFinite(amount) && amount > 0)) { setState('invalid'); return Promise.reject(new Refused(m.capInvalid)); }
     setState('saving');
-    onSave(text === '' ? null : Math.round(amount * 1e6)).then(() => setState('saved'), () => setState('failed'));
-  };
-  return <form className="aic-cap" onSubmit={(event) => { event.preventDefault(); if (state !== 'saving') save(); }}>
+    return onSave(text === '' ? null : Math.round(amount * 1e6)).then(() => setState('saved'), (error: unknown) => { setState('failed'); throw error; });
+  } });
+  const id = useId();
+  const saveChanges = useSaveChanges();
+  return <form className="aic-cap" onSubmit={(event) => { event.preventDefault(); if (state !== 'saving') void saveChanges(); }}>
     <div className="field"><span className="heading-with-tip"><label className="field-label" htmlFor={id}>{m.capLabel}</label><HelpTip label={m.capLabel} text={m.capWhy} id={`${id}-tip`} /></span>
       <input id={id} inputMode="decimal" value={value} aria-invalid={state === 'invalid' ? true : undefined} aria-describedby={`${id}-hint ${id}-tip`}
         onChange={(event) => { setValue(event.target.value); setState('idle'); }} /></div>
     <small id={`${id}-hint`} className="muted-copy">{state === 'invalid' ? m.capInvalid : m.capHint}</small>
-    <span className="button-row"><button type="submit" disabled={state === 'saving'}>{state === 'saving' ? m.capSaving : m.capSave}</button>
+    <span className="button-row">
       {state === 'saved' && <span role="status" className="muted-copy">{m.capSaved}</span>}
       {state === 'failed' && <span role="alert" className="error-copy">{m.capFailed}</span>}</span>
   </form>;

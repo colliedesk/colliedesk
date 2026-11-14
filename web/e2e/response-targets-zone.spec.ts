@@ -35,7 +35,7 @@ test('hours on a UTC workspace read by someone on Asia/Tokyo: both zones are nam
 
   await zone.selectOption('Asia/Tokyo');
   await zone.press('Enter');
-  await hours.getByRole('button', { name: 'Save business hours' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(hours.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   await expect(hours.getByText(/Hours count in/)).toHaveCount(0);
   expect(await clockZone(page)).toBe('Asia/Tokyo');

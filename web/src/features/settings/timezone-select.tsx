@@ -46,10 +46,11 @@ function zones(current: string): string[] {
   return [...new Set(['UTC', ...listed, ...(current ? [current] : [])])].sort((a, b) => (a === 'UTC' ? -1 : b === 'UTC' ? 1 : a.localeCompare(b)));
 }
 
-// TimezoneSelect saves without a button and shows the result next to it. It is never disabled while
+// TimezoneSelect picks a zone and hands it to onChange once the person stops; the page decides what a pick does
+// (a saved choice says so itself, with an Undo). It shows a refusal next to it, and is never disabled while
 // saving: a disabled control would throw keyboard focus out to the page.
 export function TimezoneSelect({ label, value, emptyOption, suggested, save, onChange }: TimezoneSelectProps) {
-  const feedback = useSaveFeedback(save);
+  const feedback = useSaveFeedback({ ...save, saved: false });
   const id = useId();
   const [draft, setDraft] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -84,7 +85,7 @@ export function TimezoneSelect({ label, value, emptyOption, suggested, save, onC
             timer.current = setTimeout(() => commit(next), settleMs);
           }}
           onBlur={() => commit(draft)}
-          onKeyDown={(event) => { if (event.key === 'Enter') commit(draft); }}>
+          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(draft); } }}>
           {emptyOption && <option value="">{emptyOption}</option>}
           {offered && <option value={offered.zone}>{offered.label}</option>}
           {zones(draft).filter((zone) => !offered || !suggestedNames?.has(zone)).map((zone) => <option key={zone} value={zone}>{zone}</option>)}

@@ -8,6 +8,7 @@ import { aiMessages as m } from './ai-messages';
 import { aiChatMessages as chatMessages } from './ai-chat-messages';
 import { AIChatPanel } from './ai-chat-panel';
 import { AutoDraftDialog, AutoTriageDialog } from './ai-level-dialogs';
+import { SettingsEditsProvider } from './settings-edits';
 import { SettingsNav } from './settings-nav';
 import { slotInput } from './ai-slot-input';
 import { PlusIcon } from './ai-icons';
@@ -74,7 +75,7 @@ export function AIPage(props: AIPageProps) {
       <header><h1>{messages.aiAndAgents}</h1><p>{m.pageLead}</p></header>
       <div className="settings-layout">
         <SettingsNav page="/settings/ai" shown={props.shown} />
-        <div className="settings-sections ai-page">
+        <div className="settings-sections ai-page"><SettingsEditsProvider>
           {views && <Tabs label={messages.aiAndAgents} variant="underline" tabs={viewTabs} value={view} onChange={(next, how) => props.onView?.(next, how)} prefix={ids.views} />}
           {view === 'built-in' && <BuiltInPanel panel={views ? { id: panelID(ids.views, 'built-in'), label: tabID(ids.views, 'built-in') } : undefined}>
           {props.builtIn !== false && (views
@@ -102,7 +103,7 @@ export function AIPage(props: AIPageProps) {
           </>}
           </BuiltInPanel>}
           {view === 'external' && (views ? <div role="tabpanel" id={panelID(ids.views, view)} aria-labelledby={tabID(ids.views, view)} className="ai-view-panel">{props.agents}</div> : props.agents)}
-        </div>
+        </SettingsEditsProvider></div>
       </div>
       {dialog?.kind === 'add' && settings && <AddDialog settings={settings} onClose={() => setDialog(undefined)} onAdd={props.onAdd} onListModels={props.onListModels} />}
       {dialog?.kind === 'key' && <KeyDialog provider={dialog.provider} onClose={() => setDialog(undefined)} onSetKey={props.onSetKey} />}

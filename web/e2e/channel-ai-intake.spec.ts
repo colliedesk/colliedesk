@@ -55,12 +55,13 @@ test('intake on a chat channel: Suggest with settings of its own, then Auto asks
   await page.goto(`${origin}/settings/channels/${channel}?tab=ai`);
   const following = page.getByRole('form', { name: 'Intake settings · Groups' });
   await expect(following).toContainText('Following the default. Pick Suggest or Auto for Groups above.');
-  await expect(following.getByRole('button', { name: 'Save intake settings' })).toHaveCount(0);
+  // A scope that follows the default has nothing to save: its fields are locked.
+  await expect(following.getByLabel('Add to a conversation')).toBeDisabled();
   await page.getByRole('combobox', { name: 'Intake · Groups' }).selectOption('suggest');
   const form = page.getByRole('form', { name: 'Intake settings · Groups' });
   await form.getByLabel('Add to a conversation').fill('0.93');
   await form.getByLabel('Words that mark a secret', { exact: true }).fill('mật khẩu\nOTP');
-  await form.getByRole('button', { name: 'Save intake settings' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(form.getByRole('status')).toHaveText('Saved');
   await expect(page.getByRole('region', { name: 'Last 7 days' })).toContainText('No cards yet.');
 

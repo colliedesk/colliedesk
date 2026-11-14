@@ -93,10 +93,12 @@ test('Esc leaves Settings, but never while a text field has focus, so typed text
   await expect(page).toHaveURL(`${baseURL}/settings/account`);
   await expect(name).toHaveValue('Half typed name');
 
-  // Once the focus is out of the field, Esc leaves.
+  // Once the focus is out of the field, Esc leaves; the text is not saved, so it asks first and leaving drops it.
   await page.getByRole('heading', { level: 1, name: 'Account' }).click();
   await name.evaluate((element) => (element as HTMLElement).blur());
+  const asked = new Promise<string>((resolve) => page.once('dialog', (dialog) => { resolve(dialog.message()); void dialog.accept(); }));
   await page.keyboard.press('Escape');
+  expect(await asked).toBe('You have unsaved changes. Leave anyway?');
   await expect(page).toHaveURL(`${baseURL}${conversation}`);
 });
 

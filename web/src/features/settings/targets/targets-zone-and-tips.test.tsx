@@ -80,7 +80,7 @@ test('choosing their own zone from the first choices and saving the hours sets i
   const zone = within(hours).getByLabelText('Time zone');
   fireEvent.change(zone, { target: { value: 'Asia/Ho_Chi_Minh' } });
   fireEvent.keyDown(zone, { key: 'Enter' });
-  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   expect(responseTargetsApi.set.mock.calls[0][0]).toMatchObject({ timezone: 'Asia/Ho_Chi_Minh' });
   // Once the clock counts in their zone the two agree: nothing to warn about, and no second copy of the zone.

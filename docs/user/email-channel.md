@@ -205,7 +205,7 @@ A new channel starts with the workspace name. To change it:
 
 1. Open **Settings → Channels → Email** and unfold **Sender name** (or the address's **Replies** tab under
    **Manage**). The field appears once a support address is saved.
-2. Enter the name in **Sender name** and select **Save sender name**.
+2. Enter the name in **Sender name**, then select **Save** in the bar that appears.
 
 The next reply uses the new name, on every way a reply leaves: your own domain, the
 `via Colliedesk` address and Gmail. A name is 1 to 100 characters. Spaces at the ends are removed.

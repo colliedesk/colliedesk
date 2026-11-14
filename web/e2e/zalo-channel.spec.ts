@@ -117,7 +117,7 @@ test('zalo channel: an admin connects an OA, adds its tokens, links a group that
   await open.getByRole('textbox', { name: 'New phrase for Open a request' }).press('Enter');
   await page.getByRole('combobox', { name: 'Match for Open a request' }).selectOption('exact');
   await page.getByLabel('When a conversation opens', { exact: true }).fill('Đã nhận yêu cầu của anh/chị.');
-  await page.getByRole('button', { name: 'Save messages' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('group', { name: 'Phrases for Open a request' }).getByText('tạo phiếu')).toBeVisible();
@@ -153,8 +153,8 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   await page.getByLabel('OA secret key').fill(secret);
   await page.getByRole('button', { name: 'Connect Zalo OA' }).click();
   await page.getByLabel('Number series').selectOption(series);
+  // A pick from the list saves at once; the page says Saved with an Undo.
   await expect(page.getByLabel('Number series')).toHaveAccessibleDescription(`Next reference: CHD-${year}-0142`);
-  await page.getByRole('button', { name: 'Save series' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
 
   // A customer writes one to one: the conversation it opens takes the series' code.
@@ -209,7 +209,7 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   await block.getByLabel('When set to Pending', { exact: true }).fill('Yêu cầu {ref} đang chờ.');
   await block.getByLabel('Close resolved conversations after', { exact: true }).fill('48');
   await expect(block.getByText('Closes after 48 hours resolved, quietly.')).toBeVisible();
-  await page.getByRole('button', { name: 'Save messages' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   await page.reload();
   await page.getByRole('tab', { name: 'Messages' }).click();
@@ -304,7 +304,7 @@ test('zalo channel: a token that may not write to customers is refused a status 
   await page.getByRole('button', { name: 'Connect Zalo OA' }).click();
   await page.getByRole('tab', { name: 'Messages' }).click();
   await page.getByLabel('When set to Pending', { exact: true }).fill('Yêu cầu {ref} đang chờ.');
-  await page.getByRole('button', { name: 'Save messages' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
 
   const body = JSON.stringify({ app_id: app, event_name: 'user_send_text', timestamp: String(Date.now()),

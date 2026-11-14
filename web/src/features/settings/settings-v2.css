@@ -40,6 +40,8 @@
 .settings-v2 .settings-rows > .form-row { grid-template-columns: 15rem minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-4); row-gap: var(--space-1); }
 .settings-v2 .settings-rows > .form-row > .field { display: contents; }
 .settings-v2 .settings-rows > .form-row > :nth-child(n + 3) { grid-column: 2 / -1; }
+/* A row whose text waits for the page's Save has no button of its own: what follows the field (its state, its hint) sits under the input. */
+.settings-v2 .settings-rows > .form-row:not(:has(> button)) > :nth-child(n + 2) { grid-column: 2 / -1; }
 .settings-v2 .settings-rows > .field { grid-template-columns: 15rem minmax(0, 1fr); align-items: center; column-gap: var(--space-4); row-gap: var(--space-1); }
 .settings-v2 .settings-rows > .field > :nth-child(n + 3) { grid-column: 2 / -1; }
 .settings-v2 .settings-rows > .field > .field-inline { grid-column: 1 / -1; }
@@ -75,6 +77,7 @@
   .settings-v2 .settings-sections, .settings-v2 .settings-sections:has(.team-list) { max-width: none; }
   .settings-v2 .settings-rows > .form-row, .settings-v2 .settings-rows > .field { grid-template-columns: minmax(0, 1fr); align-items: start; }
   .settings-v2 .settings-rows > .form-row > :nth-child(n + 3), .settings-v2 .settings-rows > .field > :nth-child(n + 3) { grid-column: 1 / -1; }
+  .settings-v2 .settings-rows > .form-row:not(:has(> button)) > :nth-child(n + 2) { grid-column: 1 / -1; }
   .settings-v2 .settings-rows > .form-row > button { justify-self: start; }
 }
 

@@ -1,5 +1,7 @@
 import { conversationFieldsTitle } from './settings-anchors';
 
+import { leaveUnsavedQuestion } from './unsaved-probe';
+
 // Strings of the Settings sections other than the help center; they load with the Settings chunk, not with the first screen.
 export const settingsMessages = {
   notificationsLabel: 'Desktop notifications for new, assigned and customer-replied conversations',
@@ -56,7 +58,6 @@ export const settingsMessages = {
   displayName: 'Display name',
   sameAsWorkspace: (zone: string) => `Same as workspace (${zone})`,
   generalDescription: 'The workspace name and the default timezone for everyone who has not chosen their own.',
-  saveWorkspaceName: 'Save workspace name',
   workspaceNameHelp: 'Your team sees this name in Colliedesk. Customers see it as the help center title while the help center has no title of its own. Replies use each email channel\'s sender name, not this name.',
   preferencesDescription: 'Theme and notifications are saved in this browser only.',
   showSetupGuide: 'Show the setup guide',
@@ -75,7 +76,6 @@ export const settingsMessages = {
   teamRename: 'Rename',
   teamRenameName: (name: string) => `Rename ${name}`,
   teamDisplayNameOf: (name: string) => `Display name of ${name}`,
-  teamSaveName: 'Save',
   teamLastAdmin: 'The only active member with the Admin role keeps it. Give Admin to someone else first.',
   teamApplyRole: 'Apply',
   teamApplyRoleFor: (name: string) => `Apply role for ${name}`,
@@ -104,11 +104,17 @@ export const settingsMessages = {
   revoke: 'Revoke',
   saving: 'Saving…',
   saved: 'Saved',
+  // The one save bar of a page, and the question when someone leaves it with text not yet saved.
+  unsavedChanges: 'Unsaved changes',
+  discard: 'Discard',
+  save: 'Save',
+  leaveUnsaved: leaveUnsavedQuestion,
+  saveFailed: 'could not be saved',
+  undoFailed: 'The change could not be undone. The value is as it was.',
   emailChannel: 'Email channel',
   supportAddress: 'Support address',
   saveSupportAddress: 'Save support address',
   senderName: 'Sender name',
-  saveSenderName: 'Save sender name',
   senderNameHelp: 'Customers see this name in the From line of every reply. It belongs to this channel; renaming the workspace does not change it.',
   forwardingAddress: 'Forwarding address',
   addressCopied: 'Address copied',

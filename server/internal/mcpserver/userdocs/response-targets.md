@@ -27,7 +27,8 @@ targets**): it saves the preset's targets, turns them on with business hours Mon
 4. **Applies to**: the channels whose conversations have targets (every channel unless you pick some).
 5. **Alerts**: whether reminder and overdue emails go out (an admin), and whether they reach you (each
    person, while the workspace sends them).
-6. Each part saves on its own; agents read them. **Applies to** shows only with two channels or more.
+6. A switch saves when you flip it. Business hours, targets and **Applies to** are saved with **Save** in the
+   bar at the foot of the page, which sends every part you changed; agents read them. **Applies to** shows only with two channels or more.
 
 Nothing is measured until you turn them on, and only conversations opened from then on have targets;
 imported conversations have none. Turning them off hides every target and keeps what was measured.

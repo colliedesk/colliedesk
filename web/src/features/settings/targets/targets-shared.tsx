@@ -46,6 +46,13 @@ export function useSave() {
   });
 }
 
+// useCurrentDocument reads the document as it is now, not as it was when the card last drew. The cards save one
+// after the other from one Save, and each must send what the one before it saved.
+export function useCurrentDocument(doc: ResponseTargets): () => ResponseTargets {
+  const client = useQueryClient();
+  return () => client.getQueryData<ResponseTargets>(['response-targets']) ?? doc;
+}
+
 // Said when the zone the clock counts in is not the zone the reader's dates show: the two otherwise read as one.
 // It stays visible, whatever its length, because the person must pick a zone (or accept it) before trusting the hours.
 export function ZoneNote({ clock, mine }: { clock: string; mine: string }) {

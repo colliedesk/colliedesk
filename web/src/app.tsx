@@ -24,6 +24,7 @@ import type { PlanIntent } from './features/settings/plan-intent';
 import { NavItemContent, SettingsNavLinkContext } from './features/settings/settings-nav';
 import { aiViews, conversationFieldsTitle, membersTabOf, movedAddress, settingsAddress } from './features/settings/settings-anchors';
 import type { MembersTab } from './features/settings/settings-anchors';
+import { confirmDiscardUnsavedSettings } from './features/settings/unsaved-probe';
 import type { NavItem } from './features/settings/settings-nav';
 import type { ReactNode } from 'react';
 import { AppShell } from './features/shell/app-shell';
@@ -198,8 +199,8 @@ function AppLayout() {
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
       {config.data?.product_analytics.realm === 'cloud' && can(me.data, 'billing:manage') && me.data.plan?.plan === 'trial'
-        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => signOut.mutate()} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
-    onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending} workspaceSwitch={workspaceSwitch}
+        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => { if (confirmDiscardUnsavedSettings()) signOut.mutate(); }} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
+    onSignOut={() => { if (confirmDiscardUnsavedSettings()) signOut.mutate(); }} signOutFailed={signOut.isError} signingOut={signOut.isPending} workspaceSwitch={workspaceSwitch}
     settingsExit={inSettings && !phone && !locked && !closed && !notFound ? { href: keeper ? beforeSettings(keeper) : '/', onBack: backToApp } : undefined}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>

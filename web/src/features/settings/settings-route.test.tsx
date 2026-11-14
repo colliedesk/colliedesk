@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { useState } from 'react';
 import { expect, test, vi } from 'vitest';
 import { agentRoleRef, builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
+import { readSkipped, storeSkipped } from '../onboarding/setup-steps';
 import { AccountRoute, GeneralRoute, MembersRoute, SavedRepliesRoute } from './settings-route';
 import type { MembersTab } from './settings-route';
 import { AIAgentsSections } from './ai-agents-sections';
@@ -15,7 +16,7 @@ const api = vi.hoisted(() => ({
   createInvite: vi.fn(), revokeInvite: vi.fn(), revokeSession: vi.fn(), updateWorkspaceTimezone: vi.fn(), updateWorkspaceName: vi.fn(), updateAgentTimezone: vi.fn(),
   saveEmailChannel: vi.fn(), saveEmailSenderName: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
   exportWorkspace: vi.fn(), config: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
-  savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
+  setSetupGuideHidden: vi.fn(), savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
   connectGmail: vi.fn(), disconnectGmail: vi.fn(), createAgentToken: vi.fn(), roles: vi.fn(), setAgentRoles: vi.fn(),
 }));
 const errors = vi.hoisted(() => {
@@ -43,8 +44,8 @@ const ANN = '33333333-3333-4333-8333-333333333333';
 type Page = () => React.ReactNode;
 const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 // show draws one settings page (Account unless another is named) with what the server answers.
-function show(role: 'admin' | 'agent', sessions: unknown[] = [], Page: Page = AccountRoute, client = newClient()) {
-  api.me.mockResolvedValue(me(role));
+function show(role: 'admin' | 'agent', sessions: unknown[] = [], Page: Page = AccountRoute, client = newClient(), meChange: object = {}) {
+  api.me.mockResolvedValue({ ...me(role), ...meChange });
   api.config.mockResolvedValue({ billing: { enabled: false }, cloud_sign_in: { enabled: false, publishable_key: null }, product_analytics: { enabled: false, key: null, host: null, realm: null } });
   api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { roles: rolesOf(role) }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
   api.updateAgent.mockResolvedValue(teammate(ANN, 'ann@example.com', { deactivated_at: '2026-10-15T10:00:00Z' }));
@@ -132,7 +133,7 @@ test('an admin renames the workspace in General and the new name is read back', 
   expect(field).toHaveAccessibleDescription(/help center title.*sender name/i);
   const before = api.me.mock.calls.length;
   fireEvent.change(field, { target: { value: ' Gamma Desk ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save workspace name' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Save/ }));
   await waitFor(() => expect(api.updateWorkspaceName).toHaveBeenCalledWith('Gamma Desk'));
   await waitFor(() => expect(api.me.mock.calls.length).toBeGreaterThan(before));
 });
@@ -165,7 +166,7 @@ test('a chosen timezone saves once, shows Saving…, then Saved', async () => {
   expect(api.updateWorkspaceTimezone).toHaveBeenCalledTimes(1);
   expect(api.updateWorkspaceTimezone.mock.calls[0][0]).toBe('Asia/Tokyo');
   finish();
-  expect(await screen.findByText('Saved')).toHaveAttribute('role', 'status');
+  expect(await screen.findByRole('status')).toHaveTextContent('Saved');
   expect(select).toBeEnabled();
 });
 
@@ -341,7 +342,7 @@ test('a plain agent manages the shared saved replies and the list reloads after 
   api.savedReplies.mockResolvedValue({ items: [stored] });
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledWith('Closing', 'Thanks.', expect.stringMatching(/^[\x21-\x7e]{1,200}$/)));
   expect(await screen.findByText('Thanks.')).toBeInTheDocument();
   api.savedReplies.mockResolvedValue({ items: [] });
@@ -360,9 +361,9 @@ test('adding a saved reply again after a failed request names the same submit, s
   fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByRole('alert')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledTimes(2));
   const [first, second] = api.createSavedReply.mock.calls as unknown as [string, string, string][];
   expect(first[2]).toEqual(expect.any(String));
@@ -527,4 +528,21 @@ test('a settings page opened at a section stays where the person scrolled while 
     await screen.findByRole('button', { name: 'Export all data' });
     expect(scrolled.mock.contexts).not.toContain(document.getElementById('export-heading'));
   } finally { leaveSettings(); }
+});
+
+
+test('Undo on "Show the setup guide" puts the browser\'s skipped state back as it was, not only the server\'s choice', async () => {
+  storeSkipped(SAM, true);
+  api.setSetupGuideHidden.mockImplementation((hidden: boolean) => Promise.resolve({ hidden }));
+  show('admin', [], AccountRoute, newClient(), { setup_guide_hidden: true });
+  const guide = await screen.findByRole('checkbox', { name: 'Show the setup guide' });
+  await waitFor(() => expect(guide).not.toBeChecked());
+  fireEvent.click(guide);
+  await waitFor(() => expect(api.setSetupGuideHidden.mock.lastCall?.[0]).toBe(false));
+  // Showing the guide again shows all of Quick start, so the skip is forgotten.
+  await waitFor(() => expect(readSkipped(SAM)).toBe(false));
+  fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(api.setSetupGuideHidden.mock.lastCall?.[0]).toBe(true));
+  await waitFor(() => expect(readSkipped(SAM)).toBe(true));
+  storeSkipped(SAM, false);
 });

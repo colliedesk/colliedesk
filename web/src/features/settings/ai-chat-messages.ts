@@ -17,8 +17,6 @@ export const aiChatMessages = {
   capHint: 'Empty means no limit.',
   capWhy: 'Past the limit, customers see related articles and Talk to a person until the next month (UTC).',
   capInvalid: 'Write an amount above 0, such as 10, or leave it empty.',
-  capSave: 'Save limit',
-  capSaving: 'Saving…',
   capSaved: 'Saved',
   capFailed: 'The limit was not saved. Try again.',
   chats: 'Chats',

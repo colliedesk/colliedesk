@@ -9,7 +9,6 @@ import type { TabChange } from '../../ui/tabs';
 import type { MembersTab } from './settings-anchors';
 import { SettingsPage } from './settings-page';
 import { TeamSection } from './team-section';
-import { useInviteDraft } from './use-invite-draft';
 import { useInvites } from './use-invites';
 
 // Settings → Members: everyone who can sign in, the invites that add people and, under Advanced, the roles they
@@ -33,10 +32,9 @@ export function MembersRoute({ tab, onTab }: { tab?: MembersTab; onTab?: (tab: M
   const loading = me.isPending || (readsTeam && invites.invites.isPending);
   useScrollToHashWhenReady(!loading);
   const roles = invites.roles;
-  const draft = useInviteDraft();
   const activePeople = team.data?.items.filter((member) => !member.deactivated_at).length;
   const pendingInvites = invites.section.invites.filter((invite) => !invite.used_at && !invite.revoked_at && Date.parse(invite.expires_at) > Date.now()).length;
-  return <SettingsPage page="members" membersTab={tab} onMembersTab={onTab} inviteDraft={draft} memberCounts={{ people: activePeople, invites: readsTeam ? pendingInvites : undefined }} loading={loading} timezone={me.data?.timezone ?? 'UTC'} showBilling={billingShown} showInvites={readsTeam}
+  return <SettingsPage page="members" membersTab={tab} onMembersTab={onTab} memberCounts={{ people: activePeople, invites: readsTeam ? pendingInvites : undefined }} loading={loading} timezone={me.data?.timezone ?? 'UTC'} showBilling={billingShown} showInvites={readsTeam}
     invites={invites.section.invites} canCreateInvites={can(me.data, 'team:invite')} canRevokeInvites={can(me.data, 'team:revoke')} inviteRoles={roles.data?.items}
     inviteError={invites.section.inviteError} createdInvite={invites.section.createdInvite} creatingInvite={invites.section.creatingInvite}
     onCreateInvite={invites.section.onCreateInvite} onRevokeInvite={invites.section.onRevokeInvite}
@@ -45,7 +43,7 @@ export function MembersRoute({ tab, onTab }: { tab?: MembersTab; onTab?: (tab: M
       roles={roles.data?.items} myPermissions={me.data?.permissions} timezone={me.data?.timezone ?? 'UTC'}
       error={updateAgent.error instanceof PlanLimitError || updateAgent.error instanceof InvalidRequestError ? updateAgent.error.message : updateAgent.isError ? messages.settingsActionFailed : undefined}
       onSetRoles={(id, roleIds) => setRoles.mutateAsync({ id, roleIds })}
-      onRename={(id, name) => updateAgent.mutate({ id, display_name: name })}
+      onRename={(id, name) => updateAgent.mutateAsync({ id, display_name: name })}
       onDeactivate={(id, reassignTo) => updateAgent.mutate({ id, active: false, ...(reassignTo ? { reassign_to: reassignTo } : {}) })}
       onReactivate={(id) => updateAgent.mutate({ id, active: true })} /> : undefined}
     rolesSection={readsTeam ? <RolesSection /> : undefined} />;

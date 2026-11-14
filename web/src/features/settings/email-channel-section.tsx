@@ -12,6 +12,7 @@ import { CopyButton } from './copy-button';
 import { InboundURLGuide } from './inbound-url-guide';
 import { ServerDetails } from './server-details';
 import { NameForm } from './name-form';
+import { useUnsavedText } from './settings-edits';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 import { gmailPart } from './gmail-part';
@@ -31,7 +32,7 @@ interface EmailChannelSectionProps {
   onSave?: (address: string) => void;
   // addressConflictLink, for an address another channel has (addressSave.conflict), is a link to it.
   addressConflictLink?: (conflict: NonNullable<SaveState['conflict']>) => ReactNode;
-  onSaveSenderName?: (name: string) => void;
+  onSaveSenderName?: (name: string) => Promise<unknown> | void;
   onSaveSlug?: (slug: string) => void;
   onRotate?: () => void;
   onDisconnect?: () => void;
@@ -63,10 +64,13 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
   const [slug, setSlug] = useState(workspaceSlug ?? '');
   useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
-  const addressError = useId();
+    const addressError = useId();
   const addressField = useRef<HTMLInputElement>(null);
   const addressFeedback = useSaveFeedback(addressSave, addressError, addressField, address);
   const slugFeedback = useSaveFeedback(slugSave);
+  // Typed and not yet saved counts for the question on leaving, though each has its own button.
+  useUnsavedText('support-address', canManage && address !== (channel?.support_address ?? ''));
+  useUnsavedText('workspace-address-name', canManage && slug !== (workspaceSlug ?? ''));
   // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const disconnectButton = useRef<HTMLButtonElement>(null);
@@ -101,7 +105,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           : <p><strong>{settingsMessages.supportAddress}: </strong><span>{channel ? channel.support_address : settingsMessages.emailNotConnected}</span></p>}
   </>;
   const senderPart = <>
-        {channel && <NameForm label={settingsMessages.senderName} saveLabel={settingsMessages.saveSenderName} hint={settingsMessages.senderNameHelp}
+        {channel && <NameForm label={settingsMessages.senderName} hint={settingsMessages.senderNameHelp}
           value={channel.sender_name} canManage={canManage} save={senderNameSave} onSave={onSaveSenderName} />}
   </>;
   const arrivalPart = <>

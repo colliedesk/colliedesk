@@ -1,7 +1,12 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
 import type { WebFormSettings } from '../../api/schemas';
+import { SettingsEditsProvider } from './settings-edits';
 import { WebFormSection } from './web-form-section';
+
+// A form that exists is saved by the page's Save, which the provider draws.
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: SettingsEditsProvider });
 
 const off: WebFormSettings = { enabled: false, allowed_origins: [], submit_path: '/api/v1/public/forms/acme' };
 const on: WebFormSettings = { ...off, enabled: true, allowed_origins: ['https://colliedesk.com', 'http://localhost:3000'] };
@@ -13,24 +18,29 @@ test('is off by default, shows the state and the address a site posts to', () =>
   expect(screen.getByRole('textbox', { name: /submit url/i })).toHaveValue(`${window.location.origin}/api/v1/public/forms/acme`);
 });
 
-test('turns the form on with its allowed origins, one per line', () => {
-  const onSave = vi.fn();
-  render(<WebFormSection settings={off} canManage onSave={onSave} />);
+test('turning the form on is one choice and saves at once with Saved and Undo; the sites typed after it wait for Save, one per line', async () => {
+  const onSave = vi.fn().mockResolvedValue(undefined);
+  const { rerender } = render(<WebFormSection settings={off} canManage onSave={onSave} />);
   fireEvent.click(screen.getByRole('checkbox', { name: /accept web form submissions/i }));
+  expect(onSave).toHaveBeenLastCalledWith(true, []);
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+  expect(await screen.findByText('Saved')).toBeInTheDocument();
+  rerender(<WebFormSection settings={{ ...off, enabled: true }} canManage onSave={onSave} />);
   fireEvent.change(screen.getByRole('textbox', { name: /allowed origins/i }), { target: { value: ' https://colliedesk.com \n\nhttp://localhost:3000\n' } });
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
-  expect(onSave).toHaveBeenCalledWith(true, ['https://colliedesk.com', 'http://localhost:3000']);
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onSave).toHaveBeenLastCalledWith(true, ['https://colliedesk.com', 'http://localhost:3000']);
 });
 
-test('turns the form off again and keeps the origins', () => {
-  const onSave = vi.fn();
+test('turning the form off again keeps the origins, and its Undo turns it back on', async () => {
+  const onSave = vi.fn().mockResolvedValue(undefined);
   render(<WebFormSection settings={on} canManage onSave={onSave} />);
   expect(screen.getByRole('checkbox', { name: /accept web form submissions/i })).toBeChecked();
   expect(screen.getByText(/the web form is on/i)).toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: /allowed origins/i })).toHaveValue('https://colliedesk.com\nhttp://localhost:3000');
   fireEvent.click(screen.getByRole('checkbox', { name: /accept web form submissions/i }));
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
-  expect(onSave).toHaveBeenCalledWith(false, ['https://colliedesk.com', 'http://localhost:3000']);
+  expect(onSave).toHaveBeenLastCalledWith(false, ['https://colliedesk.com', 'http://localhost:3000']);
+  fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(onSave).toHaveBeenLastCalledWith(true, ['https://colliedesk.com', 'http://localhost:3000']));
 });
 
 test('agents see the state read-only', () => {
@@ -38,18 +48,18 @@ test('agents see the state read-only', () => {
   expect(screen.getByText(/the web form is on/i)).toBeInTheDocument();
   expect(screen.getByText('https://colliedesk.com')).toBeInTheDocument();
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /save web form/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 });
 
 test('the save shows Saving…, refuses a second submit, then Saved until edited', () => {
   const onSave = vi.fn();
   const { rerender } = render(<WebFormSection settings={off} canManage onSave={onSave} save={{ pending: true }} />);
-  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+  expect(screen.getByText('Saving…')).toBeInTheDocument();
   fireEvent.submit(screen.getByRole('textbox', { name: /allowed origins/i }));
   expect(onSave).not.toHaveBeenCalled();
   rerender(<WebFormSection settings={off} canManage onSave={onSave} save={{ saved: true }} />);
   expect(screen.getByText('Saved')).toHaveAttribute('role', 'status');
-  fireEvent.click(screen.getByRole('checkbox', { name: /accept web form submissions/i }));
+  fireEvent.change(screen.getByRole('textbox', { name: /allowed origins/i }), { target: { value: 'https://new.example.com' } });
   expect(screen.queryByText('Saved')).not.toBeInTheDocument();
 });
 

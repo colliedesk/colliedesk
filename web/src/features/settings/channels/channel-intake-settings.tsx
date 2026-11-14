@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
 import { InvalidRequestError } from '../../../api/client';
 import type { AISettings, ChannelAIInput } from '../../../api/ai';
 import { HelpTip } from '../../../ui/help-tip';
 import { scopeName } from '../ai-levels';
+import { useSaveChanges, useSettingsEdit } from '../settings-edits';
 import { channelsMessages as m } from './channels-messages';
 
 type IntakeOptions = NonNullable<ChannelAIInput['options']>;
@@ -61,14 +61,17 @@ interface Props {
 export function IntakeSettings({ scope, level, options, settings, isAdmin, onSave }: Props) {
   const id = useId();
   const saved = options ?? {};
-  const [values, setValues] = useState(() => ({
+  const initial = () => ({
     create_threshold: saved.create_threshold?.toString() ?? '', attach_threshold: saved.attach_threshold?.toString() ?? '',
     ignore_threshold: saved.ignore_threshold?.toString() ?? '',
     reopen: saved.reopen_window_days?.toString() ?? '', age: saved.auto_max_age_seconds === undefined ? '' : String(Math.round(saved.auto_max_age_seconds / 60)),
     single: saved.attach_requires_single_candidate ?? false, sources: { ...(saved.sources ?? {}) }, instructions: saved.instructions ?? '',
     patterns: (saved.redact_patterns ?? []).map((item) => ({ ...item })),
     keywords: (saved.redact_keywords ?? []).join('\n'), accounts: (saved.contact_labels?.account ?? []).join('\n'), ids: (saved.contact_labels?.id ?? []).join('\n'),
-  }));
+  });
+  const [values, setValues] = useState(initial);
+  // What the form held when it was last saved (or opened): a change from it waits for the page's Save.
+  const [baseline, setBaseline] = useState(values);
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [ageTouched, setAgeTouched] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -77,8 +80,7 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
   useEffect(() => { if (problem) problemRef.current?.focus(); }, [problem]);
   const consents = new Set(settings?.source_consents.map((consent) => consent.source_class));
   const set = <K extends keyof typeof values>(key: K, value: (typeof values)[K]) => { setValues((current) => ({ ...current, [key]: value })); setState('idle'); };
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const save = async () => {
     const next: IntakeOptions = Object.fromEntries(Object.entries(saved).filter(([key]) => !edited.includes(key)));
     for (const item of thresholds) { const value = number(values[item.key]); if (value !== undefined) next[item.key] = value; }
     // Off by default: only a ticked box is saved.
@@ -99,17 +101,23 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
     setProblem(undefined);
     try {
       await onSave({ scope, level, options: next });
+      setBaseline(values);
+      setAgeTouched(false);
       setState('saved');
     } catch (error) {
       setProblem(error instanceof InvalidRequestError ? m.intakeNotSaved(inWords(error.message)) : m.actionFailed);
       setState('idle');
+      throw error;
     }
   };
+  const saveChanges = useSaveChanges();
+  const changed = JSON.stringify(values) !== JSON.stringify(baseline);
+  useSettingsEdit(`intake:${scope}`, isAdmin && level !== null && changed ? { label: m.intakeSettings(scopeName(scope)), save, discard: () => { setValues(baseline); setAgeTouched(false); setProblem(undefined); } } : undefined);
   // A scope that follows the default takes the default's settings: the server keeps settings with a level.
   const follows = level === null;
   const locked = !isAdmin || follows || state === 'saving';
   const heading = `${id}-heading`;
-  return <form className="ch-intake" aria-labelledby={heading} onSubmit={(event) => void submit(event)} noValidate>
+  return <form className="ch-intake" aria-labelledby={heading} onSubmit={(event) => { event.preventDefault(); void saveChanges(); }} noValidate>
     <h3 id={heading}>{m.intakeSettings(scopeName(scope))}</h3>
     <p className="ch-ai-lead">{follows ? m.intakeSettingsFollow(scopeName(scope)) : <>{m.intakeSettingsLead} <HelpTip label={m.intakeSettings(scopeName(scope))} text={m.intakeSettingsWhy} /></>}</p>
     <fieldset className="ch-intake-group" disabled={locked}>
@@ -178,10 +186,7 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
           onChange={(event) => set('instructions', event.target.value)} />
         <small className="help" id={`${id}-instructions-count`}>{m.intakeInstructionsCount(values.instructions.length)}</small></div>
     </fieldset>
-    {isAdmin && !follows && <div className="button-row">
-      <button type="submit" className="primary-action" disabled={locked}>{m.intakeSave}</button>
-      {state === 'saved' && <span role="status" className="muted-copy">{m.intakeSaved}</span>}
-    </div>}
+    {isAdmin && !follows && state === 'saved' && <div className="button-row"><span role="status" className="muted-copy">{m.intakeSaved}</span></div>}
     {problem && <p role="alert" className="error-copy" tabIndex={-1} ref={problemRef}>{problem}</p>}
   </form>;
 }

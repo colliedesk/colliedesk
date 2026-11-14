@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { can } from '../../lib/can';
@@ -8,7 +9,8 @@ import { useBillingShown } from '../billing/billing-shown';
 import { saveState } from './save-feedback';
 import { SettingsPage } from './settings-page';
 import { MentionEmailSetting } from './mention-email-setting';
-import { storeSkipped } from '../onboarding/setup-steps';
+import { readSkipped, storeSkipped } from '../onboarding/setup-steps';
+import { confirmDiscardUnsavedSettings } from './unsaved-probe';
 
 // Settings → Account: the profile, this browser's preferences, the devices signed in and the AI apps
 // connected with OAuth. It asks for who is signed in and the sessions only.
@@ -28,21 +30,30 @@ export function AccountRoute() {
   } });
   const agentTimezone = useMutation({ mutationFn: api.updateAgentTimezone, onSuccess: () => refresh('me') });
   // Your name also shows in the team list and the assignee lists.
-  const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => { void refresh('me'); void refresh('agents'); } });
-  // Showing the setup guide again shows all of Quick start, Try more too if this browser skipped it.
-  const setupGuide = useMutation({ mutationFn: api.setSetupGuideHidden, onSuccess: (answer) => {
-    if (!answer.hidden && me.data) storeSkipped(me.data.agent.id, false);
-    void refresh('me'); void refresh('setup');
+  const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => Promise.all([refresh('me'), refresh('agents')]) });
+  // Showing the setup guide again shows all of Quick start, Try more too if this browser skipped it. An Undo gives the
+  // browser's skip back as it was before the choice, not the choice's own side effect.
+  const skippedBefore = useRef<boolean>(undefined);
+  const setupGuide = useMutation({ mutationFn: ({ hidden }: { hidden: boolean; undo?: boolean }) => api.setSetupGuideHidden(hidden), onSuccess: (answer, { undo }) => {
+    if (me.data) {
+      if (undo && skippedBefore.current !== undefined) storeSkipped(me.data.agent.id, skippedBefore.current);
+      else if (!answer.hidden) storeSkipped(me.data.agent.id, false);
+    }
+    return Promise.all([refresh('me'), refresh('setup')]);
   } });
+  const chooseSetupGuide = (hidden: boolean, undo = false) => {
+    if (!undo && me.data) skippedBefore.current = readSkipped(me.data.agent.id);
+    return setupGuide.mutateAsync({ hidden, undo });
+  };
   const billingShown = useBillingShown(can(me.data, 'billing:read'));
   const loading = me.isPending || sessions.isPending;
   // A link to a section (a pasted address, an old anchor) arrives before the sections do.
   useScrollToHashWhenReady(!loading);
   return <SettingsPage page="account" loading={loading} mentionEmail={can(me.data, 'messages:read') ? <MentionEmailSetting /> : undefined} sessions={sessions.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'} showBilling={billingShown}
     personalTimezoneSave={saveState(agentTimezone)} email={me.data?.agent.email} displayName={me.data?.agent.display_name} displayNameSave={saveState(agentDisplayName)}
-    onSetDisplayName={(name) => agentDisplayName.mutate(name)}
-    setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutate(hidden)}
+    onSetDisplayName={(name) => agentDisplayName.mutateAsync(name)}
+    setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={chooseSetupGuide}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeSession.isError ? messages.settingsActionFailed : undefined} mcpAddress={mcpAddress}
-    onRevokeSession={(id) => revokeSession.mutate(id)} onSetAgentTimezone={(value) => agentTimezone.mutate(value)} />;
+    onRevokeSession={(id) => { if (sessions.data?.items.some((session) => session.current && session.id === id) && !confirmDiscardUnsavedSettings()) return; revokeSession.mutate(id); }} onSetAgentTimezone={(value) => agentTimezone.mutateAsync(value)} />;
 }

@@ -90,7 +90,6 @@ export const zaloMessages = {
   series: 'Number series',
   defaultSeries: 'Default',
   nextReference: (code: string) => `Next reference: ${code}`,
-  saveSeries: 'Save series',
   manageSeries: 'Manage number series in Settings → Conversation numbers',
   seriesFailed: 'The number series could not be loaded.',
   // Groups
@@ -227,7 +226,8 @@ export const zaloMessages = {
   askDescription: 'When a customer sends only the command',
   askDescriptionHint: 'Asks what the request is about when “Open a request” comes with nothing before it. Leave empty to open it as it is.',
   questionHint: 'Name the Confirm and Cancel phrases, for example “Send OK to send it, or Hủy to cancel.”',
-  saveMessages: 'Save messages',
+  messagesLabel: 'Messages',
+  checkFields: 'Check the fields marked in red.',
   messagesAdminsOnly: 'Only admins change what the OA says and the commands it understands.',
   none: '—',
 };

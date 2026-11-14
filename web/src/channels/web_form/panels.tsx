@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConflictError } from '../../api/client';
 import { channelsApi } from '../../api/channels';
 import type { WebFormSettings } from '../../api/schemas';
+import { useUnsavedText } from '../../features/settings/settings-edits';
 import { WebFormSection } from '../../features/settings/web-form-section';
 import { saveState } from '../../features/settings/save-feedback';
 import { HelpTip } from '../../ui/help-tip';
@@ -16,7 +17,7 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
     onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: ['channels'] }), client.invalidateQueries({ queryKey: ['web-form'] })]),
   });
   return <WebFormSection part="embed" settings={channel.config as WebFormSettings} canManage={canManage} save={saveState(save)}
-    onSave={(_enabled, origins) => save.mutate(origins)} />;
+    onSave={(_enabled, origins) => save.mutateAsync(origins)} />;
 }
 
 // Connect adds the form, on, with the sites allowed to post to it.
@@ -29,6 +30,7 @@ function Connect({ canManage, create }: ConnectProps) {
     mutationFn: (origins: string[]) => create({ ...(name.trim() ? { name: name.trim() } : {}), enabled: true, config: { allowed_origins: origins } }),
     onMutate: () => setSent(name),
   });
+  useUnsavedText('web-form-name', name.trim() !== '');
   const errorID = useId();
   const hintID = useId();
   const state = saveState(save);

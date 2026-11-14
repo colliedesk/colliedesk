@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { SettingsPage } from './settings-page';
 import { SessionsSection } from './sessions-section';
@@ -203,8 +203,8 @@ test('a chosen workspace timezone is saved when the list is left, no Save button
   fireEvent.change(select, { target: { value: 'America/New_York' } });
   fireEvent.blur(select);
   expect(onSetWorkspaceTimezone).toHaveBeenCalledWith('America/New_York');
-  // The only button in General saves the workspace name; the timezone needs none.
-  expect(within(general).getAllByRole('button').map((button) => button.textContent)).toEqual(['Save workspace name']);
+  // Nothing in General has a button of its own: the timezone saves at once, and the name waits for the page's Save.
+  expect(within(general).queryAllByRole('button')).toEqual([]);
 });
 
 test('your timezone follows the workspace until you choose one, and choosing the workspace again clears it', () => {
@@ -225,13 +225,13 @@ test('a stored timezone this browser does not list is still shown as chosen', ()
   expect(screen.getByRole('combobox', { name: 'Your timezone' })).toHaveValue('Mars/Olympus_Mons');
 });
 
-test('a timezone save shows Saving…, Saved or the failure next to its own control', () => {
+test('a timezone save shows Saving… or the failure next to its own control; Saved is the page toast', () => {
   const { rerender } = render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ pending: true }} />);
   expect(screen.getByText('Saving…')).toBeInTheDocument();
   // Never disabled: a disabled control would throw keyboard focus out to the page.
   expect(screen.getByRole('combobox', { name: 'Your timezone' })).toBeEnabled();
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ saved: true }} />);
-  expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ error: 'Unknown timezone.' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Unknown timezone.');
 });
@@ -328,7 +328,7 @@ test('an admin of a billed workspace finds Plan and billing last, under Data and
   expect(links.at(-1)).toHaveAttribute('href', '/settings/billing');
 });
 
-test('your display name is saved with its button, trimmed, and saving an empty field clears it', () => {
+test('your display name is saved with the page Save, trimmed, and saving an empty field clears it', async () => {
   const onSetDisplayName = vi.fn();
   render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" email="ada@example.com" displayName="Ada" onSetDisplayName={onSetDisplayName} />);
   const profile = screen.getByRole('region', { name: 'Profile' });
@@ -337,19 +337,58 @@ test('your display name is saved with its button, trimmed, and saving an empty f
   expect(input).toHaveAttribute('placeholder', 'ada@example.com');
   expect(input).toHaveAttribute('maxLength', '80');
   fireEvent.change(input, { target: { value: '  Ada Lovelace ' } });
-  fireEvent.click(within(profile).getByRole('button', { name: 'Save name' }));
+  expect(within(profile).queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSetDisplayName).toHaveBeenLastCalledWith('Ada Lovelace');
   fireEvent.change(input, { target: { value: '' } });
-  fireEvent.click(within(profile).getByRole('button', { name: 'Save name' }));
+  // While a save is on its way the bar says Saving…; it is Save again once the answer is in.
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   expect(onSetDisplayName).toHaveBeenLastCalledWith('');
 });
 
 test('a display name save shows Saving…, Saved or why it was refused', () => {
   const { rerender } = render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" displayName="" displayNameSave={{ pending: true }} />);
-  expect(screen.getByRole('button', { name: 'Saving…' })).toBeInTheDocument();
+  expect(screen.getByText('Saving…')).toBeInTheDocument();
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" displayName="Ada" displayNameSave={{ saved: true }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Saved');
   expect(screen.getByRole('textbox', { name: 'Display name' })).toHaveValue('Ada');
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" displayName="Ada" displayNameSave={{ error: 'display_name must be a string of at most 80 characters.' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('at most 80 characters');
+});
+
+
+// ---- the invite being typed belongs to the page, not to the Invites tab
+
+const inviteProps = { sessions: [] as never[], timezone: 'UTC', canCreateInvites: true, inviteRoles: builtInRoles, invites: [] as never[] };
+const closingTabAsks = () => !window.dispatchEvent(new Event('beforeunload', { cancelable: true }));
+
+test('an email typed on Invites still counts as unsaved when People is the tab shown, and draws no bar', async () => {
+  const view = render(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  expect(closingTabAsks()).toBe(false);
+  fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'new@example.com' } });
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  view.rerender(<SettingsPage page="members" membersTab="people" {...inviteProps} />);
+  expect(closingTabAsks()).toBe(true);
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+  view.rerender(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  expect(screen.getByLabelText(/invite email/i)).toHaveValue('new@example.com');
+});
+
+test('once an invite is created its form is empty again and nothing is unsaved', async () => {
+  const view = render(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'new@example.com' } });
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  view.rerender(<SettingsPage page="members" membersTab="invites" {...inviteProps} createdInvite={{ url: 'https://desk.example.com/sign-in?token=once' }} />);
+  await waitFor(() => expect(screen.getByLabelText(/invite email/i)).toHaveValue(''));
+  await waitFor(() => expect(closingTabAsks()).toBe(false));
+});
+
+test('picking the default role again is not a change: only an email, or a role other than the default, is unsaved', async () => {
+  render(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  fireEvent.click(screen.getByRole('button', { name: /Agent/ }));
+  const admin = screen.getByRole('checkbox', { name: /Admin/ });
+  fireEvent.click(admin);
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  fireEvent.click(admin);
+  await waitFor(() => expect(closingTabAsks()).toBe(false));
 });

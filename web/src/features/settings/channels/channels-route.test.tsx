@@ -219,7 +219,7 @@ test('a name another channel has is refused at the name, with a link to that cha
   show(FORM);
   const name = await screen.findByRole('textbox', { name: 'Name' });
   fireEvent.change(name, { target: { value: 'Careers' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
   // The refusal takes the focus to the field it is about, from the button that sent it.
   expect(name).toHaveFocus();
@@ -262,7 +262,7 @@ test('adding a web form creates it on, with its allowed origins, and opens it', 
   const origins = await screen.findByRole('textbox', { name: /Allowed origins/i });
   expect(screen.queryByRole('checkbox')).toBeNull();
   fireEvent.change(origins, { target: { value: 'https://example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
   await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'web_form', enabled: true, config: { allowed_origins: ['https://example.com'] } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
 });
@@ -358,7 +358,7 @@ test('saving the sender name sends only the trimmed name to this channel, never 
   show(EMAIL, { tab: 'replies' });
   const field = await screen.findByRole('textbox', { name: 'Sender name' });
   fireEvent.change(field, { target: { value: ' Colliedesk Support ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(EMAIL, { config: { sender_name: 'Colliedesk Support' } }));
 });
 
@@ -391,7 +391,8 @@ test('the web form save shows Saved after it succeeds', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   channelsApi.update.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   show(FORM);
-  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
+  fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://changed.example.com' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(screen.getByText('Saved')).toHaveAttribute('role', 'status'));
 });
 
@@ -399,8 +400,25 @@ test('a refused web form save shows the server message, not the generic failure'
   channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   channelsApi.update.mockRejectedValue(new mocks.InvalidRequestError('Invalid origin "*": use an exact origin such as https://example.com.'));
   show(FORM);
-  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
-  await waitFor(() => expect(screen.getByText(/Invalid origin "\*": use an exact origin/)).toBeInTheDocument());
+  fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://changed.example.com' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+  // The field says it (an alert beside it), and so does the bar.
+  expect(await screen.findByRole('alert')).toHaveTextContent(/Invalid origin "\*": use an exact origin/);
+  expect(within(screen.getByRole('region', { name: 'Unsaved changes' })).getByText(/Invalid origin "\*": use an exact origin/)).toBeInTheDocument();
+});
+
+test('the web form save holds the bar on Saving… until the server answers, so a second press sends nothing', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  let finish: () => void = () => {};
+  channelsApi.update.mockReturnValue(new Promise((resolve) => { finish = () => resolve({ ...channel('web_form'), config: webFormConfig }); }));
+  show(FORM);
+  fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://changed.example.com' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+  const saving = await screen.findByRole('button', { name: 'Saving…' });
+  expect(saving).toBeDisabled();
+  expect(channelsApi.update).toHaveBeenCalledTimes(1);
+  finish();
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Saving…' })).toBeNull());
 });
 
 test('the Embed tab saves only the origins: the switch alone turns the form on or off', async () => {
@@ -410,7 +428,7 @@ test('the Embed tab saves only the origins: the switch alone turns the form on o
   expect(await screen.findByRole('textbox', { name: /Allowed origins/i })).toBeInTheDocument();
   expect(screen.queryByRole('checkbox', { name: /Accept/i })).toBeNull();
   fireEvent.change(screen.getByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://example.com\nhttps://shop.example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(FORM, { config: { allowed_origins: ['https://example.com', 'https://shop.example.com'] } }));
 });
 
@@ -616,7 +634,7 @@ test('a web form is added with the name given, and a name another form has is re
   const name = await screen.findByRole('textbox', { name: 'Name' });
   fireEvent.change(name, { target: { value: 'Careers' } });
   fireEvent.change(screen.getByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
   await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
   expect(name).toHaveAccessibleDescription(/Another web form is called Careers/);
   expect(name).toHaveFocus();
@@ -624,7 +642,7 @@ test('a web form is added with the name given, and a name another form has is re
   fireEvent.change(name, { target: { value: ' Shop form ' } });
   expect(screen.queryByText('Another web form is called Careers.')).toBeNull();
   expect(name).not.toHaveAttribute('aria-invalid');
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
   await waitFor(() => expect(channelsApi.create).toHaveBeenLastCalledWith({ type: 'web_form', name: 'Shop form', enabled: true, config: { allowed_origins: ['https://example.com'] } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
 });
@@ -639,7 +657,7 @@ test('the refusal of a name goes once the name is changed, and is not left besid
   show(EMAIL);
   const name = await screen.findByRole('textbox', { name: 'Name' });
   fireEvent.change(name, { target: { value: 'Billing' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByText('Another email channel is called Billing.')).toBeInTheDocument();
   fireEvent.change(name, { target: { value: 'Zed' } });
   expect(screen.queryByText('Another email channel is called Billing.')).toBeNull();
@@ -949,6 +967,17 @@ test('a help chat\'s greeting and instructions keep one short line, and the expl
   for (const line of document.querySelectorAll('small.muted-copy')) expect((line.firstChild?.textContent ?? '').length).toBeLessThanOrEqual(60);
 });
 
+test('a trailing space typed in a help chat\'s greeting is not a change: the text that would be saved is the saved text, so no bar and no question on leaving', async () => {
+  channelsApi.get.mockResolvedValue({ ...helpChat(), config: helpChatConfig });
+  show(FORM);
+  const greeting = await screen.findByRole('textbox', { name: 'Greeting' });
+  const saved = (greeting as HTMLTextAreaElement).value;
+  fireEvent.change(greeting, { target: { value: `${saved} ` } });
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+  fireEvent.change(greeting, { target: { value: `${saved} more` } });
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
+});
+
 test('the sites a help chat may embed in are one line, and the rule for writing them is in the tip', async () => {
   channelsApi.get.mockResolvedValue({ ...helpChat(), config: helpChatConfig });
   show(FORM, { tab: 'embed' });
@@ -963,4 +992,67 @@ test('adding a help chat or a web form says in one line what its name is for, an
   cleanup();
   show('new/web_form');
   expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveAccessibleDescription('Names this form in the inbox and in Settings. Leave it empty to number it.');
+});
+
+
+test('a name typed while adding a help chat or a web form counts for closing the tab, though the form has its own button', async () => {
+  channelsApi.list.mockResolvedValue({ items: [], types: [{ type: 'help_chat', available: true, count: 0, default_channel_id: null }, ...types(0, 0)] });
+  show('new/help_chat');
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Shop chat' } });
+  await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
+  cleanup();
+  show('new/web_form');
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Contact form' } });
+  await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
+});
+
+
+test('a single space typed while adding a help chat is not text: nothing is asked on the way out', async () => {
+  channelsApi.list.mockResolvedValue({ items: [], types: [{ type: 'help_chat', available: true, count: 0, default_channel_id: null }, ...types(0, 0)] });
+  show('new/help_chat');
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Greeting' }), { target: { value: ' ' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Extra instructions' }), { target: { value: '  ' } });
+  expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true);
+});
+
+
+test('a channel tab left with text typed in it keeps the text and the bar: the panel stays, hidden, and comes back as it was', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form', { enabled: false }), config: { ...webFormConfig, enabled: false } });
+  channelsApi.events.mockResolvedValue({ items: [], next_cursor: null });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = (tab: 'embed' | 'history') => <QueryClientProvider client={client}><ChannelsRoute path={FORM} search={{ tab }} navigate={vi.fn()} /></QueryClientProvider>;
+  const view = render(page('embed'));
+  fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://typed.example.com' } });
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
+  view.rerender(page('history'));
+  expect(screen.queryByRole('textbox', { name: /Allowed origins/i })).toBeNull();
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
+  expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false);
+  view.rerender(page('embed'));
+  expect(screen.getByRole('textbox', { name: /Allowed origins/i })).toHaveValue('https://typed.example.com');
+});
+
+
+test('text typed on one channel never reaches another: going to channel B shows B\'s own text with no bar, and Save on B sends nothing of A\'s', async () => {
+  const A = '66666666-6666-4666-8666-666666666666';
+  const B = '77777777-7777-4777-8777-777777777777';
+  const chat = (id: string, name: string) => ({ ...channel('web_form', { id, type: 'help_chat', name }), config: { ...helpChatConfig, channel_id: id, greeting: '' } });
+  channelsApi.get.mockImplementation((id: string) => Promise.resolve(id === A ? chat(A, 'Chat A') : chat(B, 'Chat B')));
+  channelsApi.update.mockResolvedValue(chat(B, 'Chat B'));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = (id: string) => <QueryClientProvider client={client}><ChannelsRoute path={id} search={{ tab: 'setup' }} navigate={vi.fn()} /></QueryClientProvider>;
+  // B was opened before, so its page can draw at once, as it does when it is reached through an \"Open\" link.
+  client.setQueryData(['channel', B], chat(B, 'Chat B'));
+  const view = render(page(A));
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Greeting' }), { target: { value: 'Typed for A' } });
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
+  view.rerender(page(B));
+  await screen.findByRole('heading', { name: 'Chat B' });
+  expect(screen.getByRole('textbox', { name: 'Greeting' })).toHaveValue('');
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Greeting' }), { target: { value: 'Typed for B' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
+  expect(channelsApi.update).toHaveBeenCalledWith(B, { config: expect.objectContaining({ greeting: 'Typed for B' }) });
+  expect(JSON.stringify(channelsApi.update.mock.calls)).not.toContain('Typed for A');
 });

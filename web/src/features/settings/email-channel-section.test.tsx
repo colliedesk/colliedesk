@@ -4,6 +4,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { expect, test, vi } from 'vitest';
 import type { EmailChannelSettings } from '../../api/schemas';
 import { EmailChannelSection } from './email-channel-section';
+import { SettingsEditsProvider } from './settings-edits';
 
 const disconnected: EmailChannelSettings = {
   channel: null,
@@ -40,7 +41,7 @@ const connected: EmailChannelSettings = {
 function render(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(['public-config'], { cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, product_analytics: { enabled: false, key: null, host: null, realm: null } });
-  return renderInPage(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+  return renderInPage(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}><SettingsEditsProvider>{children}</SettingsEditsProvider></QueryClientProvider> });
 }
 
 test('connects a support address and shows the inbound URL', () => {
@@ -61,7 +62,7 @@ test('shows the sender name customers see and saves a new one', () => {
   expect(field).toHaveValue('Acme Support');
   expect(field).toHaveAccessibleDescription(/customers see this name in the from line/i);
   fireEvent.change(field, { target: { value: '  Colliedesk Support ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSaveSenderName).toHaveBeenCalledWith('Colliedesk Support');
 });
 
