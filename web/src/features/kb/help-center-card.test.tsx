@@ -39,7 +39,7 @@ test('everyone sees the public address as a link while the help center is on', a
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
 });
 
-// Off, the address answers like an unknown one (a 404 that says to check for typing mistakes), so the card
+// Off, the address answers a 404, the same as for an unknown address, so the card
 // must not send anyone there: it names the address and says it opens once the help center is on.
 test.each([['an admin', true], ['an agent', false]])('while the help center is off, %s sees the address as text that says it opens once it is on', async (_who, canManage) => {
   serve({ 'GET /api/v1/help-center': () => json(200, off) });
