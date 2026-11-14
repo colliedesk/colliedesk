@@ -31,10 +31,11 @@ function zones(current: string): string[] {
   return [...new Set(['UTC', ...listed, ...(current ? [current] : [])])].sort((a, b) => (a === 'UTC' ? -1 : b === 'UTC' ? 1 : a.localeCompare(b)));
 }
 
-// TimezoneSelect saves without a button and shows the result next to it. It is never disabled while
+// TimezoneSelect picks a zone and hands it to onChange once the person stops; the page decides what a pick does
+// (a saved choice says so itself, with an Undo). It shows a refusal next to it, and is never disabled while
 // saving: a disabled control would throw keyboard focus out to the page.
 export function TimezoneSelect({ label, value, emptyOption, save, onChange }: TimezoneSelectProps) {
-  const feedback = useSaveFeedback(save);
+  const feedback = useSaveFeedback({ ...save, saved: false });
   const id = useId();
   const [draft, setDraft] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);

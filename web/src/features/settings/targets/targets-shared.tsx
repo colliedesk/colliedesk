@@ -44,6 +44,13 @@ export function useSave() {
   });
 }
 
+// useCurrentDocument reads the document as it is now, not as it was when the card last drew. The cards save one
+// after the other from one Save, and each must send what the one before it saved.
+export function useCurrentDocument(doc: ResponseTargets): () => ResponseTargets {
+  const client = useQueryClient();
+  return () => client.getQueryData<ResponseTargets>(['response-targets']) ?? doc;
+}
+
 export function Card({ id, title, lead, children }: { id: string; title: string; lead?: string; children: ReactNode }) {
   return <section className="settings-card" aria-labelledby={id}>
     <div className="section-heading"><h2 id={id}>{title}</h2>{lead && <p>{lead}</p>}</div>

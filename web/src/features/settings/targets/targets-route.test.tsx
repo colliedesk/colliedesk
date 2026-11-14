@@ -4,6 +4,10 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { permissionsOf, rolesOf } from '../../../test-roles';
 import type { ResponseTargets } from '../../../api/response-targets';
 
+// One Save for the page: it sends every card that changed.
+// It waits for the button to be Save again: while a save is on its way the bar says Saving….
+const pressSave = async () => fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+
 // Settings → Response targets (docs/user/response-targets.md).
 const mocks = vi.hoisted(() => {
   class InvalidRequestError extends Error {
@@ -56,14 +60,14 @@ test('business hours refuse a day that ends before it starts, copy Monday to the
   show();
   const hours = await screen.findByRole('region', { name: 'Business hours' });
   fireEvent.change(within(hours).getByLabelText('Monday to'), { target: { value: '07:00' } });
-  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  await pressSave();
   expect(within(hours).getByLabelText('Monday to')).toHaveAccessibleDescription(/^Ends before it starts\./);
   expect(responseTargetsApi.set).not.toHaveBeenCalled();
   fireEvent.change(within(hours).getByLabelText('Monday from'), { target: { value: '06:30' } });
   fireEvent.click(within(hours).getByRole('button', { name: 'Copy Monday to weekdays' }));
   expect(within(hours).getByLabelText('Friday from')).toHaveValue('06:30');
   fireEvent.click(within(hours).getByLabelText('Saturday open'));
-  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  await pressSave();
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   expect(sent().hours[4]).toEqual({ day: 'fri', open: true, from: '06:30', to: '07:00' });
   expect(sent().hours[5]).toMatchObject({ day: 'sat', open: true });
@@ -81,7 +85,7 @@ const typeIn = (field: { value: HTMLElement; unit: HTMLElement }, amount: string
   fireEvent.change(field.value, { target: { value: amount } });
   fireEvent.change(field.unit, { target: { value: unit } });
 };
-const saveTargets = (region: HTMLElement) => fireEvent.click(within(region).getByRole('button', { name: 'Save targets' }));
+const saveTargets = (_region: HTMLElement) => pressSave();
 
 test('targets show as people say them, take minutes or hours, and are minutes on the wire; an empty box is no target', async () => {
   responseTargetsApi.get.mockResolvedValue(doc({ targets: { urgent: { first_response_minutes: 15, resolution_minutes: 480 }, high: { first_response_minutes: 60, resolution_minutes: 510 },
@@ -98,7 +102,7 @@ test('targets show as people say them, take minutes or hours, and are minutes on
   typeIn(lowFirstBox(targets), '15', 'min');
   typeIn(lowResolveBox(targets), '1.5', 'h');
   fireEvent.change(box(targets, 'Resolve target for Urgent, in business time', 'Unit of the resolve target for Urgent').value, { target: { value: '' } });
-  saveTargets(targets);
+  await saveTargets(targets);
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   expect(sent().targets).toEqual({ urgent: { first_response_minutes: 15, resolution_minutes: null }, high: { first_response_minutes: 60, resolution_minutes: 510 },
     normal: { first_response_minutes: 90, resolution_minutes: 45 }, low: { first_response_minutes: 15, resolution_minutes: 90 } });
@@ -111,13 +115,13 @@ test('a target of 0 or a part of a minute is refused with a clear message and no
   const rule = 'Use 1 minute or more, in whole minutes, or leave it empty for no target.';
   for (const [amount, unit] of [['0', 'h'], ['1.5', 'min'], ['0.01', 'h'], ['-15', 'min']] as const) {
     typeIn(lowFirstBox(targets), amount, unit);
-    saveTargets(targets);
+    await saveTargets(targets);
     expect(lowFirstBox(targets).value).toHaveAccessibleDescription(rule);
   }
   expect(responseTargetsApi.set).not.toHaveBeenCalled();
   typeIn(lowFirstBox(targets), '1.1', 'h');
   typeIn(lowResolveBox(targets), '0.1', 'h');
-  saveTargets(targets);
+  await saveTargets(targets);
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   expect(sent().targets.low).toEqual({ first_response_minutes: 66, resolution_minutes: 6 });
 });
@@ -128,12 +132,12 @@ test('due soon takes minutes or hours, and 0', async () => {
   expect((warnBox(targets).value as HTMLInputElement).value).toBe('1');
   expect(warnBox(targets).unit).toHaveValue('h');
   typeIn(warnBox(targets), '5', 'min');
-  saveTargets(targets);
+  await saveTargets(targets);
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   expect(sent().warn_before_minutes).toBe(5);
   await waitFor(() => expect(within(targets).getByRole('status')).toHaveTextContent('Saved'));
   typeIn(warnBox(targets), '0', 'min');
-  saveTargets(targets);
+  await saveTargets(targets);
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
   expect(sent().warn_before_minutes).toBe(0);
 });
@@ -145,7 +149,7 @@ test('switching the unit keeps the number: a loaded 8 h switched to min sends 8'
   const urgentResolve = box(targets, 'Resolve target for Urgent, in business time', 'Unit of the resolve target for Urgent');
   fireEvent.change(urgentResolve.unit, { target: { value: 'min' } });
   expect(urgentResolve.value).toHaveValue(8);
-  saveTargets(targets);
+  await saveTargets(targets);
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   expect(sent().targets.urgent).toEqual({ first_response_minutes: 240, resolution_minutes: 8 });
 });
@@ -156,18 +160,18 @@ test('a target above a year or a due soon above a week is refused, the limit nam
   for (const [amount, unit, message] of [['525601', 'min', 'At most 525600 min (a year of business time).'], ['8761', 'h', 'At most 8760 h (a year of business time).'],
     ['1e20', 'h', 'At most 8760 h (a year of business time).']] as const) {
     typeIn(lowFirstBox(targets), amount, unit);
-    saveTargets(targets);
+    await saveTargets(targets);
     expect(lowFirstBox(targets).value).toHaveAccessibleDescription(message);
   }
   for (const [amount, unit, message] of [['10081', 'min', 'At most 10080 min (a week of business time).'], ['169', 'h', 'At most 168 h (a week of business time).']] as const) {
     typeIn(warnBox(targets), amount, unit);
-    saveTargets(targets);
+    await saveTargets(targets);
     expect(warnBox(targets).value).toHaveAccessibleDescription(message);
   }
   expect(responseTargetsApi.set).not.toHaveBeenCalled();
   typeIn(lowFirstBox(targets), '8760', 'h');
   typeIn(warnBox(targets), '168', 'h');
-  saveTargets(targets);
+  await saveTargets(targets);
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   expect(sent().targets.low.first_response_minutes).toBe(525600);
   expect(sent().warn_before_minutes).toBe(10080);
@@ -211,10 +215,12 @@ test('Applies to shows only with two channels or more; every channel is saved as
   show();
   const applies = await screen.findByRole('region', { name: 'Applies to' });
   fireEvent.click(within(applies).getByRole('checkbox', { name: 'Email' }));
-  fireEvent.click(within(applies).getByRole('button', { name: 'Save channels' }));
+  await pressSave();
   await waitFor(() => expect(sent()?.channel_ids).toEqual(['33333333-3333-4333-8333-333333333333']));
+  // The page shows what was saved before the next change is made.
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull());
   fireEvent.click(within(applies).getByRole('checkbox', { name: 'Email' }));
-  fireEvent.click(within(applies).getByRole('button', { name: 'Save channels' }));
+  await pressSave();
   await waitFor(() => expect(sent()?.channel_ids).toBeNull());
 });
 
@@ -251,7 +257,9 @@ test('a day may close at midnight: 00:00 as its end is sent as 24:00, and 24:00 
   const hours = await screen.findByRole('region', { name: 'Business hours' });
   expect(within(hours).getByLabelText('Monday to')).toHaveValue('00:00');
   expect(within(hours).getByLabelText('Monday to')).toHaveAccessibleDescription(/midnight/);
-  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  // Saving needs a change: copying Monday to the weekdays is one, and Monday itself goes back as it was read.
+  fireEvent.click(within(hours).getByRole('button', { name: 'Copy Monday to weekdays' }));
+  await pressSave();
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   expect(sent().hours[0]).toEqual({ day: 'mon', open: true, from: '08:00', to: '24:00' });
 });
@@ -261,7 +269,8 @@ test('a refusal of the whole hours or holidays shows on its card', async () => {
     .mockRejectedValueOnce(new mocks.InvalidRequestError('Check the targets.', { fields: { holidays: 'At most 100 holidays.' } }));
   show();
   const hours = await screen.findByRole('region', { name: 'Business hours' });
-  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  fireEvent.change(within(hours).getByLabelText('Monday from'), { target: { value: '09:00' } });
+  await pressSave();
   expect(await within(hours).findByText('Give each day once.')).toBeInTheDocument();
   const holidays = screen.getByRole('region', { name: 'Holidays' });
   fireEvent.change(within(holidays).getByLabelText('Date'), { target: { value: '2027-01-01' } });
@@ -275,7 +284,8 @@ test('saving any card keeps the reader\'s own email choice, which the save does 
   show();
   const targets = await screen.findByRole('region', { name: 'Targets' });
   expect(screen.getByRole('switch', { name: 'Email them to me' })).not.toBeChecked();
-  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  typeIn(lowFirstBox(targets), '2', 'h');
+  await pressSave();
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(within(targets).getByRole('status')).toHaveTextContent('Saved'));
   expect(screen.getByRole('switch', { name: 'Email them to me' })).not.toBeChecked();
@@ -286,7 +296,7 @@ test('a day open from 00:00 to 00:00 is open all day', async () => {
   const hours = await screen.findByRole('region', { name: 'Business hours' });
   fireEvent.change(within(hours).getByLabelText('Monday from'), { target: { value: '00:00' } });
   fireEvent.change(within(hours).getByLabelText('Monday to'), { target: { value: '00:00' } });
-  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  await pressSave();
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(1));
   expect(sent().hours[0]).toEqual({ day: 'mon', open: true, from: '00:00', to: '24:00' });
   expect(within(hours).getByLabelText('Monday to')).toHaveValue('00:00');
@@ -298,9 +308,8 @@ test('saving one card leaves what is being typed in the others', async () => {
   fireEvent.change(within(hours).getByLabelText('Tuesday to'), { target: { value: '18:30' } });
   const holidays = screen.getByRole('region', { name: 'Holidays' });
   fireEvent.change(within(holidays).getByLabelText('Name'), { target: { value: 'Tết' } });
-  const targets = screen.getByRole('region', { name: 'Targets' });
-  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
-  await waitFor(() => expect(within(targets).getByRole('status')).toHaveTextContent('Saved'));
+  await pressSave();
+  await waitFor(() => expect(within(hours).getByRole('status')).toHaveTextContent('Saved'));
   expect(within(hours).getByLabelText('Tuesday to')).toHaveValue('18:30');
   expect(within(holidays).getByLabelText('Name')).toHaveValue('Tết');
 });
@@ -311,13 +320,13 @@ test('a save made after someone else saved is refused: the card says so, shows t
   show();
   const targets = await screen.findByRole('region', { name: 'Targets' });
   fireEvent.change(within(targets).getByLabelText('First reply target for Low, in business time'), { target: { value: '2' } });
-  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await pressSave();
   await waitFor(() => expect(sent()).toMatchObject({ updated_at: '2026-10-31T00:00:00Z' }));
   expect(await within(targets).findByRole('alert')).toHaveTextContent(/Someone else changed the response targets; your change was not saved\. They show as they are now/);
   expect(within(targets).getByLabelText('First reply target for Low, in business time')).toHaveValue(2);
   expect(screen.getByRole('region', { name: 'Holidays' })).toHaveTextContent('Christmas');
   // Saving again goes with the version now shown.
-  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await pressSave();
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
   expect(sent()).toMatchObject({ updated_at: '2026-10-31T02:00:00Z', holidays: [{ date: '2026-12-25', name: 'Christmas' }] });
   expect(sent().targets.low.first_response_minutes).toBe(120);
@@ -329,11 +338,11 @@ test('after a refusal, the fields nobody here touched show and save the other ad
   show();
   const targets = await screen.findByRole('region', { name: 'Targets' });
   fireEvent.change(within(targets).getByLabelText('First reply target for Normal, in business time'), { target: { value: '2' } });
-  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await pressSave();
   await within(targets).findByRole('alert');
   expect(within(targets).getByLabelText('Due soon, in business time before the target')).toHaveValue(1.5);
   expect(within(targets).getByLabelText('First reply target for Normal, in business time')).toHaveValue(2);
-  fireEvent.click(within(targets).getByRole('button', { name: 'Save targets' }));
+  await pressSave();
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
   expect(sent()).toMatchObject({ warn_before_minutes: 90, updated_at: '2026-10-31T02:00:00Z' });
   expect(sent().targets.normal.first_response_minutes).toBe(120);
@@ -345,7 +354,7 @@ test('business hours after a refusal: a day touched here keeps its hours, the ot
   show();
   const hours = await screen.findByRole('region', { name: 'Business hours' });
   fireEvent.change(within(hours).getByLabelText('Monday to'), { target: { value: '18:00' } });
-  fireEvent.click(within(hours).getByRole('button', { name: 'Save business hours' }));
+  await pressSave();
   await within(hours).findByText(/Someone else changed the response targets/);
   expect(within(hours).getByLabelText('Monday to')).toHaveValue('18:00');
   expect(within(hours).getByLabelText('Monday from')).toHaveValue('07:00');

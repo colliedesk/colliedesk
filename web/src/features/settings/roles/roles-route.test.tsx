@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   api: { me: vi.fn(), config: vi.fn(), roles: vi.fn(), role: vi.fn(), createRole: vi.fn(), restoreRole: vi.fn() },
   navigate: vi.fn(),
 }));
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mocks.navigate }));
+// The settings frame asks for the router to guard against leaving unsaved text; there is none here.
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mocks.navigate, useRouter: () => undefined, useBlocker: () => undefined }));
 vi.mock('../../../api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../../api/client')>()), api: mocks.api }));
 
 function setUp() {

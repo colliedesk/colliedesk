@@ -83,6 +83,11 @@ export const settingsMessages = {
   revoke: 'Revoke',
   saving: 'Saving…',
   saved: 'Saved',
+  // The one save bar of a page, and the question when someone leaves it with text not yet saved.
+  unsavedChanges: 'Unsaved changes',
+  discard: 'Discard',
+  save: 'Save',
+  leaveUnsaved: 'You have unsaved changes. Leave anyway?',
   emailChannel: 'Email channel',
   supportAddress: 'Support address',
   saveSupportAddress: 'Save support address',

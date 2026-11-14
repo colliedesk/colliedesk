@@ -190,8 +190,8 @@ test('a chosen workspace timezone is saved when the list is left, no Save button
   fireEvent.change(select, { target: { value: 'America/New_York' } });
   fireEvent.blur(select);
   expect(onSetWorkspaceTimezone).toHaveBeenCalledWith('America/New_York');
-  // The only button in General saves the workspace name; the timezone needs none.
-  expect(within(general).getAllByRole('button').map((button) => button.textContent)).toEqual(['Save workspace name']);
+  // Nothing in General has a button of its own: the timezone saves at once, and the name waits for the page's Save.
+  expect(within(general).queryAllByRole('button')).toEqual([]);
 });
 
 test('your timezone follows the workspace until you choose one, and choosing the workspace again clears it', () => {
@@ -212,13 +212,13 @@ test('a stored timezone this browser does not list is still shown as chosen', ()
   expect(screen.getByRole('combobox', { name: 'Your timezone' })).toHaveValue('Mars/Olympus_Mons');
 });
 
-test('a timezone save shows Saving…, Saved or the failure next to its own control', () => {
+test('a timezone save shows Saving… or the failure next to its own control; Saved is the page toast', () => {
   const { rerender } = render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ pending: true }} />);
   expect(screen.getByText('Saving…')).toBeInTheDocument();
   // Never disabled: a disabled control would throw keyboard focus out to the page.
   expect(screen.getByRole('combobox', { name: 'Your timezone' })).toBeEnabled();
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ saved: true }} />);
-  expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ error: 'Unknown timezone.' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Unknown timezone.');
 });
@@ -315,7 +315,7 @@ test('an admin of a billed workspace finds Plan and billing last, under Data and
   expect(links.at(-1)).toHaveAttribute('href', '/settings/billing');
 });
 
-test('your display name is saved with its button, trimmed, and saving an empty field clears it', () => {
+test('your display name is saved with the page Save, trimmed, and saving an empty field clears it', async () => {
   const onSetDisplayName = vi.fn();
   render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" email="ada@example.com" displayName="Ada" onSetDisplayName={onSetDisplayName} />);
   const profile = screen.getByRole('region', { name: 'Profile' });
@@ -324,16 +324,18 @@ test('your display name is saved with its button, trimmed, and saving an empty f
   expect(input).toHaveAttribute('placeholder', 'ada@example.com');
   expect(input).toHaveAttribute('maxLength', '80');
   fireEvent.change(input, { target: { value: '  Ada Lovelace ' } });
-  fireEvent.click(within(profile).getByRole('button', { name: 'Save name' }));
+  expect(within(profile).queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSetDisplayName).toHaveBeenLastCalledWith('Ada Lovelace');
   fireEvent.change(input, { target: { value: '' } });
-  fireEvent.click(within(profile).getByRole('button', { name: 'Save name' }));
+  // While a save is on its way the bar says Saving…; it is Save again once the answer is in.
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   expect(onSetDisplayName).toHaveBeenLastCalledWith('');
 });
 
 test('a display name save shows Saving…, Saved or why it was refused', () => {
   const { rerender } = render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" displayName="" displayNameSave={{ pending: true }} />);
-  expect(screen.getByRole('button', { name: 'Saving…' })).toBeInTheDocument();
+  expect(screen.getByText('Saving…')).toBeInTheDocument();
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" displayName="Ada" displayNameSave={{ saved: true }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Saved');
   expect(screen.getByRole('textbox', { name: 'Display name' })).toHaveValue('Ada');

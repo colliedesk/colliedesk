@@ -7,6 +7,7 @@ import type { ResponseTargets, Weekday } from '../../../api/response-targets';
 import { messages } from '../../../messages';
 import { useBillingShown } from '../../billing/billing-shown';
 import { saveState, useSaveFeedback } from '../save-feedback';
+import { settingsMessages } from '../settings-messages';
 import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
 import { TimezoneSelect } from '../timezone-select';
@@ -14,7 +15,8 @@ import { targetsMessages as m } from './targets-messages';
 import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoken, targetProblem, units, warnProblem } from './target-duration';
 import type { Duration, Unit } from './target-duration';
 import { OffCard } from './targets-off-card';
-import { Card, cardState, fieldErrors, useSave, withoutStamp } from './targets-shared';
+import { Card, cardState, fieldErrors, useCurrentDocument, useSave, withoutStamp } from './targets-shared';
+import { SettingsEditsProvider, useInstantSave, useSaveChanges, useSettingsEdit } from '../settings-edits';
 import { can } from '../../../lib/can';
 import '../../../ui/controls.css';
 import './targets.css';
@@ -48,7 +50,7 @@ export function TargetsRoute() {
     <header><h1>{m.heading}</h1><p>{m.description}</p></header>
     <div className="settings-layout">
       <SettingsNav page="/settings/targets" shown={shown} />
-      <div className="settings-sections">
+      <div className="settings-sections"><SettingsEditsProvider>
         {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
         {doc.isPending ? <div className="tg-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
           : doc.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void doc.refetch()}>{m.tryAgain}</button></p>
@@ -63,7 +65,7 @@ export function TargetsRoute() {
               {/* One channel: nothing to choose (design rule: only real choices), unless the scope names a deleted one. */}
               {canChoose && <AppliesCard doc={doc.data} canManage={isAdmin} channels={live.map((item) => ({ id: item.id, name: item.name }))} refused={refused} />}
             </>}
-      </div>
+      </SettingsEditsProvider></div>
     </div>
   </main>;
 }
@@ -71,14 +73,17 @@ export function TargetsRoute() {
 // refused: what the server refused on the turn-on that opened the editor, by field, shown beside it.
 interface CardProps { doc: ResponseTargets; canManage: boolean; refused?: Record<string, string> }
 
+// A switch saves when it is flipped and says Saved with an Undo that flips it back.
 function OnCard({ doc, canManage }: CardProps) {
   const save = useSave();
-  const feedback = useSaveFeedback(cardState(save));
+  const feedback = useSaveFeedback({ ...cardState(save), saved: false });
+  const current = useCurrentDocument(doc);
+  const instant = useInstantSave();
   const id = useId();
   return <Card id={id} title={m.onHeading} lead={m.onLead}>
     {canManage
       ? <span className="button-row"><label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={save.isPending ? Boolean(save.variables?.enabled) : doc.enabled}
-          disabled={save.isPending} onChange={(event) => { feedback.touch(); save.mutate({ ...withoutStamp(doc), enabled: event.target.checked }); }} /></span><span>{m.measure}</span></label>{feedback.status}</span>
+          disabled={save.isPending} onChange={(event) => { feedback.touch(); void instant((enabled: boolean) => save.mutateAsync({ ...withoutStamp(current()), enabled }), event.target.checked, doc.enabled); }} /></span><span>{m.measure}</span></label>{feedback.status}</span>
       : <p>{doc.enabled ? m.yes : m.no}</p>}
   </Card>;
 }
@@ -101,6 +106,20 @@ function HoursCard({ doc, canManage, workspaceZone, refused }: CardProps & { wor
   };
   // A day closing at midnight is 24:00 on the wire; the time field shows and takes 00:00 for it.
   const bad = (day: Weekday) => { const item = byDay(day); return item.open && item.to !== '24:00' && item.to <= item.from; };
+  const savedDay = (day: Weekday) => doc.hours.find((item) => item.day === day) ?? { day, open: false, from: '08:00', to: '17:00' };
+  const changed = (zoneEdit !== undefined && zoneEdit !== (doc.timezone ?? '')) || weekdays.some((day) => (['open', 'from', 'to'] as const).some((key) => byDay(day)[key] !== savedDay(day)[key]));
+  const saveChanges = useSaveChanges();
+  const current = useCurrentDocument(doc);
+  const clear = () => { setZoneEdit(undefined); setDayEdits({}); setChecked(false); };
+  // What was typed lies over the document only while it differs from it: once a save (or a change back) makes them
+  // the same, the document is shown again, so a later change by someone else is not hidden.
+  const typed = zoneEdit !== undefined || Object.keys(dayEdits).length > 0;
+  useEffect(() => { if (typed && !changed) clear(); }, [typed, changed]);
+  useSettingsEdit('targets-hours', canManage && changed ? { label: m.hoursHeading, discard: clear, save: () => {
+    setChecked(true);
+    if (weekdays.some(bad)) return Promise.reject(new Error('invalid'));
+    return save.mutateAsync({ ...withoutStamp(current()), timezone: zone || null, hours: weekdays.map(byDay) });
+  } } : undefined);
   if (!canManage) {
     return <Card id={id} title={m.hoursHeading} lead={m.hoursLead}><dl className="tg-dl">
       <dt>{m.timezone}</dt><dd>{doc.timezone ?? m.workspaceZone(workspaceZone)}</dd>
@@ -108,12 +127,7 @@ function HoursCard({ doc, canManage, workspaceZone, refused }: CardProps & { wor
     </dl></Card>;
   }
   return <Card id={id} title={m.hoursHeading} lead={m.hoursLead}>
-    <form className="stacked-form" noValidate onSubmit={(event) => {
-      event.preventDefault();
-      setChecked(true);
-      if (feedback.pending || weekdays.some(bad)) return;
-      save.mutate({ ...withoutStamp(doc), timezone: zone || null, hours: weekdays.map(byDay) }, { onSuccess: () => { setZoneEdit(undefined); setDayEdits({}); } });
-    }}>
+    <form className="stacked-form" noValidate onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) void saveChanges(); }}>
       <TimezoneSelect label={m.timezone} value={zone} emptyOption={m.workspaceZone(workspaceZone)} onChange={(next) => { feedback.touch(); setZoneEdit(next); }} />
       {server.timezone && <span className="error-copy field-note" role="alert">{server.timezone}</span>}
       {server.hours && <p className="error-copy" role="alert">{server.hours}</p>}
@@ -141,7 +155,7 @@ function HoursCard({ doc, canManage, workspaceZone, refused }: CardProps & { wor
         feedback.touch();
         setDayEdits((all) => ({ ...all, tue: { open, from, to }, wed: { open, from, to }, thu: { open, from, to }, fri: { open, from, to } }));
       }}>{m.copyMonday}</button></span>
-      <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveHours)}</button>{feedback.status}</span>
+      <span className="button-row">{feedback.pending ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}</span>
     </form>
   </Card>;
 }
@@ -202,6 +216,21 @@ function TargetsCard({ doc, canManage, refused }: CardProps) {
   const feedback = useSaveFeedback(cardState(save));
   const server = { ...refused, ...fieldErrors(save.error) };
   const id = useId();
+  const saveChanges = useSaveChanges();
+  const current = useCurrentDocument(doc);
+  const savedBox = (key: string) => (key === 'warn' ? durationOf(doc.warn_before_minutes) : fromDoc(...(key.split('.') as [Priority, 'first' | 'resolve'])));
+  const changed = Object.entries(edits).some(([key, value]) => value && (value.amount !== savedBox(key).amount || value.unit !== savedBox(key).unit));
+  const bad = () => priorities.some((priority) => targetProblem(valueOf(priority, 'first')) || targetProblem(valueOf(priority, 'resolve'))) || warnProblem(warn);
+  // As with the hours: typed boxes lie over the document only while they differ from it.
+  useEffect(() => { if (Object.keys(edits).length > 0 && !changed) setEdits({}); }, [edits, changed]);
+  useSettingsEdit('targets-times', canManage && changed ? { label: m.targetsHeading, discard: () => { setEdits({}); setChecked(false); }, save: () => {
+    setChecked(true);
+    if (bad()) return Promise.reject(new Error('invalid'));
+    // Checked above: each is whole minutes, or null for an empty target box.
+    const minutes = (value: Duration) => minutesOf(value) ?? null;
+    return save.mutateAsync({ ...withoutStamp(current()), warn_before_minutes: minutes(warn) ?? 0,
+      targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: minutes(valueOf(priority, 'first')), resolution_minutes: minutes(valueOf(priority, 'resolve')) }])) as ResponseTargets['targets'] });
+  } } : undefined);
   const priorityName = (priority: Priority) => messages.priorities[priority];
   const edit = (key: string) => (next: Duration) => { feedback.touch(); setEdits((all) => ({ ...all, [key]: next })); };
   if (!canManage) {
@@ -227,17 +256,7 @@ function TargetsCard({ doc, canManage, refused }: CardProps) {
   const warnError = server.warn_before_minutes ?? (!checked ? undefined
     : { rule: m.warnRule, max: m.warnMax(limitIn(maxWarnMinutes, warn.unit)), none: undefined }[warnProblem(warn) ?? 'none']);
   return <Card id={id} title={m.targetsHeading} lead={m.targetsLead}>
-    <form className="stacked-form" noValidate onSubmit={(event) => {
-      event.preventDefault();
-      setChecked(true);
-      const bad = priorities.some((priority) => targetProblem(valueOf(priority, 'first')) || targetProblem(valueOf(priority, 'resolve'))) || warnProblem(warn);
-      if (bad || feedback.pending) return;
-      // Checked above: each is whole minutes, or null for an empty target box.
-      const minutes = (value: Duration) => minutesOf(value) ?? null;
-      save.mutate({ ...withoutStamp(doc), warn_before_minutes: minutes(warn) ?? 0,
-        targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: minutes(valueOf(priority, 'first')), resolution_minutes: minutes(valueOf(priority, 'resolve')) }])) as ResponseTargets['targets'] },
-        { onSuccess: () => setEdits({}) });
-    }}>
+    <form className="stacked-form" noValidate onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) void saveChanges(); }}>
       <table className="tg-table">
         <thead><tr><th scope="col">{m.priority}</th><th scope="col">{m.firstReply}</th><th scope="col">{m.resolve}</th></tr></thead>
         <tbody>{priorities.map((priority) => <tr key={priority}><th scope="row">{priorityName(priority)}</th>{cell(priority, 'first', 'first_response_minutes')}{cell(priority, 'resolve', 'resolution_minutes')}</tr>)}</tbody>
@@ -248,7 +267,7 @@ function TargetsCard({ doc, canManage, refused }: CardProps) {
         {warnError && <span className="error-copy field-note" id={`${id}-warn-error`}>{warnError}</span>}
       </div>
       <p className="muted-copy">{m.targetsNote}</p>
-      <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveTargets)}</button>{feedback.status}</span>
+      <span className="button-row">{feedback.pending ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}</span>
     </form>
   </Card>;
 }
@@ -266,22 +285,27 @@ function AppliesCard({ doc, canManage, channels, refused }: CardProps & { channe
   const server = { ...refused, ...fieldErrors(save.error) };
   const refusedScope = Object.entries(server).find(([field]) => field.startsWith('channel_ids'))?.[1];
   const id = useId();
+  const saveChanges = useSaveChanges();
+  const current = useCurrentDocument(doc);
+  const savedScope = doc.channel_ids ?? every;
+  const changed = chosenEdit !== undefined && (chosenEdit.length !== savedScope.length || chosenEdit.some((item) => !savedScope.includes(item)));
+  useEffect(() => { if (chosenEdit !== undefined && !changed) setChosenEdit(undefined); }, [chosenEdit, changed]);
+  useSettingsEdit('targets-applies', canManage && changed ? { label: m.appliesHeading, discard: () => { setChosenEdit(undefined); setChecked(false); }, save: () => {
+    setChecked(true);
+    if (chosen.length === 0) return Promise.reject(new Error('invalid'));
+    // Every channel is null: a channel added later is measured too.
+    return save.mutateAsync({ ...withoutStamp(current()), channel_ids: chosen.length === every.length && every.every((item) => chosen.includes(item)) ? null : chosen });
+  } } : undefined);
   if (!canManage) return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}><ul className="muted-copy">{channels.filter((item) => chosen.includes(item.id)).map((item) => <li key={item.id}>{item.name}</li>)}</ul></Card>;
   return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}>
-    <form className="stacked-form" noValidate onSubmit={(event) => {
-      event.preventDefault();
-      setChecked(true);
-      if (chosen.length === 0 || feedback.pending) return;
-      // Every channel is null: a channel added later is measured too.
-      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length && every.every((item) => chosen.includes(item)) ? null : chosen }, { onSuccess: () => setChosenEdit(undefined) });
-    }}>
+    <form className="stacked-form" noValidate onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) void saveChanges(); }}>
       <fieldset className="tg-channels"><legend className="sr-only">{m.appliesHeading}</legend>
         {[...deleted.map((id) => ({ id, name: m.deletedChannel(id) })), ...channels].map((item) => <label className="check-row" key={item.id}><input type="checkbox" checked={chosen.includes(item.id)}
           onChange={(event) => { feedback.touch(); setChosenEdit(event.target.checked ? [...chosen, item.id] : chosen.filter((other) => other !== item.id)); }} /><span>{item.name}</span></label>)}
       </fieldset>
       {refusedScope && <p className="error-copy" role="alert">{refusedScope}</p>}
       {checked && chosen.length === 0 && <p className="error-copy" role="alert">{m.pickOne}</p>}
-      <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveApplies)}</button>{feedback.status}</span>
+      <span className="button-row">{feedback.pending ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}</span>
     </form>
   </Card>;
 }
@@ -290,22 +314,24 @@ function AppliesCard({ doc, canManage, channels, refused }: CardProps & { channe
 function AlertsCard({ doc, canManage }: CardProps) {
   const client = useQueryClient();
   const save = useSave();
-  const feedback = useSaveFeedback(cardState(save));
+  const feedback = useSaveFeedback({ ...cardState(save), saved: false });
+  const current = useCurrentDocument(doc);
+  const instant = useInstantSave();
   const mine = useMutation({
     mutationFn: (email: boolean) => responseTargetsApi.setMyAlerts(email),
     onSuccess: (result) => client.setQueryData<ResponseTargets>(['response-targets'], (current) => (current ? { ...current, my_alert_email: result.email } : current)),
   });
-  const mineFeedback = useSaveFeedback(saveState(mine));
+  const mineFeedback = useSaveFeedback({ ...saveState(mine), saved: false });
   const id = useId();
   const workspaceOn = save.isPending ? Boolean(save.variables?.alert_email) : doc.alert_email;
   const meOn = mine.isPending ? Boolean(mine.variables) : doc.my_alert_email !== false;
   return <Card id={id} title={m.alertsHeading} lead={m.alertsLead}>
     {canManage
       ? <span className="button-row"><label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={workspaceOn} disabled={save.isPending}
-          onChange={(event) => { feedback.touch(); save.mutate({ ...withoutStamp(doc), alert_email: event.target.checked }); }} /></span><span>{m.alertEmail}</span></label>{feedback.status}</span>
+          onChange={(event) => { feedback.touch(); void instant((alert_email: boolean) => save.mutateAsync({ ...withoutStamp(current()), alert_email }), event.target.checked, doc.alert_email); }} /></span><span>{m.alertEmail}</span></label>{feedback.status}</span>
       : <p>{m.alertEmail}: {doc.alert_email ? m.yes : m.no}</p>}
     <span className="button-row"><label className="field-inline"><span className="switch"><input type="checkbox" role="switch" checked={meOn} disabled={mine.isPending || !doc.alert_email}
-      aria-describedby={doc.alert_email ? undefined : `${id}-off`} onChange={(event) => { mineFeedback.touch(); mine.mutate(event.target.checked); }} /></span><span>{m.alertMe}</span></label>{mineFeedback.status}</span>
+      aria-describedby={doc.alert_email ? undefined : `${id}-off`} onChange={(event) => { mineFeedback.touch(); void instant(mine.mutateAsync, event.target.checked, meOn); }} /></span><span>{m.alertMe}</span></label>{mineFeedback.status}</span>
     {!doc.alert_email && <p className="muted-copy" id={`${id}-off`}>{m.alertsOff}</p>}
   </Card>;
 }

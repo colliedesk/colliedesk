@@ -28,11 +28,11 @@ export function AccountRoute() {
   } });
   const agentTimezone = useMutation({ mutationFn: api.updateAgentTimezone, onSuccess: () => refresh('me') });
   // Your name also shows in the team list and the assignee lists.
-  const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => { void refresh('me'); void refresh('agents'); } });
+  const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => Promise.all([refresh('me'), refresh('agents')]) });
   // Showing the setup guide again shows all of Quick start, Try more too if this browser skipped it.
   const setupGuide = useMutation({ mutationFn: api.setSetupGuideHidden, onSuccess: (answer) => {
     if (!answer.hidden && me.data) storeSkipped(me.data.agent.id, false);
-    void refresh('me'); void refresh('setup');
+    return Promise.all([refresh('me'), refresh('setup')]);
   } });
   const billingShown = useBillingShown(can(me.data, 'billing:read'));
   const loading = me.isPending || sessions.isPending;
@@ -40,9 +40,9 @@ export function AccountRoute() {
   useScrollToHashWhenReady(!loading);
   return <SettingsPage page="account" loading={loading} mentionEmail={can(me.data, 'messages:read') ? <MentionEmailSetting /> : undefined} sessions={sessions.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'} showBilling={billingShown}
     personalTimezoneSave={saveState(agentTimezone)} email={me.data?.agent.email} displayName={me.data?.agent.display_name} displayNameSave={saveState(agentDisplayName)}
-    onSetDisplayName={(name) => agentDisplayName.mutate(name)}
-    setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutate(hidden)}
+    onSetDisplayName={(name) => agentDisplayName.mutateAsync(name)}
+    setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutateAsync(hidden)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeSession.isError ? messages.settingsActionFailed : undefined} mcpAddress={mcpAddress}
-    onRevokeSession={(id) => revokeSession.mutate(id)} onSetAgentTimezone={(value) => agentTimezone.mutate(value)} />;
+    onRevokeSession={(id) => revokeSession.mutate(id)} onSetAgentTimezone={(value) => agentTimezone.mutateAsync(value)} />;
 }

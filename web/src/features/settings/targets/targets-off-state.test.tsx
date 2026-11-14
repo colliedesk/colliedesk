@@ -4,6 +4,10 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { permissionsOf, rolesOf } from '../../../test-roles';
 import type { ResponseTargets } from '../../../api/response-targets';
 
+// One Save for the page: it sends every card that changed.
+// It waits for the button to be Save again: while a save is on its way the bar says Saving….
+const pressSave = async () => fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+
 // Settings → Response targets while measuring is off (docs/user/response-targets.md): one card, no editor,
 // and a turn-on that starts with sensible hours.
 const mocks = vi.hoisted(() => {
@@ -156,7 +160,7 @@ test('a turn-on refused for a channel deleted since opens the editor with the se
   const deleted = within(applies).getByRole('checkbox', { name: /^Deleted channel/ });
   expect(deleted).toBeChecked();
   fireEvent.click(deleted);
-  fireEvent.click(within(applies).getByRole('button', { name: 'Save channels' }));
+  await pressSave();
   await waitFor(() => expect(responseTargetsApi.set).toHaveBeenCalledTimes(2));
   // Every live channel ticked is the scope "every channel" (null); the deleted one is gone only because it was unticked.
   expect(sent()).toMatchObject({ enabled: false, channel_ids: null });

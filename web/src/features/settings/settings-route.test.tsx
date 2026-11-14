@@ -111,7 +111,7 @@ test('an admin renames the workspace in General and the new name is read back', 
   expect(field).toHaveAccessibleDescription(/help center title.*sender name/i);
   const before = api.me.mock.calls.length;
   fireEvent.change(field, { target: { value: ' Gamma Desk ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save workspace name' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Save/ }));
   await waitFor(() => expect(api.updateWorkspaceName).toHaveBeenCalledWith('Gamma Desk'));
   await waitFor(() => expect(api.me.mock.calls.length).toBeGreaterThan(before));
 });
@@ -144,7 +144,7 @@ test('a chosen timezone saves once, shows Saving…, then Saved', async () => {
   expect(api.updateWorkspaceTimezone).toHaveBeenCalledTimes(1);
   expect(api.updateWorkspaceTimezone.mock.calls[0][0]).toBe('Asia/Tokyo');
   finish();
-  expect(await screen.findByText('Saved')).toHaveAttribute('role', 'status');
+  expect(await screen.findByRole('status')).toHaveTextContent('Saved');
   expect(select).toBeEnabled();
 });
 
