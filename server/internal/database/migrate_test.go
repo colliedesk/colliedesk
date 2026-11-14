@@ -63,10 +63,10 @@ func TestMigrateRejectsCrossWorkspaceRelationships(t *testing.T) {
 		t.Fatalf("Migrate: %v", err)
 	}
 	var workspaceA, workspaceB, contactB string
-	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name) VALUES('alpha','Alpha') RETURNING id::text`).Scan(&workspaceA); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES('alpha','Alpha',now()+interval '14 days') RETURNING id::text`).Scan(&workspaceA); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name) VALUES('beta','Beta') RETURNING id::text`).Scan(&workspaceB); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES('beta','Beta',now()+interval '14 days') RETURNING id::text`).Scan(&workspaceB); err != nil {
 		t.Fatal(err)
 	}
 	if err := pool.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Example','person@example.com') RETURNING id::text`, workspaceB).Scan(&contactB); err != nil {
@@ -228,4 +228,19 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		admin.Close()
 	})
 	return pool
+}
+
+// A workspace insert that forgets trial_ends_at must fail: there is no default to hand out a free trial by accident.
+func TestWorkspaceWithoutTrialEndIsRefused(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO workspaces(slug,name) VALUES('no-trial','No trial')`); err == nil {
+		t.Fatal("a workspace without trial_ends_at was accepted")
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES('with-trial','With trial','2026-12-01T00:00:00Z')`); err != nil {
+		t.Fatalf("a workspace with trial_ends_at: %v", err)
+	}
 }
