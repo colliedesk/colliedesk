@@ -84,9 +84,14 @@ func earlyCut(buffer string) int {
 	cut := strings.LastIndexFunc(buffer, unicode.IsSpace)
 	for cut > 0 {
 		before := strings.TrimRightFunc(buffer[:cut], unicode.IsSpace)
-		start := strings.LastIndexFunc(before, unicode.IsSpace) + 1
+		start := 0
+		if space := strings.LastIndexFunc(before, unicode.IsSpace); space >= 0 {
+			// A space may be more than one byte (a thin or no-break space).
+			_, size := utf8.DecodeRuneInString(before[space:])
+			start = space + size
+		}
 		word := before[start:]
-		if word == "" || strings.IndexFunc(word, func(r rune) bool { return !strings.ContainsRune("0123456789+().-", r) }) >= 0 {
+		if word == "" || strings.IndexFunc(word, func(r rune) bool { return !phoneWordRune(r) }) >= 0 {
 			break
 		}
 		cut = start
@@ -128,34 +133,41 @@ func (f *chatFilter) knownDigits() []string {
 	return f.digits
 }
 
-// phoneDigits are the digits of each phone number (chatPhone) in text. A number is made only of
-// digits, ASCII spaces and +().-, and chatPhone has no anchor or word boundary, so its matches are
-// the same when it reads only the runs of those characters that hold two digits and six characters
-// or more: the pattern over 180 KB of excerpts took 12 ms (docs/internals/performance.md).
+// phoneDigits are the digits of each phone number (chatPhone) in text, read as foldPhones writes it.
+// A number is made only of digits, spaces and +().-, and chatPhone has no anchor or word boundary, so
+// its matches are the same when it reads only the runs of those characters that hold two digits and six
+// characters or more: the pattern over 180 KB of excerpts took 12 ms (docs/internals/performance.md).
+// Each run is folded on its own, so the letters between runs are never copied.
 func phoneDigits(text string) []string {
 	var digits []string
-	for start := 0; start < len(text); {
-		if !phoneByte(text[start]) {
-			start++
-			continue
+	var run []byte
+	count := 0
+	flush := func() {
+		if count >= 2 && len(run) >= 6 {
+			for _, match := range chatPhone.FindAll(run, -1) {
+				digits = append(digits, onlyDigits(string(match)))
+			}
 		}
-		end, count := start, 0
-		for ; end < len(text) && phoneByte(text[end]); end++ {
-			if text[end] >= '0' && text[end] <= '9' {
+		run, count = run[:0], 0
+	}
+	for _, r := range text {
+		f := foldPhoneRune(r)
+		switch {
+		case f < 0: // an invisible character inside a number
+		case f >= utf8.RuneSelf || !phoneByte(byte(f)):
+			flush()
+		default:
+			run = append(run, byte(f))
+			if f >= '0' && f <= '9' {
 				count++
 			}
 		}
-		if count >= 2 && end-start >= 6 {
-			for _, match := range chatPhone.FindAllString(text[start:end], -1) {
-				digits = append(digits, onlyDigits(match))
-			}
-		}
-		start = end
 	}
+	flush()
 	return digits
 }
 
-// phoneByte is a byte chatPhone can match: a digit, \s (ASCII spaces) or +().-.
+// phoneByte is a folded byte chatPhone can match: a digit, \s (ASCII spaces) or +().-.
 func phoneByte(b byte) bool {
 	return b >= '0' && b <= '9' || strings.IndexByte(" \t\n\f\r+().-", b) >= 0
 }
@@ -186,7 +198,7 @@ func (f *chatFilter) check(sentence string) (string, bool, []string) {
 			return hiddenSentence(sentence), true, nil
 		}
 	}
-	for _, phone := range chatPhone.FindAllString(sentence, -1) {
+	for _, phone := range chatPhone.FindAllString(foldPhones(sentence), -1) {
 		digits := onlyDigits(phone)
 		if len(digits) < 6 {
 			continue
