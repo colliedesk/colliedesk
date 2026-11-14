@@ -21,7 +21,7 @@ import { useInstantSave } from '../settings-edits';
 // The features this tab sets; intake shows only on a chat type's intake scopes, with its settings.
 const allFeatures: AISlotName[] = ['triage', 'draft', 'intake'];
 
-type Change = { slot: AISlotName; scope: string; level: AILevel | null };
+type Change = { slot: AISlotName; scope: string; level: AILevel | null; options?: ChannelAIInput['options'] };
 
 // configured is what a scope asks of a feature before the workspace's consent: its own level, the
 // channel's, then the workspace's default.
@@ -38,7 +38,7 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
   const [intakeProblem, setIntakeProblem] = useState<string>();
   const instant = useInstantSave();
   const save = useMutation({
-    mutationFn: (change: Change) => aiApi.setChannel(channel.id, change.slot, { scope: change.scope, level: change.level }),
+    mutationFn: (change: Change) => aiApi.setChannel(channel.id, change.slot, { scope: change.scope, level: change.level, ...(change.options ? { options: change.options } : {}) }),
     onSuccess: (next) => {
       client.setQueryData(['channel-ai', channel.id], next);
       return client.invalidateQueries({ predicate: (query) => ['ai-settings', 'channel-events'].includes(String(query.queryKey[0])) });
@@ -59,10 +59,16 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
     if (raises && slotOf(change.slot)) setAsking(change);
     else apply(change);
   };
-  // A level saves when it is picked and says so; Undo sends the level the scope had, in one request. A refusal shows under the table.
+  // A level saves when it is picked and says so. Undo sends what the scope had, in one request: its level and, for intake,
+  // the settings that went with it (Follows deletes the scope's row and its settings, so a bare level would bring Auto back
+  // with default ones). Where those settings are not known there is no Undo. A refusal shows under the table.
   const apply = (change: Change) => {
-    const before = levels.data?.scopes.find((entry) => entry.scope === change.scope)?.slots.find((item) => item.slot === change.slot)?.level ?? null;
-    void instant((input: Change) => save.mutateAsync(input), change, { ...change, level: before });
+    const item = levels.data?.scopes.find((entry) => entry.scope === change.scope)?.slots.find((candidate) => candidate.slot === change.slot);
+    const before = item?.level ?? null;
+    const settingsKept = change.slot !== 'intake' || before === null;
+    const restore: Change = { slot: change.slot, scope: change.scope, level: before, ...(change.slot === 'intake' && before !== null && item?.options ? { options: item.options as ChannelAIInput['options'] } : {}) };
+    const restorable = settingsKept || Boolean(item?.options);
+    void instant((input: Change) => save.mutateAsync(input), change, restore, restorable ? undefined : null);
   };
   // Intake's level and settings go in one change: the server takes the settings whole. A refusal rejects:
   // the settings form says it under itself, the Auto dialog (gone by then) through the tab.

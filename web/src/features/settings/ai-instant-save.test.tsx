@@ -93,3 +93,47 @@ test('the consent step names the server provider when the feature runs on it, an
   expect(screen.queryByRole('dialog')).toBeNull();
   await waitFor(() => expect(onSetSlot).toHaveBeenCalledWith('intake', { source: 'server', enabled: false, effort: 'low' }));
 });
+
+// Undo changes only what the switch changed, built from the feature as it is when Undo is pressed: a model picked in the
+// sheet after the switch was turned on stays.
+test('Undo of a feature switch carries the feature as it is now, not the snapshot of the switch press', async () => {
+  const onSetSlot = vi.fn().mockResolvedValue(undefined);
+  const { again } = page({ settings: withDrafts(), onSetSlot });
+  fireEvent.click(screen.getByRole('switch', { name: 'Reply drafts on' }));
+  const toast = (await screen.findByText('Saved')).closest('.settings-toast') as HTMLElement;
+  // The server now says the feature is on and runs another model.
+  again({ settings: settings({ providers: [provider({ used_by: ['draft'] })], slots: [slot(), slot({ ...drafts, model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'chat' })] }) });
+  fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(onSetSlot).toHaveBeenCalledTimes(2));
+  expect(onSetSlot).toHaveBeenLastCalledWith('draft', { source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', effort: 'low', enabled: false });
+});
+
+// A sheet traps Tab: the toast of a switch pressed inside it lives inside it, in the sheet's own tab order, above its footer.
+test('the Saved toast of a switch in an open sheet is inside the sheet, before its Done button, so Tab reaches Undo', async () => {
+  const onSourceConsent = vi.fn().mockResolvedValue(undefined);
+  page({ chatChannels: true, onSourceConsent, settings: withIntake() });
+  const sheet = openSheet('Chat intake');
+  fireEvent.click(within(sheet).getByRole('switch', { name: 'Images customers sent' }));
+  const undo = await within(sheet).findByRole('button', { name: 'Undo' });
+  const done = within(sheet).getByRole('button', { name: 'Done' });
+  expect(undo.compareDocumentPosition(done) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(undo.closest('.settings-toast')?.className).toContain('settings-toast-in-sheet');
+  fireEvent.click(undo);
+  await waitFor(() => expect(onSourceConsent).toHaveBeenLastCalledWith('images', false));
+});
+
+// Undo restores, within seconds, what the same person had agreed to; a fresh press of the switch asks again.
+test('Undo after turning chat intake off turns it on without the agreement panel, and a new press asks again', async () => {
+  const onSetSlot = vi.fn().mockResolvedValue(undefined);
+  const on = slot({ ...intakeOff, enabled: true, active: true });
+  const { again } = page({ chatChannels: true, onSetSlot, settings: settings({ providers: [provider({ used_by: ['intake'] })], slots: [slot(), slot({ slot: 'draft' }), on] }) });
+  fireEvent.click(screen.getByRole('switch', { name: 'Chat intake on' }));
+  await waitFor(() => expect(onSetSlot).toHaveBeenCalledTimes(1));
+  fireEvent.click(within((await screen.findByText('Saved')).closest('.settings-toast') as HTMLElement).getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(onSetSlot).toHaveBeenCalledTimes(2));
+  expect(onSetSlot).toHaveBeenLastCalledWith('intake', { source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', effort: 'low', enabled: true });
+  expect(screen.queryByRole('dialog', { name: 'Turn on Chat intake' })).toBeNull();
+  again({ settings: withIntake() });
+  fireEvent.click(screen.getByRole('switch', { name: 'Chat intake on' }));
+  expect(screen.getByRole('dialog', { name: 'Turn on Chat intake' })).toBeInTheDocument();
+});

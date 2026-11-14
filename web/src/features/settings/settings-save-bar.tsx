@@ -33,9 +33,10 @@ export function SaveBar({ labels, saving, failure, onDiscard, onSave }: SaveBarP
 }
 
 // SavedToast says a choice was saved at once; Undo, when the page gave one, puts the previous value back. A refused
-// Undo says so here and keeps the button. raised lifts it above the save bar when both are on screen.
-export function SavedToast({ onUndo, onDismiss, error, raised }: { onUndo?: () => void; onDismiss: () => void; error?: string; raised?: boolean }) {
-  return <div className={`settings-toast${raised ? ' settings-toast-raised' : ''}`} role="status">
+// Undo says so here and keeps the button. raised lifts it above the save bar when both are on screen; inSheet draws it in
+// a side sheet's own slot, in the sheet's tab order and above its footer, instead of over the page.
+export function SavedToast({ onUndo, onDismiss, error, raised, inSheet }: { onUndo?: () => void; onDismiss: () => void; error?: string; raised?: boolean; inSheet?: boolean }) {
+  return <div className={`settings-toast${raised ? ' settings-toast-raised' : ''}${inSheet ? ' settings-toast-in-sheet' : ''}`} role="status">
     {error ? <span role="alert">{error}</span> : <span>{settingsMessages.saved}</span>}
     {onUndo && <button type="button" onClick={onUndo}>{messages.undo}</button>}
     <button type="button" className="settings-toast-close" aria-label={messages.dismiss} onClick={onDismiss}><XIcon /></button>

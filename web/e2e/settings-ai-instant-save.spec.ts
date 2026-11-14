@@ -120,3 +120,46 @@ test('a channel level picked on its AI tab says Saved with Undo, and Undo sends 
   await expect.poll(level).toBe('suggest');
   await expect(select).toHaveValue('suggest');
 });
+
+test('with a sheet open, Tab reaches Undo of the Saved toast and Enter on it takes the consent back', async ({ page }) => {
+  await desk(page);
+  await page.goto(`${chat.origin}/settings/ai`);
+  await page.getByRole('button', { name: 'Chat intake settings' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Chat intake' });
+  await sheet.getByRole('switch', { name: 'Images customers sent' }).click();
+  await expect.poll(async () => (await ai(page)).source_consents.length).toBe(1);
+  const undo = sheet.getByRole('button', { name: 'Undo' });
+  await expect(undo).toBeVisible();
+  let reached = false;
+  for (let press = 0; press < 25 && !reached; press += 1) {
+    await page.keyboard.press('Tab');
+    reached = await undo.evaluate((element) => element === document.activeElement);
+    // The sheet traps Tab: the focus never leaves it.
+    expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))).toBe(true);
+  }
+  expect(reached, 'Undo is reached with Tab').toBe(true);
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await ai(page)).source_consents).toEqual([]);
+});
+
+test('on a phone the Saved toast of a switch in the full-screen sheet sits above Done and does not cover it', async ({ page }) => {
+  await desk(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${chat.origin}/settings/ai`);
+  await page.getByRole('button', { name: 'Chat intake settings' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Chat intake' });
+  await sheet.getByRole('switch', { name: 'Images customers sent' }).click();
+  const toast = sheet.getByRole('status').filter({ hasText: 'Saved' });
+  await expect(toast).toBeVisible();
+  const done = sheet.getByRole('button', { name: 'Done' });
+  const [toastBox, doneBox] = [(await toast.boundingBox())!, (await done.boundingBox())!];
+  expect(toastBox.y + toastBox.height, 'the toast ends above Done').toBeLessThanOrEqual(doneBox.y);
+  expect(toastBox.x, 'inside the screen').toBeGreaterThanOrEqual(0);
+  expect(toastBox.x + toastBox.width, 'inside the screen').toBeLessThanOrEqual(390);
+  for (const control of [toast.getByRole('button', { name: 'Undo' }), toast.getByRole('button', { name: 'Dismiss' })]) {
+    expect((await control.boundingBox())!.height, 'a touch target').toBeGreaterThanOrEqual(44);
+  }
+  // A real click on Done reaches it: nothing lies over it.
+  await done.click();
+  await expect(sheet).toBeHidden();
+});

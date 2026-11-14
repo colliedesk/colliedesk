@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { AISettings, AISlot, AISlotInput, AISlotName } from '../../api/ai';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { selfHostGuide } from '../../lib/self-host-guide';
@@ -28,11 +28,15 @@ export function Features(props: AIPageProps & SheetActions & { settings: AISetti
   const shown = settings.slots.filter((slot) => slot.slot !== 'intake' || props.chatChannels);
   const opened = shown.find((slot) => slot.slot === open);
   const consenting = shown.find((slot) => slot.slot === asking);
-  // The feature turns on only once the person agrees; the switch then says Saved, and Undo turns it off again.
+  // The feature turns on only once the person agrees; the switch then says Saved, and Undo turns only it off again, built from
+  // the feature as it is then.
+  const latest = useRef(settings);
+  latest.current = settings;
   const agree = (slot: AISlot) => {
-    const { chosen } = slotChoices(slot, settings);
     setAsking(undefined);
-    void instant((input: AISlotInput) => props.onSetSlot(slot.slot, input), slotChange(slot, chosen, { enabled: true }), slotChange(slot, chosen, { enabled: slot.enabled }));
+    const now = (name: AISlotName) => latest.current.slots.find((item) => item.slot === name) ?? slot;
+    const input = (value: boolean) => slotChange(now(slot.slot), slotChoices(now(slot.slot), latest.current).chosen, { enabled: value });
+    void instant((value: boolean) => props.onSetSlot(slot.slot, input(value)), true, slot.enabled);
   };
   // The sheet's own choices (provider, model) show a refusal in the page's notice; nothing here waits for them.
   const setInSheet = (slot: AISlotName, input: AISlotInput) => { void Promise.resolve(props.onSetSlot(slot, input)).catch(() => undefined); };

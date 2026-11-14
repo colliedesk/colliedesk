@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 import type { AISettings, AISlot, AISlotInput, AISlotName } from '../../api/ai';
 import { LockedReason } from '../../ui/help-tip';
 import { aiMessages as m, slotLabel } from './ai-messages';
@@ -32,10 +32,13 @@ export function FeatureRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpe
   const why = !isAdmin ? m.autoAdminsOnly : choices.length === 0 ? m.addFirst : !choice ? m.pickProviderFirst : undefined;
   const whyID = `${line}-why`;
   const instant = useInstantSave();
-  // The switch saves at once and says so; Undo puts the feature back as it was, in one request.
+  // The switch saves at once and says so; Undo puts only the switch back, built from the feature as it is when Undo is
+  // pressed (a model picked meanwhile stays), in one request.
+  const latest = useRef({ slot, chosen });
+  latest.current = { slot, chosen };
   const turn = (enabled: boolean) => {
     if (enabled && slot.slot === 'intake') { onAskToTurnOn(slot.slot); return; }
-    void instant((input: AISlotInput) => onSetSlot(slot.slot, input), slotChange(slot, chosen, { enabled }), slotChange(slot, chosen, { enabled: slot.enabled }));
+    void instant((value: boolean) => onSetSlot(slot.slot, slotChange(latest.current.slot, latest.current.chosen, { enabled: value })), enabled, slot.enabled);
   };
   return (
     <li className="ai-row">
