@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Invite, Role } from '../../api/schemas';
 import { RoleCheckboxes } from './role-checkboxes';
 import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
+import { useInviteDraft } from './use-invite-draft';
+import type { InviteDraft } from './use-invite-draft';
 import './role-pickers.css';
 
 // inviteState makes every way an invite can end visible: used, revoked or expired.
@@ -29,26 +31,30 @@ interface InvitesSectionProps {
   roles?: Role[];
   onCreateInvite?: (email: string, roleIds: string[]) => void;
   onRevokeInvite?: (id: string) => void;
+  // draft keeps the typed invite where the page can hold it; without one the form keeps its own.
+  draft?: InviteDraft;
 }
 
-export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeInvites = false, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite }: InvitesSectionProps) {
+export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeInvites = false, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite, draft }: InvitesSectionProps) {
   const createdInviteUrl = createdInvite?.url;
-  const [email, setEmail] = useState('');
+  const own = useInviteDraft();
+  const { email, setEmail, picked, setPicked } = draft ?? own;
   // An invite gives the Agent role unless the person picks others.
   const agent = roles.find((role) => role.system === 'agent');
-  const [picked, setPicked] = useState<string[] | null>(null);
   const chosen = picked ?? (agent ? [agent.id] : []);
   const [picking, setPicking] = useState(false);
+  const rolesButton = useRef<HTMLButtonElement>(null);
   const chosenNames = roles.filter((role) => chosen.includes(role.id)).map((role) => role.name);
   return (
     <section className="settings-card" aria-labelledby="invites-heading"><div className="section-heading"><h2 id="invites-heading">{messages.invites}</h2><p>{settingsMessages.invitesDescription}</p></div>
       <div className="settings-body settings-rows">
-        {canCreateInvites && <form className="invite-form" onSubmit={(event) => { event.preventDefault(); if (chosen.length > 0) onCreateInvite?.(email, chosen); }}>
+        {/* Esc closes the picker from the Roles button as well as from inside it, and keeps the focus on the button. */}
+        {canCreateInvites && <form className="invite-form" onKeyDown={(event) => { if (event.key === 'Escape' && picking) { setPicking(false); rolesButton.current?.focus(); } }} onSubmit={(event) => { event.preventDefault(); if (chosen.length > 0) onCreateInvite?.(email, chosen); }}>
           <label className="field"><span>{settingsMessages.inviteEmail}</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <div className="field"><span>{settingsMessages.inviteRole}</span>
-            <button type="button" aria-expanded={picking} aria-controls="invite-roles" onClick={() => setPicking((open) => !open)}>{roleMessages.invitesRoles(chosenNames)}</button></div>
+            <button ref={rolesButton} type="button" aria-expanded={picking} aria-controls="invite-roles" onClick={() => setPicking((open) => !open)}>{roleMessages.invitesRoles(chosenNames)}</button></div>
           <button className="primary-action" type="submit" disabled={creatingInvite || chosen.length === 0}>{settingsMessages.createInvite}</button>
-          {picking && <div id="invite-roles" className="invite-roles" onKeyDown={(event) => { if (event.key === 'Escape') setPicking(false); }}>
+          {picking && <div id="invite-roles" className="invite-roles">
             <RoleCheckboxes idPrefix="invite-role" roles={roles} chosen={chosen} onChange={setPicked} />
             {chosen.length === 0 && <p className="error-copy" role="alert">{roleMessages.atLeastOne}</p>}
           </div>}

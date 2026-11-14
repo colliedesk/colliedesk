@@ -560,3 +560,69 @@ test('Built-in AI keeps one short line, and the rest of what it does sits in its
   expect(screen.getByText(/a draft never reaches a customer until someone presses Send/)).not.toBeVisible();
   expect(screen.getByRole('button', { name: 'About Built-in AI' })).toHaveAccessibleDescription(/a draft never reaches a customer until someone presses Send/);
 });
+
+// The page has two views: the built-in AI, and the outside agents that work through a token. The view is in the address.
+test('AI & agents has the tabs Built-in AI and External AI agents, and shows only the one that is open', () => {
+  page({ agents: <p>Agent tokens panel</p> });
+  const tabs = screen.getByRole('tablist', { name: 'AI & agents' });
+  expect(within(tabs).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Built-in AI', 'External AI agents']);
+  expect(within(tabs).getByRole('tab', { name: 'Built-in AI' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('switch', { name: 'Triage suggestions on' })).toBeInTheDocument();
+  expect(screen.queryByText('Agent tokens panel')).not.toBeInTheDocument();
+});
+
+test('the External AI agents tab holds the agent tokens and none of the built-in AI', () => {
+  page({ agents: <p>Agent tokens panel</p>, view: 'external' });
+  expect(screen.getByRole('tab', { name: 'External AI agents' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByText('Agent tokens panel')).toBeInTheDocument();
+  expect(screen.queryByRole('switch', { name: 'Triage suggestions on' })).not.toBeInTheDocument();
+});
+
+test('choosing a view tells the address', () => {
+  const onView = vi.fn();
+  page({ agents: <p>Agent tokens panel</p>, onView });
+  fireEvent.click(screen.getByRole('tab', { name: 'External AI agents' }));
+  expect(onView).toHaveBeenCalledWith('external', 'click');
+});
+
+test('a person who may not read the AI settings sees the agent tokens alone, without tabs', () => {
+  page({ builtIn: false, agents: <p>Agent tokens panel</p> });
+  expect(screen.queryByRole('tablist', { name: 'AI & agents' })).not.toBeInTheDocument();
+  expect(screen.getByText('Agent tokens panel')).toBeInTheDocument();
+});
+
+// The tab's aria-controls names the element that is its panel, for the built-in AI as for the agents.
+test('each AI & agents tab controls a tabpanel that the tab labels', () => {
+  page({ agents: <p>Agent tokens panel</p> });
+  const tab = screen.getByRole('tab', { name: 'Built-in AI' });
+  const panel = document.getElementById(tab.getAttribute('aria-controls')!);
+  expect(panel).toHaveAttribute('role', 'tabpanel');
+  expect(panel).toHaveAttribute('aria-labelledby', tab.id);
+  expect(within(panel!).getByRole('switch', { name: 'Triage suggestions on' })).toBeInTheDocument();
+  cleanup();
+  page({ agents: <p>Agent tokens panel</p>, view: 'external' });
+  const external = screen.getByRole('tab', { name: 'External AI agents' });
+  expect(document.getElementById(external.getAttribute('aria-controls')!)).toHaveAttribute('role', 'tabpanel');
+});
+
+// Someone with no agent tokens to make or revoke has nothing on the External AI agents tab: it is not offered, and an
+// address that names it opens the built-in AI.
+test('without agent tokens to show there is no External AI agents tab, and a link to it opens the built-in AI', () => {
+  page({ view: 'external' });
+  expect(screen.queryByRole('tablist', { name: 'AI & agents' })).not.toBeInTheDocument();
+  expect(screen.getByRole('switch', { name: 'Triage suggestions on' })).toBeInTheDocument();
+});
+
+// The tab names the view, so the panel does not name it again as a heading: its one line and its tip come first.
+test('under the selected Built-in AI tab there is no heading that repeats the tab, and the panel is named by its tab', () => {
+  page({ agents: <p>Agent tokens panel</p> });
+  expect(screen.queryByRole('heading', { level: 2, name: 'Built-in AI' })).not.toBeInTheDocument();
+  const panel = screen.getByRole('tabpanel', { name: 'Built-in AI' });
+  expect(within(panel).getByText('Drafts, triage and the AI chat. A person sends every reply.')).toBeInTheDocument();
+  expect(within(panel).getByRole('button', { name: /Built-in AI/ })).toBeInTheDocument();
+});
+
+test('a page with no tabs keeps the heading of its one view', () => {
+  page({});
+  expect(screen.getByRole('heading', { level: 2, name: 'Built-in AI' })).toBeInTheDocument();
+});

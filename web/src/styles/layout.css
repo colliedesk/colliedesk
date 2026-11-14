@@ -216,7 +216,9 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .settings-nav a[aria-current="page"] { background: var(--surface-3); color: var(--text-1); font-weight: 500; }
 .settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
 .settings-nav .settings-group-label { padding: 0 var(--space-2); }
-.settings-nav .settings-nav-sub { margin: 2px 0 0; padding-left: var(--space-3); }
+/* A tag or a dot after the label sits at the row's far end; on the phone's sideways row it follows the label. */
+.settings-nav-tag { margin-left: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-label); font-weight: 400; }
+.settings-nav-dot { margin-left: auto; width: var(--space-2); height: var(--space-2); border-radius: var(--radius-full); background: var(--warn); flex: none; }
 .settings-sections > .settings-group-label { padding: var(--space-6) 0 var(--space-2); }
 .settings-sections > .settings-group-label:first-child, .settings-sections > .error-copy + .settings-group-label { padding-top: 0; }
 .settings-card h2 { scroll-margin-top: var(--space-6); }
@@ -335,7 +337,6 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .settings-nav > div { display: contents; }
   .settings-nav .settings-group-label { display: none; }
   .settings-nav ul { display: flex; gap: var(--space-1); margin: 0; }
-  .settings-nav .settings-nav-parent, .settings-nav .settings-nav-sub { display: contents; }
   .settings-nav a { white-space: nowrap; border: 1px solid var(--line); padding: var(--space-1) var(--space-3); }
 }
 @media (max-width: 44rem) {
@@ -401,8 +402,6 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .settings-nav-index > div { display: block; }
   .settings-nav-index .settings-group-label { display: block; }
   .settings-nav-index ul { display: grid; gap: 0; margin: var(--space-2) 0 0; }
-  .settings-nav-index .settings-nav-parent { display: block; }
-  .settings-nav-index .settings-nav-sub { display: grid; padding-left: var(--space-3); }
   .settings-nav-index a { white-space: normal; border: 0; padding: 0 var(--space-2); }
 }
 @media (max-width: 44rem) {

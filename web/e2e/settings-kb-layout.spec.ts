@@ -196,7 +196,7 @@ for (const [width, least] of [[1440, 32], [390, 44]] as const) {
   test(`Settings → Members: the role buttons are as tall as the buttons around them at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await newDesk(page, `Role Buttons ${width}`);
-    await page.goto(`${servers.main}/settings/members`);
+    await page.goto(`${servers.main}/settings/members?tab=advanced`);
     const actions = page.locator('.role-row-actions a');
     await expect(actions.first()).toBeVisible();
     const heights = await actions.evaluateAll((links) => links.map((link) => ({ name: link.textContent ?? '', height: link.getBoundingClientRect().height })));

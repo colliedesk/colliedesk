@@ -43,6 +43,8 @@ test.describe('on a 390 px touch screen', () => {
     expect(box!.y + box!.height).toBeLessThanOrEqual(844 - 8);
 
     // The panel that scrolls the lock moves it out of sight; the tip must not stay pinned to the screen's edge.
+    // The People tab is shorter than the screen is tall, so the test gives the page length to scroll.
+    await page.evaluate(() => { const spacer = document.createElement('div'); spacer.style.height = '4000px'; document.querySelector('.settings-sections')?.append(spacer); });
     const scroll = (by: number) => lock.evaluate((element, distance) => {
       let at = element.parentElement;
       while (at && !(at.scrollHeight > at.clientHeight && /auto|scroll/.test(getComputedStyle(at).overflowY))) at = at.parentElement;

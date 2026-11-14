@@ -18,7 +18,7 @@ test('the page names itself, counts what waits and switches lists', () => {
   expect(screen.getByRole('heading', { level: 1, name: 'Review' })).toBeInTheDocument();
   expect(screen.getByRole('tab', { name: /^Waiting\s?3$/ })).toHaveAttribute('aria-selected', 'true');
   fireEvent.click(screen.getByRole('tab', { name: 'AI dismissed' }));
-  expect(handlers.onTab).toHaveBeenCalledWith('dismissed');
+  expect(handlers.onTab).toHaveBeenCalledWith('dismissed', 'click');
   expect(screen.getByRole('tabpanel')).toHaveAccessibleName(/^Waiting/);
 });
 

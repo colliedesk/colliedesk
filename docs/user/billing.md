@@ -79,7 +79,7 @@ link to continue it.
   - The mail was posted to your **inbound URL** (on your own forwarder) instead of arriving at your
     Colliedesk **forwarding address**, so nothing proves who sent it (API reason
     `mail_not_via_hosted_address`). Forward your mailbox to the forwarding address shown in
-    **Settings → Email**; mail that arrives there counts.
+    **Settings → Channels → Email**; mail that arrives there counts.
   - The mail failed sender verification (SPF, DKIM or DMARC), so it may not come from that address
     (API reason `sender_authentication_failed`).
 
@@ -127,7 +127,7 @@ If you move to a smaller plan in the billing portal while you have more agents t
 nobody is removed. Agents are paused before admins, the most recently added first: they can only
 sign out and see why. The first admin of the workspace is never paused, and a paused admin can still
 open the billing portal. An agent you reactivate keeps the place of when they were first added. Admins see a notice on every page. Deactivate agents
-in **Settings → Members → Team**, or upgrade again, and the paused agents can work again at once.
+in **Settings → Members → People**, or upgrade again, and the paused agents can work again at once.
 
 The plan belongs to the workspace, not to a person. Paid plans have no reply cap and no recipient rule. Every paid plan has an attachment storage cap
 (see "Attachment storage" below). Prices are in US dollars.

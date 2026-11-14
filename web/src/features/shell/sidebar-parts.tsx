@@ -37,6 +37,6 @@ export function SidebarLists({ views = [], channels = [] }: { views?: SidebarVie
 
 // InviteLink opens Members, where invites are made; only for someone who may invite.
 export function InviteLink() {
-  return <a href="/settings/members" className="rail-link sidebar-invite" data-tip={messages.inviteTeammates}>
+  return <a href="/settings/members?tab=invites" className="rail-link sidebar-invite" data-tip={messages.inviteTeammates}>
     <UserPlusIcon /><span className="rail-label">{messages.inviteTeammates}</span></a>;
 }
