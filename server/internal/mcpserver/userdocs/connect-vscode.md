@@ -5,7 +5,7 @@ the token once and stores it securely; it never appears in the configuration fil
 
 ## Before you start
 
-1. Sign in to Colliedesk and open **Settings → AI & agents → External agents**.
+1. Sign in to Colliedesk and open **Settings → AI & agents → External AI agents**.
 2. Name the token (for example "VS Code on my laptop"), choose what it may do (follow a role,
    or pick permissions; leaving out sending to customers is a good start) and choose **Create token**.
    See [Agent tokens](sessions.md#agent-tokens).
@@ -64,7 +64,7 @@ Every tool and what it needs: [Connect an AI agent (MCP)](mcp.md#tools).
 
 ## Remove it
 
-Delete the `colliedesk` server and the `colliedesk-token` input from the file. Then revoke the token in **Settings → AI & agents → External agents** (its **⋯** menu, **Revoke**): it stops working at once, wherever it was
+Delete the `colliedesk` server and the `colliedesk-token` input from the file. Then revoke the token in **Settings → AI & agents → External AI agents** (its **⋯** menu, **Revoke**): it stops working at once, wherever it was
 copied.
 
 ## Other hosts

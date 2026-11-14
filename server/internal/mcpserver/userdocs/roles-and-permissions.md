@@ -111,7 +111,7 @@ These hold for people and tokens alike:
 
 ## AI agent tokens
 
-Create a token in **Settings → AI & agents → External agents**. Creating a token is something only a person
+Create a token in **Settings → AI & agents → External AI agents**. Creating a token is something only a person
 does there; an AI agent cannot create one. Under **Access**, choose one of:
 
 - **Follow a role**: pick any role whose permissions you all hold: your own roles, a narrower one,
@@ -122,7 +122,7 @@ does there; an AI agent cannot create one. Under **Access**, choose one of:
   list is fixed when you create the token.
 
 Either way, a token never does more than you can do right now: if you lose a permission, every token
-of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → AI & agents → External agents**
+of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → AI & agents → External AI agents**
 shows each token as "Follows role …", "Fixed · N permissions", or "Stopped" with the reason. Revoke a
 token there. More about tokens: [Sessions and devices](sessions.md#agent-tokens).
 

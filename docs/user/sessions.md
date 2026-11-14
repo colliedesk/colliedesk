@@ -53,7 +53,7 @@ name>" in the conversation.
 ## Agent tokens
 
 An agent token lets an AI agent, such as Claude Code, Codex or a script, work your inbox as you,
-with the permissions you choose. It is a session with a label. **Settings → AI & agents → External agents**
+with the permissions you choose. It is a session with a label. **Settings → AI & agents → External AI agents**
 lists your tokens under **Agent tokens**, apart from your browser sessions (in Account): each row has the token's
 name and person, what it may do, **Last used** (when an agent last called with it) and **Expires** (the date it
 stops working). **Sessions**, further down the same page, lists them too. Someone with `team:revoke` sees and
@@ -64,7 +64,7 @@ To revoke a token, open the **⋯** menu at the end of its row and choose **Revo
 its next call, and notes and replies it wrote keep showing "by <your name> via <token label>". A revoked
 token cannot be brought back; its row then reads **Revoked** and has no actions.
 
-Create a token in **Settings → AI & agents → External agents**: choose **Create token** (it needs
+Create a token in **Settings → AI & agents → External AI agents**: choose **Create token** (it needs
 `team:create_tokens`, which the Agent and Admin roles hold). In the dialog, give it a name you will recognise in
 the list (1 to 80 characters, for
 example **Claude Code on my laptop**), then under **Access** choose one of:

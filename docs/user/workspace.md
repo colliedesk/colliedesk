@@ -42,7 +42,7 @@ The help center's settings are in the knowledge base, under **Knowledge base →
 Settings page and keeps the app's sidebar. An old link keeps working and opens the page, tab or section
 that holds the content now: `/settings/profile`, `/settings/preferences` and `/settings/sessions` open
 Account; `/settings/numbers` opens General; `/settings/roles` and `/settings/members?tab=roles` open
-Members → Advanced; `/settings/agents` opens AI & agents → External agents; `/settings/import`,
+Members → Advanced; `/settings/agents` opens AI & agents, on the External agents tab; `/settings/import`,
 `/settings/export` and `/settings/import-freshdesk` open Data; `/settings/help-center` opens
 Knowledge base → Settings. So do links to a section of the old one-page Settings, such as
 `/settings#invites-heading`. On a phone, **Settings** shows the menu; open a page from it, and
