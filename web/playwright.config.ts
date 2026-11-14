@@ -16,6 +16,10 @@ const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/
 // Sign-in, the inbox from pairing to a sent reply, and the composer: the pages a browser engine is most
 // likely to break (layout, contenteditable, the @ list).
 const crossBrowserJourneys = ['sign-in-page.spec.ts', 'inbox-workflow.spec.ts', 'reply-composer.spec.ts'];
+// WebKit drops the session cookie here: it is Secure (server/internal/httpapi/auth-handlers.go) and the test
+// servers are plain http on localhost, which Chromium and Firefox treat as secure and WebKit does not. Over
+// https, as on Cloud, Safari keeps it. So WebKit runs the journeys that need no session.
+const webkitJourneys = ['sign-in-page.spec.ts'];
 
 // Each server is the real `collie serve` on a database of its own, configured the way an operator
 // configures one: the environment opens the database, and `collie config import` writes the settings
@@ -55,7 +59,7 @@ export default defineConfig({
   // making each PR wait for three browsers.
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'], launchOptions: { executablePath: localChrome } } },
-    { name: 'webkit', use: devices['Desktop Safari'], testMatch: crossBrowserJourneys },
+    { name: 'webkit', use: devices['Desktop Safari'], testMatch: webkitJourneys },
     { name: 'firefox', use: devices['Desktop Firefox'], testMatch: crossBrowserJourneys },
   ],
   webServer: [
