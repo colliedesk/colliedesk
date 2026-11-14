@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
+import { HelpTip } from '../../ui/help-tip';
 import type { KBCollection } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { indent, parentChoices, reason } from './kb-tree';
@@ -53,8 +54,9 @@ export function CollectionForm({ tree, node, parentId = null, onSubmit, onCancel
       <label className="field"><span>{kbMessages.collectionName}</span>
         <input autoFocus required value={values.name} onChange={(event) => set({ name: event.target.value })} /></label>
       {original && <div className="field"><label htmlFor={`${id}-slug-input`}>{kbMessages.collectionSlug}</label>
-        <input id={`${id}-slug-input`} value={values.slug} aria-describedby={`${id}-slug`} onChange={(event) => set({ slug: event.target.value })} />
-        <small id={`${id}-slug`} className="muted-copy">{kbMessages.collectionSlugHelp}</small></div>}
+        <input id={`${id}-slug-input`} value={values.slug} aria-describedby={`${id}-slug ${id}-slug-tip`} onChange={(event) => set({ slug: event.target.value })} />
+        <small className="muted-copy"><span id={`${id}-slug`}>{kbMessages.collectionSlugHelp}</span>{' '}
+          <HelpTip label={kbMessages.collectionSlug} text={kbMessages.collectionSlugTip} id={`${id}-slug-tip`} /></small></div>}
       {slugChanged && <p className="warning-note" role="note">{kbMessages.slugChangeWarning}</p>}
       <label className="field"><span>{kbMessages.collectionDescription}</span>
         <textarea rows={2} value={values.description} onChange={(event) => set({ description: event.target.value })} /></label>

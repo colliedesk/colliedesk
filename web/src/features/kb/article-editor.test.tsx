@@ -606,3 +606,67 @@ test('an article\'s search title and meta description are edited beside its addr
   await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
   expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-02T00:00:00Z', seo_title: 'Reset an Acme password' });
 });
+
+// Each row keeps one short line; the how and why sit in the tip next to it.
+const articlePath = 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555';
+
+test('the search fields say what search engines show in one line, and what an empty field uses in a tip', async () => {
+  serve({ ...base, [articlePath]: () => json(200, article()) });
+  open({ articleId: ids.article });
+  const box = (await screen.findByRole('heading', { name: 'Search engines' })).closest('section') as HTMLElement;
+  expect(box).toHaveTextContent('What search engines show for this article.');
+  expect(within(box).getByRole('button', { name: 'About Search engines' })).toHaveAccessibleDescription('Left empty, the title and the start of the text are used.');
+});
+
+test('the address name shows the address in one line, and why an older link still leads here in a tip', async () => {
+  serve({ ...base, [articlePath]: () => json(200, article({ slug: 'reset-your-password' })) });
+  open({ articleId: ids.article });
+  const field = (await screen.findByRole('textbox', { name: 'Address name' })).closest('.field') as HTMLElement;
+  expect(field).toHaveTextContent('The help center address ends in /a/7-reset-your-password.');
+  expect(within(field).getByRole('button', { name: 'About Address name' })).toHaveAccessibleDescription('The number never changes, so links with an older address name still lead here.');
+});
+
+test('the collections say which one is the home in one line, and that the others never change the address in a tip', async () => {
+  serve({ ...base, [articlePath]: () => json(200, article()) });
+  open({ articleId: ids.article });
+  const home = (await screen.findByRole('combobox', { name: 'Collections' })).closest('.field') as HTMLElement;
+  expect(home).toHaveTextContent('The first one is the home: it gives the breadcrumb.');
+  expect(within(home).getByRole('button', { name: 'About Collections' })).toHaveAccessibleDescription('Adding or removing others never changes the address.');
+});
+
+test('an imported article says so in one line, and where its original HTML is kept in a tip', async () => {
+  serve({ ...base, [articlePath]: () => json(200, article({ has_source_html: true })) });
+  open({ articleId: ids.article });
+  const note = (await screen.findByText('Imported from another help desk.')).closest('p') as HTMLElement;
+  expect(within(note).getByRole('button', { name: 'About the import' })).toHaveAccessibleDescription('The original HTML is kept in the workspace export.');
+});
+
+test('deleting an article says it leaves the help center and can come back in one line, and what comes back in a tip', async () => {
+  serve({ ...base, [articlePath]: () => json(200, article()) });
+  open({ articleId: ids.article });
+  fireEvent.click(await screen.findByRole('button', { name: 'More article actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^Delete article/ }));
+  const confirm = screen.getByRole('alertdialog', { name: 'Move "Reset your password" to the trash?' });
+  expect(confirm).toHaveTextContent('Leaves the help center at once; restorable for 30 days.');
+  expect(within(confirm).getByRole('button', { name: 'About the trash' })).toHaveAccessibleDescription('It comes back from the trash with its history.');
+});
+
+test('the question before publishing asks in one line, and says why alt text matters in a tip', async () => {
+  serve({ ...base, [articlePath]: () => json(200, article({ body_md: '![](https://example.com/x.png)' })) });
+  open({ articleId: ids.article });
+  fireEvent.click(await screen.findByRole('button', { name: 'Publish' }));
+  const asking = screen.getByRole('alertdialog', { name: '1 image has no alt text' });
+  expect(asking).toHaveTextContent('Add alt text now, or publish as it is.');
+  expect(within(asking).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('Screen readers say nothing for an image without alt text.');
+});
+
+test('the question before saving a published article says a new image goes live in one line, and why alt text matters in a tip', async () => {
+  serve({ ...base, [articlePath]: () => json(200, article({ status: 'published', body_md: 'Steps.' })) });
+  open({ articleId: ids.article });
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Steps.\n\n![](https://example.com/new.png)' } });
+  await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  const asking = screen.getByRole('alertdialog', { name: '1 image has no alt text' });
+  expect(asking).toHaveTextContent('Published: an image without alt text goes live at once.');
+  expect(within(asking).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('Screen readers say nothing for an image without alt text. Add it now, or save as it is.');
+});

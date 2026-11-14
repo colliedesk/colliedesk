@@ -134,7 +134,7 @@ test('on the trial an admin verifies a domain, and the card says it serves there
     'POST /api/v1/help-center/domain/check': () => json(200, { ...active, awaiting_payment: true }),
   });
   open(true);
-  expect(await screen.findByText(/The help center serves on your domain once you pay for a plan/)).toBeInTheDocument();
+  expect(await screen.findByText(/Set and verify now; the help center serves here once paid/)).toBeInTheDocument();
   fireEvent.change(screen.getByRole('textbox', { name: 'Host name' }), { target: { value: 'help.acme.example' } });
   fireEvent.click(screen.getByRole('button', { name: 'Set domain' }));
   expect(await screen.findByText(/help.acme.example is waiting for its DNS records/)).toHaveAttribute('role', 'status');
@@ -189,4 +189,47 @@ test('under the status, one line says whether the address really opens with the 
   open(true);
   await screen.findByText(/is verified\. The help center serves there once you pay/);
   expect(screen.queryByText(/opens this help center|certificate/)).not.toBeInTheDocument();
+});
+
+// Each row keeps one short line; the how and why sit in the tip next to it.
+test('the card says what the domain is for in one line, with an example and where the other addresses go in a tip', async () => {
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, none) });
+  open(true);
+  const section = (await screen.findByRole('heading', { name: 'Custom domain' })).closest('section') as HTMLElement;
+  expect(section).toHaveTextContent('Serve the help center on an address of your own.');
+  expect(within(section).getByRole('button', { name: 'About Custom domain' })).toHaveAccessibleDescription('For example help.example.com. Your other help center addresses then move there.');
+});
+
+test('moving from Freshdesk is one line with the order of the two records, and the steps and a link to the guide in its tip', async () => {
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, pending) });
+  open(true);
+  expect(await screen.findByText('Moving from Freshdesk?')).toBeInTheDocument();
+  const line = screen.getByText('Verify by TXT first, then change the CNAME.').closest('p') as HTMLElement;
+  const tip = within(line).getByRole('button', { name: 'About moving from Freshdesk' });
+  expect(tip).toHaveAccessibleDescription('Add only the TXT record and press Check now. Your visitors still reach Freshdesk. Change the CNAME afterwards, to the target below.');
+  fireEvent.click(tip);
+  expect(within(line).getByRole('link', { name: 'Learn more' })).toHaveAttribute('href', 'https://colliedesk.com/docs/knowledge-base#moving-from-freshdesk');
+});
+
+test('the records say what to do in one line, and what else to know in a tip, before and after the domain is active', async () => {
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, pending) });
+  open(true);
+  const records_ = (await screen.findByRole('group', { name: 'TXT record: proves the domain is yours' })).parentElement as HTMLElement;
+  expect(records_).toHaveTextContent('Add these at your DNS provider, then press Check now.');
+  expect(within(records_).getByRole('button', { name: 'About the DNS records' })).toHaveAccessibleDescription('One of the two proving records is enough. DNS changes can take a few minutes.');
+  cleanup();
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, active) });
+  open(true);
+  const kept = (await screen.findByRole('group', { name: 'TXT record: proves the domain is yours' })).parentElement as HTMLElement;
+  expect(kept).toHaveTextContent('Keep these records at your DNS provider.');
+  expect(within(kept).getByRole('button', { name: 'About the DNS records' })).toHaveAccessibleDescription(
+    'The daily check warns here if they change, and the help center stops serving on the domain after 7 days without them.');
+});
+
+test('a domain waiting for payment says when it serves in one line, and why in a tip', async () => {
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, { ...pending, awaiting_payment: true }) });
+  open(true);
+  const line = (await screen.findByText(/^Set and verify now; the help center serves here once paid\./)).closest('p') as HTMLElement;
+  expect(within(line).getByRole('button', { name: 'About the trial' })).toHaveAccessibleDescription(
+    'Trial pages are hidden from search engines, and serving them on your domain would cost it its place in search results.');
 });

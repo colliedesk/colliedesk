@@ -3,10 +3,13 @@ import { join } from 'node:path';
 import { ports, scratchDir } from './e2e/support/checkout';
 import { defineConfig } from '@playwright/test';
 import { attachmentsDir, bootstrapEnv, databaseFor, databaseNameFor, goEnv, postgresURL, servers, settingsFile } from './e2e/support/cli';
-import { identity, jwksURL } from './e2e/support/identity-provider';
+import { ensureIdentityKey, identity, identityKeyFile, jwksURL } from './e2e/support/identity-provider';
 import { inAppFreshdesk } from './e2e/support/fake-freshdesk';
 import { dnsFile } from './e2e/support/dns';
 import { mailpit } from './e2e/support/mailpit';
+
+// The signing key exists before any server or worker starts: the JWKS process serves it and the workers sign with it.
+ensureIdentityKey();
 
 const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
 
@@ -44,6 +47,9 @@ export default defineConfig({
   workers: 1,
   use: { trace: 'retain-on-failure', launchOptions: { executablePath: localChrome } },
   webServer: [
+    // The JWKS the cloud server verifies sign-in tokens against. A process of its own, so it answers
+    // while a test worker sits in a synchronous CLI call (the verifier gives a fetch five seconds).
+    { command: `node e2e/support/jwks-server.mjs '${identityKeyFile}' ${identity.jwksPort}`, url: jwksURL, reuseExistingServer: false, timeout: 30_000 },
     // The main server also imports in the app from the fake Freshdesk (-tags e2e lets it reach a loopback
     // address), with a key ring as a fresh install has one. Its operator lets workspaces use an AI
     // provider on the local network, where the AI journeys run their fake model server; the others

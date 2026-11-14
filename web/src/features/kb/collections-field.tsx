@@ -1,3 +1,4 @@
+import { HelpTip } from '../../ui/help-tip';
 import { Icon } from './editor/icons';
 import { kbMessages } from './kb-messages';
 import { indent } from './kb-tree';
@@ -26,7 +27,7 @@ export function CollectionsField({ id, tree, value, onChange, describedBy }: Col
     <div className="field kb-collections-field">
       <label htmlFor={`${id}-collection`}>{kbMessages.articleCollections}</label>
       <div className="kb-home-collection">
-        <select id={`${id}-collection`} value={value.home} required aria-describedby={[`${id}-collections-help`, describedBy].filter(Boolean).join(' ')}
+        <select id={`${id}-collection`} value={value.home} required aria-describedby={[`${id}-collections-help`, `${id}-collections-tip`, describedBy].filter(Boolean).join(' ')}
           onChange={(event) => onChange(withHome(value, event.target.value))}>
           {!value.home && <option value="">{kbMessages.chooseCollection}</option>}
           {tree.map((node) => <option key={node.collection.id} value={node.collection.id}>{indent(node)}</option>)}
@@ -45,7 +46,8 @@ export function CollectionsField({ id, tree, value, onChange, describedBy }: Col
         <option value="">{kbMessages.alsoListInPlaceholder}</option>
         {offered.map((node) => <option key={node.collection.id} value={node.collection.id}>{indent(node)}</option>)}
       </select>}
-      <small id={`${id}-collections-help`} className="kb-hint">{kbMessages.collectionsHelp}</small>
+      <small className="kb-hint"><span id={`${id}-collections-help`}>{kbMessages.collectionsHelp}</span>{' '}
+        <HelpTip label={kbMessages.articleCollections} text={kbMessages.collectionsTip} id={`${id}-collections-tip`} /></small>
     </div>
   );
 }

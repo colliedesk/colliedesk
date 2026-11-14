@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { request } from '../../api/client';
 import type { Generated } from '../../api/schemas';
+import { HelpTip } from '../../ui/help-tip';
 import { freshdeskRedirectMessages as text } from './help-center-freshdesk-redirect-messages';
 
 const schema = z.object({
@@ -29,7 +30,7 @@ export function HelpCenterFreshdeskRedirectSection() {
   const domain = redirect.freshdesk_domain;
   return <section className="stacked-form hc-section" aria-labelledby="help-center-freshdesk-redirect-heading">
     <h3 id="help-center-freshdesk-redirect-heading">{text.heading}</h3>
-    <p className="muted-copy">{text.intro(domain)}</p>
+    <p className="muted-copy">{text.intro(domain)} <HelpTip label={text.heading} text={text.introTip(domain)} /></p>
     {redirect.state === 'own_domain' && <p>{text.ownDomain}</p>}
     {redirect.state === 'help_center_off' && <p>{text.helpCenterOff}</p>}
     {(redirect.state === 'ask_plan' || redirect.state === 'growth' || redirect.state === 'ready') && <>
@@ -52,9 +53,11 @@ function Snippet({ snippet, weeks, mapped }: { snippet: string; weeks: number; m
       <button type="button" onClick={() => void navigator.clipboard.writeText(snippet).then(() => setCopied(true))}>{text.copy}</button>
       {copied && <span role="status">{text.copied}</span>}
     </span>
-    <p className="muted-copy">{text.steps}</p>
-    <p className="muted-copy">{text.javascript}</p>
-    <p className="muted-copy">{text.keep(weeks)}</p>
-    {mapped && <p className="muted-copy">{mapped.embedded ? text.mapped(mapped.articles, mapped.folders, mapped.categories) : text.notMapped}</p>}
+    <p className="muted-copy">{text.steps} <HelpTip label={text.stepsLabel} text={text.stepsTip} link={{ href: text.guide, label: text.learnMore }} /></p>
+    <p className="muted-copy">{text.javascript} <HelpTip label={text.javascriptLabel} text={text.javascriptTip} /></p>
+    <p className="muted-copy">{text.keep(weeks)} <HelpTip label={text.keepLabel} text={text.keepTip} /></p>
+    {mapped && (mapped.embedded
+      ? <p className="muted-copy">{text.mapped(mapped.articles, mapped.folders, mapped.categories)}</p>
+      : <p className="muted-copy">{text.notMapped} <HelpTip label={text.notMappedLabel} text={text.notMappedTip} /></p>)}
   </div>;
 }

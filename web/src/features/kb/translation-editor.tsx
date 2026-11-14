@@ -7,6 +7,7 @@ import { kbApi } from './kb-api';
 import type { KBArticle, KBArticleStatus, KBTranslation, KBTranslationVersion } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { KBDialog, KBMenu } from './kb-ui';
+import { HelpTip } from '../../ui/help-tip';
 import { Icon } from './editor/icons';
 import { reason } from './kb-tree';
 import { MarkdownPreview } from './markdown-preview';
@@ -260,7 +261,7 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
       {deleting && translation && <KBDialog title={t.deleteHeading(name)} role="alertdialog" onClose={() => setDeleting(false)} footer={<>
         <button type="button" disabled={busy} onClick={() => setDeleting(false)}>{kbMessages.cancel}</button>
         <button type="button" className="danger-solid" disabled={busy} onClick={() => void remove()}>{kbMessages.confirmDelete}</button>
-      </>}><p className="muted-copy">{t.deleteBody}</p></KBDialog>}
+      </>}><p className="muted-copy">{t.deleteBody} <HelpTip label={t.trashLabel} text={t.deleteTip} /></p></KBDialog>}
       {historyOpen && translation && <KBDialog title={t.history} className="kb-history" phone="full" closeLabel={t.closeHistory} onClose={() => setHistoryOpen(false)}>
         <SavedReplyHistory<KBTranslationVersion> key={`${translation.updated_at}`} title={translation.title} timezone={timezone}
           load={(before) => kbApi.translationVersions(articleId, locale, before)} text={(version) => version.body_md} failedMessage={t.failed}

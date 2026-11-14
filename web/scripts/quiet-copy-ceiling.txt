@@ -6,46 +6,4 @@
 # This list only shrinks. Never add a line or raise a length: move the how, why or definition into a HelpTip and keep
 # one line of 60 characters or less. The test also pins how many lines the list may hold. When a line gets shorter,
 # the gate asks you to write its new length here; when it gets short enough or goes away, to delete it.
-
-features/kb/article-editor.tsx:seoMessages.seoHelp	117
-features/kb/help-center-domain-messages.ts:domainMessages.cutoverHeading + features/kb/help-center-domain-messages.ts:domainMessages.cutover	383
-features/kb/help-center-domain-messages.ts:domainMessages.description	118
-features/kb/help-center-domain-messages.ts:domainMessages.recordsKeep	158
-features/kb/help-center-domain-messages.ts:domainMessages.trial	254
-features/kb/help-center-freshdesk-redirect-messages.ts:freshdeskRedirectMessages.intro	196
-features/kb/help-center-freshdesk-redirect-messages.ts:freshdeskRedirectMessages.javascript	163
-features/kb/help-center-freshdesk-redirect-messages.ts:freshdeskRedirectMessages.keep	203
-features/kb/help-center-freshdesk-redirect-messages.ts:freshdeskRedirectMessages.notMapped	138
-features/kb/help-center-freshdesk-redirect-messages.ts:freshdeskRedirectMessages.planHelp	61
-features/kb/help-center-freshdesk-redirect-messages.ts:freshdeskRedirectMessages.steps	140
-features/kb/help-center-search-console-messages.ts:searchConsoleMessages.description	286
-features/kb/help-center-search-console-messages.ts:searchConsoleMessages.googleHelp	66
-features/kb/help-center-theme-messages.ts:themeMessages.colorsHelp	100
-features/kb/help-center-theme-messages.ts:themeMessages.customCSSHelp	227
-features/kb/help-center-theme-messages.ts:themeMessages.intro	96
-features/kb/kb-messages.ts:kbMessages.articleSlugHelp	138
-features/kb/kb-messages.ts:kbMessages.articleTrashDescription	154
-features/kb/kb-messages.ts:kbMessages.collectionSlugHelp	74
-features/kb/kb-messages.ts:kbMessages.collectionTrashDescription	100
-features/kb/kb-messages.ts:kbMessages.collectionsHelp	104
-features/kb/kb-messages.ts:kbMessages.deleteBody	99
-features/kb/kb-messages.ts:kbMessages.helpCenterTitleHelp	62
-features/kb/kb-messages.ts:kbMessages.importedNotice	83
-features/kb/kb-messages.ts:kbMessages.noCollections	94
-features/kb/kb-messages.ts:kbMessages.pickerMissing	95
-features/kb/kb-messages.ts:kbMessages.saveAltHelp	167
-features/kb/kb-messages.ts:kbMessages.videoLinkHelp	90
-features/kb/media-messages.ts:mediaMessages.altHelp	78
-features/kb/media-messages.ts:mediaMessages.confirmBody	69
-features/kb/media-messages.ts:mediaMessages.inProgressHelp	112
-features/kb/media-messages.ts:mediaMessages.keepHelp	69
-features/kb/media-messages.ts:mediaMessages.posterHelp + features/kb/media-messages.ts:mediaMessages.chooseFrameHelp	99
-features/kb/media-messages.ts:mediaMessages.replaceHelp	86
-features/kb/media-messages.ts:mediaMessages.trashDescription	110
-features/kb/translation-messages.ts:translationMessages.articleDraft	89
-features/kb/translation-messages.ts:translationMessages.deleteBody	73
-features/kb/translation-messages.ts:translationMessages.languagesDescription	139
-features/kb/translation-messages.ts:translationMessages.primaryHelp	67
-features/kb/translation-messages.ts:translationMessages.translationTrashDescription	64
-features/kb/translation-messages.ts:translationMessages.unlistedHelp	100
 features/settings/gmail-messages.ts:gmailMessages.gmailGoogleData + features/settings/gmail-messages.ts:gmailMessages.gmailPrivacyPolicy	205
