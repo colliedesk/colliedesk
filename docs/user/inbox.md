@@ -58,7 +58,9 @@ waits above the box folded to one line with **Show draft** and **Use draft** (wh
 While setup is unfinished, [Quick start](setup-guide.md) waits beside the workspace name at the top of the
 sidebar; nothing floats over the list. Its amber dot says a step of **Set up** is left (**Receive customer email**,
 **Import from Freshdesk**, **Answer your first email**), and a press opens the steps. A new workspace has no
-conversations yet; the list then explains that. A workspace
+conversations yet; the list then explains that, with one button for the first step you may take: **Connect
+your support email**, then **Import from Freshdesk** (the same steps Quick start lists; a person whose roles
+cannot take them sees the text only). A workspace
 with an email channel also offers **Send yourself a test message**: it opens a conversation from your
 own address that you can answer, and the reply comes to your mailbox (see
 [Send yourself a test message](email-channel.md#send-yourself-a-test-message)). If the list

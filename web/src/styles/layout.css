@@ -48,7 +48,10 @@
 .rail-brand { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius); }
 .rail-brand .logo-mark { width: 24px; height: 24px; }
 /* The head: the logo and the workspace (one line), then Quick start and the pen that starts a new conversation. */
-.workspace-name { flex: 1; min-width: 0; overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-name { flex: 1; min-width: 0; border-radius: var(--radius-sm); }
+.workspace-name strong { display: block; overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+/* The tooltip starts at the name and stays inside the sidebar, wrapping a long name instead of widening it. */
+.workspace-name[data-tip]::after { left: 0; translate: 0 0; width: max-content; max-width: calc(var(--sidebar-user-width, 248px) - 56px); white-space: normal; }
 .quick-start { position: relative; flex: none; display: flex; }
 :is(.quick-start-button, .sidebar-new) { position: relative; flex: none; width: var(--control, 32px); height: var(--control, 32px); padding: 0; border-color: transparent;
   background: transparent; box-shadow: none; color: var(--text-1); }
@@ -107,6 +110,9 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .app-shell { --sidebar-width: var(--sidebar-user-width, 248px); transition: grid-template-columns var(--dur-fast) var(--ease); }
   html[data-sidebar-resizing] .app-shell { transition: none; }
   .app-shell[data-sidebar="collapsed"] { --sidebar-width: 56px; }
+  /* The buttons beside the name have room of their own around their icons, so the name gets the gaps between them. */
+  .app-shell[data-sidebar="expanded"] .rail-head { gap: 0; }
+  .app-shell[data-sidebar="expanded"] .rail-head .workspace-name { margin-left: var(--space-2); }
   .app-shell[data-sidebar="collapsed"] .app-sidebar { padding: var(--space-2) 0; overflow: visible; }
   .app-shell[data-sidebar="collapsed"] :is(.app-rail, .rail-links, .sidebar-foot) { align-items: center; }
   .app-shell[data-sidebar="collapsed"] .rail-head { flex-direction: column; justify-content: center; gap: var(--space-1); height: auto; margin-bottom: var(--space-2); padding: 0; }

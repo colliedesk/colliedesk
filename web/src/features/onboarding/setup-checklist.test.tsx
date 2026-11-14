@@ -81,6 +81,13 @@ test('only the next step to do is highlighted, Set up first', () => {
   expect(links.filter((link) => link.classList.contains('primary-action')).map((link) => link.textContent)).toEqual([expect.stringContaining('Import from Freshdesk')]);
 });
 
+test('an address waiting for its first email is still the highlighted step, and the empty inbox offers the same address', () => {
+  render(<SetupChecklist progress={progress({ email: 'waiting' })} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
+  const highlighted = screen.getAllByRole('link').filter((link) => link.classList.contains('primary-action'));
+  expect(highlighted).toHaveLength(1);
+  expect(highlighted[0]).toHaveAttribute('href', '/setup/email');
+});
+
 test('with Set up done, the next step is the first of Try more', () => {
   render(<SetupChecklist progress={progress({ email: 'working', import: 'done', first_reply: 'sent' })} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
   expect(screen.getAllByRole('link').filter((link) => link.classList.contains('primary-action')).map((link) => link.textContent)).toEqual([expect.stringContaining('Turn on AI drafts')]);

@@ -35,8 +35,9 @@ import { preloadQuickStart, QuickStart } from './features/onboarding/quick-start
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { AtIcon, BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon } from './ui/icons';
+import { AtIcon, BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon, UserIcon } from './ui/icons';
 import { mentionMessages } from './features/inbox/mention-messages';
+import { customersPageName } from './features/contacts/contact-page-name';
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
@@ -128,6 +129,7 @@ function AppLayout() {
   const intake = useIntakeSummary(!onSignIn && readsInbox && !signedOut && !locked).data;
   // The inbox list on screen (its filters are in the address), so the sidebar marks the view or channel it is.
   const inInbox = path === '/' || path.startsWith('/conversations/');
+  const inContacts = path.startsWith('/contacts/');
   const inMentions = path === '/mentions' || path.startsWith('/mentions/');
   const sidebar = useSidebarData(me.data, !onSignIn && !signedOut && !locked, inInbox ? inboxQueryFromSearch(search) : undefined);
   // Quick start in the sidebar head reads where setup stands on every page. A guide the session hid is not asked for;
@@ -175,7 +177,7 @@ function AppLayout() {
   const page = inSettings ? { title: messages.settings, icon: <SettingsIcon /> } : inReview ? { title: messages.review, icon: <ChatIcon /> }
     : inKnowledge ? { title: messages.knowledge, icon: <BookIcon /> } : inResults ? { title: messages.results, icon: <ChartIcon /> }
     // Fixes keeps its wrench in the Autofix chunk; its name is enough here.
-    : inFixes ? { title: messages.autofix, icon: null } : inMentions ? { title: mentionMessages.mentions, icon: <AtIcon /> } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
+    : inFixes ? { title: messages.autofix, icon: null } : inMentions ? { title: mentionMessages.mentions, icon: <AtIcon /> } : inContacts ? { title: customersPageName, icon: <UserIcon /> } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
   // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
   const mayStart = (['messages:send', 'channels:read', 'contacts:read'] as const).every(shows);
   // Where each desk runs on its own host and the identity provider proves who the person is, the account menu

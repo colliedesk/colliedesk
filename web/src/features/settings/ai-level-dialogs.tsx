@@ -13,17 +13,17 @@ export type Part = AISlot['auto_parts'][number];
 export const parts: Part[] = ['tags', 'priority', 'assignee'];
 const partList = (list: Part[]) => list.map((part) => m.autoPartLower[part]).join(' and ').replace(/ and (?=.* and )/g, ', ');
 
-function Dialog(props: Omit<Parameters<typeof SharedDialog>[0], 'closeLabel'>) {
+export function AIDialog(props: Omit<Parameters<typeof SharedDialog>[0], 'closeLabel'>) {
   return <SharedDialog {...props} closeLabel={m.close} className="ai-dialog" />;
 }
 
 export function AutoTriageDialog({ slot, onClose, onTurnOn }: { slot: AISlot; onClose: () => void; onTurnOn: () => void }) {
   const chosen = slot.auto_parts.length > 0 ? slot.auto_parts : (['tags', 'priority'] as Part[]);
   return (
-    <Dialog title={m.autoConfirmTitle} help={m.autoConfirmLead(partList(chosen))} onClose={onClose} onSubmit={onTurnOn}
+    <AIDialog title={m.autoConfirmTitle} help={m.autoConfirmLead(partList(chosen))} onClose={onClose} onSubmit={onTurnOn}
       footer={<><button type="button" className="ghost" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" autoFocus>{m.autoConfirmOn}</button></>}>
       <ul className="ai-facts">{m.autoConfirmFacts.map((fact) => <li key={fact}>{fact}</li>)}</ul>
-    </Dialog>
+    </AIDialog>
   );
 }
 
@@ -36,7 +36,7 @@ export function AutoDraftDialog({ slot, settings, onClose, onTurnOn }: { slot: A
   const provider = settings.providers.find((item) => item.id === slot.provider_id);
   const half = allowance ? Math.floor(allowance.limit_micro_usd / 2) : null;
   return (
-    <Dialog title={m.autoDraftConfirmTitle} help={m.autoDraftConfirmLead} onClose={onClose} onSubmit={onTurnOn}
+    <AIDialog title={m.autoDraftConfirmTitle} help={m.autoDraftConfirmLead} onClose={onClose} onSubmit={onTurnOn}
       footer={<><button type="button" className="ghost" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" autoFocus>{m.autoConfirmOn}</button></>}>
       <dl className="ai-estimate">
         <div><dt>{m.estLast30}</dt><dd>{m.estMessages(estimate.customer_messages)}</dd></div>
@@ -48,6 +48,6 @@ export function AutoDraftDialog({ slot, settings, onClose, onTurnOn }: { slot: A
         : !server && <p className="ai-estimate-note"><b>{m.estByo(provider?.label ?? '')}</b>{m.estByoRest}</p>}
       <ul className="ai-facts">{m.autoDraftFacts(perDay).map((fact) => <li key={fact}>{fact}</li>)}</ul>
       <p><a href="https://github.com/colliedesk/colliedesk/blob/main/docs/user/ai.md#write-a-draft-when-a-customer-writes" target="_blank" rel="noopener noreferrer">{m.estHow}</a></p>
-    </Dialog>
+    </AIDialog>
   );
 }

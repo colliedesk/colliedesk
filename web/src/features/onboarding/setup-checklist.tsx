@@ -6,7 +6,7 @@ import { preloadSetupStep } from './setup-flow-part';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 import { setupMessages } from './setup-messages';
-import { nothingToDo, quickStartCount, setUpKeys, stepIsDone, visibleSteps } from './setup-steps';
+import { highlightedStep, nothingToDo, quickStartCount, setUpKeys, stepIsDone, visibleSteps } from './setup-steps';
 import type { Permissions } from '../../lib/can';
 import './setup-checklist.css';
 import { frameMessages } from '../shell/frame-messages';
@@ -50,7 +50,7 @@ export function SetupChecklist({ progress, me, goal, workspaceName, skipped = fa
   const tryMore = steps.filter((step) => !setUpKeys.has(step.key));
   const { done, total } = quickStartCount(progress, me, skipped);
   const shown = skipped ? setUp : [...setUp, ...tryMore];
-  const next = shown.find((step) => !stepIsDone(step) && !nothingToDo(step))?.key;
+  const next = highlightedStep(progress, me, skipped);
 
   // A step that turns done while this is on screen is reported once; what was done on arrival is not.
   const seenDone = useRef<Set<SetupStepKey>>(undefined);
