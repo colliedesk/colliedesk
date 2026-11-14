@@ -310,9 +310,9 @@ test('with no saved view and no channel, the sidebar shows neither heading', () 
   expect(screen.queryByText('Channels')).not.toBeInTheDocument();
 });
 
-test('Invite teammates is at the foot of the sidebar for someone who may invite, and opens Members', () => {
+test('Invite teammates is at the foot of the sidebar for someone who may invite, and opens the Invites tab of Members', () => {
   const { rerender } = render(<AppShell me={me} canInvite><p>inbox</p></AppShell>);
-  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Invite teammates' })).toHaveAttribute('href', '/settings/members');
+  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Invite teammates' })).toHaveAttribute('href', '/settings/members?tab=invites');
   rerender(<AppShell me={me}><p>inbox</p></AppShell>);
   expect(screen.queryByRole('link', { name: 'Invite teammates' })).not.toBeInTheDocument();
 });

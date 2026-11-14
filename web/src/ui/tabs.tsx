@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import './controls.css';
 
+// how a tab was chosen: a click is a step the person took, an arrow key moves through the tabs as it goes.
+export type TabChange = 'click' | 'key';
 export interface TabItem<T extends string> { id: T; label: string; count?: number | string }
 
 // tabID and panelID name a tab and its panel, so a page's panel can point back at its tab.
@@ -12,14 +14,14 @@ export const panelID = (prefix: string, id: string) => `${prefix}-${id}-panel`;
 // go to the first and the last.
 // variant 'underline' draws text tabs with a 2 px line under the open one (a page's views, as in Review); the default is the
 // segmented control.
-export function Tabs<T extends string>({ label, tabs, value, onChange, prefix, variant = 'segmented' }: { label: string; tabs: TabItem<T>[]; value: T; onChange: (id: T) => void; prefix: string; variant?: 'segmented' | 'underline' }) {
+export function Tabs<T extends string>({ label, tabs, value, onChange, prefix, variant = 'segmented' }: { label: string; tabs: TabItem<T>[]; value: T; onChange: (id: T, how: TabChange) => void; prefix: string; variant?: 'segmented' | 'underline' }) {
   const keys = (event: KeyboardEvent) => {
     const at = tabs.findIndex((t) => t.id === value);
     const index = { ArrowRight: (at + 1) % tabs.length, ArrowLeft: (at + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1 }[event.key];
     if (index === undefined) return;
     event.preventDefault();
     const next = tabs[index];
-    onChange(next.id);
+    onChange(next.id, 'key');
     document.getElementById(tabID(prefix, next.id))?.focus();
   };
   const list = useRef<HTMLDivElement>(null);
@@ -59,8 +61,8 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, prefix, v
   const className = ['seg-tabs', variant === 'underline' && 'seg-tabs-underline', fade.start && 'fade-start', fade.end && 'fade-end'].filter(Boolean).join(' ');
   return <div className={className} role="tablist" aria-label={label} ref={list} onScroll={measure}>
     {tabs.map((item) => <button key={item.id} type="button" role="tab" id={tabID(prefix, item.id)} aria-selected={value === item.id}
-      aria-controls={panelID(prefix, item.id)} tabIndex={value === item.id ? 0 : -1} onClick={() => onChange(item.id)} onKeyDown={keys}>
-      {item.label}{item.count !== undefined && <span className="seg-count">{item.count}</span>}
+      aria-controls={panelID(prefix, item.id)} tabIndex={value === item.id ? 0 : -1} onClick={() => onChange(item.id, 'click')} onKeyDown={keys}>
+      {item.label}{item.count !== undefined && <>{' '}<span className="seg-count">{item.count}</span></>}
     </button>)}
   </div>;
 }

@@ -5,6 +5,8 @@ import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
+import { useInviteDraft } from './use-invite-draft';
+import type { InviteDraft } from './use-invite-draft';
 import './role-pickers.css';
 
 // inviteState makes every way an invite can end visible: used, revoked or expired.
@@ -29,14 +31,16 @@ interface InvitesSectionProps {
   roles?: Role[];
   onCreateInvite?: (email: string, roleIds: string[]) => void;
   onRevokeInvite?: (id: string) => void;
+  // draft keeps the typed invite where the page can hold it; without one the form keeps its own.
+  draft?: InviteDraft;
 }
 
-export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeInvites = false, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite }: InvitesSectionProps) {
+export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeInvites = false, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite, draft }: InvitesSectionProps) {
   const createdInviteUrl = createdInvite?.url;
-  const [email, setEmail] = useState('');
+  const own = useInviteDraft();
+  const { email, setEmail, picked, setPicked } = draft ?? own;
   // An invite gives the Agent role unless the person picks others.
   const agent = roles.find((role) => role.system === 'agent');
-  const [picked, setPicked] = useState<string[] | null>(null);
   const chosen = picked ?? (agent ? [agent.id] : []);
   const [picking, setPicking] = useState(false);
   const rolesButton = useRef<HTMLButtonElement>(null);

@@ -23,7 +23,7 @@ import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-inte
 import { rememberSignupAttribution } from './lib/signup-attribution';
 import type { PlanIntent } from './features/settings/plan-intent';
 import { NavItemContent, SettingsNavLinkContext } from './features/settings/settings-nav';
-import { aiViews, conversationFieldsTitle, membersTabOf, movedPages, settingsAddress } from './features/settings/settings-anchors';
+import { aiViews, conversationFieldsTitle, membersTabOf, movedAddress, settingsAddress } from './features/settings/settings-anchors';
 import type { MembersTab } from './features/settings/settings-anchors';
 import type { NavItem } from './features/settings/settings-nav';
 import type { ReactNode } from 'react';
@@ -395,7 +395,7 @@ const membersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sett
     const { tab } = membersRoute.useSearch();
     const navigate = useNavigate();
     return <SettingsChunkPage title={messages.members} render={({ MembersRoute }) =>
-      <MembersRoute tab={tab === 'roles' ? 'advanced' : tab} onTab={(next) => void navigate({ to: '/settings/members', search: { tab: next }, replace: true })} />} />;
+      <MembersRoute tab={tab === 'roles' ? 'advanced' : tab} onTab={(next, how) => void navigate({ to: '/settings/members', search: { tab: next }, replace: how === 'key' })} />} />;
   } });
 // Reserved: the menu holds the place of Conversation fields, and the page says what is coming.
 const fieldsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/fields', loader: pageChunk(settingsRoutePart),
@@ -489,7 +489,7 @@ const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setting
 // Pages the menu merged into others keep their addresses: each opens the page, section or tab that holds its content
 // now (movedPages in settings-anchors.ts). The path is typed per route, so the router still knows every address.
 const moved = <P extends string>(path: P) => createRoute({ getParentRoute: () => rootRoute, path,
-  beforeLoad: () => { throw redirect({ href: movedPages[path], replace: true }); } });
+  beforeLoad: ({ location }) => { throw redirect({ href: movedAddress(path, location.searchStr, location.hash), replace: true }); } });
 const movedRoutes = [moved('/settings/profile'), moved('/settings/preferences'), moved('/settings/sessions'), moved('/settings/numbers'), moved('/settings/roles'),
   moved('/settings/agents'), moved('/settings/import'), moved('/settings/export'), moved('/settings/import-freshdesk'), moved('/settings/help-center')];
 // Settings → Response targets: business hours and the targets of each priority.

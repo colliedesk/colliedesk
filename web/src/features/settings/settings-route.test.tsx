@@ -1,5 +1,6 @@
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { expect, test, vi } from 'vitest';
 import { agentRoleRef, builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
 import { AccountRoute, GeneralRoute, MembersRoute, SavedRepliesRoute } from './settings-route';
@@ -187,7 +188,9 @@ test('Members opens on People, with four tabs: People, Invites, Groups (reserved
   show('admin', [], members());
   expect(await screen.findByRole('heading', { level: 1, name: 'Members' })).toBeInTheDocument();
   expect(await screen.findByRole('region', { name: 'Team' })).toBeInTheDocument();
-  expect(tabNames()).toEqual(['People2', 'Invites0', 'GroupsComing', 'Advanced']);
+  expect(tabNames()).toEqual(['People 2', 'Invites 0', 'Groups Coming', 'Advanced']);
+  // Each tab's name reads as words: the count and the tag are not run into the label.
+  expect(screen.getByRole('tab', { name: 'Groups Coming' })).toBeInTheDocument();
   expect(screen.getByRole('tab', { name: /^People/ })).toHaveAttribute('aria-selected', 'true');
   // Each other tab's section is on its own tab, not below the team.
   for (const name of ['Invites', 'Roles']) expect(screen.queryByRole('region', { name }), name).not.toBeInTheDocument();
@@ -214,13 +217,38 @@ test('each tab of Members opens its own section: invites, the reserved groups, a
   expect(screen.queryByRole('region', { name: 'Team' })).not.toBeInTheDocument();
 });
 
+// The invite being typed belongs to the page, not to the tab: People and back, and the email and the picked roles are still there.
+test('a typed invite email and the picked roles stay while another tab of Members is open', async () => {
+  const Tabbed = () => { const [tab, setTab] = useState<MembersTab>('invites'); return <MembersRoute tab={tab} onTab={setTab} />; };
+  show('admin', [], () => <Tabbed />);
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Invite email' }), { target: { value: 'half-typed@example.com' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Roles: Agent' }));
+  fireEvent.click(within(document.getElementById('invite-roles')!).getByRole('checkbox', { name: /Admin/ }));
+  expect(screen.getByRole('button', { name: /^Roles: .*Admin/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: /^People/ }));
+  expect(screen.queryByRole('textbox', { name: 'Invite email' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: /^Invites/ }));
+  expect(await screen.findByRole('textbox', { name: 'Invite email' })).toHaveValue('half-typed@example.com');
+  expect(screen.getByRole('button', { name: /^Roles: .*Admin/ })).toBeInTheDocument();
+});
+
+// The note says which roles exist, so it waits for the roles instead of saying one thing and then another.
+test('the note under People is not drawn until the roles are known', async () => {
+  show('admin', [], members());
+  api.roles.mockReturnValue(new Promise(() => {}));
+  cleanup();
+  draw(members());
+  expect(await screen.findByRole('region', { name: 'Team' })).toBeInTheDocument();
+  expect(screen.queryByText(/Custom roles/)).not.toBeInTheDocument();
+});
+
 test('choosing a tab of Members tells the address, and the Invites tab counts the pending invites', async () => {
   api.invites.mockResolvedValue({ items: [] });
   const choose = vi.fn();
   show('admin', [], members('people', choose));
   api.invites.mockResolvedValue({ items: [{ id: 'i1', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com', created_at: '2026-10-28T07:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null }] });
   fireEvent.click(await screen.findByRole('tab', { name: /^Advanced/ }));
-  expect(choose).toHaveBeenCalledWith('advanced');
+  expect(choose).toHaveBeenCalledWith('advanced', 'click');
 });
 
 test('an admin deactivates a teammate and the lists reload', async () => {

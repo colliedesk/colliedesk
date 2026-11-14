@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { AIModelsInput, AIProviderInput, AISettings, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
+import type { TabChange } from '../../ui/tabs';
 import type { AIView } from './settings-anchors';
 import type { Shown } from './settings-nav';
 
@@ -52,5 +53,5 @@ export interface AIPageProps {
   agents?: ReactNode;
   // The view open (the address's ?tab=) and the way to change it.
   view?: AIView;
-  onView?: (view: AIView) => void;
+  onView?: (view: AIView, how: TabChange) => void;
 }

@@ -20,7 +20,7 @@ test('the menu lists the nine items and the reserved Conversation fields, with n
   await newDesk(page, 'E2E settings menu');
   await page.goto(`${baseURL}/settings/channels`);
   const menu = page.getByRole('navigation', { name: 'Settings sections' });
-  await expect(menu.getByRole('link')).toHaveText(['Account', 'General', 'Members', 'Channels', 'Response targets', 'AI & agents', 'Saved replies', 'Conversation fieldsComing', 'Data']);
+  await expect(menu.getByRole('link')).toHaveText(['Account', 'General', 'Members', 'Channels', 'Response targets', 'AI & agents', 'Saved replies', 'Conversation fields Coming', 'Data']);
   await expect(menu.getByRole('link', { name: 'Channels' })).toHaveAttribute('aria-current', 'page');
   await expect(menu.locator('ul ul')).toHaveCount(0);
   for (const name of ['Email', 'Web form', 'Help chat', 'Zalo OA']) await expect(menu.getByRole('link', { name, exact: true }), name).toHaveCount(0);
@@ -59,7 +59,7 @@ test('Members has the tabs People, Invites, Groups and Advanced in the address, 
   await newDesk(page, 'E2E settings members tabs');
   await page.goto(`${baseURL}/settings/members`);
   const tabs = page.getByRole('tablist', { name: 'Members' });
-  await expect(tabs.getByRole('tab')).toHaveText([/^People/, /^Invites/, /^GroupsComing/, 'Advanced']);
+  await expect(tabs.getByRole('tab')).toHaveText([/^People/, /^Invites/, /^Groups Coming/, 'Advanced']);
   await expect(tabs.getByRole('tab', { name: /^People/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('region', { name: 'Team' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Roles' })).toHaveCount(0);
@@ -82,16 +82,36 @@ test('Members has the tabs People, Invites, Groups and Advanced in the address, 
   await expect(page.getByRole('tab', { name: /^Groups/ })).toHaveAttribute('aria-selected', 'true');
 });
 
-test('AI & agents has the tabs Built-in AI and External agents in the address', async ({ page }) => {
+// The invite being typed belongs to the page: People and back, and the email and the picked roles are still there.
+test('a typed invite email and the picked roles stay when another tab of Members opens and the person comes back', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await newDesk(page, 'E2E settings invite draft');
+  await page.goto(`${baseURL}/settings/members?tab=invites`);
+  await page.getByLabel('Invite email').fill('half-typed@example.com');
+  await page.getByRole('button', { name: /^Roles: / }).click();
+  await page.locator('#invite-roles').getByRole('checkbox', { name: /Admin/ }).check();
+  await expect(page.getByRole('button', { name: /^Roles: Admin/ })).toBeVisible();
+  await page.getByRole('tab', { name: /^People/ }).click();
+  await expect(page.getByRole('region', { name: 'Team' })).toBeVisible();
+  await expect(page.getByLabel('Invite email')).toHaveCount(0);
+  await page.getByRole('tab', { name: /^Invites/ }).click();
+  await expect(page.getByLabel('Invite email')).toHaveValue('half-typed@example.com');
+  await expect(page.getByRole('button', { name: /^Roles: Admin/ })).toBeVisible();
+  // A click on a tab is a step: Back returns to the tab before.
+  await page.goBack();
+  await expect(page).toHaveURL(`${baseURL}/settings/members?tab=people`);
+});
+
+test('AI & agents has the tabs Built-in AI and External AI agents in the address', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await newDesk(page, 'E2E settings ai tabs');
   await page.goto(`${baseURL}/settings/ai`);
   const tabs = page.getByRole('tablist', { name: 'AI & agents' });
-  await expect(tabs.getByRole('tab')).toHaveText(['Built-in AI', 'External agents']);
+  await expect(tabs.getByRole('tab')).toHaveText(['Built-in AI', 'External AI agents']);
   await expect(tabs.getByRole('tab', { name: 'Built-in AI' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('heading', { level: 2, name: 'External AI agents' })).toHaveCount(0);
 
-  await tabs.getByRole('tab', { name: 'External agents' }).click();
+  await tabs.getByRole('tab', { name: 'External AI agents' }).click();
   await expect(page).toHaveURL(`${baseURL}/settings/ai?tab=external`);
   await expect(page.getByRole('heading', { level: 2, name: 'External AI agents' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create token' })).toBeVisible();
@@ -126,7 +146,7 @@ test('on a phone the list of settings shows the new menu, and a page goes back t
   await newDesk(page, 'E2E settings phone menu');
   await page.goto(`${baseURL}/settings`);
   const list = page.getByRole('navigation', { name: 'Settings sections' });
-  await expect(list.getByRole('link')).toHaveText(['Account', 'General', 'Members', 'Channels', 'Response targets', 'AI & agents', 'Saved replies', 'Conversation fieldsComing', 'Data']);
+  await expect(list.getByRole('link')).toHaveText(['Account', 'General', 'Members', 'Channels', 'Response targets', 'AI & agents', 'Saved replies', 'Conversation fields Coming', 'Data']);
   await list.getByRole('link', { name: 'Members', exact: true }).click();
   await expect(page).toHaveURL(`${baseURL}/settings/members`);
   await expect(page.getByRole('tab', { name: /^People/ })).toBeVisible();

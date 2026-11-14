@@ -39,6 +39,8 @@ test('the menu is the nine items and the reserved one of the design, grouped, wi
   expect(within(nav).getByText('Workspace')).toBeInTheDocument();
   expect(within(nav).getByText('Data and billing')).toBeInTheDocument();
   expect(within(nav).getByRole('link', { name: 'Account' })).toHaveAttribute('aria-current', 'page');
+  // The tag is a word after the label, not run into it.
+  expect(within(nav).getByRole('link', { name: 'Conversation fields Coming' })).toHaveAttribute('href', '/settings/fields');
   // No item is a section of another page, and no item lists pages under it.
   expect(links(nav).filter(([, href]) => href?.includes('#'))).toEqual([]);
   expect(nav.querySelectorAll('ul ul')).toHaveLength(0);

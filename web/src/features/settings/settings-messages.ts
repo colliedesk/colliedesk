@@ -31,7 +31,7 @@ export const settingsMessages = {
   groupsComingBody: 'When this ships, you can put people in groups such as Billing or Technical, and the Freshdesk import brings your groups across. Until then, tags carry that detail.',
   followProgress: 'Follow progress',
   tabBuiltIn: 'Built-in AI',
-  tabExternal: 'External agents',
+  tabExternal: 'External AI agents',
   membersTabs: 'Members',
   tabPeople: 'People',
   tabInvites: 'Invites',

@@ -38,8 +38,8 @@ const sectionOf = (item: NavItem): SettingsSection | undefined => sectionByPage[
 export function NavItemContent({ item }: { item: NavItem }) {
   return <>
     <span className="settings-nav-label">{item.label}</span>
-    {item.tag && <span className="settings-nav-tag">{item.tag}</span>}
-    {item.dot && <span className="settings-nav-dot" role="img" aria-label={item.dot} />}
+    {item.tag && <>{' '}<span className="settings-nav-tag">{item.tag}</span></>}
+    {item.dot && <>{' '}<span className="settings-nav-dot" role="img" aria-label={item.dot} /></>}
   </>;
 }
 

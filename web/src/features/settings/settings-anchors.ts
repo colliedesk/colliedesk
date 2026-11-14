@@ -48,6 +48,19 @@ export const movedPages: Record<string, string> = {
   '/settings/help-center': '/knowledge/settings',
 };
 
+// movedAddress is where an old address opens, with what the link carried: its query goes on to the new page (the
+// new address's own parameters, such as the tab, win) and so does its anchor, which names a section more exactly than the
+// one the table gives. Without them the table's own section stays.
+export function movedAddress(path: string, search: string, hash: string): string {
+  const [target, section] = movedPages[path].split('#');
+  const [pathname, own = ''] = target.split('?');
+  const query = new URLSearchParams(own);
+  for (const [key, value] of new URLSearchParams(search)) if (!query.has(key)) query.append(key, value);
+  const text = query.toString();
+  const anchor = hash.replace(/^#/, '') || section;
+  return `${pathname}${text ? `?${text}` : ''}${anchor ? `#${anchor}` : ''}`;
+}
+
 // The tabs of Members and of AI & agents are in the address (?tab=). 'roles' is the old name of Advanced.
 export const membersTabs = ['people', 'invites', 'groups', 'advanced'] as const;
 export type MembersTab = (typeof membersTabs)[number];

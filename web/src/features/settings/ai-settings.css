@@ -284,3 +284,6 @@
 /* Text links (Change, Setup guide links): a 32px tall target, the line keeps its height. */
 .ai-settings :is(.link-action, .link-button) { display: inline-block; margin-block: -7px; padding-block: 7px; }
 @media (pointer: coarse), (max-width: 30rem) { .ai-settings :is(.link-action, .link-button) { padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); } }
+
+/* A view's panel (Built-in AI, External AI agents) lays its parts out as the page does without tabs. */
+.ai-page .ai-view-panel { display: grid; gap: var(--space-3); min-width: 0; }

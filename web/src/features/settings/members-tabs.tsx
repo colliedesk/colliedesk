@@ -1,13 +1,14 @@
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
+import type { TabChange } from '../../ui/tabs';
 import type { MembersTab } from './settings-anchors';
 import { settingsMessages } from './settings-messages';
 import { ComingCard } from './coming-card';
 
 interface MembersTabsProps {
   tab: MembersTab;
-  onTab: (tab: MembersTab) => void;
+  onTab: (tab: MembersTab, how: TabChange) => void;
   people: ReactNode;
   invites: ReactNode;
   advanced: ReactNode;
