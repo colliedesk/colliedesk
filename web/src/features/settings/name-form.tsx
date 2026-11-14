@@ -44,7 +44,7 @@ export function NameForm({ label, saveLabel, hint, tip, value, canManage, save, 
       return onSave?.(name.trim());
     } });
   // A step with its own button draws no bar, but a name typed in it counts for the question on leaving.
-  useUnsavedText(`name-step:${label}`, saveLabel !== undefined && canManage && !feedback.pending && name.trim() !== value.trim());
+  useUnsavedText(`name-step:${label}`, saveLabel !== undefined && canManage && name.trim() !== value.trim());
   if (!canManage) return <p><strong>{label}: </strong><span>{value}</span></p>;
   return (
     <form className="form-row" onSubmit={(event) => {

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { Invite, Session } from '../../api/schemas';
 import { messages } from '../../messages';
@@ -10,11 +11,11 @@ import { PreferencesSection } from './preferences-section';
 import type { SaveState } from './save-feedback';
 import { ConnectedAppsSection } from './connected-apps-section';
 import { SessionsSection } from './sessions-section';
-import { useInstantSave } from './settings-edits';
+import { useInstantSave, useUnsavedText } from './settings-edits';
 import { SettingsFrame } from './settings-frame';
 import { MembersTabs } from './members-tabs';
 import type { MembersTab } from './settings-anchors';
-import type { InviteDraft } from './use-invite-draft';
+import { useInviteDraft } from './use-invite-draft';
 import type { TabChange } from '../../ui/tabs';
 import { TimezoneSelect } from './timezone-select';
 
@@ -80,7 +81,6 @@ interface SettingsPageProps {
   onMembersTab?: (tab: MembersTab, how: TabChange) => void;
   memberCounts?: { people?: number; invites?: number };
   // The invite being typed, kept by the page so a change of tab does not drop it.
-  inviteDraft?: InviteDraft;
 }
 
 const titles: Record<SettingsPageName, string> = { account: messages.account, general: messages.general, members: messages.members, 'saved-replies': messages.savedReplies };
@@ -99,11 +99,7 @@ export function SettingsPage(props: SettingsPageProps) {
         {canManageWorkspace && <GeneralSection {...props} />}
         {numbersSection}
       </>}
-      {page === 'members' && <MembersTabs tab={props.membersTab ?? 'people'} onTab={(tab, how) => props.onMembersTab?.(tab, how)} counts={props.memberCounts ?? {}}
-        people={<>{teamSection}{teamSection && props.inviteRoles && <p className="muted-copy">{props.inviteRoles?.length === 2 ? settingsMessages.defaultRolesNote : settingsMessages.customRolesNote}</p>}</>}
-        invites={showInvites && <InvitesSection invites={props.invites ?? []} timezone={timezone} canCreateInvites={props.canCreateInvites ?? false} canRevokeInvites={props.canRevokeInvites} createdInvite={props.createdInvite}
-          creatingInvite={props.creatingInvite} inviteError={props.inviteError} roles={props.inviteRoles} onCreateInvite={props.onCreateInvite} onRevokeInvite={props.onRevokeInvite} draft={props.inviteDraft} />}
-        advanced={props.rolesSection} />}
+      {page === 'members' && <MembersPanels {...props} />}
       {page === 'saved-replies' && savedRepliesSection}
     </SettingsFrame>
   );
@@ -140,4 +136,21 @@ function GeneralSection({ workspaceName = '', workspaceNameSave, onSetWorkspaceN
         onChange={(value) => void choose(onSetWorkspaceTimezone ?? (() => undefined), value, workspaceTimezone)} />
     </div>
   </section>;
+}
+
+// MembersPanels holds the invite being typed where it survives a change of tab, and says when it is unsaved: an email, or
+// roles other than the default one. Once an invite is created the form is empty again.
+function MembersPanels(props: SettingsPageProps) {
+  const { timezone, showInvites = true, teamSection, createdInvite } = props;
+  const { email, setEmail, picked, setPicked } = useInviteDraft();
+  const agent = props.inviteRoles?.find((role) => role.system === 'agent');
+  const differs = picked !== null && (picked.length !== (agent ? 1 : 0) || (agent !== undefined && !picked.includes(agent.id)));
+  useUnsavedText('invite', email.trim() !== '' || differs);
+  const createdUrl = createdInvite?.url;
+  useEffect(() => { if (createdUrl) { setEmail(''); setPicked(null); } }, [createdUrl]);
+  return <MembersTabs tab={props.membersTab ?? 'people'} onTab={(tab, how) => props.onMembersTab?.(tab, how)} counts={props.memberCounts ?? {}}
+    people={<>{teamSection}{teamSection && props.inviteRoles && <p className="muted-copy">{props.inviteRoles?.length === 2 ? settingsMessages.defaultRolesNote : settingsMessages.customRolesNote}</p>}</>}
+    invites={showInvites && <InvitesSection invites={props.invites ?? []} timezone={timezone} canCreateInvites={props.canCreateInvites ?? false} canRevokeInvites={props.canRevokeInvites} createdInvite={createdInvite}
+      creatingInvite={props.creatingInvite} inviteError={props.inviteError} roles={props.inviteRoles} onCreateInvite={props.onCreateInvite} onRevokeInvite={props.onRevokeInvite} draft={{ email, setEmail, picked, setPicked }} />}
+    advanced={props.rolesSection} />;
 }

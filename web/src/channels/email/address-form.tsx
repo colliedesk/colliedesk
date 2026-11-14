@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react';
-import { useUnsavedText } from '../../features/settings/settings-edits';
+import { useReleaseUnsaved, useUnsavedText } from '../../features/settings/settings-edits';
 import { useMutation } from '@tanstack/react-query';
 import { ConflictError } from '../../api/client';
 import { settingsMessages } from '../../features/settings/settings-messages';
@@ -13,12 +13,13 @@ export interface AddressInput { name?: string; address: string }
 // names: that field takes the focus, and the words stand right after it.
 export function AddressForm({ canManage, named = false, initial = '', save, onSaved }: { canManage: boolean; named?: boolean; initial?: string;
   save: (input: AddressInput) => Promise<unknown>; onSaved?: () => void }) {
+  const release = useReleaseUnsaved();
   const [name, setName] = useState('');
   const [address, setAddress] = useState(initial);
-  const mutation = useMutation({ mutationFn: () => save({ ...(named && name.trim() ? { name: name.trim() } : {}), address: address.trim() }), onSuccess: onSaved });
-  // Typed and not yet saved: leaving the page asks, though the form has its own button. While the save is on its way the
-  // text is being kept, and the page the save opens next is not a question.
-  useUnsavedText('address-form', !mutation.isPending && (name !== '' || address !== initial));
+  const mutation = useMutation({ mutationFn: () => save({ ...(named && name.trim() ? { name: name.trim() } : {}), address: address.trim() }), onSuccess: () => { release(); onSaved?.(); } });
+  // Typed and not yet saved: leaving the page asks, though the form has its own button. Once the save is accepted the page it
+  // opens next is not a question, so the text is released first.
+  useUnsavedText('address-form', name !== '' || address !== initial);
   const state = saveState(mutation);
   const errorID = useId();
   const nameHint = useId();

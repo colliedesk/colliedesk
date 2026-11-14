@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { SettingsPage } from './settings-page';
 import { SessionsSection } from './sessions-section';
@@ -354,4 +354,41 @@ test('a display name save shows Saving…, Saved or why it was refused', () => {
   expect(screen.getByRole('textbox', { name: 'Display name' })).toHaveValue('Ada');
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" displayName="Ada" displayNameSave={{ error: 'display_name must be a string of at most 80 characters.' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('at most 80 characters');
+});
+
+
+// ---- the invite being typed belongs to the page, not to the Invites tab
+
+const inviteProps = { sessions: [] as never[], timezone: 'UTC', canCreateInvites: true, inviteRoles: builtInRoles, invites: [] as never[] };
+const closingTabAsks = () => !window.dispatchEvent(new Event('beforeunload', { cancelable: true }));
+
+test('an email typed on Invites still counts as unsaved when People is the tab shown, and draws no bar', async () => {
+  const view = render(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  expect(closingTabAsks()).toBe(false);
+  fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'new@example.com' } });
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  view.rerender(<SettingsPage page="members" membersTab="people" {...inviteProps} />);
+  expect(closingTabAsks()).toBe(true);
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+  view.rerender(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  expect(screen.getByLabelText(/invite email/i)).toHaveValue('new@example.com');
+});
+
+test('once an invite is created its form is empty again and nothing is unsaved', async () => {
+  const view = render(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'new@example.com' } });
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  view.rerender(<SettingsPage page="members" membersTab="invites" {...inviteProps} createdInvite={{ url: 'https://desk.example.com/sign-in?token=once' }} />);
+  await waitFor(() => expect(screen.getByLabelText(/invite email/i)).toHaveValue(''));
+  await waitFor(() => expect(closingTabAsks()).toBe(false));
+});
+
+test('picking the default role again is not a change: only an email, or a role other than the default, is unsaved', async () => {
+  render(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  fireEvent.click(screen.getByRole('button', { name: /Agent/ }));
+  const admin = screen.getByRole('checkbox', { name: /Admin/ });
+  fireEvent.click(admin);
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  fireEvent.click(admin);
+  await waitFor(() => expect(closingTabAsks()).toBe(false));
 });

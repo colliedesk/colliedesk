@@ -30,7 +30,7 @@ function Connect({ canManage, create }: ConnectProps) {
     mutationFn: (origins: string[]) => create({ ...(name.trim() ? { name: name.trim() } : {}), enabled: true, config: { allowed_origins: origins } }),
     onMutate: () => setSent(name),
   });
-  useUnsavedText('web-form-name', !save.isPending && name.trim() !== '');
+  useUnsavedText('web-form-name', name.trim() !== '');
   const errorID = useId();
   const hintID = useId();
   const state = saveState(save);

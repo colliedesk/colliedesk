@@ -13,7 +13,7 @@ import { ChatIcon, PlusIcon } from '../../../ui/icons';
 import { Part, PartUnavailable } from '../../../ui/lazy-part';
 import { panelID, tabID, Tabs } from '../../../ui/tabs';
 import { NameForm } from '../name-form';
-import { SettingsEditsProvider } from '../settings-edits';
+import { SettingsEditsProvider, useReleaseUnsaved } from '../settings-edits';
 import { saveState } from '../save-feedback';
 import { SettingsNav } from '../settings-nav';
 import type { SettingsPath, Shown } from '../settings-nav';
@@ -289,12 +289,15 @@ function TypeShortcut({ type, search, navigate }: PageProps & { type: string; se
 // useCreate adds a channel of a type and opens it: its setup when guided, else its page.
 function useCreate(type: string | undefined, navigate: PageProps['navigate']) {
   const client = useQueryClient();
+  // The channel is saved: the page it opens is not a question about the text that made it.
+  const release = useReleaseUnsaved();
   const createChannel = useCreateAction((input: Parameters<typeof channelsApi.create>[0], key: string) => channelsApi.create(input, key));
   return (guided: boolean): ConnectProps['create'] => async (input, beforeOpen) => {
     const created = await createChannel.run({ type: type as ChannelType, ...input });
     // The channel exists from here: what beforeOpen could not do shows on its page, never undoes it.
     await beforeOpen?.(created).catch(() => undefined);
     await client.invalidateQueries({ queryKey: ['channels'] });
+    release();
     navigate(`${base}/${created.id}${guided ? '/setup' : ''}`, true);
     return created;
   };

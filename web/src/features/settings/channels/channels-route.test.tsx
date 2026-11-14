@@ -1004,3 +1004,12 @@ test('a name typed while adding a help chat or a web form counts for closing the
   fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Contact form' } });
   await waitFor(() => expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false));
 });
+
+
+test('a single space typed while adding a help chat is not text: nothing is asked on the way out', async () => {
+  channelsApi.list.mockResolvedValue({ items: [], types: [{ type: 'help_chat', available: true, count: 0, default_channel_id: null }, ...types(0, 0)] });
+  show('new/help_chat');
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Greeting' }), { target: { value: ' ' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Extra instructions' }), { target: { value: '  ' } });
+  expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true);
+});

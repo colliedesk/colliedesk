@@ -79,7 +79,7 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
   const instructionsHint = useId();
   const adding = nameField !== undefined;
   // A chat being added has its own button, but what is typed in it counts when the page is left.
-  useUnsavedText('help-chat-add', adding && !feedback.pending && (greeting !== '' || suggestions.some((item) => item.trim() !== '') || instructions !== ''));
+  useUnsavedText('help-chat-add', adding && (greeting.trim() !== '' || suggestions.some((item) => item.trim() !== '') || instructions.trim() !== ''));
   const saveChanges = useSaveChanges();
   const value = () => ({ greeting: greeting.trim(), suggestions: suggestions.map((item) => item.trim()).filter(Boolean), instructions: instructions.trim() });
   // What would be saved, against what is saved: spaces at the ends and empty questions are not a change.
@@ -182,8 +182,7 @@ function Connect({ canManage, create }: ConnectProps) {
     mutationFn: (value: { greeting: string; suggestions: string[]; instructions: string }) =>
       create({ ...(name.trim() ? { name: name.trim() } : {}), enabled: true, config: value }),
   });
-  // The name is kept while the save is on its way, so the page it opens is not a question.
-  useUnsavedText('help-chat-name', !save.isPending && name.trim() !== '');
+  useUnsavedText('help-chat-name', name.trim() !== '');
   const hint = useId();
   const nameField = <>
     <label className="field"><span>{m.name}</span>

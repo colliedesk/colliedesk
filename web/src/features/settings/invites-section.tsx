@@ -4,7 +4,6 @@ import { RoleCheckboxes } from './role-checkboxes';
 import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { useUnsavedText } from './settings-edits';
 import { settingsMessages } from './settings-messages';
 import { useInviteDraft } from './use-invite-draft';
 import type { InviteDraft } from './use-invite-draft';
@@ -40,8 +39,6 @@ export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeI
   const createdInviteUrl = createdInvite?.url;
   const own = useInviteDraft();
   const { email, setEmail, picked, setPicked } = draft ?? own;
-  // An invite being typed is unsaved text for the question on leaving, though it has its own button.
-  useUnsavedText('invite', email.trim() !== '' || picked !== null);
   // An invite gives the Agent role unless the person picks others.
   const agent = roles.find((role) => role.system === 'agent');
   const chosen = picked ?? (agent ? [agent.id] : []);

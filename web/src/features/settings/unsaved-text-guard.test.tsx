@@ -1,9 +1,8 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, expect, test } from 'vitest';
-import { builtInRoles } from '../../test-roles';
 import { EmailChannelSection } from './email-channel-section';
-import { InvitesSection } from './invites-section';
 import { NameForm } from './name-form';
 import { SettingsEditsProvider } from './settings-edits';
 
@@ -13,16 +12,6 @@ afterEach(cleanup);
 // page with it typed must still ask: the browser's own question is how a closing tab asks.
 const closingTabAsks = () => !window.dispatchEvent(new Event('beforeunload', { cancelable: true }));
 const draw = (ui: ReactElement) => render(ui, { wrapper: SettingsEditsProvider });
-
-test('an invite being typed counts as unsaved, and a sent or emptied one does not', async () => {
-  draw(<InvitesSection invites={[]} timezone="UTC" canCreateInvites roles={builtInRoles} />);
-  expect(closingTabAsks()).toBe(false);
-  fireEvent.change(screen.getByLabelText('Invite email'), { target: { value: 'new@example.com' } });
-  await waitFor(() => expect(closingTabAsks()).toBe(true));
-  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
-  fireEvent.change(screen.getByLabelText('Invite email'), { target: { value: '' } });
-  await waitFor(() => expect(closingTabAsks()).toBe(false));
-});
 
 test('a support address or workspace address name being typed in the email setup counts as unsaved', async () => {
   const connected = { channel: { id: 'c1', support_address: 'help@example.com', sender_name: 'Acme', domain: 'example.com', domain_verified_at: null, status: { state: 'working' } }, inbound_url: 'https://desk.example.com/in',
@@ -38,4 +27,18 @@ test('a name typed into a step that has its own button counts as unsaved', async
   expect(closingTabAsks()).toBe(false);
   fireEvent.change(screen.getByLabelText('Workspace address name'), { target: { value: 'acme-desk' } });
   await waitFor(() => expect(closingTabAsks()).toBe(true));
+});
+
+test('an address being saved is still asked about on the way out: a save that fails must not lose it', async () => {
+  const { AddressForm } = await import('../../channels/email/address-form');
+  let refuse: (error: Error) => void = () => undefined;
+  const view = draw(<QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}><AddressForm canManage save={() => new Promise((_, reject) => { refuse = reject; })} /></QueryClientProvider>);
+  fireEvent.change(screen.getByRole('textbox', { name: /support address/i }), { target: { value: 'help@example.com' } });
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  fireEvent.click(screen.getByRole('button', { name: /save support address/i }));
+  expect(closingTabAsks()).toBe(true);
+  refuse(new Error('refused'));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Saving…' })).toBeNull());
+  expect(closingTabAsks()).toBe(true);
+  view.unmount();
 });
