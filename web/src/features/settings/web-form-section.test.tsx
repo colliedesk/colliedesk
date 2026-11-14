@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { WebFormSettings } from '../../api/schemas';
 import { WebFormSection } from './web-form-section';
@@ -107,13 +107,13 @@ test('a form that also answers the workspace\'s older address shows one Submit U
   const older = screen.getByText('Older address').closest('details') as HTMLElement;
   expect(older).not.toHaveAttribute('open');
   expect(older).toHaveTextContent(`${window.location.origin}${on.submit_path}`);
-  expect(older).toHaveTextContent(/only if your website already sends to it/);
+  expect(within(older).getByRole('button', { name: 'About Older address' })).toHaveAccessibleDescription(/only if your website already sends to it/);
   expect(screen.queryByText(/older one, which this form keeps/)).toBeNull();
 });
 
 test('Allowed origins says in plain words which websites it means, with an example', () => {
   render(<WebFormSection settings={off} canManage onSave={vi.fn()} />);
-  expect(screen.getByRole('textbox', { name: /Allowed origins/i })).toHaveAccessibleDescription(/websites that may send this form.*https:\/\/www\.example\.com/i);
+  expect(screen.getByRole('textbox', { name: /Allowed origins/i })).toHaveAccessibleDescription(/^One website per line, like https:\/\/www\.example\.com\. These websites may send this form\. Write only the start of the address/i);
 });
 
 test('the form explains itself in plain words first and lets the team try it without a developer', async () => {
@@ -144,6 +144,8 @@ test('a tried form that is refused says why', async () => {
 test('the code help explains the hidden website field in plain words', () => {
   render(<WebFormSection part="embed" settings={on} canManage onSave={vi.fn()} />);
   const code = screen.getByRole('region', { name: 'Code for your page' });
-  expect(code).toHaveTextContent('Keep the field named website empty. It is a trap for spam bots: a message with it filled in is thrown away.');
+  expect(within(code).getByText('Send it from a page on an allowed origin.')).toBeInTheDocument();
+  expect(within(code).getByRole('button', { name: 'About Code for your page' }))
+    .toHaveAccessibleDescription(/Keep the field named website empty: it is a trap for spam bots, and a message with it filled in is thrown away\./);
   expect(code).not.toHaveTextContent('as if stored');
 });
