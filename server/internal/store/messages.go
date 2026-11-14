@@ -446,8 +446,10 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 			return domain.Message{}, err
 		}
 	}
-	// Recorded last: the first reply of a workspace holds the milestone's unique key until it commits, so
-	// two first replies must already be serialized by the outbound cap lock (enqueueReply) before this.
+	// Recorded after the delivery is queued, which decides whether the reply left: one saved with a failed
+	// delivery is recorded when its retry queues it (retryDelivery). Taking the milestone's unique key before
+	// enqueueReply would make two concurrent first replies wait on that key instead of the outbound cap lock
+	// that checkTrialCap takes, and the cap test would no longer see them wait together.
 	if kind == "outgoing" {
 		if err := milestones.RecordReply(ctx, tx, workspaceID, messageID); err != nil {
 			return domain.Message{}, err

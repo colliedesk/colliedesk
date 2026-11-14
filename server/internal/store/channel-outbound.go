@@ -11,6 +11,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/milestones"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -561,6 +562,10 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	}
 	if result.RowsAffected() != 1 {
 		return domain.Message{}, ErrDeliveryNotFailed
+	}
+	// A reply saved with a failed delivery did not leave; this retry queues it, so it counts as a first reply now.
+	if err := milestones.RecordReply(ctx, tx, workspaceID, messageID); err != nil {
+		return domain.Message{}, err
 	}
 	return getMessage(ctx, tx, workspaceID, messageID)
 }

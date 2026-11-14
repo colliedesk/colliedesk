@@ -5,6 +5,7 @@ package freshdesk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/url"
 	"sort"
@@ -209,11 +210,14 @@ func (r *run) finish(ctx context.Context, report *Report) (*Report, error) {
 	if options.DryRun {
 		return report, r.checkDryRunStorage(ctx, report)
 	}
-	// A full run finished: the results page measures its baseline from it. The import is committed;
-	// a failure here is logged and the next run marks it again.
+	// A full run finished: the results page measures its baseline from it, and an OK run is the workspace's
+	// import_finished milestone, written in the same transaction. The import is committed, so the report is
+	// returned with the error: the run fails loudly instead of leaving the workspace without its milestone,
+	// and a rerun marks both again.
 	if options.Mode != ModeRecent {
 		if err := r.markResults(ctx, report.Status, report.UnverifiedCause()); err != nil {
 			log.Printf("freshdesk import: results baseline not marked for workspace %s: %v", options.WorkspaceSlug, err)
+			return report, fmt.Errorf("record the finished import: %w", err)
 		}
 	}
 	// The import is already committed; a failed extension must not hide its report. A rerun retries.

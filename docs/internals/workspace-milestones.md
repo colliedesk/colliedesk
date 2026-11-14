@@ -18,11 +18,11 @@ happens, by one rule in one place. A later change to the raw rows does not move 
 | Kind | Written when | `at` | Left out |
 |---|---|---|---|
 | `signed_up` | A workspace is created (cloud sign-up, `create-workspace`): `auth.insertWorkspaceTx` | `workspaces.created_at` | |
-| `first_customer_message` | A channel stores an incoming message (`store` channel ingest) | the message's `created_at` | imported history (`origin` set); messages without a channel (problem reports); mail refused by the sender check (`authentication` = `fail`); Gmail's forwarding confirmation (`forwarding-noreply@google.com`); mail from one of the workspace's own agents, which is how the test message (`POST /api/v1/channels/email/test-message`) arrives; a conversation marked spam |
-| `import_finished` | A full import run finishes with status `OK` (`results.MarkImportFinished`: in-app jobs and the CLI, Freshdesk and Help Scout) | the run's finish time | `FAILED`, `UNVERIFIED`, recent-tickets slices, dry runs |
-| `first_reply` | A reply is stored (`store.createMessage`) | the message's `created_at` | notes; imported replies; the channel's own notices (`notice_kind`); messages with neither an author nor an agent token; replies in a conversation whose contact is one of the workspace's agents (the answer to a test message) |
+| `first_customer_message` | A channel stores an incoming message (`store` channel ingest) | the message's `created_at` | imported history (`origin` set); messages without a channel (problem reports); mail refused by the sender check (`authentication` = `fail`); Gmail's forwarding confirmation (`forwarding-noreply@google.com`); mail from one of the workspace's own agents, which is how the test message (`POST /api/v1/channels/email/test-message`) arrives; a message that arrives in a conversation already marked spam (see Traps for the backfill) |
+| `import_finished` | A full import run finishes with status `OK` (`results.MarkImportFinished`: in-app jobs and the CLI, Freshdesk and Help Scout), in the same transaction as the results baseline marker | the run's finish time | `FAILED`, `UNVERIFIED`, recent-tickets slices, dry runs |
+| `first_reply` | A reply is stored and its delivery is queued (`store.createMessage`), or a failed delivery is retried and queued (`store.retryDelivery`) | the message's `created_at` | notes; imported replies; the channel's own notices (`notice_kind`); messages with neither an author nor an agent token; replies in a conversation whose contact is one of the workspace's agents (the answer to a test message); a reply saved with a failed delivery (channel off, removed or not connected, customer without an address), until a retry queues it |
 | `teammate_invited` | An invite is created for someone who is not a member yet (`auth.CreateInvite`) | the invite's `created_at` | an invite to an existing member (it changes their roles) |
-| `trial_ended` | The retention pass sees a trial that ran out with nothing paying or complimentary in force (`retention.recordEndedTrials`) | `trial_ends_at` | a workspace that paid before its trial ended |
+| `trial_ended` | The retention pass sees a trial that has run out (`retention.recordEndedTrials`) | `trial_ends_at` | a workspace with a subscription or complimentary plan already in force at `trial_ends_at` |
 | `paid` | An applied Polar event makes a subscription `active` (`store.ApplySubscription`: webhook and reconcile) | the subscription's `modified_at` | `trialing`, `past_due` |
 | `cancelled` | An applied event sets a subscription to end (`cancel_at_period_end`) or ends it (`canceled`) | the subscription's `modified_at` | the later end of a subscription already set to end |
 
@@ -31,20 +31,73 @@ Every kind but `paid` and `cancelled` is recorded once per workspace. A partial 
 shows the latest of each.
 
 `detail` holds ids and counts only (message, conversation, channel, invite, subscription ids, the
-importer, the plan). It never holds a name, an address or message text.
+importer, the plan). It never holds a name, an address or message text. `signed_up` also holds
+`{"internal": true|false}` for a cloud sign-up: whether the server counted it as the team's own
+(`internal_signup.emails` / `internal_signup.networks`, the same decision that marks `trial_started`).
+A report can leave internal workspaces out after the workspace and its trial record are deleted.
+`create-workspace` and the backfill write no `internal` key: the command line has no such list, and the
+list is server configuration that the database does not hold, so an absent key means unknown.
 
 ## Traps
 
+- **Churn.** A workspace is churned when `cancelled_at > paid_at`. Both are the latest event of their
+  kind across the workspace's subscriptions, and `paid` and `cancelled` repeat per subscription change
+  (a resume or a second subscription adds a `paid` after a `cancelled`). A workspace whose `paid_at` is
+  later than its `cancelled_at` is paying again.
 - **A trial ends at read time.** `domain.NewAccess` decides the lock when a workspace is read; nothing
-  writes it. The retention pass is the first writer to see it, so `trial_ended` is written there. That
-  pass runs only where billing is on, every hour and at start. `at` is still the exact trial end.
-  The migration does not backfill `trial_ended`: the database does not know whether billing is on,
-  and a self-hosted trial never locks. The first retention pass after the upgrade records every trial
-  that already ended.
+  writes it. The retention pass writes `trial_ended`: every hour and at start of `serve`, only where
+  billing is on (`serve` starts it only when billing is on, and logs "workspace retention is not running" when its
+  setup fails; a self-hosted install never records it). `at` is the exact `trial_ends_at`, not the time of the pass, and the milestone is
+  decided at that moment: a workspace that locked and paid later still gets it. A workspace gets none when
+  a `paid` event, a stored subscription last changed before the end and still running, or a complimentary
+  plan granted before the end and still in force at it, exists. The pass stops writing for a workspace once
+  it has a `trial_ended` row, so the first one stays. It records nothing while the server is down, so a
+  lock is recorded up to an hour late, and a server that never runs the pass (billing off) records none.
+  The migration does not backfill `trial_ended`: the database does not know whether billing is on. The
+  first retention pass after the upgrade records every trial that already ended.
 - **A test message is told apart by its sender.** The product writes it from the signed-in agent's own
   address. Any mail from an address of one of the workspace's agents is left out for the same reason.
   The repo uses the same rule for the trial's first-contact exception (`contactIsProvenAgent`).
+- **The help-center chat counts self-tests.** The chat is anonymous: a visitor types an email address and
+  the server holds no session or agent identity for it, and a typed address proves nothing. A team member
+  who tries the chat of their own workspace therefore records `first_customer_message` (the hand-off
+  creates the conversation). Only the email channel's test message is recognised.
+- **Spam in the backfill.** The server leaves out a message that arrives in a conversation already marked
+  spam (the status at arrival). The stored rows do not say what the status was then, and a conversation's
+  status now can be a later decision, so the backfill does not exclude spam at all. A workspace whose first
+  inbound message was spam can therefore differ between the backfill and the live rule.
+- **Import time in the backfill.** An in-app import job keeps its own finish time: the backfill uses the
+  first job that finished `OK`. An import run from the command line keeps no run record; only the results
+  baseline's anchor, the finish of the first full run of that source, survives. The backfill uses it only
+  when no OK job exists and the baseline's last run is `OK`, and marks the row `"approximate": true`:
+  when an earlier run failed, the true first OK finish is later than the anchor and not stored.
+- **Billing in the backfill.** The log of each transition is not stored, only the last state of each
+  subscription and the webhook ids. The backfill writes at most one `paid` and one `cancelled` per
+  workspace, from the subscriptions as stored now: a stale webhook the server stored but did not apply
+  makes no event, a subscription made active by the reconcile (no webhook) counts at the time it last
+  changed, and a revoke counts as a cancel. A cancel followed by a resume is not replayed.
 - **Self-host works the same.** Billing kinds and `trial_ended` never occur where billing is off.
+- **Deploy order.** The cloud runs `collie migrate && collie serve` in one container, and a compose
+  update replaces the container, so the old binary does not serve while the migration runs. A rolling
+  setup that keeps the old binary serving would still work: the old code never writes `workspace_events`,
+  and the milestones it misses are only those of that window.
+
+## Erasure
+
+The log holds ids, counts and times only: no name, address, message text or file. That is deliberate:
+a deleted workspace must keep its history for reports, and an id alone does not identify a person.
+If erasing a workspace's rows is legally required, an operator does it on purpose, as the table owner:
+
+```sql
+BEGIN;
+ALTER TABLE workspace_events DISABLE TRIGGER workspace_events_append_only;
+DELETE FROM workspace_events WHERE workspace_id = '<workspace id>';
+ALTER TABLE workspace_events ENABLE TRIGGER workspace_events_append_only;
+COMMIT;
+```
+
+The trigger is back on before the commit, so no other session sees it off. Nothing in the server does
+this: a bug or a request must not be able to.
 
 ## Append-only
 
@@ -57,10 +110,10 @@ undo it.
 
 ## Backfill
 
-The migration writes the log for existing workspaces with `source = 'backfill'`, using the same rules
-as the server. `paid` and `cancelled` come from the stored webhook ids (`subscription.active`,
-`subscription.canceled`) at the time each arrived, with an empty `detail`. The down migration drops the
-view, the table and the trigger function.
+The migration writes the log for existing workspaces with `source = 'backfill'`, using the server's
+rules where the stored rows allow it; the differences are listed in Traps (spam, import time, billing).
+`paid` and `cancelled` carry an empty `detail`. The down migration drops the view, the table and the
+trigger function.
 
 ## The view is a contract
 

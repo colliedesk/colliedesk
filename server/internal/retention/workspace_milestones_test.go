@@ -49,14 +49,31 @@ func (e *env) trialEnded(t *testing.T, id string) string {
 	return ""
 }
 
-// The trial's end is computed when the workspace is read; the retention pass writes it down as soon as
-// it sees a trial that ran out with nothing paying, at the moment the trial ended.
+// The trial's end is computed when the workspace is read; the retention pass writes it down, at the moment
+// the trial ended, for every trial that ran out unless a subscription or a complimentary plan was already
+// in force before that moment. Paying after the end does not undo it.
 func TestTheRetentionPassRecordsATrialThatEndedOnceAtItsEnd(t *testing.T) {
 	e := newEnv(t)
 	ended := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
-	paying := e.workspace(t, "Beta", "2026-11-01T00:00:00Z", "carl@beta.example")
+	// Beta locked, then paid in October of the next year (the helper's change time), before the pass ran.
+	paysLater := e.workspace(t, "Beta", "2026-11-01T00:00:00Z", "carl@beta.example")
 	periodEnd := at("2026-12-01T00:00:00Z")
-	e.pay(t, paying.ID, "sub_beta", "active", &periodEnd)
+	e.pay(t, paysLater.ID, "sub_beta", "active", &periodEnd)
+	// Delta had a complimentary plan from before its trial ended; Epsilon a subscription the reconcile stored
+	// (no paid event) that was last changed before the trial ended.
+	comp := e.workspace(t, "Delta", "2026-11-01T00:00:00Z", "dev@delta.example")
+	reconciled := e.workspace(t, "Epsilon", "2026-11-01T00:00:00Z", "eve@epsilon.example")
+	err := e.db.Privileged(context.Background(), database.PrivilegeMigrate, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(context.Background(), `INSERT INTO workspace_comp_plans(workspace_id,plan,granted_by,granted_at) VALUES($1,'team','owner','2026-10-10T00:00:00Z')`, comp.ID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(context.Background(), `INSERT INTO workspace_billing(workspace_id,polar_subscription_id,plan,polar_customer_id,status,current_period_end,source_modified_at)
+			VALUES($1,'sub_eps','team','cus_eps','active','2027-12-01T00:00:00Z','2026-10-25T00:00:00Z')`, reconciled.ID)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Gamma paid during its trial and cancelled later: its trial did not end unpaid.
 	converted := e.workspace(t, "Gamma", "2026-11-01T00:00:00Z", "dana@gamma.example")
 	for _, change := range []struct{ status, modified string }{{"active", "2026-10-20T00:00:00Z"}, {"canceled", "2026-11-20T00:00:00Z"}} {
@@ -75,8 +92,13 @@ func TestTheRetentionPassRecordsATrialThatEndedOnceAtItsEnd(t *testing.T) {
 	if got := e.milestones(t, ended.ID); strings.Count(got, "trial_ended") != 1 || e.trialEnded(t, ended.ID) != "trial_ended 2026-11-01T00:00:00Z" {
 		t.Fatalf("after the end: %q, want one trial_ended at 2026-11-01T00:00:00Z", got)
 	}
-	if got := e.trialEnded(t, paying.ID); got != "" {
-		t.Fatalf("a paying workspace: %q, want no trial_ended", got)
+	if got := e.trialEnded(t, paysLater.ID); got != "trial_ended 2026-11-01T00:00:00Z" {
+		t.Fatalf("a workspace that locked and paid later: %q, want trial_ended at 2026-11-01T00:00:00Z", got)
+	}
+	for name, id := range map[string]string{"complimentary plan from before the end": comp.ID, "reconciled subscription from before the end": reconciled.ID} {
+		if got := e.trialEnded(t, id); got != "" {
+			t.Fatalf("%s: %q, want no trial_ended", name, got)
+		}
 	}
 	if got := e.trialEnded(t, converted.ID); got != "" {
 		t.Fatalf("a workspace that paid during its trial: %q, want no trial_ended", got)
