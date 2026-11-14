@@ -178,7 +178,8 @@ test('response targets off and on again: hours and targets saved earlier are kep
   expect(before).toMatchObject({ timezone: 'Europe/Paris', holidays: [{ date: '2027-01-01', name: 'New Year' }], alert_email: false });
 
   // Off keeps every saved value, and the card says which hours the next turn-on uses.
-  await page.getByRole('switch', { name: 'Measure response targets' }).uncheck();
+  // The switch leaves the page once measuring is off: click it, since uncheck() looks for it again to check its state.
+  await page.getByRole('switch', { name: 'Measure response targets' }).click();
   const card = page.getByRole('region', { name: 'Response targets are off' });
   await expect(card).toContainText('Starts with your saved hours: Monday, 07:30 to 18:00; Tuesday to Friday, 09:00 to 18:00');
   await expect(card).toContainText('Normal 3 h');
@@ -211,7 +212,7 @@ test('response targets off: a channel deleted since is refused on turn-on, the e
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(applies.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
   expect((await stored(page)).channel_ids).toEqual([first.id]);
-  await page.getByRole('switch', { name: 'Measure response targets' }).uncheck();
+  await page.getByRole('switch', { name: 'Measure response targets' }).click();
   await expect(page.getByRole('region', { name: 'Response targets are off' })).toBeVisible();
 
   // The first channel goes away while measuring is off.
