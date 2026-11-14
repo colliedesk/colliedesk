@@ -129,6 +129,14 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   role picker, confirm panel), because React closes those before a bubbling listener runs; folded, the sidebar
   keeps only the Back to app arrow. A test or a page that
   needs the app's places from Settings goes through Back to app first.
+- A row's actions are one "⋯" button with a `role="menu"` list (`features/settings/row-menu.tsx`): the list's presence in the
+  page is what keeps Esc from leaving Settings. Inside a `.data-list` row the list's own rules would clip the menu
+  (`.data-list span` hides overflow) and make every `div` a grid cell, so `row-menu.css` overrides both; a new row
+  that holds a menu keeps it as a direct child of the row or inside an element whose overflow is visible.
+- The Saved toast sits above an open side sheet (z-index 35 over the sheet's 30): a switch inside a sheet says Saved and its Undo
+  must be reachable. Turning chat intake on goes through `ai-intake-consent.tsx`: the agreement is the act of turning the
+  feature on (the history says who did it). The server holds a consent record only for pictures and the customer's profile
+  (`ai_source_consents`), so that step never says a consent was stored.
 - Setup flow (`/setup`, owner decision 30/10/2026: Linear's onboarding, adapted): one step per screen, full
   screen on `--surface-1` without the rail, one centred column of 36 rem. It is the one exception to "no narrow
   centred column", because a single focused task is all the screen holds. A sticky header keeps the mark, the

@@ -18,7 +18,11 @@ and asks again whenever the feature moves to another provider. Turn a feature of
 **Settings → AI & agents → Features**.
 
 Each feature is one row there: its name, a short line, its state (**On · Suggest**, **On**, **Off**) and
-its switch. The switch turns the feature on or off and saves at once. The rest of the row opens the
+its switch. The switch turns the feature on or off and saves at once, and the page says **Saved** with
+**Undo**, which puts the switch back as it was. Turning on **Chat intake** asks first: a panel says what goes
+to the model, who processes it and how to turn it off, and the feature stays off until you tick the agreement
+and choose **Agree and turn on**. The agreement is the act of turning the feature on, which the history
+records with who did it; pictures and the customer's profile have their own switches (below). The rest of the row opens the
 feature's settings in a panel beside the list: its provider and model, its automatic runs, its **Default for
 channels** and the channels that differ. Choices in the panel save at once; **Done** closes it. Without a
 provider yet, one notice offers **Add provider** and the setup guide. A switch that is off has its reason in
@@ -263,7 +267,7 @@ and intake's labels keep counting. Restoring a workspace from a backup lowers le
 People with `ai_settings:update` (the Admin role has it) set a channel's levels in **Settings → Channels → <the channel> → AI**: a row per feature, a
 column per scope, each set to the default it follows or to Off, Suggest or Auto; under it, what the level
 does, or "Off: Triage is off for the workspace" with **Turn on**. Raising triage to Auto or drafts to
-Suggest asks with the same dialog as Built-in AI. Under each feature, **Built-in AI** lists the
+Suggest asks with the same dialog as Built-in AI. A level you pick saves at once and the page says **Saved** with **Undo**, which sends the level the scope had. Under each feature, **Built-in AI** lists the
 channels that differ ("Support · Auto"), each a link to its AI tab, or says that every channel follows
 the default. The same is `PUT /api/v1/channels/{id}/ai/{slot}` and the MCP tools
 `colliedesk_channel_ai_set` and `colliedesk_channel_ai_get`. Every change is in the AI history and in
@@ -292,7 +296,8 @@ Taking a word or a pattern out masks less; like any change to intake's settings,
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
 once an admin agreed to each: in **Settings → AI & agents** under Chat intake (**Images customers sent**,
-**The customer's profile**, each a switch that gives or takes back the consent), or with
+**The customer's profile**, each a switch that gives or takes back the consent and says **Saved** with
+**Undo**), or with
 `colliedesk_ai_source_consent_set` (taken back with `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
 Pictures go to intake's AI only when the workspace agreed to send them, the channel's images source is
 on, and its model (and its fallback model) reads pictures, as the provider says: every Claude model does;

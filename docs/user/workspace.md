@@ -44,8 +44,8 @@ Settings page and keeps the app's sidebar. An old link keeps working and opens t
 that holds the content now: `/settings/profile`, `/settings/preferences` and `/settings/sessions` open
 Account; `/settings/numbers` opens General; `/settings/roles` and `/settings/members?tab=roles` open
 Members → Advanced; `/settings/agents` opens AI & agents, on the External AI agents tab; `/settings/import`,
-`/settings/export` and `/settings/import-freshdesk` open Data; `/settings/help-center` opens
-Knowledge base → Settings. So do links to a section of the old one-page Settings, such as
+`/settings/export` and `/settings/import-freshdesk` open Data; `/settings/help-center` and
+`/help-center/settings` open Knowledge base → Settings. So do links to a section of the old one-page Settings, such as
 `/settings#invites-heading`. On a phone, **Settings** shows the menu; open a page from it, and
 **‹ Settings** above its title goes back.
 
@@ -54,7 +54,8 @@ Knowledge base → Settings. So do links to a section of the old one-page Settin
 Every Settings page saves the same way.
 
 - **A choice saves when you make it.** A switch, a checkbox or a pick from a list (the theme, your
-  timezone, **Show the setup guide**, a switch on **Response targets**) is saved at once. The page says
+  timezone, **Show the setup guide**, a switch on **Response targets**, a feature switch and the choices
+  under Chat intake on **AI & agents**, the level of a channel's **AI** tab) is saved at once. The page says
   **Saved** with **Undo** at its foot; **Undo** puts the previous value back with one request. The message
   goes away by itself after a few seconds.
 - **Text waits for Save.** When you type in a field (a name, business hours, a list of sites), a bar

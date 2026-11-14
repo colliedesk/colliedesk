@@ -10,7 +10,7 @@ Invite people from **Settings → Members → Invites** (it needs `team:invite`,
 
 When the person joins, they get the invite's roles, added to any roles they already hold. See
 [Roles and permissions](roles-and-permissions.md) for what each role allows. Revoke an unused invite
-with **Revoke** in the invite list (`team:revoke`). Taking a role away from someone also revokes
+with **Revoke** in the row's **⋯** menu (`team:revoke`). Taking a role away from someone also revokes
 their unused invites that would give it back.
 
 Inviting someone who is already in the workspace adds the invite's roles and signs in as them, so
@@ -19,7 +19,11 @@ they hold. An AI agent's token cannot; it changes their roles in [Manage your te
 An invite link made before its address joined the workspace no longer signs anyone in.
 
 Each invite shows its state: **Pending** (not used yet), **Accepted**, **Revoked** or **Expired**, and
-its roles. Only a pending invite can be revoked. To end a teammate's access after they joined,
+its roles. Only a pending invite can be revoked. Colliedesk does not email an invite: its link is shown once,
+and it is not kept. If the link is lost, or the invite expired, choose **New invite link** in the row's **⋯**
+menu (`team:invite`): it makes a new invite for the same address and roles and shows its one-time link. The old
+pending invite is revoked at once when you may revoke (`team:revoke`), so an address never holds two links
+that work. A new link that the plan has no seat for is refused, and the old invite stays as it was. To end a teammate's access after they joined,
 deactivate them in [Manage your team](team.md).
 
 An AI agent whose [token](sessions.md#agent-tokens) holds `team:invite` creates an invite at once with
