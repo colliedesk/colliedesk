@@ -37,8 +37,9 @@ export function CustomCSSField({ value, savedHasCSS, error, pending, onChange }:
       <summary>{text.advanced}</summary>
       <div className="field"><label htmlFor={id}>{text.customCSS}</label>
         <textarea id={id} rows={8} spellCheck={false} autoCapitalize="off" autoCorrect="off" value={value}
-          aria-invalid={error ? true : undefined} aria-describedby={`${id}-hint`} onChange={(event) => onChange(event.target.value)} />
-        <Hint id={`${id}-hint`} help={text.customCSSHelp} error={error} warning={pending ? text.customCSSPending(pending) : undefined} />
+          aria-invalid={error ? true : undefined} aria-describedby={error || pending ? `${id}-hint` : `${id}-hint ${id}-tip`} onChange={(event) => onChange(event.target.value)} />
+        <Hint id={`${id}-hint`} help={text.customCSSHelp} error={error} warning={pending ? text.customCSSPending(pending) : undefined}
+          tip={{ label: text.customCSS, text: text.customCSSTip, id: `${id}-tip`, link: { href: text.customCSSGuide, label: text.learnMore } }} />
         <small className={bytes > maxBytes ? 'error-copy theme-hint' : 'muted-copy theme-hint'}>{text.customCSSSize(bytes, maxBytes)}</small></div>
     </details>
   );

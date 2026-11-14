@@ -222,6 +222,10 @@ it works only while the Freshdesk account exists: keep the account and the snipp
 after the switch. Freshdesk suspends a cancelled account after 24 hours and deletes it after 14 days.
 There is no `meta refresh` fallback, because it cannot tell a help page from the sign-in page.
 
+When the knowledge base is too large to list every address in the snippet, the app says so. The snippet
+then sends each old address by its id to the help center, which finds the new page, so the redirect still
+works.
+
 An AI agent reads the same through `colliedesk_help_center_freshdesk_redirect_get` (`GET
 /api/v1/help-center/freshdesk-redirect?plan=pro`).
 
