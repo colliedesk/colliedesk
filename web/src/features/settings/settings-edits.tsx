@@ -213,9 +213,10 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
   const labels = [...edits.current.values(), ...drafts.current.values()].map((item) => item.label);
   const changed = labels.length > 0;
   const unsaved = changed || guards.current.size > 0;
-  const dirty = useRef(unsaved);
-  dirty.current = unsaved;
-  useEffect(() => registerUnsavedProbe(() => dirty.current), []);
+  // Read live, from the stores themselves: a step that releases its text and opens the next page in the same handler has not
+  // drawn again yet when the router asks.
+  const anythingUnsaved = useCallback(() => edits.current.size + drafts.current.size + guards.current.size > 0, []);
+  useEffect(() => registerUnsavedProbe(anythingUnsaved), [anythingUnsaved]);
 
   useEffect(() => {
     if (!changed) return;
@@ -225,10 +226,10 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
   }, [changed, save]);
   useEffect(() => {
     if (!unsaved) return;
-    const onUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    const onUnload = (event: BeforeUnloadEvent) => { if (!anythingUnsaved()) return; event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', onUnload);
     return () => window.removeEventListener('beforeunload', onUnload);
-  }, [unsaved]);
+  }, [unsaved, anythingUnsaved]);
   useEffect(() => {
     if (!toast || toast.error) return;
     const timer = setTimeout(() => setToast(undefined), toastMilliseconds);
@@ -240,7 +241,7 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
   const routed = Boolean(useRouter({ warn: false }));
   return <Edits.Provider value={value}>
     {children}
-    {routed && <LeaveGuard dirty={dirty} />}
+    {routed && <LeaveGuard unsaved={anythingUnsaved} />}
     <p className="sr-only" aria-live="polite">{changed ? `${settingsMessages.unsavedChanges}: ${labels.join(', ')}.${failure ? ` ${failure.label}: ${failure.message}` : ''}` : ''}</p>
     {changed && <SaveBar labels={labels} saving={saving} failure={changed ? failure : undefined} onDiscard={discard} onSave={() => void save()} />}
     {toast && <SavedToast raised={changed} error={toast.error} onUndo={toast.undo && (() => void undoToast())} onDismiss={() => setToast(undefined)} />}
@@ -249,9 +250,9 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
 
 // LeaveGuard asks before the router opens another page (a menu link, Back to app, Esc, the browser's Back) while
 // text is unsaved. A link to a section of the same page, or another tab of it (?tab=), is not leaving.
-function LeaveGuard({ dirty }: { dirty: { current: boolean } }) {
+function LeaveGuard({ unsaved }: { unsaved: () => boolean }) {
   useBlocker({
-    shouldBlockFn: ({ current, next }) => dirty.current && current.pathname !== next.pathname && !window.confirm(settingsMessages.leaveUnsaved),
+    shouldBlockFn: ({ current, next }) => unsaved() && current.pathname !== next.pathname && !window.confirm(settingsMessages.leaveUnsaved),
     enableBeforeUnload: false,
   });
   return null;

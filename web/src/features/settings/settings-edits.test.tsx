@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, Link } from '@tanstack/react-router';
+import { RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter, Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { SettingsEditsProvider, Refused, useConfirmDrop, useReleaseUnsaved, useSettingsDraft, useSettingsEdit, useSettingsSaved, useUnsavedText } from './settings-edits';
@@ -353,4 +353,24 @@ test('the bar tells the page how tall it is, so the toast stacks above it whatev
   unmount();
   expect(document.documentElement.style.getPropertyValue('--settings-save-bar-height')).toBe('');
   height.mockRestore();
+});
+
+
+test('releasing the typed text and opening the next page in the same handler is not asked about, though nothing has drawn again yet', async () => {
+  const root = createRootRoute();
+  function Step() {
+    useUnsavedText('typed', true);
+    const release = useReleaseUnsaved();
+    const navigate = useNavigate();
+    return <button type="button" onClick={() => { release(); void navigate({ to: '/settings/general' as never }); }}>Create</button>;
+  }
+  const account = createRoute({ getParentRoute: () => root, path: '/settings/account', component: () => <SettingsEditsProvider><Step /></SettingsEditsProvider> });
+  const general = createRoute({ getParentRoute: () => root, path: '/settings/general', component: () => <p>General page</p> });
+  const router = createRouter({ routeTree: root.addChildren([account, general]), history: createMemoryHistory({ initialEntries: ['/settings/account'] }) });
+  render(<RouterProvider router={router} />);
+  const create = await screen.findByRole('button', { name: 'Create' });
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  await act(async () => { fireEvent.click(create); });
+  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'));
+  expect(confirm).not.toHaveBeenCalled();
 });
