@@ -152,7 +152,13 @@ function PropertyMenu({ className, label, summary, disabled, children }: { class
   const close = () => { if (menu.current) menu.current.open = false; };
   return <details ref={menu} className={`action-menu property-menu ${className}`} data-disabled={disabled || undefined}
     onKeyDown={(event) => { if (event.key === 'Escape' && menu.current?.open) { event.stopPropagation(); close(); menu.current.querySelector('summary')?.focus(); } }}
-    onBlur={(event) => { if (!menu.current?.contains(event.relatedTarget as Node | null)) close(); }}>
+    onBlur={(event) => {
+      if (menu.current?.contains(event.relatedTarget as Node | null)) return;
+      // Firefox blurs a button the moment it becomes disabled (Create tag after its name is cleared); focus
+      // has not left the menu, so it stays open and focus returns to its summary.
+      if (event.relatedTarget === null && (event.target as HTMLElement).matches(':disabled')) { menu.current?.querySelector('summary')?.focus(); return; }
+      close();
+    }}>
     <summary aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}><span>{summary}</span><ChevronDownIcon /></summary>
     <div className="action-popover" role="group" aria-label={label}>{children}</div>
   </details>;
