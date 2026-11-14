@@ -69,13 +69,15 @@ dropped. The same question covers text that has its own button: an invite email,
 address, the name of a channel you are adding.
 
 Moving between the tabs of one page (People and Invites, Built-in AI and External agents, the tabs of the
-built-in AI) is not leaving it. Nothing is asked, and what you typed stays: the bar keeps naming it, and
-**Save** keeps it from any tab. Opening another row's editor, or turning **Measure response targets** off,
-while text is typed asks the same question first.
+built-in AI, the tabs of one channel) is not leaving it. Nothing is asked, and what you typed stays: the bar
+keeps naming it, and **Save** keeps it from any tab. An invite email you typed stays too, and creating the
+invite empties the form again. Opening another row's editor, or turning **Measure response targets** off,
+while text is typed asks the same question first. Signing out with unsaved text asks it as well.
 
 After **Save** or **Discard** the focus moves to the page heading, and a screen reader hears when the bar
 appears and which fields it names. If **Undo** is refused, the toast says so and keeps **Undo**; the value
-stays as it is. Ctrl+S does nothing while a dialog is open. A name the server refuses (a rename on **Members**)
+stays as it is. If **Save** is refused, the bar says which field and why, also when that field is on a tab you
+are not looking at. Ctrl+S does nothing while a dialog is open. A name the server refuses (a rename on **Members**)
 keeps its form open with what you typed and the server's reason. Dialogs and steps that add something
 (invite people, create a token, add a channel) keep their own buttons.
 

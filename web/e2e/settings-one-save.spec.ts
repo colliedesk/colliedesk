@@ -159,3 +159,68 @@ test('a rename typed on People survives the Invites tab and comes back open; cli
   await expect(page.getByRole('textbox', { name: /^Display name of / })).toHaveValue('Typed name');
   expect(asked).toHaveLength(0);
 });
+
+test('text typed in a channel tab survives opening another tab of that channel; the menu still asks and keeps it', async ({ page }) => {
+  await newDesk(page, 'E2E one save channel tabs');
+  const created = await page.request.post(`${baseURL}/api/v1/channels`, { headers: { Origin: baseURL, 'Idempotency-Key': `tabs-${Date.now()}` }, data: { type: 'web_form', config: { allowed_origins: ['https://saved.example.com'] } } });
+  expect(created.status(), await created.text()).toBe(201);
+  const { id } = await created.json() as { id: string };
+  await page.goto(`${baseURL}/settings/channels/${id}?tab=embed`);
+  const origins = page.getByRole('textbox', { name: /Allowed origins/ });
+  await origins.fill('https://typed.example.com');
+  const bar = page.getByRole('region', { name: 'Unsaved changes' });
+  await expect(bar).toBeVisible();
+
+  const asked = answers(page, false);
+  await page.getByRole('tab', { name: 'History' }).click();
+  await expect(origins).toBeHidden();
+  await expect(bar).toBeVisible();
+  await page.getByRole('tab', { name: 'Embed' }).click();
+  await expect(origins).toHaveValue('https://typed.example.com');
+  expect(asked).toHaveLength(0);
+
+  await page.getByRole('tab', { name: 'History' }).click();
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'General' }).click();
+  await expect.poll(() => asked.length).toBe(1);
+  await expect(page).toHaveURL(new RegExp(`/settings/channels/${id}`));
+  await expect(bar).toBeVisible();
+});
+
+test('an invite email typed on Invites is asked about from People: the menu asks, and the draft is still on Invites', async ({ page }) => {
+  await newDesk(page, 'E2E one save invite');
+  await page.goto(`${baseURL}/settings/members?tab=invites`);
+  await page.getByLabel('Invite email').fill('new@example.com');
+  const asked = answers(page, false);
+  await page.getByRole('tab', { name: /^People/ }).click();
+  await expect(page.getByRole('region', { name: 'Unsaved changes' })).toHaveCount(0);
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'General' }).click();
+  await expect.poll(() => asked.length).toBe(1);
+  await expect(page).toHaveURL(/\/settings\/members/);
+  await page.getByRole('tab', { name: /^Invites/ }).click();
+  await expect(page.getByLabel('Invite email')).toHaveValue('new@example.com');
+  // Creating the invite empties the form, and nothing is unsaved afterwards.
+  await page.getByRole('button', { name: 'Create invite' }).click();
+  await expect(page.getByLabel('Invite email')).toHaveValue('');
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'General' }).click();
+  await expect(page).toHaveURL(`${baseURL}/settings/general`);
+  expect(asked).toHaveLength(1);
+});
+
+test('signing out with unsaved text asks once, from the account menu and from the Sessions list; declining keeps the page and the text, agreeing signs out', async ({ page }) => {
+  await newDesk(page, 'E2E one save sign out');
+  await page.goto(`${baseURL}/settings/account`);
+  await page.getByLabel('Display name').fill('Half typed');
+  const asked = answers(page, false);
+  await page.getByRole('button', { name: 'Account' }).click();
+  await page.getByRole('group', { name: 'Account' }).getByRole('button', { name: 'Sign out' }).click();
+  await expect.poll(() => asked.length).toBe(1);
+  await expect(page.getByLabel('Display name')).toHaveValue('Half typed');
+  await page.getByRole('region', { name: 'Sessions' }).getByRole('button', { name: 'Sign out' }).click();
+  await expect.poll(() => asked.length).toBe(2);
+  await expect(page.getByLabel('Display name')).toHaveValue('Half typed');
+  page.removeAllListeners('dialog');
+  const leaving = answers(page, true);
+  await page.getByRole('region', { name: 'Sessions' }).getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.getByRole('alert')).toContainText('You are signed out');
+  expect(leaving).toHaveLength(1);
+});

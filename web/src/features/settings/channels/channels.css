@@ -92,6 +92,7 @@ a.ch-type::after, button.ch-type::after { content: ""; flex: none; width: 16px; 
 @media (pointer: coarse), (max-width: 30rem) { .ch-detail > .seg-tabs button, .ch-tabs-row > .seg-tabs button { min-height: var(--touch); } }
 .ch-carries { font-size: var(--fs-small); }
 .ch-panel { display: grid; gap: var(--space-4); min-width: 0; }
+.ch-panel[hidden] { display: none; }
 .ch-panel .settings-body { min-width: 0; }
 .ch-remove { justify-content: flex-start; border-top: 1px solid var(--line); padding-top: var(--space-4); }
 

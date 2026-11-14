@@ -431,14 +431,12 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
         {heldDone.kind === 'opened' && <span className="notice-actions"><a href={`/?channel_id=${channel.id}`}>{m.viewInInbox}</a></span>}</p>}
       {channel.enabled && channel.unsent_count > 0 && <Unsent channel={channel} />}
       <Tabs label={channel.name} prefix={prefix} value={open} tabs={tabs} onChange={(next) => navigate(withSearch(`${base}/${id}`, { tab: next }), true)} />
-      <div role="tabpanel" id={panelID(prefix, open)} aria-labelledby={tabID(prefix, open)} className="ch-panel">
-        {open === 'history' ? <History timezone={timezone} channelID={channel.id} />
-          : open === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} timezone={timezone} />
-          : ui && <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
-              const Panel = panels[open];
-              return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;
-            }} />}
-      </div>
+      <KeptPanels scope={channel.id} open={open} prefix={prefix} render={(panel) => panel === 'history' ? <History timezone={timezone} channelID={channel.id} />
+        : panel === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} timezone={timezone} />
+        : ui && <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
+            const Panel = panels[panel];
+            return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;
+          }} />} />
       {isAdmin && <div className="button-row ch-remove">
         <button type="button" className="danger-action" onClick={() => setRemoving(true)}>{ui?.removal?.label ?? m.remove}</button>
         {remove.isError && <span role="alert" className="error-copy">{remove.error instanceof InvalidRequestError ? remove.error.message : m.actionFailed}</span>}
@@ -458,6 +456,16 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
       {channel.held_count > 0 && <p role="alert" className="error-copy">{m.removeHeld(channel.held_count)}</p>}
     </Dialog>}
   </>;
+}
+
+// KeptPanels shows one tab's panel at a time and keeps the ones already opened mounted, hidden: what was typed in a tab that
+// is left is still there when it comes back, and the save bar and the question on leaving still know about it.
+function KeptPanels({ scope, open, prefix, render }: { scope: string; open: string; prefix: string; render: (tab: string) => ReactNode }) {
+  const [seen, setSeen] = useState<{ scope: string; tabs: string[] }>({ scope, tabs: [open] });
+  const opened = seen.scope === scope ? seen.tabs : [];
+  const shown = opened.includes(open) ? opened : [...opened, open];
+  useEffect(() => { if (seen.scope !== scope || !seen.tabs.includes(open)) setSeen({ scope, tabs: shown }); });
+  return <>{shown.map((tab) => <div key={tab} role="tabpanel" id={panelID(prefix, tab)} aria-labelledby={tabID(prefix, tab)} hidden={tab !== open} className="ch-panel">{render(tab)}</div>)}</>;
 }
 
 // Held is what arrived while the channel was off: open it as conversations, or discard it after a question.

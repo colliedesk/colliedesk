@@ -1013,3 +1013,20 @@ test('a single space typed while adding a help chat is not text: nothing is aske
   fireEvent.change(screen.getByRole('textbox', { name: 'Extra instructions' }), { target: { value: '  ' } });
   expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true);
 });
+
+
+test('a channel tab left with text typed in it keeps the text and the bar: the panel stays, hidden, and comes back as it was', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form', { enabled: false }), config: { ...webFormConfig, enabled: false } });
+  channelsApi.events.mockResolvedValue({ items: [], next_cursor: null });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = (tab: 'embed' | 'history') => <QueryClientProvider client={client}><ChannelsRoute path={FORM} search={{ tab }} navigate={vi.fn()} /></QueryClientProvider>;
+  const view = render(page('embed'));
+  fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://typed.example.com' } });
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
+  view.rerender(page('history'));
+  expect(screen.queryByRole('textbox', { name: /Allowed origins/i })).toBeNull();
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
+  expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false);
+  view.rerender(page('embed'));
+  expect(screen.getByRole('textbox', { name: /Allowed origins/i })).toHaveValue('https://typed.example.com');
+});

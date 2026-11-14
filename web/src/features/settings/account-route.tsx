@@ -10,6 +10,7 @@ import { saveState } from './save-feedback';
 import { SettingsPage } from './settings-page';
 import { MentionEmailSetting } from './mention-email-setting';
 import { readSkipped, storeSkipped } from '../onboarding/setup-steps';
+import { confirmDiscardUnsavedSettings } from './unsaved-probe';
 
 // Settings → Account: the profile, this browser's preferences, the devices signed in and the AI apps
 // connected with OAuth. It asks for who is signed in and the sessions only.
@@ -54,5 +55,5 @@ export function AccountRoute() {
     setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={chooseSetupGuide}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeSession.isError ? messages.settingsActionFailed : undefined} mcpAddress={mcpAddress}
-    onRevokeSession={(id) => revokeSession.mutate(id)} onSetAgentTimezone={(value) => agentTimezone.mutateAsync(value)} />;
+    onRevokeSession={(id) => { if (sessions.data?.items.some((session) => session.current && session.id === id) && !confirmDiscardUnsavedSettings()) return; revokeSession.mutate(id); }} onSetAgentTimezone={(value) => agentTimezone.mutateAsync(value)} />;
 }
