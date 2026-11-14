@@ -39,6 +39,9 @@ type Config struct {
 	// Origin is APP_ORIGIN; its scheme starts the address of the protected resource metadata a 401 names
 	// (on the host the app asked).
 	Origin string
+	// Funnel receives one mcp_tool_called event per tool call of a workspace (Colliedesk Cloud only, as
+	// telemetry.Funnel decides); nil records nothing.
+	Funnel httpapi.FunnelRecorder
 }
 
 const instructions = `Colliedesk is a helpdesk: customers write in, a small support team answers. You work the inbox for that team, as the team member who made your token.
@@ -84,7 +87,7 @@ func New(config Config) http.Handler {
 	docSections() // build the guide index now, so a bad embed stops the server at start
 	for _, spec := range Catalog() {
 		if !spec.Operator {
-			register(server, spec, rest)
+			register(server, spec, rest, config.Funnel)
 		}
 	}
 	// A bearer token is required, so DNS rebinding cannot ride on a browser's ambient credentials. The
@@ -105,7 +108,7 @@ func NewOperator(config Config) http.Handler {
 	rest := &restClient{api: config.API}
 	for _, spec := range Catalog() {
 		if spec.Operator {
-			register(server, spec, rest)
+			register(server, spec, rest, nil)
 		}
 	}
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },

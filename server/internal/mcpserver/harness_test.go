@@ -90,6 +90,12 @@ func newEnvWith(t *testing.T, mutate func(*httpapi.Config)) *env { return newEnv
 // tests still reach the real one), so a test can act as a second caller in the middle of a tool call.
 func newEnvBuilt(t *testing.T, mutate func(*httpapi.Config), front func(real http.Handler) http.Handler) *env {
 	t.Helper()
+	return newEnvMCP(t, mutate, front, nil)
+}
+
+// newEnvMCP also changes the MCP server's own configuration, for example its funnel.
+func newEnvMCP(t *testing.T, mutate func(*httpapi.Config), front func(real http.Handler) http.Handler, mutateMCP func(*mcpserver.Config)) *env {
+	t.Helper()
 	pool := testPool(t)
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
@@ -109,7 +115,11 @@ func newEnvBuilt(t *testing.T, mutate func(*httpapi.Config), front func(real htt
 	if front != nil {
 		toolAPI = front(api)
 	}
-	server := httptest.NewServer(mcpserver.Mount(mcpserver.Config{API: toolAPI, Auth: service, Version: testVersion, Operators: api.Operators(), Origin: testOrigin}, api))
+	mcpConfig := mcpserver.Config{API: toolAPI, Auth: service, Version: testVersion, Operators: api.Operators(), Origin: testOrigin}
+	if mutateMCP != nil {
+		mutateMCP(&mcpConfig)
+	}
+	server := httptest.NewServer(mcpserver.Mount(mcpConfig, api))
 	t.Cleanup(server.Close)
 	return &env{t: t, api: api, pool: pool, service: service, server: server, files: files}
 }
