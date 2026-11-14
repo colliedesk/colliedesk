@@ -181,7 +181,7 @@ func (w *Worker) dispatch(ctx context.Context, workspaceID string, work store.Fi
 		branch = work.DefaultBranch
 	}
 	created, err := client.CreateAgent(ctx, cursor.NewAgent{ID: agentID(work.ID), Name: work.SentTitle,
-		Prompt: work.SentTitle + "\n\n" + work.SentBody, RepoURL: repoURL(repo.FullName), StartingRef: branch})
+		Prompt: autofix.AgentPrompt(work.SentTitle, work.SentBody), RepoURL: repoURL(repo.FullName), StartingRef: branch})
 	var cursorErr *cursor.Error
 	if errors.As(err, &cursorErr) && cursorErr.Status == http.StatusConflict && cursorErr.Code == "agent_id_conflict" {
 		// Created before (a process that died after the create, a lease that ran out): read it back.

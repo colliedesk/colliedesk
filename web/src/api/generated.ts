@@ -4616,7 +4616,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Sends a failed or cancelled fix again as a new attempt (`previous_attempt_id` names this one), with the content the person reviewed (the preview, filled in from the attempt before). The same as `POST /api/v1/conversations/{id}/fixes` otherwise; 409 `fix_not_ended` while this fix is in progress. */
+        /** @description Sends a failed or cancelled fix again as a new attempt (`previous_attempt_id` names this one), with the content the person reviewed (the preview, filled in from the attempt before). The same as `POST /api/v1/conversations/{id}/fixes` otherwise (an agent token sends the preview unchanged, 409 `fix_text_edited`); 409 `fix_not_ended` while this fix is in progress. */
         post: operations["retryFix"];
         delete?: never;
         options?: never;
@@ -4695,7 +4695,7 @@ export interface paths {
         /** @description Every fix of the conversation, the latest attempt first. */
         get: operations["listConversationFixes"];
         put?: never;
-        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `cursor_key_missing` (Cursor without its key). */
+        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `cursor_key_missing` (Cursor without its key), `fix_text_edited` (an agent token sends only the title, body and `message_ids` the preview built, unchanged, with the same `note_ids`; a person may edit them). Cursor is sent a fixed opening from Colliedesk, then the title in a `<customer-subject>` block, then the body. */
         post: operations["sendFix"];
         delete?: never;
         options?: never;
@@ -5668,10 +5668,10 @@ export interface components {
             ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
             reason: string | null;
             /**
-             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (attach_requires_single_candidate is on and the customer has two or more unresolved conversations), no_content (nothing it could read).
+             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (attach_requires_single_candidate is on and the customer has two or more unresolved conversations), no_content (nothing it could read), other_customers (it would set the card aside while another customer wrote in what it read, whose words may ask for that).
              * @enum {string}
              */
-            not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error" | "several_candidates" | "no_content";
+            not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error" | "several_candidates" | "no_content" | "other_customers";
             /** Format: date-time */
             created_at: string;
         };
@@ -6562,10 +6562,10 @@ export interface components {
             missing_info: string | null;
             /** @description The articles and solved conversations the draft used, named from the database. */
             sources: components["schemas"]["AISource"][];
-            /** @description An email address, a number, another customer's name, a word in an alphabet the conversation does not use, or a masked detail ([email], [number], [company]) copied from a past conversation, in the draft but not in this conversation. Check before sending. */
+            /** @description An email address, a number, another customer's name, a word in an alphabet the conversation does not use, a masked detail ([email], [number], [company]) copied from a past conversation, or a link (with or without https://) that neither this conversation nor a knowledge base article the draft was given holds, in the draft but not in this conversation. Check before sending. */
             warnings: {
                 /** @enum {string} */
-                kind: "email" | "number" | "name" | "script" | "placeholder";
+                kind: "email" | "number" | "name" | "script" | "placeholder" | "link";
                 value: string;
             }[];
             model: string | null;

@@ -7902,8 +7902,8 @@ paths:
       description: >
         Sends a failed or cancelled fix again as a new attempt (`previous_attempt_id` names this one), with
         the content the person reviewed (the preview, filled in from the attempt before). The same as
-        `POST /api/v1/conversations/{id}/fixes` otherwise; 409 `fix_not_ended` while this fix is in
-        progress.
+        `POST /api/v1/conversations/{id}/fixes` otherwise (an agent token sends the preview unchanged,
+        409 `fix_text_edited`); 409 `fix_not_ended` while this fix is in progress.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/FixSendInput'}}}
@@ -8038,7 +8038,10 @@ paths:
         back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same
         `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has
         one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in),
-        `cursor_key_missing` (Cursor without its key).
+        `cursor_key_missing` (Cursor without its key), `fix_text_edited` (an agent token sends only the
+        title, body and `message_ids` the preview built, unchanged, with the same `note_ids`; a person may
+        edit them). Cursor is sent a fixed opening from Colliedesk, then the title in a
+        `<customer-subject>` block, then the body.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/FixSendInput'}}}
@@ -9514,8 +9517,8 @@ components:
         ignore_reason: {anyOf: [{$ref: '#/components/schemas/IntakeIgnoreReason'}, {type: 'null'}]}
         reason: {type: [string, 'null']}
         not_applied_reason: {type: string, enum: [level_suggest, below_threshold, too_old, credential, person_first, target_changed, lane_blocked, gate_closed, limit, error,
-            several_candidates, no_content],
-          description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (attach_requires_single_candidate is on and the customer has two or more unresolved conversations), no_content (nothing it could read).'}
+            several_candidates, no_content, other_customers],
+          description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (attach_requires_single_candidate is on and the customer has two or more unresolved conversations), no_content (nothing it could read), other_customers (it would set the card aside while another customer wrote in what it read, whose words may ask for that).'}
         created_at: {type: string, format: date-time}
     IntakeCounts:
       type: object
@@ -10297,12 +10300,12 @@ components:
           items: {$ref: '#/components/schemas/AISource'}
         warnings:
           type: array
-          description: An email address, a number, another customer's name, a word in an alphabet the conversation does not use, or a masked detail ([email], [number], [company]) copied from a past conversation, in the draft but not in this conversation. Check before sending.
+          description: An email address, a number, another customer's name, a word in an alphabet the conversation does not use, a masked detail ([email], [number], [company]) copied from a past conversation, or a link (with or without https://) that neither this conversation nor a knowledge base article the draft was given holds, in the draft but not in this conversation. Check before sending.
           items:
             type: object
             required: [kind, value]
             properties:
-              kind: {type: string, enum: [email, number, name, script, placeholder]}
+              kind: {type: string, enum: [email, number, name, script, placeholder, link]}
               value: {type: string}
         model: {type: [string, 'null']}
         outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, discarded, superseded, expired, null]}

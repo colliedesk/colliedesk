@@ -211,7 +211,8 @@ func TestACursorFixIsSentFollowedToItsPullRequestAndThenLeftToGitHub(t *testing.
 	repo, _ := repos[0].(map[string]any)
 	prompt, _ := body["prompt"].(map[string]any)
 	if body["agentId"] != "bc-"+fix.ID || body["autoCreatePR"] != true || repo["url"] != "https://github.com/acme/shop-web" || repo["startingRef"] != "main" ||
-		!strings.Contains(prompt["text"].(string), "The checkout button does nothing.") {
+		!strings.Contains(prompt["text"].(string), "The checkout button does nothing.") ||
+		!strings.HasPrefix(prompt["text"].(string), "Colliedesk, a helpdesk, sends you a problem") || !strings.Contains(prompt["text"].(string), "<customer-subject untrusted=\"true\">") {
 		t.Fatalf("create body: %+v", body)
 	}
 	if _, withEnv := body["envVars"]; withEnv {
