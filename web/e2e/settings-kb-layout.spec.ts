@@ -173,10 +173,11 @@ test('Settings → Data: the Export card is one row, the title and what it does 
   await newDesk(page, 'Export Row');
   await page.goto(`${servers.main}/settings/data`);
   const card = page.locator('.data-export');
-  await expect(card.getByRole('button', { name: 'Export all data' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Export all data', exact: true })).toBeVisible();
   const row = await card.evaluate((section) => {
     const rect = (element: Element) => element.getBoundingClientRect();
-    const button = section.querySelector('button')!;
+    // The heading's tip is a button too; the row's button is the one that exports.
+    const button = Array.from(section.querySelectorAll('button')).find((candidate) => candidate.textContent?.trim() === 'Export all data')!;
     const title = section.querySelector('h2')!;
     const rules = Array.from(section.querySelectorAll<HTMLElement>('*')).filter((element) => {
       const style = getComputedStyle(element);

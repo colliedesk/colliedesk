@@ -53,9 +53,9 @@ New to Colliedesk Cloud? Use the same sign-in form. When the
 verified email is not an agent of any workspace, the page asks you to name a workspace and starts a
 14-day free trial with you as its admin. No card is needed. See [Plan and billing](billing.md).
 A workspace is your team's account in Colliedesk: one name, such as Acme Support, for everyone who
-answers your customers. Under the form, a line links the [Terms](https://colliedesk.com/terms), the
-[Privacy Policy](https://colliedesk.com/privacy) and the [pricing](https://colliedesk.com/pricing):
-continuing means you agree to the terms.
+answers your customers. Under the form, a line links the [Terms](https://colliedesk.com/terms) and the
+[Privacy Policy](https://colliedesk.com/privacy): continuing means you agree to them. The
+[pricing](https://colliedesk.com/pricing) is linked with the page's other links, beside the service status.
 The website's **Start free trial** link opens this page as `/sign-in?intent=trial`, titled
 **Start your free trial**; it is the same form, so someone who already has a workspace is
 simply signed in. The Team 25 card links to `/sign-in?intent=trial&plan=team25`: the trial starts as

@@ -251,7 +251,8 @@ never accepts it as a command-line argument and never prints it.
    canned responses and the knowledge base. Nothing is written yet. Freshdesk does not count archived
    tickets ahead of time, so the ticket number is "at least". A plan that does not allow the archive API
    gets a calm note, not a warning: those archived tickets are listed in the report to check. The page
-   also gives a time range for the import, from the ticket count and the API limit of your plan.
+   also gives a time range for the import, from the ticket count and the API limit of your plan. The ⓘ beside the API key
+   says how the server keeps it, and the one beside the old help center address says what it changes.
 3. Select **Start import** within the hour. The tickets updated in the last 90 days come first, newest
    first: once they are in, the page says so and your team can work on them while older and archived
    tickets, contacts, saved replies and the knowledge base follow. The page lists the steps (done, in

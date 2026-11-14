@@ -7,6 +7,7 @@ import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { ownRef } from './conversation-ref';
+import { helpTipPart } from './help-tip-part';
 import { rowDue, slaOf } from '../../lib/sla';
 import { presenceViewPart } from './presence-part';
 import { useListKeys } from './use-list-keys';
@@ -100,8 +101,8 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
         {onTestMessage && <p><button type="button" className="button" disabled={testing} onClick={sendTest}>{messages.sendTestMessage}</button>{' '}
           <span className="muted-copy">{messages.sendTestMessageHint}</span>{testFailed && <span role="alert" className="error-copy"> {testFailed}</span>}</p>}
       </section>}
-      {failed === 'results_refreshed' && <div className="empty-copy"><p role="alert" className="error-copy">{messages.resultsRefreshed}</p>
-        <p className="muted-copy">{messages.resultsRefreshedWhy}</p>
+      {failed === 'results_refreshed' && <div className="empty-copy"><p className="heading-with-tip"><span role="alert" className="error-copy">{messages.resultsRefreshed}</span>
+        <Part part={helpTipPart} render={(tip) => <tip.HelpTip label={messages.resultsRefreshedAbout} text={messages.resultsRefreshedWhy} />} /></p>
         <div className="button-row"><a href="/results" className="button">{messages.openResults}</a>
           {onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilter}</button>}</div></div>}
       {failed === true && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>

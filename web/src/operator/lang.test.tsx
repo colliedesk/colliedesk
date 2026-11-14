@@ -23,6 +23,7 @@ test('a browser that prefers Vietnamese gets the console in Vietnamese, its lazy
   expect(await screen.findByRole('heading', { name: 'Phiên của bạn đã kết thúc' })).toBeInTheDocument();
   expect(document.documentElement.lang).toBe('vi');
   expect((await import('./ai-provider-messages')).am.serverModels).toBe('Mô hình');
+  expect((await import('./page-messages')).pm.trialInProgress).toBe('Đang chạy thử');
   expect((await import('./fields')).fields['smtp.host'].label).toBe('Máy chủ SMTP');
 });
 
@@ -62,8 +63,8 @@ function shape(value: unknown): unknown {
 }
 
 test('every English string has its Vietnamese, with the same keys, arguments and option values', async () => {
-  const en = { m: (await import('./messages')).m, am: (await import('./ai-provider-messages')).am, cloud: (await import('./cloud-messages')).cloudMessages };
-  const vn = { m: (await import('./vi/messages')).m, am: (await import('./vi/ai-provider-messages')).am, cloud: (await import('./vi/cloud-messages')).cloudMessages };
+  const en = { m: (await import('./messages')).m, am: (await import('./ai-provider-messages')).am, cloud: (await import('./cloud-messages')).cloudMessages, pm: (await import('./page-messages')).pm };
+  const vn = { m: (await import('./vi/messages')).m, am: (await import('./vi/ai-provider-messages')).am, cloud: (await import('./vi/cloud-messages')).cloudMessages, pm: (await import('./vi/page-messages')).pm };
   expect(shape(vn)).toEqual(shape(en));
   const { fields, sections } = await import('./fields');
   const words = await import('./vi/fields');

@@ -3,6 +3,7 @@ import { ApiError, api } from './api';
 import type { Product } from './api';
 import { ConsoleDialog } from './dialog';
 import { m } from './messages';
+import { pm } from './page-messages';
 
 const plans: Array<Product['plan']> = ['team', 'founding', 'solo', 'small', 'team25'];
 const periods: Array<Product['period']> = ['monthly', 'yearly', 'single'];
@@ -23,18 +24,18 @@ export default function ProductsSection({ totp }: { totp: boolean }) {
   }, []);
   useEffect(() => { void load(); }, [load]);
   return <section className="settings-card">
-    <div className="section-heading"><h2>{m.productsTitle}</h2><p>{m.productsLead}</p>
-      <button type="button" onClick={() => setDialog({ add: true })}>{m.addProduct}</button></div>
-    <div className="settings-body ops-table-wrap" tabIndex={0} role="region" aria-label={m.productsTitle}>
-      {failed && <p className="error-copy" role="alert">{m.loadError} <button type="button" className="link-button" onClick={() => void load()}>{m.tryAgain}</button></p>}
+    <div className="section-heading"><h2>{pm.productsTitle}</h2><p>{pm.productsLead}</p>
+      <button type="button" onClick={() => setDialog({ add: true })}>{pm.addProduct}</button></div>
+    <div className="settings-body ops-table-wrap" tabIndex={0} role="region" aria-label={pm.productsTitle}>
+      {failed && <p className="error-copy" role="alert">{pm.loadError} <button type="button" className="link-button" onClick={() => void load()}>{m.tryAgain}</button></p>}
       {items === null && !failed && <div className="skeleton" aria-busy="true" />}
-      {items?.length === 0 && <p className="help">{m.noProducts}</p>}
+      {items?.length === 0 && <p className="help">{pm.noProducts}</p>}
       {items && items.length > 0 && <table className="ops-table">
-        <thead><tr><th scope="col">{m.productId}</th><th scope="col">{m.plan}</th><th scope="col">{m.period}</th><th scope="col">{m.onSale}</th><th scope="col"><span className="sr-only">{m.onSale}</span></th></tr></thead>
+        <thead><tr><th scope="col">{pm.productId}</th><th scope="col">{pm.plan}</th><th scope="col">{pm.period}</th><th scope="col">{pm.onSale}</th><th scope="col"><span className="sr-only">{pm.onSale}</span></th></tr></thead>
         <tbody>{items.map((product) => <tr key={product.product_id}>
           <td><code>{product.product_id}</code></td><td>{product.plan}</td><td>{product.period}</td>
           <td>{product.on_sale ? <span className="badge" data-tone="ok">{m.on}</span> : <span className="badge">{m.off}</span>}</td>
-          <td><button type="button" onClick={() => setDialog({ product })}>{product.on_sale ? m.takeOffSale : m.putOnSale}</button></td>
+          <td><button type="button" onClick={() => setDialog({ product })}>{product.on_sale ? pm.takeOffSale : pm.putOnSale}</button></td>
         </tr>)}</tbody>
       </table>}
     </div>
@@ -61,24 +62,24 @@ function ProductDialog({ dialog, totp, onClose, onDone }: { dialog: { add: true 
       else await api.setOnSale(dialog.product.product_id, { on_sale: !dialog.product.on_sale, reauth_code: reauth });
       onDone();
     } catch (failure) {
-      setError(failure instanceof ApiError && failure.code === 'product_exists' ? m.productExists : failure instanceof ApiError && failure.code === 'reauth_code_invalid' ? m.codeNoMatch : m.nothingSaved);
+      setError(failure instanceof ApiError && failure.code === 'product_exists' ? pm.productExists : failure instanceof ApiError && failure.code === 'reauth_code_invalid' ? pm.codeNoMatch : m.nothingSaved);
       setCode('');
     } finally {
       setBusy(false);
     }
   };
-  const title = adding ? m.addProduct : dialog.product.on_sale ? m.takeOffSale : m.putOnSale;
-  return <ConsoleDialog title={title} help={adding ? m.productsLead : dialog.product.product_id} onClose={onClose} closeLabel={m.cancel} onSubmit={() => void submit()}
-    footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={!ready || busy}>{title}</button></>}>
+  const title = adding ? pm.addProduct : dialog.product.on_sale ? pm.takeOffSale : pm.putOnSale;
+  return <ConsoleDialog title={title} help={adding ? pm.productsPermanent : dialog.product.product_id} onClose={onClose} closeLabel={pm.cancel} onSubmit={() => void submit()}
+    footer={<><button type="button" onClick={onClose}>{pm.cancel}</button><button type="submit" className="primary-action" disabled={!ready || busy}>{title}</button></>}>
     {adding && <>
-      <div className="field"><label className="field-label" htmlFor="product-id">{m.productId}</label>
+      <div className="field"><label className="field-label" htmlFor="product-id">{pm.productId}</label>
         <input id="product-id" autoComplete="off" spellCheck={false} value={id} onChange={(event) => setId(event.target.value)} /></div>
-      <div className="field"><label className="field-label" htmlFor="product-plan">{m.plan}</label>
+      <div className="field"><label className="field-label" htmlFor="product-plan">{pm.plan}</label>
         <select id="product-plan" value={plan} onChange={(event) => setPlan(event.target.value as Product['plan'])}>{plans.map((value) => <option key={value} value={value}>{value}</option>)}</select></div>
-      <div className="field"><label className="field-label" htmlFor="product-period">{m.period}</label>
+      <div className="field"><label className="field-label" htmlFor="product-period">{pm.period}</label>
         <select id="product-period" value={period} onChange={(event) => setPeriod(event.target.value as Product['period'])}>{periods.map((value) => <option key={value} value={value}>{value}</option>)}</select></div>
     </>}
-    {totp && <div className="field"><label className="field-label" htmlFor="product-code">{m.confirmItsYou}: {m.authenticatorCode}</label>
+    {totp && <div className="field"><label className="field-label" htmlFor="product-code">{pm.confirmItsYou}: {m.authenticatorCode}</label>
       <input id="product-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} spellCheck={false} value={code}
         onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></div>}
     {error && <p className="error-copy" role="alert">{error}</p>}

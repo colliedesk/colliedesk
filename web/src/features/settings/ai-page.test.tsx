@@ -369,7 +369,7 @@ test('an admin turns on automatic triage only through a dialog that says what it
   expect(screen.queryByRole('checkbox', { name: 'Tags' })).not.toBeInTheDocument();
   fireEvent.click(within(triageLevel()).getByRole('radio', { name: 'Auto' }));
   const dialog = await screen.findByRole('dialog', { name: 'Apply triage suggestions automatically?' });
-  expect(within(dialog).getByText(/tags and priority as soon as they arrive/)).toBeInTheDocument();
+  expect(within(dialog).getByText('New tickets get AI’s tags and priority on arrival.')).toBeInTheDocument();
   expect(onSetSlot).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
   expect(onSetSlot).toHaveBeenCalledWith('triage', { source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', effort: 'low', enabled: true, default_level: 'auto' });

@@ -182,3 +182,48 @@ test('a transcript shows an answer’s markers as its sources’ numbers', async
   wrap(<ChatTranscript id="11111111-1111-4111-8111-111111111111" timezone="UTC" canDelete={false} back="AI chat" backHref="/settings/ai?tab=chat" onBack={vi.fn()} />);
   expect(await screen.findByText('It ships in 2 days [1]. Ask us.')).toBeTruthy();
 });
+
+// A row of the AI chat keeps its label and one line of 60 characters or less; what it explained below that line is the
+// accessible description of the control it is about.
+const chatSlot = { slot: 'chat', source: 'provider', provider_id: null, model: 'claude-haiku-5-5', fallback_model: null, effort: 'low', enabled: true, default_level: 'off' as const, automatic: false, auto_parts: [],
+  active: true, off_reason: null, consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null } as const;
+
+test('the spend limit says "Empty means no limit." and what happens past it sits in the tip of its label', async () => {
+  aiApi.chatUsage.mockResolvedValue(usage({ answer_limit: null, day_answer_limit: null, spent_micro_usd: 0, spent_percent: null }));
+  aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
+  wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...chatSlot, auto_parts: [] }} onSetCap={vi.fn()} />);
+  const field = await screen.findByRole('textbox', { name: 'Monthly spend limit (US dollars)' });
+  expect(screen.getByText('Empty means no limit.')).toBeVisible();
+  expect(field).toHaveAccessibleDescription(/Empty means no limit\..*customers see related articles and Talk to a person until the next month \(UTC\)/);
+  expect(screen.getByRole('button', { name: 'About Monthly spend limit (US dollars)' })).toBeInTheDocument();
+});
+
+test('Try it keeps no paragraph under its heading: who sees the question and what it costs are the heading’s tip', async () => {
+  aiApi.chatUsage.mockResolvedValue(usage());
+  aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
+  wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...chatSlot, auto_parts: [] }} />);
+  const tip = await screen.findByRole('button', { name: 'About Try it' });
+  expect(tip).toHaveAccessibleDescription(/Not shown to customers and not one of the month’s answers; what it costs counts toward the AI chat limit\./);
+});
+
+test('an empty list of chats says what shows here in one line', async () => {
+  aiApi.chatUsage.mockResolvedValue(usage());
+  aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
+  wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} />);
+  expect(await screen.findByText('No chats yet. Chats from your help center show here.')).toBeVisible();
+});
+
+test('a chat cut short says so in one line, and the date it was cut at is in the tip', async () => {
+  aiApi.chatSession.mockResolvedValue(session({ history_cut_at: '2026-10-28T11:00:00Z' }));
+  wrap(<ChatTranscript id="11111111-1111-4111-8111-111111111111" timezone="UTC" canDelete back="AI chat" backHref="/settings/ai?tab=chat" onBack={vi.fn()} />);
+  expect(await screen.findByText('Older questions are no longer read by the AI.')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'About Older questions' })).toHaveAccessibleDescription(/Questions before .+ no longer fit what the AI reads of this chat\./);
+});
+
+test('before a chat is deleted for good, the dialog still says what goes and what stays', async () => {
+  aiApi.chatSession.mockResolvedValue(session());
+  wrap(<ChatTranscript id="11111111-1111-4111-8111-111111111111" timezone="UTC" canDelete back="AI chat" backHref="/settings/ai?tab=chat" onBack={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete chat' }));
+  const dialog = await screen.findByRole('alertdialog');
+  expect(within(dialog).getByText('The transcript is removed for good. The conversation it opened keeps its copy.')).toBeVisible();
+});

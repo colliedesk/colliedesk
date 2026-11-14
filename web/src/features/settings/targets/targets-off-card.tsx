@@ -5,12 +5,12 @@ import type { ResponseTargets } from '../../../api/response-targets';
 import { useSaveFeedback } from '../save-feedback';
 import { targetsMessages as m } from './targets-messages';
 import { turnOn } from './targets-start';
-import { cardState, fieldErrors, useSave } from './targets-shared';
+import { ZoneNote, cardState, fieldErrors, useSave } from './targets-shared';
 
 // While measuring is off the page is this one card (with the editor under it only after a turn-on the server refused): what measuring is, what turning it on starts with, and the
 // button. Hours, holidays and targets are not shown, so nothing looks live that is not.
-export function OffCard({ doc, canManage, workspaceZone, repairing, onRefused }: {
-  doc: ResponseTargets; canManage: boolean; workspaceZone: string; repairing?: boolean; onRefused: (fields: Record<string, string>) => void;
+export function OffCard({ doc, canManage, workspaceZone, myZone, repairing, onRefused }: {
+  doc: ResponseTargets; canManage: boolean; workspaceZone: string; myZone: string; repairing?: boolean; onRefused: (fields: Record<string, string>) => void;
 }) {
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
@@ -24,6 +24,8 @@ export function OffCard({ doc, canManage, workspaceZone, repairing, onRefused }:
     {canManage && <>
       {repairing && <p className="error-copy">{m.fixFirst}</p>}
       {start && <p className="muted-copy">{start.line}</p>}
+      {/* While repairing, the editor below says it. */}
+      {!repairing && <ZoneNote clock={doc.timezone ?? workspaceZone} mine={myZone} />}
       {setup.isError && <p role="alert" className="error-copy">{m.startLoadFailed} <button type="button" className="link-action" onClick={() => void setup.refetch()}>{m.tryAgain}</button></p>}
       <span className="button-row"><button type="button" className="primary-action tg-turn-on" disabled={!start || save.isPending}
         onClick={() => {

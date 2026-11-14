@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChangedElsewhereError, InvalidRequestError } from '../../../api/client';
 import { responseTargetsApi, responseTargetsSchema } from '../../../api/response-targets';
 import type { ResponseTargets, ResponseTargetsChange } from '../../../api/response-targets';
+import { HelpTip } from '../../../ui/help-tip';
+import { sameZone } from '../timezone-select';
 import { saveState } from '../save-feedback';
 import { targetsMessages as m } from './targets-messages';
 
@@ -44,9 +46,19 @@ export function useSave() {
   });
 }
 
-export function Card({ id, title, lead, children }: { id: string; title: string; lead?: string; children: ReactNode }) {
+// Said when the zone the clock counts in is not the zone the reader's dates show: the two otherwise read as one.
+// It stays visible, whatever its length, because the person must pick a zone (or accept it) before trusting the hours.
+export function ZoneNote({ clock, mine }: { clock: string; mine: string }) {
+  return sameZone(clock, mine) ? null : <p className="muted-copy" data-quiet="state">{m.zonesDiffer(clock, mine)}</p>;
+}
+
+// tip is what the card explains beyond its one-line lead: how, why, a definition (design.md, "Quiet by default").
+export function Card({ id, title, lead, tip, children }: { id: string; title: string; lead?: string; tip?: string; children: ReactNode }) {
   return <section className="settings-card" aria-labelledby={id}>
-    <div className="section-heading"><h2 id={id}>{title}</h2>{lead && <p>{lead}</p>}</div>
+    <div className="section-heading">
+      {tip ? <div className="heading-with-tip"><h2 id={id}>{title}</h2><HelpTip label={title} text={tip} /></div> : <h2 id={id}>{title}</h2>}
+      {lead && <p>{lead}</p>}
+    </div>
     <div className="settings-body">{children}</div>
   </section>;
 }
