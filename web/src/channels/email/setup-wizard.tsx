@@ -14,6 +14,7 @@ import { mailboxReturn } from '../../features/settings/gmail-return';
 import { addressSaved, clockTime, nextStep, readMemory, repliesThrough, stepStates, steps, testReplied, writeMemory } from './setup-state';
 import type { SetupMemory, StepID, StepState } from './setup-state';
 import { settingsMessages } from '../../features/settings/settings-messages';
+import { HelpTip } from '../../ui/help-tip';
 import './email-setup.css';
 
 // EmailSetup connects a support address in four steps on one page: the address, forwarding its mail here,
@@ -69,7 +70,7 @@ export function EmailSetup({ channel, named = false, step, canManage, timezone, 
       <TestMessage channelID={id} ready={addressSaved(data)} forwarding={states.forward === 'done'} navigate={navigate} onSent={(sent) => remember({ testConversation: sent })} />
       {conversation && (states.test === 'done'
         ? <p className="setup-live setup-live-ok">{m.testDelivered}</p>
-        : <p className="muted-copy">{m.testWaiting} <a href={`/conversations/${encodeURIComponent(conversation)}`}>{m.testOpen}</a></p>)}
+        : <p className="muted-copy">{m.testWaiting} <a href={`/conversations/${encodeURIComponent(conversation)}`}>{m.testOpen}</a> <HelpTip label={m.test} text={m.testWaitingWhy} /></p>)}
     </div>,
   };
   const summary: Record<StepID, () => ReactNode> = {
