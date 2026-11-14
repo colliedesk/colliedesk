@@ -4,8 +4,8 @@ import type { Translation } from '../lang';
 // Vietnamese for ai-provider-messages.ts (the server provider's form).
 export const am: Translation<typeof en> = {
   serverProviderOn: 'Nhà cung cấp của máy chủ',
-  serverProviderOnHelp: 'Workspace có thể chọn nó. Tắt thì dừng nó và giữ mọi thứ bên dưới cho lần bật lại.',
-  serverProviderOffHelp: 'Tắt: không workspace nào chọn được, các tính năng đang dùng nó dừng lại và nói lý do. Cài đặt vẫn được giữ.',
+  serverProviderOnHelp: 'Workspace có thể chọn nó. Tắt thì giữ cài đặt bên dưới.',
+  serverProviderOffHelp: 'Tắt: không ai chọn được; tính năng dùng nó dừng và nói lý do.',
   serverProviderService: 'Dịch vụ',
   outOfCredit: 'Tài khoản nhà cung cấp đã hết credit.',
   outOfCreditBody: (n: string, since: string) => `Đã từ chối ${n} lượt gọi AI từ ${since}: các tính năng dùng nó bị lỗi và đều nói lý do. Hãy nạp thêm credit (hoặc nâng hạn mức của key), hoặc chọn dịch vụ hay key khác bên dưới. Việc lưu không bị ảnh hưởng.`,
@@ -16,7 +16,7 @@ export const am: Translation<typeof en> = {
     self_hosted: ['Khác hoặc tự host', 'Mọi máy chủ tương thích OpenAI: vLLM, Ollama, LM Studio…'],
   },
   serverModels: 'Mô hình',
-  serverModelsHelp: 'Mọi workspace dùng nhà cung cấp này đều chạy các mô hình này; workspace chọn nhà cung cấp, không chọn mô hình.',
+  serverModelsHelp: 'Workspace chọn nhà cung cấp và luôn nhận các mô hình này.',
   listing: 'Đang liệt kê các mô hình key này được dùng…',
   listed: (n: number) => `Có ${n} mô hình. Gõ vào ô để tìm.`,
   listNeedsKey: 'Nhập API key để liệt kê các mô hình nó được dùng.',
@@ -36,7 +36,7 @@ export const am: Translation<typeof en> = {
   perMillion: (input: number, output: number) => `$${input} vào · $${output} ra mỗi 1M token`,
   // Pricing and allowance
   pricesTitle: 'Giá của từng mô hình',
-  pricesHelp: 'Đô la Mỹ cho mỗi triệu token. Mô hình chọn từ danh sách lấy giá nhà cung cấp niêm yết.',
+  pricesHelp: 'USD cho mỗi triệu token. Mô hình được chọn lấy giá niêm yết.',
   priceModel: 'Mô hình',
   priceInput: 'Đầu vào',
   priceOutput: 'Đầu ra',
@@ -47,7 +47,7 @@ export const am: Translation<typeof en> = {
   fillPrices: (n: number) => `Dùng giá niêm yết cho ${n} mô hình`,
   noModelsYet: 'Hãy chọn mô hình ở trên trước.',
   allowanceTitle: 'Hạn mức hằng tháng',
-  allowanceHelp: 'Số tiền nhà cung cấp của máy chủ được chi cho một workspace trong một tháng dương lịch, tính bằng đô la Mỹ.',
+  allowanceHelp: 'Mức tối đa một workspace được chi mỗi tháng, tính bằng đô la Mỹ.',
   allowanceNone: 'Không giới hạn',
   allowanceWorkspace: 'Như nhau cho mọi workspace',
   allowanceAgent: 'Theo mỗi nhân viên đang hoạt động',

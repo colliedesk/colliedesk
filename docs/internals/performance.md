@@ -400,6 +400,17 @@ unchanged at 9,006. Clerk's form with its strings is the lazy part `cloud-sign-i
 sign-in page of a server with cloud sign-in. The workspace app's first bundle: 200,409 → 200,411 (its cloud
 sign-in now uses the shared `ClerkSession`).
 
+On 2026-11-14 the console's first bundle was 78,459 bytes against its 78,652 ceiling: any change to a string it
+bundles could fail the gate by a few bytes. Its entry is mostly `react-dom` (169 KB of 248 KB before gzip); the
+workspace app's `messages.ts` is not in it. What the entry did carry without using was the words of the lazy
+pages (Requests, History, the audit log, Operators, the products, the review, the trial band): 6.8 KB of
+strings in `operator/messages.ts`, and six strings nothing read. The lazy pages' strings now live in
+`operator/page-messages.ts` (Vietnamese in `vi/page-messages.ts`, joined through `lazyWords.pm` like the
+other lazy message files) and load with the first page that needs them. First bundle 78,459 → 76,334 bytes of
+JavaScript; the ceiling went from 78,652 to 77,400, so the gain is kept. A string used by the first bundle and
+by a lazy page (`tryAgain`) stays in `messages.ts`. The console does not use `HelpTip`: it brings Floating UI
+and the workspace app's strings, so its helper lines are one true line of 60 characters or less.
+
 ## Reply box lists (saved replies, articles)
 
 Measured on 2026-10-21 against a local `collie serve`, Chromium, a new browser context with the cache disabled for each run, median of 5: open a conversation by its address, wait until the reply box is enabled, then a programmatic click, timed with `performance.now` in the page until the first option shows. The list's box (loading state or list) shows in the same frame as the click in every run (2–10 ms), so nothing moves when the list arrives.
