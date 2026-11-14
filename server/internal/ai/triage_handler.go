@@ -167,11 +167,11 @@ func triageUserTurn(c triageContext) (string, map[string]store.AIRetrievedDoc) {
 	var b strings.Builder
 	b.WriteString("<tags>\n" + aiprovider.EscapeData(strings.Join(c.tagNames, "\n")) + "\n</tags>\n")
 	b.WriteString("<teammates>\n" + aiprovider.EscapeData(strings.Join(c.agentNames, "\n")) + "\n</teammates>\n")
-	b.WriteString("<untrusted_customer_content>\nSubject: " + aiprovider.EscapeData(c.subject) + "\n")
+	b.WriteString("<untrusted_customer_content>\nSubject: " + aiprovider.EscapeData(oneLine(c.subject)) + "\n")
 	if c.contactName != "" {
-		b.WriteString("Customer name: " + aiprovider.EscapeData(c.contactName) + "\n")
+		b.WriteString("Customer name: " + aiprovider.EscapeData(oneLine(c.contactName)) + "\n")
 	}
-	b.WriteString(aiprovider.EscapeData(c.message) + "\n</untrusted_customer_content>\n")
+	b.WriteString(aiprovider.EscapeData(store.IndentFollowingLines(c.message)) + "\n</untrusted_customer_content>\n")
 	ids := map[string]store.AIRetrievedDoc{}
 	writeSources(&b, c.sources, ids, func(doc store.AIRetrievedDoc) string { return c.sorted[doc.ConversationID] })
 	return strings.TrimSuffix(b.String(), "\n"), ids

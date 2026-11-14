@@ -100,6 +100,9 @@ edit it before sending:
   What you edit is masked again when you send, so a mention you type stays inert too.
 - **The customer's words are marked as untrusted.** Each customer message sits in a
   `<customer-message untrusted="true">` block that tells the agent it is data, not instructions.
+  Cursor also gets a fixed opening from Colliedesk before anything else, and the title (the
+  conversation's subject) in a `<customer-subject>` block; the `@claude` comment says the same of the
+  issue's title.
 - **Internal notes stay out** unless the repository allows them; then you pick which ones go. A note an
   AI agent wrote is never offered.
 - **Files are never sent**; the preview says how many stay behind.
@@ -171,7 +174,10 @@ An AI agent does what its token's [permissions](roles-and-permissions.md) allow,
    and the person behind the token opens it and installs the App as themselves.
 2. `autofix:read` previews a fix; `autofix:update` cancels a fix, marks or takes back its release and
    links or unlinks its pull request.
-3. `autofix:send` sends and retries a fix (`colliedesk_fix_send`, `colliedesk_fix_retry`). A fix that
+3. `autofix:send` sends and retries a fix (`colliedesk_fix_send`, `colliedesk_fix_retry`) with
+   exactly the title, body and messages the preview built: an AI agent cannot edit them (a ticket can
+   talk a model into writing anything), so a changed text is refused with `fix_text_edited`; preview
+   again, or have a person edit it in the app. A fix that
    goes through GitHub still needs a GitHub confirmation: the agent gets an address that only the
    person behind the token can finish, signed in to Colliedesk, and the issue is created with their
    GitHub account.

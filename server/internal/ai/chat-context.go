@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
@@ -137,10 +139,17 @@ func chatFingerprint(articles []store.ChatKBArticle) []byte {
 
 var attributeEscaper = strings.NewReplacer(`&`, `&amp;`, `"`, `&quot;`, `<`, `&lt;`, `>`, `&gt;`, "\n", " ")
 
-// tagSafe keeps a text from closing the tag it is put in.
+// tagSafe keeps a text from closing the tag it is put in, in any case and with spaces ("</TAG", "< / tag").
 func tagSafe(text, tag string) string {
-	return strings.ReplaceAll(text, "</"+tag, "&lt;/"+tag)
+	closing, ok := tagClosings.Load(tag)
+	if !ok {
+		closing, _ = tagClosings.LoadOrStore(tag, regexp.MustCompile(`(?i)<(\s*/\s*`+regexp.QuoteMeta(tag)+`)`))
+	}
+	return closing.(*regexp.Regexp).ReplaceAllString(text, "&lt;$1")
 }
+
+// tagClosings holds, by tag, the pattern of its closing tag.
+var tagClosings sync.Map
 
 func chatArticleBlock(tag string, a store.ChatKBArticle, body string) string {
 	return `<` + tag + ` number="` + strconv.FormatInt(a.Number, 10) + `" version="` + strconv.Itoa(a.Version) + `" title="` + attributeEscaper.Replace(a.Title) +

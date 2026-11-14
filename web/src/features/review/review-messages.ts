@@ -127,6 +127,7 @@ export const reviewMessages = {
     limit: 'Today’s automatic decisions are used up',
     error: 'AI did not answer in full, so a person decides',
     several_candidates: 'More than one conversation could fit',
+    other_customers: 'Another customer wrote here; a person decides what to set aside',
     no_content: 'Nothing to decide on: no text or file',
   } as Partial<Record<string, string>>,
 };

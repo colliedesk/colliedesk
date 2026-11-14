@@ -32,8 +32,8 @@ func fixSendSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_fix_send",
 		Title: "Send a conversation to a coding agent",
-		Description: `Send a conversation to a coding agent on a connected repository, with the title and body you reviewed (build them with colliedesk_fix_preview; ` +
-			`they are masked again on the server). For an issue connector the answer holds authorize_url: only the person this token acts as can confirm it on GitHub, ` +
+		Description: `Send a conversation to a coding agent on a connected repository, with the title, body and message_ids colliedesk_fix_preview built, unchanged, and the same note_ids ` +
+			`(a token cannot edit them: fix_text_edited; a person edits them in the app). For an issue connector the answer holds authorize_url: only the person this token acts as can confirm it on GitHub, ` +
 			`in a browser signed in to Colliedesk, and the issue is created with their GitHub account. Cursor leaves at once. ` +
 			`client_key is a new random key per send (the same key sends once). One fix per conversation is in progress at a time; follow it with colliedesk_fix_get. ` + untrustedNotice,
 		REST:   []string{"POST /api/v1/conversations/{id}/fixes"},
@@ -47,8 +47,8 @@ func fixRetrySpec() Spec {
 	return Spec{
 		Name:  "colliedesk_fix_retry",
 		Title: "Send a fix again",
-		Description: `Send a failed or cancelled fix again as a new attempt of its conversation, with the title and body you reviewed (colliedesk_fix_preview, filled in ` +
-			`from colliedesk_fix_get). Confirming works as for colliedesk_fix_send. ` + untrustedNotice,
+		Description: `Send a failed or cancelled fix again as a new attempt of its conversation, with the title, body and message_ids colliedesk_fix_preview built, unchanged ` +
+			`(fill in repo_id and connector from colliedesk_fix_get). Confirming works as for colliedesk_fix_send. ` + untrustedNotice,
 		REST:   []string{"POST /api/v1/autofix/fixes/{id}/retry"},
 		Input:  fixSendInput(false),
 		Output: `{"type":"object","required":["fix","authorize_url","next"],"properties":{"fix":` + fixSchema + `,"authorize_url":{"type":["string","null"],"description":"For an issue connector: GitHub's page where the person this token acts as confirms, valid 10 minutes; null for Cursor."},"next":{"type":"string"}}}`,
