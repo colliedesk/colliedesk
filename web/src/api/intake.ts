@@ -35,7 +35,7 @@ const intakeSuggestionSchema = z.object({
   confidence: z.number().nullable(), command: z.string().nullable(), subject: z.string().nullable(), reply_kind: replyKindSchema.nullable(),
   ignore_reason: ignoreReasonSchema.nullable(), reason: z.string().nullable(),
   not_applied_reason: z.enum(['level_suggest', 'below_threshold', 'too_old', 'credential', 'person_first', 'target_changed', 'lane_blocked', 'gate_closed', 'limit', 'error',
-    'several_candidates', 'no_content']),
+    'several_candidates', 'no_content', 'other_customers']),
   created_at: date,
 }) satisfies z.ZodType<Generated<'IntakeSuggestion'>>;
 

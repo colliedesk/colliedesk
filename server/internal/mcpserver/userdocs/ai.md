@@ -144,6 +144,9 @@ The draft arrives as plain text with:
    does not use (a model slipping into another language) is listed too, and so is a masked detail
    (`[email]`, `[number]`, `[company]`) copied from a past ticket for you to fill in. Where the model
    copied `[customer]`, Colliedesk puts this customer's name (or leaves the greeting without one).
+   A link, with or without `https://`, that neither this conversation nor a knowledge base article the
+   draft was given holds is listed too: a past ticket never vouches for a link, since another customer
+   wrote it.
 
 **Replace** puts the draft in the reply box in place of what you typed; **Insert below** adds it under
 your text; **Discard** throws it away. Nothing is sent until you press **Send**, and you can edit

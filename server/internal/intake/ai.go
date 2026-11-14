@@ -237,8 +237,40 @@ func (s *Service) notApplied(ctx context.Context, workspaceID, model string, sna
 		return "below_threshold"
 	case d.Action == prompt.ActionAttach && *options.AttachRequiresSingleCandidate && customersConversations(snap) > 1:
 		return "several_candidates"
+	case d.Action == prompt.ActionIgnore && otherCustomersWrote(snap):
+		return "other_customers"
 	}
 	return ""
+}
+
+// otherCustomersWrote says whether a customer other than the card's wrote in what AI read (the messages
+// before the card, or a message one of them quotes): their words may ask AI to set this customer aside,
+// so an ignore waits for a person.
+func otherCustomersWrote(snap store.IntakeSnapshot) bool {
+	if len(snap.Items) == 0 {
+		return false
+	}
+	sender := personOf(snap.Items[0].ChatItem)
+	other := func(item store.ChatItem) bool {
+		person := personOf(item)
+		return !person.Team && person.Key != sender.Key
+	}
+	for _, item := range snap.Before {
+		if other(item.ChatItem) {
+			return true
+		}
+	}
+	for _, item := range snap.Items {
+		if other(item.ChatItem) {
+			return true
+		}
+	}
+	for _, item := range snap.Quoted {
+		if other(item.ChatItem) {
+			return true
+		}
+	}
+	return false
 }
 
 // applyAI applies AI's decision through Decide; false when someone decided the card first.
