@@ -140,3 +140,27 @@ func TestAnImportAPersonStopsIsNotMailed(t *testing.T) {
 		t.Fatalf("job = %s, mails = %d", got.State, len(mailer.sent))
 	}
 }
+
+// An import whose end could not be recorded says so in the words of the page, and says once what stays.
+func TestAnImportWhoseEndKeptFailingIsMailedOnceWithWhatStays(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.started(t)
+	e.refuseMilestone(t)
+	mailer := &fakeMailer{}
+	w := e.mailingWorker(t, mailer)
+	e.stubOK(t, w)
+	for range 5 {
+		tick(t, w)
+		if e.get(t, job.ID).State == importjobs.StateFailed {
+			break
+		}
+		e.due(t, job.ID)
+	}
+	if got := e.get(t, job.ID); got.State != importjobs.StateFailed || code(got) != importjobs.CodeEndFailed || len(mailer.sent) != 1 {
+		t.Fatalf("job = %s %s, %d mails, want failed with %q and one mail", got.State, code(got), len(mailer.sent), importjobs.CodeEndFailed)
+	}
+	body := mailer.sent[0].message
+	if !strings.Contains(body, "The server could not record the end of the import.") || strings.Count(body, "stays") != 1 {
+		t.Fatalf("mail = %s\nwant the end named as on the page and what stays said once", body)
+	}
+}

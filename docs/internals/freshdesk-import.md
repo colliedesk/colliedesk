@@ -282,8 +282,15 @@ any of them. An undo job holds no key.
 | `knowledge_base_limit` | The knowledge base passes a limit (`KnowledgeBaseLimitError`) | `failed` |
 | `key_unavailable` | The key cannot be opened | `waiting_key` |
 | `no_progress` | Found running after a crash five times without progress in between | `failed` |
-| `end_failed` | The transaction that ends the job (its relinks, the `import_finished` milestone, an undo's people) failed. Counted in `end_failures`, apart from the crash count: a rerun ticks progress for every ticket it skips, which clears `attempts_without_progress` | `retry_wait` 1, then 2 minutes; `failed` on the third, without those writes, keeping the run's report |
+| `end_failed` | The transaction that ends the job with other writes (its relinks, the `import_finished` milestone, an undo's people) failed. Counted in `end_failures`, apart from the crash count: a rerun ticks progress for every ticket it skips, which clears `attempts_without_progress`. An undo has committed what it removed (and its ledger) before its end, so its rerun does not undo again: it only ends the job, with the report saved by the refused end | `retry_wait` 1, then 2 minutes; `failed` on the third, without those writes, keeping the run's report |
 | `import_error` | Anything else: never retried, the message is kept | `failed` |
+
+An end that writes only the job (a preview, a stop, a failure with its own code) is never `end_failed`:
+waiting would let a preview take the one-active slot, or, with an import active, leave it `previewing` to
+run again for ever. When that write is refused, the end is written again with only the columns that end
+a job (no imported-conversation count), keeping its state and code; the third `end_failed` falls back to
+the same write. A job found with `cancel_requested_at` (its cancelled end did not commit) ends `cancelled`
+without asking Freshdesk again.
 
 ### Lease
 

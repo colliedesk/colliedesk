@@ -28,7 +28,7 @@ var noticeMessages = map[string]string{
 	CodeStorageCap:       "The rest of the account does not fit the attachment storage of the plan. Move to a plan with more storage, then start a new import.",
 	CodeKnowledgeBase:    "The knowledge base is larger than a workspace can hold.",
 	CodeNoProgress:       "The import stopped several times without getting further. Start a new import, or report a problem.",
-	CodeEndFailed:        "What the import brought in stays, but the server could not record its end. Start a new import to finish it (nothing is copied twice), or report the problem.",
+	CodeEndFailed:        "The server could not record the end of the import. Start a new import to finish it (nothing is copied twice), or report the problem.",
 }
 
 // notifyAdmins mails, one message each, the person who started an import and every active admin when it ends on its own

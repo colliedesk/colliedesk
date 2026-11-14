@@ -166,10 +166,13 @@ func updateAnd(ctx context.Context, db *database.DB, item claimed, also func(con
 	})
 }
 
-// endSQL ends a claimed job: terminal state, key erased, lease released. Arguments from $4: state,
+// endColumns ends a claimed job: terminal state, key erased, lease released. Arguments from $4: state,
 // status, error code, error message, now.
-const endSQL = `state=$4, status=$5, error_code=$6, error_message=$7, sealed_key=NULL, sealed_key_id=NULL,
-	claim_token=NULL, lease_until=NULL, cancel_requested_at=NULL, finished_at=$8, updated_at=$8,
+const endColumns = `state=$4, status=$5, error_code=$6, error_message=$7, sealed_key=NULL, sealed_key_id=NULL,
+	claim_token=NULL, lease_until=NULL, cancel_requested_at=NULL, finished_at=$8, updated_at=$8`
+
+// endSQL is endColumns with the count of the conversations an import brought in.
+const endSQL = endColumns + `,
 	imported_conversations=CASE WHEN kind='import' AND account_source IS NOT NULL THEN (SELECT count(*) FROM import_items i
 		WHERE i.workspace_id=import_jobs.workspace_id AND i.source=import_jobs.account_source AND i.entity='ticket' AND i.status='done') END`
 
