@@ -52,9 +52,9 @@ the reason, and the composer shows a notice. Fix the cause, then select **Retry 
 1. Open **Settings → Channels** and select **Connect your support email** (or **Email**).
 2. Enter the **Support address**, for example `support@example.com`, and select
    **Save support address**.
-3. Select **Create inbound secret**. Copy the **Inbound secret** now. It is shown only once.
+3. Select **Create inbound secret**, then **Copy inbound secret**. Copy it now: it is shown only once.
 4. Copy the **Inbound URL**. To check it before your forwarder is ready, run the **Test request** the
-   page shows under the secret (**Copy test request**): it posts one message, which opens a conversation.
+   page shows under **Test from a terminal instead** (**Copy test request**): it posts one message, which opens a conversation.
 
 Rotate the secret with **Rotate inbound secret**. The old secret stops working immediately, so
 update your forwarder at the same time. **Disconnect email** asks first, then stops inbound mail and

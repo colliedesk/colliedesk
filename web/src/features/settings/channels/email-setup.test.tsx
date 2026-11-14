@@ -295,6 +295,21 @@ test('a server without forwarding addresses opens Other / own server, where the 
   expect(await within(forward).findByRole('textbox', { name: /Inbound secret/ })).toHaveValue('abc.def');
 });
 
+test('Create inbound secret says it is working, then focuses the secret with its Copy button', async () => {
+  waitingChannel();
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { hosted_address: null }));
+  let answer: (value: { inbound_secret: string; inbound_url: string }) => void = () => {};
+  channelsApi.emailSecret.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+  show(`${MAIN}/setup`);
+  const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
+  fireEvent.click(within(forward).getByRole('button', { name: 'Create inbound secret' }));
+  expect(await within(forward).findByRole('button', { name: 'Creating inbound secret…' })).toBeDisabled();
+  await act(async () => { answer({ inbound_secret: 'abc.def', inbound_url: 'https://app.example.com/api/v1/channels/email/inbound' }); });
+  const secret = await within(forward).findByRole('textbox', { name: /Inbound secret/ });
+  await waitFor(() => expect(secret).toHaveFocus());
+  expect(within(forward).getByRole('button', { name: 'Copy inbound secret' })).toBeInTheDocument();
+});
+
 test('step 4 sends the test message, remembers its conversation, and is done once the reply to it is delivered', async () => {
   waitingChannel({ status: working, last_inbound_at: '2026-10-29T00:33:00Z' });
   channelsApi.email.mockResolvedValue(settings('support@acme.com', { sending_from: 'support@acme.com' }));
