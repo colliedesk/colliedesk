@@ -112,6 +112,17 @@ test('a plain notice is neutral, not note amber', () => {
   expect(rule(read('features/results/results.css'), '.results-notice')).not.toMatch(amber);
 });
 
+// The trial strip is the one notice filled at rest (owner 14/11/2026: the neutral card was lost among the
+// others): ink in light, paper in dark, never the brand orange or a warning fill. Its warning mark uses
+// the warning colour made for the inverse surface.
+test('the trial strip is ink, and its warning mark reads on it', () => {
+  const css = read('styles/components.css');
+  expect(rule(css, '.plan-banner')).toMatch(/background:\s*var\(--surface-inverse\)/);
+  expect(rule(css, '.plan-banner p')).toMatch(/color:\s*var\(--text-inverse\)/);
+  expect(rule(css, '.plan-banner .icon-warn')).toMatch(/color:\s*var\(--warn-on-inverse\)/);
+  expect(rule(css, '.plan-banner')).not.toMatch(amber);
+});
+
 // Rule 4: a box sits on a ring or a surface step, never a border and a ring at once.
 test('a panel sits on its ring, without a border', () => {
   expect(rule(read('styles/layout.css'), '.panel')).not.toMatch(/border:\s*1px/);

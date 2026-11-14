@@ -699,12 +699,18 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .icon-quiet { display: inline-flex; color: var(--text-3); }
 .plan-banner {
   flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-height: 44px;
-  margin: 0; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1);
+  margin: 0; border: 0; border-radius: var(--radius-lg); background: var(--surface-inverse); color: var(--text-inverse);
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4); font-size: var(--fs-small);
 }
-.plan-banner p { display: flex; align-items: center; gap: var(--space-2); min-width: 0; margin: 0; color: var(--text-2); }
-.plan-banner p strong { color: var(--text-1); font-weight: 600; }
+/* The trial strip is ink (paper in dark), the one notice filled at rest, so it is not lost among the cards. */
+.plan-banner p { display: flex; align-items: center; gap: var(--space-2); min-width: 0; margin: 0; color: var(--text-inverse); }
+.plan-banner p strong { color: var(--text-inverse); font-weight: 600; }
 .plan-banner p .icon { flex: none; }
+.plan-banner .icon-quiet { color: var(--text-inverse); }
+.plan-banner .icon-warn { color: var(--warn-on-inverse); }
+.plan-banner button:not(.plan-banner-close) { border-color: var(--surface-1); background: var(--surface-1); color: var(--text-1); }
+.plan-banner .plan-banner-close { color: var(--text-inverse); }
+.plan-banner .plan-banner-close:hover:not(:disabled) { color: var(--text-1); }
 .plan-banner .plan-banner-warning { flex-basis: 100%; order: 3; }
 .plan-banner button { margin-left: auto; }
 .plan-banner button + .plan-banner-close { margin-left: calc(-1 * var(--space-2)); }

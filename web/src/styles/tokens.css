@@ -98,6 +98,7 @@
   --danger-soft: #fdeceb;
   --warn: #a3460a;
   --warn-soft: #fdf0e5;
+  --warn-on-inverse: #f19a55;        /* a warning mark on --surface-inverse (the trial strip) */
   --ok: #11703d;
   --ok-soft: #e6f5ec;
   --open: #2d62b3;                   /* status colour, not the brand */
@@ -159,6 +160,7 @@
   --danger-soft: #3a1c1b;
   --warn: #f19a55;                   /* warnings, SLA under 2 h */
   --warn-soft: #3a2615;
+  --warn-on-inverse: #a3460a;        /* a warning mark on --surface-inverse (the trial strip) */
   --ok: #6fcf97;                     /* resolved, reconcile match */
   --ok-soft: #13291e;
   --open: #79a8ff;

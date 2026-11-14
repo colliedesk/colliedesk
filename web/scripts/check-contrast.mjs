@@ -33,7 +33,8 @@ export function pairs() {
   add('--text-3', '--accent-soft', 4.5, 'meta on selected row');
   add('--on-accent', '--accent', 4.5, 'primary button');
   add('--on-accent', '--accent-hover', 4.5, 'primary button hover');
-  add('--text-inverse', '--surface-inverse', 4.5, 'tooltip');
+  add('--text-inverse', '--surface-inverse', 4.5, 'tooltip, trial strip');
+  add('--warn-on-inverse', '--surface-inverse', 3, 'trial strip warning mark');
   add('--note-text', '--note-bg', 4.5, 'private note label');
   add('--text-1', '--note-bg', 4.5, 'private note body');
   add('--danger', '--danger-soft', 4.5, 'urgent chip');
