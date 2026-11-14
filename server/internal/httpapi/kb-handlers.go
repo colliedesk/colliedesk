@@ -826,16 +826,17 @@ func (a *API) getHelpCenter(response http.ResponseWriter, request *http.Request)
 
 func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Enabled *bool   `json:"enabled"`
-		Title   *string `json:"title"`
-		Locale  *string `json:"locale"`
+		Enabled       *bool   `json:"enabled"`
+		Title         *string `json:"title"`
+		Locale        *string `json:"locale"`
+		PortalEnabled *bool   `json:"portal_enabled"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil || input.Title == nil || input.Locale == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send enabled, title and locale.")
 		return
 	}
 	who := principal(request)
-	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID, *input.Enabled, *input.Title, *input.Locale)
+	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID, *input.Enabled, *input.Title, *input.Locale, input.PortalEnabled)
 	if err != nil {
 		writeKBError(response, err)
 		return

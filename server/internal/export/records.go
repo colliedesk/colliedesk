@@ -623,8 +623,10 @@ type KBMediaReplacement struct {
 // HelpCenter is the public help center's settings, its theme and the knowledge base counters. A null
 // theme field is the default look; the logo and favicon are kb-images.ndjson ids.
 type HelpCenter struct {
-	Enabled bool   `json:"enabled"`
-	Title   string `json:"title"`
+	Enabled bool `json:"enabled"`
+	// PortalEnabled is whether customers can sign in on the help center and see their own requests.
+	PortalEnabled bool   `json:"portal_enabled"`
+	Title         string `json:"title"`
 	// Locale is the primary language; Languages the others, each shown to customers or not.
 	Locale            string               `json:"locale"`
 	Languages         []HelpCenterLanguage `json:"languages"`

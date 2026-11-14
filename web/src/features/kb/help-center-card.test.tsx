@@ -20,7 +20,16 @@ test('an admin turns the help center on with a title; the stored language is sen
   fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: ' Acme help ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save help center' }));
   await waitFor(() => expect(screen.getAllByRole('status')[0]).toHaveTextContent('The help center is on'));
-  expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ enabled: true, title: 'Acme help', locale: 'pt-BR' });
+  expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ enabled: true, title: 'Acme help', locale: 'pt-BR', portal_enabled: false });
+});
+
+test('an admin turns the customer portal on with the help center', async () => {
+  const calls = serve({ 'GET /api/v1/help-center': () => json(200, off), 'PUT /api/v1/help-center': (call) => json(200, { ...off, ...(call.body as object), portal_enabled: true, content_version: 4 }) });
+  open(true);
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Let customers see their requests' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save help center' }));
+  await waitFor(() => expect(screen.getByText(/Customers can sign in/)).toBeInTheDocument());
+  expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ enabled: false, title: '', locale: 'pt-BR', portal_enabled: true });
 });
 
 test('an agent sees whether it is on but cannot change it', async () => {

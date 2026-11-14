@@ -4541,9 +4541,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Whether the public help center is on, its title and language. `content_version` grows with every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the knowledge base is public. */
+        /** @description Whether the public help center is on, its title and language, and whether the customer portal is on (`portal_enabled`). `content_version` grows with every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the knowledge base is public. The portal's pages are on the help center only while both are on. */
         get: operations["getHelpCenter"];
-        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. */
+        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. `portal_enabled`, when sent, turns the customer portal on or off (a requester signs in with an email link and sees only their own requests). Leave it out to keep the current setting. */
         put: operations["putHelpCenter"];
         post?: never;
         delete?: never;
@@ -7030,7 +7030,7 @@ export interface components {
         SettableConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
         Priority: "low" | "normal" | "high" | "urgent";
-        /** @description How the conversation started: a channel type this server runs, or an origin that comes through no channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report. A test build may run another type (the loopback chat stand-in), so a client names a value it does not know by itself. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem. */
+        /** @description How the conversation started: a channel type this server runs, or an origin that comes through no channel. Values: email, web_form, help_chat, zalo, imported, agent, portal, problem_report. A test build may run another type (the loopback chat stand-in), so a client names a value it does not know by itself. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. portal: a customer opened it on the help center portal, after an email link proved their address. problem_report: an agent's Report a problem. */
         ConversationChannel: string;
         /**
          * @default updated_desc
@@ -8115,11 +8115,15 @@ export interface components {
             title: string;
             /** @description BCP 47 language tag of the pages, such as en or pt-BR. */
             locale: string;
+            /** @description Turn the customer portal on or off. Leave it out to keep the current setting. While it is on and the help center is on, a requester can sign in with an email link and see only their own requests. The pages use the help center's title and logo. */
+            portal_enabled?: boolean;
         };
         HelpCenter: {
             enabled: boolean;
             title: string;
             locale: string;
+            /** @description Whether a requester can sign in on the help center and see only their own requests. The pages are served only while the help center is on too. */
+            portal_enabled: boolean;
             content_version: number;
             /**
              * Format: date-time
@@ -8929,10 +8933,10 @@ export interface components {
             from: string;
             authentication: components["schemas"]["EmailAuthentication"];
             /**
-             * @description Door the message came through; absent on mail stored before this was recorded. `web_form` is text typed into the public web form: the address is unverified (authentication `none`). Trial replies need `platform`.
+             * @description Door the message came through; absent on mail stored before this was recorded. `web_form` is text typed into the public web form: the address is unverified (authentication `none`). `portal` is a request or reply a customer wrote on the help center after an email link proved the address (authentication `pass`). Trial replies need `platform` or `portal`.
              * @enum {string}
              */
-            via?: "platform" | "workspace" | "web_form";
+            via?: "platform" | "workspace" | "web_form" | "portal";
             /** @description Other addresses on the Cc line of the email (not the sender, not our own addresses), as the reply box offers them to copy. Absent on mail stored before Cc was kept. */
             cc?: string[];
             /**

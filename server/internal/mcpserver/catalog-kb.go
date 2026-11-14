@@ -61,8 +61,9 @@ const (
 
 	kbCollectionOutput = `{"type":"object","required":["collection"],"properties":{"collection":` + kbCollectionSchema + `}}`
 
-	helpCenterSchema = `{"type":"object","required":["enabled","title","locale","content_version","url"],"properties":{"enabled":{"type":"boolean"},"title":{"type":"string"},` +
-		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"}}}`
+	helpCenterSchema = `{"type":"object","required":["enabled","title","locale","content_version","url","portal_enabled"],"properties":{"enabled":{"type":"boolean"},"title":{"type":"string"},` +
+		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"},` +
+		`"portal_enabled":{"type":"boolean","description":"Whether a requester can sign in on the help center and see only their own requests."}}}`
 )
 
 func kbCollectionsListSpec() Spec {
@@ -358,8 +359,8 @@ func helpCenterGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_help_center_get",
 		Title: "Read the help center settings",
-		Description: `Say whether the public help center is on, its title and language, its public address (url), and content_version, which grows with every change to the knowledge base. ` +
-			`While it is off, nothing of the knowledge base is public. An article's public address is url + "/a/<number>-<slug>".`,
+		Description: `Say whether the public help center is on, its title and language, whether the customer portal is on (portal_enabled), its public address (url), and content_version, which grows with every change to the knowledge base. ` +
+			`While it is off, nothing of the knowledge base is public. An article's public address is url + "/a/<number>-<slug>". The portal's pages are url + "/requests", and only while both the help center and the portal are on.`,
 		REST:   []string{"GET /api/v1/help-center"},
 		Input:  noArguments,
 		Output: `{"type":"object","required":["help_center"],"properties":{"help_center":` + helpCenterSchema + `}}`,
@@ -372,11 +373,13 @@ func helpCenterUpdateSpec() Spec {
 		Name:  "colliedesk_help_center_update",
 		Title: "Turn the help center on or off",
 		Description: `Turn the public help center on or off and set its title (empty uses the workspace name) and language (a BCP 47 tag such as en or pt-BR). ` +
-			`Turning it on publishes every article marked published; turning it off takes every page off line at once. It is safe to repeat.`,
+			`portal_enabled turns the customer portal on or off: a requester signs in with an email link at the help center's /requests and sees only their own requests. Leave portal_enabled out to keep it. ` +
+			`Turning the help center on publishes every article marked published; turning it off takes every page off line at once, the portal included. It is safe to repeat.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/help-center"},
 		Input: `{"type":"object","additionalProperties":false,"required":["enabled","title","locale"],"properties":{"enabled":{"type":"boolean"},` +
-			`"title":{"type":"string","maxLength":200},"locale":{"type":"string","minLength":2,"maxLength":35}}}`,
+			`"title":{"type":"string","maxLength":200},"locale":{"type":"string","minLength":2,"maxLength":35},` +
+			`"portal_enabled":{"type":"boolean","description":"Turn the customer portal on or off. Leave it out to keep the current setting."}}}`,
 		Output: `{"type":"object","required":["help_center"],"properties":{"help_center":` + helpCenterSchema + `}}`,
 		run:    helpCenterUpdate,
 	}

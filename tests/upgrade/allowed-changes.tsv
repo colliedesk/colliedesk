@@ -26,3 +26,4 @@ agent_requests	decided_at	20261102120000-roles.up.sql	Agent requests were remove
 agent_requests	reason	20261102120000-roles.up.sql	Agent requests were removed: pending ones say why they closed
 ai_drafts	*	20261102120000-roles.up.sql	Pending reply drafts of agent requests are copied in as written drafts so they stay on their conversation; the requests stay
 ai_retrieval_pending	*	20261114120000-ai-retrieval-indent.up.sql	Queues every resolved or closed conversation once more so retrieval rebuilds its past-conversation text with indented later lines (a customer can no longer write a Reply: line); rows are only added, the worker drains them and nothing is lost
+channel_types	*	20261114143000-customer-portal.up.sql	Adds the portal origin (connectable false), the same kind of row as agent and problem_report; the seven rows already there are unchanged and no workspace data moves

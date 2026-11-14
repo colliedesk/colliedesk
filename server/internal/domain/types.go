@@ -267,13 +267,15 @@ const (
 	// ChannelImported marks a conversation brought over from another helpdesk; Origin.Source keeps its own channel.
 	ChannelImported = "imported"
 	// ChannelAgent marks a conversation a team member started. An older image that does not know the column also writes it.
-	ChannelAgent         = "agent"
+	ChannelAgent = "agent"
+	// ChannelPortal marks a conversation a customer opened on the help center portal.
+	ChannelPortal        = "portal"
 	ChannelProblemReport = "problem_report"
 )
 
 // ConversationOrigins are the ways a conversation starts through no channel. With the registered
 // channel types they are every value of conversations.channel (ConversationChannel in the contract).
-var ConversationOrigins = []string{ChannelImported, ChannelAgent, ChannelProblemReport}
+var ConversationOrigins = []string{ChannelImported, ChannelAgent, ChannelPortal, ChannelProblemReport}
 
 // ConversationOrigin records where an imported conversation came from.
 type ConversationOrigin struct {
@@ -447,6 +449,9 @@ const (
 	ViaWorkspace = "workspace"
 	// ViaWebForm marks a message typed into the public web form: the address was never verified.
 	ViaWebForm = "web_form"
+	// ViaPortal marks a request or reply a customer wrote in the help center portal after a one-time
+	// email link proved the address.
+	ViaPortal = "portal"
 	// ViaProblemReport marks a report an agent filed with "Report a problem": the sender is a signed-in agent.
 	ViaProblemReport = "problem_report"
 )
@@ -457,8 +462,8 @@ type IncomingEmail struct {
 	Authentication string `json:"authentication"`
 	// CC are the other addresses on the Cc line, without our own; mail stored before they were kept has none.
 	CC []string `json:"cc,omitempty"`
-	// Via is how the message arrived: ViaPlatform, ViaWorkspace or ViaWebForm. Mail stored before this field
-	// existed has none.
+	// Via is how the message arrived: ViaPlatform, ViaWorkspace, ViaWebForm or ViaPortal. Mail stored before
+	// this field existed has none.
 	Via         string            `json:"via,omitempty"`
 	Attachments []EmailAttachment `json:"attachments"`
 	// OriginalAttachmentID is the stored, gzip-compressed raw message (an attachment of this message).

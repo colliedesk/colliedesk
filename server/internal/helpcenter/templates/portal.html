@@ -1,0 +1,56 @@
+{{define "content"}}
+<article class="portal">
+<h1>{{.Portal.Heading}}</h1>
+{{if .Portal.Error}}<p class="form-error" role="alert">{{.Portal.Error}}</p>{{end}}
+{{if .Portal.Notice}}<p role="status">{{.Portal.Notice}}</p>{{end}}
+{{if eq .Portal.Mode "signin"}}
+<form method="post" action="{{.Portal.Action}}">
+<div class="hp"><label>Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label></div>
+<div class="field"><label for="portal-email">Email</label>
+<input id="portal-email" name="email" type="email" required maxlength="254" autocomplete="email" value="{{.Portal.Email}}"></div>
+<button type="submit">Email me a sign-in link</button>
+</form>
+{{else if eq .Portal.Mode "sent"}}
+<p><a href="{{.Portal.Action}}">Use a different address</a></p>
+{{else if eq .Portal.Mode "continue"}}
+<form method="post" action="{{.Portal.Action}}">
+<button type="submit">Continue</button>
+</form>
+{{else if eq .Portal.Mode "note"}}
+{{if .Portal.Action}}<p><a href="{{.Portal.Action}}">Request a sign-in link</a></p>{{end}}
+{{else if eq .Portal.Mode "list"}}
+<p class="portal-who">Signed in as {{.Portal.Email}}. <a href="{{.Portal.NewURL}}">New request</a></p>
+<form class="portal-inline" method="post" action="{{.Portal.SignOut}}"><button type="submit">Sign out</button></form>
+{{if not .Portal.Tickets}}<p>You have no requests yet.</p>{{else}}
+<ul class="portal-list">
+{{range .Portal.Tickets}}<li><a href="{{.URL}}">{{.Subject}}</a>
+<p class="portal-meta"><span class="portal-ref">{{.Ref}}</span> <span class="portal-status">{{.Status}}</span> <time datetime="{{.WhenISO}}">{{.When}}</time></p></li>{{end}}
+</ul>
+{{if .Portal.MoreTickets}}<p>Showing the 100 latest requests.</p>{{end}}
+{{end}}
+{{else if eq .Portal.Mode "new"}}
+<p class="portal-who"><a href="{{.Portal.ListURL}}">All requests</a></p>
+<form method="post" action="{{.Portal.Action}}">
+<div class="hp"><label>Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label></div>
+<div class="field"><label for="portal-subject">Subject</label>
+<input id="portal-subject" name="subject" required maxlength="200" value="{{.Portal.Subject}}"></div>
+<div class="field"><label for="portal-message">How can we help?</label>
+<textarea id="portal-message" name="message" required maxlength="5000" rows="8">{{.Portal.Message}}</textarea></div>
+<button type="submit">Send request</button>
+</form>
+{{else if eq .Portal.Mode "ticket"}}
+<p class="portal-who"><a href="{{.Portal.ListURL}}">All requests</a> · {{.Portal.Ticket.Ref}} · {{.Portal.Ticket.Status}}</p>
+{{if .Portal.MoreMessages}}<p>Older messages are not shown.</p>{{end}}
+<ol class="portal-thread">
+{{range .Portal.Ticket.Messages}}<li><header><strong>{{.By}}</strong> <time datetime="{{.WhenISO}}">{{.When}}</time></header>
+<p class="portal-body">{{.Body}}</p></li>{{end}}
+</ol>
+<form method="post" action="{{.Portal.Action}}">
+<div class="field"><label for="portal-reply">Reply</label>
+<textarea id="portal-reply" name="message" required maxlength="5000" rows="6"></textarea></div>
+<button type="submit">Send reply</button>
+</form>
+<form class="portal-inline" method="post" action="{{.Portal.SignOut}}"><button type="submit">Sign out</button></form>
+{{end}}
+</article>
+{{end}}
