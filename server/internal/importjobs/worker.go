@@ -32,6 +32,8 @@ const (
 	maxCrashes = 5
 	// maxFullRetries is how often a FAILED full pass runs again while its failures go down.
 	maxFullRetries = 2
+	// maxEndFailures is how often the transaction that ends a job may fail before the job fails without it.
+	maxEndFailures = 3
 	// relinkBatch is how many changed links one tick applies.
 	relinkBatch = 20
 	// etaWindow is the span the remaining-time estimate is computed over.
@@ -579,17 +581,44 @@ func (r *jobRun) end(ctx context.Context, state, status, code, message string, r
 }
 
 // endAnd is end with more writes in its transaction. The end releases the claim, so the run's context
-// may be cancelled right after; nothing that belongs to the end is written after it.
+// may be cancelled right after; nothing that belongs to the end is written after it. The key is erased
+// only once the end commits: an end that rolled back has not ended the job.
 func (r *jobRun) endAnd(ctx context.Context, also func(context.Context, pgx.Tx) error, state, status, code, message string, report []byte, markdown *string) error {
 	r.ended = true
 	r.flush(ctx)
 	err := r.updateAnd(ctx, also, endSQL+`, report=COALESCE($9, report), report_markdown=COALESCE($10, report_markdown)`,
 		state, nullable(status), nullable(code), nullable(message), r.now(), report, markdown)
-	r.worker.options.Keys.forget(r.item.id)
-	if err == nil {
+	switch {
+	case err == nil:
+		r.worker.options.Keys.forget(r.item.id)
 		r.notifyAdmins(ctx, state, status, code, report)
+		return nil
+	case errors.Is(err, errLeaseLost):
+		return err
 	}
-	return err
+	return r.endFailed(ctx, err, report, markdown)
+}
+
+// endFailed counts an end that rolled back, apart from the crash count: a rerun walks the account again and
+// its progress clears that one. The job waits and runs again (the ledger skips what is done) until the end
+// failed maxEndFailures times; then it fails without the end's other writes, keeping the run's report.
+func (r *jobRun) endFailed(ctx context.Context, cause error, report []byte, markdown *string) error {
+	failures := r.job.endFailures + 1
+	cause = fmt.Errorf("end import job: %w", cause)
+	now := r.now()
+	if failures < maxEndFailures {
+		message := fmt.Sprintf("The import could not record its end (%d of %d tries); it tries again: %v", failures, maxEndFailures, cause)
+		return errors.Join(cause, r.update(ctx, `state='retry_wait', end_failures=$4, error_code=$5, error_message=$6, next_run_at=$7,
+			claim_token=NULL, lease_until=NULL, updated_at=$8`, failures, CodeEndFailed, message, now.Add(time.Duration(failures)*time.Minute), now))
+	}
+	message := fmt.Sprintf("What the import brought in stays, but it could not record its end %d times, so it was given up: %v", failures, cause)
+	err := r.updateAnd(ctx, nil, endSQL+`, report=COALESCE($9, report), report_markdown=COALESCE($10, report_markdown), end_failures=$11`,
+		StateFailed, nil, CodeEndFailed, message, now, report, markdown, failures)
+	if err == nil {
+		r.worker.options.Keys.forget(r.item.id)
+		r.notifyAdmins(ctx, StateFailed, "", CodeEndFailed, report)
+	}
+	return errors.Join(cause, err)
 }
 
 // end ends a job that never started running (the crash guard), outside a jobRun.

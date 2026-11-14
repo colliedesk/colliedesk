@@ -118,6 +118,7 @@ type runRow struct {
 	ownerInstance                   *string
 	report                          []byte
 	attemptsNoProgress, fullRetries int
+	endFailures                     int
 	retryingSince                   *time.Time
 }
 
@@ -130,9 +131,9 @@ func loadRun(ctx context.Context, db *database.DB, item claimed) (runRow, error)
 			return err
 		}
 		row.Job = job
-		return tx.QueryRow(ctx, `SELECT w.slug, j.sealed_key, j.sealed_key_id, j.owner_instance, j.report, j.attempts_without_progress, j.full_retries, j.retrying_since
+		return tx.QueryRow(ctx, `SELECT w.slug, j.sealed_key, j.sealed_key_id, j.owner_instance, j.report, j.attempts_without_progress, j.full_retries, j.end_failures, j.retrying_since
 			FROM import_jobs j JOIN workspaces w ON w.id=j.workspace_id WHERE j.workspace_id=$1 AND j.id=$2`, item.workspaceID, item.id).
-			Scan(&row.slug, &row.sealedKey, &row.sealedKeyID, &row.ownerInstance, &row.report, &row.attemptsNoProgress, &row.fullRetries, &row.retryingSince)
+			Scan(&row.slug, &row.sealedKey, &row.sealedKeyID, &row.ownerInstance, &row.report, &row.attemptsNoProgress, &row.fullRetries, &row.endFailures, &row.retryingSince)
 	})
 	row.workspaceID = item.workspaceID
 	return row, err

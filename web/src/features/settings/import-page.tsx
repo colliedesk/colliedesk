@@ -190,7 +190,8 @@ function Running({ job, onCancel, busy, timezone, report }: ImportPageProps & { 
   const waitingUntil = progress?.rate_limit_until && Date.parse(progress.rate_limit_until) > Date.now() ? progress.rate_limit_until : undefined;
   const when = job.next_run_at ? formatDate(job.next_run_at, timezone) : '';
   const retry = job.state === 'retry_wait'
-    ? job.error_code === 'retrying_failed_items' ? m.retryingFailures(when) : job.error_code === 'import_running_elsewhere' ? m.waitingOtherImport(when) : m.retrying(when)
+    ? job.error_code === 'retrying_failed_items' ? m.retryingFailures(when) : job.error_code === 'import_running_elsewhere' ? m.waitingOtherImport(when)
+      : job.error_code === 'end_failed' ? m.retryingEnd(when) : m.retrying(when)
     : undefined;
   // Conversations are in the inbox from the first minute of the first pass; a pass that found nothing leaves the inbox as it was.
   const recentIn = (report?.interim && (report.tickets?.imported ?? 0) > 0) || (job.imported_conversations ?? 0) > 0;

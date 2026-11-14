@@ -58,7 +58,7 @@ func TestAnInAppImportRecordsItsFinishWithTheEndOfTheJob(t *testing.T) {
 }
 
 // A refused milestone never ends the job as failed and never discards what the run did: the end rolls back with
-// the milestone, the job stays claimed (not failed), and the run that finds the lease expired ends it again.
+// the milestone, the job waits to retry (not failed), and the next run ends it again.
 func TestARefusedMilestoneDoesNotFailTheImportAndTheNextRunEndsIt(t *testing.T) {
 	e := newEnv(t, true)
 	job := e.started(t)
@@ -85,7 +85,7 @@ func TestARefusedMilestoneDoesNotFailTheImportAndTheNextRunEndsIt(t *testing.T) 
 	}
 
 	drop()
-	e.exec(t, `UPDATE import_jobs SET lease_until = now() - interval '1 second' WHERE id=$1`, job.ID)
+	e.due(t, job.ID)
 	tick(t, w)
 	got = e.get(t, job.ID)
 	if got.State != importjobs.StateFinished || got.Status == nil || *got.Status != "OK" || !got.HasReport || got.FinishedAt == nil {

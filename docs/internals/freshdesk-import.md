@@ -282,6 +282,7 @@ any of them. An undo job holds no key.
 | `knowledge_base_limit` | The knowledge base passes a limit (`KnowledgeBaseLimitError`) | `failed` |
 | `key_unavailable` | The key cannot be opened | `waiting_key` |
 | `no_progress` | Found running after a crash five times without progress in between | `failed` |
+| `end_failed` | The transaction that ends the job (its relinks, the `import_finished` milestone, an undo's people) failed. Counted in `end_failures`, apart from the crash count: a rerun ticks progress for every ticket it skips, which clears `attempts_without_progress` | `retry_wait` 1, then 2 minutes; `failed` on the third, without those writes, keeping the run's report |
 | `import_error` | Anything else: never retried, the message is kept | `failed` |
 
 ### Lease

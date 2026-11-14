@@ -5210,7 +5210,7 @@ export interface components {
              * @enum {string|null}
              */
             status: "OK" | "FAILED" | "UNVERIFIED" | null;
-            /** @description Why a job failed or waits: freshdesk_key_rejected, freshdesk_needs_admin_key, freshdesk_plan_no_api (the Freshdesk Free plan, or an ended trial of a higher plan, has no API calls), freshdesk_unavailable, import_running_elsewhere, retrying_failed_items, storage_cap, knowledge_base_limit, key_unavailable, no_progress or import_error. */
+            /** @description Why a job failed or waits: freshdesk_key_rejected, freshdesk_needs_admin_key, freshdesk_plan_no_api (the Freshdesk Free plan, or an ended trial of a higher plan, has no API calls), freshdesk_unavailable, import_running_elsewhere, retrying_failed_items, storage_cap, knowledge_base_limit, key_unavailable, no_progress, end_failed (the server could not record the end of the import; it waits and tries again, then fails with what was imported kept) or import_error. */
             error_code: string | null;
             error_message: string | null;
             /** @description How many conversations of the Freshdesk account were in the workspace when the import ended (what an undo removes, less what the team changed since); null while it runs and for an undo. */

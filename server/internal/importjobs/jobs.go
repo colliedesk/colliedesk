@@ -55,6 +55,7 @@ const (
 	CodeNoProgress       = "no_progress"
 	CodeRetryingFailures = "retrying_failed_items"
 	CodeImportError      = "import_error"
+	CodeEndFailed        = "end_failed"
 )
 
 // DefaultRecentDays is how far back the recent pass reaches; Options.RecentDays changes it (0 skips it).

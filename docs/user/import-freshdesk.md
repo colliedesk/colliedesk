@@ -284,6 +284,11 @@ workspace and the person who started it get an email with the result and a link 
 Colliedesk Cloud and on a server whose operator set up outgoing email (SMTP and the mail domain). A preview and
 an import you stop yourself send none.
 
+If the server cannot record the end of an import (a database fault, not a Freshdesk problem), the page
+says the import tries its last step again and when. After three tries the import stops with what it
+brought in kept and its reconcile report shown; start a new import to finish it (nothing is copied twice),
+or report the problem.
+
 **Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or
 undo it. Only one import or undo runs in a workspace at a time.
 
