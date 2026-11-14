@@ -222,7 +222,7 @@ test('groups lists the groups that wrote, links one to an organization and unlin
 
 test('a group nobody wrote from yet is an empty list that says how to add one', async () => {
   view(<Tabs.groups channel={channel()} canManage timezone="UTC" />);
-  expect(await screen.findByText(/No group has written to the OA yet/)).toBeInTheDocument();
+  expect(await screen.findByText('Add the OA to a group; it shows after its first message.')).toBeInTheDocument();
 });
 
 test('staff: none says what that means; an account is added from everyone who wrote, and removed after a question', async () => {
@@ -468,7 +468,7 @@ test('references: the channel picks its number series, sees the next code, and s
 
 test('the reopen notices are saved with the others, and the received notice says what {ref} becomes', async () => {
   view(<Tabs.messages channel={channel({}, { effective_settings: {} })} canManage timezone="UTC" />);
-  expect(screen.getByLabelText('When a conversation opens')).toHaveAccessibleDescription(/\{ref\} becomes the conversation’s code/);
+  expect(screen.getByLabelText('When a conversation opens')).toHaveAccessibleDescription(/The customer can send the code back with Reopen/);
   fireEvent.change(screen.getByLabelText('When Reopen names a code that is not found'), { target: { value: 'Không tìm thấy {ref}.' } });
   fireEvent.change(screen.getByLabelText('When Reopen names a code from before Colliedesk'), { target: { value: 'Phiếu {old_ref} cũ, phiếu mới {ref}.' } });
   fireEvent.change(screen.getByLabelText('When a resolved or closed conversation is reopened'), { target: { value: 'Đã mở lại {ref}.' } });
@@ -607,7 +607,9 @@ test('connect keeps a field to its label: what the name and the OA id are is in 
   view(<Connect canManage timezone="UTC" create={vi.fn()} />);
   expect(tip('Name')).toHaveAccessibleDescription('Tells this OA apart in the inbox and in Settings. Leave it empty to use the type’s name.');
   expect(screen.getByLabelText('Name')).toHaveAccessibleDescription(/Tells this OA apart/);
-  expect(tip('OA ID')).toHaveAccessibleDescription('The Official Account’s id, in Zalo for Developers → your app → Official Account.');
+  // Where to find the OA id is what the person filling the form needs now: it stays visible, like the App ID's.
+  expect(screen.getByLabelText('OA ID')).toHaveAccessibleDescription(/In Zalo for Developers → your app → Official Account\./);
+  expect(screen.getByText('In Zalo for Developers → your app → Official Account.')).toBeVisible();
   expect(screen.queryByText(/Tells this OA apart/, { selector: '.field-note' })).toBeNull();
 });
 
@@ -637,8 +639,8 @@ test('the tokens dialog asks for the newest pair in one line and says in a tip w
 
 test('Groups and Staff open with one line each and keep what the lists mean in a tip', async () => {
   view(<Tabs.groups channel={channel()} canManage timezone="UTC" />);
-  expect(await screen.findByText('No group has written to the OA yet. Add it to a Zalo group.')).toBeInTheDocument();
-  expect(screen.getByText('Link each group to the customer it belongs to.')).toBeInTheDocument();
+  expect(await screen.findByText('Add the OA to a group; it shows after its first message.')).toBeInTheDocument();
+  expect(screen.getByText('Link each group to its customer’s organization.')).toBeInTheDocument();
   expect(tip('Zalo groups')).toHaveAccessibleDescription(/^Messages in a group are gathered into cards in Review.*Link each group to file its requests under the right customer\.$/);
   expect(tip('Zalo groups')).toHaveAccessibleDescription(/A group shows here after its first message\./);
 });
@@ -652,25 +654,29 @@ test('linking a group says in one line whose conversations change, and the organ
   expect(within(dialog).getByRole('button', { name: 'About Organization' })).toHaveAccessibleDescription('As your contacts’ organization is written, for example in the inbox filter. At most 200 characters.');
 });
 
-test('Staff says whose messages these are in one line, and the add dialog asks for one message first in a tip', async () => {
+test('Staff says whose messages these are in one line, and the add dialog says what to do when nobody wrote yet', async () => {
   view(<Tabs.staff channel={channel()} canManage timezone="UTC" />);
   expect(screen.getByText('Messages from these accounts are your team’s.')).toBeInTheDocument();
   expect(tip('Staff accounts')).toHaveAccessibleDescription('In a group they never open a request, and what they write there is the team’s.');
   fireEvent.click(screen.getAllByRole('button', { name: 'Add staff account' })[0]);
   const dialog = await screen.findByRole('dialog', { name: 'Add staff account' });
-  expect(within(dialog).getByText('Pick a person who wrote to the OA, or paste a user id.')).toBeInTheDocument();
-  expect(within(dialog).getByRole('button', { name: 'About Or paste a Zalo user id' })).toHaveAccessibleDescription('Ask the teammate to send the OA one message first, so their account shows in the list.');
+  // Nobody wrote to the OA yet: there is no list, so the step the admin needs stays on screen.
+  expect(await within(dialog).findByText('Nobody to pick: ask the teammate to message the OA.')).toBeInTheDocument();
+  expect(within(dialog).getByText('Paste the teammate’s Zalo user id.')).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'About Or paste a Zalo user id' })).toHaveAccessibleDescription('A user id shows once the teammate has written to the OA.');
 });
 
 test('Messages keeps each box to its label and a count; what a notice is for is in its tip', () => {
   view(<Tabs.messages channel={channel()} canManage timezone="UTC" />);
   expect(screen.getByText('What a customer can type to the OA, in a chat or a group.')).toBeInTheDocument();
-  expect(tip('Phrase matching')).toHaveAccessibleDescription(/^Allow one typo forgives one wrong letter.*Exact is the whole message, accents kept, in any case\.$/);
+  expect(tip('Match options')).toHaveAccessibleDescription(/^Allow one typo forgives one wrong letter.*Exact is the whole message, accents kept, in any case\.$/);
+  // The tip describes each select it explains, named after the words the person sees.
+  expect(screen.getByRole('combobox', { name: 'Match for Open a request' })).toHaveAccessibleDescription(/Allow one typo forgives one wrong letter/);
   expect(screen.getByText('Sent by the OA; not counted as your team’s first reply.')).toBeInTheDocument();
   expect(tip('When a customer sends only the command')).toHaveAccessibleDescription(/^Asks what the request is about when “Open a request” comes with nothing before it\./);
   expect(tip('When a customer asks for help')).toHaveAccessibleDescription(/^Sent for the Help command, in a chat or a group;/);
-  expect(tip('When a resolved or closed conversation is reopened')).toHaveAccessibleDescription(/^\{ref\} is its code\. Sent when the customer’s Reopen command reopens it/);
-  expect(tip('When Reopen names a code from before Colliedesk')).toHaveAccessibleDescription(/^\{old_ref\} is the code they typed/);
+  expect(tip('When a resolved or closed conversation is reopened')).toHaveAccessibleDescription(/^Sent when the customer’s Reopen command reopens it/);
+  expect(tip('When Reopen names a code from before Colliedesk')).toHaveAccessibleDescription(/^Sent instead of the received notice/);
   expect(screen.getByLabelText('When a customer asks for help')).toHaveAccessibleDescription(/0 \/ 1,000/);
 });
 
@@ -679,6 +685,7 @@ test('the status notices, the closing rule and the question each say one line an
   expect(screen.getByText('Sent in the conversation’s chat when its status changes.')).toBeInTheDocument();
   expect(tip('When a conversation’s status changes')).toHaveAccessibleDescription(/^One to one, as a reply to the customer’s first message\./);
   expect(screen.getByText('Hours; empty or 0 means never.')).toBeInTheDocument();
+  expect(tip('Close resolved conversations after')).not.toHaveAccessibleDescription(/Empty or 0/);
   expect(tip('Close resolved conversations after')).toHaveAccessibleDescription(/^Clock hours, not business hours, from the resolve or the customer’s last message/);
   fireEvent.change(screen.getByLabelText('Close resolved conversations after'), { target: { value: '24' } });
   expect(screen.getByText('Saving closes conversations already resolved for 24 hours and tells their customers.')).toBeInTheDocument();
@@ -692,5 +699,30 @@ test('asking before opening says what it does in a tip, and in one line when it 
   view(<Tabs.messages channel={channel()} canManage timezone="UTC" />);
   expect(tip('Ask the customer to confirm')).toHaveAccessibleDescription(/^A request opens as soon as the customer is done writing; nothing is asked\./);
   expect(screen.getByRole('switch', { name: 'Ask the customer to confirm' })).toHaveAccessibleDescription(/nothing is asked/);
-  expect(screen.getByText('Never asked: each chat opens a conversation.')).toBeInTheDocument();
+  expect(screen.getByText('No command needed here: this is never asked.')).toBeInTheDocument();
+});
+
+test('the add staff dialog lists who wrote when someone did, and says to ask the teammate when nobody did', async () => {
+  channelsApi.senders.mockResolvedValue({ items: [sender('6620001029', 'Minh Trần', 'Hảo Đạt chat')] });
+  view(<Tabs.staff channel={channel()} canManage timezone="UTC" />);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Add staff account' })[0]);
+  const dialog = await screen.findByRole('dialog', { name: 'Add staff account' });
+  expect(await within(dialog).findByText(/Minh Trần/)).toBeInTheDocument();
+  expect(within(dialog).getByText('Pick a person who wrote to the OA, or paste a user id.')).toBeInTheDocument();
+  expect(within(dialog).queryByText(/Nobody to pick/)).toBeNull();
+});
+
+test('a notice box says on screen what its placeholders stand for, and keeps the rest of its how in a tip', () => {
+  view(<Tabs.messages channel={channel()} canManage timezone="UTC" />);
+  expect(screen.getByLabelText('When a conversation opens')).toHaveAccessibleDescription(/\{ref\} = its code\. 0 \/ 1,000/);
+  expect(screen.getAllByText('{ref} = its code. 0 / 1,000')).toHaveLength(3);
+  expect(screen.getByText('{ref} = the code typed. 0 / 1,000')).toBeVisible();
+  expect(screen.getByText('{old_ref} = typed, {ref} = new. 0 / 1,000')).toBeVisible();
+  expect(screen.getAllByText('{ref} = its code, {subject} = its subject. 0 / 1,000')).toHaveLength(3);
+  expect(tip('When a conversation opens')).toHaveAccessibleDescription(/Leave empty to send nothing\./);
+});
+
+test('a one-to-one reply that can never be sent says why, in one line', () => {
+  view(<Tabs.messages channel={channel({}, { effective_settings: { scopes: { direct: { mode: 'all_open' } } } })} canManage timezone="UTC" />);
+  expect(screen.getByLabelText('Reply to a one-to-one message that is not a request')).toHaveAccessibleDescription(/No command needed here: this is never sent\./);
 });

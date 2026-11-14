@@ -12,7 +12,7 @@ import { Dialog, Field } from '../../ui/dialog';
 import { HelpTip } from '../../ui/help-tip';
 import { LockIcon, PlusIcon } from '../../ui/icons';
 import type { ChannelPanelProps, ConnectProps } from '../registry';
-import { TipField } from './tip-field';
+import { TipField } from '../../features/settings/tip-field';
 import { zaloMessages as m } from './zalo-messages';
 import type { CommandAction, CommandMatch, SecretName } from './zalo-messages';
 import './zalo.css';
@@ -91,8 +91,8 @@ function Connect({ canManage, create }: ConnectProps) {
     save.mutate();
   }}>
     <TipField id={`${id}-name`} label={m.name} tip={m.nameHint}>{(props) => <input {...props} value={name} maxLength={80} onChange={(event) => { feedback.touch(); setName(event.target.value); }} />}</TipField>
-    <TipField id={`${id}-oa`} label={m.oaID} error={errors.oa_id} tip={m.oaIDHint}>{(props) => <input {...props} className="zl-mono-input" inputMode="numeric" autoComplete="off" value={oaID}
-      onChange={(event) => { feedback.touch(); setOAID(event.target.value); }} />}</TipField>
+    <Field id={`${id}-oa`} label={m.oaID} error={errors.oa_id} help={m.oaIDHint}>{(props) => <input {...props} className="zl-mono-input" inputMode="numeric" autoComplete="off" value={oaID}
+      onChange={(event) => { feedback.touch(); setOAID(event.target.value); }} />}</Field>
     <Field id={`${id}-app`} label={m.appID} error={errors.app_id} help={m.appIDHint}>{(props) => <input {...props} className="zl-mono-input" inputMode="numeric" autoComplete="off" value={appID}
       onChange={(event) => { feedback.touch(); setAppID(event.target.value); }} />}</Field>
     <Field id={`${id}-as`} label={m.secretLabel.app_secret} help={m.secretHint}>{(props) => <input {...props} type="password" autoComplete="off" value={appSecret}
@@ -198,14 +198,22 @@ function Verification({ channel, canManage }: ChannelPanelProps) {
       event.preventDefault();
       if (!feedback.pending && pasted.trim()) save.mutate(pasted.trim());
     }}>
-      <TipField id={`${id}-code`} label={m.verificationCode} error={codeError} tip={codeError ? undefined : m.verificationCodeHint}>
+      <CodeField id={`${id}-code`} error={codeError}>
         {(props) => <input {...props} className="zl-mono-input" autoComplete="off" spellCheck={false} maxLength={2000} value={pasted}
-          onChange={(event) => { feedback.touch(); setPasted(event.target.value); }} />}</TipField>
+          onChange={(event) => { feedback.touch(); setPasted(event.target.value); }} />}</CodeField>
       <span className="button-row"><button type="submit" disabled={feedback.pending || !pasted.trim()}>{feedback.saveLabel(m.saveCode)}</button>
         {current && <button type="button" disabled={feedback.pending} onClick={() => save.mutate('')}>{removing ? m.removingCode : m.removeCode}</button>}
         {!codeError && feedback.status}</span>
     </form>}
   </section>;
+}
+
+type FieldChildren = (props: { id: string; 'aria-invalid'?: true; 'aria-describedby'?: string }) => ReactNode;
+
+// CodeField is the verification code's field: its how sits in a tip, until the server's refusal says the rule itself.
+function CodeField({ id, error, children }: { id: string; error?: string; children: FieldChildren }) {
+  return error ? <Field id={id} label={m.verificationCode} error={error}>{children}</Field>
+    : <TipField id={id} label={m.verificationCode} tip={m.verificationCodeHint}>{children}</TipField>;
 }
 
 // References: the number series the channel numbers what it opens in, and the code the next one gets.
@@ -435,7 +443,8 @@ function StaffDialog({ channel, people: candidates, timezone, loading, failed, o
   const chosen = pasted.trim() || picked;
   const local = !chosen ? m.pickOne : pasted.trim() && !zaloID.test(pasted.trim()) ? m.digitsOnly : config.staff_user_ids.includes(chosen) ? m.alreadyStaff : undefined;
   const error = checked ? local ?? (change.isError ? fieldErrors(change.error).staff_user_ids ?? refusal(change.error) : undefined) : undefined;
-  return <Dialog title={m.addStaff} help={m.addStaffHelp} closeLabel={m.close} onClose={onClose}
+  const nobody = !loading && !failed && candidates.length === 0;
+  return <Dialog title={m.addStaff} help={nobody ? m.addStaffHelpPaste : m.addStaffHelp} closeLabel={m.close} onClose={onClose}
     onSubmit={() => {
       setChecked(true);
       if (local || !chosen || change.isPending) return;
@@ -444,6 +453,7 @@ function StaffDialog({ channel, people: candidates, timezone, loading, failed, o
     footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={change.isPending}>{change.isPending ? m.saving : m.addSave}</button></>}>
     {loading && <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>}
     {failed && <p role="alert" className="error-copy">{m.sendersFailed} <button type="button" className="link-action" onClick={onRetry}>{m.tryAgain}</button></p>}
+    {nobody && <p className="muted-copy" data-quiet="state">{m.nobodyToPick}</p>}
     {candidates.length > 0 && <fieldset className="field zl-pick"><legend className="field-label">{m.recent}</legend>
       {candidates.map((person) => <label className="check-row" key={person.id}>
         <input type="radio" name={`${id}-uid`} checked={!pasted.trim() && picked === person.id} onChange={() => { change.reset(); setPasted(''); setPicked(person.id); }} />
@@ -630,9 +640,9 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
   const edit = (action: CommandAction, change: Partial<Draft>) => { feedback.touch(); setCommands((all) => ({ ...all, [action]: { ...all[action], ...change } })); };
   return <form className="settings-body" noValidate onSubmit={(event) => { event.preventDefault(); setChecked(true); if (!feedback.pending && !quietBad && !waitBad && !expireBad && !questionBad && !everyBad(helpEvery) && !everyBad(unmatchedEvery) && !autoCloseBad) save.mutate(); }}>
     <section className="zl-block" aria-labelledby={`${id}-cmd`}><h3 id={`${id}-cmd`}>{m.commands}</h3>
-      <p className="lead">{m.commandsLead} <HelpTip label={m.matching} text={m.matchHelp} /></p>
+      <p className="lead">{m.commandsLead} <HelpTip id={`${id}-match-why`} label={m.matching} text={m.matchHelp} /></p>
       <div className="zl-rows">
-        {actions.map((action) => <CommandRow key={action} action={action} draft={commands[action]} error={commandError(commands[action])} onChange={(change) => edit(action, change)} />)}
+        {actions.map((action) => <CommandRow key={action} action={action} draft={commands[action]} error={commandError(commands[action])} matchTip={`${id}-match-why`} onChange={(change) => edit(action, change)} />)}
       </div>
       <TipField id={`${id}-desc`} label={m.askDescription} error={commandError(commands.open)} tip={m.askDescriptionHint} help={m.count(commands.open.askDescription.length, noticeMax)}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(commands.open.askDescription)} maxLength={noticeMax} value={commands.open.askDescription} onChange={(event) => edit('open', { askDescription: event.target.value })} />}</TipField>
@@ -644,11 +654,11 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
     </section>
     <section className="zl-block" aria-labelledby={`${id}-ntc`}><h3 id={`${id}-ntc`}>{m.notices}</h3>
       <p className="lead">{m.noticesLead}</p>
-      <TipField id={`${id}-rcv`} label={m.received} error={server['settings.notices.received']} tip={m.receivedHint} help={`${m.unmatchedHint} ${m.count(received.length, noticeMax)}`}>
+      <TipField id={`${id}-rcv`} label={m.received} error={server['settings.notices.received']} tip={m.receivedHint} help={`${m.refIsCode} ${m.count(received.length, noticeMax)}`}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(received)} maxLength={noticeMax} value={received} onChange={(event) => { feedback.touch(); setReceived(event.target.value); }} />}</TipField>
-      <TipField id={`${id}-unm`} label={m.unmatched} error={server['settings.notices.unmatched'] ?? server['settings.scopes.direct.unmatched']}
+      <Field id={`${id}-unm`} label={m.unmatched} error={server['settings.notices.unmatched'] ?? server['settings.scopes.direct.unmatched']}
         help={`${onCommands ? m.unmatchedHint : m.unmatchedAllOpen} ${m.count(unmatched.length, noticeMax)}`}>
-        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(unmatched)} maxLength={noticeMax} value={unmatched} onChange={(event) => { feedback.touch(); setUnmatched(event.target.value); }} />}</TipField>
+        {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(unmatched)} maxLength={noticeMax} value={unmatched} onChange={(event) => { feedback.touch(); setUnmatched(event.target.value); }} />}</Field>
       <Field id={`${id}-uev`} label={m.unmatchedEvery} error={(checked && everyBad(unmatchedEvery) ? m.everyRange : undefined) ?? server['settings.notices.unmatched_every_seconds']} help={m.everyHint}>
         {(props) => <input {...props} type="number" min={0} max={everyLimit} step={1} inputMode="numeric" value={unmatchedEvery} onChange={(event) => { feedback.touch(); setUnmatchedEvery(event.target.value); }} />}</Field>
       {onCommands && <label className="field-inline"><input type="checkbox" checked={answer} onChange={(event) => { feedback.touch(); setAnswer(event.target.checked); }} /><span>{m.unmatchedOn}</span></label>}
@@ -656,20 +666,20 @@ function Messages({ channel, canManage }: ChannelPanelProps) {
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(help)} maxLength={noticeMax} value={help} onChange={(event) => { feedback.touch(); setHelp(event.target.value); }} />}</TipField>
       <Field id={`${id}-hev`} label={m.helpEvery} error={(checked && everyBad(helpEvery) ? m.everyRange : undefined) ?? server['settings.notices.help_every_seconds']} help={m.everyHint}>
         {(props) => <input {...props} type="number" min={0} max={everyLimit} step={1} inputMode="numeric" value={helpEvery} onChange={(event) => { feedback.touch(); setHelpEvery(event.target.value); }} />}</Field>
-      <TipField id={`${id}-rop`} label={m.reopened} error={server['settings.notices.reopened']} tip={m.reopenedHint} help={`${m.unmatchedHint} ${m.count(reopened.length, noticeMax)}`}>
+      <TipField id={`${id}-rop`} label={m.reopened} error={server['settings.notices.reopened']} tip={m.reopenedHint} help={`${m.refIsCode} ${m.count(reopened.length, noticeMax)}`}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(reopened)} maxLength={noticeMax} value={reopened} onChange={(event) => { feedback.touch(); setReopened(event.target.value); }} />}</TipField>
-      <TipField id={`${id}-rnt`} label={m.reopenNoted} error={server['settings.notices.reopen_noted']} tip={m.reopenNotedHint} help={`${m.unmatchedHint} ${m.count(reopenNoted.length, noticeMax)}`}>
+      <TipField id={`${id}-rnt`} label={m.reopenNoted} error={server['settings.notices.reopen_noted']} tip={m.reopenNotedHint} help={`${m.refIsCode} ${m.count(reopenNoted.length, noticeMax)}`}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(reopenNoted)} maxLength={noticeMax} value={reopenNoted} onChange={(event) => { feedback.touch(); setReopenNoted(event.target.value); }} />}</TipField>
-      <TipField id={`${id}-rnf`} label={m.reopenNotFound} error={server['settings.notices.reopen_not_found']} tip={m.reopenNotFoundHint} help={`${m.unmatchedHint} ${m.count(reopenNotFound.length, noticeMax)}`}>
+      <TipField id={`${id}-rnf`} label={m.reopenNotFound} error={server['settings.notices.reopen_not_found']} tip={m.reopenNotFoundHint} help={`${m.refIsTyped} ${m.count(reopenNotFound.length, noticeMax)}`}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(reopenNotFound)} maxLength={noticeMax} value={reopenNotFound} onChange={(event) => { feedback.touch(); setReopenNotFound(event.target.value); }} />}</TipField>
-      <TipField id={`${id}-rlg`} label={m.reopenLegacy} error={server['settings.notices.reopen_legacy']} tip={m.reopenLegacyHint} help={m.count(reopenLegacy.length, noticeMax)}>
+      <TipField id={`${id}-rlg`} label={m.reopenLegacy} error={server['settings.notices.reopen_legacy']} tip={m.reopenLegacyHint} help={`${m.legacyRefs} ${m.count(reopenLegacy.length, noticeMax)}`}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(reopenLegacy)} maxLength={noticeMax} value={reopenLegacy} onChange={(event) => { feedback.touch(); setReopenLegacy(event.target.value); }} />}</TipField>
       <Field id={`${id}-cnl`} label={m.cancelled} error={server['settings.notices.cancelled']} help={`${m.unmatchedHint} ${m.count(cancelled.length, noticeMax)}`}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(cancelled)} maxLength={noticeMax} value={cancelled} onChange={(event) => { feedback.touch(); setCancelled(event.target.value); }} />}</Field>
     </section>
     <section className="zl-block" id="status-notices" aria-labelledby={`${id}-st`}><h3 id={`${id}-st`}>{m.statusHeading}</h3>
       <p className="lead">{m.statusLead} <HelpTip label={m.statusHeading} text={m.statusWhy} /></p>
-      {statusFields.map(([key, label, hint]) => <TipField key={key} id={`${id}-st-${key}`} label={label} error={server[`settings.notices.status_${key}`]} tip={hint} help={m.count(status[key].length, noticeMax)}>
+      {statusFields.map(([key, label, hint]) => <TipField key={key} id={`${id}-st-${key}`} label={label} error={server[`settings.notices.status_${key}`]} tip={hint} help={`${m.statusRefs} ${m.count(status[key].length, noticeMax)}`}>
         {(props) => <textarea {...props} className="zl-notice" rows={rowsFor(status[key])} maxLength={noticeMax} value={status[key]} onChange={(event) => { feedback.touch(); const value = event.target.value; setStatus((now) => ({ ...now, [key]: value })); }} />}</TipField>)}
       <TipField id={`${id}-ac`} label={m.autoClose} error={(checked && autoCloseBad ? m.autoCloseRange : undefined) ?? server['settings.auto_close_hours']} help={m.autoCloseUnit} tip={m.autoCloseHint}>
         {(props) => <span className="zl-hours"><input {...props} aria-describedby={autoCloseBad ? props['aria-describedby'] : `${props['aria-describedby'] ?? ''} ${id}-ac-now`.trim()} type="number" min={0} max={autoCloseLimit} step={1} inputMode="numeric"
@@ -711,7 +721,7 @@ function ReadOnly({ label, value }: { label: string; value: ReactNode }) {
   return <><dt>{label}</dt><dd>{value}</dd></>;
 }
 
-function CommandRow({ action, draft, error, onChange }: { action: CommandAction; draft: Draft; error?: string; onChange: (change: Partial<Draft>) => void }) {
+function CommandRow({ action, draft, error, matchTip, onChange }: { action: CommandAction; draft: Draft; error?: string; matchTip: string; onChange: (change: Partial<Draft>) => void }) {
   const [adding, setAdding] = useState(false);
   const [phrase, setPhrase] = useState('');
   const id = useId();
@@ -733,7 +743,7 @@ function CommandRow({ action, draft, error, onChange }: { action: CommandAction;
         : <button type="button" className="link-action" onClick={() => setAdding(true)}>{m.addPhrase}</button>}
     </div>
     <div className="zl-actions"><label className="sr-only" htmlFor={`${id}-match`}>{m.matchFor(label)}</label>
-      <select id={`${id}-match`} value={draft.match} onChange={(event) => onChange({ match: event.target.value as CommandMatch })}>
+      <select id={`${id}-match`} aria-describedby={matchTip} value={draft.match} onChange={(event) => onChange({ match: event.target.value as CommandMatch })}>
         {matches.map((value) => <option key={value} value={value}>{m.match[value]}</option>)}
       </select></div>
   </div>;
