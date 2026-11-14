@@ -80,7 +80,7 @@ function Folds({ channel, settings, several, canManage, timezone, navigate }: Fo
   const which = several && <p className="muted-copy">{m.forWhich(config.support_address)}</p>;
   return <div className="email-home-folds">
     <details className="email-home-fold"><summary>{m.foldSender}</summary>{which}
-      <EmailChannelSection part="sender" settings={settings} timezone={timezone} canManage={canManage} senderNameSave={saveState(saveSenderName)} onSaveSenderName={(name) => saveSenderName.mutate(name)} />
+      <EmailChannelSection part="sender" settings={settings} timezone={timezone} canManage={canManage} senderNameSave={saveState(saveSenderName)} onSaveSenderName={(name) => saveSenderName.mutateAsync(name)} />
     </details>
     <details className="email-home-fold"><summary>{m.foldDomain(config.domain, verified)}</summary>{which}
       {verifyDomain.isError && !(verifyDomain.error instanceof InvalidRequestError) && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}

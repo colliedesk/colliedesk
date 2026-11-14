@@ -92,7 +92,6 @@ export const settingsMessages = {
   supportAddress: 'Support address',
   saveSupportAddress: 'Save support address',
   senderName: 'Sender name',
-  saveSenderName: 'Save sender name',
   senderNameHelp: 'Customers see this name in the From line of every reply. It belongs to this channel; renaming the workspace does not change it.',
   forwardingAddress: 'Forwarding address',
   addressCopied: 'Address copied',

@@ -30,7 +30,7 @@ interface EmailChannelSectionProps {
   onSave?: (address: string) => void;
   // addressConflictLink, for an address another channel has (addressSave.conflict), is a link to it.
   addressConflictLink?: (conflict: NonNullable<SaveState['conflict']>) => ReactNode;
-  onSaveSenderName?: (name: string) => void;
+  onSaveSenderName?: (name: string) => Promise<unknown> | void;
   onSaveSlug?: (slug: string) => void;
   onRotate?: () => void;
   onDisconnect?: () => void;
@@ -100,7 +100,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           : <p><strong>{settingsMessages.supportAddress}: </strong><span>{channel ? channel.support_address : settingsMessages.emailNotConnected}</span></p>}
   </>;
   const senderPart = <>
-        {channel && <NameForm label={settingsMessages.senderName} saveLabel={settingsMessages.saveSenderName} hint={settingsMessages.senderNameHelp}
+        {channel && <NameForm label={settingsMessages.senderName} hint={settingsMessages.senderNameHelp}
           value={channel.sender_name} canManage={canManage} save={senderNameSave} onSave={onSaveSenderName} />}
   </>;
   const arrivalPart = <>

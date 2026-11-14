@@ -8,13 +8,14 @@ import { settingsMessages } from './settings-messages';
 import { channelSetupMessages } from './channel-setup-messages';
 import { CopyButton } from './copy-button';
 import { useSaveFeedback } from './save-feedback';
+import { useSaveChanges, useSettingsEdit } from './settings-edits';
 import type { SaveState } from './save-feedback';
 
 interface WebFormSectionProps {
   settings?: WebFormSettings;
   canManage: boolean;
   save?: SaveState;
-  onSave?: (enabled: boolean, origins: string[]) => void;
+  onSave?: (enabled: boolean, origins: string[]) => Promise<unknown> | void;
   // part 'embed' is the form as a channel tab shows it: no section frame, and no on/off checkbox, since the
   // channel's own switch turns it on and off.
   part?: 'all' | 'embed';
@@ -33,6 +34,14 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   useEffect(() => setEnabled(settings?.enabled ?? false), [settings?.enabled]);
   useEffect(() => setOrigins((settings?.allowed_origins ?? []).join('\n')), [settings?.allowed_origins]);
   const feedback = useSaveFeedback(save);
+  // A form being added is saved by its own button, which adds it. A form that exists waits for the page's Save.
+  const adding = nameField !== undefined;
+  const saveChanges = useSaveChanges();
+  const savedOrigins = settings?.allowed_origins ?? [];
+  const nowOrigins = parseOrigins(origins);
+  const changed = enabled !== (settings?.enabled ?? false) || nowOrigins.length !== savedOrigins.length || nowOrigins.some((origin, index) => origin !== savedOrigins[index]);
+  useSettingsEdit('web-form', !adding && canManage && changed ? { label: settingsMessages.webFormOrigins, save: () => onSave?.(enabled, nowOrigins),
+    discard: () => { setEnabled(settings?.enabled ?? false); setOrigins(savedOrigins.join('\n')); } } : undefined);
   const state = settings?.enabled ? settingsMessages.webFormOn : settingsMessages.webFormOff;
   const embed = part === 'embed';
   // A form that also answers the workspace's older address shows its own address, the one a new site uses;
@@ -43,14 +52,14 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   const body = <div className="settings-body">
         {!embed && <p role="status" className="saved-state" data-on={settings?.enabled ? 'true' : 'false'}>{state}</p>}
         {canManage
-          ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) onSave?.(enabled, parseOrigins(origins)); }}>
+          ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (feedback.pending) return; if (adding) void onSave?.(enabled, nowOrigins); else void saveChanges(); }}>
               {nameField}
               {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{settingsMessages.webFormAccept}</span></label>}
               <label className="field"><span>{settingsMessages.webFormOrigins}</span>
                 <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={originsHelp} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
               <small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
-              <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(settingsMessages.saveWebForm)}</button>
-                {feedback.status}</span>
+              <span className="button-row">{adding && <button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(settingsMessages.saveWebForm)}</button>}
+                {feedback.pending && !adding ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}</span>
             </form>
           : <ul className="muted-copy">{(settings?.allowed_origins ?? []).map((origin) => <li key={origin}>{origin}</li>)}</ul>}
         {settings && <p>{tryMessages.what}</p>}

@@ -219,7 +219,7 @@ test('a name another channel has is refused at the name, with a link to that cha
   show(FORM);
   const name = await screen.findByRole('textbox', { name: 'Name' });
   fireEvent.change(name, { target: { value: 'Careers' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
   // The refusal takes the focus to the field it is about, from the button that sent it.
   expect(name).toHaveFocus();
@@ -262,7 +262,7 @@ test('adding a web form creates it on, with its allowed origins, and opens it', 
   const origins = await screen.findByRole('textbox', { name: /Allowed origins/i });
   expect(screen.queryByRole('checkbox')).toBeNull();
   fireEvent.change(origins, { target: { value: 'https://example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
   await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'web_form', enabled: true, config: { allowed_origins: ['https://example.com'] } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
 });
@@ -358,7 +358,7 @@ test('saving the sender name sends only the trimmed name to this channel, never 
   show(EMAIL, { tab: 'replies' });
   const field = await screen.findByRole('textbox', { name: 'Sender name' });
   fireEvent.change(field, { target: { value: ' Colliedesk Support ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(EMAIL, { config: { sender_name: 'Colliedesk Support' } }));
 });
 
@@ -390,7 +390,8 @@ test('the web form save shows Saved after it succeeds', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   channelsApi.update.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   show(FORM);
-  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
+  fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://changed.example.com' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(screen.getByText('Saved')).toHaveAttribute('role', 'status'));
 });
 
@@ -398,7 +399,8 @@ test('a refused web form save shows the server message, not the generic failure'
   channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   channelsApi.update.mockRejectedValue(new mocks.InvalidRequestError('Invalid origin "*": use an exact origin such as https://example.com.'));
   show(FORM);
-  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
+  fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://changed.example.com' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(screen.getByText(/Invalid origin "\*": use an exact origin/)).toBeInTheDocument());
 });
 
@@ -409,7 +411,7 @@ test('the Embed tab saves only the origins: the switch alone turns the form on o
   expect(await screen.findByRole('textbox', { name: /Allowed origins/i })).toBeInTheDocument();
   expect(screen.queryByRole('checkbox', { name: /Accept/i })).toBeNull();
   fireEvent.change(screen.getByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://example.com\nhttps://shop.example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(FORM, { config: { allowed_origins: ['https://example.com', 'https://shop.example.com'] } }));
 });
 
@@ -615,7 +617,7 @@ test('a web form is added with the name given, and a name another form has is re
   const name = await screen.findByRole('textbox', { name: 'Name' });
   fireEvent.change(name, { target: { value: 'Careers' } });
   fireEvent.change(screen.getByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
   await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
   expect(name).toHaveAccessibleDescription(/Another web form is called Careers/);
   expect(name).toHaveFocus();
@@ -623,7 +625,7 @@ test('a web form is added with the name given, and a name another form has is re
   fireEvent.change(name, { target: { value: ' Shop form ' } });
   expect(screen.queryByText('Another web form is called Careers.')).toBeNull();
   expect(name).not.toHaveAttribute('aria-invalid');
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
   await waitFor(() => expect(channelsApi.create).toHaveBeenLastCalledWith({ type: 'web_form', name: 'Shop form', enabled: true, config: { allowed_origins: ['https://example.com'] } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
 });
@@ -638,7 +640,7 @@ test('the refusal of a name goes once the name is changed, and is not left besid
   show(EMAIL);
   const name = await screen.findByRole('textbox', { name: 'Name' });
   fireEvent.change(name, { target: { value: 'Billing' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByText('Another email channel is called Billing.')).toBeInTheDocument();
   fireEvent.change(name, { target: { value: 'Zed' } });
   expect(screen.queryByText('Another email channel is called Billing.')).toBeNull();

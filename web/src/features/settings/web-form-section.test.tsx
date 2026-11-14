@@ -1,7 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render as renderPlain, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
 import type { WebFormSettings } from '../../api/schemas';
+import { SettingsEditsProvider } from './settings-edits';
 import { WebFormSection } from './web-form-section';
+
+// A form that exists is saved by the page's Save, which the provider draws.
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: SettingsEditsProvider });
 
 const off: WebFormSettings = { enabled: false, allowed_origins: [], submit_path: '/api/v1/public/forms/acme' };
 const on: WebFormSettings = { ...off, enabled: true, allowed_origins: ['https://colliedesk.com', 'http://localhost:3000'] };
@@ -18,7 +23,7 @@ test('turns the form on with its allowed origins, one per line', () => {
   render(<WebFormSection settings={off} canManage onSave={onSave} />);
   fireEvent.click(screen.getByRole('checkbox', { name: /accept web form submissions/i }));
   fireEvent.change(screen.getByRole('textbox', { name: /allowed origins/i }), { target: { value: ' https://colliedesk.com \n\nhttp://localhost:3000\n' } });
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSave).toHaveBeenCalledWith(true, ['https://colliedesk.com', 'http://localhost:3000']);
 });
 
@@ -29,7 +34,7 @@ test('turns the form off again and keeps the origins', () => {
   expect(screen.getByText(/the web form is on/i)).toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: /allowed origins/i })).toHaveValue('https://colliedesk.com\nhttp://localhost:3000');
   fireEvent.click(screen.getByRole('checkbox', { name: /accept web form submissions/i }));
-  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSave).toHaveBeenCalledWith(false, ['https://colliedesk.com', 'http://localhost:3000']);
 });
 
@@ -38,13 +43,13 @@ test('agents see the state read-only', () => {
   expect(screen.getByText(/the web form is on/i)).toBeInTheDocument();
   expect(screen.getByText('https://colliedesk.com')).toBeInTheDocument();
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /save web form/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 });
 
 test('the save shows Saving…, refuses a second submit, then Saved until edited', () => {
   const onSave = vi.fn();
   const { rerender } = render(<WebFormSection settings={off} canManage onSave={onSave} save={{ pending: true }} />);
-  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+  expect(screen.getByText('Saving…')).toBeInTheDocument();
   fireEvent.submit(screen.getByRole('textbox', { name: /allowed origins/i }));
   expect(onSave).not.toHaveBeenCalled();
   rerender(<WebFormSection settings={off} canManage onSave={onSave} save={{ saved: true }} />);

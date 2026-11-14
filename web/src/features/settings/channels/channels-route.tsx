@@ -13,6 +13,7 @@ import { ChatIcon, PlusIcon } from '../../../ui/icons';
 import { Part, PartUnavailable } from '../../../ui/lazy-part';
 import { panelID, tabID, Tabs } from '../../../ui/tabs';
 import { NameForm } from '../name-form';
+import { SettingsEditsProvider } from '../settings-edits';
 import { saveState } from '../save-feedback';
 import { SettingsNav } from '../settings-nav';
 import type { SettingsPath, Shown } from '../settings-nav';
@@ -81,7 +82,7 @@ export function ChannelsRoute({ path, search, navigate }: ChannelsRouteProps) {
       <header><h1>{typeHome?.label ?? m.heading}</h1><p>{typeHome?.description ?? m.description}</p></header>
       <div className="settings-layout">
         <SettingsNav page={navPage(path === '' ? undefined : type)} shown={shown} />
-        <div className="settings-sections ch-page">{content}</div>
+        <div className="settings-sections ch-page"><SettingsEditsProvider>{content}</SettingsEditsProvider></div>
       </div>
     </main>
   );
@@ -526,8 +527,8 @@ function ChannelIdentity({ channel, label, defaultHelp, defaultBadge, isAdmin }:
   const said = succeeded && channel.is_default === true;
   useEffect(() => { if (said) done.current?.focus(); }, [said]);
   return <div className="ch-identity">
-    {isAdmin && <NameForm label={m.nameLabel} saveLabel={m.saveName} hint={defaultHelp ?? m.defaultHelp} value={channel.name} canManage maxLength={80} save={saveState(rename)}
-      onSave={(name) => rename.mutate(name)} conflictLink={(conflict) => <a href={`${base}/${conflict.channel_id}`}>{m.openTaken(conflict.channel_name)}</a>} />}
+    {isAdmin && <NameForm label={m.nameLabel} hint={defaultHelp ?? m.defaultHelp} value={channel.name} canManage maxLength={80} save={saveState(rename)}
+      onSave={(name) => rename.mutateAsync(name)} conflictLink={(conflict) => <a href={`${base}/${conflict.channel_id}`}>{m.openTaken(conflict.channel_name)}</a>} />}
     <div className="ch-default-row">
       {channel.is_default
         ? succeeded
