@@ -102,9 +102,9 @@ func earlyCut(buffer string) int {
 var (
 	chatEmail = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`)
 	chatPhone = regexp.MustCompile(`\+?\(?\d[\d\s().-]{4,}\d`)
-	// chatRange is a range or a date written with dashes (after foldPhones), not a phone number: two
-	// groups of up to four digits ("2024–2026", "100-500") or a year, month and day ("2026-11-15").
-	chatRange = regexp.MustCompile(`^\(?(?:\d{1,4}-\d{1,4}|\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))$`)
+	// chatDashed is two or three groups of digits joined by dashes (after foldPhones), which
+	// isDashedRangeOrDate reads.
+	chatDashed = regexp.MustCompile(`^\(?(\d+)-(\d+)(?:-(\d+))?$`)
 	// chatLink: a scheme, www., a domain with a path, or a bare lower-case domain under any top-level
 	// domain of letters (acme-login.xyz, bit.ly). A capitalised word after a missing space ("Save.Then")
 	// is no domain, and a file name (invoice.pdf) is left to chatFileName.
@@ -112,6 +112,32 @@ var (
 	chatFileName = regexp.MustCompile(`^[^/]*\.(?:pdf|csv|png|jpe?g|gif|svg|webp|json|js|ts|txt|zip|docx?|xlsx?|pptx?|md|html?|css|py|xml|ya?ml|exe|dmg|apk|mp4|mp3)$`)
 	chatCitation = regexp.MustCompile(`\[#(\d{1,18})\]`)
 )
+
+// isDashedRangeOrDate reports whether a number chatPhone found (after foldPhones) is a range or a date
+// written with dashes, not a phone number. Only three forms are: a range of years from 1900 to 2099
+// that does not go backwards ("2024–2026"), a range whose sides have three digits or fewer ("100–500"),
+// and a real year, month and day ("2026–11–15"). Every other dashed form is read as a phone number,
+// since the common short ones are dashed groups of four or three and four digits: "1900-1234",
+// "2123-4567", "555-1234".
+func isDashedRangeOrDate(phone string) bool {
+	groups := chatDashed.FindStringSubmatch(phone)
+	if groups == nil {
+		return false
+	}
+	from, to, day := groups[1], groups[2], groups[3]
+	if day != "" {
+		if len(from) != 4 || len(to) != 2 || len(day) != 2 {
+			return false
+		}
+		_, err := time.Parse(time.DateOnly, from+"-"+to+"-"+day)
+		return err == nil
+	}
+	if len(from) <= 3 && len(to) <= 3 {
+		return true
+	}
+	// Strings of four digits compare as their numbers do.
+	return len(from) == 4 && len(to) == 4 && from >= "1900" && to >= from && to <= "2099"
+}
 
 // chatFilter checks sentences against the text of the articles the AI read. One stream uses it, one
 // sentence after another, never from two goroutines.
@@ -203,7 +229,7 @@ func (f *chatFilter) check(sentence string) (string, bool, []string) {
 	}
 	for _, phone := range chatPhone.FindAllString(foldPhones(sentence), -1) {
 		digits := onlyDigits(phone)
-		if len(digits) < 6 || chatRange.MatchString(phone) {
+		if len(digits) < 6 || isDashedRangeOrDate(phone) {
 			continue
 		}
 		if !slices.ContainsFunc(f.knownDigits(), func(known string) bool { return strings.Contains(known, digits) }) {
