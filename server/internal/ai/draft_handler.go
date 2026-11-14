@@ -237,7 +237,7 @@ func digits(text string) string {
 type draftNumber struct{ written, digits string }
 
 // draftNumbers are the numbers of text however their digits and separators are written, leaving out
-// a range or a date written with dashes (chatRange). The text is
+// a range or a date written with dashes (isDashedRangeOrDate). The text is
 // folded rune by rune and each folded byte remembers where its rune was, so a match is reported as the
 // draft wrote it ("０９８７６５４３２１", an invisible character inside it included).
 func draftNumbers(text string) []draftNumber {
@@ -264,7 +264,7 @@ func draftNumbers(text string) []draftNumber {
 	}
 	var numbers []draftNumber
 	for _, match := range numberPattern.FindAllIndex(folded, -1) {
-		if chatRange.Match(folded[match[0]:match[1]]) {
+		if isDashedRangeOrDate(string(folded[match[0]:match[1]])) {
 			continue
 		}
 		numbers = append(numbers, draftNumber{
