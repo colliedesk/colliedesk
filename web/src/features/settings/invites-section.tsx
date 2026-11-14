@@ -6,6 +6,7 @@ import type { RowMenuItem } from './row-menu';
 import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { settingsMessages } from './settings-messages';
 import { useEndedAnnouncement } from './use-ended-announcement';
 import { useInviteDraft } from './use-invite-draft';
@@ -73,7 +74,7 @@ export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeI
   });
   const chosenNames = roles.filter((role) => chosen.includes(role.id)).map((role) => role.name);
   return (
-    <section className="settings-card" aria-labelledby="invites-heading"><div className="section-heading"><h2 id="invites-heading">{messages.invites}</h2><p>{settingsMessages.invitesDescription}</p></div>
+    <section className="settings-card" aria-labelledby="invites-heading"><div className="section-heading"><div className="heading-with-tip"><h2 id="invites-heading">{messages.invites}</h2><HelpTip label={messages.invites} text={settingsMessages.invitesWhy} /></div><p>{settingsMessages.invitesDescription}</p></div>
       <div className="settings-body settings-rows">
         {/* Esc closes the picker from the Roles button as well as from inside it, and keeps the focus on the button. */}
         {canCreateInvites && <form className="invite-form" onKeyDown={(event) => { if (event.key === 'Escape' && picking) { setPicking(false); rolesButton.current?.focus(); } }} onSubmit={(event) => { event.preventDefault(); if (chosen.length > 0) onCreateInvite?.(email, chosen); }}>

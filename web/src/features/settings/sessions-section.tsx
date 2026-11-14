@@ -2,6 +2,7 @@ import type { Session } from '../../api/schemas';
 import { describeUserAgent } from '../../lib/describe-user-agent';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { settingsMessages } from './settings-messages';
 
 function sessionState(session: Session): keyof typeof settingsMessages.sessionStates {
@@ -22,7 +23,7 @@ interface SessionsSectionProps {
 export function SessionsSection({ sessions, timezone, onRevokeSession }: SessionsSectionProps) {
   const shown = sessions.filter((session) => !session.app && !session.token && sessionState(session) === 'active');
   return (
-    <section className="settings-card" aria-labelledby="sessions-heading"><div className="section-heading"><h2 id="sessions-heading">{messages.sessions}</h2><p>{settingsMessages.sessionsDescription}</p></div>
+    <section className="settings-card" aria-labelledby="sessions-heading"><div className="section-heading"><div className="heading-with-tip"><h2 id="sessions-heading">{messages.sessions}</h2><HelpTip label={messages.sessions} text={settingsMessages.sessionsWhy} /></div><p>{settingsMessages.sessionsDescription}</p></div>
       <div className="settings-body settings-rows"><div className="data-list">{shown.map((session) => {
         return <article key={session.id}>
           <div><span className="session-name"><strong title={session.label}>{describeUserAgent(session.label) ?? session.label}</strong>

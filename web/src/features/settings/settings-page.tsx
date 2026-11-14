@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { Invite, Session } from '../../api/schemas';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { settingsMessages } from './settings-messages';
 import { DisplayNameField } from './display-name-field';
 import { InvitesSection } from './invites-section';
@@ -131,9 +132,10 @@ function AccountSections({ sessions = [], timezone, displayName = '', email, dis
 function GeneralSection({ workspaceName = '', workspaceNameSave, onSetWorkspaceName, workspaceTimezone = 'UTC', workspaceTimezoneSave, onSetWorkspaceTimezone }: SettingsPageProps) {
   const choose = useInstantSave();
   return <section className="settings-card" aria-labelledby="general-heading">
-    <div className="section-heading"><h2 id="general-heading" className="sr-only">{messages.general}</h2><p>{settingsMessages.generalDescription}</p></div>
+    <div className="section-heading"><h2 id="general-heading" className="sr-only">{messages.general}</h2>
+      <p className="heading-with-tip"><span>{settingsMessages.generalDescription}</span><HelpTip label={messages.general} text={settingsMessages.generalWhy} /></p></div>
     <div className="settings-body settings-rows">
-      <NameForm label={messages.workspaceName} hint={settingsMessages.workspaceNameHelp}
+      <NameForm label={messages.workspaceName} hint={settingsMessages.workspaceNameHelp} tip={settingsMessages.workspaceNameWhy}
         value={workspaceName} canManage save={workspaceNameSave} onSave={onSetWorkspaceName} minLength={2} maxLength={60} />
       <TimezoneSelect label={settingsMessages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave}
         onChange={(value) => void choose(onSetWorkspaceTimezone ?? (() => undefined), value, workspaceTimezone)} />

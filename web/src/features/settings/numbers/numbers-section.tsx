@@ -4,6 +4,8 @@ import { api, InvalidRequestError } from '../../../api/client';
 import { codeOf, numberSeriesApi, seriesName, yearIn } from '../../../api/number-series';
 import type { NumberSeries, NumberSeriesChange } from '../../../api/number-series';
 import { Dialog, Field } from '../../../ui/dialog';
+import { HelpTip } from '../../../ui/help-tip';
+import { TipField } from '../tip-field';
 import { PlusIcon } from '../../../ui/icons';
 import { numbersMessages as m } from './numbers-messages';
 import { can } from '../../../lib/can';
@@ -38,9 +40,8 @@ export function NumbersSection() {
   const label = (item: NumberSeries) => (item.series === 'default' ? m.defaultName : item.series);
   return <>
         <section className="settings-card" aria-labelledby="numbers-heading">
-          <div className="section-heading"><h2 id="numbers-heading">{m.heading}</h2><p>{m.description}</p></div>
+          <div className="section-heading"><div className="heading-with-tip"><h2 id="numbers-heading">{m.heading}</h2><HelpTip label={m.heading} text={m.why} /></div><p>{m.description}</p></div>
           <div className="settings-body settings-rows">
-            <p className="muted-copy">{m.lead}</p>
             {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
             {series.isPending ? <div className="num-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
               : series.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void series.refetch()}>{m.tryAgain}</button></p>
@@ -95,7 +96,8 @@ function SeriesDialog({ current, taken, year, onClose, onSaved }: { current?: Nu
   const error = (field: keyof typeof local) => (checked ? local[field] : undefined) ?? server[field === 'name' ? 'series' : field];
   const preview = !local.format && whole(next) >= 1 ? codeOf(format.trim(), whole(next), year) : undefined;
   const nothing = current && Object.keys(change()).length === 0;
-  return <Dialog title={current ? m.editTitle(current.series === 'default' ? m.defaultName : current.series) : m.addTitle} help={current ? m.editHelp : undefined} closeLabel={m.close} onClose={onClose}
+  return <Dialog title={current ? m.editTitle(current.series === 'default' ? m.defaultName : current.series) : m.addTitle} help={current ? m.editHelp : undefined}
+    titleTip={current ? <HelpTip label={m.editTitle(current.series === 'default' ? m.defaultName : current.series)} text={m.editWhy} /> : undefined} closeLabel={m.close} onClose={onClose}
     onSubmit={() => {
       setChecked(true);
       if (Object.values(local).some(Boolean) || save.isPending) return;
@@ -103,15 +105,15 @@ function SeriesDialog({ current, taken, year, onClose, onSaved }: { current?: Nu
       save.mutate();
     }}
     footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={save.isPending}>{save.isPending ? m.saving : m.save}</button></>}>
-    {!current && <Field id={`${id}-name`} label={m.name} error={error('name')} help={m.nameHint}>{(props) => <input {...props} className="num-mono" autoFocus autoComplete="off" maxLength={20}
-      value={name} onChange={(event) => { save.reset(); setName(event.target.value); }} />}</Field>}
-    <Field id={`${id}-format`} label={m.format} error={error('format')} help={m.formatHint}>{(props) => <input {...props} className="num-mono" autoFocus={Boolean(current)} autoComplete="off" maxLength={40}
-      placeholder="REF-{yyyy}-{n:04}" value={format} onChange={(event) => { save.reset(); setFormat(event.target.value); }} />}</Field>
+    {!current && <TipField id={`${id}-name`} label={m.name} error={error('name')} help={m.nameHint} tip={m.nameWhy}>{(props) => <input {...props} className="num-mono" autoFocus autoComplete="off" maxLength={20}
+      value={name} onChange={(event) => { save.reset(); setName(event.target.value); }} />}</TipField>}
+    <TipField id={`${id}-format`} label={m.format} error={error('format')} help={m.formatHint} tip={m.formatWhy}>{(props) => <input {...props} className="num-mono" autoFocus={Boolean(current)} autoComplete="off" maxLength={40}
+      placeholder="REF-{yyyy}-{n:04}" value={format} onChange={(event) => { save.reset(); setFormat(event.target.value); }} />}</TipField>
     <Field id={`${id}-next`} label={m.nextNumber} error={error('next')} help={preview ? m.nextHint(preview) : undefined}>{(props) => <input {...props} type="number" min={least} step={1} inputMode="numeric"
       value={next} onChange={(event) => { save.reset(); setNext(event.target.value); }} />}</Field>
     <div className="num-pair">
-      <Field id={`${id}-start`} label={m.start} error={error('start')} help={m.startHint}>{(props) => <input {...props} type="number" min={1} step={1} inputMode="numeric"
-        value={start} onChange={(event) => { save.reset(); setStart(event.target.value); }} />}</Field>
+      <TipField id={`${id}-start`} label={m.start} error={error('start')} help={m.startHint} tip={m.startWhy}>{(props) => <input {...props} type="number" min={1} step={1} inputMode="numeric"
+        value={start} onChange={(event) => { save.reset(); setStart(event.target.value); }} />}</TipField>
       <Field id={`${id}-year`} label={m.startYear} error={error('start_year')}>{(props) => <input {...props} type="number" min={1970} max={9999} step={1} inputMode="numeric"
         value={startYear} onChange={(event) => { save.reset(); setStartYear(event.target.value); }} />}</Field>
     </div>

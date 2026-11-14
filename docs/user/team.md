@@ -51,7 +51,7 @@ id, under the same rules. See [Roles and permissions](roles-and-permissions.md#s
 
 ## Deactivate someone
 
-Use **Deactivate** instead of deleting. Nothing is lost: their name stays on old conversations and
+A deactivated person cannot sign in and does not use a seat. Use **Deactivate** instead of deleting. Nothing is lost: their name stays on old conversations and
 messages, and the export still lists them with `deactivated_at`.
 
 1. Open **⋯** in their row and choose **Deactivate**. The question shows how many open and pending conversations

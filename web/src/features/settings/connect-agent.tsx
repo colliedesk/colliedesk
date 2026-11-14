@@ -1,7 +1,9 @@
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { agentTokenMessages as text } from './agent-tokens-messages';
+import { HelpTip } from '../../ui/help-tip';
 import { CopyButton } from './copy-button';
+import { QuietNote } from './quiet-note';
 import { connectHosts, connectSnippets, exampleOrigin, mcpServerName, pluginMCPURL } from './connect-snippets.generated';
 import type { ConnectHostID } from './connect-snippets.generated';
 
@@ -33,7 +35,7 @@ export function ConnectAgent({ host, onHost, origin, mcpAddress, token, hidden }
         onChange={() => onHost(item.id)} />{item.name}</label>)}
     </div>
     <HostSteps host={host} origin={origin} mcpAddress={mcpAddress} token={token} hidden={hidden} />
-    <p className="muted-copy check-it">{text.checkIt}</p>
+    <QuietNote className="check-it" note={text.checkIt} label={text.checkItLabel} tip={text.checkItWhy} />
   </>;
 }
 
@@ -44,25 +46,29 @@ function HostSteps({ host, origin, mcpAddress, token, hidden }: { host: ConnectH
   // Claude Code signs in with OAuth: the Colliedesk plugin on Cloud, this server's address elsewhere.
   const plugin = mcpAddress === pluginMCPURL;
   const [before, command] = host === 'claude-code' && !plugin ? text.claudeCodeRemove : text.disconnects[host];
-  const after = host === 'claude-code' ? text.disconnectAfter : text.revokeAfter;
+  const after = [text.disconnectTips[host], host === 'claude-code' ? text.disconnectAfter : text.revokeAfter].filter(Boolean).join(' ');
+  const learnMore = { href: item.guide, label: text.learnMore };
   let steps: ReactNode;
   if (host === 'claude-code') {
     steps = <>
-      <p className="muted-copy">{text.claudeCodeOAuth}</p>
+      <QuietNote note={text.claudeCodeOAuth} label={text.claudeCodeOAuthLabel} tip={text.claudeCodeOAuthWhy} />
       <ol className="host-steps">
         {plugin ? <>
-          <li><Snippet label={text.runInTerminal} code={connectSnippets.claudeCodePlugin} /><p className="muted-copy">{text.pluginInstalls}</p></li>
-          <li><Snippet label={text.thenSignIn} code={connectSnippets.claudeCodeLogin} /><p className="muted-copy">{text.claudeCodeAllow}</p></li>
+          <li><Snippet label={text.runInTerminal} code={connectSnippets.claudeCodePlugin} />
+            <QuietNote note={text.pluginInstalls} label={text.pluginInstallsLabel} tip={text.pluginInstallsWhy} link={learnMore} /></li>
+          <li><Snippet label={text.thenSignIn} code={connectSnippets.claudeCodeLogin} />
+            <QuietNote note={text.claudeCodeAllow} label={text.claudeCodeAllowLabel} tip={text.claudeCodeAllowWhy} link={learnMore} /></li>
         </> : <>
           <li><Snippet label={text.runInTerminal} code={connectSnippets.claudeCodeCLI.replaceAll(`${exampleOrigin}/mcp`, mcpAddress)} /></li>
-          <li><Snippet label={text.thenSignIn} code={connectSnippets.claudeCodeCLILogin} /><p className="muted-copy">{text.claudeCodeAllow}</p></li>
+          <li><Snippet label={text.thenSignIn} code={connectSnippets.claudeCodeCLILogin} />
+            <QuietNote note={text.claudeCodeAllow} label={text.claudeCodeAllowLabel} tip={text.claudeCodeAllowWhy} link={learnMore} /></li>
         </>}
       </ol>
-      {!plugin && <p className="muted-copy">{text.claudeCodeSkills}</p>}
+      {!plugin && <QuietNote note={text.claudeCodeSkills} label={text.claudeCodeSkillsLabel} tip={text.claudeCodeSkillsWhy} link={learnMore} />}
     </>;
   } else if (host === 'codex') {
     steps = <ol className="host-steps">
-      <li><Snippet label={text.shellProfile} code={snippet('tokenEnv')} /><p className="muted-copy">{text.codexReadsEnv}</p></li>
+      <li><Snippet label={text.shellProfile} code={snippet('tokenEnv')} /><QuietNote note={text.codexReadsEnv} label={text.codexReadsEnvLabel} tip={text.codexReadsEnvWhy} /></li>
       <li><Snippet label={text.thenRun} code={snippet('codex')} /></li>
     </ol>;
   } else if (host === 'cursor') {
@@ -70,7 +76,8 @@ function HostSteps({ host, origin, mcpAddress, token, hidden }: { host: ConnectH
       <div className="deeplink">
         {token ? <a className="button primary-action" href={cursorInstallLink(origin, token)}>{text.addToCursor}</a>
           : <button type="button" className="primary-action" aria-disabled="true">{text.addToCursor}</button>}
-        <p className="muted-copy">{token ? text.cursorWithToken : hidden ? text.cursorHidden : text.cursorNoToken}</p>
+        <QuietNote note={token ? text.cursorWithToken : hidden ? text.cursorHidden : text.cursorNoToken} label={text.cursorLabel}
+          tip={token ? text.cursorWithTokenWhy : hidden ? text.cursorHiddenWhy : text.cursorNoTokenWhy} />
       </div>
       <details className="host-alt"><summary>{text.byHand}</summary>
         <ol className="host-steps">
@@ -98,8 +105,8 @@ function HostSteps({ host, origin, mcpAddress, token, hidden }: { host: ConnectH
   return (
     <div className="host-panel" role="group" aria-label={item.name}>
       {steps}
-      <p className="muted-copy host-foot"><a href={item.guide} target="_blank" rel="noopener noreferrer">{text.fullGuide}</a>
-        {' · '}{text.disconnect}{before}{command && <code>{command}</code>}{after}</p>
+      <p className="muted-copy host-foot heading-with-tip"><a href={item.guide} target="_blank" rel="noopener noreferrer">{text.fullGuide}</a>
+        <span>{' · '}{text.disconnect}{before}{command && <code>{command}</code>}</span><HelpTip label={text.disconnectLabel} text={after} /></p>
     </div>
   );
 }

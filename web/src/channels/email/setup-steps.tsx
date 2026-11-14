@@ -54,7 +54,7 @@ export function ForwardingName() {
     onSuccess: (renamed) => renamed.continue_url ? (release(`name-step:${settingsMessages.workspaceAddressName}`), leaveTo(renamed.continue_url))
       : Promise.all(['me', 'email-channel'].map((key) => client.invalidateQueries({ queryKey: [key] }))) });
   if (!me.data) return null;
-  return <NameForm label={settingsMessages.workspaceAddressName} saveLabel={settingsMessages.saveAddressName} hint={settingsMessages.addressNameWarning} value={me.data.workspace.slug} canManage
+  return <NameForm label={settingsMessages.workspaceAddressName} saveLabel={settingsMessages.saveAddressName} hint={settingsMessages.addressNameWarning} tip={settingsMessages.addressNameWhy} value={me.data.workspace.slug} canManage
     maxLength={63} save={saveState(save)} onSave={(slug) => save.mutate(slug)} />;
 }
 

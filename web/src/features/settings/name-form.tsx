@@ -58,8 +58,7 @@ export function NameForm({ label, saveLabel, hint, tip, value, canManage, save, 
       {saveLabel !== undefined && <button type="submit" disabled={feedback.pending}>{feedback.saveLabel(saveLabel)}</button>}
       {feedback.pending && saveLabel === undefined ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}
       {feedback.invalid && save?.conflict && conflictLink?.(save.conflict)}
-      <small id={hintId}>{hint}</small>
-      {tip && <HelpTip id={tipId} label={label} text={tip} />}
+      {tip ? <span className="heading-with-tip"><small id={hintId}>{hint}</small><HelpTip id={tipId} label={label} text={tip} /></span> : <small id={hintId}>{hint}</small>}
     </form>
   );
 }

@@ -7,6 +7,7 @@ import { ConnectAgent } from './connect-agent';
 import type { ConnectHostID } from './connect-snippets.generated';
 import { CopyButton } from './copy-button';
 import { PermissionMatrix } from './permission-matrix';
+import { QuietNote } from './quiet-note';
 import { outsidePermissions, permissionSummary } from './token-permissions';
 
 // What a token is created with: a role it follows, or a fixed list.
@@ -126,7 +127,7 @@ export function CreateTokenDialog({ roles, rolePermissions, held, onCreate, host
     <fieldset className="access-field"><legend className="field-label">{text.access}</legend>
       <div className="access-option">
         <label><input type="radio" name="agent-token-access" checked={mode === 'role'} onChange={() => setMode('role')} />{text.followRole}</label>
-        <p className="muted-copy">{text.followRoleHelp}</p>
+        <QuietNote note={text.followRoleHelp} label={text.followRole} tip={text.followRoleWhy} />
         {mode === 'role' && <>
           {ordered.length > 1
             ? <label className="field"><span className="sr-only">{text.role}</span>
@@ -150,7 +151,7 @@ export function CreateTokenDialog({ roles, rolePermissions, held, onCreate, host
       </div>
     </fieldset>
     {draftsOnly && <p className="drafts-note"><span className="token-dot token-dot-hollow" aria-hidden="true" /><span><strong>{text.draftsOnly}</strong>{text.draftsOnlyRest}</span></p>}
-    <p className="muted-copy">{text.lifetime}</p>
+    <QuietNote note={text.lifetime} label={text.lifetimeLabel} tip={text.lifetimeWhy} />
     {error && <p role="alert" id="agent-token-error" className="error-copy">{error.message}</p>}
   </Dialog>;
 }
