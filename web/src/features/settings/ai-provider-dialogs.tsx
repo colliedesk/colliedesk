@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import type { AIProvider, AIProviderInput, AISettings } from '../../api/ai';
 import { Field } from '../../ui/dialog';
+import { HelpTip } from '../../ui/help-tip';
 import { selfHostGuide } from '../../lib/self-host-guide';
 import { aiModelMatches as modelMatches, aiServices as services, aiServiceURL as serviceURL } from '../../lib/ai-services';
 import type { AIService as Service } from '../../lib/ai-services';
@@ -8,6 +9,7 @@ import { aiMessages as m, slotLabel } from './ai-messages';
 import { AIDialog as Dialog } from './ai-level-dialogs';
 import { KeyIcon } from './ai-icons';
 import type { AIPageProps, FieldError } from './ai-page-props';
+import { TipField } from './tip-field';
 
 // The most models a provider keeps (contracts/openapi.yaml, AIProviderInput).
 const maxProviderModels = 20;
@@ -113,9 +115,9 @@ export function AddDialog({ settings, onClose, onAdd, onListModels }: { settings
           // Leaving the key with nothing loaded yet loads the list, so the next thing to do is pick.
           onBlur={() => { if (list.state === 'idle' && key.trim() !== '') void loadModels(false); }} />}</Field>
       {list.state === 'typing'
-        ? <Field label={m.modelsTyped} id={`${id}-models`} error={fieldError('models')} help={m.modelsHelp}>
+        ? <TipField label={m.modelsTyped} tip={m.modelsWhy} id={`${id}-models`} error={fieldError('models')} help={m.modelsHelp}>
             {(attrs) => <input {...attrs} value={typed} placeholder={kind === 'anthropic' ? 'claude-sonnet-5-5, claude-haiku-5-5' : 'llama3.1, qwen3'}
-              onChange={(event) => { setTyped(event.target.value); if (error?.field === 'models') setError(undefined); }} />}</Field>
+              onChange={(event) => { setTyped(event.target.value); if (error?.field === 'models') setError(undefined); }} />}</TipField>
         : <ModelPicker id={`${id}-models`} list={list} picked={picked} onPick={setPicked} error={fieldError('models')} canLoad={canLoad}
             needsAddress={service === 'self_hosted'} onLoad={() => void loadModels(true)} />}
       {list.state === 'typing'
@@ -131,12 +133,14 @@ function ModelPicker({ id, list, picked, onPick, error, canLoad, needsAddress, o
   error?: string; canLoad: boolean; needsAddress: boolean; onLoad: () => void }) {
   const [query, setQuery] = useState('');
   const note = `${id}-note`;
+  const tip = `${id}-tip`;
   const models = list.state === 'loaded' ? list.models : [];
+  const tipped = list.state === 'loaded' && !error;
   const shown = models.filter((model) => modelMatches(model, query));
   const full = picked.length >= maxProviderModels;
   const toggle = (model: string) => onPick(picked.includes(model) ? picked.filter((item) => item !== model) : full ? picked : [...picked, model]);
   return (
-    <fieldset className={`field ai-models${error ? ' field-bad' : ''}`} aria-describedby={note}>
+    <fieldset className={`field ai-models${error ? ' field-bad' : ''}`} aria-describedby={tipped ? `${note} ${tip}` : note}>
       <legend className="field-label">{m.modelsField}</legend>
       <div className="ai-models-head">
         {list.state === 'loaded' && models.length > modelSearchFrom
@@ -157,7 +161,8 @@ function ModelPicker({ id, list, picked, onPick, error, canLoad, needsAddress, o
         ))}
       </ul>}
       {error ? <span className="error-copy field-note" id={note} role="alert">{error}</span>
-        : <span className="help field-note" id={note}>{full ? m.modelsLimit(maxProviderModels) : list.state === 'loaded' ? m.modelsPicked(picked.length, maxProviderModels) : ''}</span>}
+        : <span className="heading-with-tip"><span className="help field-note" id={note}>{full ? m.modelsLimit(maxProviderModels) : list.state === 'loaded' ? m.modelsPicked(picked.length, maxProviderModels) : ''}</span>
+          {tipped && <HelpTip label={m.modelsField} text={m.modelsPickedWhy} id={tip} />}</span>}
     </fieldset>
   );
 }

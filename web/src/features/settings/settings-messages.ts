@@ -35,7 +35,6 @@ export const settingsMessages = {
   displayName: 'Display name',
   sameAsWorkspace: (zone: string) => `Same as workspace (${zone})`,
   generalDescription: 'The workspace name and the default timezone for everyone who has not chosen their own.',
-  saveWorkspaceName: 'Save workspace name',
   workspaceNameHelp: 'Your team sees this name in Colliedesk. Customers see it as the help center title while the help center has no title of its own. Replies use each email channel\'s sender name, not this name.',
   preferencesDescription: 'Theme and notifications are saved in this browser only.',
   showSetupGuide: 'Show the setup guide',

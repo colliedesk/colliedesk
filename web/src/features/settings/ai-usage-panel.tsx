@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import type { AIUsage } from '../../api/ai';
+import { HelpTip } from '../../ui/help-tip';
 import { aiMessages as m } from './ai-messages';
 import { money } from './ai-level-dialogs';
 import { Meter } from './ai-meter';
@@ -37,7 +38,7 @@ export function Usage({ usage, failed, month, onMonth }: { usage?: AIUsage; fail
           <td className="ai-hide-sm">{row.billed_to === 'server' ? row.provider_label : m.yourKey}</td></tr>)}</tbody>
       </table>)}
     </section>
-    <p className="help ai-help">{m.usageHelp}</p>
+    <p className="help ai-help">{m.usageHelp} <HelpTip label={m.usageByFeature} text={m.usageWhy} /></p>
   </>;
 }
 
