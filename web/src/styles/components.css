@@ -707,7 +707,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .plan-banner p strong { color: var(--text-inverse); font-weight: 600; }
 .plan-banner p .icon { flex: none; }
 .plan-banner .icon-quiet { color: var(--text-inverse); }
-.plan-banner .icon-warn { color: var(--warn-on-inverse); }
+.plan-banner .icon-warn { color: color-mix(in srgb, var(--warn) 60%, var(--text-inverse)); }   /* 6.5:1 light, 5.0:1 dark */
 .plan-banner button:not(.plan-banner-close) { border-color: var(--surface-1); background: var(--surface-1); color: var(--text-1); }
 .plan-banner .plan-banner-close { color: var(--text-inverse); }
 .plan-banner .plan-banner-close:hover:not(:disabled) { color: var(--text-1); }

@@ -24,7 +24,8 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
    **Nothing is filled at rest** (owner 30/10/2026): priority, tags and status are marks and words; a fill means
    hover, selection, a menu or a private note. One exception: the trial strip is ink (`--surface-inverse` with
    `--text-inverse`, paper in dark), because as a neutral card it was lost among the others (owner 14/11/2026);
-   its warning mark is `--warn-on-inverse`. Amber means focus,
+   its warning mark is `--warn` mixed 60 % with `--text-inverse` in `components.css`
+   (6.5:1 light, 5.0:1 dark), not a token: `tokens.css` is also the operator console's, whose CSS budget is full. Amber means focus,
    private notes and the pending status, and nothing else: a warning uses `--warn` / `--warn-soft` (or a
    neutral card with a `--warn` icon), never the note colours; a plain notice is a neutral card. `web/scripts/brand-rules.test.mjs` checks it. In dark mode the
    logo tile keeps `#c2410c` (the mark never changes), while the price text on the site lightens to
@@ -398,7 +399,6 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--on-accent` #ffffff | `--accent` #171717 | 17.93 | 4.5 | primary button |
 | `--on-accent` #ffffff | `--accent-hover` #3d3d3d | 10.86 | 4.5 | primary button hover |
 | `--text-inverse` #ffffff | `--surface-inverse` #171717 | 17.93 | 4.5 | tooltip, trial strip |
-| `--warn-on-inverse` #f19a55 | `--surface-inverse` #171717 | 8.10 | 3 | trial strip warning mark |
 | `--note-text` #7f5200 | `--note-bg` #fff6e0 | 6.27 | 4.5 | private note label |
 | `--text-1` #171717 | `--note-bg` #fff6e0 | 16.66 | 4.5 | private note body |
 | `--danger` #c0261b | `--danger-soft` #fdeceb | 5.20 | 4.5 | urgent chip |
@@ -458,7 +458,6 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--on-accent` #0a0a0a | `--accent` #fafafa | 18.97 | 4.5 | primary button |
 | `--on-accent` #0a0a0a | `--accent-hover` #e0e0e0 | 15.00 | 4.5 | primary button hover |
 | `--text-inverse` #0a0a0a | `--surface-inverse` #fafafa | 18.97 | 4.5 | tooltip, trial strip |
-| `--warn-on-inverse` #a3460a | `--surface-inverse` #fafafa | 5.85 | 3 | trial strip warning mark |
 | `--note-text` #f2cd8a | `--note-bg` #2a2213 | 10.38 | 4.5 | private note label |
 | `--text-1` #fafafa | `--note-bg` #2a2213 | 15.05 | 4.5 | private note body |
 | `--danger` #f2837a | `--danger-soft` #3a1c1b | 6.10 | 4.5 | urgent chip |

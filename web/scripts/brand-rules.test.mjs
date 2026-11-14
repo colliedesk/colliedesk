@@ -113,13 +113,14 @@ test('a plain notice is neutral, not note amber', () => {
 });
 
 // The trial strip is the one notice filled at rest (owner 14/11/2026: the neutral card was lost among the
-// others): ink in light, paper in dark, never the brand orange or a warning fill. Its warning mark uses
-// the warning colour made for the inverse surface.
+// others): ink in light, paper in dark, never the brand orange or a warning fill. Its warning mark mixes
+// the warning colour into the strip's text, so tokens.css (shared with the operator console) does not grow.
 test('the trial strip is ink, and its warning mark reads on it', () => {
   const css = read('styles/components.css');
   expect(rule(css, '.plan-banner')).toMatch(/background:\s*var\(--surface-inverse\)/);
   expect(rule(css, '.plan-banner p')).toMatch(/color:\s*var\(--text-inverse\)/);
-  expect(rule(css, '.plan-banner .icon-warn')).toMatch(/color:\s*var\(--warn-on-inverse\)/);
+  expect(rule(css, '.plan-banner .icon-warn')).toMatch(/color:\s*color-mix\(in srgb, var\(--warn\) 60%, var\(--text-inverse\)\)/);
+  expect(read('styles/tokens.css')).not.toMatch(/--warn-on-inverse/);
   expect(rule(css, '.plan-banner')).not.toMatch(amber);
 });
 

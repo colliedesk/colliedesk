@@ -43,3 +43,14 @@ test('every token pair in both themes meets its WCAG minimum', () => {
     expect(failures.map((row) => `${theme} ${row.fg} on ${row.bg} ${row.ratio.toFixed(2)}`)).toEqual([]);
   }
 });
+
+// The trial strip's warning mark is the warning colour mixed 60 % with the strip's text, in components.css:
+// a token would grow tokens.css, which the operator console's CSS budget has no room for.
+test('the trial strip warning mark reads 3:1 on the strip in both themes', () => {
+  const mix = (a, b, share) => `#${[1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * share + parseInt(b.slice(i, i + 2), 16) * (1 - share)).toString(16).padStart(2, '0')).join('')}`;
+  for (const theme of ['light', 'dark']) {
+    const tokens = themeTokens(css, theme);
+    expect(contrast(mix(tokens['--warn'], tokens['--text-inverse'], 0.6), tokens['--surface-inverse'])).toBeGreaterThanOrEqual(3);
+  }
+  expect(contrast('#c8906c', '#171717')).toBeCloseTo(6.54, 2);
+});
