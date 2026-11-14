@@ -46,7 +46,7 @@ function HostSteps({ host, origin, mcpAddress, token, hidden }: { host: ConnectH
   // Claude Code signs in with OAuth: the Colliedesk plugin on Cloud, this server's address elsewhere.
   const plugin = mcpAddress === pluginMCPURL;
   const [before, command] = host === 'claude-code' && !plugin ? text.claudeCodeRemove : text.disconnects[host];
-  const after = host === 'claude-code' ? text.disconnectAfter : text.revokeAfter;
+  const after = [text.disconnectTips[host], host === 'claude-code' ? text.disconnectAfter : text.revokeAfter].filter(Boolean).join(' ');
   const learnMore = { href: item.guide, label: text.learnMore };
   let steps: ReactNode;
   if (host === 'claude-code') {
@@ -106,7 +106,7 @@ function HostSteps({ host, origin, mcpAddress, token, hidden }: { host: ConnectH
     <div className="host-panel" role="group" aria-label={item.name}>
       {steps}
       <p className="muted-copy host-foot heading-with-tip"><a href={item.guide} target="_blank" rel="noopener noreferrer">{text.fullGuide}</a>
-        <span>{' · '}{text.howToDisconnect}</span><HelpTip label={text.disconnectLabel} text={`${text.disconnect}${before}${command ?? ''}${after}`} /></p>
+        <span>{' · '}{text.disconnect}{before}{command && <code>{command}</code>}</span><HelpTip label={text.disconnectLabel} text={after} /></p>
     </div>
   );
 }

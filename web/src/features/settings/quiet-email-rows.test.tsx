@@ -64,16 +64,15 @@ test('the forwarding address says what to forward in one line, and the tip says 
 test('the Gmail and Outlook steps are one line with a tip that holds them and a link to the guide', () => {
   render(<EmailChannelSection settings={hosted} timezone="UTC" canManage />);
   line('Set up forwarding in Gmail or Outlook.');
-  expect(tip('Forwarding steps')).toHaveAccessibleDescription(
-    'Gmail: Settings → See all settings → Forwarding and POP/IMAP → Add a forwarding address. Gmail sends a confirmation message to this address; it appears in your inbox here, so open it and select the link. ' +
-    'Outlook: Settings → Mail → Forwarding, enter the address and select Start forwarding. In Microsoft 365, forwarding outside your organization is often blocked (a bounce with 5.7.520): your admin allows it for this mailbox in the outbound spam policy (see the email channel guide).');
+  // The steps are in the guide, which holds every one of them; the tip is one sentence and the link.
+  expect(tip('Forwarding steps')).toHaveAccessibleDescription('Step-by-step for Gmail, Google Workspace and Microsoft 365.');
   const layer = document.getElementById(tip('Forwarding steps').getAttribute('aria-controls')!)!;
   expect(within(layer).getByRole('link', { name: 'Learn more', hidden: true })).toHaveAttribute('href', 'https://colliedesk.com/docs/email-channel');
 });
 
 test('the workspace address name warns in one line, and the tip says what stops working', () => {
   render(<EmailChannelSection settings={hosted} timezone="UTC" canManage onSaveSlug={vi.fn()} />);
-  line('Changing it moves the forwarding and help center addresses.');
+  line('The old address and help center links stop working at once.');
   expect(tip('Workspace address name')).toHaveAccessibleDescription('Changing the name changes the forwarding address and the help center address. The old address stops receiving mail at once and old help center links stop working, so update your mailbox forwarding and links too.');
 });
 

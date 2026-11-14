@@ -117,7 +117,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
             <span className="button-row"><CopyButton value={hostedAddress} copiedText={settingsMessages.addressCopied}>{settingsMessages.copyForwardingAddress}</CopyButton></span>
           </div>
           <QuietNote note={settingsMessages.forwardingHelp} label={settingsMessages.forwardingAddress} tip={settingsMessages.forwardingWhy} />
-          <QuietNote note={settingsMessages.forwardingSteps} label={settingsMessages.forwardingStepsLabel} tip={`${settingsMessages.forwardingGmail} ${settingsMessages.forwardingOutlook}`}
+          <QuietNote note={settingsMessages.forwardingSteps} label={settingsMessages.forwardingStepsLabel} tip={settingsMessages.forwardingStepsWhy}
             link={{ href: settingsMessages.emailGuideURL, label: settingsMessages.learnMore }} />
           {canManage && onSaveSlug && <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!slugFeedback.pending) onSaveSlug(slug.trim()); }}>
             <label className="field"><span>{settingsMessages.workspaceAddressName}</span><input value={slug} onChange={(event) => { slugFeedback.touch(); setSlug(event.target.value); }} required /></label>

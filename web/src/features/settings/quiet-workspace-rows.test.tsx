@@ -75,10 +75,18 @@ test('Saved replies keeps one line, and the tip names the two variables', () => 
   expect(tip('Saved replies')).toHaveAccessibleDescription('{{customer.name}} and {{agent.name}} are filled in when a reply is inserted.');
 });
 
-test('the saved reply trash keeps one line, and the tip says what happens after 30 days', () => {
-  render(<SavedReplyTrash timezone="UTC" now={new Date('2026-11-14T00:00:00Z')} load={async () => ({ items: [], next_cursor: null })} onUndelete={vi.fn()} />);
+test('the saved reply trash opened from Saved replies keeps one line, and the tip says what happens after 30 days', async () => {
+  render(<SavedRepliesSection replies={[]} onCreate={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()} onReload={vi.fn()} loadHistory={vi.fn()} onRestoreVersion={vi.fn()}
+    loadTrash={async () => ({ items: [], next_cursor: null })} onUndelete={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Trash' }));
+  await screen.findByText('Deleted saved replies stay here for 30 days.');
   line('Deleted saved replies stay here for 30 days.');
   expect(tip('Trash')).toHaveAccessibleDescription('Then they are deleted for good with their history.');
+});
+
+test('a trash that brings its own line gets no tip it did not ask for', () => {
+  render(<SavedReplyTrash timezone="UTC" now={new Date('2026-11-14T00:00:00Z')} load={async () => ({ items: [], next_cursor: null })} onUndelete={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'About Trash' })).toBeNull();
 });
 
 test('Export says the download started in one line, and the tip says who saves the file', async () => {
@@ -87,9 +95,11 @@ test('Export says the download started in one line, and the tip says who saves t
   Object.defineProperty(window, 'location', { configurable: true, value: { assign: vi.fn() } });
   renderPlain(<QueryClientProvider client={new QueryClient()}><ExportAllData /></QueryClientProvider>);
   fireEvent.click(screen.getByRole('button', { name: 'Export all data' }));
-  await screen.findByRole('status');
+  const status = await screen.findByRole('status');
   line('Your download is starting. Keep this page open.');
-  expect(tip('Download')).toHaveAccessibleDescription('The file is saved by your browser; keep this page open until it finishes.');
+  // The tip is a button, so it sits beside the live region, not in it.
+  expect(within(status).queryByRole('button')).toBeNull();
+  expect(tip('Export')).toHaveAccessibleDescription('The file is saved by your browser; keep this page open until it finishes.');
 });
 
 function rolesPage() {

@@ -65,16 +65,29 @@ test('Cursor says what the button needs in one line, and the tip says what it do
   line('Create a token above to use this button.');
   expect(tip('Add to Cursor')).toHaveAccessibleDescription('Create a token above first; this button puts it into Cursor for you. You can also add it by hand below.');
   fireEvent.click(screen.getByText('Add it by hand'));
-  line('Cursor reads it only when opened from a terminal.');
+  line('Cursor reads the variable only if opened from a terminal.');
 });
 
-test('every host ends with its guide and a tip that holds the way out', () => {
+// The command is a value to copy, so it stays visible in <code>; only what comes after it is in the tip.
+const foot = (host: string) => within(screen.getByRole('group', { name: host })).getByText(/To disconnect:/).closest('p') as HTMLElement;
+
+test('every host ends with its guide, the way out on screen and what comes after in a tip', () => {
   show();
-  expect(tip('Disconnecting')).toHaveAccessibleDescription('To disconnect: run claude mcp remove colliedesk, then Disconnect it in Connected AI apps above.');
+  // What is on screen besides the command (a value to copy) fits one quiet line; the tip's text is not on screen.
+  const visible = foot('Claude Code').cloneNode(true) as HTMLElement;
+  visible.querySelectorAll('.help-tip, code').forEach((node) => node.remove());
+  expect(visible.textContent!.length).toBeLessThanOrEqual(60);
+  expect(within(foot('Claude Code')).getByText('claude mcp remove colliedesk').tagName).toBe('CODE');
+  expect(tip('Disconnecting')).toHaveAccessibleDescription('Then Disconnect it in Connected AI apps above.');
   fireEvent.click(screen.getByRole('radio', { name: 'Codex' }));
-  expect(tip('Disconnecting')).toHaveAccessibleDescription('To disconnect: run codex mcp remove colliedesk, then revoke the token above.');
+  expect(within(foot('Codex')).getByText('codex mcp remove colliedesk').tagName).toBe('CODE');
+  expect(tip('Disconnecting')).toHaveAccessibleDescription('Then revoke the token above.');
+  fireEvent.click(screen.getByRole('radio', { name: 'VS Code' }));
+  expect(within(foot('VS Code')).getByText('mcp.json').tagName).toBe('CODE');
+  expect(tip('Disconnecting')).toHaveAccessibleDescription('Also delete its colliedesk-token input. Then revoke the token above.');
   fireEvent.click(screen.getByRole('radio', { name: 'Claude Desktop' }));
-  expect(tip('Disconnecting')).toHaveAccessibleDescription('To disconnect: remove Colliedesk in Claude Desktop → Settings → Extensions, then revoke the token above.');
+  expect(foot('Claude Desktop')).toHaveTextContent('To disconnect: remove it in Claude Desktop');
+  expect(tip('Disconnecting')).toHaveAccessibleDescription('Settings → Extensions. Then revoke the token above.');
 });
 
 test('a new token says how its role works in one line, and how long it lasts in another', () => {
@@ -98,8 +111,28 @@ const app = (change: Partial<Session> = {}): Session => ({
 test('Connected AI apps keeps one line, the address to add, and a tip with everything else', () => {
   render(<ConnectedAppsSection sessions={[app()]} timezone="UTC" mcpAddress="https://desk.example.com/mcp" />);
   line('AI apps you connected act as you in this workspace.');
-  // The address is a value to copy, so it stays on screen.
-  expect(screen.getByText('To connect one, add https://desk.example.com/mcp in your AI app.')).toBeVisible();
+  // The address is a value to copy, so it stays on screen in <code> with a copy button.
+  line('To connect one, add this address in your AI app.');
+  expect(screen.getByText('https://desk.example.com/mcp', { selector: 'code' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
   expect(tip('Connected AI apps')).toHaveAccessibleDescription('AI apps you connected with OAuth act as you in this workspace, with everything you can do now. To connect one, add https://desk.example.com/mcp in Claude, ChatGPT, Codex, Cursor or Claude Code: it opens a page here to allow it. Each sign-in is its own row, so two computers show twice.');
-  line('Removing it in the app does not disconnect it here.');
+  line('Removing it in the app does not disconnect; Disconnect does.');
+});
+
+test('a guide link in the Create token dialog opens in a new tab, so the token shown once is not lost', async () => {
+  const roles = rolesOf('admin');
+  const created = { token: 'cdk_agent_secret', session: { id: '66666666-6666-4666-8666-666666666666', agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam',
+    label: 'Claude Code', token: null, role: null, permissions: [], current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2026-11-22T00:00:00Z', revoked_at: null } } as never;
+  render(<AgentTokensSection roles={roles} rolePermissions={new Map([[roles[0].id, permissionsOf('admin')]])} held={permissionsOf('admin')} origin={origin} onCreate={async () => created} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
+  const dialog = screen.getByRole('dialog', { name: 'Create a token' });
+  fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Claude Code' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Create token' }));
+  await within(dialog).findByText('Copy it now. Colliedesk keeps only a fingerprint, so this token cannot be shown again. If you lose it, create a new one and revoke this one.');
+  const links = Array.from(dialog.querySelectorAll<HTMLAnchorElement>('a[href^="https://colliedesk.com/docs/"]'));
+  expect(links.length).toBeGreaterThan(0);
+  for (const link of links) {
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  }
 });

@@ -57,7 +57,7 @@ test('the fields of a new series keep one short line each, and a tip holds the r
   fireEvent.click(await screen.findByRole('button', { name: 'Add a series' }));
   const dialog = screen.getByRole('dialog', { name: 'Add a number series' });
   line('Lowercase letter first, then letters, digits, - or _.', within(dialog) as never);
-  expect(within(dialog).getByRole('textbox', { name: 'Name' })).toHaveAccessibleDescription(/What a channel’s settings name it by; 20 characters at most\./);
+  expect(within(dialog).getByRole('textbox', { name: 'Name' })).toHaveAccessibleDescription(/A channel’s settings pick the series by this name; 20 at most\./);
   line('Use {n} once; {yyyy} adds the year it opens in.', within(dialog) as never);
   expect(within(dialog).getByRole('textbox', { name: 'Code format' })).toHaveAccessibleDescription(
     expect.stringContaining('Letters, digits, # - _ / . with {n} once ({n:04} pads to 4 digits) and {yyyy} for the year it opens in.'));

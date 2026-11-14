@@ -25,7 +25,7 @@ const row = (text: string) => screen.getByText(text).closest('article') as HTMLE
 const openMenu = (who: string) => fireEvent.click(screen.getByRole('button', { name: `Actions for ${who}` }));
 
 // A help tip is an ⓘ button that explains; it is not a control, so only the buttons that act are counted.
-const actions = (buttons: HTMLElement[]) => buttons.filter((button) => !(button.getAttribute('aria-label') ?? '').startsWith('About '));
+const actions = (buttons: HTMLElement[]) => buttons.filter((button) => !button.classList.contains('help-tip-button'));
 test('lists every member with role, state and last activity', () => {
   render(<TeamSection members={[admin, ann, bob, cy]} currentAgentId={admin.id} canManage={false} timezone="UTC" />);
   const team = screen.getByRole('region', { name: 'Team' });

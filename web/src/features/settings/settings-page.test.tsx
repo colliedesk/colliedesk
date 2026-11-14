@@ -212,7 +212,7 @@ test('a chosen workspace timezone is saved when the list is left, no Save button
   expect(onSetWorkspaceTimezone).toHaveBeenCalledWith('America/New_York');
   // Nothing in General has a button of its own: the timezone saves at once, and the name waits for the page's Save.
   // A help tip is an ⓘ button that explains; only the buttons that act are counted.
-  expect(within(general).queryAllByRole('button').filter((button) => !(button.getAttribute('aria-label') ?? '').startsWith('About '))).toEqual([]);
+  expect(within(general).queryAllByRole('button').filter((button) => !button.classList.contains('help-tip-button'))).toEqual([]);
 });
 
 test('your timezone follows the workspace until you choose one, and choosing the workspace again clears it', () => {

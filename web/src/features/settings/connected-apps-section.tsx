@@ -2,12 +2,15 @@ import type { Session } from '../../api/schemas';
 import { describeUserAgent } from '../../lib/describe-user-agent';
 import { formatDate } from '../../lib/format-date';
 import { HelpTip } from '../../ui/help-tip';
+import { CopyButton } from './copy-button';
 
 export const connectedAppsMessages = {
   heading: 'Connected AI apps',
   description: 'AI apps you connected act as you in this workspace.',
-  // The address is a value to copy, so its line stays; the rest of how to connect is in the tip.
-  connectAddress: (address: string) => `To connect one, add ${address} in your AI app.`,
+  // The address is a value to copy, so it stays on screen with a copy button; the rest of how to connect is in the tip.
+  connectOne: 'To connect one, add this address in your AI app.',
+  copy: 'Copy',
+  copyAddress: 'Copy address',
   descriptionWhy: (address: string) => `AI apps you connected with OAuth act as you in this workspace, with everything you can do now. To connect one, add ${address} in Claude, ChatGPT, Codex, Cursor or Claude Code: it opens a page here to allow it. Each sign-in is its own row, so two computers show twice.`,
   none: 'No AI app is connected yet.',
   connected: 'Connected',
@@ -16,7 +19,7 @@ export const connectedAppsMessages = {
   needsReconnecting: 'Needs reconnecting',
   reconnectSteps: 'To use it again: in Claude or ChatGPT, Disconnect the Colliedesk connector, then Connect; in Claude Code, run /mcp, choose colliedesk (plugin:colliedesk:colliedesk with the Colliedesk plugin) and Authenticate; in Codex, run codex mcp login colliedesk; in Cursor, log in to colliedesk again in Settings → MCP.',
   disconnect: 'Disconnect',
-  removingInApp: 'Removing it in the app does not disconnect it here.',
+  removingInApp: 'Removing it in the app does not disconnect; Disconnect does.',
 } as const;
 const text = connectedAppsMessages;
 
@@ -37,7 +40,7 @@ export function ConnectedAppsSection({ sessions, timezone, mcpAddress, onDisconn
     <section className="settings-card" aria-labelledby="connected-apps-heading">
       <div className="section-heading"><div className="heading-with-tip"><h2 id="connected-apps-heading">{text.heading}</h2><HelpTip label={text.heading} text={text.descriptionWhy(mcpAddress)} /></div><p>{text.description}</p></div>
       <div className="settings-body settings-rows">
-        <p className="muted-copy" data-quiet="value">{text.connectAddress(mcpAddress)}</p>
+        <p className="muted-copy">{text.connectOne} <code data-quiet="value">{mcpAddress}</code> <CopyButton value={mcpAddress} label={text.copyAddress}>{text.copy}</CopyButton></p>
         {apps.length === 0 ? <p className="muted-copy">{text.none}</p> : <div className="data-list">{apps.map((session) => {
           const app = session.app!;
           const stale = app.needs_reconnecting || session.revoked_at !== null || Date.parse(session.expires_at) <= Date.now();

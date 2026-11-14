@@ -148,7 +148,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
         <div className="saved-reply-bar"><button type="button" className="saved-reply-trash-toggle" aria-expanded={panel === 'trash'}
           onClick={(event) => (panel === 'trash' ? closePanel() : openPanel('trash', event.currentTarget))}>{savedReplyMessages.savedReplyTrash}</button></div>
         {panel === 'trash' && <Suspense fallback={<p className="muted-copy">{savedReplyMessages.loadingSavedReplyHistory}</p>}>
-          <SavedReplyTrash timezone={timezone} now={now ?? new Date()} load={loadTrash} onUndelete={onUndelete} onClose={closePanel} /></Suspense>}
+          <SavedReplyTrash timezone={timezone} now={now ?? new Date()} descriptionTip={savedReplyMessages.savedReplyTrashWhy} load={loadTrash} onUndelete={onUndelete} onClose={closePanel} /></Suspense>}
       </div>
     </section>
   );

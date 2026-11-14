@@ -148,7 +148,7 @@ interface TrashProps<T extends TrashedItem> {
   // The panel's name and copy; the saved replies' by default.
   heading?: string;
   description?: string;
-  // descriptionTip is what the line leaves out; the saved reply trash's own line has one.
+  // descriptionTip is what the line leaves out; a trash that has one passes it with its line.
   descriptionTip?: string;
   empty?: string;
   closeLabel?: string;
@@ -162,7 +162,7 @@ const trashedReplyText = (item: TrashedItem) => ('body' in item && typeof item.b
 // SavedReplyTrash lists the deleted replies (or articles, or collections), a page at a time, with the
 // days left before they are deleted for good.
 export function SavedReplyTrash<T extends TrashedItem>({ timezone, now, load, onUndelete, onClose, heading = savedReplyMessages.savedReplyTrash,
-  description = savedReplyMessages.savedReplyTrashDescription, descriptionTip = description === savedReplyMessages.savedReplyTrashDescription ? savedReplyMessages.savedReplyTrashWhy : undefined, empty = savedReplyMessages.savedReplyTrashEmpty, closeLabel = savedReplyMessages.closeSavedReplyTrash,
+  description = savedReplyMessages.savedReplyTrashDescription, descriptionTip, empty = savedReplyMessages.savedReplyTrashEmpty, closeLabel = savedReplyMessages.closeSavedReplyTrash,
   text = trashedReplyText, failedMessage = savedReplyMessages.savedReplyActionFailed }: TrashProps<T>) {
   const { items, failed, reload, more } = usePages<T, string>(async (cursor) => {
     const page = await load(cursor);

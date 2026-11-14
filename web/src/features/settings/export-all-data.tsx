@@ -55,7 +55,7 @@ export function ExportAllData() {
       <div className="button-row">
         <button type="button" disabled={start.isPending} onClick={() => start.mutate()}>{messages.exportHeading}</button>
       </div>
-      {start.isSuccess && <p role="status" className="muted-copy heading-with-tip"><span>{settingsMessages.exportStarted}</span><HelpTip label={settingsMessages.exportStartedLabel} text={settingsMessages.exportStartedWhy} /></p>}
+      {start.isSuccess && <div className="heading-with-tip"><p role="status" className="muted-copy">{settingsMessages.exportStarted}</p><HelpTip label={settingsMessages.exportStartedLabel} text={settingsMessages.exportStartedWhy} /></div>}
       {returned && !start.isPending && !start.isSuccess && !start.isError && <p role="alert" className="error-copy">{returned}</p>}
       {start.isError && <p role="alert" className="error-copy">{refusalText(start.error)}</p>}
     </div>

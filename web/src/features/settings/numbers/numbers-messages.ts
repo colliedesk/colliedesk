@@ -17,7 +17,7 @@ export const numbersMessages = {
   editWhy: 'A new format applies to conversations opened from now on; codes already given stay as they are, and customers can still send them back.',
   name: 'Name',
   nameHint: 'Lowercase letter first, then letters, digits, - or _.',
-  nameWhy: 'What a channel’s settings name it by; 20 characters at most.',
+  nameWhy: 'A channel’s settings pick the series by this name; 20 at most.',
   nameBad: 'Start with a lowercase letter; then letters, digits, - or _, 20 at most.',
   nameTaken: 'A series has this name already.',
   format: 'Code format',

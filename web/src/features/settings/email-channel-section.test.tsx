@@ -148,8 +148,9 @@ test('shows the hosted forwarding address with a copy button and the Gmail and O
   fireEvent.click(screen.getByRole('button', { name: /copy forwarding address/i }));
   expect(writeText).toHaveBeenCalledWith('support@acme.colliedesk.com');
   expect(await screen.findByText(/copied/i)).toBeInTheDocument();
-  expect(screen.getByText(/forwarding and pop\/imap/i)).toBeInTheDocument();
-  expect(screen.getByText(/outlook: settings → mail → forwarding/i)).toBeInTheDocument();
+  // The Gmail and Outlook steps are one line and a link; the email channel guide holds every step.
+  expect(screen.getByText('Set up forwarding in Gmail or Outlook.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Forwarding steps' })).toHaveAccessibleDescription('Step-by-step for Gmail, Google Workspace and Microsoft 365.');
   expect(screen.queryByRole('textbox', { name: /inbound url/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /rotate inbound secret/i })).not.toBeInTheDocument();
 });
