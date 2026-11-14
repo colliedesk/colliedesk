@@ -203,7 +203,7 @@
 .ai-estimate-note { margin: 0; color: var(--text-2); }
 @media (max-width: 44rem) { .ai-auto-side .ai-auto-stat { display: none; } }
 /* A link that does what a button does looks like one, and is a full touch target on a phone. */
-.ai-link-button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+.ai-link-button { min-height: var(--control); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
 @media (pointer: coarse), (max-width: 30rem) { .ai-link-button { min-height: var(--touch); } }
 /* The models a key may use, ticked instead of typed: picked ones first, the first is the default. */

@@ -10,7 +10,7 @@
 .help-tip { display: inline-flex; vertical-align: middle; }
 .heading-with-tip { display: flex; align-items: center; gap: var(--space-1); }
 .help-tip-button {
-  --hit: var(--control, 32px);
+  --hit: var(--control);
   width: auto; min-height: 0; border: 0; border-radius: var(--radius-full); background: none; box-shadow: none;
   padding: calc((var(--hit) - 16px) / 2); margin: calc((16px - var(--hit)) / 2); color: var(--text-3); cursor: help;
 }

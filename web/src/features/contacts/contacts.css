@@ -19,7 +19,7 @@ main.contact-page > :not(.dialog-backdrop):not(.sr-only) { width: 100%; max-widt
 /* Rename: the name becomes a field with Save name and Cancel. */
 .contact-page .contact-rename { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); }
 .contact-page .contact-rename label { flex-basis: 100%; color: var(--text-1); font-size: var(--fs-small); font-weight: 600; line-height: 20px; }
-.contact-page .contact-rename input { flex: 1 1 20rem; max-width: 360px; min-height: var(--control, 32px); }
+.contact-page .contact-rename input { flex: 1 1 20rem; max-width: 360px; min-height: var(--control); }
 
 /* Section titles and the cards under them. */
 .contact-page .contact-merges, .contact-page .contact-history { display: flex; flex-direction: column; gap: var(--space-3); }

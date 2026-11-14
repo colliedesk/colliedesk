@@ -13,7 +13,7 @@
 .setup-flow-identity span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
 .setup-flow-identity span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
 .setup-flow-exit {
-  flex: none; display: grid; place-items: center; width: var(--control, 32px); height: var(--control, 32px); margin-left: auto;
+  flex: none; display: grid; place-items: center; width: var(--control); height: var(--control); margin-left: auto;
   border-radius: var(--radius); color: var(--text-3);
 }
 .setup-flow-exit:hover { background: var(--surface-2); color: var(--text-1); }
@@ -59,7 +59,7 @@
 .setup-flow-missing { margin: 0; font-size: var(--fs-small); }
 .setup-flow-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
 .setup-flow-later { margin-left: auto; font-size: var(--fs-ui); }
-.setup-flow-buttons button, .setup-flow a.button { min-height: max(40px, var(--control, 32px)); padding: 0 var(--space-5); font-size: var(--fs-ui); }
+.setup-flow-buttons button, .setup-flow a.button { min-height: max(40px, var(--control)); padding: 0 var(--space-5); font-size: var(--fs-ui); }
 .setup-flow a.button {
   display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   background: var(--surface-1); box-shadow: var(--shadow-1); color: var(--text-1); font-weight: 500; text-decoration: none;

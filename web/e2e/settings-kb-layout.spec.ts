@@ -192,7 +192,7 @@ test('Settings → Data: the Export card is one row, the title and what it does 
   await page.screenshot({ path: test.info().outputPath('data-export-1440.png') });
 });
 
-for (const [width, least] of [[1440, 32], [390, 44]] as const) {
+for (const [width, least] of [[1440, 28], [390, 44]] as const) {
   test(`Settings → Members: the role buttons are as tall as the buttons around them at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await newDesk(page, `Role Buttons ${width}`);

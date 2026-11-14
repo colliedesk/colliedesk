@@ -11,7 +11,7 @@
 .permission-resource { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); padding-top: 5px; color: var(--text-1); font-size: var(--fs-small); font-weight: 500; }
 .permission-tally { color: var(--text-3); font-size: var(--fs-label); font-weight: 400; }
 .permission-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); min-width: 0; }
-.permission-chip { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--control, 32px); border: 1px solid var(--line-control); border-radius: var(--radius-full);
+.permission-chip { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--control); border: 1px solid var(--line-control); border-radius: var(--radius-full);
   background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-label); cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
 /* The box is the whole chip and never shows: rules for disabled controls of a page (.agent-tokens dims
