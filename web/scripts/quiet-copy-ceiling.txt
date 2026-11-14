@@ -184,24 +184,3 @@ features/settings/targets/targets-messages.ts:targetsMessages.targetsLead	81
 features/settings/targets/targets-messages.ts:targetsMessages.targetsNote	126
 features/shell/report-messages.ts:reportMessages.reportFromServer	184
 features/shell/report-messages.ts:reportMessages.reportIntro	62
-messages.ts:messages.cloudNewHere	88
-messages.ts:messages.cloudTrialWorkspace	122
-messages.ts:messages.consentBefore + messages.ts:messages.consentTerms + messages.ts:messages.consentAnd + messages.ts:messages.consentPrivacy + messages.ts:messages.consentSee + messages.ts:messages.consentPricing	73
-messages.ts:messages.exportDescription	97
-messages.ts:messages.getStartedExplanation	94
-messages.ts:messages.oneTimeLinkInstead	69
-messages.ts:messages.resultsRefreshedWhy	183
-messages.ts:messages.sendTestMessageHint	86
-messages.ts:messages.signedOutSelfHosted	99
-messages.ts:messages.workspaceExplained	80
-operator/ai-provider-messages.ts:en.allowanceHelp	90
-operator/ai-provider-messages.ts:en.pricesHelp	94
-operator/ai-provider-messages.ts:en.serverModelsHelp	100
-operator/ai-provider-messages.ts:en.serverProviderOffHelp	94
-operator/messages.ts:m.confirmTrialLead	98
-operator/messages.ts:m.environmentLead	68
-operator/messages.ts:m.noProducts	78
-operator/messages.ts:m.productsLead	145
-operator/messages.ts:m.revokeSessionLead	91
-operator/messages.ts:m.secretOnlyYou	70
-operator/messages.ts:m.writeOnly	85
