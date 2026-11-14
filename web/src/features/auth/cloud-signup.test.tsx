@@ -151,5 +151,5 @@ test('the sign-up page explains itself in one short line, trial or payment', () 
   expect(screen.getByText('No workspace uses this email. 14-day free trial, no card.')).toBeInTheDocument();
   unmount();
   render(<CloudSignup onCreate={vi.fn()} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} buying />);
-  expect(screen.getByText('No workspace uses this email. Name it, then pay next.')).toBeInTheDocument();
+  expect(screen.getByText('No workspace uses this email. Name the workspace, then pay.')).toBeInTheDocument();
 });

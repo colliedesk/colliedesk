@@ -108,13 +108,15 @@ test('an app that returns to this computer is warned about; one that returns to 
   expect(screen.queryByText(/a program on this computer/)).toBeNull();
 });
 
-test('how to disconnect is one line, and that the app follows role changes sits in a tip', async () => {
+test('the app following the roles is said in the open, beside what it can do, before anyone allows it', async () => {
   show();
-  expect(await screen.findByText('Disconnect it any time in Settings → Connected AI apps.')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'About role changes' })).toHaveAccessibleDescription('If your roles change, it follows them at once.');
+  expect(await screen.findByText('It works in Acme Support as Ada, with everything you can do there now.')).toBeVisible();
+  expect(screen.getByText('If your roles change, it follows them at once.')).toBeVisible();
+  expect(screen.getByText('Disconnect it any time in Settings → Connected AI apps.')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /About/ })).toBeNull();
 });
 
 test('on a self-hosted server another workspace is one short line', async () => {
   show();
-  expect(await screen.findByText('Sign in to the other workspace here, then connect again.')).toBeTruthy();
+  expect(await screen.findByText('Sign in to that workspace here, then connect from the app.')).toBeTruthy();
 });

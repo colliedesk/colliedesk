@@ -7,7 +7,7 @@ export const signupMessages = {
   signupExplanation: 'No workspace uses this email. 14-day free trial, no card.',
   startTrial: 'Start free trial',
   // A visitor who came from a website "buy" link pays right after naming the workspace, so no trial wording.
-  signupBuyingExplanation: 'No workspace uses this email. Name it, then pay next.',
+  signupBuyingExplanation: 'No workspace uses this email. Name the workspace, then pay.',
   createWorkspaceAndPay: 'Create workspace and continue to payment',
   creatingWorkspace: 'Creating workspace…',
   signInToWorkspace: 'Sign in to your workspace',

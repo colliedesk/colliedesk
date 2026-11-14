@@ -18,7 +18,7 @@
 
 .move-dialog { width: min(40rem, 100%); }
 .move-messages { display: grid; gap: 2px; margin: 0; border: 0; padding: 0; }
-.move-messages legend { margin-bottom: var(--space-1); padding: 0; color: var(--text-1); font-size: var(--fs-small); font-weight: 600; }
+.move-messages-label { margin-bottom: var(--space-1); padding: 0; color: var(--text-1); font-size: var(--fs-small); font-weight: 600; }
 .move-message { display: flex; align-items: flex-start; gap: var(--space-2); min-height: var(--touch, 44px); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); cursor: pointer; }
 .move-message:hover { background: color-mix(in srgb, var(--text-1) 5%, transparent); }
 .move-message input { margin-top: 3px; }

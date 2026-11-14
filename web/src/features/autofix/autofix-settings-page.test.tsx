@@ -188,13 +188,13 @@ describe('quiet rows', () => {
     const row = screen.getByText('northwind/web', { selector: 'b' }).closest('li') as HTMLElement;
     fireEvent.click(within(row).getByRole('button', { name: 'Disconnect' }));
     const dialog = screen.getByRole('alertdialog', { name: 'Disconnect northwind/web?' });
-    expect(dialog).toHaveTextContent('Fixes in progress on it are cancelled.');
-    expect(dialog).toHaveTextContent('Its fixes stay listed. Connect it again to send new ones.');
+    // One sentence, one visible line: it is what the person gives up by pressing Disconnect.
+    expect(dialog.querySelector('[data-quiet="consequence"]')).toHaveTextContent(/^Fixes in progress on it are cancelled\. Its fixes stay listed; connect it again to send new ones\.$/);
   });
 
   it('keeps what the vendor checklist ticks mean in one line', () => {
     show(settingsOf({ connectors: [connectorOf({ enabled: false, consent: null })] }));
-    expect(screen.getAllByText('You tick these yourself; kept in this browser only.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Colliedesk can’t see these; kept in this browser only.').length).toBeGreaterThan(0);
   });
 
   it('says the Cursor key is never shown again, and why a service account key is advised in a tip', () => {

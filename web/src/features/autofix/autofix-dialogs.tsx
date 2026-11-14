@@ -9,12 +9,13 @@ import { autofixMessages as m } from './autofix-messages';
 export function CancelDialog({ fix, busy, problem, onCancel, onClose }: { fix: Fix; busy: boolean; problem?: string; onCancel: () => void; onClose: () => void }) {
   const issue = fix.state !== 'sending' && fix.connector !== 'cursor_api';
   const help = fix.state === 'sending' ? m.cancelSendingHelp : fix.connector === 'cursor_api' ? m.cancelCursorHelp : m.cancelIssueHelp(fix.issue_number);
-  // The run that may go on and the pull request that stays open are the tip of the line, before the person confirms.
-  const details = [issue && m.cancelRunTip(fix.connector), fix.pr_number !== null && m.cancelPRHelp, m.cancelKept].filter(Boolean).join(' ');
+  // What stays on GitHub after Cancel is something the person must do or know before pressing it: it stays in the open.
+  const consequence = [issue && m.cancelRun(fix.connector), fix.pr_number !== null && m.cancelPRHelp].filter(Boolean).join(' ');
   return <Dialog alert className="af-dialog" title={m.cancelTitle} help={help} closeLabel={m.close} onClose={onClose} onSubmit={onCancel}
     footer={<><button type="button" className="af-ghost" onClick={onClose}>{m.keepIt}</button>
       <button type="submit" className="af-danger-solid" disabled={busy}>{m.cancelFix}</button></>}>
-    <p className="af-help">{m.cancelKeep}<HelpTip label={m.cancelTipLabel} text={details} /></p>
+    {consequence && <p data-quiet="consequence">{consequence}</p>}
+    <p className="af-help">{m.cancelKeep}<HelpTip label={m.cancelTipLabel} text={m.cancelKept} /></p>
     {problem && <p role="alert" className="error-copy">{problem}</p>}
   </Dialog>;
 }

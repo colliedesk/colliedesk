@@ -83,7 +83,7 @@ test('a card holding a password says so, and one behind another of its lane says
   rerender(<IntakeCard {...props({ item: gathering({ review_reason: 'lane_blocked' }) })} />);
   expect(screen.getByText('Waiting for the card above')).toBeInTheDocument();
   expect(screen.getByText('An earlier card of this customer waits above.')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'About the card above' })).toHaveAccessibleDescription('Deciding that one first keeps their messages in order.');
+  expect(screen.getByRole('button', { name: 'About Lan Nguyen’s earlier card' })).toHaveAccessibleDescription('Deciding that one first keeps their messages in order.');
 });
 
 test('a card of messages taken back from a conversation says so, and by whom when the server knows', () => {

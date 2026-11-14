@@ -52,7 +52,7 @@ export interface AutofixSettingsPageProps {
 
 type Busy = (run: () => Promise<unknown>) => void;
 
-function Confirm({ title, help, children, confirm, danger, onConfirm, onClose, busy }: { title: string; help: string; children?: ReactNode; confirm: string; danger?: boolean; onConfirm: () => void; onClose: () => void; busy: boolean }) {
+function Confirm({ title, help, children, confirm, danger, onConfirm, onClose, busy }: { title: string; help?: string; children?: ReactNode; confirm: string; danger?: boolean; onConfirm: () => void; onClose: () => void; busy: boolean }) {
   return <Dialog alert className="af-dialog" title={title} help={help} closeLabel={autofixMessages.close} onClose={onClose} onSubmit={onConfirm}
     footer={<><button type="button" className="af-ghost" onClick={onClose}>{autofixMessages.cancel}</button>
       <button type="submit" className={danger ? 'af-danger-solid' : 'primary-action'} disabled={busy}>{confirm}</button></>}>{children}</Dialog>;
@@ -122,8 +122,8 @@ function RepoRow({ repo, isAdmin, at, busy, run, actions, enabled }: { repo: Rep
       : <button type="button" className="af-ghost" disabled={busy} onClick={() => setDialog('disconnect')}>{m.disconnect}</button>)}</div>
     {dialog === 'notes' && <Confirm title={m.notesTitle(repo.full_name)} help={m.notesHelp} confirm={m.allowNotes} busy={busy} onClose={() => setDialog(undefined)}
       onConfirm={() => { setDialog(undefined); run(() => actions.setNotes(repo, true)); }}><p className="af-help">{m.notesNote}<HelpTip label={m.notesLabel} text={m.notesWhy} /></p></Confirm>}
-    {dialog === 'disconnect' && <Confirm danger title={m.disconnectRepoTitle(repo.full_name)} help={m.disconnectRepoHelp} confirm={m.disconnect} busy={busy}
-      onClose={() => setDialog(undefined)} onConfirm={() => { setDialog(undefined); run(() => actions.disconnectRepo(repo)); }}><p className="af-help">{m.disconnectRepoAgain}</p></Confirm>}
+    {dialog === 'disconnect' && <Confirm danger title={m.disconnectRepoTitle(repo.full_name)} confirm={m.disconnect} busy={busy}
+      onClose={() => setDialog(undefined)} onConfirm={() => { setDialog(undefined); run(() => actions.disconnectRepo(repo)); }}><p data-quiet="consequence">{m.disconnectRepoConsequence}</p></Confirm>}
   </li>;
 }
 

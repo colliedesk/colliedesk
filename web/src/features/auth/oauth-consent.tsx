@@ -2,7 +2,6 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, InvalidRequestError, UnauthorizedError } from '../../api/client';
 import type { OAuthClient } from '../../api/schemas';
 import { leaveTo } from '../../lib/leave-to';
-import { HelpTip } from '../../ui/help-tip';
 import { LogoMark } from '../../ui/logo';
 import { messages } from '../../messages';
 import { oauthConsentMessages as text } from './oauth-consent-messages';
@@ -78,7 +77,8 @@ export function OAuthConsent({ request, here }: OAuthConsentProps) {
     const person = me.data.agent.display_name?.trim() || me.data.agent.email;
     const locked = me.data.plan?.locked === true;
     body = <><h1>{text.title(app.data.name)}</h1>
-      <p>{text.acts(me.data.workspace.name, person)}<HelpTip label={text.rolesLabel} text={text.roles} /></p>
+      <p>{text.acts(me.data.workspace.name, person)}</p>
+      <p>{text.roles}</p>
       <p className="muted-copy">{text.changes}</p>
       {app.data.client_host && <p className="muted-copy">{text.publishedBy(app.data.client_host)}</p>}
       {!app.data.verified && <p className="muted-copy">{text.unverifiedName}</p>}
