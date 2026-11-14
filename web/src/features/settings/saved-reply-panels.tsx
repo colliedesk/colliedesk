@@ -4,6 +4,7 @@ import type { Generated, SavedReplyChange } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
+import { QuietNote } from './quiet-note';
 import { savedReplyMessages } from './saved-reply-messages';
 import { settingsMessages } from './settings-messages';
 
@@ -147,6 +148,8 @@ interface TrashProps<T extends TrashedItem> {
   // The panel's name and copy; the saved replies' by default.
   heading?: string;
   description?: string;
+  // descriptionTip is what the line leaves out; a trash that has one passes it with its line.
+  descriptionTip?: string;
   empty?: string;
   closeLabel?: string;
   // text is the line under the title; a saved reply's body by default, nothing when it returns ''.
@@ -159,7 +162,7 @@ const trashedReplyText = (item: TrashedItem) => ('body' in item && typeof item.b
 // SavedReplyTrash lists the deleted replies (or articles, or collections), a page at a time, with the
 // days left before they are deleted for good.
 export function SavedReplyTrash<T extends TrashedItem>({ timezone, now, load, onUndelete, onClose, heading = savedReplyMessages.savedReplyTrash,
-  description = savedReplyMessages.savedReplyTrashDescription, empty = savedReplyMessages.savedReplyTrashEmpty, closeLabel = savedReplyMessages.closeSavedReplyTrash,
+  description = savedReplyMessages.savedReplyTrashDescription, descriptionTip, empty = savedReplyMessages.savedReplyTrashEmpty, closeLabel = savedReplyMessages.closeSavedReplyTrash,
   text = trashedReplyText, failedMessage = savedReplyMessages.savedReplyActionFailed }: TrashProps<T>) {
   const { items, failed, reload, more } = usePages<T, string>(async (cursor) => {
     const page = await load(cursor);
@@ -172,7 +175,7 @@ export function SavedReplyTrash<T extends TrashedItem>({ timezone, now, load, on
         <strong>{heading}</strong>
         {onClose && <button type="button" onClick={onClose}>{closeLabel}</button>}
       </div>
-      <p className="muted-copy">{description}</p>
+      {descriptionTip ? <QuietNote note={description} label={heading} tip={descriptionTip} /> : <p className="muted-copy">{description}</p>}
       {problem && <p role="alert" className="error-copy">{problem}</p>}
       {failed && <p className="error-copy">{savedReplyMessages.savedReplyPanelFailed}</p>}
       {!items ? !failed && <p className="muted-copy">{savedReplyMessages.loadingSavedReplyHistory}</p>

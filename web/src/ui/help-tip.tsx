@@ -86,7 +86,7 @@ export function HelpTip({ label, text, link, id, icon = 'info' }: HelpTipProps) 
         ref={open ? refs.setFloating : undefined} style={open ? floatingStyles : undefined}
         data-reference-hidden={(open && middlewareData.hide?.referenceHidden) || undefined}>
         <span id={textId}>{text}</span>
-        {link && <> <a href={link.href}>{link.label}</a></>}
+        {link && <> <a href={link.href} target="_blank" rel="noopener noreferrer">{link.label}</a></>}
       </span>
     </span>
   );
