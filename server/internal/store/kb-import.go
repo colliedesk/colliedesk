@@ -59,6 +59,7 @@ func ImportKBCollection(ctx context.Context, tx pgx.Tx, workspaceID string, inpu
 // UpdatedAt: the source does not say when it was published.
 type KBImportArticle struct {
 	CollectionID, Title, BodyMD, Status string
+	SEOTitle, SEODescription            string
 	AuthorAgentID                       *string
 	SourceMeta                          []byte
 	SourceHTML                          string
@@ -74,7 +75,22 @@ func cleanKBImportArticle(input *KBImportArticle) error {
 	if err := domain.CheckKBBody(input.BodyMD); err != nil {
 		return err
 	}
+	input.SEOTitle, input.SEODescription = importedKBSEO(input.SEOTitle, input.SEODescription)
 	return domain.CheckKBStatus(input.Status)
+}
+
+// importedKBSEO cleans the search title and description an import read. Fields that do not fit are
+// left empty (the defaults), never cut; the source keeps them.
+func importedKBSEO(title, description string) (string, string) {
+	title, err := domain.CleanKBSEO("search title", title, domain.MaxKBSEOTitle)
+	if err != nil {
+		title = ""
+	}
+	description, err = domain.CleanKBSEO("meta description", description, domain.MaxKBSEODescription)
+	if err != nil {
+		description = ""
+	}
+	return title, description
 }
 
 func publishedAt(input KBImportArticle) *time.Time {
@@ -100,10 +116,10 @@ func ImportKBArticle(ctx context.Context, tx pgx.Tx, workspaceID string, input K
 	}
 	var id string
 	if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,
-			source_meta,source_html,created_at,updated_at,position)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,`+kbArticleEnd(`$2::uuid`)+`) RETURNING id::text`,
+			source_meta,source_html,created_at,updated_at,seo_title,seo_description,position)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,`+kbArticleEnd(`$2::uuid`)+`) RETURNING id::text`,
 		workspaceID, input.CollectionID, number, input.Title, domain.Slugify(input.Title, "article"), input.BodyMD, input.Status, publishedAt(input),
-		input.AuthorAgentID, input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt).Scan(&id); err != nil {
+		input.AuthorAgentID, input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt, input.SEOTitle, input.SEODescription).Scan(&id); err != nil {
 		return "", fmt.Errorf("import knowledge base article: %w", err)
 	}
 	return id, addKBArticleVersion(ctx, tx, workspaceID, id, Actor{}, domain.KBArticleImported, nil)
@@ -165,9 +181,9 @@ func ReimportKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string, i
 	}
 	if _, err := tx.Exec(ctx, `UPDATE kb_articles SET position=CASE WHEN collection_id<>$3::uuid THEN `+kbArticleEnd(`$3::uuid`)+` ELSE position END,
 			collection_id=$3,title=$4,slug=$5,body_md=$6,status=$7,published_at=$8,author_agent_id=$9,
-			source_meta=$10,source_html=$11,created_at=$12,updated_at=$13 WHERE workspace_id=$1 AND id=$2`,
+			source_meta=$10,source_html=$11,created_at=$12,updated_at=$13,seo_title=$14,seo_description=$15 WHERE workspace_id=$1 AND id=$2`,
 		workspaceID, id, input.CollectionID, input.Title, domain.Slugify(input.Title, "article"), input.BodyMD, input.Status, publishedAt(input),
-		input.AuthorAgentID, input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt); err != nil {
+		input.AuthorAgentID, input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt, input.SEOTitle, input.SEODescription); err != nil {
 		return "", fmt.Errorf("import knowledge base article: %w", err)
 	}
 	// The source's newer article leaves its translations behind until their own newer versions come.
@@ -254,13 +270,7 @@ func PutKBArticleTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articl
 	if err := domain.CheckKBStatus(input.Status); err != nil {
 		return "", err
 	}
-	// Search fields that do not fit are left empty (the defaults), never cut; the source keeps them.
-	if input.SEOTitle, err = domain.CleanKBSEO("search title", input.SEOTitle, domain.MaxKBSEOTitle); err != nil {
-		input.SEOTitle = ""
-	}
-	if input.SEODescription, err = domain.CleanKBSEO("meta description", input.SEODescription, domain.MaxKBSEODescription); err != nil {
-		input.SEODescription = ""
-	}
+	input.SEOTitle, input.SEODescription = importedKBSEO(input.SEOTitle, input.SEODescription)
 	if err := lockKBArticleRow(ctx, tx, workspaceID, articleID); err != nil {
 		return "", err
 	}
