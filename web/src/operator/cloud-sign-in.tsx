@@ -14,7 +14,7 @@ import { m } from './messages';
 // page's own content policy (server/internal/webui signInCSP).
 const copy = { signingOut: c.signingOut, signOutFailed: c.signOutFailed, tryAgain: m.tryAgain, signingIn: m.continuing, retry: c.retry };
 
-const loadCopy = { notLoaded: c.notLoaded, retry: m.tryAgain };
+const loadCopy = { notLoaded: c.notLoaded, notSetUp: c.notSetUp, retry: m.tryAgain };
 
 const isRefused = (error: unknown) => error instanceof ApiError && error.code === 'operator_sign_in_refused';
 

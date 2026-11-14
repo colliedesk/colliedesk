@@ -28,6 +28,9 @@ If the form says **Sign-in could not load**, your browser could not get Clerk's 
 blocker or privacy extension, or a network that blocks it, is the usual cause. Allow the page or
 change network, then press **Retry**. The rest of the page keeps working.
 
+If it says **Sign-in is not set up correctly on this server**, the server's sign-in key is missing or
+wrong. Retrying or changing network does not help: ask your workspace admin, or whoever runs the server.
+
 Signing in does not by itself add you to a workspace. Your verified primary email must belong to an
 agent in at least one workspace. If it belongs to several workspaces, choose the workspace after
 authentication. Colliedesk then creates its own ordinary browser session; the identity provider does

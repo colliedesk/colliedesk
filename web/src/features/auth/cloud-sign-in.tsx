@@ -29,7 +29,7 @@ const copy = {
   signingIn: signupMessages.cloudSigningIn, retry: signupMessages.retryCloudSignIn,
 };
 
-const loadCopy = { notLoaded: signupMessages.cloudSignInNotLoaded, retry: messages.retryLoad };
+const loadCopy = { notLoaded: signupMessages.cloudSignInNotLoaded, notSetUp: signupMessages.cloudSignInNotSetUp, retry: messages.retryLoad };
 
 const isNotAnAgent = (error: unknown) => error instanceof NotAnAgentError;
 

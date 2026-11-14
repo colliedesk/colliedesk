@@ -7,13 +7,14 @@ import { CloudSignIn } from './cloud-sign-in';
 
 afterEach(() => { vi.useRealTimers(); document.querySelectorAll('script[data-clerk-js-script]').forEach((script) => script.remove()); });
 
-test('a publishable key Clerk refuses says sign-in could not load, instead of crashing the page', () => {
+test('a publishable key Clerk refuses says sign-in is not set up on this server, instead of crashing the page', () => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   render(<main><h1>Sign in to Colliedesk</h1><CloudSignIn publishableKey="pk_test_e2e_colliedesk" onSessionToken={vi.fn()} /></main>);
 
   expect(screen.getByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
-  expect(screen.getByRole('alert')).toHaveTextContent('Sign-in could not load.');
-  expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  // The visitor cannot fix the server's key: the admin can, and an ad blocker is not the cause.
+  expect(screen.getByRole('alert')).toHaveTextContent('Sign-in is not set up correctly on this server. Ask your workspace admin.');
+  expect(screen.queryByText(/ad blocker/)).not.toBeInTheDocument();
 });
 
 test('when Clerk\'s script cannot be downloaded, sign-in says it could not load and offers a retry', async () => {
