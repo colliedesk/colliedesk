@@ -9,6 +9,8 @@ on:
   schedule:
     - cron: '17 20 * * *'
   workflow_dispatch:
+  push:
+    branches: [ci/cross-browser-e2e]
 
 permissions:
   contents: read
