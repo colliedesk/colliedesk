@@ -299,6 +299,8 @@ type HelpCenter struct {
 	Locale         string     `json:"locale"`
 	ContentVersion int64      `json:"content_version"`
 	UpdatedAt      *time.Time `json:"updated_at"`
+	// PortalEnabled is whether a customer can sign in on the help center and see their own requests.
+	PortalEnabled bool `json:"portal_enabled"`
 	// URL is the public address; the API sets it, the store leaves it empty.
 	URL string `json:"url"`
 }
@@ -453,6 +455,8 @@ type HelpCenterSite struct {
 	Locale         string
 	ContentVersion int64
 	Trial          bool
+	// Portal is whether customers can sign in here and see their own requests.
+	Portal bool
 	// Theme is the brand the pages show. A logo or favicon that is no longer an image of the library
 	// outside its trash is left out (nil), so a page never links an image it cannot serve.
 	Theme HelpCenterTheme

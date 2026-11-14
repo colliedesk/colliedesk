@@ -403,6 +403,10 @@ it on or off with **Publish the help center** and set its **Title** (empty uses 
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
 published.
 
+**Let customers see their requests** turns on the [customer portal](customer-portal.md): a customer
+signs in with an email link and sees only their own requests. It uses this title and logo, and the
+pages appear once the help center is on. Saving without that tick leaves the portal as it was.
+
 ### Brand
 
 An admin sets the help center's brand in **Knowledge base → Settings → Brand**, through the API

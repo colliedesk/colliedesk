@@ -106,10 +106,13 @@ const countedDelivery = `(status <> 'failed' OR sent_at IS NOT NULL)`
 const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM channel_outbox WHERE workspace_id=$1 AND channel_type='email' AND created_at > $2 AND ` + countedDelivery
 
 // customerWroteFirst is true for a conversation that holds a message from the customer: an
-// imported one, or inbound mail that came through the platform forwarder and whose authentication
-// did not fail. Mail posted to a workspace's own inbound endpoint never counts: its admin writes the
-// whole message, Authentication-Results included. Without these rules a trial user could mail
-// themselves with a forged From and use the relay to write to the victim.
+// imported one, a portal message whose address a one-time email link proved, or inbound mail that
+// came through the platform forwarder and whose authentication did not fail. Mail posted to a
+// workspace's own inbound endpoint never counts: its admin writes the whole message,
+// Authentication-Results included. Without these rules a trial user could mail themselves with a
+// forged From and use the relay to write to the victim. A portal message counts only when its from
+// address is the contact's, or a contact merged into them: the portal sets that address from the
+// sign-in, which a one-time link proved, and nothing else can set via to portal.
 // A "none" verdict passes for MVP because many small senders publish no DMARC; the daily cap bounds
 // that. The real hardening, when needed, is requiring an aligned dmarc=pass, which needs the parser
 // to record the DMARC result separately (today a bare spf=pass or dkim=pass of any domain is "pass").
@@ -120,7 +123,10 @@ const customerWroteFirst = `SELECT EXISTS(SELECT 1 FROM messages m
 	JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
 	WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.kind='incoming'
 	AND (m.origin IS NOT NULL OR (m.email_meta->>'via'='platform' AND COALESCE(m.email_meta->>'authentication','none') <> 'fail'
-		AND lower(m.email_meta->>'from')=lower(k.email))))`
+		AND lower(m.email_meta->>'from')=lower(k.email))
+		OR (m.email_meta->>'via'='portal' AND (lower(m.email_meta->>'from')=lower(k.email)
+			OR EXISTS(SELECT 1 FROM contacts d WHERE d.workspace_id=k.workspace_id AND d.merged_into_id=k.id
+				AND lower(d.email)=lower(m.email_meta->>'from'))))))`
 
 // onTrial reports whether the trial outbound rules apply to the workspace now: plan limits are on
 // and the plan in effect is the trial. Paid, locked and self-hosted workspaces are untouched.

@@ -7813,9 +7813,10 @@ paths:
       operationId: getHelpCenter
       x-permission: help_center:read
       description: >
-        Whether the public help center is on, its title and language. `content_version` grows with
-        every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns
-        it on, it is off and nothing of the knowledge base is public.
+        Whether the public help center is on, its title and language, and whether the customer portal
+        is on (`portal_enabled`). `content_version` grows with every change to the knowledge base, so a
+        cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the
+        knowledge base is public. The portal's pages are on the help center only while both are on.
       responses:
         '200':
           description: Help center settings
@@ -7827,7 +7828,9 @@ paths:
       description: >
         Turn the public help center on or off, and set its title and language (a BCP 47 tag such as
         `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off
-        line at once; turning it on again publishes the articles marked published.
+        line at once; turning it on again publishes the articles marked published. `portal_enabled`,
+        when sent, turns the customer portal on or off (a requester signs in with an email link and
+        sees only their own requests). Leave it out to keep the current setting.
       requestBody:
         required: true
         content:
@@ -10742,14 +10745,15 @@ components:
       pattern: '^[a-z_]{1,40}$'
       description: >-
         How the conversation started: a channel type this server runs, or an origin that comes through no
-        channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report. A test build may run another type
+        channel. Values: email, web_form, help_chat, zalo, imported, agent, portal, problem_report. A test build may run another type
         (the loopback chat stand-in), so a client names a value it does not know by itself.
         email: a customer's mail. web_form: the public web form.
         help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified).
         zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in.
         imported: brought over from another helpdesk (its original channel is in origin.source).
         agent: a team member started it in Colliedesk; an older image that does not know this field
-        also writes agent. problem_report: an agent's Report a problem.
+        also writes agent. portal: a customer opened it on the help center portal, after an email link
+        proved their address. problem_report: an agent's Report a problem.
     ConversationSort: {type: string, enum: [updated_desc, updated_asc, created_desc, created_asc, priority, waiting_longest, due], default: updated_desc}
     ConversationFilters:
       type: object
@@ -11902,13 +11906,24 @@ components:
         enabled: {type: boolean}
         title: {type: string, maxLength: 200, description: Shown at the top of every page; empty uses the workspace name.}
         locale: {type: string, minLength: 2, maxLength: 35, description: 'BCP 47 language tag of the pages, such as en or pt-BR.'}
+        portal_enabled:
+          type: boolean
+          description: >-
+            Turn the customer portal on or off. Leave it out to keep the current setting. While it is on
+            and the help center is on, a requester can sign in with an email link and see only their own
+            requests. The pages use the help center's title and logo.
     HelpCenter:
       type: object
-      required: [enabled, title, locale, content_version, updated_at, url]
+      required: [enabled, title, locale, content_version, updated_at, url, portal_enabled]
       properties:
         enabled: {type: boolean}
         title: {type: string}
         locale: {type: string}
+        portal_enabled:
+          type: boolean
+          description: >-
+            Whether a requester can sign in on the help center and see only their own requests. The pages
+            are served only while the help center is on too.
         content_version: {type: integer, minimum: 0}
         updated_at: {type: [string, 'null'], format: date-time, description: Null until the knowledge base or its settings were first changed.}
         url:
@@ -12796,11 +12811,12 @@ components:
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}
         via:
           type: string
-          enum: [platform, workspace, web_form]
+          enum: [platform, workspace, web_form, portal]
           description: >-
             Door the message came through; absent on mail stored before this was recorded. `web_form`
             is text typed into the public web form: the address is unverified (authentication `none`).
-            Trial replies need `platform`.
+            `portal` is a request or reply a customer wrote on the help center after an email link
+            proved the address (authentication `pass`). Trial replies need `platform` or `portal`.
         cc:
           type: array
           description: >-

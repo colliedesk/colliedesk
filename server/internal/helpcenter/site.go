@@ -94,6 +94,12 @@ type Config struct {
 	// Additions says what the channel types add to the help center's pages now (an Ask AI link, an
 	// article's chat box); nil adds nothing.
 	Additions func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error)
+	// SendPortalLink emails a one-time sign-in link for the customer portal. sent is false when this
+	// server has no address to send from. Nil means the portal cannot email a link.
+	SendPortalLink func(ctx context.Context, workspaceID, helpTitle, to, link string) (sent bool, err error)
+	// AllowPortalLink reports whether this client may email one more sign-in link to email, and how
+	// long to wait when not. Nil allows every request.
+	AllowPortalLink func(request *http.Request, workspaceID, email string) (bool, time.Duration)
 }
 
 // ChannelRoute is a channel type's help center route with the handler the API built for it.
@@ -258,7 +264,9 @@ func (s *Site) movedTo(request *http.Request, at address, site domain.HelpCenter
 func (s *Site) serve(response http.ResponseWriter, request *http.Request, at address) {
 	slug, base, sub := at.slug, at.base, at.sub
 	route := s.channelRoute(request, sub)
-	if route == nil && request.Method != http.MethodGet && request.Method != http.MethodHead {
+	// A portal write is answered after the help center is known: while the portal is off it is the
+	// same 405 as any other write, so the path does not announce itself.
+	if route == nil && request.Method != http.MethodGet && request.Method != http.MethodHead && !portalPath(sub) {
 		response.Header().Set("Allow", "GET, HEAD")
 		securityHeaders(response.Header())
 		response.Header().Set("Cache-Control", "no-store")
@@ -312,8 +320,16 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	case !at.workspaceHost && base != "" && s.config.Domain != "" && email.ValidateHostedSlug(slug) == nil:
 		s.redirect(response, request, s.movedTo(request, at, domain.HelpCenterSite{Slug: slug}), base == "")
 		return
-	// Unknown, off and locked are one answer, and none of them ever reaches the ETag.
+	// Unknown, off and locked are one answer, and none of them ever reaches the ETag. A portal write
+	// is the same 405 as any other write, so the path does not say the portal exists.
 	case !open:
+		if portalPath(sub) && request.Method != http.MethodGet && request.Method != http.MethodHead {
+			response.Header().Set("Allow", "GET, HEAD")
+			securityHeaders(response.Header())
+			response.Header().Set("Cache-Control", "no-store")
+			http.Error(response, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		s.writeNotFound(response, base == "")
 		return
 	}
@@ -358,6 +374,10 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		return
 	} else if _, rest, segment, _ := view.splitLanguage(sub); len(view.site.Languages) > 0 && strings.EqualFold(segment, view.site.Locale) && rest == "" {
 		moveTo(response, request, view.home+query(request))
+		return
+	}
+	if portalPath(sub) {
+		s.servePortal(response, request, view, sub)
 		return
 	}
 	switch {
@@ -422,7 +442,7 @@ type helpCenterKey struct{}
 // channelRoute is the channel types' route that answers a request at sub, the path below the help
 // center's root, or nil. The built-in pages never move: a type cannot claim one of their paths.
 func (s *Site) channelRoute(request *http.Request, sub string) http.Handler {
-	if sub == "" || sub == "/" || sub == "/search" || sub == "/robots.txt" {
+	if sub == "" || sub == "/" || sub == "/search" || sub == "/robots.txt" || portalPath(sub) {
 		return nil
 	}
 	for _, prefix := range []string{"/c/", "/a/", "/images/", "/media/", stylePath} {
@@ -541,7 +561,7 @@ func (s *Site) newView(site domain.HelpCenterSite, base string, additions channe
 	brand := newBrand(site)
 	address := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
 	sum := sha256.Sum256([]byte(strings.Join([]string{site.Slug, strconv.FormatInt(site.ContentVersion, 10), strconv.FormatBool(site.Trial),
-		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, chatVersion, brand.key, additions.Version, strings.Join(site.Languages, ",")}, "\x00")))
+		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, chatVersion, brand.key, additions.Version, strings.Join(site.Languages, ","), strconv.FormatBool(site.Portal)}, "\x00")))
 	v := view{site: site, base: base, home: home, address: address, brand: brand, additions: additions, tag: hex.EncodeToString(sum[:12])}
 	return v.in("")
 }

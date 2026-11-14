@@ -88,6 +88,8 @@ const imageSchema = z.object({
 }) satisfies z.ZodType<Pick<Generated<'KBMedia'>, 'id' | 'content_type' | 'size' | 'sha256' | 'url' | 'created_at'>>;
 const helpCenterSchema = z.object({
   enabled: z.boolean(), title: z.string(), locale: z.string(), content_version: z.number().int(), updated_at: nullableDate, url: z.string(),
+  // A server from before the portal reads as off.
+  portal_enabled: z.boolean().default(false),
 }) satisfies z.ZodType<Generated<'HelpCenter'>>;
 
 const orderSchema = z.object({

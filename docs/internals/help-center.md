@@ -482,6 +482,22 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   into one workspace with the same id: a row whose target is public now (or a collection outside the
   trash) wins, then the newest row, so a newer account's draft never hides the older one's page.
 
+## Customer portal
+
+A requester signs in on `/requests` with a one-time link emailed to them (`portal_links`, stored as a
+sha256, spent by the Continue button's POST, never by opening the page) and then holds
+`colliedesk_portal`, an HttpOnly Secure cookie whose path is the help center's own (`/help/<slug>`,
+`/help` on a workspace host, `/` on a custom domain). It is not an agent session: the agent cookie
+is a different name, and the portal token is not in `sessions`. Pages are the help center's
+templates, with the same script-free policy, and they are `no-store`. While the portal is off, a
+read is the missing page and a write is 405, the same as any other path.
+
+What a signed-in address can see is one SQL predicate (`portalVisible` in `store/portal.go`): the
+contact's own requests, plus, for an address merged away, the requests that merge moved and later
+portal messages that address wrote. Notes are a different `messages.kind` and the predicate never
+reads them. A guess of another number is the missing page. The message is `via=portal` with
+authentication `pass`, which the trial's first-contact rule counts, unlike `web_form`.
+
 ## Traps
 
 - **goldmark has quadratic paths, and every visit renders.** Measured on 100,000 characters: one line

@@ -208,8 +208,8 @@ func (s *Store) GetHelpCenter(ctx context.Context, workspaceID string) (domain.H
 
 func readHelpCenter(ctx context.Context, tx pgx.Tx, workspaceID string) (domain.HelpCenter, error) {
 	center := domain.HelpCenter{Locale: "en"}
-	err := tx.QueryRow(ctx, `SELECT enabled,title,locale,content_version,updated_at FROM help_centers WHERE workspace_id=$1`, workspaceID).
-		Scan(&center.Enabled, &center.Title, &center.Locale, &center.ContentVersion, &center.UpdatedAt)
+	err := tx.QueryRow(ctx, `SELECT enabled,title,locale,content_version,updated_at,portal_enabled FROM help_centers WHERE workspace_id=$1`, workspaceID).
+		Scan(&center.Enabled, &center.Title, &center.Locale, &center.ContentVersion, &center.UpdatedAt, &center.PortalEnabled)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return center, nil
 	}
@@ -219,7 +219,7 @@ func readHelpCenter(ctx context.Context, tx pgx.Tx, workspaceID string) (domain.
 
 // PutHelpCenter turns the help center on or off and sets its title and language; it bumps the
 // content version, since every page shows them.
-func (s *Store) PutHelpCenter(ctx context.Context, workspaceID string, enabled bool, title, locale string) (domain.HelpCenter, error) {
+func (s *Store) PutHelpCenter(ctx context.Context, workspaceID string, enabled bool, title, locale string, portal *bool) (domain.HelpCenter, error) {
 	if err := domain.CheckLocale(locale); err != nil {
 		return domain.HelpCenter{}, err
 	}
@@ -239,9 +239,9 @@ func (s *Store) PutHelpCenter(ctx context.Context, workspaceID string, enabled b
 		if listed {
 			return domain.HelpCenter{}, &domain.InvalidKBError{Message: locale + " is one of the help center's other languages. Remove it there first (Knowledge base, Languages), then make it the primary language."}
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,enabled,title,locale,content_version,updated_at) VALUES($1,$2,$3,$4,1,clock_timestamp())
-			ON CONFLICT (workspace_id) DO UPDATE SET enabled=$2, title=$3, locale=$4, content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
-			workspaceID, enabled, title, locale); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,enabled,title,locale,portal_enabled,content_version,updated_at) VALUES($1,$2,$3,$4,COALESCE($5,false),1,clock_timestamp())
+			ON CONFLICT (workspace_id) DO UPDATE SET enabled=$2, title=$3, locale=$4, portal_enabled=COALESCE($5,help_centers.portal_enabled), content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
+			workspaceID, enabled, title, locale, portal); err != nil {
 			return domain.HelpCenter{}, err
 		}
 		return readHelpCenter(ctx, tx, workspaceID)

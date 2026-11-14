@@ -32,7 +32,7 @@ type pages struct {
 	fingerprint string
 }
 
-var pageNames = []string{"home", "collection", "article", "search", "missing", "busy"}
+var pageNames = []string{"home", "collection", "article", "search", "missing", "busy", "portal"}
 
 func parsePages() pages {
 	style, err := files.ReadFile("static/site.css")
@@ -158,6 +158,11 @@ type page struct {
 	ChatText      string
 	ArticleNumber int64
 	ArticleTitle  string
+
+	// The customer portal, on every page while it is on: the masthead link, and on its own pages what
+	// that page shows.
+	RequestsURL, RequestsLabel string
+	Portal                     portalPage
 }
 
 func (s *Site) page(v view, title string, crumbs []link) page {
@@ -169,6 +174,9 @@ func (s *Site) page(v view, title string, crumbs []link) page {
 	data := page{Lang: v.locale(), Title: full, SiteTitle: siteTitle, Home: v.home, SearchURL: v.root + "/search", T: v.text,
 		Style: v.base + stylePath + s.pages.styleName, NoIndex: v.site.Trial, Crumbs: crumbs,
 		GoogleVerification: v.site.SearchConsole.Google, BingVerification: v.site.SearchConsole.Bing}
+	if v.site.Portal {
+		data.RequestsURL, data.RequestsLabel = portalHome(v.base), portalLinkLabel(v.locale())
+	}
 	v.brand.fill(&data, v)
 	if v.additions.Link != "" {
 		data.AskLink, data.AskLabel = v.base+v.additions.Link, v.additions.LinkLabel

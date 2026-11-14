@@ -12,7 +12,7 @@ export type SettableStatus = Exclude<z.infer<typeof statusSchema>, 'spam'>;
 export const prioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
 // How a conversation started: the values known today, which the filters offer, and any other channel type the
 // server's registry names (a chat type), which the inbox shows by its name instead of failing to load.
-export const knownChannels = ['email', 'web_form', 'help_chat', 'zalo', 'imported', 'agent', 'problem_report'] as const;
+export const knownChannels = ['email', 'web_form', 'help_chat', 'zalo', 'imported', 'agent', 'portal', 'problem_report'] as const;
 export const channelSchema = z.string().regex(/^[a-z_]{1,40}$/);
 export const conversationSortSchema = z.enum(['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'priority', 'waiting_longest', 'due']);
 
@@ -173,7 +173,7 @@ export const messageDeliverySchema = z.object({
 }) satisfies z.ZodType<Generated<'MessageDelivery'>>;
 export const emailAuthenticationSchema = z.enum(['pass', 'fail', 'none']);
 export const incomingEmailSchema = z.object({
-  from: z.string(), authentication: emailAuthenticationSchema, via: z.enum(['platform', 'workspace', 'web_form']).optional(),
+  from: z.string(), authentication: emailAuthenticationSchema, via: z.enum(['platform', 'workspace', 'web_form', 'portal']).optional(),
   cc: z.array(z.string()).optional(),
   attachments: z.array(z.object({ filename: z.string(), content_type: z.string() })),
   original_attachment_id: z.string().uuid().nullable(),

@@ -179,7 +179,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_cancel` | Cancels an upload and throws its parts away (one you started; with kb_media:purge, any) | `kb_media:create` |
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `kb_media:create` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `kb_media:update` |
-| `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `help_center:read` |
+| `colliedesk_help_center_get` | Says whether the public help center is on, its title, its language and whether the customer portal is on | `help_center:read` |
 | `colliedesk_help_center_languages_get` | Lists the help center's languages, which are shown to customers, and how many articles are translated, outdated and missing in each | `help_center:read` |
 | `colliedesk_help_center_languages_set` | Sets the help center's languages besides the primary one, and which of them customers see | `help_center:update` |
 | `colliedesk_kb_translations_list` | Lists the articles missing, outdated or translated in one language | `kb_articles:read` |
@@ -237,7 +237,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_role_reset` | Puts the Agent role back to its first permissions | `team:manage_roles` |
 | `colliedesk_role_restore` | Brings back a deleted role | `team:manage_roles` |
 | `colliedesk_member_roles_set` | Sets which roles a team member holds, by name | `team:manage_roles`, `team:read` |
-| `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `help_center:update` |
+| `colliedesk_help_center_update` | Turns the public help center on or off, sets its title and language, and turns the customer portal on or off | `help_center:update` |
 | `colliedesk_help_center_theme_update` | Replaces the public help center's brand after checking its color contrast and custom CSS | `help_center:update` |
 | `colliedesk_help_center_search_console_update` | Sets or removes the Google and Bing verification tokens served as meta tags on the help center's pages | `help_center:update` |
 | `colliedesk_help_center_domain_set` | Sets or replaces the custom domain, pending DNS ownership proof | `help_center:update` |

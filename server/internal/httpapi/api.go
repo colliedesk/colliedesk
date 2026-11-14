@@ -105,6 +105,9 @@ type Config struct {
 	// a workspace whose email sending was paused for spam complaints (BILLING_ALERT_EMAIL). Empty, or without AlertMailer or Email.MailFromDomain, turns the alert off.
 	AlertEmail  string
 	AlertMailer Mailer
+	// PortalMailer sends the customer portal's sign-in links. Nil uses the SMTP relay when it is
+	// configured. Tests set it so nothing is sent to a real relay.
+	PortalMailer Mailer
 	// Now is the clock for the trial, the lock and plan limits; nil uses the system clock.
 	Now func() time.Time
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
@@ -236,6 +239,8 @@ type API struct {
 	// helpCenterPages and helpCenterSearches count each client address's help center pages and searches.
 	helpCenterPages, helpCenterSearches *webFormLimiter
 	helpCenter                          *helpcenter.Site
+	// portalLinkByIP and portalLinkByEmail bound sign-in emails: one address, and one recipient.
+	portalLinkByIP, portalLinkByEmail *webFormLimiter
 	// liveChecks bounds the DNS checks the reverse proxy's certificate question starts.
 	liveChecks *helpcenter.LiveChecks
 	// certificateNotes lets the certificate question record a certificate once an hour per host name.
@@ -469,6 +474,8 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		api.config.ServerConfig = serverconfig.NewStore(db, config.Google.Keys, api.environ())
 	}
 	api.db, api.preview = db, serverconfig.NewPreview(db)
+	api.portalLinkByIP = newWindowLimiter(5, webFormMaxKeys, 15*time.Minute)
+	api.portalLinkByEmail = newWindowLimiter(5, webFormMaxKeys, time.Hour)
 	api.helpCenter = api.newHelpCenter()
 	mux := http.NewServeMux()
 	api.mux = mux

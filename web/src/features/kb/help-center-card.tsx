@@ -43,13 +43,15 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
   const settings = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter });
   const save = useMutation({
     // The language is not edited here yet, so the one stored is sent back as it is.
-    mutationFn: ({ enabled, title }: { enabled: boolean; title: string }) => kbApi.saveHelpCenter({ enabled, title, locale: settings.data?.locale || 'en' }),
+    mutationFn: ({ enabled, title, portalEnabled }: { enabled: boolean; title: string; portalEnabled: boolean }) => kbApi.saveHelpCenter({ enabled, title, locale: settings.data?.locale || 'en', portal_enabled: portalEnabled }),
     onSuccess: (saved) => client.setQueryData(['help-center'], saved),
   });
   const [enabled, setEnabled] = useState(false);
   const [title, setTitle] = useState('');
+  const [portalEnabled, setPortalEnabled] = useState(false);
   useEffect(() => setEnabled(settings.data?.enabled ?? false), [settings.data?.enabled]);
   useEffect(() => setTitle(settings.data?.title ?? ''), [settings.data?.title]);
+  useEffect(() => setPortalEnabled(settings.data?.portal_enabled ?? false), [settings.data?.portal_enabled]);
   // The reply box's articles list opens Settings at #help-center-heading. This card is a chunk of its own,
   // so Settings may be drawn before the card is; once the card is, go to it.
   useScrollToHashWhenReady(settings.isSuccess, 'help-center-heading');
@@ -58,15 +60,21 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
   if (settings.isError) return <p role="alert" className="error-copy">{kbMessages.helpCenterFailed}</p>;
   if (!settings.data) return <p role="status" className="muted-copy">{messages.loading}</p>;
   const on = settings.data.enabled;
+  const portal = settings.data.portal_enabled;
+  const portalURL = `${settings.data.url.replace(/\/$/, '')}/requests`;
   return <>
     <p role="status" className="saved-state" data-on={on ? 'true' : 'false'}>{on ? kbMessages.helpCenterOn : kbMessages.helpCenterOff}</p>
     <p className="muted-copy">{kbMessages.helpCenterAddress} <a href={settings.data.url} target="_blank" rel="noopener noreferrer">{settings.data.url}</a></p>
+    <p className="muted-copy" data-on={portal ? 'true' : 'false'}>{portal ? kbMessages.portalOn : kbMessages.portalOff}
+      {portal && <> {kbMessages.portalAddress} <a href={portalURL} target="_blank" rel="noopener noreferrer">{portalURL}</a></>}</p>
     {canManage
-      ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate({ enabled, title: title.trim() }); }}>
+      ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate({ enabled, title: title.trim(), portalEnabled }); }}>
           <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{kbMessages.helpCenterEnable}</span></label>
           <div className="field"><label htmlFor="help-center-title">{kbMessages.helpCenterTitle}</label>
             <input id="help-center-title" value={title} maxLength={200} placeholder={workspaceName} aria-describedby="help-center-title-help" onChange={(event) => { feedback.touch(); setTitle(event.target.value); }} />
             <small id="help-center-title-help" className="muted-copy">{kbMessages.helpCenterTitleHelp}</small></div>
+          <label className="field-inline"><input type="checkbox" checked={portalEnabled} onChange={(event) => { feedback.touch(); setPortalEnabled(event.target.checked); }} /><span>{kbMessages.portalEnable}</span></label>
+          <small className="muted-copy">{kbMessages.portalHelp}</small>
           <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(kbMessages.saveHelpCenter)}</button>
             {feedback.status}</span>
         </form>
