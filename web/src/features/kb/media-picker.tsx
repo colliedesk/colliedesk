@@ -6,6 +6,7 @@ import { Icon } from './editor/icons';
 import { kbMessages } from './kb-messages';
 import { reason } from './kb-tree';
 import { KBDialog, usePhone } from './kb-ui';
+import { HelpTip } from '../../ui/help-tip';
 import { mediaApi, updateFields } from './media-api';
 import type { KBMedia, MediaKind } from './media-api';
 import { cardLabel, facts, mediaName } from './media-grid';
@@ -139,7 +140,7 @@ export function MediaPicker({ onInsert, onUpload, onClose }: { onInsert: (items:
         <button type="button" onClick={onClose}>{kbMessages.cancel}</button>
         {phone
           ? <button type="button" className="primary-action" disabled={picked.length === 0} onClick={() => setStep('alt')}>{kbMessages.pickerNext}</button>
-          : <button type="button" className="primary-action" disabled={!ready || busy} aria-describedby={missing.length ? `${id}-missing` : undefined} onClick={() => void insert()}>{insertLabel}</button>}
+          : <button type="button" className="primary-action" disabled={!ready || busy} aria-describedby={missing.length ? `${id}-missing ${id}-missing-tip` : undefined} onClick={() => void insert()}>{insertLabel}</button>}
       </>}>
       <div className="picker-tools">
         <label className="search-field picker-search">
@@ -187,7 +188,8 @@ export function MediaPicker({ onInsert, onUpload, onClose }: { onInsert: (items:
         <aside className="picker-picks" aria-label={kbMessages.pickerPicked}>
           <h3>{picked.length > 0 ? kbMessages.pickerOrder(picked.length) : kbMessages.pickerNone}</h3>
           {problem && <p role="alert" className="error-copy">{problem}</p>}
-          {missing.length > 0 && <p id={`${id}-missing`} className="kb-hint">{kbMessages.pickerMissing(missing.length)}</p>}
+          {missing.length > 0 && <p className="kb-hint"><span id={`${id}-missing`}>{kbMessages.pickerMissing(missing.length)}</span>{' '}
+            <HelpTip label={kbMessages.altLabel} text={kbMessages.pickerMissingTip} id={`${id}-missing-tip`} /></p>}
           {altFields(true)}
         </aside>
       </div>

@@ -48,7 +48,10 @@
 .rail-brand { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius); }
 .rail-brand .logo-mark { width: 24px; height: 24px; }
 /* The head: the logo and the workspace (one line), then Quick start and the pen that starts a new conversation. */
-.workspace-name { flex: 1; min-width: 0; overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-name { flex: 1; min-width: 0; border-radius: var(--radius-sm); }
+.workspace-name strong { display: block; overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+/* The tooltip starts at the name and stays inside the sidebar, wrapping a long name instead of widening it. */
+.workspace-name[data-tip]::after { left: 0; translate: 0 0; width: max-content; max-width: calc(var(--sidebar-user-width, 248px) - 56px); white-space: normal; }
 .quick-start { position: relative; flex: none; display: flex; }
 :is(.quick-start-button, .sidebar-new) { position: relative; flex: none; width: var(--control, 32px); height: var(--control, 32px); padding: 0; border-color: transparent;
   background: transparent; box-shadow: none; color: var(--text-1); }
@@ -107,6 +110,9 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .app-shell { --sidebar-width: var(--sidebar-user-width, 248px); transition: grid-template-columns var(--dur-fast) var(--ease); }
   html[data-sidebar-resizing] .app-shell { transition: none; }
   .app-shell[data-sidebar="collapsed"] { --sidebar-width: 56px; }
+  /* The buttons beside the name have room of their own around their icons, so the name gets the gaps between them. */
+  .app-shell[data-sidebar="expanded"] .rail-head { gap: 0; }
+  .app-shell[data-sidebar="expanded"] .rail-head .workspace-name { margin-left: var(--space-2); }
   .app-shell[data-sidebar="collapsed"] .app-sidebar { padding: var(--space-2) 0; overflow: visible; }
   .app-shell[data-sidebar="collapsed"] :is(.app-rail, .rail-links, .sidebar-foot) { align-items: center; }
   .app-shell[data-sidebar="collapsed"] .rail-head { flex-direction: column; justify-content: center; gap: var(--space-1); height: auto; margin-bottom: var(--space-2); padding: 0; }
@@ -120,6 +126,10 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .app-shell[data-sidebar="collapsed"] .sidebar-toggle svg { transform: none; }
   .app-shell[data-sidebar="collapsed"] .sidebar-toggle[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
   .app-shell[data-sidebar="collapsed"] .rail-links { gap: var(--space-1); }
+  /* Folded, Settings keeps Back to app as an arrow; the menu waits for the sidebar to open again. */
+  .app-shell[data-sidebar="collapsed"] .settings-rail .sidebar-scroll { display: none; }
+  .app-shell[data-sidebar="collapsed"] .settings-exit { flex: none; width: 40px; height: 40px; justify-content: center; padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .settings-exit :is(span, kbd) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .app-shell[data-sidebar="collapsed"] .rail-link { position: relative; width: 40px; height: 40px; justify-content: center; padding: 0; }
   .app-shell[data-sidebar="collapsed"] .rail-link svg { width: 18px; height: 18px; }
   .app-shell[data-sidebar="collapsed"] .rail-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -183,7 +193,19 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 /* The sheet is the panel: a page that is a panel itself draws no second card inside it. */
 .app-content > .panel { border-radius: 0; box-shadow: none; }
 .settings-page > header { max-width: 84rem; margin-bottom: var(--space-6); }
-.settings-layout { max-width: 84rem; display: grid; grid-template-columns: 14.5rem minmax(0, 1fr); gap: var(--space-10); align-items: start; }
+/* The sheet holds the page alone: the menu is in the sidebar (settings-nav.tsx), or on a phone the page before it. */
+.settings-layout { max-width: 84rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+/* Settings in the sidebar: Back to app at the head (48px, as the workspace row it replaces), the menu under it. */
+.settings-rail-head { flex-direction: row; }
+.settings-exit { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); height: var(--control, 32px); padding: 0 var(--space-2); border-radius: var(--radius);
+  color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-decoration: none; }
+.settings-exit:hover { background: var(--surface-2); }
+.settings-exit svg { flex: none; width: 16px; height: 16px; }
+.settings-exit span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-exit kbd { flex: none; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--line); padding: 0 var(--space-1); color: var(--text-3); font: 500 var(--fs-label)/20px var(--font-mono); }
+.settings-rail .settings-nav { position: static; padding-top: var(--space-2); }
+/* The workspace, above the person: the foot is where Settings names who this browser acts as. */
+.settings-rail .sidebar-foot .workspace-name { flex: none; padding: var(--space-1) var(--space-2) 0; }
 /* A card puts its heading beside its controls only where both get room; the column it sits in decides, not the window. */
 .settings-sections { container-type: inline-size; }
 .settings-nav { position: sticky; top: 0; display: grid; gap: var(--space-4); }
@@ -194,7 +216,9 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .settings-nav a[aria-current="page"] { background: var(--surface-3); color: var(--text-1); font-weight: 500; }
 .settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
 .settings-nav .settings-group-label { padding: 0 var(--space-2); }
-.settings-nav .settings-nav-sub { margin: 2px 0 0; padding-left: var(--space-3); }
+/* A tag or a dot after the label sits at the row's far end; on the phone's sideways row it follows the label. */
+.settings-nav-tag { margin-left: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-label); font-weight: 400; }
+.settings-nav-dot { margin-left: auto; width: var(--space-2); height: var(--space-2); border-radius: var(--radius-full); background: var(--warn); flex: none; }
 .settings-sections > .settings-group-label { padding: var(--space-6) 0 var(--space-2); }
 .settings-sections > .settings-group-label:first-child, .settings-sections > .error-copy + .settings-group-label { padding-top: 0; }
 .settings-card h2 { scroll-margin-top: var(--space-6); }
@@ -313,7 +337,6 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .settings-nav > div { display: contents; }
   .settings-nav .settings-group-label { display: none; }
   .settings-nav ul { display: flex; gap: var(--space-1); margin: 0; }
-  .settings-nav .settings-nav-parent, .settings-nav .settings-nav-sub { display: contents; }
   .settings-nav a { white-space: nowrap; border: 1px solid var(--line); padding: var(--space-1) var(--space-3); }
 }
 @media (max-width: 44rem) {
@@ -369,12 +392,16 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 @media (max-width: 44rem) {
   .settings-layout > .settings-back { display: inline-flex; align-items: center; gap: var(--space-1); justify-self: start; min-height: var(--touch); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
   .settings-nav:not(.settings-nav-index) { display: none; }
+  /* A channel's own way back to Channels is the one back link of its page. */
+  .settings-layout:has(.ch-back) > .settings-back { display: none; }
+  /* The way back sits above the page's title (the title is the page's header, the link is inside its layout). */
+  .settings-page:has(> .settings-layout > .settings-back) { display: flex; flex-direction: column; }
+  .settings-page:has(> .settings-layout > .settings-back) > .settings-layout { display: contents; }
+  .settings-page > .settings-layout > .settings-back { order: -1; align-self: flex-start; margin-bottom: var(--space-2); }
   .settings-nav-index { display: grid; gap: var(--space-4); overflow: visible; padding-bottom: 0; mask-image: none; }
   .settings-nav-index > div { display: block; }
   .settings-nav-index .settings-group-label { display: block; }
   .settings-nav-index ul { display: grid; gap: 0; margin: var(--space-2) 0 0; }
-  .settings-nav-index .settings-nav-parent { display: block; }
-  .settings-nav-index .settings-nav-sub { display: grid; padding-left: var(--space-3); }
   .settings-nav-index a { white-space: normal; border: 0; padding: 0 var(--space-2); }
 }
 @media (max-width: 44rem) {

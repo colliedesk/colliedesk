@@ -80,7 +80,8 @@ it applies every migration with its fixture file and requires a non-NULL value i
 A migration that changes existing data on purpose (drops a column, rewrites values) fails the
 upgrade test until `tests/upgrade/allowed-changes.tsv` declares it: table, column (or `*`),
 migration and reason. A declaration counts only in an upgrade that runs that migration; the other
-columns of the table are still compared one by one. Read the migration before declaring anything:
+columns of the table are still compared one by one. A `*` declaration also lets the table gain rows
+(a migration that queues work, such as rebuilding AI retrieval), never lose them. Read the migration before declaring anything:
 a dropped column that held data is lost data, which the guide's backup can only bring back by
 rolling the whole install back.
 

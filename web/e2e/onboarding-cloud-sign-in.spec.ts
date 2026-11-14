@@ -9,9 +9,6 @@ const baseURL = servers.cloud;
 const exchangeURL = `${baseURL}/api/v1/auth/cloud/exchange`;
 const provider = new IdentityProvider();
 
-test.beforeAll(async () => { await provider.start(); });
-test.afterAll(async () => { await provider.stop(); });
-
 test('cloud sign-in: a verified identity of an existing agent gets a Colliedesk session; every other token is refused', { tag: '@onboarding' }, async ({ page }) => {
   const suffix = uniqueSuffix();
   const email = `cloud-${suffix}@example.com`;

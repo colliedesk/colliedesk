@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError } from '../../../api/client';
 import type { Role } from '../../../api/schemas';
+import { HelpTip } from '../../../ui/help-tip';
 import { can } from '../../../lib/can';
 import { roleMessages as m } from '../roles-messages';
 import { useCreateMutation } from '../../../api/use-create';
@@ -81,7 +82,7 @@ function RoleList({ onStatus }: { onStatus: (status: { text: string } | undefine
         : roles.isError ? <div role="alert" className="notice"><span>{m.loadFailed}</span> <button type="button" onClick={() => void roles.refetch()}>{m.tryAgain}</button></div>
         : <>
           <div className="data-list roles-list">{roles.data.items.map((role) => <RoleRow key={role.id} role={role} manage={manage} />)}</div>
-          {roles.data.items.length === 2 && manage && <p className="muted-copy">{m.onlySystem} <a className="roles-make" href="/settings/roles/new">{m.makeRole}</a></p>}
+          {roles.data.items.length === 2 && manage && <p className="muted-copy">{m.onlySystem} <a className="roles-make" href="/settings/roles/new">{m.makeRole}</a> <HelpTip label={m.makeRole} text={m.onlySystemWhy} /></p>}
         </>}
       {(deleted.data?.items.length ?? 0) > 0 && <button type="button" className="link-action" aria-expanded={showDeleted} onClick={() => setShowDeleted((open) => !open)}>{m.deletedRoles(deleted.data!.items.length)}</button>}
       {showDeleted && <div className="data-list roles-deleted">

@@ -78,6 +78,7 @@ export function OAuthConsent({ request, here }: OAuthConsentProps) {
     const locked = me.data.plan?.locked === true;
     body = <><h1>{text.title(app.data.name)}</h1>
       <p>{text.acts(me.data.workspace.name, person)}</p>
+      <p>{text.roles}</p>
       <p className="muted-copy">{text.changes}</p>
       {app.data.client_host && <p className="muted-copy">{text.publishedBy(app.data.client_host)}</p>}
       {!app.data.verified && <p className="muted-copy">{text.unverifiedName}</p>}

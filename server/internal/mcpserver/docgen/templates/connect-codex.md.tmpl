@@ -48,7 +48,8 @@ For a server you run yourself, or to give Codex fewer permissions than you hold,
    {{index .Snippets "codex"}}
    ```
 
-`codex mcp list` shows `{{.ServerName}}` with `Bearer token`. Codex reads the variable when it
+`codex mcp list` shows `{{.ServerName}}` with `Bearer token`. Codex reads the token from the variable and
+never writes it into its configuration. It reads the variable when it
 starts, so start it from a terminal that has it. The IDE extension and the desktop app only see it
 when they are started from such a terminal.
 

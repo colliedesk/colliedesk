@@ -4,6 +4,8 @@ import type { Me } from '../../api/schemas';
 import { messages } from '../../messages';
 import { PanelRightIcon, PenIcon } from '../../ui/icons';
 import { lazyPart, Part } from '../../ui/lazy-part';
+import { BackToApp } from '../settings/back-to-app';
+import { SettingsMenuSlot } from '../settings/settings-nav';
 import { AccountMenu } from './account-menu';
 import type { WorkspaceSwitch } from './account-menu';
 import type { PaletteSource } from './palette-entries';
@@ -45,6 +47,8 @@ interface AppShellProps {
   signingOut?: boolean;
   // workspaceSwitch lets the account menu offer the person's other workspaces.
   workspaceSwitch?: WorkspaceSwitch;
+  // settingsExit puts Settings in the sidebar: its menu under Back to app, instead of the app's places and lists.
+  settingsExit?: { href: string; onBack: () => void };
   children: ReactNode;
 }
 
@@ -118,37 +122,52 @@ function usePalette(enabled: boolean) {
 }
 
 export function AppShell({ me, appVersion, signedOut = false, brand, links, footLinks, page, palette, quickStart, onNewConversation, views, channels, canInvite = false,
-  notice, lockedScreen, onSignOut, signOutFailed, signingOut, workspaceSwitch, children }: AppShellProps) {
+  notice, lockedScreen, onSignOut, signOutFailed, signingOut, workspaceSwitch, settingsExit, children }: AppShellProps) {
   useDismissibleTooltips();
   const sidebar = useSidebarLayout();
   const { collapsed } = sidebar.layout;
   const wide = useSyncExternalStore(subscribeNames, showsNames);
   const toggleLabel = collapsed ? messages.expandSidebar : messages.collapseSidebar;
+  const [menuSlot, setMenuSlot] = useState<HTMLElement | null>(null);
   // Signed out, the old session's identity would be a false claim, so neither the sidebar nor the top bar names it.
   const session = me && !signedOut ? me : undefined;
-  // The open sidebar shows the workspace and the person; it is then the region that names them.
+  const inSettings = Boolean(session && settingsExit && !lockedScreen);
+  // The open sidebar shows the workspace and the person; it is then the region that names them. Settings has no
+  // workspace row at its head, so it shows the name above the account row at its foot.
   const sidebarNames = Boolean(session) && wide && !collapsed;
   const search = usePalette(Boolean(session && palette));
   const view = signedOut
     ? <main className="redeem-page"><section className="redeem-panel">
         <p role="alert" className="error-copy">{messages.signedOut}</p>
         <p className="muted-copy">{messages.signedOutSelfHosted}</p>
+        <p><code>{messages.signedOutCommand}</code></p>
       </section></main>
     : lockedScreen ?? children;
+  const toggle = <button type="button" className="sidebar-toggle" aria-label={toggleLabel} data-tip={toggleLabel} aria-expanded={!collapsed}
+    onClick={() => sidebar.set({ ...sidebar.layout, collapsed: !collapsed })}><PanelRightIcon /></button>;
+  const account = session && <AccountMenu me={session} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut}
+    workspaceSwitch={workspaceSwitch} />;
   return (
+    <SettingsMenuSlot.Provider value={inSettings ? menuSlot : undefined}>
     <div className="app-shell" data-sidebar={collapsed ? 'collapsed' : 'expanded'}
       style={{ '--sidebar-user-width': `${sidebar.layout.width}px` } as CSSProperties}>
       {/* On a desktop the sidebar can be resized from its edge and folded into an icon rail; both are kept per browser. */}
       <div className="app-sidebar" {...(sidebarNames ? { role: 'region', 'aria-label': messages.signedInAs } : {})}>
-        <nav className="app-rail" aria-label={messages.mainNavigation}>
+        {inSettings && settingsExit ? <div className="app-rail settings-rail">
+          <div className="rail-head settings-rail-head"><BackToApp {...settingsExit} />{toggle}</div>
+          {/* Each Settings page puts its menu here (settings-nav.tsx). Folded into the rail there is no room for its names. */}
+          <div className="sidebar-scroll" ref={setMenuSlot} />
+          <div className="sidebar-foot">{session && <strong className="workspace-name">{session.workspace.name}</strong>}{account}</div>
+        </div> : <nav className="app-rail" aria-label={messages.mainNavigation}>
           <div className="rail-head">
             {brand}
-            {session && <strong className="workspace-name">{session.workspace.name}</strong>}
+            {/* The name takes the room the head has; what does not fit is told in full on hover. The text is the whole name, so a
+                screen reader reads it once, and the top bar's search field names it for a keyboard. */}
+            {session && <span className="workspace-name" data-tip={session.workspace.name}><strong>{session.workspace.name}</strong></span>}
             {session && quickStart}
             {session && onNewConversation && <button type="button" className="sidebar-new" aria-label={messages.newConversation} data-tip={messages.newConversation}
               data-opens="new-conversation" onClick={onNewConversation}><PenIcon /></button>}
-            <button type="button" className="sidebar-toggle" aria-label={toggleLabel} data-tip={toggleLabel} aria-expanded={!collapsed}
-              onClick={() => sidebar.set({ ...sidebar.layout, collapsed: !collapsed })}><PanelRightIcon /></button>
+            {toggle}
           </div>
           {/* Signed out, every destination ends on the same screen, so the rail offers none. */}
           {/* The places and the lists scroll between the head and the foot, so the person at the foot stays on screen. */}
@@ -159,11 +178,10 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, foot
           {session && <div className="sidebar-foot">
             {canInvite && <InviteLink />}
             {footLinks}
-            <AccountMenu me={session} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut}
-              workspaceSwitch={workspaceSwitch} />
+            {account}
           </div>}
           {!session && !signedOut && footLinks}
-        </nav>
+        </nav>}
         <SidebarResizer {...sidebar} />
       </div>
       <div className="app-main">
@@ -180,5 +198,6 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, foot
       {session && palette && search.anchor && <Part part={palettePart} render={({ CommandPalette }) =>
         <CommandPalette {...palette} workspaceId={session.workspace.id} anchor={search.anchor ?? undefined} onClose={search.close} />} />}
     </div>
+    </SettingsMenuSlot.Provider>
   );
 }

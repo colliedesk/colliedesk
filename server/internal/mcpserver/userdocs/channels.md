@@ -16,6 +16,10 @@ page per type under it:
 
 Members of the team who are not admins see these pages and cannot change them.
 
+These pages keep to a name and one short line. The ⓘ beside a name or a field says how it works or why:
+hover it, focus it with the keyboard, or tap it. Steps that take a few minutes, such as forwarding mail,
+stay on the page as steps.
+
 ## The list
 
 Each channel shows its type, its name, one line about it (the support address, the website origins)
@@ -66,7 +70,7 @@ on your shop and one on your careers page. Pick the type again to add another.
 
 Each channel has its own page with its type's tabs (email: **Connection**, how mail arrives, and
 **Replies**, how replies leave; web form: **Embed**; help chat: **Setup** and **Your site**; Zalo OA:
-**Connection**, **Groups**, **Staff** and **Messages**), **AI** and **History**; on **Settings → Email** it is
+**Connection**, **Groups**, **Staff** and **Messages**), **AI** and **History**; on **Settings → Channels → Email** it is
 **Manage**. An email address still waiting for its first email also has its setup,
 `/settings/channels/<id>/setup` (**Continue setup**). Old links to the email and web form sections of
 Settings open the type's page; a bookmark to `/settings/channels/<id>` opens the same channel.

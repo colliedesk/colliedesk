@@ -362,3 +362,43 @@ test('in a column too narrow for every tool (a tablet held upright), the toolbar
   expect(screen.getAllByRole('menuitem').map((item) => item.textContent).filter((label) => /^(Text|Heading)/.test(label ?? ''))).toEqual(['Text', 'Heading 2', 'Heading 3']);
   vi.unstubAllGlobals();
 });
+
+test('the video link dialog says which links work in one line, and where YouTube videos play from in a tip', async () => {
+  await make('Steps');
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^YouTube or Vimeo link/ }));
+  const dialog = screen.getByRole('dialog', { name: 'YouTube or Vimeo link' });
+  expect(dialog).toHaveTextContent('A watch page, a short link or a Share link.');
+  expect(within(dialog).getByRole('button', { name: 'About YouTube or Vimeo link' })).toHaveAccessibleDescription('YouTube videos play from youtube-nocookie.com.');
+});
+
+test('the picker says what Insert waits for in one line, and why alt text matters in a tip that also describes the button', async () => {
+  const id = 'aaaaaaaa-aaaa-4aaa-8aaa-000000000009';
+  const bare = { id, kind: 'image', content_type: 'image/png', size: 10, sha256: 'a'.repeat(64), url: `/api/v1/kb/images/${id}`, name: 'Invoices', alt: '', width: 10, height: 10,
+    duration_ms: null, codecs: [], thumbnail_url: null, poster_url: null, kept: false, deleted_at: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: [bare], next_cursor: null }), { status: 200 })));
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  let handle: EditorHandle | undefined;
+  render(<QueryClientProvider client={new QueryClient()}><CodeMirrorEditor initial="Intro" uploads={never} label="Text" describedBy="help" invalid={false} mode="edit"
+    onChange={() => undefined} onReady={(ready) => { handle = ready; }} /></QueryClientProvider>);
+  await waitFor(() => expect(handle).toBeDefined());
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^From the media library/ }));
+  const picker = screen.getByRole('dialog', { name: 'Insert from the media library' });
+  fireEvent.click(await within(picker).findByRole('option', { name: /^Invoices, image/ }));
+  expect(picker).toHaveTextContent('Insert waits for the alt text of one image.');
+  expect(within(picker).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('Screen readers say nothing for an image without it.');
+  expect(within(picker).getByRole('button', { name: 'Insert 1' })).toHaveAccessibleDescription(/Screen readers say nothing for an image without it/);
+});
+
+test('the video link field, while a refusal shows in place of the help, describes itself only with ids that are on the page', async () => {
+  await make('Intro');
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^YouTube or Vimeo link/ }));
+  const link = screen.getByRole('textbox', { name: 'YouTube or Vimeo link' });
+  fireEvent.change(link, { target: { value: 'https://evil.example/watch' } });
+  fireEvent.keyDown(link, { key: 'Enter' });
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  const missing = (link.getAttribute('aria-describedby') ?? '').split(/\s+/).filter((part) => part && !document.getElementById(part));
+  expect(missing).toEqual([]);
+});

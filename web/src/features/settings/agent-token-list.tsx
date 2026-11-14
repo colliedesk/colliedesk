@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import { useState } from 'react';
 import type { Session } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { agentTokenMessages as text } from './agent-tokens-messages';
 import { RevokeTokenDialog } from './revoke-token-dialog';
+import { RowMenu } from './row-menu';
+import { useEndedAnnouncement } from './use-ended-announcement';
 import { settingsMessages } from './settings-messages';
 import { permissionLabel } from './token-permissions';
 
@@ -28,36 +29,6 @@ function TokenAccess({ session }: { session: Session }) {
       <ul>{token.permissions.map((name) => <li key={name}>{permissionLabel(name)}</li>)}</ul></details></div>;
 }
 
-// RowMenu is the row's "⋯" button with a menu under it: Escape or a press outside closes it.
-function RowMenu({ label, onRevoke }: { label: string; onRevoke: () => void }) {
-  const id = useId();
-  const [open, setOpen] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    menu.current?.querySelector<HTMLElement>('[role=menuitem]')?.focus();
-    const outside = (event: PointerEvent) => {
-      if (!menu.current?.contains(event.target as Node) && !button.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', outside);
-    return () => document.removeEventListener('pointerdown', outside);
-  }, [open]);
-  const keys = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') { event.preventDefault(); setOpen(false); button.current?.focus(); }
-    if (event.key === 'Tab') setOpen(false);
-  };
-  return <div className="token-menu-wrap">
-    <button ref={button} type="button" className="icon-button token-menu-button" aria-label={text.rowActions(label)} aria-haspopup="menu" aria-expanded={open}
-      aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}>
-      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
-    </button>
-    {open && <div ref={menu} id={id} className="token-menu" role="menu" aria-label={text.rowActions(label)} onKeyDown={keys}>
-      <button type="button" role="menuitem" className="danger-action" onClick={() => { setOpen(false); onRevoke(); }}>{text.revoke}</button>
-    </div>}
-  </div>;
-}
-
 interface AgentTokenListProps {
   tokens: Session[];
   timezone: string;
@@ -69,8 +40,10 @@ interface AgentTokenListProps {
 // last used it (the session's last_seen_at) and when it ends. Revoke, from the row menu, asks first.
 export function AgentTokenList({ tokens, timezone, onRevoke, labelledBy }: AgentTokenListProps) {
   const [confirming, setConfirming] = useState<Session | null>(null);
+  const revoked = useEndedAnnouncement(tokens, (session) => session.id, (session) => ended(session) === 'revoked', (session) => text.revokedToken(session.label));
   if (tokens.length === 0) return <p className="muted-copy token-list-empty">{text.noTokens}</p>;
   return <>
+    <p role="status" className="sr-only">{revoked}</p>
     <table className="token-table" aria-labelledby={labelledBy}>
       <thead><tr><th scope="col">{text.columns.token}</th><th scope="col">{text.columns.access}</th><th scope="col">{text.columns.lastUsed}</th>
         <th scope="col">{text.columns.expires}</th><th scope="col"><span className="sr-only">{text.columns.actions}</span></th></tr></thead>
@@ -83,7 +56,7 @@ export function AgentTokenList({ tokens, timezone, onRevoke, labelledBy }: Agent
           <td className="token-when token-expires" data-label={text.columns.expires}>{end
             ? <span className="token-end"><span className="token-dot token-dot-hollow" aria-hidden="true" />{end === 'revoked' ? text.revoked : text.expired}</span>
             : <time dateTime={session.expires_at}>{formatDate(session.expires_at, timezone)}</time>}</td>
-          <td className="token-actions">{!end && <RowMenu label={session.label} onRevoke={() => setConfirming(session)} />}</td>
+          <td className="token-actions">{!end && <RowMenu label={session.label} items={[{ key: 'revoke', label: text.revoke, danger: true, onSelect: () => setConfirming(session) }]} />}</td>
         </tr>;
       })}</tbody>
     </table>

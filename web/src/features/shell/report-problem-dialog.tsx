@@ -6,6 +6,7 @@ import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 import { reportMessages } from './report-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
+import { HelpTip } from '../../ui/help-tip';
 import { issueURL } from './report-issue-url';
 import { useCreateAction } from '../../api/use-create';
 
@@ -106,7 +107,7 @@ export function ReportProblemDialog({ appVersion, onClose }: Props) {
                 <span key={index}>{item.at} {item.method} {item.route} {item.status}, {reportMessages.reportRequestId(item.request_id ?? '')}</span>)}</dd>
               <dt>{reportMessages.reportActions}</dt><dd>{diagnostics.product_events?.join(', ') || reportMessages.reportNone}</dd>
             </dl>
-            <p className="muted-copy">{reportMessages.reportFromServer}</p>
+            <p className="muted-copy">{reportMessages.reportFromServer}<HelpTip label={reportMessages.reportServerLabel} text={reportMessages.reportServerAdds} /></p>
           </details>
           <div className="button-row">
             <button type="button" className="primary-action" disabled={text === '' || sending} onClick={() => void send()}>

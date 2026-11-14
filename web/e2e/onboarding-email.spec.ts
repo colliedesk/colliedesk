@@ -51,7 +51,7 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
   const created = await inbound.json() as { status: string; conversation_id: string };
   expect(created.status).toBe('created');
 
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  await page.getByRole('link', { name: 'Back to app' }).click();
   await page.getByRole('button', { name: new RegExp(`Order ${suffix} never arrived`) }).click();
   // The list row quotes the same words; the message itself is in the timeline.
   await expect(page.getByRole('region', { name: /timeline/i }).getByText('My order never arrived. Receipt attached.')).toBeVisible();

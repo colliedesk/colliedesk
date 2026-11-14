@@ -222,6 +222,10 @@ it works only while the Freshdesk account exists: keep the account and the snipp
 after the switch. Freshdesk suspends a cancelled account after 24 hours and deletes it after 14 days.
 There is no `meta refresh` fallback, because it cannot tell a help page from the sign-in page.
 
+When the knowledge base is too large to list every address in the snippet, the app says so. The snippet
+then sends each old address by its id to the help center, which finds the new page, so the redirect still
+works.
+
 An AI agent reads the same through `colliedesk_help_center_freshdesk_redirect_get` (`GET
 /api/v1/help-center/freshdesk-redirect?plan=pro`).
 
@@ -251,7 +255,8 @@ never accepts it as a command-line argument and never prints it.
    canned responses and the knowledge base. Nothing is written yet. Freshdesk does not count archived
    tickets ahead of time, so the ticket number is "at least". A plan that does not allow the archive API
    gets a calm note, not a warning: those archived tickets are listed in the report to check. The page
-   also gives a time range for the import, from the ticket count and the API limit of your plan.
+   also gives a time range for the import, from the ticket count and the API limit of your plan. The ⓘ beside the API key
+   says how the server keeps it, and the one beside the old help center address says what it changes.
 3. Select **Start import** within the hour. The tickets updated in the last 90 days come first, newest
    first: once they are in, the page says so and your team can work on them while older and archived
    tickets, contacts, saved replies and the knowledge base follow. The page lists the steps (done, in

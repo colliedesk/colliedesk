@@ -11,6 +11,9 @@ for how cards are collected and what the rules decide by themselves). A card wai
 - a group message has no command (**No command**);
 - intake is at Suggest: every card waits here with AI's suggestion (**AI suggests, a person decides**);
 - at Auto, AI was not sure, did not answer in time, or may not decide this yet;
+- at Auto, AI would set a group card aside while another customer wrote in what it read: their words
+  may ask for that, so a person decides (under AI's suggestion: **Another customer wrote here; a person
+  decides what to set aside**);
 - it is too old to decide alone, or its conversation changed meanwhile;
 - it holds a password or a one-time code, hidden from AI (the card shows it to people): ask the customer to
   change it;

@@ -245,13 +245,24 @@ func (a *API) sendFixOf(response http.ResponseWriter, request *http.Request, con
 		writeError(response, http.StatusConflict, "notes_not_allowed", "This repository does not let internal notes go with a fix. An admin allows it in Settings → Autofix.")
 		return
 	}
-	if _, ok := sources.pickNotes(input.NoteIDs); !ok {
+	picked, ok := sources.pickNotes(input.NoteIDs)
+	if !ok {
 		writeError(response, http.StatusBadRequest, "invalid_request", "note_ids names a message that is not an internal note of this conversation a person wrote.")
 		return
 	}
 	for _, id := range input.MessageIDs {
 		if !slices.ContainsFunc(sources.customer, func(message autofix.SourceMessage) bool { return message.ID == id }) {
 			writeError(response, http.StatusBadRequest, "invalid_request", "message_ids names a message that is not one the customer wrote in this conversation.")
+			return
+		}
+	}
+	// An agent token sends only the text the preview built: a model can be talked into writing anything
+	// by the very ticket it reads, and the coding agent acts on what it is sent. A person may edit it.
+	if who.IsToken() {
+		built := autofix.BuildFixOf(autofix.FixSource{Subject: sources.conversation.Subject, Customer: sources.customer, Notes: noteSources(picked)}, input.MessageIDs)
+		if !autofix.SameAsBuilt(built, title, body) {
+			writeError(response, http.StatusConflict, "fix_text_edited", "An agent token sends the title and body colliedesk_fix_preview built, unchanged, "+
+				"with its message_ids and the same note_ids. Preview again (the conversation may have changed), or ask a person to edit the text in the app.")
 			return
 		}
 	}

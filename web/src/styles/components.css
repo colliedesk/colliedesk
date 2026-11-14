@@ -406,10 +406,12 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-actions .tool-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .composer-actions .saved-reply-button kbd { display: none; }
 .composer-actions .ai-tool .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
-/* Off, shown to admins only, keeps the name where it fits, so the icon is not left with a bare "Off". */
-@container (min-width: 36rem) {
-  .composer-actions :has(> .ai-off-label) .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
-}
+/* Off, shown to admins only, keeps the name at every width: an icon with a bare "Off" says nothing. */
+.composer-actions :has(> .ai-off-label) .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+/* The reply box is at the bottom of the screen: its tooltips open upwards, as the list's do. */
+/* A tooltip takes no room until it shows: unseen, a long one would widen the toolbar's scroll width. */
+.composer-actions [data-tip]::after { top: auto; bottom: calc(100% + var(--space-2)); width: max-content; max-width: 16rem; white-space: normal; }
+.composer-actions [data-tip]:not(:hover, :focus-visible)::after { display: none; }
 /* A narrow box keeps every word of the hints: they wrap under the tabs in one tidy block instead of being cut. */
 @container (max-width: 40rem) {
   .composer-head { flex-wrap: wrap; row-gap: var(--space-1); }
@@ -618,6 +620,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .form-row > small { max-width: 34rem; color: var(--text-3); font-size: var(--fs-label); line-height: 1.45; }
 /* The field and its button share the first line; a save status and a hint take the whole line under them. */
 .form-row > :nth-child(n + 3) { grid-column: 1 / -1; }
+.form-row:not(:has(> button)) > :nth-child(n + 2) { grid-column: 1 / -1; }
 .invite-form { display: grid; grid-template-columns: minmax(0, 1fr) 9rem auto; align-items: end; gap: var(--space-3); }
 .button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .invite-link { display: grid; gap: var(--space-1); }
@@ -989,6 +992,10 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-5);
 }
 .dialog h2, .dialog p { margin: 0; }
+/* One head for every dialog: the title is semibold on a 24 px line. */
+.dialog > h2, .form-dialog > header h2 { color: var(--text-1); font-size: var(--fs-body); font-weight: 600; line-height: 24px; }
+/* A form's labels read the same in Start a conversation as in the form dialogs of Settings (.field > label). */
+.new-conversation :is(label, legend, .field-label) { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; line-height: 20px; }
 .dialog textarea { width: 100%; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; padding: var(--space-2) var(--space-3); line-height: 1.5; }
 .dialog textarea:focus-visible, .dialog input:focus-visible, .dialog summary:focus-visible, .dialog a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .report-preview { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }

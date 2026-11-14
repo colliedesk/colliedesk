@@ -110,6 +110,13 @@ test('an admin connects Microsoft 365, replies leave from the mailbox with threa
   const question = block.getByRole('group', { name: 'Disconnect Microsoft 365?' });
   await expect(question.getByRole('link', { name: 'My Apps' })).toHaveAttribute('href', 'https://myapps.microsoft.com');
   await expect(question.getByRole('link', { name: 'Microsoft account permissions' })).toHaveAttribute('href', 'https://account.live.com/consent/Manage');
+  // Esc closes the question (a panel on the page, not a dialog) and does not also leave Settings.
+  await expect(question.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(question).toHaveCount(0);
+  await expect(page).toHaveURL(/\/settings\/channels\//);
+  await block.getByRole('button', { name: 'Disconnect Microsoft 365' }).click();
+  await expect(question).toBeVisible();
   await question.getByRole('button', { name: 'Yes, disconnect Microsoft 365' }).click();
   await expect(block.getByRole('button', { name: 'Connect Microsoft 365' })).toBeVisible();
 });

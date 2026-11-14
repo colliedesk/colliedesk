@@ -12,8 +12,10 @@ import { EmailChannelSection, gmailPart } from '../../features/settings/email-ch
 import { GmailDataDisclosure, MicrosoftDataDisclosure } from '../../features/settings/gmail-connection';
 import type { MailboxReturn } from '../../features/settings/gmail-return';
 import { NameForm } from '../../features/settings/name-form';
+import { useReleaseUnsaved } from '../../features/settings/settings-edits';
 import { saveState } from '../../features/settings/save-feedback';
 import { settingsMessages } from '../../features/settings/settings-messages';
+import { HelpTip } from '../../ui/help-tip';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { providerSteps } from './provider-instructions';
 import { clockTime, recommended } from './setup-state';
@@ -45,13 +47,14 @@ export function useRefetchOnActivity(channelID: string, active: boolean) {
 // changes them all, so it sits folded where the forwarding address is changed.
 export function ForwardingName() {
   const client = useQueryClient();
+  const release = useReleaseUnsaved();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const save = useMutation({ mutationFn: api.updateWorkspaceSlug,
-    // On the workspace's own host the desk moves with the name: continue on the new host.
-    onSuccess: (renamed) => renamed.continue_url ? leaveTo(renamed.continue_url)
+    // On the workspace's own host the desk moves with the name: continue on the new host, without asking about the name just saved.
+    onSuccess: (renamed) => renamed.continue_url ? (release(`name-step:${settingsMessages.workspaceAddressName}`), leaveTo(renamed.continue_url))
       : Promise.all(['me', 'email-channel'].map((key) => client.invalidateQueries({ queryKey: [key] }))) });
   if (!me.data) return null;
-  return <NameForm label={settingsMessages.workspaceAddressName} saveLabel={settingsMessages.saveAddressName} hint={settingsMessages.addressNameWarning} value={me.data.workspace.slug} canManage
+  return <NameForm label={settingsMessages.workspaceAddressName} saveLabel={settingsMessages.saveAddressName} hint={settingsMessages.addressNameWarning} tip={settingsMessages.addressNameWhy} value={me.data.workspace.slug} canManage
     maxLength={63} save={saveState(save)} onSave={(slug) => save.mutate(slug)} />;
 }
 
@@ -86,7 +89,8 @@ export function ForwardStep({ channel, settings, canManage, timezone, provider, 
     <Tabs label={m.providerTabs} prefix={prefix} value={tab} onChange={onProvider} tabs={providerSteps.map(({ id, label }) => ({ id, label }))} />
     <div role="tabpanel" id={panelID(prefix, tab)} aria-labelledby={tabID(prefix, tab)} className="setup-provider">
       {!hosted && tab !== 'other'
-        ? <p className="muted-copy">{m.needsForwarder(shown.label)} <button type="button" className="link-action" onClick={() => onProvider('other')}>{m.openOther}</button></p>
+        ? <p className="muted-copy">{m.needsForwarder(shown.label)} <button type="button" className="link-action" onClick={() => onProvider('other')}>{m.openOther}</button>
+            {' '}<HelpTip label={m.forwarder} text={m.needsForwarderWhy(shown.label)} /></p>
         : <ol className="setup-instructions">{shown.steps.map((text, index) => <li key={text}>
             {shown.warning?.before === index && <p role="note" className="warning-note">{shown.warning.text}</p>}
             <span>{text}</span>
@@ -151,7 +155,7 @@ export function RepliesStep({ channelID, settings, canManage, timezone, provider
   const mailboxFor = choice === 'microsoft' ? 'microsoft' : 'google';
   const available = mailboxFor === 'microsoft' ? settings.microsoft.available : settings.gmail.available;
   return <div className="setup-body">
-    <p className="muted-copy">{m.repliesIntro}</p>
+    <p className="muted-copy">{m.repliesIntro} <HelpTip label={m.repliesLegend} text={m.repliesWhy} /></p>
     <EmailChannelSection part="sending" settings={settings} timezone={timezone} canManage={canManage} />
     <fieldset className="setup-choices">
       <legend className="sr-only">{m.repliesLegend}</legend>

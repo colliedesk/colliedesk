@@ -9,20 +9,22 @@ import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { can } from './lib/can';
 import { closedScreen, firstOpenArea, knowledgeHome, railAreasFor } from './lib/areas';
-import { isPhone } from './lib/use-phone';
+import { isPhone, usePhone } from './lib/use-phone';
+import { beforeSettings, forgetBeforeSettings, rememberBeforeSettings } from './features/settings/back-to-app';
 import { keepContentScroll } from './lib/content-scroll';
 import { PermissionsContext } from './lib/permissions-context';
 import type { TokenPermission } from './api/schemas';
 import { useIntakeSummary } from './features/review/use-intake-summary';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { HandoffSignIn } from './features/auth/handoff-sign-in';
-import { OAuthConsent, oauthRequestFrom } from './features/auth/oauth-consent';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
 import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-intent';
 import { rememberSignupAttribution } from './lib/signup-attribution';
 import type { PlanIntent } from './features/settings/plan-intent';
-import { SettingsNavLinkContext } from './features/settings/settings-nav';
-import { settingsAddress } from './features/settings/settings-anchors';
+import { NavItemContent, SettingsNavLinkContext } from './features/settings/settings-nav';
+import { aiViews, conversationFieldsTitle, membersTabOf, movedAddress, settingsAddress } from './features/settings/settings-anchors';
+import type { MembersTab } from './features/settings/settings-anchors';
+import { confirmDiscardUnsavedSettings } from './features/settings/unsaved-probe';
 import type { NavItem } from './features/settings/settings-nav';
 import type { ReactNode } from 'react';
 import { AppShell } from './features/shell/app-shell';
@@ -34,8 +36,9 @@ import { preloadQuickStart, QuickStart } from './features/onboarding/quick-start
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { AtIcon, BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon } from './ui/icons';
+import { AtIcon, BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon, UserIcon } from './ui/icons';
 import { mentionMessages } from './features/inbox/mention-messages';
+import { customersPageName } from './features/contacts/contact-page-name';
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
@@ -68,6 +71,8 @@ const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 // A trial offer link is opened once by a few admins: its page loads from its own chunk.
 const trialOfferPart = lazyPart(() => import('./features/auth/trial-offer-page'));
+// The consent page carries help tips, so it loads with its own chunk, not with the first screen.
+const oauthConsentPart = lazyPart(() => import('./features/auth/oauth-consent'));
 
 // pageChunk is the loader of a route whose page is a lazy part. Moving inside the app, it waits for the page's
 // chunk, so the router keeps the current page on screen, Settings nav included, until the next one can show:
@@ -97,10 +102,17 @@ function AppLayout() {
   const notFound = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === rootRouteId });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
   const signedOut = !onSignIn && me.error instanceof UnauthorizedError;
+  // Settings takes the sidebar on a wide screen: Back to app (and Esc) return to the page that was on screen before it.
+  const phone = usePhone();
+  const here = useRouterState({ select: (state) => state.location.href });
+  // The page is kept for this workspace and person: a tab that changes hands never offers the last one's page.
+  const keeper = me.data ? `${me.data.workspace.id}/${me.data.agent.id}` : undefined;
+  useEffect(() => { if (keeper && !onSignIn && !signedOut && !path.startsWith('/settings')) rememberBeforeSettings(here, keeper); }, [keeper, onSignIn, signedOut, path, here]);
+  const backToApp = useCallback(() => router.history.push(keeper ? beforeSettings(keeper) : '/'), [router, keeper]);
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
   const client = useQueryClient();
   // After sign out /auth/me answers 401, which turns the view into the signed-out screen.
-  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => { resetProductAnalytics(); forgetAllDrafts(); return client.invalidateQueries({ queryKey: ['me'] }); } });
+  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => { resetProductAnalytics(); forgetAllDrafts(); forgetBeforeSettings(); return client.invalidateQueries({ queryKey: ['me'] }); } });
   // A paused agent (more agents than the plan allows) gets the same treatment as a lock: nothing but why and sign out.
   const paused = me.data?.plan?.seat_paused === true;
   const locked = me.data?.plan?.locked === true || paused;
@@ -120,6 +132,7 @@ function AppLayout() {
   const intake = useIntakeSummary(!onSignIn && readsInbox && !signedOut && !locked).data;
   // The inbox list on screen (its filters are in the address), so the sidebar marks the view or channel it is.
   const inInbox = path === '/' || path.startsWith('/conversations/');
+  const inContacts = path.startsWith('/contacts/');
   const inMentions = path === '/mentions' || path.startsWith('/mentions/');
   const sidebar = useSidebarData(me.data, !onSignIn && !signedOut && !locked, inInbox ? inboxQueryFromSearch(search) : undefined);
   // Quick start in the sidebar head reads where setup stands on every page. A guide the session hid is not asked for;
@@ -167,7 +180,7 @@ function AppLayout() {
   const page = inSettings ? { title: messages.settings, icon: <SettingsIcon /> } : inReview ? { title: messages.review, icon: <ChatIcon /> }
     : inKnowledge ? { title: messages.knowledge, icon: <BookIcon /> } : inResults ? { title: messages.results, icon: <ChartIcon /> }
     // Fixes keeps its wrench in the Autofix chunk; its name is enough here.
-    : inFixes ? { title: messages.autofix, icon: null } : inMentions ? { title: mentionMessages.mentions, icon: <AtIcon /> } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
+    : inFixes ? { title: messages.autofix, icon: null } : inMentions ? { title: mentionMessages.mentions, icon: <AtIcon /> } : inContacts ? { title: customersPageName, icon: <UserIcon /> } : inInbox && !notFound ? { title: messages.inbox, icon: <InboxIcon /> } : undefined;
   // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
   const mayStart = (['messages:send', 'channels:read', 'contacts:read'] as const).every(shows);
   // Where each desk runs on its own host and the identity provider proves who the person is, the account menu
@@ -186,8 +199,9 @@ function AppLayout() {
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
       {config.data?.product_analytics.realm === 'cloud' && can(me.data, 'billing:manage') && me.data.plan?.plan === 'trial'
-        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => signOut.mutate()} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
-    onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending} workspaceSwitch={workspaceSwitch}
+        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => { if (confirmDiscardUnsavedSettings()) signOut.mutate(); }} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
+    onSignOut={() => { if (confirmDiscardUnsavedSettings()) signOut.mutate(); }} signOutFailed={signOut.isError} signingOut={signOut.isPending} workspaceSwitch={workspaceSwitch}
+    settingsExit={inSettings && !phone && !locked && !closed && !notFound ? { href: keeper ? beforeSettings(keeper) : '/', onBack: backToApp } : undefined}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
       {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={inboxOpen > 0 ? messages.inboxOpenCount(inboxOpen) : messages.inbox}
@@ -219,7 +233,7 @@ function AppLayout() {
 function settingsRouterLink(item: NavItem) {
   // /settings/channels, the type homes under it and /settings/ai are routes with a splat, paths the route types do not list.
   return <Link to={item.to as Exclude<NavItem['to'], `/settings/channels${string}` | '/settings/ai'>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
-    aria-current={item.current ? 'page' : undefined}>{item.label}</Link>;
+    aria-current={item.current ? 'page' : undefined}><NavItemContent item={item} /></Link>;
 }
 
 // An unknown address inside the app says so and offers the way back, in the frame of every other page.
@@ -369,8 +383,25 @@ const accountRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sett
   component: () => <SettingsChunkPage title={messages.account} render={({ AccountRoute }) => <AccountRoute />} /> });
 const generalRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/general', loader: pageChunk(settingsRoutePart),
   component: () => <SettingsChunkPage title={messages.general} render={({ GeneralRoute }) => <GeneralRoute />} /> });
+// Members has four tabs, named in the address. 'roles' is what Advanced was called: it, and an old anchor to a section
+// that now sits on a tab, open that tab.
+type MembersSearch = { tab?: MembersTab | 'roles' };
+const sectionTab: Record<string, MembersTab> = { 'invites-heading': 'invites', 'roles-heading': 'advanced' };
 const membersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/members', loader: pageChunk(settingsRoutePart),
-  component: () => <SettingsChunkPage title={messages.members} render={({ MembersRoute }) => <MembersRoute />} /> });
+  validateSearch: (search: Record<string, unknown>): MembersSearch => (search.tab === 'roles' ? { tab: 'roles' } : membersTabOf(search.tab) ? { tab: membersTabOf(search.tab) } : {}),
+  beforeLoad: ({ search, location }) => {
+    const tab = search.tab === 'roles' ? 'advanced' : search.tab ?? sectionTab[location.hash.replace(/^#/, '')];
+    if (tab && tab !== search.tab) throw redirect({ to: '/settings/members', search: { tab }, hash: location.hash, replace: true });
+  },
+  component: function Members() {
+    const { tab } = membersRoute.useSearch();
+    const navigate = useNavigate();
+    return <SettingsChunkPage title={messages.members} render={({ MembersRoute }) =>
+      <MembersRoute tab={tab === 'roles' ? 'advanced' : tab} onTab={(next, how) => void navigate({ to: '/settings/members', search: { tab: next }, replace: how === 'key' })} />} />;
+  } });
+// Reserved: the menu holds the place of Conversation fields, and the page says what is coming.
+const fieldsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/fields', loader: pageChunk(settingsRoutePart),
+  component: () => <SettingsChunkPage title={conversationFieldsTitle} render={({ FieldsRoute }) => <FieldsRoute />} /> });
 const savedRepliesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/saved-replies', loader: pageChunk(settingsRoutePart),
   component: () => <SettingsChunkPage title={messages.savedReplies} render={({ SavedRepliesRoute }) => <SavedRepliesRoute />} /> });
 // Agent requests were removed: an agent token acts at once when it holds the permission. An old bookmark opens the inbox.
@@ -443,13 +474,9 @@ const dataRoute = createRoute({
   loader: pageChunk(dataRoutePart),
   component: () => <Part part={dataRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ DataRoute }) => <DataRoute />} />,
 });
-const importRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/import-freshdesk',
-  beforeLoad: () => { throw redirect({ to: '/settings/data', replace: true }); } });
 // Settings → Members → a role: a new role (optionally from another) and one role. The list of roles is a
 // section of Members; its old address opens it there.
 const rolesFailed = <main className="settings-page"><PartUnavailable /></main>;
-const rolesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles',
-  beforeLoad: () => { throw redirect({ to: '/settings/members', hash: 'roles-heading', replace: true }); } });
 const newRoleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/new', loader: pageChunk(rolesRoutePart),
   validateSearch: (search: Record<string, unknown>): { from?: string } => (typeof search.from === 'string' ? { from: search.from } : {}),
   component: function NewRole() {
@@ -461,9 +488,12 @@ const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setting
     const { roleId } = roleRoute.useParams();
     return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'edit', id: roleId }} />} />;
   } });
-// Conversation numbers were a page of their own; they are a section of General now.
-const numbersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/numbers',
-  beforeLoad: () => { throw redirect({ to: '/settings/general', hash: 'numbers-heading', replace: true }); } });
+// Pages the menu merged into others keep their addresses: each opens the page, section or tab that holds its content
+// now (movedPages in settings-anchors.ts). The path is typed per route, so the router still knows every address.
+const moved = <P extends string>(path: P) => createRoute({ getParentRoute: () => rootRoute, path,
+  beforeLoad: ({ location }) => { throw redirect({ href: movedAddress(path, location.searchStr, location.hash), replace: true }); } });
+const movedRoutes = [moved('/settings/profile'), moved('/settings/preferences'), moved('/settings/sessions'), moved('/settings/numbers'), moved('/settings/roles'),
+  moved('/settings/agents'), moved('/settings/import'), moved('/settings/export'), moved('/settings/import-freshdesk'), moved('/settings/help-center'), moved('/help-center/settings')];
 // Settings → Response targets: business hours and the targets of each priority.
 const targetsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -474,12 +504,21 @@ const targetsRoute = createRoute({
   },
 });
 // Settings → Built-in AI, with a chat's transcript below it (/settings/ai/chats/<id>): the chunk reads its path.
+// ?tab= names the view: Built-in AI or External agents ('chat' is the built-in AI's chat tab, which a transcript goes back to).
+// An old anchor to the agent tokens opens External agents.
+type AISearch = { tab?: 'built-in' | 'external' | 'chat' };
+const agentAnchors = new Set(['agents-heading', 'agent-tokens-heading']);
 const aiRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/settings/ai/$', loader: pageChunk(aiRoutePart),
+  validateSearch: (search: Record<string, unknown>): AISearch => (search.tab === 'chat' ? { tab: 'chat' } : aiViews.find((view) => view === search.tab) ? { tab: search.tab as AISearch['tab'] } : {}),
+  beforeLoad: ({ search, location }) => {
+    if (!search.tab && agentAnchors.has(location.hash.replace(/^#/, ''))) throw redirect({ href: `/settings/ai?tab=external#${location.hash}`, replace: true });
+  },
   component: function AISettings() {
     // The path is read here, not in render: the part calls render only once its chunk has loaded.
     const path = aiRoute.useParams()._splat ?? '';
-    return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute path={path} />} />;
+    const { tab } = aiRoute.useSearch();
+    return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute path={path} tab={tab} />} />;
   },
 });
 // Settings → Channels is its own chunk; one component reads the rest of the address (channels-route.tsx).
@@ -589,9 +628,11 @@ const signInRoute = createRoute({
 const oauthAuthorizeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/oauth/authorize',
+  loader: pageChunk(oauthConsentPart),
   component: function OAuthAuthorize() {
     const { search, pathname } = window.location;
-    return <OAuthConsent request={oauthRequestFrom(new URLSearchParams(search))} here={pathname + search} />;
+    return <Part part={oauthConsentPart} failed={<main className="settings-page"><PartUnavailable /></main>}
+      render={({ OAuthConsent, oauthRequestFrom }) => <OAuthConsent request={oauthRequestFrom(new URLSearchParams(search))} here={pathname + search} />} />;
   },
 });
 
@@ -607,7 +648,7 @@ const trialOfferRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 // Every router Link loads its page ahead when the pointer or the focus reaches it (plain links: lib/in-app-links.ts).
 export const router = createRouter({ routeTree, context: {}, defaultPreload: 'intent' });
 

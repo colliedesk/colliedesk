@@ -33,7 +33,7 @@ the empty inbox opens the same page.
 Below the table, folded, are the settings of the default address that people rarely change:
 **Sender name**, **Your domain** (verified or not), **Send a test message**, and on Colliedesk Cloud
 **Change forwarding address** (the **Workspace address name**). To disconnect an address, select
-**Manage** on its row, then **Disconnect email**.
+**Manage** on its row, then **Disconnect email**; the ⓘ beside **Support addresses** says the same.
 
 Old links keep working: `/settings/channels/<id>` opens the address's page, and a link with a tab
 (`/settings/channels/type/email?tab=replies`) opens that tab of the default address.
@@ -154,7 +154,7 @@ reads **Reply delivered**, and the page says **Email is set up**.
 
 The quickest way to see the whole loop needs no forwarder and no terminal. Select **Send yourself a
 test message**: on the empty inbox, in step 4 of the setup, or under **Send a test message** on
-**Settings → Email**. Colliedesk delivers one email from your own address to the channel, the way a
+**Settings → Channels → Email**. Colliedesk delivers one email from your own address to the channel, the way a
 customer's email arrives. It opens a conversation, **Test message from Colliedesk**, and opens it, from
 any of those places. The test works before forwarding is set up, so it shows that your inbox and
 replies work; customer email still needs your support mailbox to forward here. Before a support
@@ -203,9 +203,9 @@ renaming the workspace does not change it.
 
 A new channel starts with the workspace name. To change it:
 
-1. Open **Settings → Email** and unfold **Sender name** (or the address's **Replies** tab under
+1. Open **Settings → Channels → Email** and unfold **Sender name** (or the address's **Replies** tab under
    **Manage**). The field appears once a support address is saved.
-2. Enter the name in **Sender name** and select **Save sender name**.
+2. Enter the name in **Sender name**, then select **Save** in the bar that appears.
 
 The next reply uses the new name, on every way a reply leaves: your own domain, the
 `via Colliedesk` address and Gmail. A name is 1 to 100 characters. Spaces at the ends are removed.
@@ -343,7 +343,7 @@ On a server you run, Microsoft 365 sending needs your own app registration in Mi
 ## Several mailboxes
 
 A workspace can have several email channels, one per support address: `support@example.com` and
-`billing@example.com`, or a second domain. Add one with **Add another address** on **Settings → Email** (or **Settings → Channels → Add channel →
+`billing@example.com`, or a second domain. Add one with **Add another address** on **Settings → Channels → Email** (or **Settings → Channels → Add channel →
 Connect your support email**): step 1 asks a **Name** (left empty, it is called by its address) and its
 **Support address**, and the setup goes on for that address. Two channels never share a mailbox: `support+billing@example.com` is the same mailbox as
 `support@example.com`, so it is refused, with a link to the channel that has it.
@@ -360,7 +360,7 @@ Each mailbox has its own settings, on its own page (**Manage**):
 - **Domain verification belongs to the domain.** Two mailboxes on `example.com` share it: verify
   once, and a later mailbox on the domain is verified at once. **Replies** says so.
 
-The **Workspace address name** sits on **Settings → Email** under **Change forwarding address or
+The **Workspace address name** sits on **Settings → Channels → Email** under **Change forwarding address or
 disconnect**: it is part of every mailbox's forwarding address, so changing it changes them all.
 
 Replies leave from the mailbox the conversation came through; see
@@ -379,12 +379,12 @@ act on the default mailbox, as before.
 Until your domain is verified, replies are sent as **"<sender name> via Colliedesk"** from a
 `reply+…@` address on the server's sending domain, with `Reply-To` set to your support address
 (before your mailbox forwards here, to the conversation's `reply+…@` address).
-Customer replies still reach you and thread. **Settings → Email** (step 3 of the setup, or the address's **Replies** tab) shows **Replies are sent
+Customer replies still reach you and thread. **Settings → Channels → Email** (step 3 of the setup, or the address's **Replies** tab) shows **Replies are sent
 from …** with the current address. Verify the domain to send as your support address.
 
 **Colliedesk Cloud** verifies in two steps:
 
-1. Publish the TXT record shown in **Settings → Email** (step 3 of the setup, or the address's **Replies** tab) (**TXT record name**, for example
+1. Publish the TXT record shown in **Settings → Channels → Email** (step 3 of the setup, or the address's **Replies** tab) (**TXT record name**, for example
    `_colliedesk.example.com`, and **TXT record value**). It proves you control the domain. Select
    **Verify domain**; until the TXT record is found, Colliedesk asks for it and does nothing else.
 2. Colliedesk then lists a table **DNS records to publish** (DKIM, SPF and an MX record for bounces),
@@ -407,7 +407,7 @@ address until you verify it again.
 
 **Your own server** verifies with one TXT record, unless its operator set it up like Cloud:
 
-1. In **Settings → Email** (step 3 of the setup, or the address's **Replies** tab), copy the **TXT record name** (for example
+1. In **Settings → Channels → Email** (step 3 of the setup, or the address's **Replies** tab), copy the **TXT record name** (for example
    `_colliedesk.example.com`) and the **TXT record value**.
 2. Add that TXT record at your DNS provider.
 3. Select **Verify domain**. DNS changes can take a few minutes; try again if it fails.
@@ -423,7 +423,7 @@ Colliedesk counts spam complaints per workspace. A workspace is
 paused when it has **3 or more complaints in the last 7 days and they are more than 0.3% of the
 replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does not pause; 4 does).
 
-- **Settings → Email** (step 3 of the setup, or the address's **Replies** tab) shows **Email sending is paused** with the counts. Admins cannot lift it.
+- **Settings → Channels → Email** (step 3 of the setup, or the address's **Replies** tab) shows **Email sending is paused** with the counts. Admins cannot lift it.
 - Replies written during the pause stay **Queued** with the note "Email sending is paused after spam
   complaints; contact support." Nothing is failed and no attempt is used up. They are sent after
   the pause ends.

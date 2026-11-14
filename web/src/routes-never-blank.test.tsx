@@ -67,8 +67,9 @@ test.each(await paths())('%s is not blank on its first render', async (path) => 
   expect(container.querySelector('[data-chunk-loading]'), `${path} shows a placeholder until its chunk arrives: ${fix}`).toBeNull();
 }, 30_000);
 
-// On the first load there is no page on screen to keep: the rail shows at once, whatever the page's chunk takes.
-test('opening the app on a page whose chunk has not arrived shows the rail at once', async () => {
+// On the first load there is no page on screen to keep: the sidebar shows at once, whatever the page's chunk takes.
+// Settings has the sidebar to itself, so what shows is its Back to app.
+test('opening the app on a page whose chunk has not arrived shows the sidebar at once', async () => {
   vi.resetModules();
   vi.doMock('./features/settings/targets/targets-route', () => new Promise(() => {}));
   const { routeTree } = await import('./app');
@@ -77,6 +78,6 @@ test('opening the app on a page whose chunk has not arrived shows the rail at on
   queryClient.setQueryData(['public-config'], config);
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/settings/targets'] }), context: { queryClient } });
   const { findByRole } = render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>);
-  expect(await findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+  expect(await findByRole('link', { name: 'Back to app' })).toBeInTheDocument();
   vi.doUnmock('./features/settings/targets/targets-route');
 });

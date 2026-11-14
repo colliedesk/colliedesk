@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { InvalidRequestError, PlanLimitError } from '../../api/client';
 import type { Role, TeamMember } from '../../api/schemas';
 import { RoleCheckboxes } from './role-checkboxes';
+import { RowMenu } from './row-menu';
 import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
+import { useConfirmDrop, useDraftIds, useDropDrafts, useSaveChanges, useSettingsDraft } from './settings-edits';
 import { settingsMessages } from './settings-messages';
 import { displayNameMaxLength } from './display-name-field';
 import './role-pickers.css';
@@ -21,7 +25,8 @@ interface TeamSectionProps {
   // The whole list of a member's roles.
   onSetRoles?: (id: string, roleIds: string[]) => Promise<unknown>;
   // name is trimmed; an empty name clears it and the email is shown again.
-  onRename?: (id: string, name: string) => void;
+  // onRename resolves once the server took the name and rejects with its reason; the form stays open until then.
+  onRename?: (id: string, name: string) => Promise<unknown> | void;
   // reassignTo is the agent that takes the open and pending conversations, or null for Unassigned.
   onDeactivate?: (id: string, reassignTo: string | null) => void;
   onReactivate?: (id: string) => void;
@@ -31,18 +36,29 @@ const nameOf = (member: TeamMember) => member.display_name || member.email;
 
 export function TeamSection({ members, currentAgentId, canManage, roles = [], myPermissions = [], timezone, error, onSetRoles, onRename, onDeactivate, onReactivate }: TeamSectionProps) {
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renamingNow, setRenaming] = useState<string | null>(null);
+  // A name typed on a tab that was left is still the page's: the form opens again on that row.
+  const draftRows = useDraftIds('rename:');
+  const renameable = (id: string) => canManage && members.some((member) => member.id === id && member.manageable);
+  const draftRow = draftRows.map((id) => id.slice('rename:'.length)).find(renameable);
+  const renaming = (renamingNow && renameable(renamingNow) ? renamingNow : null) ?? draftRow ?? null;
+  const confirmDrop = useConfirmDrop();
+  const dropDrafts = useDropDrafts();
+  // A draft for someone the person can no longer rename (their role changed, they left) is not kept.
+  const stale = draftRows.filter((id) => !renameable(id.slice('rename:'.length))).join();
+  useEffect(() => { for (const id of stale ? stale.split(',') : []) dropDrafts(id); }, [stale]);
+  // Opening another row's editor, or a question, closes the rename form: its typed name is not dropped without asking.
+  const leaveRename = () => { if (renaming && !confirmDrop(`rename:${renaming}`)) return false; dropDrafts('rename:'); return true; };
   const [changing, setChanging] = useState<string | null>(null);
   const [status, setStatus] = useState<string>();
-  // After a question or the rename form closes, focus goes to the row (done) or the button that opened it (cancelled).
-  const [refocus, setRefocus] = useState<{ id: string; target: 'row' | 'button' | 'rename' | 'roles' } | null>(null);
+  // After a question or the rename form closes, focus goes to the row (done) or the menu that opened it (cancelled).
+  const [refocus, setRefocus] = useState<{ id: string; target: 'row' | 'menu' } | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
-  const buttons = useRef(new Map<string, HTMLElement>());
-  const renameButtons = useRef(new Map<string, HTMLElement>());
-  const roleButtons = useRef(new Map<string, HTMLElement>());
+  // Every action of a row is in its "⋯" menu: when one closes or is cancelled, focus goes back to that button.
+  const menuButtons = useRef(new Map<string, HTMLElement>());
   useEffect(() => {
     if (!refocus) return;
-    ({ row: rows, button: buttons, rename: renameButtons, roles: roleButtons })[refocus.target].current.get(refocus.id)?.focus();
+    (refocus.target === 'row' ? rows : menuButtons).current.get(refocus.id)?.focus();
     setRefocus(null);
   }, [refocus]);
   // The server refuses to leave a workspace without an active member holding Admin; the button is not offered either.
@@ -50,7 +66,7 @@ export function TeamSection({ members, currentAgentId, canManage, roles = [], my
   const activeAdmins = members.filter((member) => isAdmin(member) && member.deactivated_at === null).length;
   return (
     <section className="settings-card" aria-labelledby="team-heading">
-      <div className="section-heading"><h2 id="team-heading">{messages.team}</h2><p>{settingsMessages.teamDescription}</p></div>
+      <div className="section-heading"><div className="heading-with-tip"><h2 id="team-heading">{messages.team}</h2><HelpTip label={messages.team} text={settingsMessages.teamWhy} /></div><p>{settingsMessages.teamDescription}</p></div>
       <div className="settings-body settings-rows">
         {error && <p role="alert" className="error-copy">{error}</p>}
         <p role="status" className="sr-only">{status}</p>
@@ -65,38 +81,36 @@ export function TeamSection({ members, currentAgentId, canManage, roles = [], my
                 {member.display_name && <small>{member.email}</small>}</span>
               <span className="team-role role-chips" aria-label={settingsMessages.teamRoleOf(name)}>
                 {member.roles.map((role) => <span key={role.id} className="role-chip" title={role.name}>{role.name}</span>)}
-                {manage && !deactivated && changing !== member.id && <button type="button" aria-expanded={false} aria-controls={`roles-of-${member.id}`}
-                  ref={(node) => { if (node) roleButtons.current.set(member.id, node); else roleButtons.current.delete(member.id); }}
-                  aria-label={`${roleMessages.changeRoles}: ${name}`} onClick={() => { setStatus(undefined); setChanging(member.id); }}>{roleMessages.changeRoles}</button>}
               </span>
               <span>{deactivated ? settingsMessages.teamDeactivated : settingsMessages.teamActive}</span>
               <time>{member.last_active_at ? settingsMessages.teamLastActive(formatDate(member.last_active_at, timezone)) : settingsMessages.teamNeverSignedIn}</time>
             </div>
             {canManage && !manage && <span className="team-actions" aria-label={roleMessages.outranks} />}
-            {manage && <span className="team-actions">
-              {renaming !== member.id &&
-                <button type="button" aria-label={settingsMessages.teamRenameName(name)} ref={(node) => { if (node) renameButtons.current.set(member.id, node); else renameButtons.current.delete(member.id); }}
-                  onClick={() => { setConfirming(null); setRenaming(member.id); }}>{settingsMessages.teamRename}</button>}
-              {!deactivated && !lastAdmin && confirming !== member.id &&
-                <button type="button" className="danger-action" aria-label={settingsMessages.teamDeactivateName(name)} ref={(node) => { if (node) buttons.current.set(member.id, node); else buttons.current.delete(member.id); }} onClick={() => { setRenaming(null); setConfirming(member.id); }}>{settingsMessages.teamDeactivate}</button>}
-              {deactivated &&
-                <button type="button" aria-label={settingsMessages.teamReactivateName(name)} title={settingsMessages.teamReactivateHelp} onClick={() => onReactivate?.(member.id)}>{settingsMessages.teamReactivate}</button>}
-            </span>}
+            {manage && <span className="team-actions"><RowMenu label={name} buttonRef={(node) => { if (node) menuButtons.current.set(member.id, node); else menuButtons.current.delete(member.id); }}
+              items={[
+                ...(!deactivated && changing !== member.id ? [{ key: 'roles', label: roleMessages.changeRoles, name: `${roleMessages.changeRoles}: ${name}`,
+                  onSelect: () => { setStatus(undefined); setChanging(member.id); } }] : []),
+                ...(renaming !== member.id ? [{ key: 'rename', label: settingsMessages.teamRename, name: settingsMessages.teamRenameName(name),
+                  onSelect: () => { if (!leaveRename()) return; setConfirming(null); setRenaming(member.id); } }] : []),
+                ...(!deactivated && !lastAdmin && confirming !== member.id ? [{ key: 'deactivate', label: settingsMessages.teamDeactivate, name: settingsMessages.teamDeactivateName(name), danger: true,
+                  onSelect: () => { if (!leaveRename()) return; setRenaming(null); setConfirming(member.id); } }] : []),
+                ...(deactivated ? [{ key: 'reactivate', label: settingsMessages.teamReactivate, name: settingsMessages.teamReactivateName(name), onSelect: () => { onReactivate?.(member.id); setStatus(settingsMessages.teamReactivated(name)); } }] : []),
+              ]} /></span>}
             {changing === member.id && <ChangeRoles member={member} roles={roles} myPermissions={myPermissions} lastAdmin={lastAdmin}
               isSelf={member.id === currentAgentId}
-              onCancel={() => { setChanging(null); setRefocus({ id: member.id, target: 'roles' }); }}
+              onCancel={() => { setChanging(null); setRefocus({ id: member.id, target: 'menu' }); }}
               onApply={async (roleIds) => {
                 await onSetRoles?.(member.id, roleIds);
                 setChanging(null);
                 setStatus(roleMessages.nowHas(name, roles.filter((role) => roleIds.includes(role.id)).map((role) => role.name)));
-                setRefocus({ id: member.id, target: 'roles' });
+                setRefocus({ id: member.id, target: 'menu' });
               }} />}
             {renaming === member.id && <RenameForm member={member}
-              onCancel={() => { setRenaming(null); setRefocus({ id: member.id, target: 'rename' }); }}
-              onSave={(next) => { setRenaming(null); setRefocus({ id: member.id, target: 'row' }); onRename?.(member.id, next); }} />}
+              onCancel={() => { setRenaming(null); setRefocus({ id: member.id, target: 'menu' }); }}
+              onSave={async (next) => { await onRename?.(member.id, next); setRenaming(null); setRefocus({ id: member.id, target: 'row' }); }} />}
             {confirming === member.id && <DeactivateConfirm member={member} others={members.filter((other) => other.id !== member.id && other.deactivated_at === null)}
               isSelf={member.id === currentAgentId}
-              onCancel={() => { setConfirming(null); setRefocus({ id: member.id, target: 'button' }); }}
+              onCancel={() => { setConfirming(null); setRefocus({ id: member.id, target: 'menu' }); }}
               onConfirm={(reassignTo) => { setConfirming(null); setRefocus({ id: member.id, target: 'row' }); onDeactivate?.(member.id, reassignTo); }} />}
           </article>;
         })}</div>
@@ -204,17 +218,27 @@ function ChangeRoles({ member, roles, myPermissions, lastAdmin, isSelf, onCancel
   );
 }
 
-function RenameForm({ member, onCancel, onSave }: { member: TeamMember; onCancel: () => void; onSave: (name: string) => void }) {
-  const [draft, setDraft] = useState(member.display_name);
+function RenameForm({ member, onCancel, onSave }: { member: TeamMember; onCancel: () => void; onSave: (name: string) => Promise<unknown> | void }) {
+  const [failed, setFailed] = useState<string>();
+  // The typed name is the page's unsaved change: the bar names it, it survives a tab switch, and leaving the page asks first.
+  // The form stays open with the name and the server's words until the server took it.
+  const [draft, setDraft] = useSettingsDraft(`rename:${member.id}`, member.display_name, { label: settingsMessages.teamRenameName(nameOf(member)), save: async (typed) => {
+    setFailed(undefined);
+    try { await onSave(typed.trim()); } catch (error) {
+      setFailed(error instanceof InvalidRequestError || error instanceof PlanLimitError ? error.message : messages.settingsActionFailed);
+      throw error;
+    }
+  } });
+  const saveChanges = useSaveChanges();
   return (
-    <form className="form-row team-rename" onSubmit={(event) => { event.preventDefault(); onSave(draft.trim()); }}>
+    <form className="form-row team-rename" onSubmit={(event) => { event.preventDefault(); void saveChanges(); }}>
       {/* The field opens because the person asked for it, so it takes focus at once. */}
       <input aria-label={settingsMessages.teamDisplayNameOf(nameOf(member))} value={draft} maxLength={displayNameMaxLength} placeholder={member.email} autoFocus
-        onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); }} />
+        onChange={(event) => { setFailed(undefined); setDraft(event.target.value); }} onKeyDown={(event) => { if (event.key === 'Escape') { setDraft(member.display_name); onCancel(); } }} />
       <span className="button-row">
-        <button type="submit">{settingsMessages.teamSaveName}</button>
-        <button type="button" onClick={onCancel}>{settingsMessages.teamCancel}</button>
+        <button type="button" onClick={() => { setDraft(member.display_name); onCancel(); }}>{settingsMessages.teamCancel}</button>
       </span>
+      {failed && <p role="alert" className="error-copy">{failed}</p>}
     </form>
   );
 }

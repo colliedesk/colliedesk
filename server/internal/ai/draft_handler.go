@@ -97,7 +97,8 @@ func (s *Service) loadDraftContext(ctx context.Context, run *Run) (draftContext,
 			if kind == "incoming" {
 				who, latestCustomer = "Customer", body
 			}
-			c.thread = append(c.thread, who+": "+body)
+			// Indented after its first line: a customer cannot start a line "Agent:" of their own.
+			c.thread = append(c.thread, who+": "+store.IndentFollowingLines(body))
 			total += utf8.RuneCountInString(body)
 		}
 		rows.Close()
@@ -143,6 +144,10 @@ func (s *Service) loadDraftContext(ctx context.Context, run *Run) (draftContext,
 	})
 	return c, err
 }
+
+// oneLine puts a subject or a name on one line, so it cannot start a line of the prompt of its own
+// ("Agent:", "Customer:").
+func oneLine(text string) string { return strings.Join(strings.Fields(text), " ") }
 
 func cut(text string, runes int) string {
 	if utf8.RuneCountInString(text) <= runes {
@@ -199,9 +204,9 @@ func citedSources(ids map[string]store.AIRetrievedDoc, cited []string) []DraftSo
 func draftUserTurn(c draftContext) (string, map[string]store.AIRetrievedDoc) {
 	ids := map[string]store.AIRetrievedDoc{}
 	var b strings.Builder
-	b.WriteString("<untrusted_customer_content>\nSubject: " + aiprovider.EscapeData(c.subject) + "\n")
+	b.WriteString("<untrusted_customer_content>\nSubject: " + aiprovider.EscapeData(oneLine(c.subject)) + "\n")
 	if c.contactName != "" {
-		b.WriteString("Customer name: " + aiprovider.EscapeData(c.contactName) + "\n")
+		b.WriteString("Customer name: " + aiprovider.EscapeData(oneLine(c.contactName)) + "\n")
 	}
 	b.WriteString(aiprovider.EscapeData(c.threadText) + "\n</untrusted_customer_content>\n")
 	writeSources(&b, c.sources, ids, nil)
@@ -290,7 +295,7 @@ func fillPlaceholders(reply, contactName string) string {
 }
 
 // draftWarnings lists what the draft says that the conversation does not: an email address, a number
-// of six digits or more, the name of a past conversation's customer, or a word in another alphabet.
+// of six digits or more, the name of a past conversation's customer, a word in another alphabet, or a link.
 func draftWarnings(reply string, c draftContext) []DraftWarning {
 	warnings := []DraftWarning{}
 	known := strings.ToLower(c.subject + "\n" + c.threadText + "\n" + c.prompt)
@@ -317,6 +322,34 @@ func draftWarnings(reply string, c draftContext) []DraftWarning {
 	}
 	for _, word := range foreignWords(reply, known) {
 		warnings = append(warnings, DraftWarning{Kind: "script", Value: word})
+	}
+	warnings = append(warnings, draftLinkWarnings(reply, known, c.sources)...)
+	return warnings
+}
+
+// draftLinkWarnings lists the links of a draft, with or without a scheme ("evil-portal.com/login"), that
+// neither this conversation nor a knowledge base article it was given holds. A past conversation's text
+// never vouches for a link: another customer wrote it, and may have written it for this.
+func draftLinkWarnings(reply, known string, sources []store.AIRetrievedDoc) []DraftWarning {
+	vouched := known
+	for _, doc := range sources {
+		if doc.Kind == store.AIRetrievedKBArticle {
+			vouched += "\n" + strings.ToLower(doc.Title+"\n"+doc.Text)
+		}
+	}
+	vouched = normalizeLinks(vouched)
+	warnings := []DraftWarning{}
+	seen := map[string]bool{}
+	for _, link := range chatLink.FindAllString(emailPattern.ReplaceAllString(reply, " "), -1) {
+		if chatFileName.MatchString(strings.ToLower(link)) {
+			continue
+		}
+		clean := cleanLink(link)
+		if clean == "" || seen[clean] || strings.Contains(vouched, clean) {
+			continue
+		}
+		seen[clean] = true
+		warnings = append(warnings, DraftWarning{Kind: "link", Value: strings.TrimRight(link, ".,;:!?)]}>\"'")})
 	}
 	return warnings
 }

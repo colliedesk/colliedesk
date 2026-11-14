@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { HelpCenterSearchConsoleSection } from './help-center-search-console';
 import { json, serve } from './kb.test.fixture';
@@ -63,4 +63,27 @@ test('an agent without admin rights reads the tokens but cannot change them', as
   expect(screen.getByText('Bing Webmaster Tools: not set.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Save tokens' })).not.toBeInTheDocument();
   expect(screen.getByText(/Only an admin can change/)).toBeInTheDocument();
+});
+
+// Each row keeps one short line; the how and why sit in the tip next to it.
+test('the card says what to do in one line, and how the tags work in a tip with a link to the guide', async () => {
+  serve({ 'GET /api/v1/help-center/search-console': () => json(200, none) });
+  open(true);
+  const section = (await screen.findByRole('heading', { name: 'Search Console' })).closest('section') as HTMLElement;
+  expect(section).toHaveTextContent('Verify your help center in Google and Bing yourself.');
+  const tip = within(section).getByRole('button', { name: 'About Search Console' });
+  expect(tip).toHaveAccessibleDescription('Each tool offers a verification by HTML tag: paste only the content value of its meta tag here. The help center then puts the tag in the head of every page of this help center, and nowhere else.');
+  fireEvent.click(tip);
+  expect(within(section).getByRole('link', { name: 'Learn more' })).toHaveAttribute('href', 'https://colliedesk.com/docs/knowledge-base#search-console-and-bing-webmaster-tools');
+});
+
+test('each token names its meta tag in one line, and shows the whole tag in a tip', async () => {
+  serve({ 'GET /api/v1/help-center/search-console': () => json(200, none) });
+  open(true);
+  const googleField = (await screen.findByRole('textbox', { name: 'Google Search Console token' })).closest('.field') as HTMLElement;
+  expect(googleField).toHaveTextContent('The content of the google-site-verification meta tag.');
+  expect(within(googleField).getByRole('button', { name: 'About Google Search Console token' })).toHaveAccessibleDescription('The tag is <meta name="google-site-verification" content="…">. Paste the content value only.');
+  const bingField = screen.getByRole('textbox', { name: 'Bing Webmaster Tools token' }).closest('.field') as HTMLElement;
+  expect(bingField).toHaveTextContent('The content of the msvalidate.01 meta tag.');
+  expect(within(bingField).getByRole('button', { name: 'About Bing Webmaster Tools token' })).toHaveAccessibleDescription('The tag is <meta name="msvalidate.01" content="…">. Paste the content value only.');
 });

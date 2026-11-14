@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ConflictError } from '../../api/client';
 import type { Contact, ContactDetail, ContactMerge, Conversation } from '../../api/schemas';
-import { formatDate } from '../../lib/format-date';
+import { formatDate, formatDay, stampTitle } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { contactAddress, contactMessages } from './contact-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
+import { HelpTip } from '../../ui/help-tip';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { StatusLabel } from '../inbox/conversation-labels';
 import { ContactPicker } from './contact-picker';
@@ -66,7 +67,7 @@ export function ContactPage({ contact, conversations = [], page, pageSize, onPag
           {contact.identities?.map((identity) => <div key={`${identity.channel_id}:${identity.kind}:${identity.value}`}>
             <dt>{contactMessages.contactOnChannel}</dt><dd>{identity.display_name ? `${identity.display_name} · ${identity.value}` : identity.value}</dd></div>)}
           {contact.organization && <div><dt>{contactMessages.contactOrganization}</dt><dd>{contact.organization}</dd></div>}
-          <div><dt>{contactMessages.contactSince}</dt><dd><time dateTime={contact.created_at}>{formatDate(contact.created_at, timezone)}</time></dd></div>
+          <div><dt>{contactMessages.contactSince}</dt><dd><time dateTime={contact.created_at} data-tip={stampTitle(contact.created_at, timezone)}>{formatDay(contact.created_at, timezone)}</time></dd></div>
         </dl>
       </header>
       {merged && <p role="status" className="contact-merged-notice">{contactMessages.mergedIntoNotice(merged.name, contactAddress(merged))}{' '}
@@ -211,7 +212,7 @@ function MergeDialog({ contact, onMerge, onClose }: { contact: ContactDetail; on
       <div className="dialog merge-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={dialogKeys(root, onClose)}>
         <h2 id={titleId}>{contactMessages.mergeTitle(contact.name)}</h2>
         {!duplicate && <>
-          <p className="muted-copy">{contactMessages.mergeIntro}</p>
+          <p className="muted-copy">{contactMessages.mergeIntro}<HelpTip label={contactMessages.mergeLabel} text={contactMessages.mergeSafe} /></p>
           <ContactPicker label={contactMessages.mergeSearch} excludeId={contact.id} autoFocus onPick={setDuplicate} />
           <div className="button-row"><button type="button" onClick={onClose}>{messages.cancel}</button></div>
         </>}

@@ -92,6 +92,7 @@ a.ch-type::after, button.ch-type::after { content: ""; flex: none; width: 16px; 
 @media (pointer: coarse), (max-width: 30rem) { .ch-detail > .seg-tabs button, .ch-tabs-row > .seg-tabs button { min-height: var(--touch); } }
 .ch-carries { font-size: var(--fs-small); }
 .ch-panel { display: grid; gap: var(--space-4); min-width: 0; }
+.ch-panel[hidden] { display: none; }
 .ch-panel .settings-body { min-width: 0; }
 .ch-remove { justify-content: flex-start; border-top: 1px solid var(--line); padding-top: var(--space-4); }
 
@@ -188,19 +189,19 @@ a.ch-type::after, button.ch-type::after { content: ""; flex: none; width: 16px; 
 /* A legend is drawn on the fieldset's border unless it floats; floated, it is an ordinary grid item. */
 .ch-new form > fieldset.field > legend { float: left; }
 .ch-new form > .field > :not(:first-child), .ch-new form > label.field > :not(:first-child), .ch-new form > fieldset.field > :not(legend) { grid-column: 2; }
-.ch-new form > :is(.field, label.field, fieldset.field):has(+ :is(small, p)) { padding-bottom: var(--space-1); }
-.ch-new form > :is(small, p) { grid-column: 2; margin: 0; padding: 0 var(--space-4) var(--space-4) 0; }
+.ch-new form > :is(.field, label.field, fieldset.field):has(+ :is(small, p, .field-hint)) { padding-bottom: var(--space-1); }
+.ch-new form > :is(small, p, .field-hint) { grid-column: 2; margin: 0; padding: 0 var(--space-4) var(--space-4) 0; }
 /* Every help line reads the same: 13px, text-3 (Zalo's live in the row, help chat's and the web form's after it). */
-.ch-new form .field-note, .ch-new form > small, .ch-new form > p { font-size: var(--fs-small); line-height: 20px; }
-.ch-new form .help.field-note, .ch-new form > small:not(.error-copy), .ch-new form > p:not(.error-copy) { color: var(--text-3); }
+.ch-new form .field-note, .ch-new form > small, .ch-new form > p, .ch-new form > .field-hint > small { font-size: var(--fs-small); line-height: 20px; }
+.ch-new form .help.field-note, .ch-new form > small:not(.error-copy), .ch-new form > p:not(.error-copy), .ch-new form > .field-hint > small { color: var(--text-3); }
 .ch-new form > .button-row { padding: var(--space-4); }
 @media (max-width: 40rem) {
   .ch-new form.settings-body, .ch-new .settings-body > form { grid-template-columns: minmax(0, 1fr); }
   .ch-new form > .field, .ch-new form > label.field, .ch-new form > fieldset.field { grid-template-columns: minmax(0, 1fr); padding: var(--space-3); }
   .ch-new form > .field > :first-child, .ch-new form > label.field > span:first-child, .ch-new form > fieldset.field > legend { grid-row: auto; padding-top: 0; }
   .ch-new form > .field > :not(:first-child), .ch-new form > label.field > :not(:first-child), .ch-new form > fieldset.field > :not(legend) { grid-column: 1; }
-  .ch-new form > :is(.field, label.field, fieldset.field):has(+ :is(small, p)) { padding-bottom: var(--space-1); }
-  .ch-new form > :is(small, p) { grid-column: 1; padding: 0 var(--space-3) var(--space-3); }
+  .ch-new form > :is(.field, label.field, fieldset.field):has(+ :is(small, p, .field-hint)) { padding-bottom: var(--space-1); }
+  .ch-new form > :is(small, p, .field-hint) { grid-column: 1; padding: 0 var(--space-3) var(--space-3); }
 }
 /* A channel's switch is a fingertip wide as well as tall on a phone (the switch itself is 34px wide). */
 @media (pointer: coarse), (max-width: 30rem) { .ch-switch .switch { min-width: var(--touch); justify-content: center; } }

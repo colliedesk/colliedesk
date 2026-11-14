@@ -12,7 +12,7 @@ contact in a workspace.
 - The address `/contacts/<id>` opens the page directly, so it can be bookmarked or shared with a teammate.
 
 The page shows the name, the email address, the company when one is known (for example from a
-Freshdesk company), and when the customer was added. Below that, **Conversations** lists every
+Freshdesk company), and the day the customer was added (**Customer since**; point at it for the time). The top bar names the page **Customers**. Below that, **Conversations** lists every
 conversation with the customer: any status, imported ones included (marked **Imported**), the most
 recently active first, 25 to a page. Select one to open it in the inbox.
 

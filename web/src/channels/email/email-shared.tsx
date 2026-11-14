@@ -5,6 +5,7 @@ import { channelsApi } from '../../api/channels';
 import { useCreateMutation } from '../../api/use-create';
 import { messages } from '../../messages';
 import { Dialog } from '../../ui/dialog';
+import { HelpTip } from '../../ui/help-tip';
 import type { MailboxProvider } from '../../features/settings/gmail-return';
 import type { SaveState } from '../../features/settings/save-feedback';
 
@@ -86,8 +87,8 @@ export function TestMessage({ channelID, ready, forwarding, navigate, onSent }: 
     send.mutate();
   };
   return <div className="email-channel-test">
-    <p><button type="button" className="primary-action" disabled={send.isPending} onClick={press}>{send.isPending ? emailMessages.testSending : emailMessages.testSend}</button></p>
-    <p className="muted-copy">{emailMessages.testHelp}</p>
+    <p><button type="button" className="primary-action" disabled={send.isPending} onClick={press}>{send.isPending ? emailMessages.testSending : emailMessages.testSend}</button>
+      <HelpTip label={emailMessages.testSend} text={emailMessages.testHelp} /></p>
     {notReady && <p role="status" tabIndex={-1} ref={result}>{emailMessages.testNeedsAddress}</p>}
     {send.data && !notReady && <p role="status" tabIndex={-1} ref={result}>{emailMessages.testSent(send.data.sent_to)}{' '}
       {forwarding ? emailMessages.testWorks : emailMessages.testWorksForwardNext}{' '}

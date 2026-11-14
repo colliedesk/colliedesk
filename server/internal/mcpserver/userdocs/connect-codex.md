@@ -59,7 +59,8 @@ Under **Connect your agent**, Settings shows these steps for Codex with your add
    codex mcp add colliedesk --url https://desk.example.com/mcp --bearer-token-env-var COLLIEDESK_TOKEN
    ```
 
-`codex mcp list` shows `colliedesk` with `Bearer token`. Codex reads the variable when it
+`codex mcp list` shows `colliedesk` with `Bearer token`. Codex reads the token from the variable and
+never writes it into its configuration. It reads the variable when it
 starts, so start it from a terminal that has it. The IDE extension and the desktop app only see it
 when they are started from such a terminal.
 

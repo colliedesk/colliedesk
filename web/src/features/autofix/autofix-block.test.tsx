@@ -95,6 +95,11 @@ describe('AutofixBlockView', () => {
     expect(onAction).toHaveBeenCalledWith('retry');
   });
 
+  it('says in one line that Retry shows the preview again before anything leaves', () => {
+    show(detailOf({ state: 'failed', outcome_reason: 'agent_error' }, [eventOf({ id: 4, to_state: 'failed', from_state: 'working', actor_name: 'claude[bot]' })]));
+    expect(screen.getByText('Retry opens the preview again so you can check it.')).toBeInTheDocument();
+  });
+
   it('says a cancelled issue may still run, and that an open pull request stays open', () => {
     show(detailOf({ state: 'cancelled', outcome_reason: 'cancelled_by_person', ...withPR }, [eventOf({ kind: 'cancel', actor_kind: 'person', actor_name: 'Mai Tran' })]));
     expect(screen.getByText(/Cancelled by Mai Tran/)).toBeInTheDocument();

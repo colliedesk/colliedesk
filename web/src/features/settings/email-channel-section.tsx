@@ -5,12 +5,15 @@ import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
 import { channelSetupMessages } from './channel-setup-messages';
+import { HelpTip } from '../../ui/help-tip';
 import { PartUnavailable } from '../../ui/lazy-part';
 import type { MailboxProvider, MailboxReturn } from './gmail-return';
 import { CopyButton } from './copy-button';
+import { QuietNote } from './quiet-note';
 import { InboundURLGuide } from './inbound-url-guide';
 import { ServerDetails } from './server-details';
 import { NameForm } from './name-form';
+import { useUnsavedText } from './settings-edits';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 import { gmailPart } from './gmail-part';
@@ -30,7 +33,7 @@ interface EmailChannelSectionProps {
   onSave?: (address: string) => void;
   // addressConflictLink, for an address another channel has (addressSave.conflict), is a link to it.
   addressConflictLink?: (conflict: NonNullable<SaveState['conflict']>) => ReactNode;
-  onSaveSenderName?: (name: string) => void;
+  onSaveSenderName?: (name: string) => Promise<unknown> | void;
   onSaveSlug?: (slug: string) => void;
   onRotate?: () => void;
   onDisconnect?: () => void;
@@ -62,10 +65,13 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
   const [slug, setSlug] = useState(workspaceSlug ?? '');
   useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
-  const addressError = useId();
+    const addressError = useId();
   const addressField = useRef<HTMLInputElement>(null);
   const addressFeedback = useSaveFeedback(addressSave, addressError, addressField, address);
   const slugFeedback = useSaveFeedback(slugSave);
+  // Typed and not yet saved counts for the question on leaving, though each has its own button.
+  useUnsavedText('support-address', canManage && address !== (channel?.support_address ?? ''));
+  useUnsavedText('workspace-address-name', canManage && slug !== (workspaceSlug ?? ''));
   // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const disconnectButton = useRef<HTMLButtonElement>(null);
@@ -81,7 +87,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const mailboxSending = mailboxConnection?.status === 'connected' &&
     (mailboxConnection.provider === 'microsoft' ? settings?.microsoft.available : settings?.gmail.available) === true;
   const dnsVerification = channel && <div className="email-channel-dns">
-    <p className="muted-copy">{settings?.domain_verification === 'provider' ? settingsMessages.providerProofHelp : settingsMessages.domainVerificationHelp}</p>
+    <QuietNote note={settings?.domain_verification === 'provider' ? settingsMessages.providerProofHelp : settingsMessages.domainVerificationHelp} label={settingsMessages.domainVerificationLabel}
+      tip={settings?.domain_verification === 'provider' ? settingsMessages.providerProofWhy : settingsMessages.domainVerificationWhy} />
     <label className="invite-link"><span className="field-label">{settingsMessages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
     <label className="invite-link"><span className="field-label">{settingsMessages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label>
     {settings?.domain_verification === 'provider' && <DnsRecordsTable records={channel.dns_records} expiredAt={channel.dns_records_expired_at} timezone={timezone} />}
@@ -100,7 +107,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           : <p><strong>{settingsMessages.supportAddress}: </strong><span>{channel ? channel.support_address : settingsMessages.emailNotConnected}</span></p>}
   </>;
   const senderPart = <>
-        {channel && <NameForm label={settingsMessages.senderName} saveLabel={settingsMessages.saveSenderName} hint={settingsMessages.senderNameHelp}
+        {channel && <NameForm label={settingsMessages.senderName} hint={settingsMessages.senderNameHelp} tip={settingsMessages.senderNameWhy}
           value={channel.sender_name} canManage={canManage} save={senderNameSave} onSave={onSaveSenderName} />}
   </>;
   const arrivalPart = <>
@@ -109,13 +116,14 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
             <label className="invite-link"><span className="field-label">{settingsMessages.forwardingAddress}</span><input readOnly value={hostedAddress} /></label>
             <span className="button-row"><CopyButton value={hostedAddress} copiedText={settingsMessages.addressCopied}>{settingsMessages.copyForwardingAddress}</CopyButton></span>
           </div>
-          <p className="muted-copy">{settingsMessages.forwardingHelp}</p>
-          <ul className="muted-copy"><li>{settingsMessages.forwardingGmail}</li><li>{settingsMessages.forwardingOutlook}</li></ul>
+          <QuietNote note={settingsMessages.forwardingHelp} label={settingsMessages.forwardingAddress} tip={settingsMessages.forwardingWhy} />
+          <QuietNote note={settingsMessages.forwardingSteps} label={settingsMessages.forwardingStepsLabel} tip={settingsMessages.forwardingStepsWhy}
+            link={{ href: settingsMessages.emailGuideURL, label: settingsMessages.learnMore }} />
           {canManage && onSaveSlug && <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!slugFeedback.pending) onSaveSlug(slug.trim()); }}>
             <label className="field"><span>{settingsMessages.workspaceAddressName}</span><input value={slug} onChange={(event) => { slugFeedback.touch(); setSlug(event.target.value); }} required /></label>
             <button type="submit" disabled={slugFeedback.pending}>{slugFeedback.saveLabel(settingsMessages.saveAddressName)}</button>
             {slugFeedback.status}
-            <small>{settingsMessages.addressNameWarning}</small>
+            <span className="heading-with-tip"><small>{settingsMessages.addressNameWarning}</small><HelpTip label={settingsMessages.workspaceAddressName} text={settingsMessages.addressNameWhy} /></span>
           </form>}
         </div>}
         {settings && !hostedAddress && <div className="copy-field">
@@ -123,7 +131,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           <span className="button-row"><CopyButton value={settings.inbound_url} copiedText={settingsMessages.urlCopied}>{settingsMessages.copyInboundURL}</CopyButton></span>
         </div>}
         {channel && !hostedAddress && <p className="muted-copy">{channel.secret_set && channel.secret_rotated_at
-          ? settingsMessages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : channelSetupMessages.inboundSecretMissing}</p>}
+          ? settingsMessages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : channelSetupMessages.inboundSecretMissing}
+          {' '}<HelpTip label={settingsMessages.inboundSecret} text={channelSetupMessages.inboundSecretWhy} /></p>}
         {canManage && !hostedAddress && createdSecret && <label className="invite-link"><span className="field-label">{settingsMessages.inboundSecret}</span>
           <input readOnly value={createdSecret} /><small>{settingsMessages.inboundSecretNotice}</small></label>}
         {canManage && channel && settings && !hostedAddress && <InboundURLGuide inboundURL={settings.inbound_url} supportAddress={channel.support_address} secret={createdSecret} />}
@@ -142,7 +151,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </>;
   const domainPart = <>
         {channel && (channel.domain_verified_at
-          ? <p className="muted-copy">{settingsMessages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))} {sharedDomain(channel.domain)}</p>
+          ? <p className="muted-copy heading-with-tip"><span>{settingsMessages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</span>
+            <HelpTip label={settingsMessages.domainVerificationLabel} text={sharedDomain(channel.domain)} /></p>
           : mailboxSending
             // Replies through a mailbox need no verified domain; the records stay one click away for SMTP.
             ? <details className="email-channel-dns-folded" open={Boolean(verifyError) || undefined}>
@@ -195,7 +205,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </div>;
   return (
     <section className="settings-card" aria-labelledby="email-channel-heading">
-      <div className="section-heading"><h2 id="email-channel-heading">{settingsMessages.emailChannel}</h2><p>{channelSetupMessages.emailChannelDescription}</p></div>
+      <div className="section-heading"><div className="heading-with-tip"><h2 id="email-channel-heading">{settingsMessages.emailChannel}</h2>
+        <HelpTip label={settingsMessages.emailChannel} text={channelSetupMessages.emailChannelWhy} /></div><p>{channelSetupMessages.emailChannelDescription}</p></div>
       <div className="settings-body">
         {addressPart}{senderPart}{arrivalPart}{repliesPart}
       </div>
@@ -212,7 +223,7 @@ const repliesHeadings = { leave: 'How replies leave', name: 'The name customers 
 function DnsRecordsTable({ records, expiredAt, timezone }: { records: EmailDnsRecord[]; expiredAt: string | null; timezone: string }) {
   if (records.length === 0) return <p className="muted-copy" data-quiet="state">{expiredAt ? settingsMessages.dnsRecordsExpired(formatDate(expiredAt, timezone)) : settingsMessages.dnsRecordsNotReady}</p>;
   return <>
-    <p className="muted-copy">{settingsMessages.dnsRecordsHelp}</p>
+    <QuietNote note={settingsMessages.dnsRecordsHelp} label={settingsMessages.dnsRecordsLabel} tip={settingsMessages.dnsRecordsWhy} />
     {/* A narrow screen scrolls the table sideways inside its own frame, faded at the edges. */}
     <div className="scroll-x-fade"><table aria-label={settingsMessages.dnsRecordsHeading}>
       <thead><tr><th>{settingsMessages.dnsColumnPurpose}</th><th>{settingsMessages.dnsColumnType}</th><th>{settingsMessages.dnsColumnName}</th><th>{settingsMessages.dnsColumnValue}</th><th>{settingsMessages.dnsColumnPriority}</th><th>{settingsMessages.dnsColumnStatus}</th></tr></thead>

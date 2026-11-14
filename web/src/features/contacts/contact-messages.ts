@@ -31,7 +31,9 @@ export const contactMessages = {
   openMergedInto: 'Open that customer',
   mergeDuplicate: 'Merge a duplicate…',
   mergeTitle: (name: string) => `Merge a duplicate into ${name}`,
-  mergeIntro: 'Find the other contact of the same person. Nothing is deleted, and you can undo the merge here.',
+  mergeIntro: 'Find the other contact of the same person.',
+  mergeLabel: 'merging',
+  mergeSafe: 'Nothing is deleted, and you can undo the merge here.',
   mergeSearch: 'Search contacts by name or email',
   mergeSearchEmpty: 'No other contact matches.',
   mergeConfirm: (duplicate: string, kept: string, email: string) =>

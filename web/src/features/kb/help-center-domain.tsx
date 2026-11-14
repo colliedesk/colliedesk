@@ -6,6 +6,7 @@ import type { RequestBody } from '../../api/client';
 import type { Generated } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { domainMessages } from './help-center-domain-messages';
 
 const domainPath = '/api/v1/help-center/domain';
@@ -67,9 +68,13 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
   const error = set.error ?? check.error ?? remove.error;
   return <section className="stacked-form hc-section" aria-labelledby="help-center-domain-heading">
     <h3 id="help-center-domain-heading">{domainMessages.heading}</h3>
-    <p className="muted-copy">{domainMessages.description}</p>
-    {domain.awaiting_payment && <p className="muted-copy">{domainMessages.trial}</p>}
-    {domain.status !== 'active' && <p className="muted-copy"><strong>{domainMessages.cutoverHeading}</strong> {domainMessages.cutover}</p>}
+    <p className="muted-copy">{domainMessages.description} <HelpTip label={domainMessages.heading} text={domainMessages.descriptionTip} /></p>
+    {domain.awaiting_payment && <p className="muted-copy">{domainMessages.trial} <HelpTip label={domainMessages.trialLabel} text={domainMessages.trialTip} /></p>}
+    {domain.status !== 'active' && <>
+      <p className="muted-copy"><strong>{domainMessages.cutoverHeading}</strong></p>
+      <p className="muted-copy">{domainMessages.cutover}{' '}
+        <HelpTip label={domainMessages.cutoverLabel} text={domainMessages.cutoverTip} link={{ href: domainMessages.cutoverGuide, label: domainMessages.learnMore }} /></p>
+    </>}
     <p role="status" className="saved-state" data-on={domain.status === 'active' && !domain.awaiting_payment ? 'true' : 'false'}>
       {domain.status === 'active' && domain.awaiting_payment && domain.hostname ? domainMessages.verifiedUnpaid(domain.hostname) : domainMessages.state(domain.status, domain.hostname)}</p>
     {domain.status === 'active' && domain.address_checked_at && domain.address_url && (domain.address_error
@@ -77,7 +82,8 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
       : <p className="muted-copy">{domain.address_url.startsWith('https://') && <>{domainMessages.httpsWorks} </>}
           <a href={domain.address_url} target="_blank" rel="noopener noreferrer">{domain.address_url}</a> {domainMessages.addressOpens}</p>)}
     {domain.records.length > 0 && <div className="email-channel-dns">
-      <p className="muted-copy">{domain.status === 'active' ? domainMessages.recordsKeep : domainMessages.recordsHelp}</p>
+      <p className="muted-copy">{domain.status === 'active' ? domainMessages.recordsKeep : domainMessages.recordsHelp}{' '}
+        <HelpTip label={domainMessages.recordsLabel} text={domain.status === 'active' ? domainMessages.recordsKeepTip : domainMessages.recordsHelpTip} /></p>
       {domain.records.map((record) => <DnsRecord key={`${record.type} ${record.name}`} record={record} />)}
     </div>}
     {domain.status === 'pending' && domain.pending_reason && domain.hostname && <p className="warning-note">{domainMessages.released(domain.pending_reason, domain.hostname)}</p>}

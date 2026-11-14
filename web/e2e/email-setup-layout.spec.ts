@@ -14,7 +14,9 @@ test('email setup steps keep their layout after Quick start has shown the setup 
   await page.keyboard.press('Escape');
 
   await page.getByRole('link', { name: 'Settings' }).click();
-  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Email', exact: true }).click();
+  // A new workspace's Channels page offers to connect the support email; the menu has no item for a channel type.
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Channels', exact: true }).click();
+  await page.getByRole('link', { name: /Connect your support email/ }).click();
   const address = page.getByRole('group', { name: 'Your support address' });
   await expect(address).toContainText('Step 1 of 4');
 

@@ -87,7 +87,8 @@ Each screen shows:
     example **Use Same day**. It saves the targets, turns them on with business hours Monday to Friday,
     09:00 to 18:00 in the workspace's timezone (your own hours, as Settings → Response targets has them when
     the button is pressed: a preset never replaces them), sets **Due soon** to 30 minutes, and opens the next step. The example rows of
-    Today and the worked example count in those same hours. The choice follows the suggestion, for
+    Today and the worked example count in those same hours. The line under the presets says which hours: "Will set these business hours: …" when none are saved,
+    "Uses your saved business hours: …" when Settings already has some (they are not in effect until measuring is on). Settings → Response targets names the same hours while targets are off. The choice follows the suggestion, for
     example when an import ends, until you pick a preset yourself. When someone else saved the targets in
     between, the save is refused, the step reads them again, and the next press saves. Targets start with
     the next new conversation.
@@ -121,7 +122,7 @@ and reply targets steps the buttons stay pinned at the bottom of the screen, and
   (to read the AI settings), reply targets `workspace:update`, inviting `team:invite` and `team:read` (to list the invites and the roles), as in
   Settings. **Revoke** on a pending invite needs `team:revoke`.
   Answering the first email is everyone's step.
-- To hide Quick start for you only, open **Settings → Preferences** and turn off **Show the setup guide**; turn
+- To hide Quick start for you only, open **Settings → Account → Preferences** and turn off **Show the setup guide**; turn
   it on to bring it back (with **Try more**, if this browser skipped it). Other team members keep their own choice.
 
 Quick start refreshes when the inbox changes; it does not poll on its own.

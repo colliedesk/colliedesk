@@ -1,9 +1,16 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
+import type { ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
+import { InvalidRequestError } from '../../api/client';
 import type { Role, TeamMember } from '../../api/schemas';
 import { permissionsOf, roleOf, rolesOf } from '../../test-roles';
 import { settingsMessages } from './settings-messages';
+import { SettingsEditsProvider } from './settings-edits';
 import { TeamSection } from './team-section';
+
+// A rename is saved by the page's Save, which the provider draws.
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: SettingsEditsProvider });
 
 const member = (overrides: Partial<TeamMember> & Pick<TeamMember, 'id' | 'email'>): TeamMember => ({
   display_name: '', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0, ...overrides,
@@ -14,7 +21,11 @@ const bob = member({ id: '33333333-3333-4333-8333-333333333333', email: 'bob@exa
 const cy = member({ id: '44444444-4444-4444-8444-444444444444', email: 'cy@example.com', deactivated_at: '2026-10-10T00:00:00Z', last_active_at: '2026-10-09T08:00:00Z' });
 
 const row = (text: string) => screen.getByText(text).closest('article') as HTMLElement;
+// A member's actions are in the row's "⋯" menu: open it, then choose.
+const openMenu = (who: string) => fireEvent.click(screen.getByRole('button', { name: `Actions for ${who}` }));
 
+// A help tip is an ⓘ button that explains; it is not a control, so only the buttons that act are counted.
+const actions = (buttons: HTMLElement[]) => buttons.filter((button) => !button.classList.contains('help-tip-button'));
 test('lists every member with role, state and last activity', () => {
   render(<TeamSection members={[admin, ann, bob, cy]} currentAgentId={admin.id} canManage={false} timezone="UTC" />);
   const team = screen.getByRole('region', { name: 'Team' });
@@ -30,7 +41,7 @@ test('lists every member with role, state and last activity', () => {
 test('an agent sees the team read-only', () => {
   render(<TeamSection members={[admin, ann, cy]} currentAgentId={ann.id} canManage={false} timezone="UTC" />);
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  expect(actions(screen.queryAllByRole('button'))).toEqual([]);
 });
 
 const adminRole = roleOf(rolesOf('admin')[0], permissionsOf('admin'));
@@ -43,7 +54,7 @@ test('a token following a role its person covers stops only when the new roles n
   const agentWithToken = { ...agentRole, tokens: [{ id: 't2', label: 'Ops bot', owner: 'admin@example.com', owner_id: admin.id }] };
   const other = member({ id: '55555555-5555-4555-8555-555555555555', email: 'eve@example.com', roles: rolesOf('admin') });
   render(<TeamSection members={[admin, other]} currentAgentId={other.id} canManage roles={[adminRole, agentWithToken, editor]} myPermissions={permissionsOf('admin')} timezone="UTC" onSetRoles={vi.fn()} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  openMenu('Ada Admin'); fireEvent.click(screen.getByRole('menuitem', { name: 'Change roles: Ada Admin' }));
   const group = screen.getByRole('group', { name: 'Roles of Ada Admin' });
   fireEvent.click(within(group).getByRole('checkbox', { name: /Agent/ }));
   fireEvent.click(within(group).getByRole('checkbox', { name: /Admin/ }));
@@ -58,7 +69,7 @@ test('a token following a role its person covers stops only when the new roles n
 test('changing roles changes nothing until Apply is pressed, then sets the whole list', async () => {
   const onSetRoles = vi.fn().mockResolvedValue(undefined);
   render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole, editor]} myPermissions={permissionsOf('admin')} timezone="UTC" onSetRoles={onSetRoles} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Change roles: ann@example.com' }));
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Change roles: ann@example.com' }));
   const group = screen.getByRole('group', { name: 'Roles of ann@example.com' });
   fireEvent.click(within(group).getByRole('checkbox', { name: /Editor/ }));
   expect(onSetRoles).not.toHaveBeenCalled();
@@ -70,7 +81,7 @@ test('taking a role a token follows says which tokens stop, and nobody is left w
   // The token is matched by its owner's id, not the name, which a rename or a namesake changes.
   const holder = { ...ann, display_name: 'Ann', roles: [...rolesOf('agent'), { id: editor.id, name: 'Editor', system: null }] };
   render(<TeamSection members={[admin, holder]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole, editor]} myPermissions={permissionsOf('admin')} timezone="UTC" onSetRoles={vi.fn()} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ann' }));
+  openMenu('Ann'); fireEvent.click(screen.getByRole('menuitem', { name: 'Change roles: Ann' }));
   const group = screen.getByRole('group', { name: 'Roles of Ann' });
   fireEvent.click(within(group).getByRole('checkbox', { name: /Editor/ }));
   expect(group).toHaveTextContent('Claude on laptop');
@@ -80,16 +91,17 @@ test('taking a role a token follows says which tokens stop, and nobody is left w
   expect(group).toHaveTextContent('Everyone needs at least one role.');
 });
 
-test('a member who holds more than you has no Change roles button', () => {
+test('a member who holds more than you has no actions menu', () => {
   render(<TeamSection members={[{ ...admin, manageable: false }, ann]} currentAgentId={ann.id} canManage roles={[agentRole]} myPermissions={permissionsOf('agent')} timezone="UTC" />);
-  expect(screen.queryByRole('button', { name: 'Change roles: Ada Admin' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Change roles: ann@example.com' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Actions for Ada Admin' })).not.toBeInTheDocument();
+  openMenu('ann@example.com');
+  expect(screen.getByRole('menuitem', { name: 'Change roles: ann@example.com' })).toBeInTheDocument();
 });
 
 test('deactivating asks first, shows the open work and moves it to Unassigned by default', () => {
   const onDeactivate = vi.fn();
   render(<TeamSection members={[admin, ann, bob, cy]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={onDeactivate} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' }));
   expect(onDeactivate).not.toHaveBeenCalled();
 
   const confirm = screen.getByRole('group', { name: 'Deactivate ann@example.com?' });
@@ -102,7 +114,7 @@ test('deactivating asks first, shows the open work and moves it to Unassigned by
 test('open work can go to another active agent, never to a deactivated one or to the same person', () => {
   const onDeactivate = vi.fn();
   render(<TeamSection members={[admin, ann, bob, cy]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={onDeactivate} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' }));
   const confirm = screen.getByRole('group', { name: 'Deactivate ann@example.com?' });
   fireEvent.click(within(confirm).getByRole('radio', { name: 'Assign them to another agent' }));
   const target = within(confirm).getByRole('combobox', { name: 'Assign to' });
@@ -115,7 +127,7 @@ test('open work can go to another active agent, never to a deactivated one or to
 test('cancel closes the question without changing anything', () => {
   const onDeactivate = vi.fn();
   render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={onDeactivate} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' }));
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   expect(screen.queryByRole('group')).not.toBeInTheDocument();
   expect(onDeactivate).not.toHaveBeenCalled();
@@ -124,7 +136,7 @@ test('cancel closes the question without changing anything', () => {
 test('someone with no open work gets a plain confirmation and nothing to move', () => {
   const onDeactivate = vi.fn();
   render(<TeamSection members={[admin, bob]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={onDeactivate} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Deactivate Bob Builder' }));
+  openMenu('Bob Builder'); fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate Bob Builder' }));
   const confirm = screen.getByRole('group', { name: 'Deactivate Bob Builder?' });
   expect(confirm).toHaveTextContent('No open or pending conversations are assigned to them');
   expect(within(confirm).queryByRole('radio')).not.toBeInTheDocument();
@@ -135,16 +147,17 @@ test('someone with no open work gets a plain confirmation and nothing to move', 
 test('deactivating yourself warns that you will be signed out', () => {
   // A second admin exists: the last active admin is never offered Deactivate.
   render(<TeamSection members={[admin, { ...ann, roles: rolesOf('admin') }]} currentAgentId={admin.id} canManage timezone="UTC" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Deactivate Ada Admin' }));
+  openMenu('Ada Admin'); fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate Ada Admin' }));
   expect(screen.getByRole('group', { name: 'Deactivate Ada Admin?' })).toHaveTextContent('You will be signed out');
 });
 
-test('a deactivated agent can be reactivated and has no other action', () => {
+test('a deactivated agent can be reactivated or renamed, and cannot be deactivated again', () => {
   const onReactivate = vi.fn();
   render(<TeamSection members={[admin, cy]} currentAgentId={admin.id} canManage timezone="UTC" onReactivate={onReactivate} />);
   const line = row('cy@example.com');
-  expect(within(line).queryByRole('button', { name: /^Deactivate/ })).not.toBeInTheDocument();
-  fireEvent.click(within(line).getByRole('button', { name: 'Reactivate cy@example.com' }));
+  fireEvent.click(within(line).getByRole('button', { name: 'Actions for cy@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Rename', 'Reactivate']);
+  fireEvent.click(within(line).getByRole('menuitem', { name: 'Reactivate cy@example.com' }));
   expect(onReactivate).toHaveBeenCalledWith(cy.id);
 });
 
@@ -155,21 +168,21 @@ test('shows why a change was refused', () => {
 
 test('the question is visible text and keyboard focus moves into it', () => {
   render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' }));
   expect(screen.getByText('Deactivate ann@example.com?')).toBeVisible();
   expect(screen.getByRole('group', { name: 'Deactivate ann@example.com?' })).toHaveFocus();
 });
 
-test('cancel gives focus back to the Deactivate button of the same row', () => {
+test('cancel gives focus back to the actions menu button of the same row', () => {
   render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' }));
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-  expect(screen.getByRole('button', { name: 'Deactivate ann@example.com' })).toHaveFocus();
+  expect(screen.getByRole('button', { name: 'Actions for ann@example.com' })).toHaveFocus();
 });
 
 test('confirming leaves focus on the row, not on the page body', () => {
   render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={vi.fn()} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' }));
   fireEvent.click(screen.getByRole('button', { name: 'Yes, deactivate' }));
   expect(row('ann@example.com')).toHaveFocus();
 });
@@ -177,9 +190,13 @@ test('confirming leaves focus on the row, not on the page body', () => {
 test('the only active admin cannot deactivate or demote themself; with a second admin they can', () => {
   const props = { currentAgentId: admin.id, canManage: true, roles: [adminRole, agentRole], myPermissions: permissionsOf('admin'), timezone: 'UTC' };
   const { rerender } = render(<TeamSection members={[admin, ann]} {...props} />);
-  expect(screen.queryByRole('button', { name: 'Deactivate Ada Admin' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Deactivate ann@example.com' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  openMenu('Ada Admin');
+  expect(screen.queryByRole('menuitem', { name: 'Deactivate Ada Admin' })).not.toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  openMenu('ann@example.com');
+  expect(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' })).toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  openMenu('Ada Admin'); fireEvent.click(screen.getByRole('menuitem', { name: 'Change roles: Ada Admin' }));
   const adminBox = screen.getByRole('checkbox', { name: /Admin/ });
   expect(adminBox).toHaveAttribute('aria-disabled', 'true');
   expect(adminBox).toHaveAccessibleDescription(settingsMessages.teamLastAdmin);
@@ -187,14 +204,15 @@ test('the only active admin cannot deactivate or demote themself; with a second 
   expect(adminBox).toBeChecked();
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   rerender(<TeamSection members={[admin, { ...ann, roles: rolesOf('admin') }]} {...props} />);
-  expect(screen.getByRole('button', { name: 'Deactivate Ada Admin' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  openMenu('Ada Admin');
+  expect(screen.getByRole('menuitem', { name: 'Deactivate Ada Admin' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Change roles: Ada Admin' }));
   expect(screen.getByRole('checkbox', { name: /Admin/ })).not.toHaveAttribute('aria-disabled');
 });
 
 test('why the last admin keeps Admin sits in the tip of its lock, not in a visible line', () => {
   render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole]} myPermissions={permissionsOf('admin')} timezone="UTC" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  openMenu('Ada Admin'); fireEvent.click(screen.getByRole('menuitem', { name: 'Change roles: Ada Admin' }));
   expect(screen.queryByText(settingsMessages.teamLastAdmin)).not.toBeVisible();
   const lock = screen.getByRole('button', { name: 'Why Admin is locked' });
   expect(lock).toHaveAccessibleDescription(settingsMessages.teamLastAdmin);
@@ -204,7 +222,7 @@ test('why the last admin keeps Admin sits in the tip of its lock, not in a visib
 
 test('Escape on the lock tip closes the tip only: Change roles stays open with its picks', () => {
   render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole]} myPermissions={permissionsOf('admin')} timezone="UTC" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Change roles: Ada Admin' }));
+  openMenu('Ada Admin'); fireEvent.click(screen.getByRole('menuitem', { name: 'Change roles: Ada Admin' }));
   const agent = screen.getByRole('checkbox', { name: /Agent/ });
   fireEvent.click(agent);
   expect(agent).toBeChecked();
@@ -216,34 +234,131 @@ test('Escape on the lock tip closes the tip only: Change roles stays open with i
   expect(screen.getByRole('checkbox', { name: /Agent/ })).toBeChecked();
 });
 
-test('an admin renames a member from their row, and saving an empty name clears it', () => {
+test('an admin renames a member from their row, and saving an empty name clears it', async () => {
   const onRename = vi.fn();
   render(<TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />);
-  fireEvent.click(within(row('Bob Builder')).getByRole('button', { name: 'Rename Bob Builder' }));
+  openMenu('Bob Builder'); fireEvent.click(within(row('Bob Builder')).getByRole('menuitem', { name: 'Rename Bob Builder' }));
   const input = screen.getByRole('textbox', { name: 'Display name of Bob Builder' });
   expect(input).toHaveValue('Bob Builder');
   expect(input).toHaveFocus();
   fireEvent.change(input, { target: { value: '  Robert  ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onRename).toHaveBeenLastCalledWith(bob.id, 'Robert');
-  expect(screen.queryByRole('textbox', { name: 'Display name of Bob Builder' })).not.toBeInTheDocument();
+  // The form closes once the server has taken the name.
+  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Display name of Bob Builder' })).not.toBeInTheDocument());
 
-  fireEvent.click(screen.getByRole('button', { name: 'Rename Bob Builder' }));
+  openMenu('Bob Builder'); fireEvent.click(screen.getByRole('menuitem', { name: 'Rename Bob Builder' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: '' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  // The bar says Saving… until the first save is answered.
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   expect(onRename).toHaveBeenLastCalledWith(bob.id, '');
 });
 
 test('a member without a name is renamed from an empty field that shows the email, and cancel changes nothing', () => {
   const onRename = vi.fn();
   render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Rename ann@example.com' }));
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Rename ann@example.com' }));
   const input = screen.getByRole('textbox', { name: 'Display name of ann@example.com' });
   expect(input).toHaveValue('');
   expect(input).toHaveAttribute('placeholder', 'ann@example.com');
   expect(input).toHaveAttribute('maxLength', '80');
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Rename ann@example.com' })).toHaveFocus();
+  expect(screen.getByRole('button', { name: 'Actions for ann@example.com' })).toHaveFocus();
   expect(onRename).not.toHaveBeenCalled();
+});
+
+
+test('a rename the server refuses keeps the form open with what was typed and the server\'s words', async () => {
+  const onRename = vi.fn().mockRejectedValue(new InvalidRequestError('That name is taken.'));
+  render(<TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />);
+  openMenu('Bob Builder'); fireEvent.click(within(row('Bob Builder')).getByRole('menuitem', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByText('That name is taken.')).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Display name of Bob Builder' })).toHaveValue('Robert');
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent('Rename Bob Builder');
+});
+
+test('a rename being typed survives the team list leaving the page (another tab) and coming back open', () => {
+  function Tabs() {
+    const [shown, setShown] = useState(true);
+    return <><button type="button" onClick={() => setShown(!shown)}>Toggle</button>{shown && <TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={vi.fn()} />}</>;
+  }
+  render(<Tabs />);
+  openMenu('Bob Builder'); fireEvent.click(within(row('Bob Builder')).getByRole('menuitem', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle' }));
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent('Rename Bob Builder');
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle' }));
+  expect(screen.getByRole('textbox', { name: 'Display name of Bob Builder' })).toHaveValue('Robert');
+});
+
+test('opening another row\'s rename or a deactivation while a name is typed asks first; declining keeps the typed name', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValueOnce(true);
+  render(<TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={vi.fn()} onDeactivate={vi.fn()} />);
+  openMenu('Bob Builder'); fireEvent.click(within(row('Bob Builder')).getByRole('menuitem', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Rename ann@example.com' }));
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' }));
+  expect(confirm).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('textbox', { name: 'Display name of Bob Builder' })).toHaveValue('Robert');
+  openMenu('ann@example.com'); fireEvent.click(screen.getByRole('menuitem', { name: 'Rename ann@example.com' }));
+  expect(confirm).toHaveBeenCalledTimes(3);
+  expect(screen.queryByRole('textbox', { name: 'Display name of Bob Builder' })).not.toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Display name of ann@example.com' })).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+});
+
+
+test('a rename the server refuses says why on the bar while the team list is not shown', async () => {
+  const onRename = vi.fn().mockRejectedValue(new InvalidRequestError('That name is taken.'));
+  function Tabs() {
+    const [shown, setShown] = useState(true);
+    return <><button type="button" onClick={() => setShown(!shown)}>Toggle</button>{shown && <TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />}</>;
+  }
+  render(<Tabs />);
+  openMenu('Bob Builder'); fireEvent.click(within(row('Bob Builder')).getByRole('menuitem', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(await within(screen.getByRole('region', { name: 'Unsaved changes' })).findByText('Rename Bob Builder: That name is taken.')).toBeInTheDocument();
+});
+
+test('a rename typed for a member the person can no longer manage does not open a form, and its draft goes', async () => {
+  function Page({ members }: { members: TeamMember[] }) {
+    return <TeamSection members={members} currentAgentId={admin.id} canManage timezone="UTC" onRename={vi.fn()} />;
+  }
+  const view = render(<Page members={[admin, ann, bob]} />);
+  openMenu('Bob Builder'); fireEvent.click(within(row('Bob Builder')).getByRole('menuitem', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  view.rerender(<Page members={[admin, ann, { ...bob, manageable: false }]} />);
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument());
+  expect(screen.queryByRole('textbox', { name: 'Display name of Bob Builder' })).not.toBeInTheDocument();
+});
+
+test('a member row has one actions button and no inline Change roles, Rename or Deactivate buttons', () => {
+  render(<TeamSection members={[admin, ann, cy]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole]} myPermissions={permissionsOf('admin')} timezone="UTC" />);
+  expect(screen.getAllByRole('button', { name: /^Actions for / })).toHaveLength(3);
+  expect(screen.queryByRole('button', { name: /^(Change roles|Rename|Deactivate|Reactivate)/ })).not.toBeInTheDocument();
+  openMenu('ann@example.com');
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Change roles', 'Rename', 'Deactivate']);
+});
+
+test('Escape in the actions menu closes it and the focus returns to its button', () => {
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage roles={[adminRole, agentRole]} myPermissions={permissionsOf('admin')} timezone="UTC" />);
+  openMenu('ann@example.com');
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Actions for ann@example.com' })).toHaveFocus();
+});
+
+test('reactivating says so and leaves the focus on the row\'s actions button', () => {
+  const onReactivate = vi.fn();
+  render(<TeamSection members={[admin, cy]} currentAgentId={admin.id} canManage timezone="UTC" onReactivate={onReactivate} />);
+  openMenu('cy@example.com');
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Reactivate cy@example.com' }));
+  expect(onReactivate).toHaveBeenCalledWith(cy.id);
+  expect(screen.getByRole('button', { name: 'Actions for cy@example.com' })).toHaveFocus();
+  expect(screen.getByRole('status')).toHaveTextContent('cy@example.com is active again.');
 });

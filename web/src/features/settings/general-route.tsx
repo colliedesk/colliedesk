@@ -20,7 +20,7 @@ export function GeneralRoute() {
   useScrollToHashWhenReady(!me.isPending);
   return <SettingsPage page="general" loading={me.isPending} timezone={me.data?.timezone ?? 'UTC'} canManageWorkspace={can(me.data, 'workspace:update')} showBilling={billingShown}
     workspaceTimezoneSave={saveState(workspaceTimezone)} workspaceName={me.data?.workspace.name} workspaceNameSave={saveState(workspaceName)}
-    onSetWorkspaceName={(name) => workspaceName.mutate(name)} workspaceTimezone={me.data?.workspace.timezone}
-    onSetWorkspaceTimezone={(value) => workspaceTimezone.mutate(value)}
+    onSetWorkspaceName={(name) => workspaceName.mutateAsync(name)} workspaceTimezone={me.data?.workspace.timezone}
+    onSetWorkspaceTimezone={(value) => workspaceTimezone.mutateAsync(value)}
     numbersSection={can(me.data, 'conversations:read') ? <NumbersSection /> : undefined} />;
 }

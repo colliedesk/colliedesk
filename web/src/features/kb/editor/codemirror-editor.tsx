@@ -5,6 +5,7 @@ import type { Extension } from '@codemirror/state';
 import { EditorView, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, redo, undo } from '@codemirror/commands';
 import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
+import { HelpTip } from '../../../ui/help-tip';
 import { kbMessages } from '../kb-messages';
 import { activeOf, codeBlockTemplate, inlineCode, insertBlock, insertLink, sameActive, setHeading, tableTemplate, toggleLines, toggleMark } from './commands';
 import type { Active, Block, LineKind } from './commands';
@@ -279,10 +280,11 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
         <div className="field md-video">
           <label htmlFor={`${id}-video-link`}>{kbMessages.videoLink}</label>
           <input ref={videoLink} id={`${id}-video-link`} type="url" inputMode="url" autoComplete="off" placeholder="https://www.youtube.com/watch?v=…"
-            aria-invalid={video.error ? true : undefined} aria-describedby={`${id}-video-help`} onChange={() => { if (video.error) setVideo({ error: '' }); }}
+            aria-invalid={video.error ? true : undefined} aria-describedby={video.error ? `${id}-video-help` : `${id}-video-help ${id}-video-tip`} onChange={() => { if (video.error) setVideo({ error: '' }); }}
             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); insertVideo(); } }} />
-          <small id={`${id}-video-help`} className={video.error ? 'error-copy' : 'kb-hint'} role={video.error ? 'alert' : undefined}>
-            {video.error || kbMessages.videoLinkHelp}
+          <small className={video.error ? 'error-copy' : 'kb-hint'} role={video.error ? 'alert' : undefined}>
+            <span id={`${id}-video-help`}>{video.error || kbMessages.videoLinkHelp}</span>
+            {!video.error && <>{' '}<HelpTip label={kbMessages.videoLink} text={kbMessages.videoLinkTip} id={`${id}-video-tip`} /></>}
           </small>
         </div>
       </KBDialog>}

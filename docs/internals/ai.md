@@ -415,6 +415,27 @@ feature does by itself: `off`, `suggest`, `auto`.
    (`images`, `contact_profile`, `external:<name>`); giving and taking one back both need
    `ai_settings:update`.
 
+## Prompt injection: what is stopped and what is accepted
+
+Customer text can ask a model anything, and wrapping it as data only lowers the odds that the model obeys.
+So nothing a model writes acts outside its feature's own narrow answer, and each answer is checked:
+
+- A message's following lines are indented in a draft's thread and in a past conversation
+  (`store.IndentFollowingLines`): a customer cannot start a line `Agent:` or `Reply:` and pass their words
+  as the team's.
+- A draft lists the links that neither the conversation nor a knowledge base article it was given holds
+  (warning `link`). A past conversation never vouches for a link: another customer wrote it.
+- Intake never sets a group card aside by itself while another customer wrote in what AI read
+  (`other_customers`): their words could ask for it.
+- The help chat escapes its closing tags in any case and spacing (`tagSafe`), and its answers pass the
+  contact and link filter.
+- Autofix: an agent token sends only the text the preview built (`fix_text_edited`); Cursor gets a fixed
+  opening and the title in `<customer-subject>` (`autofix.AgentPrompt`).
+
+Accepted: triage applied by itself may be talked into another priority, tag or assignee of the
+workspace's own (the admin chose the parts, and Undo takes them back); text inside an image intake sends;
+what a Cursor agent can reach while it runs is set in Cursor, not here.
+
 ## Testing
 
 `aiprovider.Fake` records every `Request` and answers from a script, without a network. Feature tests

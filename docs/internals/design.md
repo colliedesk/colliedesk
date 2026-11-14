@@ -113,10 +113,31 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   preview); Data and billing: Data, Plan and billing. A page is its serif title, one line saying what it
   holds, then its sections (`SettingsFrame`, `settings-frame.tsx`). The menu lists pages, never a section of
   another page, and a page shows only when the person can see one of its sections. `/settings` opens Account;
-  on a phone it is the menu itself, and each page shows **All settings** (back to it) where the menu was, as
-  the inbox list and a conversation take turns. An old `/settings#…-heading` link opens the page that holds
-  that section (`settings-anchors.ts`). The help center's settings are the knowledge base's Settings tab.
-  Not built yet: the design's own settings sidebar with **Back to app** in place of the app rail.
+  on a phone it is the menu itself, and each page shows **‹ Settings** (named "All settings") above its title,
+  as the inbox list and a conversation take turns; a channel page's own "Back to channels" is then its one
+  back link. An old `/settings#…-heading` link opens the page that holds that section (`settings-anchors.ts`).
+  The help center's settings are the knowledge base's Settings tab and keep the app's sidebar.
+  On a wide screen Settings takes the sidebar: **Back to app** (and Esc) at its head, the menu under it, the
+  account row at its foot, and none of the app's places (`app-shell.tsx`, `back-to-app.tsx`). Traps: each
+  page still draws its own menu from what its roles show, into the sidebar's slot (`SettingsMenuSlot` in
+  `settings-nav.tsx`), so a page tested alone keeps its menu inline; the sidebar is the "Signed in as" region
+  (the workspace name sits above the account row at its foot, as the head has no workspace row) and the top
+  bar repeats nothing until the sidebar is folded or a tablet; Back to app goes to the last address outside
+  `/settings` kept in `sessionStorage` with the workspace and person it was kept for (a sign-out clears it, and
+  another person's is ignored), the inbox when none; Esc leaves only with focus on the page body or in the
+  settings menu, looked at in the capture phase with nothing open that owns Esc (dialog, menu, account menu,
+  role picker, confirm panel), because React closes those before a bubbling listener runs; folded, the sidebar
+  keeps only the Back to app arrow. A test or a page that
+  needs the app's places from Settings goes through Back to app first.
+- A row's actions are one "⋯" button with a `role="menu"` list (`features/settings/row-menu.tsx`): the list's presence in the
+  page is what keeps Esc from leaving Settings. Inside a `.data-list` row the list's own rules would clip the menu
+  (`.data-list span` hides overflow) and make every `div` a grid cell, so `row-menu.css` overrides both; a new row
+  that holds a menu keeps it as a direct child of the row or inside an element whose overflow is visible.
+- The Saved toast of a switch pressed inside an open side sheet is drawn inside the sheet (its `[data-sheet-toast]` slot, above the
+  footer, by a portal from `SettingsEditsProvider`): a sheet traps Tab and covers the page, so a toast outside it could not be
+  reached with the keyboard and, on a phone, would lie over the sheet's Done button. Turning chat intake on goes through `ai-intake-consent.tsx`: the agreement is the act of turning the
+  feature on (the history says who did it). The server holds a consent record only for pictures and the customer's profile
+  (`ai_source_consents`), so that step never says a consent was stored.
 - Setup flow (`/setup`, owner decision 30/10/2026: Linear's onboarding, adapted): one step per screen, full
   screen on `--surface-1` without the rail, one centred column of 36 rem. It is the one exception to "no narrow
   centred column", because a single focused task is all the screen holds. A sticky header keeps the mark, the

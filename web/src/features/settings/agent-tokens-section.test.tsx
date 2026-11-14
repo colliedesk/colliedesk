@@ -266,14 +266,16 @@ test('each agent app has its steps with this address, a copy button, a guide and
   expect(panel).toHaveTextContent('needs no token');
   expect(panel).not.toHaveTextContent('Authorization');
   expect(within(panel).getByRole('link', { name: 'Full guide' })).toHaveAttribute('href', 'https://colliedesk.com/docs/connect-claude-code');
-  expect(panel).toHaveTextContent('claude mcp remove colliedesk, then Disconnect it in Connected AI apps above.');
+  expect(panel).toHaveTextContent('To disconnect: run claude mcp remove colliedesk');
+  expect(within(panel).getByRole('button', { name: 'About Disconnecting' })).toHaveAccessibleDescription('Then Disconnect it in Connected AI apps above.');
   expect(document.body.innerHTML).not.toContain('desk.example.com');
   expect(screen.getByRole('heading', { level: 3, name: 'Connect your agent' })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('radio', { name: 'Codex' }));
   expect(screen.queryByRole('group', { name: 'Claude Code' })).not.toBeInTheDocument();
   panel = screen.getByRole('group', { name: 'Codex' });
-  expect(panel).toHaveTextContent('codex mcp remove colliedesk, then revoke the token above.');
+  expect(panel).toHaveTextContent('To disconnect: run codex mcp remove colliedesk');
+  expect(within(panel).getByRole('button', { name: 'About Disconnecting' })).toHaveAccessibleDescription('Then revoke the token above.');
   fireEvent.click(within(panel).getByRole('button', { name: 'Copy: Then run' }));
   expect(writeText).toHaveBeenCalledWith(`codex mcp add colliedesk --url ${origin}/mcp --bearer-token-env-var COLLIEDESK_TOKEN`);
   expect(await within(panel).findByText('Copied')).toBeInTheDocument();
@@ -384,7 +386,8 @@ test('on Colliedesk Cloud, Claude Code installs the plugin and signs in with OAu
   // Each command is a labelled stop for the keyboard, so a screen reader names what it is.
   expect(within(panel).getByRole('group', { name: 'Run in your terminal' })).toHaveTextContent(/^claude plugin install colliedesk --marketplace colliedesk\/colliedesk$/);
   expect(within(panel).getByRole('group', { name: 'Then sign in' })).toHaveTextContent('claude mcp login plugin:colliedesk:colliedesk');
-  expect(panel).toHaveTextContent('claude plugin uninstall colliedesk@colliedesk, then Disconnect it in Connected AI apps above.');
+  expect(panel).toHaveTextContent('To disconnect: run claude plugin uninstall colliedesk@colliedesk');
+  expect(within(panel).getByRole('button', { name: 'About Disconnecting' })).toHaveAccessibleDescription('Then Disconnect it in Connected AI apps above.');
   expect(panel).not.toHaveTextContent('acme.colliedesk.com');
 });
 
@@ -393,4 +396,12 @@ test('someone who may see and revoke tokens but not make one gets the list witho
   expect(screen.getByRole('heading', { name: 'Agent tokens' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
   expect(screen.queryByRole('heading', { name: 'Connect your agent' })).toBeNull();
+});
+
+test('a token that turns revoked is announced', () => {
+  const props = { roles: rolesOf('agent'), rolePermissions: new Map([[rolesOf('agent')[0].id, permissionsOf('agent')]]), held: permissionsOf('agent'), origin, onCreate: vi.fn(), timezone: 'UTC', onRevoke: vi.fn() };
+  const { rerender } = render(<AgentTokensSection {...props} tokens={tokens} />);
+  expect(screen.getByRole('status')).toHaveTextContent('');
+  rerender(<AgentTokensSection {...props} tokens={[...tokens.slice(0, 3), { ...tokens[3], revoked_at: '2026-11-12T03:00:00Z' }]} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Nightly tagging script revoked.');
 });

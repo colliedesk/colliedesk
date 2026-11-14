@@ -10,9 +10,6 @@ const baseURL = servers.cloud;
 const ring = { MAILBOX_TOKEN_KEYS: 'c1:ZTJlLWNsb3VkLWltcG9ydC1rZXktMzItYnl0ZXMhISE=' };
 const provider = new IdentityProvider();
 
-test.beforeAll(async () => { await provider.start(); });
-test.afterAll(async () => { await provider.stop(); });
-
 // totp is the authenticator app: RFC 6238, 30 seconds, 6 digits, from the key the console shows (base32).
 function totp(key: string, at = Date.now()): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';

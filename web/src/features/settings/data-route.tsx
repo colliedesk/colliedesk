@@ -3,7 +3,9 @@ import { api } from '../../api/client';
 import { can } from '../../lib/can';
 import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { useBillingShown } from '../billing/billing-shown';
+import './data-export.css';
 import { ExportAllData } from './export-all-data';
 import { importMessages } from './import-messages';
 import { ImportRoute } from './import-route';
@@ -25,7 +27,7 @@ export function DataRoute() {
       <ImportRoute />
     </>}
     {exports && <section className="settings-card data-export" aria-labelledby="export-heading">
-      <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>
+      <div className="section-heading"><div className="heading-with-tip"><h2 id="export-heading">{messages.exportHeading}</h2><HelpTip label={messages.exportHeading} text={messages.exportContents} /></div><p>{messages.exportDescription}</p></div>
       <div className="settings-body settings-rows"><ExportAllData /></div>
     </section>}
     {/* The import's email links here: someone who may do neither is told who can, as the import's page told them. */}

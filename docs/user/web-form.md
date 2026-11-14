@@ -21,7 +21,8 @@ It works the same on self-hosted installs and on Colliedesk Cloud.
    it. No path, no trailing slash, no wildcard. `https://example.com` and `https://www.example.com`
    are two origins. At most 20.
 3. Select **Save web form**. The button reads "Saving…" and stays disabled until the save ends. The
-   form is added and on; its page opens on the **Embed** tab, where you change the origins later.
+   form is added and on; its page opens on the **Embed** tab, where you change the origins later: a change to the sites waits for **Save** in the bar at the foot of the page, while the switch that
+accepts submissions saves at once with **Saved** and **Undo**.
 
 The form is **off** until you add it. Turn it off and on again with its switch in **Settings →
 Channels** (see [Channels](channels.md#turn-a-channel-off)); your origins stay saved. While it is off, the form answers `404`, the same as a workspace that does not
