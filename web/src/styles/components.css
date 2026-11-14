@@ -707,6 +707,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .plan-banner p .icon { flex: none; }
 .plan-banner .plan-banner-warning { flex-basis: 100%; order: 3; }
 .plan-banner button { margin-left: auto; }
+.plan-banner button + .plan-banner-close { margin-left: calc(-1 * var(--space-2)); }
 
 .trial-survey {
   flex: none; display: grid; gap: var(--space-2); margin: 0; border: 1px solid var(--line);

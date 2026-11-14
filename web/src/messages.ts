@@ -372,6 +372,7 @@ export const messages = {
   trialEnds: (when: string) => `Trial ends ${when}`,
   trialLocks: 'Then the workspace locks. Nothing is deleted.',
   trialAskAdmin: 'Ask an admin to choose a plan.',
+  hideTrialNotice: 'Hide the trial notice',
   buyPlan: (plan: string) => `Buy ${plan}`,
   trialExtendedNote: 'Your trial was extended after your Freshdesk import.',
   choosePlan: 'Choose a plan',

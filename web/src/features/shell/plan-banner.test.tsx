@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Billing } from '../../api/schemas';
 import { PlanBanner } from './plan-banner';
 
@@ -88,6 +88,56 @@ test('an admin of a workspace over its agent cap is told on every page; an agent
   expect(screen.getByRole('alert')).toHaveTextContent('This workspace has 2 agents more than the Small plan allows. The 2 most recently added cannot work until you deactivate agents in Settings > Team or upgrade in the billing portal.');
   rerender(<PlanBanner plan={over} isAdmin={false} />);
   expect(container).toBeEmptyDOMElement();
+});
+
+const workspaceA = '0b6c1a52-6f3e-4c55-9d0e-2f1f6a7c1a01';
+const workspaceB = '0b6c1a52-6f3e-4c55-9d0e-2f1f6a7c1a02';
+const hideStrip = () => fireEvent.click(screen.getByRole('button', { name: 'Hide the trial notice' }));
+
+describe('closing the trial strip', () => {
+  beforeEach(() => localStorage.clear());
+
+  test('an admin closes the strip and it stays closed after a reload', () => {
+    const { container, unmount } = render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceA} timezone="UTC" now={at('2026-10-05T09:00:00Z')} onChoosePlan={vi.fn()} />);
+    hideStrip();
+    expect(container).toBeEmptyDOMElement();
+    unmount();
+    const reloaded = render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceA} timezone="UTC" now={at('2026-10-06T09:00:00Z')} onChoosePlan={vi.fn()} />);
+    expect(reloaded.container).toBeEmptyDOMElement();
+  });
+
+  test('an agent who is not an admin can close it too', () => {
+    const { container } = render(<PlanBanner plan={trial} isAdmin={false} workspaceId={workspaceA} timezone="UTC" now={at('2026-10-05T09:00:00Z')} />);
+    hideStrip();
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  test('a strip closed early comes back once three days are left, because then the workspace is about to lock', () => {
+    const { unmount } = render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceA} timezone="UTC" now={at('2026-10-05T09:00:00Z')} onChoosePlan={vi.fn()} />);
+    hideStrip();
+    unmount();
+    const nearEnd = render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceA} timezone="UTC" now={at('2026-10-12T09:00:00Z')} onChoosePlan={vi.fn()} />);
+    expect(screen.getByText(/then the workspace locks/i)).toBeInTheDocument();
+    hideStrip();
+    nearEnd.unmount();
+    const { container } = render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceA} timezone="UTC" now={at('2026-10-14T09:00:00Z')} onChoosePlan={vi.fn()} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  test('closing it in one workspace leaves it in another', () => {
+    const { unmount } = render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceA} timezone="UTC" now={at('2026-10-05T09:00:00Z')} onChoosePlan={vi.fn()} />);
+    hideStrip();
+    unmount();
+    render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceB} timezone="UTC" now={at('2026-10-05T09:00:00Z')} onChoosePlan={vi.fn()} />);
+    expect(screen.getByText('Trial ends Oct 15')).toBeInTheDocument();
+  });
+
+  test('the storage warning stays after the strip is closed', () => {
+    render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceA} timezone="UTC" now={at('2026-10-05T09:00:00Z')} billing={billing(1.7 * GiB)} onChoosePlan={vi.fn()} />);
+    hideStrip();
+    expect(screen.queryByText(/trial ends/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/storage is 85% full/i);
+  });
 });
 
 test('Choose a plan is a plain button, never the filled primary action that would outrank the first onboarding step', () => {
