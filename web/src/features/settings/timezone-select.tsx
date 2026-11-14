@@ -85,7 +85,7 @@ export function TimezoneSelect({ label, value, emptyOption, suggested, save, onC
             timer.current = setTimeout(() => commit(next), settleMs);
           }}
           onBlur={() => commit(draft)}
-          onKeyDown={(event) => { if (event.key === 'Enter') commit(draft); }}>
+          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(draft); } }}>
           {emptyOption && <option value="">{emptyOption}</option>}
           {offered && <option value={offered.zone}>{offered.label}</option>}
           {zones(draft).filter((zone) => !offered || !suggestedNames?.has(zone)).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
