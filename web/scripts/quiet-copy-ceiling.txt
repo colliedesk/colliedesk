@@ -151,8 +151,6 @@ features/settings/ai-messages.ts:aiMessages.automaticHelp	126
 features/settings/ai-messages.ts:aiMessages.baseURLHelp	80
 features/settings/ai-messages.ts:aiMessages.draftsPerDayHelp	127
 features/settings/ai-messages.ts:aiMessages.historyHelp	105
-features/settings/ai-messages.ts:aiMessages.intakeChatOnly	132
-features/settings/ai-messages.ts:aiMessages.intakeSourcesHelp	151
 features/settings/ai-messages.ts:aiMessages.modelsBeforeLoadAddress	79
 features/settings/ai-messages.ts:aiMessages.modelsHelp	76
 features/settings/ai-messages.ts:aiMessages.modelsPicked	94
