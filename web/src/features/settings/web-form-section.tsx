@@ -4,6 +4,7 @@ import { InvalidRequestError, request } from '../../api/client';
 import { useCreateAction } from '../../api/use-create';
 import type { ReactNode } from 'react';
 import type { WebFormSettings } from '../../api/schemas';
+import { HelpTip } from '../../ui/help-tip';
 import { settingsMessages } from './settings-messages';
 import { channelSetupMessages } from './channel-setup-messages';
 import { CopyButton } from './copy-button';
@@ -56,8 +57,9 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
               {nameField}
               {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{settingsMessages.webFormAccept}</span></label>}
               <label className="field"><span>{settingsMessages.webFormOrigins}</span>
-                <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={originsHelp} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
-              <small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
+                <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={`${originsHelp} ${originsHelp}-why`} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
+              <div className="heading-with-tip field-hint"><small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
+                <HelpTip id={`${originsHelp}-why`} label={settingsMessages.webFormOrigins} text={channelSetupMessages.webFormOriginsWhy} /></div>
               <span className="button-row">{adding && <button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(settingsMessages.saveWebForm)}</button>}
                 {feedback.pending && !adding ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}</span>
             </form>
@@ -68,7 +70,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
           <input readOnly value={submitURL} /><small>{settingsMessages.webFormSubmitHelp}{' '}
             <a className="web-form-guide" href={tryMessages.guideURL} target="_blank" rel="noreferrer">{tryMessages.guide}</a></small></label>}
         {settings && embed && <EmbedCode url={submitURL} />}
-        {older && <details className="muted-copy"><summary>{olderMessages.summary}</summary><p>{olderMessages.body(older)}</p></details>}
+        {older && <details className="muted-copy"><summary>{olderMessages.summary}</summary><p>{olderMessages.body(older)} <HelpTip label={olderMessages.summary} text={olderMessages.why} /></p></details>}
       </div>;
   if (embed) return body;
   return (
@@ -128,7 +130,8 @@ function TryForm({ path }: { path: string }) {
 const embedMessages = {
   copyUrl: 'Copy submit URL',
   code: 'Code for your page',
-  codeHelp: 'Send it from a page on an allowed origin, with the visitor\'s email and message. Keep the field named website empty. It is a trap for spam bots: a message with it filled in is thrown away.',
+  codeHelp: 'Send it from a page on an allowed origin.',
+  codeWhy: 'Include the visitor\'s email and message. Keep the field named website empty: it is a trap for spam bots, and a message with it filled in is thrown away.',
   copyCode: 'Copy code',
   codeCopied: 'Code copied',
 };
@@ -145,7 +148,7 @@ await fetch('${url}', {
   return <>
     <span className="button-row"><CopyButton value={url} copiedText={settingsMessages.urlCopied}>{embedMessages.copyUrl}</CopyButton></span>
     <section className="embed-code" aria-labelledby="embed-code-heading">
-      <h3 id="embed-code-heading" className="field-label">{embedMessages.code}</h3>
+      <div className="heading-with-tip"><h3 id="embed-code-heading" className="field-label">{embedMessages.code}</h3><HelpTip label={embedMessages.code} text={embedMessages.codeWhy} /></div>
       <pre><code>{code}</code></pre>
       <p className="muted-copy">{embedMessages.codeHelp}</p>
       <span className="button-row"><CopyButton value={code} copiedText={embedMessages.codeCopied}>{embedMessages.copyCode}</CopyButton></span>
@@ -155,5 +158,6 @@ await fetch('${url}', {
 
 const olderMessages = {
   summary: 'Older address',
-  body: (address: string) => `This form also answers ${address}. Use it only if your website already sends to it; it keeps working. A new website uses the Submit URL above.`,
+  body: (address: string) => `This form also answers ${address}.`,
+  why: 'Use it only if your website already sends to it; it keeps working. A new website uses the Submit URL above.',
 };

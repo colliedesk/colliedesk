@@ -80,7 +80,8 @@ test('a provider the server lacks is folded away for the admin, with whom to ask
 test('a teammate sees the state without buttons or setup details', () => {
   render(block({ canManage: false, microsoft: { ...microsoft, available: false } }));
   expect(screen.getByText('Only an admin can connect a mailbox.')).toBeInTheDocument();
-  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  // The only button is the help tip of the heading: nothing here changes anything.
+  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['About Send from your mailbox']);
   expect(screen.queryByText('Microsoft 365 is not set up on this server')).not.toBeInTheDocument();
 });
 
@@ -215,7 +216,8 @@ test('on Colliedesk Cloud each provider links how its data is handled; Microsoft
 
 test('the approver of an agent\'s request to connect Microsoft 365 reads that a work account may need its admin first', () => {
   render(<MicrosoftRequestNote />);
-  expect(screen.getByText('Approving opens Microsoft\'s sign-in page. A work account may need its Microsoft 365 admin\'s approval first.')).toBeInTheDocument();
+  expect(screen.getByText('Approving opens Microsoft\'s sign-in page.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Microsoft sign-in' })).toHaveAccessibleDescription('A work account may need its Microsoft 365 admin\'s approval first.');
 });
 
 test('on Colliedesk Cloud a server without Microsoft settings leaves Microsoft 365 out, with no settings to name', () => {
@@ -258,7 +260,8 @@ test('a server that lost its Microsoft settings says what to set, not that a wro
 
 test('the approval fold names the button that starts the sign-in now', () => {
   render(block({ gmail: { ...gmail, connection: gmailConnection }, returned: { kind: 'error', reason: 'denied', provider: 'microsoft' } }));
-  expect(screen.getByText(/After they approve, select Use Microsoft 365 instead again\./)).toBeInTheDocument();
+  expect(screen.getByText(/Send this link to your admin, then select Use Microsoft 365 instead again\./)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Approval link for your Microsoft 365 admin' })).toHaveAccessibleDescription(/Many organizations only let an admin approve apps that send email/);
 });
 
 // Switched off by the operator: available is false with nothing missing.

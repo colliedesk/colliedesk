@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { HelpTip } from '../../ui/help-tip';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 import { useSaveChanges, useSettingsEdit } from './settings-edits';
@@ -12,6 +13,8 @@ interface NameFormProps {
   saveLabel?: string;
   // hint says where the name shows; it is the field's description.
   hint: string;
+  // tip is the how or why the row no longer shows: a help tip after the hint.
+  tip?: string;
   value: string;
   canManage: boolean;
   save?: SaveState;
@@ -25,10 +28,11 @@ interface NameFormProps {
 
 // NameForm edits a name that others see, such as the sender name of the email channel or the workspace
 // name; a person who cannot change it reads it.
-export function NameForm({ label, saveLabel, hint, value, canManage, save, onSave, minLength = 1, maxLength = 100, conflictLink }: NameFormProps) {
+export function NameForm({ label, saveLabel, hint, tip, value, canManage, save, onSave, minLength = 1, maxLength = 100, conflictLink }: NameFormProps) {
   const [name, setName] = useState(value);
   useEffect(() => setName(value), [value]);
   const hintId = useId();
+  const tipId = `${hintId}-tip`;
   const errorId = useId();
   const input = useRef<HTMLInputElement>(null);
   const feedback = useSaveFeedback(save, errorId, input, name);
@@ -48,11 +52,12 @@ export function NameForm({ label, saveLabel, hint, value, canManage, save, onSav
     }}>
       <label className="field"><span>{label}</span>
         <input ref={input} value={name} minLength={minLength} maxLength={maxLength} required aria-invalid={feedback.invalid || undefined}
-          aria-describedby={feedback.invalid ? `${errorId} ${hintId}` : hintId} onChange={(event) => { feedback.touch(); setName(event.target.value); }} /></label>
+          aria-describedby={`${feedback.invalid ? `${errorId} ` : ''}${hintId}${tip ? ` ${tipId}` : ''}`} onChange={(event) => { feedback.touch(); setName(event.target.value); }} /></label>
       {saveLabel !== undefined && <button type="submit" disabled={feedback.pending}>{feedback.saveLabel(saveLabel)}</button>}
       {feedback.pending && saveLabel === undefined ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}
       {feedback.invalid && save?.conflict && conflictLink?.(save.conflict)}
       <small id={hintId}>{hint}</small>
+      {tip && <HelpTip id={tipId} label={label} text={tip} />}
     </form>
   );
 }

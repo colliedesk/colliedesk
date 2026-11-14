@@ -527,7 +527,7 @@ function ChannelIdentity({ channel, label, defaultHelp, defaultBadge, isAdmin }:
   const said = succeeded && channel.is_default === true;
   useEffect(() => { if (said) done.current?.focus(); }, [said]);
   return <div className="ch-identity">
-    {isAdmin && <NameForm label={m.nameLabel} hint={defaultHelp ?? m.defaultHelp} value={channel.name} canManage maxLength={80} save={saveState(rename)}
+    {isAdmin && <NameForm label={m.nameLabel} hint={m.nameHint} tip={defaultHelp ?? m.defaultHelp} value={channel.name} canManage maxLength={80} save={saveState(rename)}
       onSave={(name) => rename.mutateAsync(name)} conflictLink={(conflict) => <a href={`${base}/${conflict.channel_id}`}>{m.openTaken(conflict.channel_name)}</a>} />}
     <div className="ch-default-row">
       {channel.is_default

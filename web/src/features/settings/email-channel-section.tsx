@@ -5,6 +5,7 @@ import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
 import { channelSetupMessages } from './channel-setup-messages';
+import { HelpTip } from '../../ui/help-tip';
 import { PartUnavailable } from '../../ui/lazy-part';
 import type { MailboxProvider, MailboxReturn } from './gmail-return';
 import { CopyButton } from './copy-button';
@@ -123,7 +124,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           <span className="button-row"><CopyButton value={settings.inbound_url} copiedText={settingsMessages.urlCopied}>{settingsMessages.copyInboundURL}</CopyButton></span>
         </div>}
         {channel && !hostedAddress && <p className="muted-copy">{channel.secret_set && channel.secret_rotated_at
-          ? settingsMessages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : channelSetupMessages.inboundSecretMissing}</p>}
+          ? settingsMessages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : channelSetupMessages.inboundSecretMissing}
+          {' '}<HelpTip label={settingsMessages.inboundSecret} text={channelSetupMessages.inboundSecretWhy} /></p>}
         {canManage && !hostedAddress && createdSecret && <label className="invite-link"><span className="field-label">{settingsMessages.inboundSecret}</span>
           <input readOnly value={createdSecret} /><small>{settingsMessages.inboundSecretNotice}</small></label>}
         {canManage && channel && settings && !hostedAddress && <InboundURLGuide inboundURL={settings.inbound_url} supportAddress={channel.support_address} secret={createdSecret} />}
@@ -195,7 +197,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </div>;
   return (
     <section className="settings-card" aria-labelledby="email-channel-heading">
-      <div className="section-heading"><h2 id="email-channel-heading">{settingsMessages.emailChannel}</h2><p>{channelSetupMessages.emailChannelDescription}</p></div>
+      <div className="section-heading"><div className="heading-with-tip"><h2 id="email-channel-heading">{settingsMessages.emailChannel}</h2>
+        <HelpTip label={settingsMessages.emailChannel} text={channelSetupMessages.emailChannelWhy} /></div><p>{channelSetupMessages.emailChannelDescription}</p></div>
       <div className="settings-body">
         {addressPart}{senderPart}{arrivalPart}{repliesPart}
       </div>

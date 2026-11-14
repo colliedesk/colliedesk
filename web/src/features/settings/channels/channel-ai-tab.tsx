@@ -6,6 +6,7 @@ import { intakeApi } from '../../../api/intake';
 import type { AILevel, AISettings, AISlotName, ChannelAI, ChannelAIInput } from '../../../api/ai';
 import type { ChannelDetail } from '../../../api/channels';
 import { formatDay } from '../../../lib/format-date';
+import { HelpTip } from '../../../ui/help-tip';
 import { AutoDraftDialog, AutoTriageDialog } from '../ai-level-dialogs';
 import { featureName, levelMeaning, levelName, levelsOf, scopeName } from '../ai-levels';
 import { IntakeSettings } from './channel-intake-settings';
@@ -80,7 +81,7 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
   });
   const askedSlot = asking ? slotOf(asking.slot) : undefined;
   return <div className="ch-ai">
-    <p className="ch-ai-lead">{m.aiLead}</p>
+    <p className="ch-ai-lead">{m.aiLead} <HelpTip label={m.aiLeadLabel} text={m.aiWhy} /></p>
     {!isAdmin && <p className="notice notice-plain" role="note"><span>{m.aiAdminsOnly}</span></p>}
     <table className="ch-ai-table">
       <thead><tr><th scope="col">{m.aiFeature}</th>{scopes.map((entry) => <th key={entry.scope} scope="col">{scopeName(entry.scope)}</th>)}</tr></thead>
@@ -117,7 +118,6 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
       settings={settings.data} isAdmin={isAdmin} onSave={saveIntake} />)}
     {intakeProblem && <p role="alert" className="error-copy">{intakeProblem}</p>}
     {save.isError && <p role="alert" className="error-copy">{save.error instanceof InvalidRequestError ? save.error.message : m.actionFailed}</p>}
-    <p className="help">{m.aiHelp}</p>
     {asking && asking.slot === 'intake' && <IntakeAutoDialog channelID={channel.id} scope={asking.scope}
       options={data.scopes.find((entry) => entry.scope === asking.scope)?.slots.find((item) => item.slot === 'intake')?.options ?? null} settings={settings.data}
       onClose={() => setAsking(undefined)} onTurnOn={(input) => { setAsking(undefined); void turnOnAuto(input); }} />}

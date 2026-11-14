@@ -54,13 +54,13 @@ test('intake on a chat channel: Suggest with settings of its own, then Auto asks
   // scope has its own level.
   await page.goto(`${origin}/settings/channels/${channel}?tab=ai`);
   const following = page.getByRole('form', { name: 'Intake settings · Groups' });
-  await expect(following).toContainText('These follow the default. Pick Suggest or Auto for Groups above to set its own.');
+  await expect(following).toContainText('Following the default. Pick Suggest or Auto for Groups above.');
   // A scope that follows the default has nothing to save: its fields are locked.
   await expect(following.getByLabel('Add to a conversation')).toBeDisabled();
   await page.getByRole('combobox', { name: 'Intake · Groups' }).selectOption('suggest');
   const form = page.getByRole('form', { name: 'Intake settings · Groups' });
   await form.getByLabel('Add to a conversation').fill('0.93');
-  await form.getByLabel('Words that mark a secret').fill('mật khẩu\nOTP');
+  await form.getByLabel('Words that mark a secret', { exact: true }).fill('mật khẩu\nOTP');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(form.getByRole('status')).toHaveText('Saved');
   await expect(page.getByRole('region', { name: 'Last 7 days' })).toContainText('No cards yet.');
@@ -71,10 +71,10 @@ test('intake on a chat channel: Suggest with settings of its own, then Auto asks
   await expect(dialog).toContainText('Open a conversation: stays a suggestion until 30 decisions are labelled (0 of 30)');
   await expect(dialog).toContainText('No estimate yet');
   await dialog.getByRole('checkbox', { name: 'Let it open a conversation alone anyway' }).check();
-  await dialog.getByRole('button', { name: 'Turn on Auto' }).click();
+  await dialog.getByRole('button', { name: 'Turn on Auto', exact: true }).click();
   await expect(dialog.getByRole('alert')).toContainText('Say why');
   await dialog.getByLabel('Why AI may do this before it is ready').fill('Checked 50 cards by hand');
-  await dialog.getByRole('button', { name: 'Turn on Auto' }).click();
+  await dialog.getByRole('button', { name: 'Turn on Auto', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: 'Intake · Groups' })).toHaveValue('auto');
 
