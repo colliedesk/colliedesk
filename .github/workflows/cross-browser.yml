@@ -9,8 +9,6 @@ on:
   schedule:
     - cron: '17 20 * * *'
   workflow_dispatch:
-  push:
-    branches: [ci/cross-browser-e2e]
 
 permissions:
   contents: read
@@ -61,7 +59,9 @@ jobs:
         run: sh .github/scripts/ci-services.sh wait postgres mailpit
       - name: Run the core journeys on WebKit and Firefox
         working-directory: web
-        run: corepack pnpm e2e --project=webkit --project=firefox
+        # One retry: the sign-in page loads Clerk with the e2e's fake key, and Clerk's late error replaces
+        # the page (#602). A test that passes on its retry is reported flaky; a real break still fails.
+        run: corepack pnpm e2e --project=webkit --project=firefox --retries=1
       - name: Keep the traces of a failed run
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
