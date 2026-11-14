@@ -24,6 +24,8 @@ const row = (text: string) => screen.getByText(text).closest('article') as HTMLE
 // A member's actions are in the row's "⋯" menu: open it, then choose.
 const openMenu = (who: string) => fireEvent.click(screen.getByRole('button', { name: `Actions for ${who}` }));
 
+// A help tip is an ⓘ button that explains; it is not a control, so only the buttons that act are counted.
+const actions = (buttons: HTMLElement[]) => buttons.filter((button) => !(button.getAttribute('aria-label') ?? '').startsWith('About '));
 test('lists every member with role, state and last activity', () => {
   render(<TeamSection members={[admin, ann, bob, cy]} currentAgentId={admin.id} canManage={false} timezone="UTC" />);
   const team = screen.getByRole('region', { name: 'Team' });
@@ -39,7 +41,7 @@ test('lists every member with role, state and last activity', () => {
 test('an agent sees the team read-only', () => {
   render(<TeamSection members={[admin, ann, cy]} currentAgentId={ann.id} canManage={false} timezone="UTC" />);
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  expect(actions(screen.queryAllByRole('button'))).toEqual([]);
 });
 
 const adminRole = roleOf(rolesOf('admin')[0], permissionsOf('admin'));

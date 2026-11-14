@@ -4,6 +4,7 @@ import type { SavedReply, SavedReplyVersionPage, TrashedSavedReplyPage } from '.
 import { formatDate } from '../../lib/format-date';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { savedReplyMessages } from './saved-reply-messages';
 import { Refused, useConfirmDrop, useSaveChanges, useSettingsEdit } from './settings-edits';
 import { settingsMessages } from './settings-messages';
@@ -99,7 +100,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
     } } : undefined);
   return (
     <section className="settings-card saved-replies" aria-labelledby="saved-replies-heading">
-      <div className="section-heading"><h2 id="saved-replies-heading" className="sr-only">{messages.savedReplies}</h2><p>{savedReplyMessages.savedRepliesDescription}</p></div>
+      <div className="section-heading"><h2 id="saved-replies-heading" className="sr-only">{messages.savedReplies}</h2><p className="heading-with-tip"><span>{savedReplyMessages.savedRepliesDescription}</span><HelpTip label={messages.savedReplies} text={savedReplyMessages.savedRepliesWhy} /></p></div>
       <div className="settings-body">
         {problem && <p role="alert" className="error-copy">{problem}</p>}
         {stale && <div className="saved-reply-bar"><button type="button" onClick={() => { setEditing(null); setProblem(undefined); setStale(false); onReload?.(); }}>{settingsMessages.reload}</button></div>}

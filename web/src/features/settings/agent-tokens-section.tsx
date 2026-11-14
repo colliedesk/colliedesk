@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Role, RoleRef, Session } from '../../api/schemas';
+import { HelpTip } from '../../ui/help-tip';
 import { agentTokenMessages as text } from './agent-tokens-messages';
 import { AgentTokenList } from './agent-token-list';
 import { ConnectAgent } from './connect-agent';
@@ -48,7 +49,8 @@ export function AgentTokensSection({ roles, rolePermissions, held, onCreate, ori
       <div className="settings-body">
         <div className="agent-step">
           <div className="tokens-head">
-            <div><h3 id="agent-tokens-heading" className="step-title">{text.tokensHeading}</h3><p className="muted-copy">{text.description}</p></div>
+            <div><div className="heading-with-tip"><h3 id="agent-tokens-heading" className="step-title">{text.tokensHeading}</h3><HelpTip label={text.tokensHeading} text={text.descriptionWhy} /></div>
+              <p className="muted-copy">{text.description}</p></div>
             {onCreate && <button type="button" className="primary-action" onClick={() => setCreating(true)}>{text.create}</button>}
           </div>
           <AgentTokenList tokens={tokens} timezone={timezone} onRevoke={onRevoke} labelledBy="agent-tokens-heading" />

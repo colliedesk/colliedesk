@@ -80,7 +80,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   if (embed) return body;
   return (
     <section className="settings-card" aria-labelledby="web-form-heading">
-      <div className="section-heading"><h2 id="web-form-heading">{settingsMessages.webForm}</h2><p>{settingsMessages.webFormDescription}</p></div>
+      <div className="section-heading"><div className="heading-with-tip"><h2 id="web-form-heading">{settingsMessages.webForm}</h2><HelpTip label={settingsMessages.webForm} text={settingsMessages.webFormWhy} /></div><p>{settingsMessages.webFormDescription}</p></div>
       {body}
     </section>
   );

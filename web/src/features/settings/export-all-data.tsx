@@ -5,6 +5,7 @@ import { ExportRefusedError } from '../../api/workspace-export';
 import { track } from '../../lib/product-analytics';
 import { formatWait } from '../../lib/format-wait';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { settingsMessages } from './settings-messages';
 
 function refusalText(error: unknown): string {
@@ -54,7 +55,7 @@ export function ExportAllData() {
       <div className="button-row">
         <button type="button" disabled={start.isPending} onClick={() => start.mutate()}>{messages.exportHeading}</button>
       </div>
-      {start.isSuccess && <p role="status" className="muted-copy">{settingsMessages.exportStarted}</p>}
+      {start.isSuccess && <p role="status" className="muted-copy heading-with-tip"><span>{settingsMessages.exportStarted}</span><HelpTip label={settingsMessages.exportStartedLabel} text={settingsMessages.exportStartedWhy} /></p>}
       {returned && !start.isPending && !start.isSuccess && !start.isError && <p role="alert" className="error-copy">{returned}</p>}
       {start.isError && <p role="alert" className="error-copy">{refusalText(start.error)}</p>}
     </div>

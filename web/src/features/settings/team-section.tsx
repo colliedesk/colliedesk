@@ -6,6 +6,7 @@ import { RowMenu } from './row-menu';
 import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { useConfirmDrop, useDraftIds, useDropDrafts, useSaveChanges, useSettingsDraft } from './settings-edits';
 import { settingsMessages } from './settings-messages';
 import { displayNameMaxLength } from './display-name-field';
@@ -65,7 +66,7 @@ export function TeamSection({ members, currentAgentId, canManage, roles = [], my
   const activeAdmins = members.filter((member) => isAdmin(member) && member.deactivated_at === null).length;
   return (
     <section className="settings-card" aria-labelledby="team-heading">
-      <div className="section-heading"><h2 id="team-heading">{messages.team}</h2><p>{settingsMessages.teamDescription}</p></div>
+      <div className="section-heading"><div className="heading-with-tip"><h2 id="team-heading">{messages.team}</h2><HelpTip label={messages.team} text={settingsMessages.teamWhy} /></div><p>{settingsMessages.teamDescription}</p></div>
       <div className="settings-body settings-rows">
         {error && <p role="alert" className="error-copy">{error}</p>}
         <p role="status" className="sr-only">{status}</p>

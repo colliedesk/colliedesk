@@ -265,7 +265,8 @@ test('an agent sees the team but no controls', async () => {
   show('agent', [], members());
   const team = await screen.findByRole('region', { name: 'Team' });
   expect(await within(team).findByText('ann@example.com')).toBeInTheDocument();
-  expect(within(team).queryByRole('button')).not.toBeInTheDocument();
+  // A help tip is an ⓘ button that explains; only the buttons that act are counted.
+  expect(within(team).queryAllByRole('button').filter((button) => !(button.getAttribute('aria-label') ?? '').startsWith('About '))).toEqual([]);
 });
 
 test('a burst of Create invite presses sends one invite under one key, and the button waits for it', async () => {

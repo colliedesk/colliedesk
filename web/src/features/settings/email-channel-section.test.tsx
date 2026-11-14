@@ -60,7 +60,7 @@ test('shows the sender name customers see and saves a new one', () => {
   render(<EmailChannelSection settings={connected} timezone="UTC" canManage onSaveSenderName={onSaveSenderName} />);
   const field = screen.getByRole('textbox', { name: 'Sender name' });
   expect(field).toHaveValue('Acme Support');
-  expect(field).toHaveAccessibleDescription(/customers see this name in the from line/i);
+  expect(field).toHaveAccessibleDescription(/customers see it in the from line/i);
   fireEvent.change(field, { target: { value: '  Colliedesk Support ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSaveSenderName).toHaveBeenCalledWith('Colliedesk Support');

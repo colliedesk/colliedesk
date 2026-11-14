@@ -48,43 +48,4 @@ features/kb/translation-messages.ts:translationMessages.languagesDescription	139
 features/kb/translation-messages.ts:translationMessages.primaryHelp	67
 features/kb/translation-messages.ts:translationMessages.translationTrashDescription	64
 features/kb/translation-messages.ts:translationMessages.unlistedHelp	100
-features/settings/agent-tokens-messages.ts:agentTokenMessages.checkIt	123
-features/settings/agent-tokens-messages.ts:agentTokenMessages.claudeCodeAllow	128
-features/settings/agent-tokens-messages.ts:agentTokenMessages.claudeCodeOAuth	85
-features/settings/agent-tokens-messages.ts:agentTokenMessages.claudeCodeSkills	121
-features/settings/agent-tokens-messages.ts:agentTokenMessages.codexReadsEnv	82
-features/settings/agent-tokens-messages.ts:agentTokenMessages.cursorEnv	64
-features/settings/agent-tokens-messages.ts:agentTokenMessages.cursorNoToken	103
-features/settings/agent-tokens-messages.ts:agentTokenMessages.description	128
-features/settings/agent-tokens-messages.ts:agentTokenMessages.desktopToken	65
-features/settings/agent-tokens-messages.ts:agentTokenMessages.followRoleHelp	150
-features/settings/agent-tokens-messages.ts:agentTokenMessages.fullGuide + features/settings/agent-tokens-messages.ts:agentTokenMessages.disconnect + features/settings/agent-tokens-messages.ts:agentTokenMessages.disconnectAfter	76
-features/settings/agent-tokens-messages.ts:agentTokenMessages.lifetime	78
-features/settings/agent-tokens-messages.ts:agentTokenMessages.pluginInstalls	93
-features/settings/agent-tokens-messages.ts:agentTokenMessages.vscodePrompt	65
-features/settings/connected-apps-section.tsx:connectedAppsMessages.description	256
-features/settings/connected-apps-section.tsx:connectedAppsMessages.removingInApp	76
 features/settings/gmail-messages.ts:gmailMessages.gmailGoogleData + features/settings/gmail-messages.ts:gmailMessages.gmailPrivacyPolicy	205
-features/settings/numbers/numbers-messages.ts:numbersMessages.editHelp	135
-features/settings/numbers/numbers-messages.ts:numbersMessages.formatHint	103
-features/settings/numbers/numbers-messages.ts:numbersMessages.lead	206
-features/settings/numbers/numbers-messages.ts:numbersMessages.nameHint	93
-features/settings/numbers/numbers-messages.ts:numbersMessages.startHint	120
-features/settings/roles-messages.ts:roleMessages.onlySystem + features/settings/roles-messages.ts:roleMessages.makeRole	113
-features/settings/saved-reply-messages.ts:savedReplyMessages.savedRepliesDescription	113
-features/settings/saved-reply-messages.ts:savedReplyMessages.savedReplyTrashDescription	95
-features/settings/settings-messages.ts:settingsMessages.addressNameWarning	211
-features/settings/settings-messages.ts:settingsMessages.dnsRecordsHelp	192
-features/settings/settings-messages.ts:settingsMessages.domainVerified + features/settings/email-channel-section.tsx:sharedDomain	67
-features/settings/settings-messages.ts:settingsMessages.exportStarted	100
-features/settings/settings-messages.ts:settingsMessages.forwardingGmail + features/settings/settings-messages.ts:settingsMessages.forwardingOutlook	482
-features/settings/settings-messages.ts:settingsMessages.forwardingHelp	119
-features/settings/settings-messages.ts:settingsMessages.generalDescription	86
-features/settings/settings-messages.ts:settingsMessages.invitesDescription	147
-features/settings/settings-messages.ts:settingsMessages.providerProofHelp	190
-features/settings/settings-messages.ts:settingsMessages.senderNameHelp	127
-features/settings/settings-messages.ts:settingsMessages.serverDetailsHelp	74
-features/settings/settings-messages.ts:settingsMessages.sessionsDescription	96
-features/settings/settings-messages.ts:settingsMessages.teamDescription	104
-features/settings/settings-messages.ts:settingsMessages.webFormDescription	95
-features/settings/settings-messages.ts:settingsMessages.workspaceNameHelp	189
