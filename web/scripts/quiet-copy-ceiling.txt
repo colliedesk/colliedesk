@@ -7,31 +7,6 @@
 # one line of 60 characters or less. The test also pins how many lines the list may hold. When a line gets shorter,
 # the gate asks you to write its new length here; when it gets short enough or goes away, to delete it.
 
-features/auth/oauth-consent-messages.ts:oauthConsentMessages.changes	113
-features/auth/oauth-consent-messages.ts:oauthConsentMessages.otherWorkspaceSelfHost	102
-features/auth/oauth-consent-messages.ts:oauthConsentMessages.unverifiedName	61
-features/auth/signup-messages.ts:signupMessages.signupExplanation	106
-features/autofix/autofix-messages.ts:autofixMessages.cancelIssueHelp + features/autofix/autofix-messages.ts:autofixMessages.cancelPRHelp	223
-features/autofix/autofix-messages.ts:autofixMessages.cancelKeep	64
-features/autofix/autofix-messages.ts:autofixMessages.linkHelp	63
-features/autofix/autofix-messages.ts:autofixMessages.notesLockedHelp	64
-features/autofix/autofix-messages.ts:autofixMessages.retryHelp	104
-features/autofix/autofix-messages.ts:autofixMessages.sendHelp	90
-features/autofix/autofix-messages.ts:autofixMessages.set.checklistLocal	99
-features/autofix/autofix-messages.ts:autofixMessages.set.disconnectAgain	67
-features/autofix/autofix-messages.ts:autofixMessages.set.disconnectRepoHelp	116
-features/autofix/autofix-messages.ts:autofixMessages.set.keyAdvice	186
-features/autofix/autofix-messages.ts:autofixMessages.set.leavingHelp	99
-features/autofix/autofix-messages.ts:autofixMessages.set.leavingNote	93
-features/autofix/autofix-messages.ts:autofixMessages.set.notesHelp	118
-features/autofix/autofix-messages.ts:autofixMessages.set.notesNote	89
-features/autofix/autofix-messages.ts:autofixMessages.untrustedHelp	125
-features/contacts/contact-messages.ts:contactMessages.mergeIntro	95
-features/inbox/message-moves-messages.ts:moveMessages.closeSourceHelp	112
-features/inbox/message-moves-messages.ts:moveMessages.moveHelp	119
-features/inbox/message-moves-messages.ts:moveMessages.otherChannel	99
-features/inbox/message-moves-messages.ts:moveMessages.otherContact	98
-features/inbox/message-moves-messages.ts:moveMessages.searchHelp	83
 features/kb/article-editor.tsx:seoMessages.seoHelp	117
 features/kb/help-center-domain-messages.ts:domainMessages.cutoverHeading + features/kb/help-center-domain-messages.ts:domainMessages.cutover	383
 features/kb/help-center-domain-messages.ts:domainMessages.description	118
@@ -73,12 +48,6 @@ features/kb/translation-messages.ts:translationMessages.languagesDescription	139
 features/kb/translation-messages.ts:translationMessages.primaryHelp	67
 features/kb/translation-messages.ts:translationMessages.translationTrashDescription	64
 features/kb/translation-messages.ts:translationMessages.unlistedHelp	100
-features/onboarding/setup-flow-messages.ts:flowMessages.doneSome	77
-features/onboarding/setup-flow-messages.ts:flowMessages.noMailbox + features/onboarding/setup-flow-messages.ts:flowMessages.setUpEmail	99
-features/review/review-messages.ts:reviewMessages.deciding	67
-features/review/review-messages.ts:reviewMessages.laneBlocked	109
-features/review/review-messages.ts:reviewMessages.noCandidates	64
-features/review/review-messages.ts:reviewMessages.stats + features/review/review-messages.ts:reviewMessages.statsCorrected	71
 features/settings/agent-tokens-messages.ts:agentTokenMessages.checkIt	123
 features/settings/agent-tokens-messages.ts:agentTokenMessages.claudeCodeAllow	128
 features/settings/agent-tokens-messages.ts:agentTokenMessages.claudeCodeOAuth	85
@@ -119,5 +88,3 @@ features/settings/settings-messages.ts:settingsMessages.sessionsDescription	96
 features/settings/settings-messages.ts:settingsMessages.teamDescription	104
 features/settings/settings-messages.ts:settingsMessages.webFormDescription	95
 features/settings/settings-messages.ts:settingsMessages.workspaceNameHelp	189
-features/shell/report-messages.ts:reportMessages.reportFromServer	184
-features/shell/report-messages.ts:reportMessages.reportIntro	62

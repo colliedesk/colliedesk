@@ -154,3 +154,54 @@ describe('the Cursor key while Cursor is off', () => {
     expect(within(card).getByRole('button', { name: 'Replace' })).toBeInTheDocument();
   });
 });
+
+// Each row keeps one short line; the how and why sit in the tip next to it.
+describe('quiet rows', () => {
+  it('asks to tick the private repositories in one line, and keeps why GitHub asks to authorize in a tip', () => {
+    show(settingsOf({ installations: [], repos: [] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect GitHub' }));
+    const dialog = screen.getByRole('dialog', { name: 'On GitHub, choose “Only select repositories”' });
+    expect(dialog).toHaveTextContent('Then tick the private repositories Autofix may use.');
+    expect(dialog).toHaveTextContent('GitHub then asks you to authorize Colliedesk once.');
+    expect(within(dialog).getByRole('button', { name: 'About the GitHub sign-in' })).toHaveAccessibleDescription(
+      'It checks the installation is yours. You can change the list of repositories on GitHub any time.');
+  });
+
+  it('says what disconnecting GitHub brings back in one line', () => {
+    show();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Disconnect' })[0]);
+    expect(screen.getByRole('alertdialog', { name: 'Disconnect GitHub?' })).toHaveTextContent('Connect again later and they come back with their settings.');
+  });
+
+  it('asks before notes go, with what happens to them in a line and the rest in a tip', () => {
+    show(settingsOf({ repos: [repoOf({ include_notes: false })] }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Private notes may be sent' }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('The sender can then tick notes to include.');
+    expect(dialog).toHaveTextContent('Once sent, notes stay in the GitHub issue or at Cursor.');
+    expect(within(dialog).getByRole('button', { name: 'About private notes' })).toHaveAccessibleDescription(
+      'Notes often hold internal details. None is ticked by default, and notes written by an AI agent are never sent.');
+  });
+
+  it('says what disconnecting a repository cancels, and that it can be connected again', () => {
+    show();
+    const row = screen.getByText('northwind/web', { selector: 'b' }).closest('li') as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: 'Disconnect' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Disconnect northwind/web?' });
+    // One sentence, one visible line: it is what the person gives up by pressing Disconnect.
+    expect(dialog.querySelector('[data-quiet="consequence"]')).toHaveTextContent(/^Fixes in progress on it are cancelled\. Its fixes stay listed; connect it again to send new ones\.$/);
+  });
+
+  it('keeps what the vendor checklist ticks mean in one line', () => {
+    show(settingsOf({ connectors: [connectorOf({ enabled: false, consent: null })] }));
+    expect(screen.getAllByText('Colliedesk can’t see these; kept in this browser only.').length).toBeGreaterThan(0);
+  });
+
+  it('says the Cursor key is never shown again, and why a service account key is advised in a tip', () => {
+    show(settingsOf({ connectors: [connectorOf({ kind: 'cursor_api', enabled: false, consent: null, credential: null, last_check: null })] }));
+    const card = screen.getByRole('article', { name: 'Cursor' });
+    expect(card).toHaveTextContent('Once saved, the key is never shown again.');
+    expect(within(card).getByRole('button', { name: 'About Cursor API key' })).toHaveAccessibleDescription(
+      'Use a service account key (Cursor Enterprise, with a spending limit). A personal key can reach every repository its owner can.');
+  });
+});

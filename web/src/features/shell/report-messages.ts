@@ -1,6 +1,6 @@
 // Strings of the Report a problem window. It opens rarely, so they live in its chunk and not in the first bundle.
 export const reportMessages = {
-  reportIntro: 'Tell us what went wrong. Nothing is sent until you press Send.',
+  reportIntro: 'Tell us what went wrong. Nothing is sent until you Send.',
   reportDescription: 'What went wrong?',
   reportScreenshots: 'Screenshots (optional)',
   reportScreenshotsHint: 'PNG, JPEG or WebP, up to 3 files and 5 MB in total.',
@@ -19,7 +19,9 @@ export const reportMessages = {
   reportActions: 'Recent actions',
   reportRequestId: (id: string) => (id ? `request id ${id}` : 'no request id'),
   reportNone: 'None',
-  reportFromServer: 'Added by the server: your agent id, name, email and role; your workspace id, name and plan; the server version; the id of this report. No conversation, contact or message text is sent.',
+  reportFromServer: 'No conversation, contact or message text is sent.',
+  reportServerLabel: 'what the server adds',
+  reportServerAdds: 'Added by the server: your agent id, name, email and role; your workspace id, name and plan; the server version; the id of this report.',
   reportSend: 'Send',
   reportSending: 'Sending…',
   reportCancel: 'Cancel',

@@ -74,12 +74,12 @@ test('an app published by a client ID metadata document names its host; only a k
   api.describeOAuthClient.mockResolvedValue({ ...app, client_id: 'https://evil.example/x', client_host: 'evil.example', name: 'Claude' });
   const { unmount } = show();
   expect(await screen.findByText('Published by evil.example.')).toBeTruthy();
-  expect(screen.getByText('The app named itself; check it is the app you just connected.')).toBeTruthy();
+  expect(screen.getByText('The app named itself. Check it is the one you connected.')).toBeTruthy();
   unmount();
   api.describeOAuthClient.mockResolvedValue({ ...app, client_id: 'https://claude.ai/oauth/claude-code-client-metadata', client_host: 'claude.ai', verified: true });
   show();
   expect(await screen.findByText('Published by claude.ai.')).toBeTruthy();
-  expect(screen.queryByText('The app named itself; check it is the app you just connected.')).toBeNull();
+  expect(screen.queryByText('The app named itself. Check it is the one you connected.')).toBeNull();
 });
 
 // The page's text and its two buttons keep the app's spacing: the layout stylesheet spaces the actions
@@ -106,4 +106,17 @@ test('an app that returns to this computer is warned about; one that returns to 
   show();
   expect(await screen.findByText('After your answer you go back to claude.ai.')).toBeTruthy();
   expect(screen.queryByText(/a program on this computer/)).toBeNull();
+});
+
+test('the app following the roles is said in the open, beside what it can do, before anyone allows it', async () => {
+  show();
+  expect(await screen.findByText('It works in Acme Support as Ada, with everything you can do there now.')).toBeVisible();
+  expect(screen.getByText('If your roles change, it follows them at once.')).toBeVisible();
+  expect(screen.getByText('Disconnect it any time in Settings → Connected AI apps.')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /About/ })).toBeNull();
+});
+
+test('on a self-hosted server another workspace is one short line', async () => {
+  show();
+  expect(await screen.findByText('Sign in to that workspace here, then connect from the app.')).toBeTruthy();
 });

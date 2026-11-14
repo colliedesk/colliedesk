@@ -24,7 +24,8 @@ test('the page names itself, counts what waits and switches lists', () => {
 
 test('cards that wait for AI are counted under Waiting, not listed', () => {
   const { rerender } = render(<ReviewPage {...props({ decidingCount: 2 })} />);
-  expect(screen.getByText('2 more cards wait for AI; what it does not decide in time waits here.')).toBeInTheDocument();
+  expect(screen.getByText('2 more cards wait for AI.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About cards waiting for AI' })).toHaveAccessibleDescription('What AI does not decide in time waits here.');
   rerender(<ReviewPage {...props({ decidingCount: 0 })} />);
   expect(screen.queryByText(/wait for AI/)).not.toBeInTheDocument();
 });
@@ -57,8 +58,10 @@ test('a card that waits behind another of its customer comes right under it', ()
 test('the counts of the last 7 days, AI corrections only when AI decided, and nothing when they failed', () => {
   const stats = { days: 7, gatherings: 9, by_state: { created: 5, attached: 1, ignored: 3 }, decided_by: { ai: 4, agent: 5 }, fallback: 0, ai_decisions: 4, ai_corrected: 1 };
   const { rerender } = render(<ReviewPage {...props({ stats })} />);
-  expect(screen.getByText('Last 7 days: 9 cards, 6 became conversations')).toBeInTheDocument();
-  expect(screen.getByText('People changed 1 of 4 AI decisions')).toBeInTheDocument();
+  expect(screen.getByText('Last 7 days: 9 cards, 6 conversations')).toBeInTheDocument();
+  // The number stays on the line; only what it counts is in the tip.
+  expect(screen.getByText('1 of 4 AI decisions changed')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About AI decisions changed' })).toHaveAccessibleDescription('AI decisions a person changed afterwards, out of all AI decisions in the last 7 days.');
   rerender(<ReviewPage {...props({ stats: { ...stats, gatherings: 0, by_state: {}, ai_decisions: 0, ai_corrected: 0 } })} />);
   expect(screen.getByText('Last 7 days: no cards yet')).toBeInTheDocument();
   expect(screen.queryByText(/AI decision/)).not.toBeInTheDocument();
@@ -92,5 +95,5 @@ test('more cards load on request', () => {
 
 test('one conversation reads in the singular', () => {
   render(<ReviewPage {...props({ stats: { days: 7, gatherings: 1, by_state: { created: 1 }, decided_by: {}, fallback: 0, ai_decisions: 0, ai_corrected: 0 } })} />);
-  expect(screen.getByText('Last 7 days: 1 card, 1 became a conversation')).toBeInTheDocument();
+  expect(screen.getByText('Last 7 days: 1 card, 1 conversation')).toBeInTheDocument();
 });

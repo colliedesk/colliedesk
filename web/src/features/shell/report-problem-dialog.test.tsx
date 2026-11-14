@@ -194,3 +194,11 @@ test('a click on the backdrop keeps the focus in the dialog, so Escape still clo
   fireEvent.keyDown(dialog, { key: 'Escape' });
   expect(onClose).toHaveBeenCalled();
 });
+
+test('the dialog promises in one line that nothing is sent before Send, and the preview says no conversation text goes', () => {
+  render(<ReportProblemDialog appVersion="0.0.41" onClose={() => undefined} />);
+  expect(screen.getByText('Tell us what went wrong. Nothing is sent until you Send.')).toBeInTheDocument();
+  expect(screen.getByText('No conversation, contact or message text is sent.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About what the server adds' })).toHaveAccessibleDescription(
+    'Added by the server: your agent id, name, email and role; your workspace id, name and plan; the server version; the id of this report.');
+});

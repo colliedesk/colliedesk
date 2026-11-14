@@ -218,6 +218,7 @@ test('the summary lists every step with its state, links back to each unfinished
     expect.stringMatching(/Invite your team.*To do/), expect.stringMatching(/Answer your first email.*To do/),
   ]);
   expect(within(rows[0]).queryByRole('link')).not.toBeInTheDocument();
+  expect(screen.getByText('Finish the rest any time; the setup guide keeps track.')).toBeInTheDocument();
   expect(within(rows[1]).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', '/setup/import');
   expect(within(rows[2]).getByRole('link', { name: 'Invite your team' })).toHaveAttribute('href', '/setup/invite');
   fireEvent.click(screen.getByRole('link', { name: 'Open the inbox' }));
@@ -270,6 +271,14 @@ test('the last step leads to the inbox, where imported conversations wait to be 
   open('/setup/first_reply');
   await title('Answer your first email');
   expect(await screen.findByRole('link', { name: 'Open the inbox' })).toHaveAttribute('href', '/');
+});
+
+test('with no mailbox the last step says in one line how conversations arrive and where to set up email', async () => {
+  serve({ setup: progress({ import: 'done' }) });
+  open('/setup/first_reply');
+  await title('Answer your first email');
+  expect(await screen.findByText('Conversations arrive by email or import.')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Set up email first' })).toHaveAttribute('href', '/setup/email');
 });
 
 test('an address under /setup that names no screen is the not-found page of every page, with the rail and the workspace', async () => {
