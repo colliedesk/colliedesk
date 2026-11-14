@@ -41,6 +41,7 @@ export function RedeemPage({
         <p className="signin-status">
           <a href={messages.gaGuaranteesURL} target="_blank" rel="noreferrer">{messages.gaGuarantees}</a>
           {hostedCloud && <>{' · '}<a href={messages.statusURL} target="_blank" rel="noreferrer">{messages.serviceStatus}</a></>}
+          {signupEnabled && <>{' · '}<a href={messages.pricingURL} target="_blank" rel="noreferrer">{messages.pricingLink}</a></>}
         </p>
         <p className="signin-footnote">{messages.signInFootnote}</p>
       </div>
@@ -68,8 +69,7 @@ export function RedeemPage({
           {/* Where a visitor can start a workspace, the page says what they agree to and links the prices. */}
           {signupEnabled && <p className="muted-copy signin-consent">{messages.consentBefore}
             <a href={messages.termsURL} target="_blank" rel="noreferrer">{messages.consentTerms}</a>{messages.consentAnd}
-            <a href={messages.privacyURL} target="_blank" rel="noreferrer">{messages.consentPrivacy}</a>.{' '}{messages.consentSee}
-            <a href={messages.pricingURL} target="_blank" rel="noreferrer">{messages.consentPricing}</a>.</p>}
+            <a href={messages.privacyURL} target="_blank" rel="noreferrer">{messages.consentPrivacy}</a>.</p>}
         </div>}
         {failed && workspaces.length === 0 && <p role="alert" className="error-copy">
           {token ? (planLimited ? messages.linkPlanLimited : messages.invalidLink) : messages.cloudSignInFailed}
