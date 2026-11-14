@@ -60,7 +60,10 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
   const on = settings.data.enabled;
   return <>
     <p role="status" className="saved-state" data-on={on ? 'true' : 'false'}>{on ? kbMessages.helpCenterOn : kbMessages.helpCenterOff}</p>
-    <p className="muted-copy">{kbMessages.helpCenterAddress} <a href={settings.data.url} target="_blank" rel="noopener noreferrer">{settings.data.url}</a></p>
+    {/* Off, the address answers like one that does not exist, so it is not a link until the help center is on. */}
+    <p className="muted-copy">{kbMessages.helpCenterAddress} {on
+      ? <a href={settings.data.url} target="_blank" rel="noopener noreferrer">{settings.data.url}</a>
+      : <>{settings.data.url} {kbMessages.turnOnToOpen}.</>}</p>
     {canManage
       ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate({ enabled, title: title.trim() }); }}>
           <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{kbMessages.helpCenterEnable}</span></label>

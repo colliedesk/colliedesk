@@ -507,8 +507,11 @@ in **Knowledge base → Settings** (see [Help center settings](#help-center-sett
 
 ### Its address
 
-**Knowledge base → Settings** shows the address as a link, even while the help center is off; the API
-(`GET /api/v1/help-center`) and `colliedesk_help_center_get` give it in `url`.
+**Knowledge base → Settings** shows the address. While the help center is on it is a link; while it is
+off it is plain text followed by *Turn the help center on to open its public page.*, because an off
+help center answers like an address that does not exist. To see the pages before publishing, use the
+preview under **Brand**. The API (`GET /api/v1/help-center`) and `colliedesk_help_center_get` give
+the address in `url`, on or off.
 
 - **Colliedesk Cloud:** `/help` on your workspace's own address, `https://<workspace address name>.colliedesk.com/help`.
   The rest of that address is your team's desk ([your workspace's address](workspace.md#the-workspace-address)).
@@ -747,6 +750,10 @@ Then press **Verify** in Search Console or Bing.
   this.
 - A **locked** workspace (trial over, nothing paid) has no help center: its addresses say "This page
   does not exist", like a help center that is off. Paying brings it back at once.
+- An address that is no open help center (unknown, off, locked or mistyped) gets one `404` page, the
+  same for every cause, so it tells a stranger nothing the address does not: "This help center is not
+  published, or the page does not exist", and that an admin publishes it in **Knowledge base →
+  Settings**.
 - Browsers may keep a page but check with the server before showing it again, so an article you
   unpublish disappears on the next visit.
 

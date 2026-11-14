@@ -31,12 +31,32 @@ test('an agent sees whether it is on but cannot change it', async () => {
   expect(screen.getByText('Only admins can turn the help center on or off.')).toBeInTheDocument();
 });
 
-test('everyone sees the public address as a link, also while the help center is off', async () => {
-  serve({ 'GET /api/v1/help-center': () => json(200, off) });
+test('everyone sees the public address as a link while the help center is on', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, { ...off, enabled: true }) });
   open(false);
   const link = await screen.findByRole('link', { name: 'https://desk.example.com/help/acme' });
   expect(link).toHaveAttribute('href', 'https://desk.example.com/help/acme');
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+});
+
+// Off, the address answers like an unknown one (a 404 that says to check for typing mistakes), so the card
+// must not send anyone there: it names the address and says it opens once the help center is on.
+test.each([['an admin', true], ['an agent', false]])('while the help center is off, %s sees the address as text that says it opens once it is on', async (_who, canManage) => {
+  serve({ 'GET /api/v1/help-center': () => json(200, off) });
+  open(canManage);
+  const address = await screen.findByText(/^Address:/);
+  expect(address).toHaveTextContent('Address: https://desk.example.com/help/acme Turn the help center on to open its public page.');
+  expect(screen.queryByRole('link')).not.toBeInTheDocument();
+});
+
+test('an admin who saves the help center on gets the address as a link right away', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, off), 'PUT /api/v1/help-center': (call) => json(200, { ...off, ...(call.body as object) }) });
+  open(true);
+  await screen.findByText(/^Address:/);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Publish the help center' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save help center' }));
+  expect(await screen.findByRole('link', { name: 'https://desk.example.com/help/acme' })).toHaveAttribute('href', 'https://desk.example.com/help/acme');
+  expect(screen.queryByText(/Turn the help center on to open its public page/)).not.toBeInTheDocument();
 });
 
 test('the help center settings opened at #help-center-heading (the reply box links there) scroll to the card once it is there', async () => {
