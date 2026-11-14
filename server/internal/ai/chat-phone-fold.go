@@ -15,9 +15,12 @@ import (
 // for the answer and for the articles alike, so a number the articles hold in one form is known in any
 // other and a made-up number is found however it is written.
 
-// foldPhones returns text with every decimal digit as its ASCII digit, every space as ' ', every dash
-// as '-', middle dots as '.', the compatibility forms of + ( ) . as those, and format characters (zero
-// width space, word joiner, soft hyphen) dropped. Text of ASCII only is returned as it is.
+// foldPhones returns text with every decimal digit as its ASCII digit, every digit-like symbol
+// (superscript, subscript, circled, parenthesized) as its digit, every space as ' ', every dash as '-',
+// middle dots and the Arabic decimal and thousands separators as '.', the compatibility forms of
+// + ( ) . as those, and format characters (zero width space, word joiner, soft hyphen) and combining
+// marks (an underline, a keycap and its variation selector) dropped. Text of ASCII only is returned as
+// it is. The folded text is only read for numbers, never shown, so dropping an accent mark is harmless.
 func foldPhones(text string) string {
 	ascii := true
 	for i := 0; i < len(text); i++ {
@@ -49,11 +52,13 @@ func foldPhoneRune(r rune) rune {
 		return digitValue(r)
 	case unicode.IsSpace(r):
 		return ' '
-	case unicode.Is(unicode.Cf, r):
+	case unicode.In(r, unicode.Cf, unicode.Mn, unicode.Me):
 		return -1
+	case unicode.Is(unicode.No, r):
+		return digitLikeValue(r)
 	case unicode.Is(unicode.Pd, r) || r == '−':
 		return '-'
-	case r == '·' || r == '・':
+	case r == '·' || r == '・' || r == '٫' || r == '٬':
 		return '.'
 	case unicode.In(r, unicode.Po, unicode.Ps, unicode.Pe, unicode.Sm):
 		// Fullwidth and small forms: NFKC makes '＋' '+', '（' '(' and '．' '.'.
@@ -73,6 +78,29 @@ func digitValue(r rune) rune {
 		return '0' + (r-rune(nd32[at].Lo))%10
 	}
 	return r
+}
+
+// digitLikeValue is the ASCII digit of a symbol that shows one digit (Unicode No with a digit value:
+// ² ₃ ④ ⑷ ⒌ ⓿ ❶ ➀ ➊ 🄁), or r itself for any other number such as ½ or ⑩. Old scripts' numerals
+// with no zero (Ethiopic, Brahmi) are left as they are: no phone number is written in them.
+func digitLikeValue(r rune) rune {
+	for _, run := range digitLikeRuns {
+		if r >= run.lo && r <= run.hi {
+			return run.first + r - run.lo
+		}
+	}
+	return r
+}
+
+// digitLikeRuns are runs of No symbols whose digit values count up from first.
+var digitLikeRuns = []struct{ lo, hi, first rune }{
+	{'²', '³', '2'}, {'¹', '¹', '1'},
+	{'⁰', '⁰', '0'}, {'⁴', '⁹', '4'}, // superscript
+	{'₀', '₉', '0'}, // subscript
+	{'①', '⑨', '1'}, {'⑴', '⑼', '1'}, {'⒈', '⒐', '1'}, {'⓪', '⓪', '0'},
+	{'⓵', '⓽', '1'}, {'⓿', '⓿', '0'}, // circled, parenthesized, full stop, double and negative circled
+	{'❶', '❾', '1'}, {'➀', '➈', '1'}, {'➊', '➒', '1'}, // dingbats
+	{'🄀', '🄀', '0'}, {'🄁', '🄊', '0'}, // digit full stop, digit comma
 }
 
 // nd32 is unicode.Nd as one sorted list of 32-bit ranges.

@@ -102,6 +102,9 @@ func earlyCut(buffer string) int {
 var (
 	chatEmail = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`)
 	chatPhone = regexp.MustCompile(`\+?\(?\d[\d\s().-]{4,}\d`)
+	// chatRange is a range or a date written with dashes (after foldPhones), not a phone number: two
+	// groups of up to four digits ("2024–2026", "100-500") or a year, month and day ("2026-11-15").
+	chatRange = regexp.MustCompile(`^\(?(?:\d{1,4}-\d{1,4}|\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))$`)
 	// chatLink: a scheme, www., a domain with a path, or a bare lower-case domain under any top-level
 	// domain of letters (acme-login.xyz, bit.ly). A capitalised word after a missing space ("Save.Then")
 	// is no domain, and a file name (invoice.pdf) is left to chatFileName.
@@ -200,7 +203,7 @@ func (f *chatFilter) check(sentence string) (string, bool, []string) {
 	}
 	for _, phone := range chatPhone.FindAllString(foldPhones(sentence), -1) {
 		digits := onlyDigits(phone)
-		if len(digits) < 6 {
+		if len(digits) < 6 || chatRange.MatchString(phone) {
 			continue
 		}
 		if !slices.ContainsFunc(f.knownDigits(), func(known string) bool { return strings.Contains(known, digits) }) {

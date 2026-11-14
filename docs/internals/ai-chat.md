@@ -110,10 +110,14 @@ leaves still gets the answer stored and metered, and reads it back with `GET …
 - **Sentences and the contact filter** (`chat-filter.go`): text is sent at a sentence's end, or early
   at 200 characters or 1.5 s, at the last space that does not split a run of number groups (`+84 912
   345` waits for `678`). An email address, a run of 6 or more digits (compared digits only, so
-  `10.000.000` and `10,000,000` are the same; any script's decimal digits count as their ASCII digit
-  and any Unicode space, dash, dot or invisible format character between groups as a separator, in the
-  answer and the articles alike, so `０９１２–３４５–６７８` and `٠٩١٢ ٣٤٥ ٦٧٨` are `0912345678`,
-  `chat-phone-fold.go`) or a link (scheme, `www.`, a domain with a path, or a
+  `10.000.000` and `10,000,000` are the same; any script's decimal digits and the symbols that show
+  one digit (superscript, subscript, circled, parenthesized, `0️⃣` keycaps) count as their ASCII digit,
+  combining marks on a digit are ignored, and any Unicode space, dash, dot, Arabic separator (`٫`
+  `٬`) or invisible format character between groups is a separator, in the answer and the articles
+  alike, so `０９１２–３４５–６７８`, `٠٩١٢٬٣٤٥٬٦٧٨` and `⁰⁹¹² ³⁴⁵ ⁶⁷⁸` are `0912345678`,
+  `chat-phone-fold.go`; a range or a date written with dashes and no spaces is not a number:
+  two groups of up to four digits, `2024–2026` or `100-500`, or a year, month and day, `2026-11-15`,
+  `chatRange`, while `0987–654–321` or `12345-6789` still are) or a link (scheme, `www.`, a domain with a path, or a
   bare lower-case domain under any top-level domain of letters, not a file name such as `invoice.pdf`; compared without scheme and `www.`, a translated `<placeholder>` keeps the
   part before it) that the articles the AI read do not hold replaces its whole sentence with
   `[contact details hidden — not in the articles]`. The 20 answers of the eval keep every word
