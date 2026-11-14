@@ -7,6 +7,8 @@
 -- Input kinds: column (table, columns), rows (table, count, md5), owner (table, workspace, count) are a
 -- previous snapshot; allow (table, column) is a declared change; file (storage key, sha256, size) is
 -- every file in the attachments directory now; nofiles (no columns) skips the file check.
+-- A declared change with column * also lets the table gain rows (a migration queueing work); a table
+-- that keeps its name never passes with fewer rows.
 --
 -- A table's checksum is the md5 of its rows as text, sorted, over the columns of the snapshot it is
 -- compared with, so a column a migration adds does not count and a dropped one fails.
@@ -97,7 +99,9 @@ BEGIN
                 IF NOT EXISTS (SELECT 1 FROM input i WHERE i.kind = allow_kind AND i.a = expected.a AND i.b = '*') THEN
                     INSERT INTO problems VALUES (format('%s: table is gone (had %s rows)', expected.a, expected.b));
                 END IF;
-            ELSIF n <> expected.b::bigint THEN
+            ELSIF n <> expected.b::bigint
+                  -- A table declared with * may gain rows (a migration queueing work), never lose one.
+                  AND NOT (n > expected.b::bigint AND EXISTS (SELECT 1 FROM input i WHERE i.kind = allow_kind AND i.a = expected.a AND i.b = '*')) THEN
                 INSERT INTO problems VALUES (format('%s: %s rows, had %s', expected.a, n, expected.b));
             ELSIF NOT EXISTS (SELECT 1 FROM input i WHERE i.kind = allow_kind AND i.a = expected.a) THEN
                 IF sum <> expected.c THEN
