@@ -50,6 +50,10 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 		if recorded.RowsAffected() == 0 {
 			return SubscriptionDuplicate, nil
 		}
+		before, err := subscriptionStateTx(ctx, tx, workspaceID, incoming.SubscriptionID)
+		if err != nil {
+			return "", err
+		}
 		written, err := tx.Exec(ctx, `INSERT INTO workspace_billing(workspace_id,`+subscriptionColumns+`) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 			ON CONFLICT(workspace_id,polar_subscription_id) DO UPDATE SET plan=EXCLUDED.plan,
 				polar_customer_id=EXCLUDED.polar_customer_id,status=EXCLUDED.status,current_period_end=EXCLUDED.current_period_end,
@@ -63,6 +67,9 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 		}
 		if written.RowsAffected() == 0 {
 			return SubscriptionStale, nil
+		}
+		if err := recordBillingMilestones(ctx, tx, workspaceID, before, incoming); err != nil {
+			return "", err
 		}
 		return SubscriptionApplied, nil
 	})

@@ -14,6 +14,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/intake/rules"
+	"github.com/colliedesk/colliedesk/server/internal/milestones"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -798,6 +799,9 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	}
 	messageID, err := insertChannelMessage(ctx, tx, channel, conversationID, externalID, replyKind, in)
 	if err != nil {
+		return result, err
+	}
+	if err := milestones.RecordCustomerMessage(ctx, tx, workspaceID, messageID); err != nil {
 		return result, err
 	}
 	// A key names the message that recorded it, so moving the message moves the key.

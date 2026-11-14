@@ -132,13 +132,15 @@ SQL
 
 echo "Copying workspace $SLUG ($wid)..."
 # Every table with a workspace_id column, and the workspace row itself, with their columns. Generated
-# columns (kb_articles.search) cannot be copied in; the database computes them again.
+# columns (kb_articles.search) cannot be copied in; the database computes them again. The lifecycle log
+# (workspace_events) is append-only and outlives its workspace: the live one keeps every milestone, also
+# those after the backup, so it is neither emptied nor copied.
 psql_super -At -F ' ' -d "$scratch" >"$work/plan" <<'SQL'
 SELECT c.relname, string_agg(quote_ident(a.attname), ',' ORDER BY a.attnum)
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
 JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped AND a.attgenerated = ''
-WHERE c.relkind IN ('r', 'p')
+WHERE c.relkind IN ('r', 'p') AND c.relname <> 'workspace_events'
   AND (c.relname = 'workspaces' OR EXISTS (
       SELECT 1 FROM pg_attribute w WHERE w.attrelid = c.oid AND w.attname = 'workspace_id' AND NOT w.attisdropped))
 GROUP BY c.relname

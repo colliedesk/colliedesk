@@ -262,6 +262,19 @@ same data the page's read (`store.ReadResults`: the state row and one snapshot o
 conversations of the 30-day volume, a page of 50) to the inbox's 100 ms p95 (5 ms locally); one seed
 serves all three. Do not widen any of them.
 
+## Milestone checks on the message path
+
+Every stored inbound channel message runs `milestones.RecordCustomerMessage` and every stored reply runs
+`milestones.RecordReply` (`docs/internals/workspace-milestones.md`), inside the transaction that stores the
+message. Each is one statement. The usual case is a workspace that has recorded the milestone already: the
+statement finds it through the unique index `workspace_events_first` (workspace, kind), and then writes and
+reads nothing else. The rules (live sender, channel, queued delivery) are evaluated only for the one message,
+by its id, and only when the milestone is missing, so the cost does not grow with the workspace's messages.
+`TestMilestoneHotPathLatencyBudget` holds each check to 5 ms p95 on a workspace with 5,000 live inbound
+messages, 5,000 delivered replies and 500 conversations, next to a second workspace of the same size. Measured
+on the dev host: 0.09 ms for each, about 0.1% of the 100 ms request budgets they run in. Do not widen the 5 ms.
+A workspace's first customer message and first reply each write one row, once.
+
 ## Conversation presence budget
 
 `TestConversationPresenceLatencyBudget` holds the store call behind

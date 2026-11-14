@@ -63,9 +63,10 @@ func (s *Service) Handoff(ctx context.Context, principal Principal) (string, err
 }
 
 type createdLink struct {
-	Token string
-	URL   string
-	ID    string
+	Token     string
+	URL       string
+	ID        string
+	CreatedAt time.Time
 }
 
 func (s *Service) createLinkTx(ctx context.Context, tx pgx.Tx, workspaceID, agentID, email, kind, ceiling string, creatorID *string) (createdLink, error) {
@@ -82,13 +83,14 @@ func (s *Service) createLinkFor(ctx context.Context, tx pgx.Tx, workspaceID, age
 		nullableAgent = agentID
 	}
 	var linkID, slug string
+	var createdAt time.Time
 	err = tx.QueryRow(ctx, `INSERT INTO pairing_links(workspace_id,agent_id,email,kind,role_ceiling,token_hash,created_by_agent_id,expires_at)
-		VALUES($1,$2,lower($3),$4,$5,$6,$7,$8) RETURNING id::text, (SELECT slug FROM workspaces WHERE id=$1)`,
-		workspaceID, nullableAgent, email, kind, ceiling, hash, creatorID, s.now().Add(lifetime)).Scan(&linkID, &slug)
+		VALUES($1,$2,lower($3),$4,$5,$6,$7,$8) RETURNING id::text, (SELECT slug FROM workspaces WHERE id=$1), created_at`,
+		workspaceID, nullableAgent, email, kind, ceiling, hash, creatorID, s.now().Add(lifetime)).Scan(&linkID, &slug, &createdAt)
 	if err != nil {
 		return createdLink{}, fmt.Errorf("create %s link: %w", kind, err)
 	}
-	return createdLink{Token: token, URL: s.redeemURL(token, slug), ID: linkID}, nil
+	return createdLink{Token: token, URL: s.redeemURL(token, slug), ID: linkID, CreatedAt: createdAt}, nil
 }
 
 // linkOf finds the workspace and kind of the one-time link with token. A link's workspace is unknown

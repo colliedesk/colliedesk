@@ -56,6 +56,10 @@ type SignUp struct {
 	Onboarding domain.Onboarding
 	// Attribution is the post or ad the sign-up came from (domain.ParseAttribution); stored with the answers.
 	Attribution domain.Attribution
+	// Internal says the server counts this sign-up as the team's own (INTERNAL_SIGNUP_EMAILS or a network
+	// of INTERNAL_SIGNUP_NETWORKS). The workspace's signed_up milestone keeps it, so a report can leave
+	// the workspace out after the workspace and its trial record are deleted.
+	Internal bool
 }
 
 // SignUpCloud creates a trial workspace with Email as its admin. In one privileged transaction it
@@ -99,7 +103,7 @@ func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace,
 		if err := checkSignupAllowed(ctx, tx, emailHash, ipHash, now); err != nil {
 			return err
 		}
-		if workspace, err = s.createUniqueWorkspaceTx(ctx, tx, name, in.Email); err != nil {
+		if workspace, err = s.createUniqueWorkspaceTx(ctx, tx, name, in.Email, in.Internal); err != nil {
 			return err
 		}
 		if err := connectHostedEmailTx(ctx, tx, workspace, in.HostedMailDomain); err != nil {
@@ -189,7 +193,7 @@ func (s *Service) ClearSignupAddresses(ctx context.Context) (int64, error) {
 // createUniqueWorkspaceTx tries the plain slug of the name, then twice with a random suffix, and
 // gives up with ErrSlugUnavailable. A slug that cannot be a mail subdomain (reserved, too long
 // after cleaning) goes straight to the suffixed form.
-func (s *Service) createUniqueWorkspaceTx(ctx context.Context, tx pgx.Tx, name, adminEmail string) (domain.Workspace, error) {
+func (s *Service) createUniqueWorkspaceTx(ctx context.Context, tx pgx.Tx, name, adminEmail string, internal bool) (domain.Workspace, error) {
 	base := slugify(name)
 	if len(base) > maxSlugBase {
 		base = strings.Trim(base[:maxSlugBase], "-")
@@ -215,7 +219,7 @@ func (s *Service) createUniqueWorkspaceTx(ctx context.Context, tx pgx.Tx, name, 
 		candidates = append(candidates, candidate)
 	}
 	for _, slug := range candidates {
-		workspace, _, created, err := s.insertWorkspaceTx(ctx, tx, slug, name, adminEmail)
+		workspace, _, created, err := s.insertWorkspaceTx(ctx, tx, slug, name, adminEmail, map[string]any{"internal": internal})
 		if err != nil {
 			return domain.Workspace{}, err
 		}

@@ -73,7 +73,8 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	ip := clientIP(request, a.config.TrustedProxies)
-	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.hostedMailDomain(), Onboarding: onboarding, Attribution: attribution})
+	internal := a.hot().InternalSignups.Match(verified, ip)
+	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Internal: internal, Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.hostedMailDomain(), Onboarding: onboarding, Attribution: attribution})
 	switch {
 	case errors.Is(err, auth.ErrInvalidEmail):
 		writeError(response, http.StatusBadRequest, "invalid_request", "The identity provider returned an email address this service cannot use.")
@@ -116,7 +117,7 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	if visitor := telemetry.WebsiteVisitorID(request); visitor != "" {
 		properties["website_visitor_id"] = visitor
 	}
-	if a.hot().InternalSignups.Match(verified, ip) {
+	if internal {
 		properties["internal"] = true
 	}
 	a.recordFunnel("trial_started", workspace.ID, properties)

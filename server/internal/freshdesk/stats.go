@@ -80,3 +80,16 @@ func (r *run) markResults(ctx context.Context, status, cause string) error {
 	}
 	return tx.Commit(ctx)
 }
+
+// recordFinished writes the import_finished milestone of an OK full run.
+func (r *run) recordFinished(ctx context.Context) error {
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := results.RecordImportFinished(ctx, tx, r.workspaceID, r.ledger.source, r.now()); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}

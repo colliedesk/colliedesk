@@ -5,8 +5,10 @@ package results
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/milestones"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -37,6 +39,15 @@ func MarkImportFinished(ctx context.Context, tx pgx.Tx, workspaceID, source, sta
 		return fmt.Errorf("mark the results baseline: %w", err)
 	}
 	return nil
+}
+
+// RecordImportFinished records the workspace's import_finished milestone for a full run that finished OK, once:
+// the first OK finish wins. It is separate from MarkImportFinished so that a caller writes it in the
+// transaction that ends its own record of the run (the in-app job), and a refused milestone never changes what
+// the run did or how it ended for the person who started it.
+func RecordImportFinished(ctx context.Context, tx pgx.Tx, workspaceID, source string, finishedAt time.Time) error {
+	importer, _, _ := strings.Cut(source, ":")
+	return milestones.Record(ctx, tx, workspaceID, milestones.ImportFinished, finishedAt, map[string]any{"importer": importer})
 }
 
 // MarkImportUndone forgets the baseline when its import is undone, in the undo's transaction: the
