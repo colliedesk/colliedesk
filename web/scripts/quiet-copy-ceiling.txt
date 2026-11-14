@@ -140,22 +140,6 @@ features/settings/agent-tokens-messages.ts:agentTokenMessages.fullGuide + featur
 features/settings/agent-tokens-messages.ts:agentTokenMessages.lifetime	78
 features/settings/agent-tokens-messages.ts:agentTokenMessages.pluginInstalls	93
 features/settings/agent-tokens-messages.ts:agentTokenMessages.vscodePrompt	65
-features/settings/ai-chat-messages.ts:aiChatMessages.capHint	110
-features/settings/ai-chat-messages.ts:aiChatMessages.deleteBody	78
-features/settings/ai-chat-messages.ts:aiChatMessages.historyCut	62
-features/settings/ai-chat-messages.ts:aiChatMessages.noChats	83
-features/settings/ai-chat-messages.ts:aiChatMessages.tryHelp	105
-features/settings/ai-messages.ts:aiMessages.autoConfirmLead	76
-features/settings/ai-messages.ts:aiMessages.autoDraftConfirmLead	94
-features/settings/ai-messages.ts:aiMessages.automaticHelp	126
-features/settings/ai-messages.ts:aiMessages.baseURLHelp	80
-features/settings/ai-messages.ts:aiMessages.draftsPerDayHelp	127
-features/settings/ai-messages.ts:aiMessages.historyHelp	105
-features/settings/ai-messages.ts:aiMessages.modelsBeforeLoadAddress	79
-features/settings/ai-messages.ts:aiMessages.modelsHelp	76
-features/settings/ai-messages.ts:aiMessages.modelsPicked	94
-features/settings/ai-messages.ts:aiMessages.rotateHelp	63
-features/settings/ai-messages.ts:aiMessages.usageHelp	133
 features/settings/channel-setup-messages.ts:channelSetupMessages.emailChannelDescription	271
 features/settings/channel-setup-messages.ts:channelSetupMessages.inboundSecretMissing	172
 features/settings/channel-setup-messages.ts:channelSetupMessages.webFormOriginsHelp	162
@@ -178,16 +162,6 @@ features/settings/gmail-connection.tsx:returnText + features/settings/microsoft-
 features/settings/gmail-messages.ts:gmailMessages.gmailGoogleData + features/settings/gmail-messages.ts:gmailMessages.gmailPrivacyPolicy	205
 features/settings/gmail-messages.ts:gmailMessages.gmailOtherAddress	84
 features/settings/gmail-messages.ts:gmailMessages.mailboxDescription	213
-features/settings/import-messages.ts:importMessages.adminsOnly	81
-features/settings/import-messages.ts:importMessages.apiCalls + features/settings/import-messages.ts:importMessages.rateLimitWait	200
-features/settings/import-messages.ts:importMessages.closeNote	69
-features/settings/import-messages.ts:importMessages.connectHelp	107
-features/settings/import-messages.ts:importMessages.inviteNote	72
-features/settings/import-messages.ts:importMessages.keyHelp	137
-features/settings/import-messages.ts:importMessages.keyHelpAgain	86
-features/settings/import-messages.ts:importMessages.oldHelpCenterHelp	143
-features/settings/import-messages.ts:importMessages.peopleHelp	191
-features/settings/import-messages.ts:importMessages.ticketsNote	106
 features/settings/inbound-url-guide.tsx:text.technical + features/settings/inbound-url-guide.tsx:text.guide	293
 features/settings/inbound-url-guide.tsx:text.what	210
 features/settings/microsoft-messages.ts:microsoftMessages.microsoftAdminApprovalBody	187

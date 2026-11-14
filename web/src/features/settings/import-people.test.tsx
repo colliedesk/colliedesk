@@ -83,6 +83,10 @@ test('each invite made on the page keeps its own link, and a refused copy says s
 
 test('the list says that inviting sends an email and that agents link by themselves on joining', () => {
   show([{ external_id: '2', name: 'Bob Old', email: 'bob@old.example', active: true, linked_agent_id: null, linked_by_email: false, pending: false, updated_at: '2026-10-22T08:00:00Z' }]);
-  expect(screen.getByText(/Invite by email sends a real invitation from Colliedesk/)).toBeInTheDocument();
+  expect(screen.getByText('Invite by email sends a real invitation to that address.')).toBeVisible();
   expect(screen.getByText(/links by itself when they join Colliedesk with the same email as in Freshdesk/)).toBeInTheDocument();
+  // The heading keeps one line; how linking works is the heading's tip.
+  expect(screen.getByText('Link each to a Colliedesk agent.')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'About Freshdesk agents' })).toHaveAccessibleDescription(
+    /Their imported replies and the tickets they held then show that agent\. An agent links by itself when they join Colliedesk with the same email as in Freshdesk\./);
 });

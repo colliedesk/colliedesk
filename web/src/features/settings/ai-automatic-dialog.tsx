@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import type { AISettings } from '../../api/ai';
 import { Field } from '../../ui/dialog';
+import { TipField } from './tip-field';
 import { aiMessages as m } from './ai-messages';
 import { AIDialog as Dialog } from './ai-level-dialogs';
 import type { AIPageProps } from './ai-page-props';
@@ -35,11 +36,11 @@ export function AutomaticDialog({ settings, onClose, onSave }: { settings: AISet
       footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={busy}>{m.save}</button></>}>
       {error && <p role="alert" className="error-copy">{error}</p>}
       <div className="ai-two">
-        <Field label={m.perDay} id={`${id}-day`} error={bad.day}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={perDay} onChange={(event) => setPerDay(event.target.value)} autoFocus />}</Field>
+        <TipField label={m.perDay} tip={m.automaticWhy} id={`${id}-day`} error={bad.day}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={perDay} onChange={(event) => setPerDay(event.target.value)} autoFocus />}</TipField>
         <Field label={m.perMinute} id={`${id}-minute`} error={bad.minute}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={1000} value={perMinute} onChange={(event) => setPerMinute(event.target.value)} />}</Field>
       </div>
-      <Field label={m.draftsPerDay} id={`${id}-drafts`} help={m.draftsPerDayHelp} error={bad.drafts}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={draftsPerDay}
-        onChange={(event) => setDraftsPerDay(event.target.value)} />}</Field>
+      <TipField label={m.draftsPerDay} tip={m.draftsPerDayWhy} id={`${id}-drafts`} help={m.draftsPerDayHelp} error={bad.drafts}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={draftsPerDay}
+        onChange={(event) => setDraftsPerDay(event.target.value)} />}</TipField>
       <p>{m.usedToday(settings.automatic.used_today)}</p>
     </Dialog>
   );
