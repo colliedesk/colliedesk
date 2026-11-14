@@ -143,7 +143,9 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, foot
         <nav className="app-rail" aria-label={messages.mainNavigation}>
           <div className="rail-head">
             {brand}
-            {session && <strong className="workspace-name">{session.workspace.name}</strong>}
+            {/* The name takes the room the head has; what does not fit is told in full on hover. The text is the whole name, so a
+                screen reader reads it once, and the top bar's search field names it for a keyboard. */}
+            {session && <span className="workspace-name" data-tip={session.workspace.name}><strong>{session.workspace.name}</strong></span>}
             {session && quickStart}
             {session && onNewConversation && <button type="button" className="sidebar-new" aria-label={messages.newConversation} data-tip={messages.newConversation}
               data-opens="new-conversation" onClick={onNewConversation}><PenIcon /></button>}

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ConflictError } from '../../api/client';
 import type { Contact, ContactDetail, ContactMerge, Conversation } from '../../api/schemas';
-import { formatDate } from '../../lib/format-date';
+import { formatDate, formatDay, stampTitle } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { contactAddress, contactMessages } from './contact-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
@@ -66,7 +66,7 @@ export function ContactPage({ contact, conversations = [], page, pageSize, onPag
           {contact.identities?.map((identity) => <div key={`${identity.channel_id}:${identity.kind}:${identity.value}`}>
             <dt>{contactMessages.contactOnChannel}</dt><dd>{identity.display_name ? `${identity.display_name} · ${identity.value}` : identity.value}</dd></div>)}
           {contact.organization && <div><dt>{contactMessages.contactOrganization}</dt><dd>{contact.organization}</dd></div>}
-          <div><dt>{contactMessages.contactSince}</dt><dd><time dateTime={contact.created_at}>{formatDate(contact.created_at, timezone)}</time></dd></div>
+          <div><dt>{contactMessages.contactSince}</dt><dd><time dateTime={contact.created_at} data-tip={stampTitle(contact.created_at, timezone)}>{formatDay(contact.created_at, timezone)}</time></dd></div>
         </dl>
       </header>
       {merged && <p role="status" className="contact-merged-notice">{contactMessages.mergedIntoNotice(merged.name, contactAddress(merged))}{' '}

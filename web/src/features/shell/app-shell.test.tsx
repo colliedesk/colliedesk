@@ -175,6 +175,24 @@ test('the sidebar head names the workspace beside the logo, and the person at it
   expect(screen.getAllByRole('region', { name: 'Signed in as' })).toHaveLength(1);
 });
 
+test('the workspace name in the sidebar head is plain text with the full name in its tooltip, and takes no tab stop', () => {
+  localStorage.removeItem(sidebarStorageKey);
+  render(<AppShell me={{ ...me, workspace: { ...me.workspace, name: 'Northwind Outdoors' } }} brand={<a href="/">Colliedesk</a>}><p>inbox</p></AppShell>);
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  const name = within(rail).getByText('Northwind Outdoors');
+  // The text is the whole name (the ellipsis is drawn by the style), so a screen reader reads it once.
+  expect(name.closest('[data-tip]')).toHaveAttribute('data-tip', 'Northwind Outdoors');
+  expect(rail.querySelector('.workspace-name')).not.toHaveAttribute('tabindex');
+  expect(rail.querySelector('.workspace-name')).not.toHaveAttribute('role');
+  expect(rail.querySelector('.workspace-name')).not.toHaveAttribute('aria-label');
+  expect(within(rail).queryByRole('group', { name: 'Northwind Outdoors' })).not.toBeInTheDocument();
+  // Tab goes from the logo straight to the next control of the head.
+  const stops = Array.from(rail.querySelectorAll<HTMLElement>('.rail-head a, .rail-head button, .rail-head [tabindex]'));
+  expect(stops[0]).toHaveTextContent('Colliedesk');
+  // Nothing sits between the logo and the first button of the head (here the sidebar toggle).
+  expect(stops[1]).toHaveAttribute('aria-label', 'Collapse sidebar');
+});
+
 test('folded into its rail, the sidebar leaves the workspace and the address to the top bar', () => {
   localStorage.setItem(sidebarStorageKey, JSON.stringify({ width: 248, collapsed: true }));
   render(<AppShell me={me} page={{ title: 'Inbox', icon: null }}><p>inbox</p></AppShell>);

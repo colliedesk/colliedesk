@@ -873,6 +873,20 @@ test('on every page the sidebar counts the open conversations and lists the save
   expect(within(rail).getByRole('link', { name: 'support@northwind.help' })).not.toHaveAttribute('aria-current');
 });
 
+test('the top bar names the customer page like every other page', async () => {
+  const contactId = '33333333-3333-4333-8333-333333333333';
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('agent', null)),
+    '/api/v1/config': () => json(200, config),
+    [`/api/v1/contacts/${contactId}`]: () => json(200, { id: contactId, name: 'Mai Linh', email: 'mai@customer.example', organization: null, merged_into_id: null,
+      created_at: '2026-01-02T00:00:00Z', updated_at: '2026-01-02T00:00:00Z', conversation_count: 0, merged_into: null, merges: [] }),
+    '/api/v1/conversations': () => json(200, { items: [], page: 1, page_size: 25 }),
+  });
+  open(`/contacts/${contactId}`);
+  expect(await screen.findByRole('heading', { level: 1, name: 'Mai Linh' })).toBeInTheDocument();
+  await waitFor(() => expect(document.querySelector('.app-topbar .topbar-title')).toHaveTextContent('Customers'));
+});
+
 test('the top bar names the page the person is on', async () => {
   serve({
     '/api/v1/auth/me': () => json(200, meBody('agent', null)),

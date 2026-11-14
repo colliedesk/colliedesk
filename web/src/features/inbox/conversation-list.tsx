@@ -43,6 +43,8 @@ interface ConversationListProps {
   grouped?: boolean;
   // Sends the agent a test message on the default email channel; only where the workspace has one.
   onTestMessage?: () => Promise<unknown>;
+  // The first setup step the person may do, as the one primary button of a brand-new workspace.
+  nextStep?: { label: string; href: string };
 }
 
 // Where the inbox sends an admin to finish something in Settings.
@@ -57,7 +59,7 @@ function dotOf(item: Conversation, late: boolean): { tone: string; words: string
 }
 
 export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, checkedIds, onToggle, draftIds, viewers, grouped = true, onTestMessage }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, checkedIds, onToggle, draftIds, viewers, grouped = true, onTestMessage, nextStep }: ConversationListProps) {
   const [testing, setTesting] = useState(false);
   const [testFailed, setTestFailed] = useState<string>();
   const testInFlight = useRef(false);
@@ -94,6 +96,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
+        {nextStep && <p><a className="button primary-action" href={nextStep.href}>{nextStep.label}</a></p>}
         {onTestMessage && <p><button type="button" className="button" disabled={testing} onClick={sendTest}>{messages.sendTestMessage}</button>{' '}
           <span className="muted-copy">{messages.sendTestMessageHint}</span>{testFailed && <span role="alert" className="error-copy"> {testFailed}</span>}</p>}
       </section>}

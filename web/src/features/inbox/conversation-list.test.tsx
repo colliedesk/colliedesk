@@ -83,6 +83,23 @@ test('a brand-new workspace explains itself and no longer lists setup steps as b
   expect(within(start).queryByRole('link')).not.toBeInTheDocument();
 });
 
+test('a brand-new workspace with a next step offers it as the one primary button', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} nextStep={{ label: 'Connect your support email', href: '/setup/email' }} />);
+  const start = screen.getByRole('region', { name: 'Get started' });
+  const next = within(start).getByRole('link', { name: 'Connect your support email' });
+  expect(next).toHaveAttribute('href', '/setup/email');
+  expect(next).toHaveClass('primary-action');
+  expect(within(start).getAllByRole('link')).toHaveLength(1);
+});
+
+test('a next step never shows on a list that has conversations or is filtered', () => {
+  const step = { label: 'Connect your support email', href: '/setup/email' };
+  const { rerender } = render(<ConversationList items={[row('2026-10-15T09:05:00Z')]} timezone="UTC" page={1} hasNextPage={false} nextStep={step} />);
+  expect(screen.queryByRole('link', { name: step.label })).not.toBeInTheDocument();
+  rerender(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} filtered nextStep={step} />);
+  expect(screen.queryByRole('link', { name: step.label })).not.toBeInTheDocument();
+});
+
 test('a row marks who else has the conversation open, and says in words who is writing a reply', () => {
   vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
   const viewers = new Map([['11111111-1111-4111-8111-111111111111', [
