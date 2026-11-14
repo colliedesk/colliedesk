@@ -126,35 +126,9 @@ features/settings/agent-tokens-messages.ts:agentTokenMessages.fullGuide + featur
 features/settings/agent-tokens-messages.ts:agentTokenMessages.lifetime	78
 features/settings/agent-tokens-messages.ts:agentTokenMessages.pluginInstalls	93
 features/settings/agent-tokens-messages.ts:agentTokenMessages.vscodePrompt	65
-features/settings/ai-chat-messages.ts:aiChatMessages.capHint	110
-features/settings/ai-chat-messages.ts:aiChatMessages.deleteBody	78
-features/settings/ai-chat-messages.ts:aiChatMessages.historyCut	62
-features/settings/ai-chat-messages.ts:aiChatMessages.noChats	83
-features/settings/ai-chat-messages.ts:aiChatMessages.tryHelp	105
-features/settings/ai-messages.ts:aiMessages.autoConfirmLead	76
-features/settings/ai-messages.ts:aiMessages.autoDraftConfirmLead	94
-features/settings/ai-messages.ts:aiMessages.automaticHelp	126
-features/settings/ai-messages.ts:aiMessages.baseURLHelp	80
-features/settings/ai-messages.ts:aiMessages.draftsPerDayHelp	127
-features/settings/ai-messages.ts:aiMessages.historyHelp	105
-features/settings/ai-messages.ts:aiMessages.modelsBeforeLoadAddress	79
-features/settings/ai-messages.ts:aiMessages.modelsHelp	76
-features/settings/ai-messages.ts:aiMessages.modelsPicked	94
-features/settings/ai-messages.ts:aiMessages.rotateHelp	63
-features/settings/ai-messages.ts:aiMessages.usageHelp	133
 features/settings/connected-apps-section.tsx:connectedAppsMessages.description	256
 features/settings/connected-apps-section.tsx:connectedAppsMessages.removingInApp	76
 features/settings/gmail-messages.ts:gmailMessages.gmailGoogleData + features/settings/gmail-messages.ts:gmailMessages.gmailPrivacyPolicy	205
-features/settings/import-messages.ts:importMessages.adminsOnly	81
-features/settings/import-messages.ts:importMessages.apiCalls + features/settings/import-messages.ts:importMessages.rateLimitWait	200
-features/settings/import-messages.ts:importMessages.closeNote	69
-features/settings/import-messages.ts:importMessages.connectHelp	107
-features/settings/import-messages.ts:importMessages.inviteNote	72
-features/settings/import-messages.ts:importMessages.keyHelp	137
-features/settings/import-messages.ts:importMessages.keyHelpAgain	86
-features/settings/import-messages.ts:importMessages.oldHelpCenterHelp	143
-features/settings/import-messages.ts:importMessages.peopleHelp	191
-features/settings/import-messages.ts:importMessages.ticketsNote	106
 features/settings/numbers/numbers-messages.ts:numbersMessages.editHelp	135
 features/settings/numbers/numbers-messages.ts:numbersMessages.formatHint	103
 features/settings/numbers/numbers-messages.ts:numbersMessages.lead	206
@@ -178,9 +152,5 @@ features/settings/settings-messages.ts:settingsMessages.sessionsDescription	96
 features/settings/settings-messages.ts:settingsMessages.teamDescription	104
 features/settings/settings-messages.ts:settingsMessages.webFormDescription	95
 features/settings/settings-messages.ts:settingsMessages.workspaceNameHelp	189
-features/settings/targets/targets-messages.ts:targetsMessages.alertsLead	124
-features/settings/targets/targets-messages.ts:targetsMessages.alertsOff	72
-features/settings/targets/targets-messages.ts:targetsMessages.targetsLead	81
-features/settings/targets/targets-messages.ts:targetsMessages.targetsNote	126
 features/shell/report-messages.ts:reportMessages.reportFromServer	184
 features/shell/report-messages.ts:reportMessages.reportIntro	62
