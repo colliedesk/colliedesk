@@ -77,7 +77,7 @@ The whole knowledge base is imported on every run, whatever `--since` says:
 | Category | Top-level collection |
 | Folder, subfolder | Collection inside it, then a collection inside that one |
 | A folder nested deeper | A third-level collection named after its folders, for example `Advanced / Deep`, listed under the warning `kb_folder_flattened` |
-| Article | Article in Markdown with its title, original created and updated dates, and the author when a Colliedesk agent has the same email |
+| Article | Article in Markdown with its title, search title and description, original created and updated dates, and the author when a Colliedesk agent has the same email. Tags, views and votes stay in the export (`source_meta`) |
 | Article images hosted by Freshdesk | Stored by Colliedesk in the knowledge base media library, named after the file in the image address, with the alt text of the image (at most 500 characters); the article points at the stored copy. Their bytes stay as Freshdesk served them |
 | Translations | [Translations](knowledge-base.md#translations) of the same article, with their status (published in Freshdesk stays published, everything else is a draft), search title and description. Tags stay in the export (`source_meta`) |
 | Category and folder names in other languages | The collection's [names in other languages](knowledge-base.md#collection-names) |
