@@ -408,7 +408,9 @@ published.
 An admin sets the help center's brand in **Knowledge base → Settings → Brand**, through the API
 (`PUT /api/v1/help-center/theme`) or an AI agent (`colliedesk_help_center_theme_update`). Every page
 shows it on the next visit (see [what visitors see](#what-visitors-see)). Agents who are not admins
-see the saved brand and its preview, without the controls. A brand has:
+see the saved brand and its preview, without the controls. When the preview cannot be shown, it says
+why: the server could not make it (press **Retry**), or a setting is not accepted (the field says what
+to change). A brand has:
 
 - **Logo** and **favicon**: images of the [media library](#media-library), outside its trash, with
   the logo's text for screen readers (empty uses the title). An image the help center uses is kept
