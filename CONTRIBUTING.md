@@ -2,7 +2,7 @@
 
 Thank you for helping improve Colliedesk.
 
-Before a contribution can be accepted, every contributor must sign the HC Labs Contributor License Agreement. The CLA text and signing process will follow. Until then, HC Labs cannot merge external contributions.
+Before a contribution can be accepted, every contributor must agree to the [Colliedesk Contributor License Agreement](CLA.md). You keep the copyright in your work; the agreement lets HC Labs use and license it. When you open your first pull request, CLA Assistant comments with a link: sign in with GitHub and press "I agree". You sign once. A pull request cannot be merged until everyone who wrote a commit in it has signed (the `license/cla` check).
 
 Please keep changes focused, add tests for observable behavior, run `make test`, and do not include secrets or customer data.
 
