@@ -10,6 +10,8 @@ contact in a workspace.
 - From search: type a name or an email address in **Search conversations**. Customers who match are
   listed under **Customers** above the conversations; select one.
 - The address `/contacts/<id>` opens the page directly, so it can be bookmarked or shared with a teammate.
+  A link to a customer that is not there (a wrong link, or a customer of another workspace) says
+  **Customer not found**, with **Back to Inbox**.
 
 The page shows the name, the email address, the company when one is known (for example from a
 Freshdesk company), and the day the customer was added (**Customer since**; point at it for the time). The top bar names the page **Customers**. Below that, **Conversations** lists every

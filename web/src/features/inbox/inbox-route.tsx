@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useCreateAction, useCreateMutation } from '../../api/use-create';
 import { api, ReplyConflictError } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
+import { isNotFound } from '../../api/not-found';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
 import { leaveList, listIsBehind, showList, showThread } from './list-return';
@@ -372,7 +373,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     defaultMailbox={defaultMailbox} replyMailbox={selected && (!repliesVia || repliesVia.type === 'email') ? emailChannel.data : undefined}
     outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
-    conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
+    conversationFailed={activeID && !selected && opened.isError ? (isNotFound(opened.error) ? 'not_found' : true) : false} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
     onSpam={(ids, value) => spam.mutateAsync({ ids, spam: value })}

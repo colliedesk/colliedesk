@@ -225,11 +225,39 @@ test('a ticket whose detail fails to load says so and Retry asks for it again', 
     render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/could not be loaded/i);
+    expect(screen.queryByRole('heading', { name: 'Conversation not found' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
     fireEvent.click(within(alert).getByRole('button', { name: /retry/i }));
     expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(api.conversation).toHaveBeenCalledTimes(2);
+  } finally {
+    testRouter.params = {};
+  }
+});
+
+// A 404 is not a failure that may pass (query-client.ts asks for it once): nothing offers to ask again.
+test('a ticket the server does not have says it was not found and offers no Retry', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  testRouter.params = { conversationId: '00000000-0000-0000-0000-000000000000' };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockRejectedValue(new Error('API 404'));
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockRejectedValue(new Error('API 404'));
+    api.timeEntries.mockResolvedValue({ items: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByRole('heading', { name: 'Conversation not found' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to Inbox' })).toHaveAttribute('href', '/');
+    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
+    expect(screen.queryByText(/could not be loaded/i)).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
   } finally {
     testRouter.params = {};
   }

@@ -309,6 +309,20 @@ test('while the list loads, after it failed, or while a linked conversation load
   expect(screen.getByRole('alert')).toHaveTextContent('This conversation could not be loaded.');
 });
 
+// A link to a conversation that is not there (wrong, deleted, merged, another workspace's) answers 404: the pane
+// says so and leads back to the inbox; asking again would get the same answer, so there is no Retry.
+test('a link to a conversation that is not there says it was not found and leads back to the inbox, without Retry', () => {
+  render(<InboxPage conversations={[conversation]} threadOpen onBack={() => {}} conversationFailed="not_found" onRetryConversation={() => {}} />);
+  expectNothingOpen();
+  const timeline = within(screen.getByRole('region', { name: /timeline/i }));
+  expect(timeline.getByRole('heading', { name: 'Conversation not found' })).toBeInTheDocument();
+  expect(timeline.getByText('The link may be wrong, or the conversation was deleted or merged, or you cannot see it.')).toBeInTheDocument();
+  expect(timeline.getByRole('link', { name: 'Back to Inbox' })).toHaveAttribute('href', '/');
+  expect(timeline.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  expect(screen.queryByText('This conversation could not be loaded.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Select a conversation to read its timeline.')).not.toBeInTheDocument();
+});
+
 test('Mentions with no conversation open shows no reply box and no details', () => {
   render(<InboxPage otherList={{ label: 'Mentions', content: <p>No mentions</p> }} />);
   expectNothingOpen();

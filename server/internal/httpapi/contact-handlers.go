@@ -33,7 +33,13 @@ func (a *API) createContact(response http.ResponseWriter, request *http.Request)
 }
 
 func (a *API) getContact(response http.ResponseWriter, request *http.Request) {
-	contact, err := a.store.GetContact(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	id := request.PathValue("id")
+	// Something that is not an id names no customer: 404, the same answer as for a missing one.
+	if !isUUID(id) {
+		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
+		return
+	}
+	contact, err := a.store.GetContact(request.Context(), principal(request).Workspace.ID, id)
 	if err != nil {
 		writeStoreError(response, err)
 		return

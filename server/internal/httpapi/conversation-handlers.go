@@ -102,7 +102,14 @@ func newContactProblem(contact *store.NewContact, withBody bool) string {
 }
 
 func (a *API) getConversation(response http.ResponseWriter, request *http.Request) {
-	item, err := a.store.GetConversation(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	id := request.PathValue("id")
+	// A link with something that is not an id names no conversation, like a missing one: 404, so the web
+	// app says "not found" instead of offering to try again.
+	if !isUUID(id) {
+		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
+		return
+	}
+	item, err := a.store.GetConversation(request.Context(), principal(request).Workspace.ID, id)
 	if err != nil {
 		writeStoreError(response, err)
 		return

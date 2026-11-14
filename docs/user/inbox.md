@@ -164,6 +164,11 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
   page; use **Next page** to go on.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
   You do not need to reload to see new mail.
+- The address `/conversations/<id>` opens one conversation, so it can be bookmarked or shared with a teammate.
+  A link to a conversation that is not there (a wrong link, a conversation that was deleted or merged, or one
+  of another workspace) says **Conversation not found**, with **Back to Inbox**. When the conversation is
+  there but could not be loaded (the network or the server failed), the page says so and offers **Retry**.
+  The API answers `404 not_found` for every such id, also for something that is not an id.
 
 ## Conversation numbers
 

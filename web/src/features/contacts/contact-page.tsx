@@ -19,7 +19,8 @@ interface ContactPageProps {
   onPage: (page: number) => void;
   timezone?: string;
   loading?: boolean;
-  failed?: boolean;
+  // The customer could not be loaded; 'not_found' when the server has no such customer (a 404).
+  failed?: boolean | 'not_found';
   historyLoading?: boolean;
   // Each may return a promise: the form stays open, with the reason shown, when it rejects.
   onRename?: (name: string) => Promise<unknown>;
@@ -43,7 +44,9 @@ export function ContactPage({ contact, conversations = [], page, pageSize, onPag
   if (!contact) {
     return <main className="settings-page contact-page">
       {loading && <p role="status" className="empty-copy">{messages.loading}</p>}
-      {failed && <p role="alert" className="error-copy">{contactMessages.contactNotLoaded}</p>}
+      {failed === 'not_found' && <><header><h1>{contactMessages.contactNotFound}</h1><p>{contactMessages.contactNotFoundExplanation}</p></header>
+        <a href="/" className="link-action page-back">{messages.backToInbox}</a></>}
+      {failed === true && <p role="alert" className="error-copy">{contactMessages.contactNotLoaded}</p>}
     </main>;
   }
   const merged = contact.merged_into;

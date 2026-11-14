@@ -103,7 +103,8 @@ interface InboxPageProps {
   loading?: boolean;
   refreshing?: boolean;
   timelineLoading?: boolean;
-  conversationFailed?: boolean;
+  // The conversation the address names could not be loaded; 'not_found' when the server has no such conversation.
+  conversationFailed?: boolean | 'not_found';
   onRetryConversation?: () => void;
   // results_refreshed: the list of a results number whose snapshot is no longer kept (410).
   failed?: boolean | 'results_refreshed';

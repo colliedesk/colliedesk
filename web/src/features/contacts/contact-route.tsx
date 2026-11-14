@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
+import { isNotFound } from '../../api/not-found';
 import { contactApi } from './contact-api';
 import type { Contact, ContactMerge } from '../../api/schemas';
 import { ContactPage } from './contact-page';
@@ -37,7 +38,7 @@ export function ContactRoute() {
   };
   return <ContactPage contact={contact.data} conversations={history.data?.items} page={page} pageSize={contactHistoryPageSize}
     onPage={(next) => setPaged({ contactId, page: next })} timezone={me.data?.timezone}
-    loading={contact.isPending} failed={contact.isError} historyLoading={history.isPending}
+    loading={contact.isPending} failed={contact.isError && (isNotFound(contact.error) ? 'not_found' : true)} historyLoading={history.isPending}
     onRename={async (name: string) => { await contactApi.renameContact(contactId, name); await changed(); }}
     onMerge={async (duplicate: Contact) => { await contactApi.mergeContact(contactId, duplicate.id); await changed(); }}
     onUndoMerge={async (merge: ContactMerge) => { await contactApi.undoMerge(contactId, merge.id); await changed(); }} />;
