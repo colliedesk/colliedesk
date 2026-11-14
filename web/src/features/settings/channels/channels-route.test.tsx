@@ -965,6 +965,17 @@ test('a help chat\'s greeting and instructions keep one short line, and the expl
   for (const line of document.querySelectorAll('small.muted-copy')) expect((line.firstChild?.textContent ?? '').length).toBeLessThanOrEqual(60);
 });
 
+test('a trailing space typed in a help chat\'s greeting is not a change: the text that would be saved is the saved text, so no bar and no question on leaving', async () => {
+  channelsApi.get.mockResolvedValue({ ...helpChat(), config: helpChatConfig });
+  show(FORM);
+  const greeting = await screen.findByRole('textbox', { name: 'Greeting' });
+  const saved = (greeting as HTMLTextAreaElement).value;
+  fireEvent.change(greeting, { target: { value: `${saved} ` } });
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+  fireEvent.change(greeting, { target: { value: `${saved} more` } });
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
+});
+
 test('the sites a help chat may embed in are one line, and the rule for writing them is in the tip', async () => {
   channelsApi.get.mockResolvedValue({ ...helpChat(), config: helpChatConfig });
   show(FORM, { tab: 'embed' });

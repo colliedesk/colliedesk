@@ -601,10 +601,13 @@ function MessagesForm({ channel, canManage, onDiscard }: ChannelPanelProps & { o
       expireSeconds: expireTouched ? seconds(expire) * 60 : undefined }) }),
     onSuccess: () => reload(),
   });
-  // Any change to a field marks the form as unsaved, which the page's Save bar names.
-  const [unsaved, setUnsaved] = useState(false);
-  const base = useSaveFeedback(saveState(save));
-  const feedback = { ...base, touch: () => { base.touch(); setUnsaved(true); } };
+  const feedback = useSaveFeedback(saveState(save));
+  // The form is unsaved while what it holds differs from what it held when it was opened or last saved: typing a change
+  // and typing the saved text back leaves nothing for the page's Save bar to name.
+  const snapshot = JSON.stringify([commands, received, unmatched, answer, askConfirm, cancelled, confirm, expire, expired, reopenNotFound, reopened, reopenNoted, help, helpEvery, unmatchedEvery, reopenLegacy, status, autoClose]);
+  const opened = useRef(snapshot);
+  const [savedAs, setSavedAs] = useState<string>();
+  const unsaved = snapshot !== (savedAs ?? opened.current);
   const id = useId();
   const server = fieldErrors(save.error);
   // The quiet wait comes before the question and before asking for a description: it shows while either is used.
@@ -630,7 +633,7 @@ function MessagesForm({ channel, canManage, onDiscard }: ChannelPanelProps & { o
   useSettingsEdit('zalo-messages', canManage && unsaved ? { label: m.messagesLabel, discard: onDiscard, save: () => {
     setChecked(true);
     if (invalid) return Promise.reject(new Error('invalid'));
-    return save.mutateAsync().then(() => setUnsaved(false));
+    return save.mutateAsync().then(() => setSavedAs(snapshot));
   } } : undefined);
   if (!canManage) {
     return <div className="settings-body">

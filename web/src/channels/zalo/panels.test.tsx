@@ -727,3 +727,14 @@ test('a one-to-one reply that can never be sent says why, in one line', () => {
   view(<Tabs.messages channel={channel({}, { effective_settings: { scopes: { direct: { mode: 'all_open' } } } })} canManage timezone="UTC" />);
   expect(screen.getByLabelText('Reply to a one-to-one message that is not a request')).toHaveAccessibleDescription(/No command needed here: this is never sent\./);
 });
+
+
+test('messages: typing a change and typing the saved text back leaves nothing unsaved', async () => {
+  view(<Tabs.messages channel={channel({}, { effective_settings: { notices: { received: 'Đã nhận.' } } })} canManage timezone="UTC" />);
+  const field = screen.getByLabelText('When a conversation opens', { exact: true });
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+  fireEvent.change(field, { target: { value: 'Đã nhận rồi.' } });
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent('Messages');
+  fireEvent.change(field, { target: { value: 'Đã nhận.' } });
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+});

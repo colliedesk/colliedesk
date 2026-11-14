@@ -9,7 +9,7 @@ import { settingsMessages } from './settings-messages';
 import { channelSetupMessages } from './channel-setup-messages';
 import { CopyButton } from './copy-button';
 import { useSaveFeedback } from './save-feedback';
-import { useSaveChanges, useSettingsEdit } from './settings-edits';
+import { useInstantSave, useSaveChanges, useSettingsEdit, useUnsavedText } from './settings-edits';
 import type { SaveState } from './save-feedback';
 
 interface WebFormSectionProps {
@@ -40,9 +40,13 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   const saveChanges = useSaveChanges();
   const savedOrigins = settings?.allowed_origins ?? [];
   const nowOrigins = parseOrigins(origins);
-  const changed = enabled !== (settings?.enabled ?? false) || nowOrigins.length !== savedOrigins.length || nowOrigins.some((origin, index) => origin !== savedOrigins[index]);
-  useSettingsEdit('web-form', !adding && canManage && changed ? { label: settingsMessages.webFormOrigins, save: () => onSave?.(enabled, nowOrigins),
-    discard: () => { setEnabled(settings?.enabled ?? false); setOrigins(savedOrigins.join('\n')); } } : undefined);
+  // Accepting submissions is one choice: it saves when it is made, with Saved and Undo. The sites are text: they wait for Save.
+  const instant = useInstantSave();
+  const changed = nowOrigins.length !== savedOrigins.length || nowOrigins.some((origin, index) => origin !== savedOrigins[index]);
+  useSettingsEdit('web-form', !adding && canManage && changed ? { label: settingsMessages.webFormOrigins, save: () => onSave?.(settings?.enabled ?? false, nowOrigins),
+    discard: () => setOrigins(savedOrigins.join('\n')) } : undefined);
+  // A form being added has its own button, but what is typed in it still counts when the page is left.
+  useUnsavedText('web-form-add', adding && (origins.trim() !== '' || enabled));
   const state = settings?.enabled ? settingsMessages.webFormOn : settingsMessages.webFormOff;
   const embed = part === 'embed';
   // A form that also answers the workspace's older address shows its own address, the one a new site uses;
@@ -55,7 +59,8 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
         {canManage
           ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (feedback.pending) return; if (adding) void onSave?.(enabled, nowOrigins); else void saveChanges(); }}>
               {nameField}
-              {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{settingsMessages.webFormAccept}</span></label>}
+              {!embed && <label className="field-inline"><input type="checkbox" checked={adding ? enabled : settings?.enabled ?? false}
+                onChange={(event) => { if (adding) { feedback.touch(); setEnabled(event.target.checked); } else void instant((value: boolean) => onSave?.(value, savedOrigins), event.target.checked, settings?.enabled ?? false); }} /><span>{settingsMessages.webFormAccept}</span></label>}
               <label className="field"><span>{settingsMessages.webFormOrigins}</span>
                 <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={`${originsHelp} ${originsHelp}-why`} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
               <div className="heading-with-tip field-hint"><small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>

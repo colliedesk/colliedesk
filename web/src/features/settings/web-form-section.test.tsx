@@ -18,24 +18,29 @@ test('is off by default, shows the state and the address a site posts to', () =>
   expect(screen.getByRole('textbox', { name: /submit url/i })).toHaveValue(`${window.location.origin}/api/v1/public/forms/acme`);
 });
 
-test('turns the form on with its allowed origins, one per line', () => {
-  const onSave = vi.fn();
-  render(<WebFormSection settings={off} canManage onSave={onSave} />);
+test('turning the form on is one choice and saves at once with Saved and Undo; the sites typed after it wait for Save, one per line', async () => {
+  const onSave = vi.fn().mockResolvedValue(undefined);
+  const { rerender } = render(<WebFormSection settings={off} canManage onSave={onSave} />);
   fireEvent.click(screen.getByRole('checkbox', { name: /accept web form submissions/i }));
+  expect(onSave).toHaveBeenLastCalledWith(true, []);
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+  expect(await screen.findByText('Saved')).toBeInTheDocument();
+  rerender(<WebFormSection settings={{ ...off, enabled: true }} canManage onSave={onSave} />);
   fireEvent.change(screen.getByRole('textbox', { name: /allowed origins/i }), { target: { value: ' https://colliedesk.com \n\nhttp://localhost:3000\n' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).toHaveBeenCalledWith(true, ['https://colliedesk.com', 'http://localhost:3000']);
+  expect(onSave).toHaveBeenLastCalledWith(true, ['https://colliedesk.com', 'http://localhost:3000']);
 });
 
-test('turns the form off again and keeps the origins', () => {
-  const onSave = vi.fn();
+test('turning the form off again keeps the origins, and its Undo turns it back on', async () => {
+  const onSave = vi.fn().mockResolvedValue(undefined);
   render(<WebFormSection settings={on} canManage onSave={onSave} />);
   expect(screen.getByRole('checkbox', { name: /accept web form submissions/i })).toBeChecked();
   expect(screen.getByText(/the web form is on/i)).toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: /allowed origins/i })).toHaveValue('https://colliedesk.com\nhttp://localhost:3000');
   fireEvent.click(screen.getByRole('checkbox', { name: /accept web form submissions/i }));
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  expect(onSave).toHaveBeenCalledWith(false, ['https://colliedesk.com', 'http://localhost:3000']);
+  expect(onSave).toHaveBeenLastCalledWith(false, ['https://colliedesk.com', 'http://localhost:3000']);
+  fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(onSave).toHaveBeenLastCalledWith(true, ['https://colliedesk.com', 'http://localhost:3000']));
 });
 
 test('agents see the state read-only', () => {
@@ -54,7 +59,7 @@ test('the save shows Saving…, refuses a second submit, then Saved until edited
   expect(onSave).not.toHaveBeenCalled();
   rerender(<WebFormSection settings={off} canManage onSave={onSave} save={{ saved: true }} />);
   expect(screen.getByText('Saved')).toHaveAttribute('role', 'status');
-  fireEvent.click(screen.getByRole('checkbox', { name: /accept web form submissions/i }));
+  fireEvent.change(screen.getByRole('textbox', { name: /allowed origins/i }), { target: { value: 'https://new.example.com' } });
   expect(screen.queryByText('Saved')).not.toBeInTheDocument();
 });
 

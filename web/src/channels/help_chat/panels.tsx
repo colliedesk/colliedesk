@@ -80,7 +80,8 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
   const adding = nameField !== undefined;
   const saveChanges = useSaveChanges();
   const value = () => ({ greeting: greeting.trim(), suggestions: suggestions.map((item) => item.trim()).filter(Boolean), instructions: instructions.trim() });
-  const changed = greeting !== (config?.greeting ?? '') || instructions !== (config?.instructions ?? '') || JSON.stringify(suggestions) !== JSON.stringify(config?.suggestions ?? []);
+  // What would be saved, against what is saved: spaces at the ends and empty questions are not a change.
+  const changed = JSON.stringify(value()) !== JSON.stringify({ greeting: config?.greeting ?? '', suggestions: config?.suggestions ?? [], instructions: config?.instructions ?? '' });
   const discard = () => { setGreeting(config?.greeting ?? ''); setSuggestions(config?.suggestions ?? []); setInstructions(config?.instructions ?? ''); };
   useSettingsEdit('help-chat-surface', !adding && canManage && changed ? { label: m.surface, save: () => onSave(value()), discard } : undefined);
   if (!canManage) {
