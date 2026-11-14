@@ -546,7 +546,9 @@ func TestReadinessOpensWhatAIDoesOnItsOwn(t *testing.T) {
 		d.workspaceID, d.channel.ID, prompt.Version); err != nil {
 		t.Fatal(err)
 	}
-	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Text: "haha nice"})
+	// Another group, so no other customer wrote around b's card (that waits for a person:
+	// TestAnIgnoreWaitsForAPersonWhenAnotherCustomerWrote).
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g2", Text: "haha nice"})
 	d.flush(t)
 	d.answers(map[string]any{"action": "ignore", "ignore_reason": "chat", "confidence": 0.99})
 	d.runAI(t)
