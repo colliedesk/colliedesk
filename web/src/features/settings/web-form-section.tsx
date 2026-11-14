@@ -46,7 +46,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   useSettingsEdit('web-form', !adding && canManage && changed ? { label: settingsMessages.webFormOrigins, save: () => onSave?.(settings?.enabled ?? false, nowOrigins),
     discard: () => setOrigins(savedOrigins.join('\n')) } : undefined);
   // A form being added has its own button, but what is typed in it still counts when the page is left.
-  useUnsavedText('web-form-add', adding && (origins.trim() !== '' || enabled));
+  useUnsavedText('web-form-add', adding && !feedback.pending && (origins.trim() !== '' || enabled));
   const state = settings?.enabled ? settingsMessages.webFormOn : settingsMessages.webFormOff;
   const embed = part === 'embed';
   // A form that also answers the workspace's older address shows its own address, the one a new site uses;

@@ -64,12 +64,14 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
   const [slug, setSlug] = useState(workspaceSlug ?? '');
   useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
-  useUnsavedText('support-address', canManage && address !== (channel?.support_address ?? ''));
-  useUnsavedText('workspace-address-name', canManage && slug !== (workspaceSlug ?? ''));
-  const addressError = useId();
+    const addressError = useId();
   const addressField = useRef<HTMLInputElement>(null);
   const addressFeedback = useSaveFeedback(addressSave, addressError, addressField, address);
   const slugFeedback = useSaveFeedback(slugSave);
+  // Typed and not yet saved counts for the question on leaving, though each has its own button; while a save is on its
+  // way the text is being kept, and the page it opens is not a question.
+  useUnsavedText('support-address', canManage && !addressFeedback.pending && address !== (channel?.support_address ?? ''));
+  useUnsavedText('workspace-address-name', canManage && !slugFeedback.pending && slug !== (workspaceSlug ?? ''));
   // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const disconnectButton = useRef<HTMLButtonElement>(null);

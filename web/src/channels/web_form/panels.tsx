@@ -24,13 +24,13 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
 // A name left empty is the type's (Web form, Web form 2, …); one another form has is refused at the field.
 function Connect({ canManage, create }: ConnectProps) {
   const [name, setName] = useState('');
-  useUnsavedText('web-form-name', name.trim() !== '');
   // The name a refusal is about: its words show while the field holds it.
   const [sent, setSent] = useState('');
   const save = useMutation({
     mutationFn: (origins: string[]) => create({ ...(name.trim() ? { name: name.trim() } : {}), enabled: true, config: { allowed_origins: origins } }),
     onMutate: () => setSent(name),
   });
+  useUnsavedText('web-form-name', !save.isPending && name.trim() !== '');
   const errorID = useId();
   const hintID = useId();
   const state = saveState(save);

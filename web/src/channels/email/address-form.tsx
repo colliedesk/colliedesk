@@ -15,9 +15,10 @@ export function AddressForm({ canManage, named = false, initial = '', save, onSa
   save: (input: AddressInput) => Promise<unknown>; onSaved?: () => void }) {
   const [name, setName] = useState('');
   const [address, setAddress] = useState(initial);
-  // Typed and not yet saved: leaving the page asks, though the form has its own button.
-  useUnsavedText('address-form', name !== '' || address !== initial);
   const mutation = useMutation({ mutationFn: () => save({ ...(named && name.trim() ? { name: name.trim() } : {}), address: address.trim() }), onSuccess: onSaved });
+  // Typed and not yet saved: leaving the page asks, though the form has its own button. While the save is on its way the
+  // text is being kept, and the page the save opens next is not a question.
+  useUnsavedText('address-form', !mutation.isPending && (name !== '' || address !== initial));
   const state = saveState(mutation);
   const errorID = useId();
   const nameHint = useId();
