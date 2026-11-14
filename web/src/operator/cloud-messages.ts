@@ -6,6 +6,8 @@ const en = {
   signingOut: 'Signing out…',
   signOutFailed: 'Signing out did not work. Try again.',
   retry: 'Try signing in again',
+  // The identity provider's script was blocked, could not be reached, or refused the server's key.
+  notLoaded: 'Sign-in could not load. Check your connection or ad blocker, then try again.',
   refused: 'This account cannot sign in to the operator console.',
   refusedHelp: 'If you run this server, an operator adds you on it with:',
   useAnotherAccount: 'Use another account',

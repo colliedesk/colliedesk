@@ -24,6 +24,10 @@ Enter your email address, then the six-digit code Clerk sends to that address. Y
 create a Clerk account first: the same form works for everyone, and an agent who has been invited can
 sign in this way even before they have one.
 
+If the form says **Sign-in could not load**, your browser could not get Clerk's sign-in form. An ad
+blocker or privacy extension, or a network that blocks it, is the usual cause. Allow the page or
+change network, then press **Retry**. The rest of the page keeps working.
+
 Signing in does not by itself add you to a workspace. Your verified primary email must belong to an
 agent in at least one workspace. If it belongs to several workspaces, choose the workspace after
 authentication. Colliedesk then creates its own ordinary browser session; the identity provider does

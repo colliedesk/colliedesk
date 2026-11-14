@@ -1,8 +1,8 @@
-import { ClerkProvider } from '@clerk/clerk-react';
 import { NotAnAgentError } from '../../api/cloud-signup';
 import type { SignupAnswers } from '../../api/cloud-signup';
 import { messages } from '../../messages';
 import { signupMessages } from './signup-messages';
+import { ClerkLoadGuard } from './clerk-load-guard';
 import { ClerkSession } from './clerk-session';
 import type { RefusedIdentity } from './clerk-session';
 import { CloudSignup } from './cloud-signup';
@@ -29,6 +29,8 @@ const copy = {
   signingIn: signupMessages.cloudSigningIn, retry: signupMessages.retryCloudSignIn,
 };
 
+const loadCopy = { notLoaded: signupMessages.cloudSignInNotLoaded, retry: messages.retryLoad };
+
 const isNotAnAgent = (error: unknown) => error instanceof NotAnAgentError;
 
 export function CloudSignIn({ publishableKey, onSessionToken, onSignUp, buying, optionalQuestions, findWorkspaceAt, endSession }: CloudSignInProps) {
@@ -48,7 +50,7 @@ export function CloudSignIn({ publishableKey, onSessionToken, onSignUp, buying, 
       {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
     </div>;
   };
-  return <ClerkProvider publishableKey={publishableKey}>
+  return <ClerkLoadGuard publishableKey={publishableKey} copy={loadCopy}>
     <ClerkSession copy={copy} onSessionToken={onSessionToken} isRefused={isNotAnAgent} refused={noWorkspace} endSession={endSession} />
-  </ClerkProvider>;
+  </ClerkLoadGuard>;
 }

@@ -2,6 +2,8 @@
 export const signupMessages = {
   cloudSigningIn: 'Signing in…',
   retryCloudSignIn: 'Try cloud sign-in again',
+  // Clerk's script was blocked, could not be reached, or refused the server's key.
+  cloudSignInNotLoaded: 'Sign-in could not load. Check your connection or ad blocker, then retry.',
   signingOut: 'Signing out…',
   signupHeading: 'Create your workspace',
   signupExplanation: 'No workspace uses this email. 14-day free trial, no card.',

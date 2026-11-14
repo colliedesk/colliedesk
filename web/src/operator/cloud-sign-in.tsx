@@ -1,6 +1,6 @@
-import { ClerkProvider } from '@clerk/clerk-react';
 import { useCallback, useEffect } from 'react';
 import { preconnectClerk } from '../features/auth/clerk-appearance';
+import { ClerkLoadGuard } from '../features/auth/clerk-load-guard';
 import { ClerkSession } from '../features/auth/clerk-session';
 import type { RefusedIdentity } from '../features/auth/clerk-session';
 import { ApiError, api } from './api';
@@ -13,6 +13,8 @@ import { m } from './messages';
 // the hand-over of its token to POST /api/v1/operator/auth/cloud. Only the sign-in page loads it, under the
 // page's own content policy (server/internal/webui signInCSP).
 const copy = { signingOut: c.signingOut, signOutFailed: c.signOutFailed, tryAgain: m.tryAgain, signingIn: m.continuing, retry: c.retry };
+
+const loadCopy = { notLoaded: c.notLoaded, retry: m.tryAgain };
 
 const isRefused = (error: unknown) => error instanceof ApiError && error.code === 'operator_sign_in_refused';
 
@@ -42,7 +44,7 @@ export default function CloudSignIn({ publishableKey, endSession, onStep, onErro
       else throw error;
     }
   }, [onError, onStep]);
-  return <ClerkProvider publishableKey={publishableKey}>
+  return <ClerkLoadGuard publishableKey={publishableKey} copy={loadCopy}>
     <ClerkSession copy={copy} onSessionToken={exchange} isRefused={isRefused} refused={(identity) => <Refused {...identity} />} endSession={endSession} />
-  </ClerkProvider>;
+  </ClerkLoadGuard>;
 }
