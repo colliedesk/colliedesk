@@ -45,7 +45,7 @@ test('a document without its own policy, or with a wider one, is never put in th
   for (const html of ['<!doctype html><title>x</title><h1>Unsafe</h1>', wider]) {
     const { unmount } = render(<HelpCenterPreview html={html} pending={false} page="home" onPage={() => {}} />);
     expect(screen.queryByTitle('Preview of the help center')).not.toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('The preview could not be shown.');
+    expect(screen.getByRole('alert')).toHaveTextContent('The preview could not be shown: it was made for another web address than this page.');
     unmount();
   }
 });
@@ -106,7 +106,47 @@ test('a failed preview says so and keeps the last page shown', async () => {
   rerender({ value: { colors: { primary: '#000002' } } });
   await act(async () => { await vi.advanceTimersByTimeAsync(300); });
   expect(result.current.preview?.html).toBe('first');
-  expect(result.current.error).toBe('The preview could not be shown.');
+  expect(result.current.error).toBe('The preview could not be shown: the server could not make it.');
+});
+
+test('after a failure Retry asks again for the same theme, and its answer replaces the error', async () => {
+  vi.useFakeTimers();
+  let fail = true;
+  const calls = serve({ 'POST /api/v1/help-center/theme/preview': () => (fail ? json(500) : json(200, answer('back'))) });
+  const { result } = renderHook(() => useThemePreview('home', { colors: { primary: '#000001' } }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  expect(result.current.error).toBe('The preview could not be shown: the server could not make it.');
+  expect(result.current.retry).toBeTypeOf('function');
+  fail = false;
+  await act(async () => { result.current.retry!(); await vi.advanceTimersByTimeAsync(0); });
+  expect(calls.filter((call) => call.method === 'POST')).toHaveLength(2);
+  expect(result.current.preview?.html).toBe('back');
+  expect(result.current.error).toBeUndefined();
+});
+
+test('a refused theme names no Retry: the refused field says what to change', async () => {
+  vi.useFakeTimers();
+  serve({ 'POST /api/v1/help-center/theme/preview': () => json(422, { error: { code: 'media_not_found', message: 'The logo must be an image of the media library.', fields: { logo_media_id: 'Choose an image of the media library.' } } }) });
+  const { result } = renderHook(() => useThemePreview('home', {}));
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  expect(result.current.error).toBe('The preview could not be shown: a setting is not accepted. The field marked in the form says why.');
+  expect(result.current.refused).toEqual({ logo_media_id: 'Choose an image of the media library.' });
+  expect(result.current.retry).toBeUndefined();
+});
+
+test('the error offers Retry beside its cause, and a document made for another address says so', () => {
+  const onRetry = vi.fn();
+  const { unmount } = render(<HelpCenterPreview pending={false} error="The preview could not be shown: the server could not make it." onRetry={onRetry} page="home" onPage={() => {}} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('The preview could not be shown: the server could not make it.');
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  expect(onRetry).toHaveBeenCalledTimes(1);
+  unmount();
+  const elsewhere = page('Other').replaceAll(origin, 'https://app.example.com');
+  render(<HelpCenterPreview html={elsewhere} pending={false} onRetry={onRetry} page="home" onPage={() => {}} />);
+  expect(screen.queryByTitle('Preview of the help center')).not.toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('The preview could not be shown: it was made for another web address than this page.');
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  expect(onRetry).toHaveBeenCalledTimes(2);
 });
 
 test('nothing is asked after the preview goes away, not even the change that was waiting', async () => {

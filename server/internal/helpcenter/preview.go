@@ -24,7 +24,8 @@ const (
 // session, whether the help center is on or off. The frame showing a preview follows no link.
 const previewBase = "/api/v1/kb"
 
-// previewPolicy is the preview document's own Content-Security-Policy for an app at origin. The
+// previewPolicy is the preview document's own Content-Security-Policy for an app at origin: the origin
+// the request came from, APP_ORIGIN or a workspace's own host, since the frame runs there. The
 // document is shown in a frame of the app, same-origin so its images load with the session; the policy
 // therefore names paths of the origin rather than all of it ('self'), as the email frame does: images only from the workspace's
 // image and media routes (a CSS url() cannot reach any other route with the cookie), style only from
@@ -74,8 +75,9 @@ const (
 // off, read in one transaction. theme must be clean (domain.CleanTheme); a logo or favicon that is not
 // this workspace's image is a domain.ThemeError, one in the trash is left out as on the public pages.
 // The answer is a whole document under previewPolicy for a sandboxed frame without scripts: the help
-// center's sheet loads by its hashed, immutable address, and the candidate brand is inline.
-func (s *Site) Preview(ctx context.Context, workspaceID string, theme domain.HelpCenterTheme, which string) ([]byte, error) {
+// center's sheet loads by its hashed, immutable address, and the candidate brand is inline. origin is
+// where the app asking runs (APP_ORIGIN or the workspace's own host); the policy names it.
+func (s *Site) Preview(ctx context.Context, workspaceID, origin string, theme domain.HelpCenterTheme, which string) ([]byte, error) {
 	if which != PreviewHome && which != PreviewArticle {
 		return nil, errors.New("help center preview: unknown page " + which)
 	}
@@ -113,7 +115,7 @@ func (s *Site) Preview(ctx context.Context, workspaceID string, theme domain.Hel
 	var out bytes.Buffer
 	out.Grow(len(body) + len(v.brand.sheet) + len(previewStyle) + 400)
 	out.Write(body[:at])
-	out.WriteString(`<meta http-equiv="Content-Security-Policy" content="` + previewPolicy(s.config.Origin) + "\">\n")
+	out.WriteString(`<meta http-equiv="Content-Security-Policy" content="` + previewPolicy(origin) + "\">\n")
 	out.WriteString("<style>" + previewStyle + "\n</style>\n")
 	out.Write(body[at:end])
 	out.WriteString("<style>\n")

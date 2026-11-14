@@ -283,6 +283,31 @@ test('the preview shows custom CSS as it is typed, and while the server refuses 
   expect((calls.filter((call) => call.method === 'POST').at(-1)?.body as { theme: { custom_css: string } }).theme.custom_css).toBe('a{background:url(x)}');
 });
 
+test('a first preview the server fails to make says so with Retry, and Retry shows the saved brand', async () => {
+  let fail = true;
+  serve({ 'GET /api/v1/help-center/theme': () => json(200, saved), 'POST /api/v1/help-center/theme/preview': () => (fail ? json(500) : json(200, preview)) });
+  open(true);
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('The preview could not be shown: the server could not make it.');
+  fail = false;
+  fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+  await screen.findByTitle('Preview of the help center');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('a first preview refused for a field says so in the panel and beside that field', async () => {
+  const message = 'The logo must be an image of the media library, outside its trash.';
+  serve({
+    'GET /api/v1/help-center/theme': () => json(200, saved),
+    'POST /api/v1/help-center/theme/preview': () => json(422, { error: { code: 'media_not_found', message: 'The logo and favicon must be images of the media library, outside its trash. Nothing was saved.', fields: { logo_media_id: message } } }),
+  });
+  open(true);
+  const alert = await screen.findByText('The preview could not be shown: a setting is not accepted. The field marked in the form says why.');
+  expect(alert).toHaveAttribute('role', 'alert');
+  expect(within(alert).queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  expect(screen.getByText(`Not in the preview yet: ${message}`)).toBeInTheDocument();
+});
+
 test('the custom CSS field counts bytes of UTF-8, as the server limits it, and marks a text over 32,768 bytes', async () => {
   serve({ 'GET /api/v1/help-center/theme': () => json(200, saved), 'POST /api/v1/help-center/theme/preview': () => json(200, preview) });
   open(true);

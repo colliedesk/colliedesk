@@ -200,8 +200,9 @@ func (a *API) previewHelpCenterTheme(response http.ResponseWriter, request *http
 		writeThemeError(response, err)
 		return
 	}
-	// The logo and favicon are checked in the preview's own transaction.
-	html, err := a.helpCenter.Preview(request.Context(), who.Workspace.ID, cleaned, input.Page)
+	// The logo and favicon are checked in the preview's own transaction. The frame runs where the app
+	// does, on APP_ORIGIN or the workspace's own host, so the document's policy names that origin.
+	html, err := a.helpCenter.Preview(request.Context(), who.Workspace.ID, a.requestOrigin(request), cleaned, input.Page)
 	if err != nil {
 		writeThemeError(response, err)
 		return

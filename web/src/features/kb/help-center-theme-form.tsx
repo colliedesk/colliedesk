@@ -127,16 +127,22 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
     setDraft({ ...current, ...next });
   };
   const cssPending = live.refused?.custom_css;
-  const preview = <HelpCenterPreview html={live.preview?.html} pending={live.pending} error={cssPending ? text.previewCustomCSS : live.error} page={page} onPage={setPage} />;
+  // A field the preview refused says so beside it until a save names it; custom CSS says it in its own way.
+  const shown: Record<string, string> = {
+    ...Object.fromEntries(Object.entries(live.refused ?? {}).filter(([field]) => field !== 'custom_css').map(([field, reason]) => [field, text.notInPreview(reason)])),
+    ...errors,
+  };
+  const preview = <HelpCenterPreview html={live.preview?.html} pending={live.pending} error={cssPending ? text.previewCustomCSS : live.error} onRetry={live.retry}
+    page={page} onPage={setPage} />;
   if (!canManage) return <div className="theme-layout"><ReadOnly theme={theme.data} />{preview}</div>;
 
   const textField = (field: TextField, label: string, help: string, type = 'text', maxLength = 2000) => {
     const id = controlId(field);
     return (
       <div className="field"><label htmlFor={id}>{label}</label>
-        <input id={id} type={type} value={current[field]} maxLength={maxLength} aria-invalid={errors[field] ? true : undefined} aria-describedby={`${id}-hint`}
+        <input id={id} type={type} value={current[field]} maxLength={maxLength} aria-invalid={shown[field] ? true : undefined} aria-describedby={`${id}-hint`}
           onChange={(event) => change({ [field]: event.target.value })} />
-        <Hint id={`${id}-hint`} help={help} error={errors[field]} warning={field !== 'logo_alt' && incomplete(current, field) ? text.shapeHints[field] : undefined} /></div>
+        <Hint id={`${id}-hint`} help={help} error={shown[field]} warning={field !== 'logo_alt' && incomplete(current, field) ? text.shapeHints[field] : undefined} /></div>
     );
   };
   // The default is stored as no font (''), as before. A font saved from another key stays listed, so the
@@ -146,11 +152,11 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
     const keys = [...new Set([...fontChoices[field], ...[theme.data?.[field], current[field]].filter((key): key is string => Boolean(key))])];
     return (
       <div className="field"><label htmlFor={controlId(field)}>{label}</label>
-        <select id={controlId(field)} value={current[field] || fallback} aria-invalid={errors[field] ? true : undefined} aria-describedby={errors[field] ? `${controlId(field)}-hint` : undefined}
+        <select id={controlId(field)} value={current[field] || fallback} aria-invalid={shown[field] ? true : undefined} aria-describedby={shown[field] ? `${controlId(field)}-hint` : undefined}
           onChange={(event) => change({ [field]: event.target.value === fallback ? '' : event.target.value })}>
           {keys.map((key) => <option key={key} value={key}>{text.fontNames[key] ?? key}</option>)}
         </select>
-        <Hint id={`${controlId(field)}-hint`} error={errors[field]} /></div>
+        <Hint id={`${controlId(field)}-hint`} error={shown[field]} /></div>
     );
   };
   const submit = (event: FormEvent) => { event.preventDefault(); if (!save.isPending) save.mutate(inputOf(current)); };
@@ -159,9 +165,9 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
     <div className="theme-layout">
       <form className="stacked-form theme-form" onSubmit={submit} noValidate>
         <fieldset><legend>{text.brand}</legend>
-          <ImageField field="logo_media_id" label={text.logo} id={current.logo_media_id} empty={text.noImage} error={errors.logo_media_id} onChange={(id) => change({ logo_media_id: id })} />
+          <ImageField field="logo_media_id" label={text.logo} id={current.logo_media_id} empty={text.noImage} error={shown.logo_media_id} onChange={(id) => change({ logo_media_id: id })} />
           {textField('logo_alt', text.logoAlt, text.logoAltHelp, 'text', 200)}
-          <ImageField field="favicon_media_id" label={text.favicon} id={current.favicon_media_id} empty={text.noFavicon} error={errors.favicon_media_id} onChange={(id) => change({ favicon_media_id: id })} />
+          <ImageField field="favicon_media_id" label={text.favicon} id={current.favicon_media_id} empty={text.noFavicon} error={shown.favicon_media_id} onChange={(id) => change({ favicon_media_id: id })} />
         </fieldset>
         <fieldset><legend>{text.links}</legend>
           {textField('linkback_url', text.website, text.websiteHelp, 'url')}
@@ -172,7 +178,7 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
           <p className="muted-copy theme-note">{text.colorsHelp} <HelpTip label={text.colors} text={text.colorsTip} /></p>
           {colorFields.map((field) => (
             <ColorRow key={field} field={field} label={text.colorNames[field]} value={current.colors[field]} effective={effective[field]}
-              checks={checks.filter((check) => check.field === `colors.${field}`)} message={live.preview?.fields[`colors.${field}`]} error={errors[`colors.${field}`]}
+              checks={checks.filter((check) => check.field === `colors.${field}`)} message={live.preview?.fields[`colors.${field}`]} error={shown[`colors.${field}`]}
               onChange={(value) => change({ colors: { ...current.colors, [field]: value } })} />
           ))}
         </fieldset>
@@ -181,7 +187,7 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
           {fontField('body_font', text.bodyFont)}
           {fontField('heading_font', text.headingFont)}
         </fieldset>
-        <CustomCSSField value={current.custom_css} savedHasCSS={theme.data.custom_css !== ''} error={errors.custom_css} pending={cssPending}
+        <CustomCSSField value={current.custom_css} savedHasCSS={theme.data.custom_css !== ''} error={shown.custom_css} pending={cssPending}
           onChange={(value) => change({ custom_css: value })} />
         <span className="button-row">
           <button className="primary-action" type="submit" disabled={save.isPending}>{save.isPending ? text.saving : text.save}</button>
