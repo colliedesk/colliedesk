@@ -4,6 +4,7 @@ import type { ImportJob, ImportPreview, ImportReport, UndoReport } from '../../a
 import { reportDownloadPath } from '../../api/imports';
 import { formatDate } from '../../lib/format-date';
 import { formatWait } from '../../lib/format-wait';
+import { HelpTip } from '../../ui/help-tip';
 import { estimateRange } from './import-estimate';
 import { ImportLinksSummary } from './import-links';
 import { importMessages as m } from './import-messages';
@@ -90,9 +91,11 @@ function Current(props: ImportPageProps) {
   }
 }
 
-function Heading({ title, help, children }: { title: ReactNode; help?: string; children: ReactNode }) {
+// Heading is the title of the page's current step and one short line under it; tip is the how or why the step no longer shows.
+function Heading({ title, help, tip, children }: { title: ReactNode; help?: string; tip?: { label: string; text: string }; children: ReactNode }) {
+  const name = <h2 id="import-current-heading">{title}</h2>;
   return <>
-    <div className="section-heading"><h2 id="import-current-heading">{title}</h2>{help && <p>{help}</p>}</div>
+    <div className="section-heading">{tip ? <div className="heading-with-tip">{name}<HelpTip label={tip.label} text={tip.text} /></div> : name}{help && <p>{help}</p>}</div>
     <div className="settings-body">{children}</div>
   </>;
 }
@@ -103,7 +106,7 @@ function ConnectForm({ onPreview, busy, initialDomain = '' }: ImportPageProps & 
   const [oldHelpCenter, setOldHelpCenter] = useState('');
   // problem names the field that is wrong and says why, next to it.
   const [problem, setProblem] = useState<{ field: 'domain' | 'key'; text: string }>();
-  const ids = { domain: useId(), key: useId(), keyHelp: useId(), problem: useId(), oldHelpCenter: useId(), oldHelpCenterHelp: useId() };
+  const ids = { domain: useId(), key: useId(), keyHelp: useId(), keyTip: useId(), problem: useId(), oldHelpCenter: useId(), oldHelpCenterHelp: useId(), oldHelpCenterTip: useId() };
   const fields = { domain: useRef<HTMLInputElement>(null), key: useRef<HTMLInputElement>(null) };
   const refuse = (field: 'domain' | 'key', text: string) => { setProblem({ field, text }); fields[field].current?.focus(); };
   const submit = (event: FormEvent) => {
@@ -120,20 +123,20 @@ function ConnectForm({ onPreview, busy, initialDomain = '' }: ImportPageProps & 
   };
   const invalid = (field: 'domain' | 'key') => (problem?.field === field ? { 'aria-invalid': true as const } : {});
   const describedBy = (field: 'domain' | 'key', ...more: string[]) => [...(problem?.field === field ? [ids.problem] : []), ...more].join(' ') || undefined;
-  return <Heading title={m.connectHeading} help={m.connectHelp}>
+  return <Heading title={m.connectHeading} help={m.connectHelp} tip={{ label: m.connectHeading, text: m.connectWhy }}>
     <form className="import-connect" onSubmit={submit} noValidate>
       <label htmlFor={ids.domain}>{m.domainLabel}</label>
       <input id={ids.domain} ref={fields.domain} name="domain" autoComplete="off" spellCheck={false} placeholder={m.domainPlaceholder} value={domain}
         onChange={(event) => setDomain(event.target.value)} aria-describedby={describedBy('domain')} {...invalid('domain')} />
       {problem?.field === 'domain' && <p id={ids.problem} role="alert" className="error-copy">{problem.text}</p>}
-      <label htmlFor={ids.key}>{m.keyLabel}</label>
+      <div className="heading-with-tip"><label htmlFor={ids.key}>{m.keyLabel}</label><HelpTip label={m.keyLabel} text={m.keyWhy} id={ids.keyTip} /></div>
       <input id={ids.key} ref={fields.key} name="api_key" type="password" autoComplete="off" value={key} onChange={(event) => setKey(event.target.value)}
-        aria-describedby={describedBy('key', ids.keyHelp)} {...invalid('key')} />
+        aria-describedby={describedBy('key', ids.keyHelp, ids.keyTip)} {...invalid('key')} />
       {problem?.field === 'key' && <p id={ids.problem} role="alert" className="error-copy">{problem.text}</p>}
       <small id={ids.keyHelp} className="muted-copy">{m.keyHelp}</small>
-      <label htmlFor={ids.oldHelpCenter}>{m.oldHelpCenterLabel}</label>
+      <div className="heading-with-tip"><label htmlFor={ids.oldHelpCenter}>{m.oldHelpCenterLabel}</label><HelpTip label={m.oldHelpCenterLabel} text={m.oldHelpCenterWhy} id={ids.oldHelpCenterTip} /></div>
       <input id={ids.oldHelpCenter} name="old_help_center_domain" autoComplete="off" spellCheck={false} placeholder={m.oldHelpCenterPlaceholder}
-        value={oldHelpCenter} onChange={(event) => setOldHelpCenter(event.target.value)} aria-describedby={ids.oldHelpCenterHelp} />
+        value={oldHelpCenter} onChange={(event) => setOldHelpCenter(event.target.value)} aria-describedby={`${ids.oldHelpCenterHelp} ${ids.oldHelpCenterTip}`} />
       <small id={ids.oldHelpCenterHelp} className="muted-copy">{m.oldHelpCenterHelp}</small>
       <div className="button-row import-actions"><button type="submit" className="primary-action" disabled={busy}>{m.readAccount}</button></div>
     </form>
@@ -168,7 +171,7 @@ function Found({ job, preview, onStart, onCancel, busy }: ImportPageProps & { jo
       { label: m.rowCompanies, source: count(preview.companies) },
       { label: m.rowAgents, source: count(preview.agents.length) },
     ]} />
-    <small className="muted-copy">{m.ticketsNote}</small>
+    <small className="muted-copy">{m.ticketsNote} <HelpTip label={m.rowTickets} text={m.ticketsWhy} /></small>
     {preview.archive === 'refused' && <p className="info-note">{m.archiveRefused}</p>}
     {preview.canned_responses === 'refused' && <p className="warning-note">{m.cannedRefused}</p>}
     {preview.knowledge_base === 'refused' && <p className="warning-note">{m.knowledgeBaseRefused}</p>}
@@ -207,16 +210,15 @@ function Running({ job, onCancel, busy, timezone, report }: ImportPageProps & { 
       {job.cancel_requested ? <p role="status">{m.stopping}</p>
         : <button type="button" onClick={() => onCancel(job.id)} disabled={busy}>{m.stopImport}</button>}
     </div>
-    {progress && <small className="muted-copy import-detail">
-      {m.apiCalls(progress.api_calls)}{waitingUntil && <>{' '}{m.rateLimitWait(formatDate(waitingUntil, timezone))}</>}
-    </small>}
+    {progress && <small className="muted-copy import-detail">{m.apiCalls(progress.api_calls)}</small>}
+    {waitingUntil && <small className="muted-copy import-detail">{m.rateLimitWait(formatDate(waitingUntil, timezone))} <HelpTip label={m.rateLimitLabel} text={m.rateLimitWhy} /></small>}
   </Heading>;
 }
 
 function KeyAgain({ job, onSetKey, onCancel, busy }: ImportPageProps & { job: ImportJob }) {
   const [key, setKey] = useState('');
   const id = useId();
-  return <Heading title={m.keyHeading} help={m.keyHelpAgain}>
+  return <Heading title={m.keyHeading} help={m.keyHelpAgain} tip={{ label: m.keyHeading, text: m.keyAgainWhy }}>
     <form className="import-connect" onSubmit={(event) => { event.preventDefault(); if (key.trim()) onSetKey(job.id, key.trim()); }}>
       <label htmlFor={id}>{m.keyLabel}</label>
       <input id={id} name="api_key" type="password" autoComplete="off" value={key} onChange={(event) => setKey(event.target.value)} />

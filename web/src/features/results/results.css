@@ -33,11 +33,12 @@
 .results-head { border-bottom: 1px solid var(--line); background: var(--surface-2); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding-block: var(--space-3); }
 .results-head-title { margin: 0; display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: var(--fs-small); font-weight: 600; color: var(--text-1); }
 .results-row + .results-row { border-top: 1px solid var(--line); }
-.results-metric h2 { margin: 0 0 var(--space-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
-.results-metric p { margin: 0; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; }
-.results-metric strong { color: var(--text-1); font-weight: 600; }
+/* The name of a metric and the tip that says how it is counted, side by side (.heading-with-tip). */
+.results-metric h2 { margin: 0; font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
 .results-cell { display: grid; gap: 2px; align-content: start; min-width: 0; }
 .results-cell-label, .results-narrow { display: none; }
+/* The window of a column, repeated in its label where the column heads are hidden. */
+.results-cell-label .results-narrow { font-weight: 400; }
 .results-cell-title { margin: 0 0 var(--space-1); font-size: var(--fs-small); font-weight: 600; color: var(--text-1); }
 .results-number { justify-self: start; color: var(--text-1); font: 500 var(--fs-heading, 24px)/32px var(--font-sans); text-decoration: underline; text-decoration-color: var(--line-control);
   text-decoration-thickness: 1px; text-underline-offset: 4px; font-variant-numeric: tabular-nums; }
@@ -68,8 +69,6 @@
 .results-ai { display: grid; gap: var(--space-3); padding: var(--space-5); }
 .results-ai > header { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
 .results-ai h2 { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; }
-.results-ai-how { margin: 0; color: var(--text-2); font-size: var(--fs-label); line-height: 16px; }
-.results-ai-how strong { color: var(--text-1); font-weight: 600; }
 .results-ai-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); gap: var(--space-4); }
 .results-ai-grid > div { display: grid; gap: 2px; align-content: start; min-width: 0; }
 .results-saved { border-radius: 0; background: transparent; padding: 0; }

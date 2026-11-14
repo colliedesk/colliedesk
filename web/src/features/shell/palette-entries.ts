@@ -44,7 +44,7 @@ export function paletteEntries(me: Me, { inboxOpen = 0, mentionsUnread = 0, onNe
   ];
   const actions: PaletteEntry[] = [
     ...(onNewConversation ? [{ key: 'new-conversation', label: messages.newConversation, icon: icon(PenIcon), run: onNewConversation }] : []),
-    ...(reads('team:invite') ? [{ key: 'invite', label: messages.inviteTeammates, icon: icon(UserPlusIcon), href: '/settings/members' }] : []),
+    ...(reads('team:invite') ? [{ key: 'invite', label: messages.inviteTeammates, icon: icon(UserPlusIcon), href: '/settings/members?tab=invites' }] : []),
   ];
   return { places, actions, searchConversations: reads('conversations:read'), searchCustomers: reads('contacts:read') };
 }

@@ -1,6 +1,7 @@
 // Strings of saved replies: their Settings section, history and trash, the reply box picker and the requests that propose a change. They load with those parts, not with the first screen.
 export const savedReplyMessages = {
-  savedRepliesDescription: 'Anyone can add, edit or delete them. {{customer.name}} and {{agent.name}} are filled in when a reply is inserted.',
+  savedRepliesDescription: 'Anyone can add, edit or delete them.',
+  savedRepliesWhy: '{{customer.name}} and {{agent.name}} are filled in when a reply is inserted.',
   searchSavedReplies: 'Search saved replies',
   loadingSavedReplies: 'Loading saved replies…',
   savedRepliesFailed: 'Saved replies could not be loaded. Close this and try again.',
@@ -10,7 +11,7 @@ export const savedReplyMessages = {
   savedReplyTitle: 'Title',
   savedReplyText: 'Text',
   addSavedReply: 'Add saved reply',
-  saveSavedReply: 'Save saved reply',
+  titleAndTextRequired: 'A saved reply needs a title and its text.',
   editSavedReplyName: (title: string) => `Edit ${title}`,
   deleteSavedReplyName: (title: string) => `Delete ${title}`,
   confirmDeleteSavedReply: (title: string) => `Move "${title}" to the trash? It can be restored for 30 days.`,
@@ -26,7 +27,8 @@ export const savedReplyMessages = {
   savedReplyTrash: 'Trash',
   closeSavedReplyTrash: 'Close trash',
   savedReplyTrashEmpty: 'The trash is empty.',
-  savedReplyTrashDescription: 'Deleted saved replies stay here for 30 days, then they are deleted for good with their history.',
+  savedReplyTrashDescription: 'Deleted saved replies stay here for 30 days.',
+  savedReplyTrashWhy: 'Then they are deleted for good with their history.',
   restoreSavedReply: 'Restore',
   restoreSavedReplyName: (title: string) => `Restore ${title}`,
   savedReplyDaysLeft: (days: number) => (days === 1 ? '1 day left' : `${days} days left`),

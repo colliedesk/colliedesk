@@ -5,8 +5,8 @@ import { lazyWords } from './lang';
 
 const en = {
   serverProviderOn: "The server's provider",
-  serverProviderOnHelp: 'Workspaces can pick it. Off stops it and keeps everything below for when it is on again.',
-  serverProviderOffHelp: 'Off: no workspace can pick it, and features set to it stop and say why. Its settings are kept.',
+  serverProviderOnHelp: 'Workspaces can pick it. Off keeps the settings below.',
+  serverProviderOffHelp: 'Off: nobody can pick it; features on it stop and say why.',
   serverProviderService: 'Service',
   outOfCredit: 'The provider account is out of credit.',
   outOfCreditBody: (n: string, since: string) => `It refused ${n} AI ${n === '1' ? 'call' : 'calls'} since ${since}: features on it fail, and each says why. Add credit to the account (or raise the key's limit), or pick another service or key below. Saving is not affected.`,
@@ -17,7 +17,7 @@ const en = {
     self_hosted: ['Other or self-hosted', 'Any OpenAI-compatible server: vLLM, Ollama, LM Studio…'],
   } as Record<string, readonly [string, string]>,
   serverModels: 'Models',
-  serverModelsHelp: 'Every workspace on this provider runs these models; a workspace picks the provider, never its model.',
+  serverModelsHelp: 'Workspaces pick the provider, and always get these models.',
   listing: 'Listing the models this key may use…',
   listed: (n: number) => `${n} ${n === 1 ? 'model' : 'models'} available. Type in a box to search.`,
   listNeedsKey: 'Enter the API key to list the models it may use.',
@@ -37,7 +37,7 @@ const en = {
   perMillion: (input: number, output: number) => `$${input} in · $${output} out per 1M tokens`,
   // Pricing and allowance
   pricesTitle: 'Price of each model',
-  pricesHelp: 'US dollars per million tokens. A model picked from the list gets the price its provider lists.',
+  pricesHelp: 'USD per million tokens. A picked model gets its list price.',
   priceModel: 'Model',
   priceInput: 'Input',
   priceOutput: 'Output',
@@ -48,7 +48,7 @@ const en = {
   fillPrices: (n: number) => `Use the listed price for ${n} ${n === 1 ? 'model' : 'models'}`,
   noModelsYet: 'Pick the models above first.',
   allowanceTitle: 'Monthly allowance',
-  allowanceHelp: 'What the server’s provider may spend for one workspace in a calendar month, in US dollars.',
+  allowanceHelp: 'Most a workspace may spend on this provider per UTC month.',
   allowanceNone: 'No limit',
   allowanceWorkspace: 'Same for every workspace',
   allowanceAgent: 'Per active agent',

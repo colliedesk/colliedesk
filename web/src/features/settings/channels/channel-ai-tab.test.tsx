@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AISettings, ChannelAI } from '../../../api/ai';
 import type { ChannelDetail } from '../../../api/channels';
+import { SettingsEditsProvider } from '../settings-edits';
 import { ChannelAITab } from './channel-ai-tab';
 
 const aiApi = vi.hoisted(() => ({ channel: vi.fn(), setChannel: vi.fn(), settings: vi.fn(), readiness: vi.fn() }));
@@ -32,7 +33,7 @@ const settings = (consents: string[] = []) => ({ slots: [slot('triage'), slot('d
   consented_by: null, consented_at: '2026-10-25T08:00:00Z' })) }) as unknown as AISettings;
 
 const view = (isAdmin = true) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-  <ChannelAITab channel={channel} isAdmin={isAdmin} /></QueryClientProvider>);
+  <SettingsEditsProvider><ChannelAITab channel={channel} isAdmin={isAdmin} /></SettingsEditsProvider></QueryClientProvider>);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -60,7 +61,7 @@ test('intake at Suggest has its settings: defaults as hints, and Save sends what
   fireEvent.click(within(form).getByRole('checkbox', { name: /Past corrections by people/ }));
   fireEvent.change(within(form).getByLabelText('Words that mark a secret'), { target: { value: 'mật khẩu\nOTP\n' } });
   fireEvent.change(within(form).getByLabelText('Instructions for this channel'), { target: { value: 'Lệnh "Báo lỗi" mở phiếu.' } });
-  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: {
     create_threshold: 0.8, attach_threshold: 0.93, reopen_window_days: 3, sources: { corrections: true }, redact_keywords: ['mật khẩu', 'OTP'], instructions: 'Lệnh "Báo lỗi" mở phiếu.',
   } }));
@@ -87,13 +88,13 @@ test('a value out of range is refused by the server and said under the form; age
   const { unmount } = view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
   fireEvent.change(within(form).getByLabelText('Open a conversation'), { target: { value: '1.5' } });
-  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   expect(await within(form).findByRole('alert')).toBeInTheDocument();
   unmount();
   view(false);
   const read = await screen.findByRole('form', { name: 'Intake settings · Groups' });
   expect(within(read).getByLabelText('Open a conversation')).toBeDisabled();
-  expect(within(read).queryByRole('button', { name: 'Save intake settings' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 });
 
 test('intake off on a scope has no settings to show', async () => {
@@ -115,14 +116,14 @@ test('adding alone while the customer has several open conversations is allowed 
   view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
   fireEvent.click(within(form).getByRole('checkbox', { name: /Never add on its own/ }));
-  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: {
     create_threshold: 0.8, attach_requires_single_candidate: true,
   } }));
   const saved = await screen.findByRole('form', { name: 'Intake settings · Groups' });
   expect(within(saved).getByRole('checkbox', { name: /Never add on its own/ })).toBeChecked();
   fireEvent.click(within(saved).getByRole('checkbox', { name: /Never add on its own/ }));
-  fireEvent.click(within(saved).getByRole('button', { name: 'Save intake settings' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(aiApi.setChannel).toHaveBeenLastCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: { create_threshold: 0.8 } }));
 });
 
@@ -131,7 +132,7 @@ test('saving the settings keeps what this form does not show, since the server t
   view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
   fireEvent.change(within(form).getByLabelText('Reopen a resolved conversation within (days)'), { target: { value: '3' } });
-  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: {
     create_threshold: 0.8, reopen_window_days: 3, gate_override: ['create'], gate_override_reason: 'Checked 40 cards by hand',
   } }));
@@ -228,7 +229,7 @@ test('masking patterns: an admin adds one with what it stands for, removes one, 
   fireEvent.change(within(table).getByLabelText('Pattern 2'), { target: { value: '\\b0\\d{9}\\b' } });
   fireEvent.change(within(table).getByLabelText('Shown as, pattern 2'), { target: { value: 'phone' } });
   fireEvent.click(within(table).getByRole('button', { name: 'Remove pattern 1' }));
-  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: {
     create_threshold: 0.8, redact_patterns: [{ pattern: '\\b0\\d{9}\\b', mask: 'phone' }],
   } }));
@@ -249,7 +250,9 @@ test('settings the server refuses are said once, under the form', async () => {
   aiApi.setChannel.mockRejectedValue(new Error('API 500'));
   view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
-  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  // Saving needs a change.
+  fireEvent.change(within(form).getByLabelText('Reopen a resolved conversation within (days)'), { target: { value: '3' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await within(form).findByRole('alert');
   expect(screen.getAllByRole('alert')).toHaveLength(1);
 });
@@ -289,9 +292,9 @@ test('a scope that follows the default shows its settings read-only and says how
   aiApi.settings.mockResolvedValue({ ...settings(), slots: [slot('triage'), slot('draft'), { ...slot('intake'), default_level: 'suggest' }] } as unknown as AISettings);
   view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
-  expect(within(form).getByText('These follow the default. Pick Suggest or Auto for Groups above to set its own.')).toBeInTheDocument();
+  expect(within(form).getByText('Following the default. Pick Suggest or Auto for Groups above.')).toBeInTheDocument();
   expect(within(form).getByLabelText('Open a conversation')).toBeDisabled();
-  expect(within(form).queryByRole('button', { name: 'Save intake settings' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 });
 
 test('an age set to seconds that are not whole minutes is kept when other fields are saved', async () => {
@@ -299,7 +302,7 @@ test('an age set to seconds that are not whole minutes is kept when other fields
   view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
   fireEvent.change(within(form).getByLabelText('Reopen a resolved conversation within (days)'), { target: { value: '3' } });
-  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: { auto_max_age_seconds: 90, reopen_window_days: 3 } }));
 });
 
@@ -318,8 +321,90 @@ test('a refusal names the field as the form does, and takes the focus', async ()
   aiApi.setChannel.mockRejectedValue(new InvalidRequestError('create_threshold is between 0.5 and 0.99.'));
   view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
-  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  // Saving needs a change.
+  fireEvent.change(within(form).getByLabelText('Reopen a resolved conversation within (days)'), { target: { value: '3' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   const alert = await within(form).findByRole('alert');
   expect(alert).toHaveTextContent('Not saved: “Open a conversation” is between 0.5 and 0.99.');
   expect(document.activeElement).toBe(alert);
+});
+
+// Quiet by default: a row keeps its label and one short line; the how and why wait in a help tip, which is
+// the description of its control.
+const ownText = (element: Element) => Array.from(element.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent).join('').trim();
+
+test('the AI tab says what it sets in one line, and the levels explanation waits in a tip', async () => {
+  view();
+  expect(await screen.findByText('What each AI feature does by itself on this channel.')).toBeInTheDocument();
+  const tip = screen.getByRole('button', { name: 'About AI on this channel' });
+  expect(tip).toHaveAccessibleDescription(/A level left on the default follows the workspace’s, set in Settings → Built-in AI\./);
+  expect(tip).toHaveAccessibleDescription(/People can always ask by hand \(Suggest, Draft with AI\) while the feature is on\./);
+  expect(screen.queryByText(/Every change is in this channel’s history/, { selector: '.help' })).toBeNull();
+});
+
+test('each group of intake settings keeps one short line, and what explains it is the description of its tip or field', async () => {
+  view();
+  const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
+  for (const line of Array.from(form.querySelectorAll('.help, .ch-ai-lead'))) expect(ownText(line).length).toBeLessThanOrEqual(60);
+  expect(within(form).getByRole('button', { name: 'About Intake settings · Groups' })).toHaveAccessibleDescription('A field left empty keeps the default shown.');
+  expect(within(form).getByRole('button', { name: 'About Deciding alone (Auto)' })).toHaveAccessibleDescription('Below that, it only suggests in Review.');
+  expect(within(form).getByRole('button', { name: 'About What AI reads besides the messages' })).toHaveAccessibleDescription('What the customer wrote is always read.');
+  expect(within(form).getByRole('textbox', { name: 'Words that mark a secret' }))
+    .toHaveAccessibleDescription(/^One per line, in the channel’s language\. For example "mật khẩu" or "OTP"\. What follows them is hidden before AI reads it\.$/);
+  expect(within(form).getByRole('button', { name: 'About What AI never reads' })).toHaveAccessibleDescription(/Removing a word asks for the same approval as raising AI\./);
+  expect(within(form).getByRole('button', { name: 'About Patterns to mask' })).toHaveAccessibleDescription(/regular expression \(RE2\) and what AI sees instead/);
+});
+
+test('the Auto dialog says in one line what Auto does, and when it waits for a person in a tip', async () => {
+  aiApi.readiness.mockResolvedValue(readiness());
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'auto' } });
+  const dialog = await screen.findByRole('dialog', { name: 'Let AI decide on its own · Groups' });
+  expect(within(dialog).getByText('AI decides what it is sure of; Review gets the rest.')).toBeInTheDocument();
+  const tip = await within(dialog).findByRole('button', { name: 'About Readiness' });
+  expect(tip).toHaveAccessibleDescription(/A message AI is not sure of waits in Review with its suggestion for a person to decide\./);
+  expect(tip).toHaveAccessibleDescription(/A decision is labelled when a person followed or changed what AI suggested in Review\./);
+});
+
+// A channel's level is a choice: it saves when it is made, says "Saved" and offers Undo, which sends the level it had
+// before in one request.
+test('a level picked for a scope says Saved with Undo, and Undo sends the previous level', async () => {
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'off' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'off' }));
+  fireEvent.click(within((await screen.findByText('Saved')).closest('.settings-toast') as HTMLElement).getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenLastCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: { create_threshold: 0.8 } }));
+  expect(aiApi.setChannel).toHaveBeenCalledTimes(2);
+});
+
+test('a level the server refuses says nothing is saved', async () => {
+  aiApi.setChannel.mockRejectedValue(new Error('refused'));
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'off' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalled());
+  await new Promise((resolve) => { setTimeout(resolve, 30); });
+  expect(screen.queryByText('Saved')).toBeNull();
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+});
+
+// Choosing Follows deletes the scope's row and its settings on the server. Undo must put back exactly what was there: the
+// level with the settings it had (redact words, instructions, an override and its reason), never a bare Auto.
+const autoOptions = { create_threshold: 0.8, redact_keywords: ['mật khẩu'], instructions: 'Lệnh "Báo lỗi" mở phiếu.', gate_override: ['attach' as const], gate_override_reason: 'We checked 50 by hand' };
+
+test('Undo of Follows on an Auto scope sends the settings the scope had with its level', async () => {
+  aiApi.channel.mockResolvedValue(levels({ level: 'auto', effective_level: 'auto', options: autoOptions }));
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: '' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: null }));
+  fireEvent.click(within((await screen.findByText('Saved')).closest('.settings-toast') as HTMLElement).getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenLastCalledWith(CHAT, 'intake', { scope: 'group', level: 'auto', options: autoOptions }));
+});
+
+test('where the settings the scope had are not known, Saved offers no Undo: Auto is never put back without them', async () => {
+  aiApi.channel.mockResolvedValue(levels({ level: 'auto', effective_level: 'auto', options: null }));
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: '' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledTimes(1));
+  const toast = (await screen.findByText('Saved')).closest('.settings-toast') as HTMLElement;
+  expect(within(toast).queryByRole('button', { name: 'Undo' })).toBeNull();
 });

@@ -6,6 +6,7 @@ import { InvalidRequestError, request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import type { Generated } from '../../api/schemas';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { searchConsoleMessages as text } from './help-center-search-console-messages';
 
 const path = '/api/v1/help-center/search-console';
@@ -54,11 +55,11 @@ export function HelpCenterSearchConsoleSection({ canManage }: { canManage: boole
   };
   return <section className="stacked-form hc-section" aria-labelledby="help-center-search-console-heading">
     <h3 id="help-center-search-console-heading">{text.heading}</h3>
-    <p className="muted-copy">{text.description}</p>
+    <p className="muted-copy">{text.description} <HelpTip label={text.heading} text={text.descriptionTip} link={{ href: text.guide, label: text.learnMore }} /></p>
     {canManage
       ? <form className="stacked-form" onSubmit={submit}>
-          <Token id="search-console-google" label={text.googleLabel} help={text.googleHelp} value={google} problem={fields.google_site_verification} onChange={setGoogle} />
-          <Token id="search-console-bing" label={text.bingLabel} help={text.bingHelp} value={bing} problem={fields.bing_site_verification} onChange={setBing} />
+          <Token id="search-console-google" label={text.googleLabel} help={text.googleHelp} tip={text.googleTip} value={google} problem={fields.google_site_verification} onChange={setGoogle} />
+          <Token id="search-console-bing" label={text.bingLabel} help={text.bingHelp} tip={text.bingTip} value={bing} problem={fields.bing_site_verification} onChange={setBing} />
           {failed && <p role="alert" className="error-copy">{failed}</p>}
           <span className="button-row"><button className="primary-action" type="submit" disabled={save.isPending}>{save.isPending ? text.saving : text.save}</button>
             {save.isSuccess && <span role="status" className="saved-state" data-on="true">{text.saved}</span>}</span>
@@ -71,10 +72,10 @@ export function HelpCenterSearchConsoleSection({ canManage }: { canManage: boole
   </section>;
 }
 
-function Token({ id, label, help, value, problem, onChange }: { id: string; label: string; help: string; value: string; problem?: string; onChange: (value: string) => void }) {
+function Token({ id, label, help, tip, value, problem, onChange }: { id: string; label: string; help: string; tip: string; value: string; problem?: string; onChange: (value: string) => void }) {
   return <div className="field"><label htmlFor={id}>{label}</label>
     <input id={id} value={value} maxLength={100} autoComplete="off" spellCheck={false} aria-invalid={problem ? true : undefined}
-      aria-describedby={`${id}-help`} onChange={(event) => onChange(event.target.value)} />
-    <small id={`${id}-help`} className="muted-copy">{help}</small>
+      aria-describedby={`${id}-help ${id}-tip`} onChange={(event) => onChange(event.target.value)} />
+    <small className="muted-copy"><span id={`${id}-help`}>{help}</span>{' '}<HelpTip label={label} text={tip} id={`${id}-tip`} /></small>
     {problem && <small role="alert" className="error-copy">{problem}</small>}</div>;
 }

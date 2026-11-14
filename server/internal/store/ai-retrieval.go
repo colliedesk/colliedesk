@@ -672,9 +672,11 @@ func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, id
 			continue
 		}
 		// Masked before it is cut: a cut through a name would leave the part before it unmasked.
-		body := "Customer: " + cutRunes(maskAIText(strings.TrimSpace(*incoming), contact), aiCustomerRunes)
+		// Every line after a message's first is indented, so a customer cannot start a line "Reply:" and
+		// pass words of their own as the team's answer.
+		body := "Customer: " + cutRunes(IndentFollowingLines(maskAIText(strings.TrimSpace(*incoming), contact)), aiCustomerRunes)
 		if reply != nil {
-			body += "\n\nReply: " + maskAIText(strings.TrimSpace(*reply), contact)
+			body += "\n\nReply: " + IndentFollowingLines(maskAIText(strings.TrimSpace(*reply), contact))
 		}
 		title := cutRunes(maskAIText(subject, contact), 300)
 		docs.add(nil, nil, &id, title, cutRunes(body, aiConversationRunes-utf8.RuneCountInString(title)), updated)
@@ -683,6 +685,12 @@ func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, id
 		return err
 	}
 	return docs.insert(ctx, tx, workspaceID)
+}
+
+// IndentFollowingLines indents every line of a message after its first, so a line of the text never
+// starts where a prompt's own labels ("Customer:", "Agent:", "Reply:") do.
+func IndentFollowingLines(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", "\n  ")
 }
 
 // RunAIRetrieval builds queued sources every interval until ctx ends.

@@ -40,6 +40,8 @@
 .settings-v2 .settings-rows > .form-row { grid-template-columns: 15rem minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-4); row-gap: var(--space-1); }
 .settings-v2 .settings-rows > .form-row > .field { display: contents; }
 .settings-v2 .settings-rows > .form-row > :nth-child(n + 3) { grid-column: 2 / -1; }
+/* A row whose text waits for the page's Save has no button of its own: what follows the field (its state, its hint) sits under the input. */
+.settings-v2 .settings-rows > .form-row:not(:has(> button)) > :nth-child(n + 2) { grid-column: 2 / -1; }
 .settings-v2 .settings-rows > .field { grid-template-columns: 15rem minmax(0, 1fr); align-items: center; column-gap: var(--space-4); row-gap: var(--space-1); }
 .settings-v2 .settings-rows > .field > :nth-child(n + 3) { grid-column: 2 / -1; }
 .settings-v2 .settings-rows > .field > .field-inline { grid-column: 1 / -1; }
@@ -75,6 +77,7 @@
   .settings-v2 .settings-sections, .settings-v2 .settings-sections:has(.team-list) { max-width: none; }
   .settings-v2 .settings-rows > .form-row, .settings-v2 .settings-rows > .field { grid-template-columns: minmax(0, 1fr); align-items: start; }
   .settings-v2 .settings-rows > .form-row > :nth-child(n + 3), .settings-v2 .settings-rows > .field > :nth-child(n + 3) { grid-column: 1 / -1; }
+  .settings-v2 .settings-rows > .form-row:not(:has(> button)) > :nth-child(n + 2) { grid-column: 1 / -1; }
   .settings-v2 .settings-rows > .form-row > button { justify-self: start; }
 }
 
@@ -94,7 +97,7 @@
 .settings-v2 .import-connect { max-width: 34rem; gap: var(--space-2); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-5); }
 .settings-v2.import-page .settings-body > .import-connect { padding: var(--space-5); }
 .settings-v2 .import-connect label { color: var(--text-1); font-size: var(--fs-small); font-weight: 500; line-height: 20px; }
-.settings-v2 .import-connect label:not(:first-child) { margin-top: var(--space-2); }
+.settings-v2 .import-connect label:not(:first-child), .settings-v2 .import-connect .heading-with-tip:not(:first-child) { margin-top: var(--space-2); }
 .settings-v2 .import-connect small { font-size: var(--fs-label); line-height: 16px; }
 
 /* The ledger: a card table, 36px head, 48px rows, counts in the sans face, right-aligned. */
@@ -170,3 +173,9 @@
 /* Links inside a sentence of a card (Roles: "Make a role", "Give to someone") get a 32px hit area without
    moving the line: vertical padding on an inline box does not change the line height (final review V11). */
 .settings-v2 :is(.roles-list, .settings-rows > .muted-copy, .role-form .muted-copy) a:not(.button) { padding-block: 9px; }
+
+/* A tab's panel (Members) holds its sections one under the other, as the page does without tabs. */
+.settings-v2 .settings-tab-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); min-width: 0; }
+/* The reserved places (Groups, Conversation fields) say what is coming in a card of text. */
+.coming-card .settings-body { display: grid; gap: var(--space-2); padding: var(--space-4); }
+.coming-card p { margin: 0; color: var(--text-2); }

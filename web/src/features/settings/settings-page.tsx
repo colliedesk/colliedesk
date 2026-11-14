@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { Invite, Session } from '../../api/schemas';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { settingsMessages } from './settings-messages';
 import { DisplayNameField } from './display-name-field';
 import { InvitesSection } from './invites-section';
@@ -10,7 +12,12 @@ import { PreferencesSection } from './preferences-section';
 import type { SaveState } from './save-feedback';
 import { ConnectedAppsSection } from './connected-apps-section';
 import { SessionsSection } from './sessions-section';
+import { useInstantSave, useUnsavedText } from './settings-edits';
 import { SettingsFrame } from './settings-frame';
+import { MembersTabs } from './members-tabs';
+import type { MembersTab } from './settings-anchors';
+import { useInviteDraft } from './use-invite-draft';
+import type { TabChange } from '../../ui/tabs';
 import { TimezoneSelect } from './timezone-select';
 
 // The settings pages drawn here; AI & agents, Data and the others are pages of their own modules.
@@ -26,15 +33,15 @@ interface SettingsPageProps {
   workspaceTimezone?: string;
   workspaceName?: string;
   workspaceNameSave?: SaveState;
-  onSetWorkspaceName?: (name: string) => void;
+  onSetWorkspaceName?: (name: string) => Promise<unknown> | void;
   timezoneOverride?: string | null;
   // email and displayName are the person signed in; an empty name shows the email.
   email?: string;
   displayName?: string;
-  onSetDisplayName?: (name: string) => void;
+  onSetDisplayName?: (name: string) => Promise<unknown> | void;
   // The setup guide in the inbox is this agent's choice, saved with the profile.
   setupGuideHidden?: boolean;
-  onSetSetupGuideHidden?: (hidden: boolean) => void;
+  onSetSetupGuideHidden?: (hidden: boolean, undo?: boolean) => Promise<unknown> | void;
   displayNameSave?: SaveState;
   // The invite just created: its one-time link, or none when a repeat of the press came back without it.
   createdInvite?: { url?: string };
@@ -46,8 +53,11 @@ interface SettingsPageProps {
   canRevokeInvites?: boolean;
   onRevokeSession?: (id: string) => void;
   onRevokeInvite?: (id: string) => void;
-  onSetWorkspaceTimezone?: (timezone: string) => void;
-  onSetAgentTimezone?: (timezone: string | null) => void;
+  myPermissions?: readonly string[];
+  onResendInvite?: (invite: Invite, mayRevoke: boolean) => Promise<boolean>;
+  inviteNotice?: { kind: 'status' | 'alert'; text: string };
+  onSetWorkspaceTimezone?: (timezone: string) => Promise<unknown> | void;
+  onSetAgentTimezone?: (timezone: string | null) => Promise<unknown> | void;
   loading?: boolean;
   error?: string;
   workspaceTimezoneSave?: SaveState;
@@ -70,6 +80,11 @@ interface SettingsPageProps {
   mcpAddress?: string;
   // showBilling adds Plan and billing to the menu; only admins of a billed (cloud) workspace see it.
   showBilling?: boolean;
+  // Members: the tab open, the way to change it, and what the tabs count.
+  membersTab?: MembersTab;
+  onMembersTab?: (tab: MembersTab, how: TabChange) => void;
+  memberCounts?: { people?: number; invites?: number };
+  // The invite being typed, kept by the page so a change of tab does not drop it.
 }
 
 const titles: Record<SettingsPageName, string> = { account: messages.account, general: messages.general, members: messages.members, 'saved-replies': messages.savedReplies };
@@ -88,12 +103,7 @@ export function SettingsPage(props: SettingsPageProps) {
         {canManageWorkspace && <GeneralSection {...props} />}
         {numbersSection}
       </>}
-      {page === 'members' && <>
-        {teamSection}
-        {showInvites && <InvitesSection invites={props.invites ?? []} timezone={timezone} canCreateInvites={props.canCreateInvites ?? false} canRevokeInvites={props.canRevokeInvites} createdInvite={props.createdInvite}
-          creatingInvite={props.creatingInvite} inviteError={props.inviteError} roles={props.inviteRoles} onCreateInvite={props.onCreateInvite} onRevokeInvite={props.onRevokeInvite} />}
-        {props.rolesSection}
-      </>}
+      {page === 'members' && <MembersPanels {...props} />}
       {page === 'saved-replies' && savedRepliesSection}
     </SettingsFrame>
   );
@@ -103,13 +113,14 @@ export function SettingsPage(props: SettingsPageProps) {
 // The agent tokens and the sessions they opened are in AI & agents.
 function AccountSections({ sessions = [], timezone, displayName = '', email, displayNameSave, onSetDisplayName, timezoneOverride = null, workspaceTimezone = 'UTC',
   personalTimezoneSave, onSetAgentTimezone, setupGuideHidden = false, onSetSetupGuideHidden, onRevokeSession, mentionEmail, mcpAddress = `${window.location.origin}/mcp` }: SettingsPageProps) {
+  const choose = useInstantSave();
   return <>
     <section className="settings-card" aria-labelledby="profile-heading">
       <div className="section-heading"><h2 id="profile-heading">{messages.profile}</h2><p>{settingsMessages.profileDescription}</p></div>
       <div className="settings-body settings-rows">
         <DisplayNameField value={displayName} email={email} save={displayNameSave} onSave={onSetDisplayName} />
         <TimezoneSelect label={settingsMessages.yourTimezone} value={timezoneOverride ?? ''} emptyOption={settingsMessages.sameAsWorkspace(workspaceTimezone)}
-          save={personalTimezoneSave} onChange={(value) => onSetAgentTimezone?.(value || null)} />
+          save={personalTimezoneSave} onChange={(value) => void choose(onSetAgentTimezone ?? (() => undefined), value || null, timezoneOverride)} />
       </div>
     </section>
     <PreferencesSection setupGuideHidden={setupGuideHidden} onSetSetupGuideHidden={onSetSetupGuideHidden} mentionEmail={mentionEmail} />
@@ -119,12 +130,32 @@ function AccountSections({ sessions = [], timezone, displayName = '', email, dis
 }
 
 function GeneralSection({ workspaceName = '', workspaceNameSave, onSetWorkspaceName, workspaceTimezone = 'UTC', workspaceTimezoneSave, onSetWorkspaceTimezone }: SettingsPageProps) {
+  const choose = useInstantSave();
   return <section className="settings-card" aria-labelledby="general-heading">
-    <div className="section-heading"><h2 id="general-heading" className="sr-only">{messages.general}</h2><p>{settingsMessages.generalDescription}</p></div>
+    <div className="section-heading"><h2 id="general-heading" className="sr-only">{messages.general}</h2>
+      <p className="heading-with-tip"><span>{settingsMessages.generalDescription}</span><HelpTip label={messages.general} text={settingsMessages.generalWhy} /></p></div>
     <div className="settings-body settings-rows">
-      <NameForm label={messages.workspaceName} saveLabel={settingsMessages.saveWorkspaceName} hint={settingsMessages.workspaceNameHelp}
+      <NameForm label={messages.workspaceName} hint={settingsMessages.workspaceNameHelp} tip={settingsMessages.workspaceNameWhy}
         value={workspaceName} canManage save={workspaceNameSave} onSave={onSetWorkspaceName} minLength={2} maxLength={60} />
-      <TimezoneSelect label={settingsMessages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave} onChange={(value) => onSetWorkspaceTimezone?.(value)} />
+      <TimezoneSelect label={settingsMessages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave}
+        onChange={(value) => void choose(onSetWorkspaceTimezone ?? (() => undefined), value, workspaceTimezone)} />
     </div>
   </section>;
+}
+
+// MembersPanels holds the invite being typed where it survives a change of tab, and says when it is unsaved: an email, or
+// roles other than the default one. Once an invite is created the form is empty again.
+function MembersPanels(props: SettingsPageProps) {
+  const { timezone, showInvites = true, teamSection, createdInvite } = props;
+  const { email, setEmail, picked, setPicked } = useInviteDraft();
+  const agent = props.inviteRoles?.find((role) => role.system === 'agent');
+  const differs = picked !== null && (picked.length !== (agent ? 1 : 0) || (agent !== undefined && !picked.includes(agent.id)));
+  useUnsavedText('invite', email.trim() !== '' || differs);
+  const createdUrl = createdInvite?.url;
+  useEffect(() => { if (createdUrl) { setEmail(''); setPicked(null); } }, [createdUrl]);
+  return <MembersTabs tab={props.membersTab ?? 'people'} onTab={(tab, how) => props.onMembersTab?.(tab, how)} counts={props.memberCounts ?? {}}
+    people={<>{teamSection}{teamSection && props.inviteRoles && <p className="muted-copy">{props.inviteRoles?.length === 2 ? settingsMessages.defaultRolesNote : settingsMessages.customRolesNote}</p>}</>}
+    invites={showInvites && <InvitesSection invites={props.invites ?? []} timezone={timezone} canCreateInvites={props.canCreateInvites ?? false} canRevokeInvites={props.canRevokeInvites} createdInvite={createdInvite}
+      creatingInvite={props.creatingInvite} inviteError={props.inviteError} roles={props.inviteRoles} myPermissions={props.myPermissions} onCreateInvite={props.onCreateInvite} onRevokeInvite={props.onRevokeInvite} onResendInvite={props.onResendInvite} inviteNotice={props.inviteNotice} draft={{ email, setEmail, picked, setPicked }} />}
+    advanced={props.rolesSection} />;
 }

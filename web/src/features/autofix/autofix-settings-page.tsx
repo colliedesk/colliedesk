@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { formatDay, formatShortDate } from '../../lib/format-date';
 import { Dialog } from '../../ui/dialog';
+import { HelpTip } from '../../ui/help-tip';
 import type { AutofixSettings, ConnectorState, FixConnector, GitHubRepo, Installation, Repo } from './autofix-api';
 import { StateLabel, OutLink } from './autofix-block';
 import { ExternalIcon, KeyIcon } from './autofix-icons';
@@ -51,7 +52,7 @@ export interface AutofixSettingsPageProps {
 
 type Busy = (run: () => Promise<unknown>) => void;
 
-function Confirm({ title, help, children, confirm, danger, onConfirm, onClose, busy }: { title: string; help: string; children?: ReactNode; confirm: string; danger?: boolean; onConfirm: () => void; onClose: () => void; busy: boolean }) {
+function Confirm({ title, help, children, confirm, danger, onConfirm, onClose, busy }: { title: string; help?: string; children?: ReactNode; confirm: string; danger?: boolean; onConfirm: () => void; onClose: () => void; busy: boolean }) {
   return <Dialog alert className="af-dialog" title={title} help={help} closeLabel={autofixMessages.close} onClose={onClose} onSubmit={onConfirm}
     footer={<><button type="button" className="af-ghost" onClick={onClose}>{autofixMessages.cancel}</button>
       <button type="submit" className={danger ? 'af-danger-solid' : 'primary-action'} disabled={busy}>{confirm}</button></>}>{children}</Dialog>;
@@ -72,7 +73,7 @@ function GitHubStep({ installation, isAdmin, at, busy, run, actions, repos }: { 
       <div className="af-cardopt af-static"><span className="af-ok-mark" aria-hidden="true">✓</span><b>{m.onlySelect}</b><span>{m.onlySelectHelp}</span></div>
       <div className="af-cardopt af-static af-off"><span className="af-no-mark" aria-hidden="true">✕</span><b>{m.allRepos}</b><span>{m.allReposHelp}</span></div>
     </div>
-    <p className="af-help">{m.leavingNote}</p>
+    <p className="af-help">{m.leavingNote}<HelpTip label={m.leavingLabel} text={m.leavingWhy} /></p>
   </Dialog>;
   if (!installation) {
     return <section className="af-stepcard panel" aria-labelledby="af-s1"><header><h2 id="af-s1">{m.connectGitHub}</h2><StateLabel tone="off">{m.notConnected}</StateLabel></header>
@@ -120,9 +121,9 @@ function RepoRow({ repo, isAdmin, at, busy, run, actions, enabled }: { repo: Rep
     <div className="af-end">{isAdmin && (repo.paused_reason === 'removed_from_app' ? null
       : <button type="button" className="af-ghost" disabled={busy} onClick={() => setDialog('disconnect')}>{m.disconnect}</button>)}</div>
     {dialog === 'notes' && <Confirm title={m.notesTitle(repo.full_name)} help={m.notesHelp} confirm={m.allowNotes} busy={busy} onClose={() => setDialog(undefined)}
-      onConfirm={() => { setDialog(undefined); run(() => actions.setNotes(repo, true)); }}><p className="af-help">{m.notesNote}</p></Confirm>}
-    {dialog === 'disconnect' && <Confirm danger title={m.disconnectRepoTitle(repo.full_name)} help={m.disconnectRepoHelp} confirm={m.disconnect} busy={busy}
-      onClose={() => setDialog(undefined)} onConfirm={() => { setDialog(undefined); run(() => actions.disconnectRepo(repo)); }} />}
+      onConfirm={() => { setDialog(undefined); run(() => actions.setNotes(repo, true)); }}><p className="af-help">{m.notesNote}<HelpTip label={m.notesLabel} text={m.notesWhy} /></p></Confirm>}
+    {dialog === 'disconnect' && <Confirm danger title={m.disconnectRepoTitle(repo.full_name)} confirm={m.disconnect} busy={busy}
+      onClose={() => setDialog(undefined)} onConfirm={() => { setDialog(undefined); run(() => actions.disconnectRepo(repo)); }}><p data-quiet="consequence">{m.disconnectRepoConsequence}</p></Confirm>}
   </li>;
 }
 
@@ -201,7 +202,7 @@ function VendorCard({ state, kind, isAdmin, at, busy, run, actions, ticks, onTic
             : <label className="af-keyrow"><span className="sr-only">{m.cursorKey}</span><input type="password" value={key} placeholder={m.pasteKey} autoComplete="off" spellCheck={false} onChange={(event) => setKey(event.target.value)} /></label>}
           {state?.credential && replacing && <KeyField label={m.newKey} placeholder={m.pasteNewKey} busy={busy}
             onSave={(value) => { setReplacing(false); run(() => actions.setKey(value)); }} />}
-          <span className="af-help">{m.keyAdvice}</span></div>
+          <span className="af-help">{m.keyNever}<HelpTip label={m.cursorKey} text={m.keyAdvice} /></span></div>
           : <Checklist kind={kind} ticks={ticks} onTicks={onTicks} disabled={false} />}
         <div className="af-col"><h4>{m.whatLeaves}</h4>
           <label className="af-consent"><input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} /><span>{m.consent[kind]}</span></label>

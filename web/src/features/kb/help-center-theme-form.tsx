@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { HelpTip } from '../../ui/help-tip';
 import { ColorRow, Hint, ImageField, controlId, linkShapes, normalize, validHex } from './help-center-theme-fields';
 import { themeMessages as text } from './help-center-theme-messages';
 import { HelpCenterPreview, useThemePreview } from './help-center-preview';
@@ -168,7 +169,7 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
           {textField('contact_phone', text.phone, text.phoneHelp, 'tel', 40)}
         </fieldset>
         <fieldset><legend>{text.colors}</legend>
-          <p className="muted-copy theme-note">{text.colorsHelp}</p>
+          <p className="muted-copy theme-note">{text.colorsHelp} <HelpTip label={text.colors} text={text.colorsTip} /></p>
           {colorFields.map((field) => (
             <ColorRow key={field} field={field} label={text.colorNames[field]} value={current.colors[field]} effective={effective[field]}
               checks={checks.filter((check) => check.field === `colors.${field}`)} message={live.preview?.fields[`colors.${field}`]} error={errors[`colors.${field}`]}
@@ -200,7 +201,7 @@ export function HelpCenterThemeSection({ canManage }: { canManage: boolean }) {
   return (
     <section className="theme-settings" aria-labelledby="help-center-brand-heading">
       <h3 id="help-center-brand-heading">{text.heading}</h3>
-      <p className="muted-copy">{text.intro}</p>
+      <p className="muted-copy">{text.intro} <HelpTip label={text.heading} text={text.introTip} /></p>
       <HelpCenterThemeForm canManage={canManage} />
     </section>
   );

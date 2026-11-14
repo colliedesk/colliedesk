@@ -4,6 +4,9 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
+A conversation opens at its newest message, and a reply or note you just sent is in view. A message
+that arrives while you read stays out of your way if you scrolled up, and comes into view if you were at the end.
+
 The details list **Status**, **Priority**, **Assignee**, **Tags** and, while a reply target runs, **Due**,
 one row each, then the **Customer**: their name, their organization and **All conversations of** *name*.
 **Tags** names the conversation's tags (**None** without any); select it to tick or untick tags or create
@@ -21,7 +24,7 @@ On a computer the sidebar on the left starts open. From the top it has:
 - **Views**: your saved views, each opening the inbox on its filters;
 - **Channels**: each channel of the workspace, opening the inbox on its open conversations. A channel that needs
   attention has an orange dot; its page in **Settings → Channels** says why;
-- at the foot, **Invite teammates** (for someone who may invite; it opens **Settings → Members**), **Settings**, and
+- at the foot, **Invite teammates** (for someone who may invite; it opens **Settings → Members → Invites**), **Settings**, and
   you: your name and address, which open the account menu.
 
 The top bar over each page names the page. In its middle is the search field, "Search *your workspace*" with
@@ -55,7 +58,9 @@ waits above the box folded to one line with **Show draft** and **Use draft** (wh
 While setup is unfinished, [Quick start](setup-guide.md) waits beside the workspace name at the top of the
 sidebar; nothing floats over the list. Its amber dot says a step of **Set up** is left (**Receive customer email**,
 **Import from Freshdesk**, **Answer your first email**), and a press opens the steps. A new workspace has no
-conversations yet; the list then explains that. A workspace
+conversations yet; the list then explains that, with one button for the first step you may take: **Connect
+your support email**, then **Import from Freshdesk** (the same steps Quick start lists; a person whose roles
+cannot take them sees the text only). A workspace
 with an email channel also offers **Send yourself a test message**: it opens a conversation from your
 own address that you can answer, and the reply comes to your mailbox (see
 [Send yourself a test message](email-channel.md#send-yourself-a-test-message)). If the list
@@ -167,7 +172,8 @@ default series. A channel can number what it opens in a series of its own (`sett
 the channel), with its own code format, for example `REF-{yyyy}-{n:04}` for `REF-2026-0170`: letters,
 digits, `#`, `-`, `_`, `/` and `.`, with `{n}` once (`{n:04}` pads it to four digits, 2 to 8), and `{yyyy}`
 for the year it was opened in the workspace's timezone. A series counts on and never restarts with the
-year; its next number can be raised, never lowered. When you move to Colliedesk from a system that
+year; its next number can be raised, never lowered. A series name, which a channel's settings use to pick
+it, is a lowercase letter, then letters, digits, `-` or `_`, 20 characters at most. When you move to Colliedesk from a system that
 numbered its own way, set the series' next number (and `start`, `start_year`) to where that system
 stopped: codes below it that are not here belong to the system before.
 

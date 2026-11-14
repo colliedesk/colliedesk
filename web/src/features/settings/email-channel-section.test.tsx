@@ -4,6 +4,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { expect, test, vi } from 'vitest';
 import type { EmailChannelSettings } from '../../api/schemas';
 import { EmailChannelSection } from './email-channel-section';
+import { SettingsEditsProvider } from './settings-edits';
 
 const disconnected: EmailChannelSettings = {
   channel: null,
@@ -40,7 +41,7 @@ const connected: EmailChannelSettings = {
 function render(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(['public-config'], { cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, product_analytics: { enabled: false, key: null, host: null, realm: null } });
-  return renderInPage(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+  return renderInPage(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}><SettingsEditsProvider>{children}</SettingsEditsProvider></QueryClientProvider> });
 }
 
 test('connects a support address and shows the inbound URL', () => {
@@ -59,9 +60,9 @@ test('shows the sender name customers see and saves a new one', () => {
   render(<EmailChannelSection settings={connected} timezone="UTC" canManage onSaveSenderName={onSaveSenderName} />);
   const field = screen.getByRole('textbox', { name: 'Sender name' });
   expect(field).toHaveValue('Acme Support');
-  expect(field).toHaveAccessibleDescription(/customers see this name in the from line/i);
+  expect(field).toHaveAccessibleDescription(/customers see it in the from line/i);
   fireEvent.change(field, { target: { value: '  Colliedesk Support ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSaveSenderName).toHaveBeenCalledWith('Colliedesk Support');
 });
 
@@ -147,8 +148,9 @@ test('shows the hosted forwarding address with a copy button and the Gmail and O
   fireEvent.click(screen.getByRole('button', { name: /copy forwarding address/i }));
   expect(writeText).toHaveBeenCalledWith('support@acme.colliedesk.com');
   expect(await screen.findByText(/copied/i)).toBeInTheDocument();
-  expect(screen.getByText(/forwarding and pop\/imap/i)).toBeInTheDocument();
-  expect(screen.getByText(/outlook: settings → mail → forwarding/i)).toBeInTheDocument();
+  // The Gmail and Outlook steps are one line and a link; the email channel guide holds every step.
+  expect(screen.getByText('Set up forwarding in Gmail or Outlook.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Forwarding steps' })).toHaveAccessibleDescription('Step-by-step for Gmail, Google Workspace and Microsoft 365.');
   expect(screen.queryByRole('textbox', { name: /inbound url/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /rotate inbound secret/i })).not.toBeInTheDocument();
 });
@@ -348,8 +350,11 @@ test('a verified domain says every mailbox on it shares the verification', () =>
 
 test('on a server without hosted mail, the inbound URL says what it is for, links the guide and gives a test request with the new secret', () => {
   render(<EmailChannelSection settings={connected} timezone="UTC" canManage createdSecret="s3cret-value" part="connection" />);
-  expect(screen.getByText(/Your mailbox cannot send to the inbound URL by itself/i)).toBeInTheDocument();
-  expect(screen.getByText(/not your email password/i)).toBeInTheDocument();
+  expect(screen.getByText('Have a forwarder send your mail to the inbound URL.')).toBeInTheDocument();
+  const why = screen.getByRole('button', { name: 'About Inbound URL' });
+  expect(why).toHaveAccessibleDescription(/Your mailbox cannot send to the inbound URL by itself/i);
+  expect(why).toHaveAccessibleDescription(/not your email password/i);
+  fireEvent.click(why);
   expect(screen.getByRole('link', { name: /how mail reaches the inbound url/i }))
     .toHaveAttribute('href', 'https://colliedesk.com/docs/self-host/email#3-forward-mail-to-colliedesk');
   const example = (screen.getByRole('textbox', { name: /test request/i }) as HTMLTextAreaElement).value;

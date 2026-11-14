@@ -38,25 +38,34 @@ test('intake on a chat channel: Suggest with settings of its own, then Auto asks
 
   // Built-in AI: intake has its row now that a chat channel collects messages; turn it on.
   await page.goto(`${origin}/settings/ai`);
+  await page.getByRole('button', { name: 'Chat intake settings' }).click();
   await page.getByRole('combobox', { name: 'Chat intake provider' }).selectOption({ label: 'Office model' });
+  await page.getByRole('button', { name: 'Done' }).click();
   await page.getByRole('switch', { name: 'Chat intake on' }).click();
+  // Turning intake on asks the person to agree first.
+  const consent = page.getByRole('dialog', { name: 'Turn on Chat intake' });
+  await consent.getByRole('checkbox', { name: /I agree that messages in linked chat channels are sent to Office model/ }).check();
+  await consent.getByRole('button', { name: 'Agree and turn on' }).click();
   await expect(page.getByRole('switch', { name: 'Chat intake on' })).toBeChecked();
+  await page.getByRole('button', { name: 'Chat intake settings' }).click();
   const intakeDefault = page.getByRole('group', { name: 'Intake: default for channels' });
   await expect(intakeDefault.getByRole('radio')).toHaveCount(2);
   await intakeDefault.getByRole('radio', { name: 'Suggest' }).click();
   await expect(intakeDefault.getByRole('radio', { name: 'Suggest' })).toBeChecked();
+  await page.getByRole('button', { name: 'Done' }).click();
 
   // The channel's AI tab: its groups follow the default, so their settings are the default's until the
   // scope has its own level.
   await page.goto(`${origin}/settings/channels/${channel}?tab=ai`);
   const following = page.getByRole('form', { name: 'Intake settings · Groups' });
-  await expect(following).toContainText('These follow the default. Pick Suggest or Auto for Groups above to set its own.');
-  await expect(following.getByRole('button', { name: 'Save intake settings' })).toHaveCount(0);
+  await expect(following).toContainText('Following the default. Pick Suggest or Auto for Groups above.');
+  // A scope that follows the default has nothing to save: its fields are locked.
+  await expect(following.getByLabel('Add to a conversation')).toBeDisabled();
   await page.getByRole('combobox', { name: 'Intake · Groups' }).selectOption('suggest');
   const form = page.getByRole('form', { name: 'Intake settings · Groups' });
   await form.getByLabel('Add to a conversation').fill('0.93');
-  await form.getByLabel('Words that mark a secret').fill('mật khẩu\nOTP');
-  await form.getByRole('button', { name: 'Save intake settings' }).click();
+  await form.getByLabel('Words that mark a secret', { exact: true }).fill('mật khẩu\nOTP');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(form.getByRole('status')).toHaveText('Saved');
   await expect(page.getByRole('region', { name: 'Last 7 days' })).toContainText('No cards yet.');
 
@@ -66,10 +75,10 @@ test('intake on a chat channel: Suggest with settings of its own, then Auto asks
   await expect(dialog).toContainText('Open a conversation: stays a suggestion until 30 decisions are labelled (0 of 30)');
   await expect(dialog).toContainText('No estimate yet');
   await dialog.getByRole('checkbox', { name: 'Let it open a conversation alone anyway' }).check();
-  await dialog.getByRole('button', { name: 'Turn on Auto' }).click();
+  await dialog.getByRole('button', { name: 'Turn on Auto', exact: true }).click();
   await expect(dialog.getByRole('alert')).toContainText('Say why');
   await dialog.getByLabel('Why AI may do this before it is ready').fill('Checked 50 cards by hand');
-  await dialog.getByRole('button', { name: 'Turn on Auto' }).click();
+  await dialog.getByRole('button', { name: 'Turn on Auto', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: 'Intake · Groups' })).toHaveValue('auto');
 

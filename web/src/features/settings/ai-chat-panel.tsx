@@ -5,8 +5,10 @@ import type { AIChatPreview, AIChatSession, AIChatStatus, AIChatSummary, AIChatT
 import { ConflictError } from '../../api/client';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { Dialog } from '../../ui/dialog';
+import { HelpTip } from '../../ui/help-tip';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiChatMessages as m } from './ai-chat-messages';
+import { Refused, useSaveChanges, useSettingsDraft } from './settings-edits';
 import './ai-settings.css';
 
 // The team's side of the help center's AI chat: the month's use (admins), the chats and a chat's
@@ -52,22 +54,24 @@ function Notices({ usage }: { usage: AIChatUsage }) {
 
 // CapForm sets the AI chat feature's own monthly spend limit, on a provider the workspace pays for.
 function CapForm({ slot, onSave }: { slot: AISlot; onSave: (cap: number | null) => Promise<unknown> }) {
-  const [value, setValue] = useState(slot.monthly_cap_micro_usd === null ? '' : dollars(slot.monthly_cap_micro_usd));
+  const initial = slot.monthly_cap_micro_usd === null ? '' : dollars(slot.monthly_cap_micro_usd);
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'invalid' | 'failed'>('idle');
-  const id = useId();
-  const save = () => {
-    const text = value.trim();
+  // The typed limit lives in the page, so opening another tab does not lose it, and the bar keeps naming it.
+  const [value, setValue] = useSettingsDraft('ai-chat-cap', initial, { label: m.capLabel, save: (typed) => {
+    const text = typed.trim();
     const amount = Number(text);
-    if (text !== '' && !(Number.isFinite(amount) && amount > 0)) { setState('invalid'); return; }
+    if (text !== '' && !(Number.isFinite(amount) && amount > 0)) { setState('invalid'); return Promise.reject(new Refused(m.capInvalid)); }
     setState('saving');
-    onSave(text === '' ? null : Math.round(amount * 1e6)).then(() => setState('saved'), () => setState('failed'));
-  };
-  return <form className="aic-cap" onSubmit={(event) => { event.preventDefault(); if (state !== 'saving') save(); }}>
-    <label className="field" htmlFor={id}><span>{m.capLabel}</span>
-      <input id={id} inputMode="decimal" value={value} aria-invalid={state === 'invalid' ? true : undefined} aria-describedby={`${id}-hint`}
-        onChange={(event) => { setValue(event.target.value); setState('idle'); }} /></label>
+    return onSave(text === '' ? null : Math.round(amount * 1e6)).then(() => setState('saved'), (error: unknown) => { setState('failed'); throw error; });
+  } });
+  const id = useId();
+  const saveChanges = useSaveChanges();
+  return <form className="aic-cap" onSubmit={(event) => { event.preventDefault(); if (state !== 'saving') void saveChanges(); }}>
+    <div className="field"><span className="heading-with-tip"><label className="field-label" htmlFor={id}>{m.capLabel}</label><HelpTip label={m.capLabel} text={m.capWhy} id={`${id}-tip`} /></span>
+      <input id={id} inputMode="decimal" value={value} aria-invalid={state === 'invalid' ? true : undefined} aria-describedby={`${id}-hint ${id}-tip`}
+        onChange={(event) => { setValue(event.target.value); setState('idle'); }} /></div>
     <small id={`${id}-hint`} className="muted-copy">{state === 'invalid' ? m.capInvalid : m.capHint}</small>
-    <span className="button-row"><button type="submit" disabled={state === 'saving'}>{state === 'saving' ? m.capSaving : m.capSave}</button>
+    <span className="button-row">
       {state === 'saved' && <span role="status" className="muted-copy">{m.capSaved}</span>}
       {state === 'failed' && <span role="alert" className="error-copy">{m.capFailed}</span>}</span>
   </form>;
@@ -108,9 +112,8 @@ function TryIt({ on }: { on: boolean }) {
   const answer: AIChatPreview | undefined = ask.data;
   const off = !on || (ask.error instanceof ConflictError && ask.error.detail?.code === 'ai_feature_off');
   return <section className="panel aic-try" aria-labelledby={`${id}-heading`}>
-    <div className="aic-chats-head"><h2 id={`${id}-heading`}>{m.try}</h2>
+    <div className="aic-chats-head"><div className="heading-with-tip"><h2 id={`${id}-heading`}>{m.try}</h2><HelpTip label={m.try} text={m.tryHelp} /></div>
       {(answer || ask.isError) && <button type="button" onClick={() => { ask.reset(); setQuestion(''); }}>{m.tryClear}</button>}</div>
-    <p className="muted-copy">{m.tryHelp}</p>
     {off ? <p className="notice notice-plain" role="status"><span>{m.tryOff}</span></p>
       : <form className="aic-try-form" onSubmit={(event) => { event.preventDefault(); if (!ask.isPending && question.trim()) ask.mutate(question.trim()); }}>
           <label className="field" htmlFor={id}><span>{m.tryLabel}</span>
@@ -235,15 +238,16 @@ export function ChatTranscript({ id, timezone, canDelete, back, backHref, onBack
           {canDelete && <button type="button" className="danger-action" onClick={() => setConfirm(true)}>{m.delete}</button>}
         </span>
       </header>
-      {data.history_cut_at && <p className="muted-copy">{m.historyCut(formatDate(data.history_cut_at, timezone))}</p>}
+      {data.history_cut_at && <p className="muted-copy">{m.historyCut} <HelpTip label={m.historyCutLabel} text={m.historyCutWhy(formatDate(data.history_cut_at, timezone))} /></p>}
       <ol className="aic-turns">{data.transcript.map((turn) => <Turn key={turn.id} turn={turn} timezone={timezone} />)}</ol>
       {data.status === 'handed_off' && <p className="muted-copy">{m.handedOff}</p>}
     </section>
-    {confirm && <Dialog title={m.deleteTitle} help={m.deleteBody(data.conversation_id !== null)} closeLabel={m.cancel} alert onClose={() => setConfirm(false)}
+    {confirm && <Dialog title={m.deleteTitle} closeLabel={m.cancel} alert onClose={() => setConfirm(false)}
       onSubmit={() => { if (!remove.isPending) remove.mutate(); }}
       footer={<><button type="button" onClick={() => setConfirm(false)} autoFocus>{m.cancel}</button>
         <button type="submit" className="danger-action" disabled={remove.isPending}>{remove.isPending ? m.deleting : m.delete}</button></>}>
       {remove.isError && <p role="alert" className="error-copy">{m.deleteFailed}</p>}
+      <p data-quiet="consequence">{m.deleteBody(data.conversation_id !== null)}</p>
     </Dialog>}
   </div>;
 }

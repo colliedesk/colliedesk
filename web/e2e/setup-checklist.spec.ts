@@ -70,6 +70,8 @@ test('Quick start: a workspace with one conversation and no email channel still 
   await expect(show).toBeChecked();
   await show.click();
   await expect(show).not.toBeChecked();
+  // Settings has the sidebar, so Quick start is looked for in the app.
+  await page.getByRole('link', { name: 'Back to app' }).click();
   await expect(quickStart).toHaveCount(0);
   await page.goto(baseURL);
   await expect(page.getByRole('button', { name: new RegExp(`Forwarded ${suffix}`) })).toBeVisible();
@@ -77,5 +79,6 @@ test('Quick start: a workspace with one conversation and no email channel still 
   await page.goto(`${baseURL}/settings`);
   await show.click();
   await expect(show).toBeChecked();
+  await page.getByRole('link', { name: 'Back to app' }).click();
   await expect(quickStart).toBeVisible();
 });

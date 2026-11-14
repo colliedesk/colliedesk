@@ -40,7 +40,7 @@ function Replies({ channel, canManage, timezone }: ChannelPanelProps) {
   return <>
     {verifyDomain.isError && !(verifyDomain.error instanceof InvalidRequestError) && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}
     <EmailChannelSection part="replies" settings={settings.data} timezone={timezone} canManage={canManage}
-      senderNameSave={saveState(saveSenderName)} onSaveSenderName={(name) => saveSenderName.mutate(name)}
+      senderNameSave={saveState(saveSenderName)} onSaveSenderName={(name) => saveSenderName.mutateAsync(name)}
       onVerifyDomain={() => verifyDomain.mutate()} verifyPending={verifyDomain.isPending}
       verifyError={verifyDomain.error instanceof InvalidRequestError ? verifyDomain.error.message : undefined}
       onConnectMailbox={mailbox.connect} onDisconnectMailbox={mailbox.disconnect}

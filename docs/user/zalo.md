@@ -59,8 +59,8 @@ The channel's page then has four tabs of its own, before AI and History:
    **Domain verification** takes the code Zalo gives to verify the webhook's address; see
    [Verify the webhook address](#verify-the-webhook-address).
    **References** picks the [number series](inbox.md#conversation-numbers) the OA's conversations are
-   numbered in and shows the code the next one gets (`CHD-2026-0143`); the series themselves are changed in
-   Settings → General → Conversation numbers.
+   numbered in and shows the code the next one gets (`CHD-2026-0143`). A pick saves at once and the page says
+   **Saved** with **Undo**; the series themselves are changed in Settings → General → Conversation numbers.
 2. **Groups**: every group that wrote to the OA (and every group linked before it did). **Link…** files the
    group under an organization, written as your contacts' organization is: a conversation of that group
    then names it. **Unlink** stops that for new conversations; earlier ones keep their organization.
@@ -71,6 +71,11 @@ The channel's page then has four tabs of its own, before AI and History:
    [The Messages tab](#the-messages-tab).
 
 Everyone with `channels:read` sees the same tabs; changing them needs `channels:update`.
+
+Each row of these tabs shows its name and one short line. Where a row needs more, an ⓘ holds the longer
+explanation: what the OA does with the setting, and why. The ⓘ sits beside the row's name, or, for a section
+(Domain verification, Webhook URL, Secrets, References, Processing, Groups, Staff, the status notices),
+at the end of the section's first line. Open it with a hover, a tap or the keyboard; Escape closes it.
 
 **Pause processing**, at the top of the channel's page (admins), asks first, then keeps every message
 Zalo delivers and opens nothing, adds nothing and sends nothing until **Resume processing**: what arrived
@@ -133,7 +138,8 @@ other name below the prefix answers as an address the server does not have.
 
 ## The Messages tab
 
-**Save messages** saves the whole tab at once. Agents read it and change nothing.
+Typing in any field here shows the **Save** bar at the foot of the page; **Save** keeps the whole tab at once,
+and **Discard** puts every field back. Agents read it and change nothing.
 
 ### Commands
 

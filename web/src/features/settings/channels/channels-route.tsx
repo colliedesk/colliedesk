@@ -13,6 +13,7 @@ import { ChatIcon, PlusIcon } from '../../../ui/icons';
 import { Part, PartUnavailable } from '../../../ui/lazy-part';
 import { panelID, tabID, Tabs } from '../../../ui/tabs';
 import { NameForm } from '../name-form';
+import { SettingsEditsProvider, useReleaseUnsaved } from '../settings-edits';
 import { saveState } from '../save-feedback';
 import { SettingsNav } from '../settings-nav';
 import type { SettingsPath, Shown } from '../settings-nav';
@@ -75,13 +76,13 @@ export function ChannelsRoute({ path, search, navigate }: ChannelsRouteProps) {
   else if (first === 'new') content = <NewChannel {...page} type={second ?? ''} />;
   else if (first === 'type') content = carriesChannelState(search) ? <TypeShortcut {...page} type={second ?? ''} search={search} /> : <TypeHome {...page} type={second ?? ''} search={search} />;
   else if (second === 'setup') content = <ChannelSetup {...page} id={first} step={search.step} />;
-  else content = <ChannelPage {...page} id={first} tab={search.tab} search={search} />;
+  else content = <ChannelPage key={first} {...page} id={first} tab={search.tab} search={search} />;
   return (
     <main className="settings-page panel channels-settings">
       <header><h1>{typeHome?.label ?? m.heading}</h1><p>{typeHome?.description ?? m.description}</p></header>
       <div className="settings-layout">
         <SettingsNav page={navPage(path === '' ? undefined : type)} shown={shown} />
-        <div className="settings-sections ch-page">{content}</div>
+        <div className="settings-sections ch-page"><SettingsEditsProvider>{content}</SettingsEditsProvider></div>
       </div>
     </main>
   );
@@ -285,15 +286,21 @@ function TypeShortcut({ type, search, navigate }: PageProps & { type: string; se
   return <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>;
 }
 
+// The typed text of the forms that add a channel: web form, help chat, email address.
+const addFormGuards = ['web-form-add', 'web-form-name', 'help-chat-add', 'help-chat-name', 'address-form'];
+
 // useCreate adds a channel of a type and opens it: its setup when guided, else its page.
 function useCreate(type: string | undefined, navigate: PageProps['navigate']) {
   const client = useQueryClient();
+  // The channel is saved: the page it opens is not a question about the text that made it (and about nothing else).
+  const release = useReleaseUnsaved();
   const createChannel = useCreateAction((input: Parameters<typeof channelsApi.create>[0], key: string) => channelsApi.create(input, key));
   return (guided: boolean): ConnectProps['create'] => async (input, beforeOpen) => {
     const created = await createChannel.run({ type: type as ChannelType, ...input });
     // The channel exists from here: what beforeOpen could not do shows on its page, never undoes it.
     await beforeOpen?.(created).catch(() => undefined);
     await client.invalidateQueries({ queryKey: ['channels'] });
+    release(...addFormGuards);
     navigate(`${base}/${created.id}${guided ? '/setup' : ''}`, true);
     return created;
   };
@@ -344,7 +351,7 @@ function ChannelSetup({ id, step, navigate, isAdmin, timezone }: PageProps & { i
     <a href={`${base}/type/${ui.type}`} className="ch-back">{ui.label}</a>
     <Part part={ui.panels} failed={<PartUnavailable />} render={({ Setup }) => (Setup
       ? <Setup channel={channel} step={step} canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} />
-      : <ChannelPage id={id} navigate={navigate} isAdmin={isAdmin} timezone={timezone} search={{}} />)} />
+      : <ChannelPage key={id} id={id} navigate={navigate} isAdmin={isAdmin} timezone={timezone} search={{}} />)} />
   </>;
 }
 
@@ -427,14 +434,12 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
         {heldDone.kind === 'opened' && <span className="notice-actions"><a href={`/?channel_id=${channel.id}`}>{m.viewInInbox}</a></span>}</p>}
       {channel.enabled && channel.unsent_count > 0 && <Unsent channel={channel} />}
       <Tabs label={channel.name} prefix={prefix} value={open} tabs={tabs} onChange={(next) => navigate(withSearch(`${base}/${id}`, { tab: next }), true)} />
-      <div role="tabpanel" id={panelID(prefix, open)} aria-labelledby={tabID(prefix, open)} className="ch-panel">
-        {open === 'history' ? <History timezone={timezone} channelID={channel.id} />
-          : open === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} timezone={timezone} />
-          : ui && <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
-              const Panel = panels[open];
-              return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;
-            }} />}
-      </div>
+      <KeptPanels scope={channel.id} open={open} prefix={prefix} render={(panel) => panel === 'history' ? <History timezone={timezone} channelID={channel.id} />
+        : panel === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} timezone={timezone} />
+        : ui && <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
+            const Panel = panels[panel];
+            return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;
+          }} />} />
       {isAdmin && <div className="button-row ch-remove">
         <button type="button" className="danger-action" onClick={() => setRemoving(true)}>{ui?.removal?.label ?? m.remove}</button>
         {remove.isError && <span role="alert" className="error-copy">{remove.error instanceof InvalidRequestError ? remove.error.message : m.actionFailed}</span>}
@@ -454,6 +459,16 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
       {channel.held_count > 0 && <p role="alert" className="error-copy">{m.removeHeld(channel.held_count)}</p>}
     </Dialog>}
   </>;
+}
+
+// KeptPanels shows one tab's panel at a time and keeps the ones already opened mounted, hidden: what was typed in a tab that
+// is left is still there when it comes back, and the save bar and the question on leaving still know about it.
+function KeptPanels({ scope, open, prefix, render }: { scope: string; open: string; prefix: string; render: (tab: string) => ReactNode }) {
+  const [seen, setSeen] = useState<{ scope: string; tabs: string[] }>({ scope, tabs: [open] });
+  const opened = seen.scope === scope ? seen.tabs : [];
+  const shown = opened.includes(open) ? opened : [...opened, open];
+  useEffect(() => { if (seen.scope !== scope || !seen.tabs.includes(open)) setSeen({ scope, tabs: shown }); });
+  return <>{shown.map((tab) => <div key={tab} role="tabpanel" id={panelID(prefix, tab)} aria-labelledby={tabID(prefix, tab)} hidden={tab !== open} className="ch-panel">{render(tab)}</div>)}</>;
 }
 
 // Held is what arrived while the channel was off: open it as conversations, or discard it after a question.
@@ -526,8 +541,8 @@ function ChannelIdentity({ channel, label, defaultHelp, defaultBadge, isAdmin }:
   const said = succeeded && channel.is_default === true;
   useEffect(() => { if (said) done.current?.focus(); }, [said]);
   return <div className="ch-identity">
-    {isAdmin && <NameForm label={m.nameLabel} saveLabel={m.saveName} hint={defaultHelp ?? m.defaultHelp} value={channel.name} canManage maxLength={80} save={saveState(rename)}
-      onSave={(name) => rename.mutate(name)} conflictLink={(conflict) => <a href={`${base}/${conflict.channel_id}`}>{m.openTaken(conflict.channel_name)}</a>} />}
+    {isAdmin && <NameForm label={m.nameLabel} hint={m.nameHint} tip={defaultHelp ?? m.defaultHelp} value={channel.name} canManage maxLength={80} save={saveState(rename)}
+      onSave={(name) => rename.mutateAsync(name)} conflictLink={(conflict) => <a href={`${base}/${conflict.channel_id}`}>{m.openTaken(conflict.channel_name)}</a>} />}
     <div className="ch-default-row">
       {channel.is_default
         ? succeeded

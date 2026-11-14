@@ -6,6 +6,7 @@ import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/clien
 import { useCreateAction } from '../../api/use-create';
 import { messages } from '../../messages';
 import { savedReplyMessages } from '../settings/saved-reply-messages';
+import { HelpTip } from '../../ui/help-tip';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
 import { ArticleTranslationsBox } from './article-translations';
@@ -66,7 +67,8 @@ const seoMessages = {
   searchEngines: 'Search engines',
   seoTitle: 'Search title',
   seoDescription: 'Meta description',
-  seoHelp: 'What Google and other search engines show for this article. Left empty, the title and the start of the text are used.',
+  seoHelp: 'What search engines show for this article.',
+  seoTip: 'Left empty, the title and the start of the text are used.',
 };
 // seoValue is a search field as the server stores it: on one line, runs of spaces as one, trimmed.
 const seoValue = (text: string) => text.trim().split(/\s+/).filter(Boolean).join(' ');
@@ -489,18 +491,20 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {collectionsFailed && <small className="error-copy">{kbMessages.collectionsFailed}</small>}
         {!draft.collection_id && <small id={`${id}-needs-collection`} className="kb-hint">{kbMessages.needsCollection}</small>}
         {base && <div className="field"><label htmlFor={`${id}-slug-input`}>{kbMessages.articleSlug}</label>
-          <input id={`${id}-slug-input`} value={draft.slug} aria-describedby={`${id}-slug`} onChange={(event) => set({ slug: event.target.value })} />
-          <small id={`${id}-slug`} className="kb-hint">{kbMessages.articleSlugHelp(base.number, draft.slug.trim())}</small></div>}
+          <input id={`${id}-slug-input`} value={draft.slug} aria-describedby={`${id}-slug ${id}-slug-tip`} onChange={(event) => set({ slug: event.target.value })} />
+          <small className="kb-hint"><span id={`${id}-slug`}>{kbMessages.articleSlugHelp(base.number, draft.slug.trim())}</span>{' '}
+            <HelpTip label={kbMessages.articleSlug} text={kbMessages.articleSlugTip} id={`${id}-slug-tip`} /></small></div>}
       </section>
       <section className="kb-side-box" aria-labelledby={`${id}-search`}>
         <h3 id={`${id}-search`}>{seoMessages.searchEngines}</h3>
-        <p id={`${id}-search-help`} className="kb-hint">{seoMessages.seoHelp}</p>
+        <p className="kb-hint"><span id={`${id}-search-help`}>{seoMessages.seoHelp}</span>{' '}
+          <HelpTip label={seoMessages.searchEngines} text={seoMessages.seoTip} id={`${id}-search-tip`} /></p>
         <div className="field"><label htmlFor={`${id}-seo-title`}>{seoMessages.seoTitle}</label>
-          <input id={`${id}-seo-title`} value={draft.seo_title} placeholder={draft.title.trim()} aria-describedby={`${id}-search-help ${id}-seo-title-count`}
+          <input id={`${id}-seo-title`} value={draft.seo_title} placeholder={draft.title.trim()} aria-describedby={`${id}-search-help ${id}-search-tip ${id}-seo-title-count`}
             aria-invalid={seoTitleLength > maxSEOTitle || undefined} onChange={(event) => set({ seo_title: event.target.value })} />
           <small id={`${id}-seo-title-count`} className={seoTitleLength > maxSEOTitle ? 'error-copy' : 'kb-hint'}>{kbMessages.characters(seoTitleLength, maxSEOTitle)}</small></div>
         <div className="field"><label htmlFor={`${id}-seo-description`}>{seoMessages.seoDescription}</label>
-          <textarea id={`${id}-seo-description`} rows={3} value={draft.seo_description} aria-describedby={`${id}-search-help ${id}-seo-description-count`}
+          <textarea id={`${id}-seo-description`} rows={3} value={draft.seo_description} aria-describedby={`${id}-search-help ${id}-search-tip ${id}-seo-description-count`}
             aria-invalid={seoDescriptionLength > maxSEODescription || undefined} onChange={(event) => set({ seo_description: event.target.value })} />
           <small id={`${id}-seo-description-count`} className={seoDescriptionLength > maxSEODescription ? 'error-copy' : 'kb-hint'}>{kbMessages.characters(seoDescriptionLength, maxSEODescription)}</small></div>
       </section>
@@ -542,10 +546,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {tooLong && <p role="alert" className="error-copy">{kbMessages.tooLong(bodyLength - maxBody)}</p>}
         {uploading > 0 && <p role="status" className="kb-hint">{kbMessages.waitingForImages}</p>}
         {imageProblems.map((text) => <p key={text} role="alert" className="error-copy">{text}</p>)}
-        {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice}</p>}
+        {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice} <HelpTip label={kbMessages.importedLabel} text={kbMessages.importedTip} /></p>}
       </div>}
-      {/* On a phone the box stands at the top of the page, as the note does on a wide screen: the way out and back is never behind Details. */}
-      {base && phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       <form id={`${id}-form`} className="kb-editor" aria-label={heading} onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); submit.current(); }}>
         <div className="kb-editor-main">
           <div className="field kb-title-field"><label htmlFor={`${id}-title`} className="sr-only">{kbMessages.articleTitle}</label>
@@ -582,6 +584,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         </div>
         {!phone && <aside className="kb-editor-side" aria-label={kbMessages.articleSettings}>{details}</aside>}
       </form>
+      {/* On a phone the page opens on the title and the text; the AI box follows them, and visibility and placement open from Details. */}
+      {base && phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {phone && <div className="kb-phone-bar" role="region" aria-label={kbMessages.articleActions}>
         <span className="kb-phone-state">
           <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
@@ -599,13 +603,14 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       {deleting && base && <KBDialog title={kbMessages.deleteHeading(base.title)} role="alertdialog" onClose={() => setDeleting(false)} footer={<>
         <button type="button" disabled={busy} onClick={() => setDeleting(false)}>{kbMessages.cancel}</button>
         <button type="button" className="danger-solid" disabled={busy} onClick={() => void remove()}>{kbMessages.confirmDelete}</button>
-      </>}><p className="muted-copy">{kbMessages.deleteBody}</p></KBDialog>}
+      </>}><p className="muted-copy">{kbMessages.deleteBody} <HelpTip label={kbMessages.trashLabel} text={kbMessages.deleteTip} /></p></KBDialog>}
       {askingAlt && <KBDialog title={kbMessages.imagesWithoutAlt(missing.length)} role="alertdialog" onClose={() => setAskingAlt(undefined)} footer={<>
         <button type="button" onClick={() => setAskingAlt(undefined)}>{kbMessages.cancel}</button>
         <button type="button" className="primary-action" disabled={busy || invalid} onClick={() => { const then = askingAlt; setAskingAlt(undefined); void save(then === 'publish' ? 'published' : undefined); }}>
           {askingAlt === 'publish' ? kbMessages.publishAnyway : kbMessages.saveAnyway}</button>
       </>}>
-        <p className="muted-copy">{askingAlt === 'publish' ? kbMessages.publishAltHelp : kbMessages.saveAltHelp}</p>
+        <p className="muted-copy">{askingAlt === 'publish' ? kbMessages.publishAltHelp : kbMessages.saveAltHelp}{' '}
+          <HelpTip label={kbMessages.altLabel} text={askingAlt === 'publish' ? kbMessages.publishAltTip : kbMessages.saveAltTip} /></p>
         <ul className="kb-alt-list">{missing.map((image, at) => (
           <li key={`${image.url}-${at}`}><span title={nameOf(image, at)}>{nameOf(image, at)}</span>
             <button type="button" aria-label={kbMessages.addAltFor(nameOf(image, at))} onClick={() => { setAskingAlt(undefined); setAltFor({ ...image, fallback: nameOf(image, at) }); }}>{kbMessages.addAlt}</button></li>

@@ -114,7 +114,7 @@ test('on a 375 px screen the test message conversation, its email links and the 
   // The test message is the setup's last step: forwarding and replies are skipped for now.
   await page.getByRole('group', { name: 'Forward its mail to Colliedesk' }).getByRole('button', { name: 'Skip for now' }).click();
   await page.getByRole('group', { name: /Send replies from/ }).getByRole('button', { name: /Skip for now/ }).click();
-  await page.getByRole('button', { name: 'Send yourself a test message' }).click();
+  await page.getByRole('button', { name: 'Send yourself a test message', exact: true }).click();
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('link', { name: 'Download original email' })).toBeVisible();
   await expectTapSized(page.locator('.message-envelope'), 'incoming email links');
@@ -138,7 +138,7 @@ test('on a 375 px screen every control of the setup flow\'s email step is tap-si
 test('on a 375 px screen the links inside a sentence on Members and on a web form channel are tap-sized', async ({ page }) => {
   await newDesk(page, 'Narrow Links');
   // A new workspace holds only the two built-in roles, so Roles offers to make one in a sentence.
-  await page.goto(`${servers.main}/settings/members`);
+  await page.goto(`${servers.main}/settings/members?tab=advanced`);
   const makeRole = page.getByRole('link', { name: 'Make a role' });
   await expect(makeRole).toBeVisible();
   expect((await makeRole.boundingBox())?.height, 'Make a role').toBeGreaterThanOrEqual(44);

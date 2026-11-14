@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { InvalidRequestError } from '../../api/client';
 import { formatShortDate } from '../../lib/format-date';
 import { Dialog, Field } from '../../ui/dialog';
+import { HelpTip } from '../../ui/help-tip';
 import { autofixApi } from './autofix-api';
 import type { ConnectorState, Fix, FixConnector, FixPreview, FixSent, Repo } from './autofix-api';
 import { ExternalIcon, KeyIcon, ShieldIcon } from './autofix-icons';
@@ -135,13 +136,14 @@ export function SendDialog({ conversationId, repos, connectors, initialRepo, ini
       <Ledger removed={data.removed} />
       <section className="af-pv" aria-label={m.whatAgentGets}>
         <div className="af-pv-head"><b>{issue ? <>{m.issueIn} <span className="af-mono">{data.destination.repo_full_name}</span></> : m.promptForCursor}</b>
+          <HelpTip label={m.sentKeptLabel} text={m.sentKept} />
           <button type="button" className="link-button af-push" aria-pressed={editing} onClick={() => setEditing(!editing)}>{m.editable}</button></div>
         <label><span className="sr-only">{m.title}</span><input className="af-pv-title" value={title} maxLength={256} onChange={(event) => edit({ title: event.target.value })} /></label>
         {editing
           ? <label><span className="sr-only">{m.body}</span><textarea className="af-pv-edit" value={body} rows={12} maxLength={65536} onChange={(event) => edit({ body: event.target.value })} /></label>
           : <BodyView body={body} />}
       </section>
-      <p className="af-help">{m.untrustedHelp}</p>
+      <p className="af-help">{m.untrustedHelp}<HelpTip label={m.untrustedLabel} text={m.untrustedWhy} /></p>
       {data.notes.length > 0 && <section className="af-notes-sec" aria-label={m.notesTitle}>
         <div className="af-sec-head"><b>{m.notesTitle}</b><span className="af-help">{notesAllowed ? m.notesOff : m.notesLocked(repo.full_name)}</span></div>
         <ul className={`af-notes${notesAllowed ? '' : ' af-locked'}`}>{data.notes.map((note) => <li key={note.message_id}>

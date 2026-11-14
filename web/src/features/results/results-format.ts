@@ -1,5 +1,9 @@
 // Durations and changes as the results page writes them (docs/user/results.md).
 
+// minSample is how many conversations a median, a 90th percentile or a reopen rate needs (MinSample in the server's
+// results package); below it the page says what is missing instead of a number.
+export const minSample = 5;
+
 // formatDuration writes seconds as minutes under an hour, hours and minutes under a day, days and
 // hours from there.
 export function formatDuration(seconds: number): string {

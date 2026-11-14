@@ -88,6 +88,13 @@ test('a tip with a link is a disclosure: its button says expanded and controls t
   expect(tip()).not.toBeInTheDocument();
 });
 
+test('the link of a tip opens in a new tab, so a page with unsaved or one-time text is not left', () => {
+  render(linkTip);
+  const link = screen.getByRole('link', { name: 'Learn more', hidden: true });
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+});
+
 test('a tip with a Learn more link stays open while the pointer or focus is inside it', async () => {
   render(<>{linkTip}<button type="button">Next</button></>);
   const button = screen.getByRole('button', { name: 'About Response targets' });

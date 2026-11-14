@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import type { Conversation, ConversationViewer, Message, SettableStatus, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
@@ -8,6 +8,7 @@ import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
 import { ActionMenu } from './action-menu';
 import { MessageItem } from './message-item';
+import { useNewestInView } from './newest-in-view';
 import { mediaKind } from './media-kind';
 import type { GalleryItem } from './media-kind';
 import { mediaViewerPart } from './media-part';
@@ -130,6 +131,8 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
   const [opened, setOpened] = useState<string | null>(null);
   const openMedia = useCallback((attachmentId: string) => { mediaViewerPart.preload(); setOpened(attachmentId); }, []);
   const closeMedia = useCallback(() => setOpened(null), []);
+  const scroller = useRef<HTMLDivElement>(null);
+  useNewestInView(scroller, conversation?.id, items, currentAgentId);
   const back = onBack && <button type="button" className="thread-back" onClick={onBack}><ChevronLeftIcon /><span className="thread-back-label">{messages.backToInbox}</span></button>;
   // Nothing open (I5-a): no title and no actions for a conversation that does not exist, only the way back on a
   // phone and one line in the middle of the pane.
@@ -171,7 +174,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
         </div>}
       </header>
       {autofix && conversation && onToggleDetails && <AutofixStrip conversationId={conversation.id} customerName={conversation.contact_name} timezone={timezone} onOpenDetails={onToggleDetails} />}
-      <div className="timeline-scroll">
+      <div className="timeline-scroll" ref={scroller}>
         <div className="timeline-stack">
           {!conversation && loadFailed && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>
             <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}

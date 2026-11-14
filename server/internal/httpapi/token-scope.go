@@ -418,8 +418,9 @@ var routeAccess = map[string]TokenAccess{
 	"PUT /api/v1/autofix/repos/{id}/include-notes":               need(auth.PermAutofixSettingsUpdate),
 	"DELETE /api/v1/autofix/repos/{id}/include-notes":            need(auth.PermAutofixSettingsUpdate),
 	// Autofix fixes: a preview changes nothing. Sending (and retrying) takes ticket data out to a coding
-	// agent after the caller's GitHub confirmation. A person's changes to a fix stay in Colliedesk, except
-	// that a cancel closes the fix's issue.
+	// agent: an issue connector after the caller's GitHub authorization, Cursor at once with the
+	// workspace's key; a token sends only the text the preview built. A person's changes to a fix stay in
+	// Colliedesk, except that a cancel closes the fix's issue.
 	"POST /api/v1/conversations/{id}/fixes/preview":  need(auth.PermAutofixRead),
 	"POST /api/v1/conversations/{id}/fixes":          need(auth.PermAutofixSend),
 	"POST /api/v1/autofix/fixes/{id}/retry":          need(auth.PermAutofixSend),

@@ -40,7 +40,7 @@ export function AttachmentPicker({ files, onChange, limits, disabled, labelled =
         // The same file can be chosen again after it was removed.
         event.target.value = '';
       }} />
-      <button type="button" className={labelled ? 'attach-button attach-button-labelled' : 'attach-button'} disabled={disabled} title={messages.addAttachment}
+      <button type="button" className={labelled ? 'attach-button attach-button-labelled' : 'attach-button'} disabled={disabled} data-tip={messages.addAttachment}
         aria-label={messages.addAttachment} onClick={() => input.current?.click()}>
         <PaperclipIcon />{labelled && <span>{messages.addAttachment}</span>}
       </button>

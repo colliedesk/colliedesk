@@ -1,0 +1,3 @@
+/* Knowledge base → Settings keeps the frame of the other tabs (padding, content width and the one rule under the
+   tabs come from kb.css). Its card has no rule of its own on top: the tabs' rule is the only one. */
+.kb-settings-page > .settings-card { border-top: 0; padding: 0; }

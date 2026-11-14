@@ -18,8 +18,10 @@ test('email setup: a new workspace saves its address, the first forwarded mail f
 
   // Settings → Email: without an address, the page is the setup at step 1.
   await page.getByRole('link', { name: 'Settings' }).click();
-  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Email', exact: true }).click();
-  await expect(page).toHaveURL(`${baseURL}/settings/channels/type/email`);
+  // A new workspace's Channels page offers to connect the support email; the menu has no item for a channel type.
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Channels', exact: true }).click();
+  await page.getByRole('link', { name: /Connect your support email/ }).click();
+  await expect(page).toHaveURL(/\/settings\/channels\/(type|new)\/email$/);
   await expect(page.getByRole('heading', { name: 'Connect your support email' })).toBeVisible();
   const address = page.getByRole('group', { name: 'Your support address' });
   await expect(address).toContainText('Step 1 of 4');
@@ -74,7 +76,7 @@ test('email setup: a new workspace saves its address, the first forwarded mail f
   const setupURL = page.url();
   const test4 = page.getByRole('group', { name: 'Try it with a test message' });
   await expect(test4).toContainText('Step 4 of 4');
-  await test4.getByRole('button', { name: 'Send yourself a test message' }).click();
+  await test4.getByRole('button', { name: 'Send yourself a test message', exact: true }).click();
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   const reply = `Answering my test (${suffix}).`;
   await page.getByLabel('Message body').last().fill(reply);

@@ -31,9 +31,10 @@ export function useSaveFeedback(save: SaveState = {}, errorID?: string, field?: 
   const [refused, setRefused] = useState<{ error: string; value?: string }>();
   const pending = Boolean(save.pending);
   const error = pending ? undefined : save.error;
-  // A new save, or a refusal that came back before its pending state was ever drawn, is about what is
+  // A new save, or an answer that came back before its pending state was ever drawn, is about what is
   // in the form now.
-  useEffect(() => { if (pending || error) setEdited(false); }, [pending, error]);
+  const saved = Boolean(save.saved);
+  useEffect(() => { if (pending || error || saved) setEdited(false); }, [pending, error, saved]);
   useEffect(() => { if (error) field?.current?.focus(); }, [error, field]);
   // The value a refusal is about is the one the form held when it came back.
   const current = useRef(value);

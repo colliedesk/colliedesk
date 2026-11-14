@@ -5,6 +5,7 @@ import type { Channel } from '../../api/channels';
 import type { EmailChannelSettings } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { PlusIcon } from '../../ui/icons';
 import { EmailChannelSection } from '../../features/settings/email-channel-section';
 import { saveState } from '../../features/settings/save-feedback';
@@ -41,7 +42,7 @@ export function EmailHome(props: HomeProps) {
   const mainSettings = settings[email.indexOf(main)]?.data;
   return <section className="settings-card email-home" aria-labelledby="email-home-heading">
     <div className="email-home-head">
-      <div className="section-heading"><h2 id="email-home-heading">{m.addresses}</h2>{lastEmail && <p>{m.lastEmail(formatDate(lastEmail, timezone))}</p>}</div>
+      <div className="section-heading"><div className="heading-with-tip"><h2 id="email-home-heading">{m.addresses}</h2><HelpTip label={m.addresses} text={m.disconnectHelp} /></div>{lastEmail && <p>{m.lastEmail(formatDate(lastEmail, timezone))}</p>}</div>
       {canManage && <a className="button ch-add" href="/settings/channels/new/email"><PlusIcon /><span>{m.addAnother}</span></a>}
     </div>
     <div className="scroll-x-fade"><table className="email-home-table" aria-label={m.addresses}>
@@ -80,7 +81,7 @@ function Folds({ channel, settings, several, canManage, timezone, navigate }: Fo
   const which = several && <p className="muted-copy">{m.forWhich(config.support_address)}</p>;
   return <div className="email-home-folds">
     <details className="email-home-fold"><summary>{m.foldSender}</summary>{which}
-      <EmailChannelSection part="sender" settings={settings} timezone={timezone} canManage={canManage} senderNameSave={saveState(saveSenderName)} onSaveSenderName={(name) => saveSenderName.mutate(name)} />
+      <EmailChannelSection part="sender" settings={settings} timezone={timezone} canManage={canManage} senderNameSave={saveState(saveSenderName)} onSaveSenderName={(name) => saveSenderName.mutateAsync(name)} />
     </details>
     <details className="email-home-fold"><summary>{m.foldDomain(config.domain, verified)}</summary>{which}
       {verifyDomain.isError && !(verifyDomain.error instanceof InvalidRequestError) && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}
@@ -94,7 +95,5 @@ function Folds({ channel, settings, several, canManage, timezone, navigate }: Fo
     {canManage && settings.hosted_address && <details className="email-home-fold email-home-danger"><summary>{m.foldChange}</summary>
       <ForwardingName />
     </details>}
-    {/* One sentence, shown as it is: each row's Manage button is the way to an address's Disconnect email. */}
-    <p className="muted-copy email-home-disconnect">{m.disconnectHelp}</p>
   </div>;
 }

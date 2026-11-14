@@ -4,17 +4,19 @@ import { InvalidRequestError, request } from '../../api/client';
 import { useCreateAction } from '../../api/use-create';
 import type { ReactNode } from 'react';
 import type { WebFormSettings } from '../../api/schemas';
+import { HelpTip } from '../../ui/help-tip';
 import { settingsMessages } from './settings-messages';
 import { channelSetupMessages } from './channel-setup-messages';
 import { CopyButton } from './copy-button';
 import { useSaveFeedback } from './save-feedback';
+import { useInstantSave, useSaveChanges, useSettingsEdit, useUnsavedText } from './settings-edits';
 import type { SaveState } from './save-feedback';
 
 interface WebFormSectionProps {
   settings?: WebFormSettings;
   canManage: boolean;
   save?: SaveState;
-  onSave?: (enabled: boolean, origins: string[]) => void;
+  onSave?: (enabled: boolean, origins: string[]) => Promise<unknown> | void;
   // part 'embed' is the form as a channel tab shows it: no section frame, and no on/off checkbox, since the
   // channel's own switch turns it on and off.
   part?: 'all' | 'embed';
@@ -33,6 +35,18 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   useEffect(() => setEnabled(settings?.enabled ?? false), [settings?.enabled]);
   useEffect(() => setOrigins((settings?.allowed_origins ?? []).join('\n')), [settings?.allowed_origins]);
   const feedback = useSaveFeedback(save);
+  // A form being added is saved by its own button, which adds it. A form that exists waits for the page's Save.
+  const adding = nameField !== undefined;
+  const saveChanges = useSaveChanges();
+  const savedOrigins = settings?.allowed_origins ?? [];
+  const nowOrigins = parseOrigins(origins);
+  // Accepting submissions is one choice: it saves when it is made, with Saved and Undo. The sites are text: they wait for Save.
+  const instant = useInstantSave();
+  const changed = nowOrigins.length !== savedOrigins.length || nowOrigins.some((origin, index) => origin !== savedOrigins[index]);
+  useSettingsEdit('web-form', !adding && canManage && changed ? { label: settingsMessages.webFormOrigins, save: () => onSave?.(settings?.enabled ?? false, nowOrigins),
+    discard: () => setOrigins(savedOrigins.join('\n')) } : undefined);
+  // A form being added has its own button, but what is typed in it still counts when the page is left.
+  useUnsavedText('web-form-add', adding && (origins.trim() !== '' || enabled));
   const state = settings?.enabled ? settingsMessages.webFormOn : settingsMessages.webFormOff;
   const embed = part === 'embed';
   // A form that also answers the workspace's older address shows its own address, the one a new site uses;
@@ -43,14 +57,16 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   const body = <div className="settings-body">
         {!embed && <p role="status" className="saved-state" data-on={settings?.enabled ? 'true' : 'false'}>{state}</p>}
         {canManage
-          ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) onSave?.(enabled, parseOrigins(origins)); }}>
+          ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (feedback.pending) return; if (adding) void onSave?.(enabled, nowOrigins); else void saveChanges(); }}>
               {nameField}
-              {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{settingsMessages.webFormAccept}</span></label>}
+              {!embed && <label className="field-inline"><input type="checkbox" checked={adding ? enabled : settings?.enabled ?? false}
+                onChange={(event) => { if (adding) { feedback.touch(); setEnabled(event.target.checked); } else void instant((value: boolean) => onSave?.(value, savedOrigins), event.target.checked, settings?.enabled ?? false); }} /><span>{settingsMessages.webFormAccept}</span></label>}
               <label className="field"><span>{settingsMessages.webFormOrigins}</span>
-                <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={originsHelp} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
-              <small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
-              <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(settingsMessages.saveWebForm)}</button>
-                {feedback.status}</span>
+                <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={`${originsHelp} ${originsHelp}-why`} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
+              <div className="heading-with-tip field-hint"><small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
+                <HelpTip id={`${originsHelp}-why`} label={settingsMessages.webFormOrigins} text={channelSetupMessages.webFormOriginsWhy} /></div>
+              <span className="button-row">{adding && <button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(settingsMessages.saveWebForm)}</button>}
+                {feedback.pending && !adding ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}</span>
             </form>
           : <ul className="muted-copy">{(settings?.allowed_origins ?? []).map((origin) => <li key={origin}>{origin}</li>)}</ul>}
         {settings && <p>{tryMessages.what}</p>}
@@ -59,12 +75,12 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
           <input readOnly value={submitURL} /><small>{settingsMessages.webFormSubmitHelp}{' '}
             <a className="web-form-guide" href={tryMessages.guideURL} target="_blank" rel="noreferrer">{tryMessages.guide}</a></small></label>}
         {settings && embed && <EmbedCode url={submitURL} />}
-        {older && <details className="muted-copy"><summary>{olderMessages.summary}</summary><p>{olderMessages.body(older)}</p></details>}
+        {older && <details className="muted-copy"><summary>{olderMessages.summary}</summary><p>{olderMessages.body(older)} <HelpTip label={olderMessages.summary} text={olderMessages.why} /></p></details>}
       </div>;
   if (embed) return body;
   return (
     <section className="settings-card" aria-labelledby="web-form-heading">
-      <div className="section-heading"><h2 id="web-form-heading">{settingsMessages.webForm}</h2><p>{settingsMessages.webFormDescription}</p></div>
+      <div className="section-heading"><div className="heading-with-tip"><h2 id="web-form-heading">{settingsMessages.webForm}</h2><HelpTip label={settingsMessages.webForm} text={settingsMessages.webFormWhy} /></div><p>{settingsMessages.webFormDescription}</p></div>
       {body}
     </section>
   );
@@ -119,7 +135,8 @@ function TryForm({ path }: { path: string }) {
 const embedMessages = {
   copyUrl: 'Copy submit URL',
   code: 'Code for your page',
-  codeHelp: 'Send it from a page on an allowed origin, with the visitor\'s email and message. Keep the field named website empty. It is a trap for spam bots: a message with it filled in is thrown away.',
+  codeHelp: 'Send it from a page on an allowed origin.',
+  codeWhy: 'Include the visitor\'s email and message. Keep the field named website empty: it is a trap for spam bots, and a message with it filled in is thrown away.',
   copyCode: 'Copy code',
   codeCopied: 'Code copied',
 };
@@ -136,7 +153,7 @@ await fetch('${url}', {
   return <>
     <span className="button-row"><CopyButton value={url} copiedText={settingsMessages.urlCopied}>{embedMessages.copyUrl}</CopyButton></span>
     <section className="embed-code" aria-labelledby="embed-code-heading">
-      <h3 id="embed-code-heading" className="field-label">{embedMessages.code}</h3>
+      <div className="heading-with-tip"><h3 id="embed-code-heading" className="field-label">{embedMessages.code}</h3><HelpTip label={embedMessages.code} text={embedMessages.codeWhy} /></div>
       <pre><code>{code}</code></pre>
       <p className="muted-copy">{embedMessages.codeHelp}</p>
       <span className="button-row"><CopyButton value={code} copiedText={embedMessages.codeCopied}>{embedMessages.copyCode}</CopyButton></span>
@@ -146,5 +163,6 @@ await fetch('${url}', {
 
 const olderMessages = {
   summary: 'Older address',
-  body: (address: string) => `This form also answers ${address}. Use it only if your website already sends to it; it keeps working. A new website uses the Submit URL above.`,
+  body: (address: string) => `This form also answers ${address}.`,
+  why: 'Use it only if your website already sends to it; it keeps working. A new website uses the Submit URL above.',
 };

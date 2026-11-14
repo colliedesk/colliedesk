@@ -1,0 +1,12 @@
+/* Export all data: one card, one row. The title and what it does stand on the left, the button on the right.
+   The row's own rule is gone with its box; a line about what happened (started, refused) takes the whole width
+   under a hairline. */
+.settings-v2 .settings-card.data-export { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-1) var(--space-4);
+  min-height: 60px; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-3) var(--space-4); }
+.settings-v2 .data-export :is(.settings-body, .export-action) { display: contents; }
+.settings-v2 .data-export .section-heading h2 { font-size: var(--fs-ui); font-weight: 500; line-height: 20px; letter-spacing: 0; }
+.settings-v2 .data-export .section-heading p { margin-top: 0; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; }
+.settings-v2 .data-export .export-action > p { grid-column: 1 / -1; }
+@container (max-width: 30rem) {
+  .settings-v2 .settings-card.data-export { grid-template-columns: minmax(0, 1fr); }
+}

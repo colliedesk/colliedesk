@@ -7,6 +7,12 @@ import { messages } from '../../messages';
 import { AgentTokensSection, followableRoles } from './agent-tokens-section';
 import type { TokenChoice } from './agent-tokens-section';
 
+// agentTokensShown says whether the agent tokens have anything to show this session: a person who may make tokens
+// (not through a token of their own) or revoke a teammate's, or who holds a token already.
+export function agentTokensShown(me: { permissions: string[]; token?: unknown }, sessions: readonly { token?: unknown }[] = []): boolean {
+  return (can(me, 'team:create_tokens') && !me.token) || can(me, 'team:revoke') || sessions.some((session) => session.token);
+}
+
 // AIAgentsSections is the part of Settings → AI & agents for AI agents working through a token: one card that
 // lists, creates and revokes tokens.
 export function AIAgentsSections() {

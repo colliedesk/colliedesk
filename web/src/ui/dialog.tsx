@@ -5,8 +5,8 @@ import './controls.css';
 
 // Dialog is the frame of a form dialog: Escape closes, Tab stays inside, focus returns to what opened it.
 // alert makes it an alertdialog without a close button (a confirmation).
-export function Dialog({ title, help, onClose, children, footer, onSubmit, alert, closeLabel, className = '' }: {
-  title: string; help?: string; onClose: () => void; children: ReactNode; footer: ReactNode; onSubmit?: (event: FormEvent) => void; alert?: boolean;
+export function Dialog({ title, titleTip, help, onClose, children, footer, onSubmit, alert, closeLabel, className = '' }: {
+  title: string; titleTip?: ReactNode; help?: string; onClose: () => void; children: ReactNode; footer: ReactNode; onSubmit?: (event: FormEvent) => void; alert?: boolean;
   closeLabel: string; className?: string;
 }) {
   useReturnFocus();
@@ -16,7 +16,7 @@ export function Dialog({ title, help, onClose, children, footer, onSubmit, alert
     <div className="dialog-backdrop" onMouseDown={keepDialogFocus}>
       <form className={`dialog form-dialog ${className}`.trim()} role={alert ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby={titleId} ref={root}
         onKeyDown={dialogKeys(root, onClose)} onSubmit={(event) => { event.preventDefault(); onSubmit?.(event); }} noValidate>
-        <header><div><h2 id={titleId}>{title}</h2>{help && <p>{help}</p>}</div>
+        <header><div>{titleTip ? <div className="heading-with-tip"><h2 id={titleId}>{title}</h2>{titleTip}</div> : <h2 id={titleId}>{title}</h2>}{help && <p>{help}</p>}</div>
           {!alert && <button type="button" className="icon-button" aria-label={closeLabel} onClick={onClose}>×</button>}</header>
         <div className="form-dialog-body">{children}</div>
         <footer className="button-row form-dialog-footer">{footer}</footer>

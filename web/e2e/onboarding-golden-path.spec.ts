@@ -15,9 +15,6 @@ const baseURL = servers.cloud;
 const apiKey = 'fd-e2e-golden-path-key-never-shown';
 const provider = new IdentityProvider();
 
-test.beforeAll(async () => { await provider.start(); });
-test.afterAll(async () => { await provider.stop(); });
-
 test('golden path: a new team signs up on the cloud, imports Freshdesk in the app, reconcile OK, answers its first conversation by email', { tag: '@onboarding' }, async ({ page }) => {
   test.setTimeout(240_000);
   const suffix = uniqueSuffix();
@@ -34,7 +31,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
 
     // Import in the app, in the background, until the reconcile report is ready and OK.
     await page.getByLabel('Freshdesk address').fill('acme.freshdesk.com');
-    await page.getByLabel('API key of a Freshdesk admin').fill(apiKey);
+    await page.getByLabel('API key of a Freshdesk admin', { exact: true }).fill(apiKey);
     await page.getByRole('button', { name: 'Read account' }).click();
     await expect(page.getByRole('heading', { name: 'Found in acme.freshdesk.com' })).toBeVisible({ timeout: 60_000 });
     await page.getByRole('button', { name: 'Start import' }).click();
@@ -93,6 +90,8 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     // gets the reply by SMTP from the support address.
     const subject = ticketSubject(296);
     const customer = requesterEmail(296)!;
+    // Back to app returns to Reports, where the team was before Settings; the inbox is one place over.
+    await page.getByRole('link', { name: 'Back to app' }).click();
     await page.getByRole('link', { name: 'Inbox' }).click();
     await page.getByRole('button', { name: new RegExp(subject) }).click();
     const reply = `Thanks for your patience, this is Golden Desk (${suffix}).`;

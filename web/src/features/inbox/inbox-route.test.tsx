@@ -479,6 +479,45 @@ test('a brand-new workspace still shows "Get started"', async () => {
   expect(await screen.findByRole('region', { name: /get started/i })).toBeInTheDocument();
 });
 
+const setupSteps = (states: Record<string, string> = {}) => {
+  const all = { email: 'none', import: 'none', ai_drafts: 'none', reply_targets: 'none', invite: 'alone', first_reply: 'none', ...states } as Record<string, string>;
+  return { steps: Object.entries(all).map(([key, state]) => ({ key, name: key, state, detail: null })), complete: false, recommended: null };
+};
+
+test('an empty inbox offers an admin the first undone setup step, the one Quick start highlights', async () => {
+  quietApis();
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: 'Sam' }, permissions: permissionsOf('admin') });
+  api.setupProgress.mockResolvedValue(setupSteps());
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  const start = await screen.findByRole('region', { name: /get started/i });
+  expect(await within(start).findByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/setup/email');
+});
+
+test('an empty inbox names the step Quick start highlights: an address waiting for its first email is still that step', async () => {
+  quietApis();
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: 'Sam' }, permissions: permissionsOf('admin') });
+  api.setupProgress.mockResolvedValue(setupSteps({ email: 'waiting' }));
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  const start = await screen.findByRole('region', { name: /get started/i });
+  expect(await within(start).findByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/setup/email');
+});
+
+test('an empty inbox is text only when the person has no step left to take', async () => {
+  quietApis();
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: 'Sam' }, permissions: permissionsOf('agent') });
+  api.setupProgress.mockResolvedValue(setupSteps({ first_reply: 'sent' }));
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  const start = await screen.findByRole('region', { name: /get started/i });
+  await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
+  expect(within(start).queryByRole('link')).not.toBeInTheDocument();
+});
+
 test('resolving the open conversation keeps it on screen although it left the Open list', async () => {
   quietApis();
   api.conversations.mockReset();

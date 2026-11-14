@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { SettingsPage } from './settings-page';
 import { SessionsSection } from './sessions-section';
@@ -6,7 +6,7 @@ import { builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
 
 test('creates an invite and exposes its one-time URL', () => {
   const onCreateInvite = vi.fn();
-  render(<SettingsPage page="members" sessions={[]} invites={[]} timezone="UTC"
+  render(<SettingsPage page="members" membersTab="invites" sessions={[]} invites={[]} timezone="UTC"
     canCreateInvites inviteRoles={builtInRoles}
     createdInvite={{ url: "https://desk.example.com/sign-in?token=once" }}
     onCreateInvite={onCreateInvite} />);
@@ -32,7 +32,7 @@ test('shows the state of every invite and offers revoke only while it is pending
   const base = { roles: rolesOf('agent'), created_by_email: 'admin@example.com', created_at: '2026-10-14T00:00:00Z', used_at: null, revoked_at: null };
   const future = new Date(Date.now() + 600_000).toISOString();
   const past = new Date(Date.now() - 600_000).toISOString();
-  render(<SettingsPage page="members" sessions={[]} timezone="UTC" canCreateInvites canRevokeInvites invites={[
+  render(<SettingsPage page="members" membersTab="invites" sessions={[]} timezone="UTC" canCreateInvites canRevokeInvites invites={[
     { ...base, id: '11111111-1111-4111-8111-111111111111', email: 'pending@example.com', expires_at: future },
     { ...base, id: '22222222-2222-4222-8222-222222222222', email: 'accepted@example.com', expires_at: future, used_at: '2026-10-14T00:01:00Z' },
     { ...base, id: '33333333-3333-4333-8333-333333333333', email: 'revoked@example.com', expires_at: future, revoked_at: '2026-10-14T00:01:00Z' },
@@ -44,23 +44,30 @@ test('shows the state of every invite and offers revoke only while it is pending
   expect(row('accepted@example.com')).toHaveTextContent('Accepted');
   expect(row('revoked@example.com')).toHaveTextContent('Revoked');
   expect(row('expired@example.com')).toHaveTextContent('Expired');
-  expect(within(invites).getAllByRole('button', { name: 'Revoke' })).toHaveLength(1);
+  // A row's actions are in its menu: a pending invite can get a new link or be revoked, an expired one a new link; an ended one has none.
+  expect(within(invites).getAllByRole('button', { name: /^Actions for / }).map((button) => button.getAttribute('aria-label'))).toEqual(['Actions for pending@example.com', 'Actions for expired@example.com']);
+  fireEvent.click(within(row('pending@example.com')).getByRole('button', { name: 'Actions for pending@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link', 'Revoke']);
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  fireEvent.click(within(row('expired@example.com')).getByRole('button', { name: 'Actions for expired@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link']);
   // The sessions, with their own Revoke buttons, are on Account now, not beside the invites.
   expect(screen.queryByRole('region', { name: 'Sessions' })).not.toBeInTheDocument();
 });
 
 test('an invite stays listed without Revoke for a person who may invite but not revoke', () => {
-  render(<SettingsPage page="members" sessions={[]} timezone="UTC" canCreateInvites canRevokeInvites={false} invites={[
+  render(<SettingsPage page="members" membersTab="invites" sessions={[]} timezone="UTC" canCreateInvites canRevokeInvites={false} invites={[
     { id: '11111111-1111-4111-8111-111111111111', email: 'pending@example.com', roles: rolesOf('agent'), created_by_email: 'admin@example.com',
       created_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), used_at: null, revoked_at: null },
   ]} />);
   const invites = screen.getByRole('region', { name: 'Invites' });
   expect(within(invites).getByText('pending@example.com')).toBeInTheDocument();
-  expect(within(invites).queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+  fireEvent.click(within(invites).getByRole('button', { name: 'Actions for pending@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link']);
 });
 
 // Agent tokens are listed in AI & agents (ai-agents-sections.tsx), with the same rows as before.
-test('a revoked or expired session is shown as such and cannot be revoked again', () => {
+test('a revoked or expired session is not listed, so it cannot be revoked again', () => {
   const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', agent_name: 'Sam', label: 'Chrome', token: null, role: null, permissions: [], current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
   const future = new Date(Date.now() + 600_000).toISOString();
   render(<SettingsPage page="account" invites={[]} timezone="UTC" sessions={[
@@ -71,13 +78,13 @@ test('a revoked or expired session is shown as such and cannot be revoked again'
   const sessions = screen.getByRole('region', { name: 'Sessions' });
   const row = (label: string) => within(sessions).getByText(label).closest('article') as HTMLElement;
   expect(row('Active device')).toHaveTextContent('Active');
-  expect(row('Revoked device')).toHaveTextContent('Revoked');
-  expect(row('Old device')).toHaveTextContent('Expired');
+  expect(within(sessions).queryByText('Revoked device')).not.toBeInTheDocument();
+  expect(within(sessions).queryByText('Old device')).not.toBeInTheDocument();
   expect(within(sessions).getAllByRole('button', { name: 'Revoke' })).toHaveLength(1);
 });
 
 test('shows why an invite was refused next to the invite form', () => {
-  render(<SettingsPage page="members" sessions={[]} invites={[]} timezone="UTC" canCreateInvites
+  render(<SettingsPage page="members" membersTab="invites" sessions={[]} invites={[]} timezone="UTC" canCreateInvites
     inviteError="The trial allows 10 agents, pending invites included." />);
   expect(screen.getByRole('alert')).toHaveTextContent(/trial allows 10 agents/i);
 });
@@ -127,9 +134,17 @@ test('settings is one page per menu item, each holding its own sections', () => 
   expect(screen.getByRole('heading', { level: 1, name: 'General' })).toBeInTheDocument();
   expect(regions()).toEqual(['general-heading', 'numbers-heading']);
   general.unmount();
-  render(<SettingsPage page="members" sessions={[]} invites={[]} timezone="UTC" canCreateInvites teamSection={team} rolesSection={<section aria-labelledby="roles-heading"><h2 id="roles-heading">Roles</h2></section>} />);
+  // Members shows one tab's section at a time: the team, the invites, and under Advanced the roles.
+  const roles = <section aria-labelledby="roles-heading"><h2 id="roles-heading">Roles</h2></section>;
+  const members = render(<SettingsPage page="members" sessions={[]} invites={[]} timezone="UTC" canCreateInvites teamSection={team} rolesSection={roles} />);
   expect(screen.getByRole('heading', { level: 1, name: 'Members' })).toBeInTheDocument();
-  expect(regions()).toEqual(['team-heading', 'invites-heading', 'roles-heading']);
+  expect(regions()).toEqual(['team-heading']);
+  members.unmount();
+  const invites = render(<SettingsPage page="members" membersTab="invites" sessions={[]} invites={[]} timezone="UTC" canCreateInvites teamSection={team} rolesSection={roles} />);
+  expect(regions()).toEqual(['invites-heading']);
+  invites.unmount();
+  render(<SettingsPage page="members" membersTab="advanced" sessions={[]} invites={[]} timezone="UTC" canCreateInvites teamSection={team} rolesSection={roles} />);
+  expect(regions()).toEqual(['roles-heading']);
   localStorage.removeItem('colliedesk.autofix');
 });
 
@@ -153,11 +168,16 @@ test('an agent gets no workspace-only sections or links', () => {
   expect(screen.queryByRole('combobox', { name: 'Workspace timezone' })).not.toBeInTheDocument();
 });
 
-test('invites sit right after the team they add to', () => {
-  render(<SettingsPage page="members" sessions={[]} invites={[]} timezone="UTC" canCreateInvites
-    teamSection={<section aria-labelledby="team-heading"><h2 id="team-heading">Team</h2></section>} />);
-  const team = screen.getByRole('region', { name: 'Team' });
-  expect(team.nextElementSibling).toBe(screen.getByRole('region', { name: 'Invites' }));
+// The invites that add people are the tab beside the people: each tab holds its own section alone.
+test('the People tab holds the team and the Invites tab the invites, never both at once', () => {
+  const team = <section aria-labelledby="team-heading"><h2 id="team-heading">Team</h2></section>;
+  const people = render(<SettingsPage page="members" sessions={[]} invites={[]} timezone="UTC" canCreateInvites teamSection={team} />);
+  expect(screen.getByRole('region', { name: 'Team' })).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Invites' })).not.toBeInTheDocument();
+  people.unmount();
+  render(<SettingsPage page="members" membersTab="invites" sessions={[]} invites={[]} timezone="UTC" canCreateInvites teamSection={team} />);
+  expect(screen.getByRole('region', { name: 'Invites' })).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Team' })).not.toBeInTheDocument();
 });
 
 test('theme and desktop notifications live together under Preferences', () => {
@@ -190,8 +210,9 @@ test('a chosen workspace timezone is saved when the list is left, no Save button
   fireEvent.change(select, { target: { value: 'America/New_York' } });
   fireEvent.blur(select);
   expect(onSetWorkspaceTimezone).toHaveBeenCalledWith('America/New_York');
-  // The only button in General saves the workspace name; the timezone needs none.
-  expect(within(general).getAllByRole('button').map((button) => button.textContent)).toEqual(['Save workspace name']);
+  // Nothing in General has a button of its own: the timezone saves at once, and the name waits for the page's Save.
+  // A help tip is an ⓘ button that explains; only the buttons that act are counted.
+  expect(within(general).queryAllByRole('button').filter((button) => !button.classList.contains('help-tip-button'))).toEqual([]);
 });
 
 test('your timezone follows the workspace until you choose one, and choosing the workspace again clears it', () => {
@@ -212,13 +233,13 @@ test('a stored timezone this browser does not list is still shown as chosen', ()
   expect(screen.getByRole('combobox', { name: 'Your timezone' })).toHaveValue('Mars/Olympus_Mons');
 });
 
-test('a timezone save shows Saving…, Saved or the failure next to its own control', () => {
+test('a timezone save shows Saving… or the failure next to its own control; Saved is the page toast', () => {
   const { rerender } = render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ pending: true }} />);
   expect(screen.getByText('Saving…')).toBeInTheDocument();
   // Never disabled: a disabled control would throw keyboard focus out to the page.
   expect(screen.getByRole('combobox', { name: 'Your timezone' })).toBeEnabled();
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ saved: true }} />);
-  expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ error: 'Unknown timezone.' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Unknown timezone.');
 });
@@ -245,7 +266,7 @@ test('a session is named by its browser and system, and this device is marked wi
 
 test('an invite gives the Agent role unless other roles are picked, and needs at least one', () => {
   const onCreateInvite = vi.fn();
-  render(<SettingsPage page="members" sessions={[]} invites={[]} timezone="UTC" canCreateInvites inviteRoles={builtInRoles} onCreateInvite={onCreateInvite} />);
+  render(<SettingsPage page="members" membersTab="invites" sessions={[]} invites={[]} timezone="UTC" canCreateInvites inviteRoles={builtInRoles} onCreateInvite={onCreateInvite} />);
   const picker = screen.getByRole('button', { name: 'Roles: Agent' });
   fireEvent.click(picker);
   fireEvent.click(screen.getByRole('checkbox', { name: /Admin/ }));
@@ -315,7 +336,7 @@ test('an admin of a billed workspace finds Plan and billing last, under Data and
   expect(links.at(-1)).toHaveAttribute('href', '/settings/billing');
 });
 
-test('your display name is saved with its button, trimmed, and saving an empty field clears it', () => {
+test('your display name is saved with the page Save, trimmed, and saving an empty field clears it', async () => {
   const onSetDisplayName = vi.fn();
   render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" email="ada@example.com" displayName="Ada" onSetDisplayName={onSetDisplayName} />);
   const profile = screen.getByRole('region', { name: 'Profile' });
@@ -324,19 +345,84 @@ test('your display name is saved with its button, trimmed, and saving an empty f
   expect(input).toHaveAttribute('placeholder', 'ada@example.com');
   expect(input).toHaveAttribute('maxLength', '80');
   fireEvent.change(input, { target: { value: '  Ada Lovelace ' } });
-  fireEvent.click(within(profile).getByRole('button', { name: 'Save name' }));
+  expect(within(profile).queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onSetDisplayName).toHaveBeenLastCalledWith('Ada Lovelace');
   fireEvent.change(input, { target: { value: '' } });
-  fireEvent.click(within(profile).getByRole('button', { name: 'Save name' }));
+  // While a save is on its way the bar says Saving…; it is Save again once the answer is in.
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   expect(onSetDisplayName).toHaveBeenLastCalledWith('');
 });
 
 test('a display name save shows Saving…, Saved or why it was refused', () => {
   const { rerender } = render(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" displayName="" displayNameSave={{ pending: true }} />);
-  expect(screen.getByRole('button', { name: 'Saving…' })).toBeInTheDocument();
+  expect(screen.getByText('Saving…')).toBeInTheDocument();
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" displayName="Ada" displayNameSave={{ saved: true }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Saved');
   expect(screen.getByRole('textbox', { name: 'Display name' })).toHaveValue('Ada');
   rerender(<SettingsPage page="account" sessions={[]} invites={[]} timezone="UTC" displayName="Ada" displayNameSave={{ error: 'display_name must be a string of at most 80 characters.' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('at most 80 characters');
+});
+
+
+// ---- the invite being typed belongs to the page, not to the Invites tab
+
+const inviteProps = { sessions: [] as never[], timezone: 'UTC', canCreateInvites: true, inviteRoles: builtInRoles, invites: [] as never[] };
+const closingTabAsks = () => !window.dispatchEvent(new Event('beforeunload', { cancelable: true }));
+
+test('an email typed on Invites still counts as unsaved when People is the tab shown, and draws no bar', async () => {
+  const view = render(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  expect(closingTabAsks()).toBe(false);
+  fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'new@example.com' } });
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  view.rerender(<SettingsPage page="members" membersTab="people" {...inviteProps} />);
+  expect(closingTabAsks()).toBe(true);
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull();
+  view.rerender(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  expect(screen.getByLabelText(/invite email/i)).toHaveValue('new@example.com');
+});
+
+test('once an invite is created its form is empty again and nothing is unsaved', async () => {
+  const view = render(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'new@example.com' } });
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  view.rerender(<SettingsPage page="members" membersTab="invites" {...inviteProps} createdInvite={{ url: 'https://desk.example.com/sign-in?token=once' }} />);
+  await waitFor(() => expect(screen.getByLabelText(/invite email/i)).toHaveValue(''));
+  await waitFor(() => expect(closingTabAsks()).toBe(false));
+});
+
+test('picking the default role again is not a change: only an email, or a role other than the default, is unsaved', async () => {
+  render(<SettingsPage page="members" membersTab="invites" {...inviteProps} />);
+  fireEvent.click(screen.getByRole('button', { name: /Agent/ }));
+  const admin = screen.getByRole('checkbox', { name: /Admin/ });
+  fireEvent.click(admin);
+  await waitFor(() => expect(closingTabAsks()).toBe(true));
+  fireEvent.click(admin);
+  await waitFor(() => expect(closingTabAsks()).toBe(false));
+});
+
+// The server refuses an invite whose roles hold a permission the person lacks (403 role_exceeds_yours): the menu does not offer it.
+// The person here holds the Agent role's permissions and the right to invite, not the Admin role's.
+test('New invite link is not offered for an invite whose roles hold a permission the person lacks', () => {
+  const [agent, admin] = [rolesOf('agent')[0], rolesOf('admin')[0]];
+  const base = { created_by_email: 'admin@example.com', created_at: '2026-10-14T00:00:00Z', used_at: null, revoked_at: null, expires_at: new Date(Date.now() + 600_000).toISOString() };
+  render(<SettingsPage page="members" membersTab="invites" sessions={[]} timezone="UTC" canCreateInvites canRevokeInvites inviteRoles={builtInRoles}
+    myPermissions={[...permissionsOf('agent'), 'team:invite']} invites={[
+    { ...base, id: '11111111-1111-4111-8111-111111111111', email: 'agent@example.com', roles: [agent] },
+    { ...base, id: '22222222-2222-4222-8222-222222222222', email: 'admin@example.com', roles: [admin] },
+  ]} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Actions for agent@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link', 'Revoke']);
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  fireEvent.click(screen.getByRole('button', { name: 'Actions for admin@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Revoke']);
+});
+
+test('an invite that turns revoked is announced', () => {
+  const pending = { id: '11111111-1111-4111-8111-111111111111', email: 'pending@example.com', roles: rolesOf('agent'), created_by_email: 'admin@example.com',
+    created_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), used_at: null, revoked_at: null };
+  const props = { page: 'members' as const, membersTab: 'invites' as const, sessions: [], timezone: 'UTC', canCreateInvites: true, canRevokeInvites: true };
+  const { rerender } = render(<SettingsPage {...props} invites={[pending]} />);
+  rerender(<SettingsPage {...props} invites={[{ ...pending, revoked_at: '2026-10-14T00:01:00Z' }]} />);
+  expect(screen.getByText('Invite for pending@example.com revoked.')).toHaveAttribute('role', 'status');
 });

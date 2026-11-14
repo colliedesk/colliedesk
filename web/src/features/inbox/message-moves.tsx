@@ -7,6 +7,7 @@ import type { Conversation, Message } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { apiQuery } from '../../lib/inbox-query';
 import { Dialog, Field } from '../../ui/dialog';
+import { HelpTip } from '../../ui/help-tip';
 import { RotateCcwIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
 import { AIDecisionWhy } from '../review/ai-decision-why';
@@ -184,6 +185,8 @@ export function MoveDialog({ mode, conversation, timeline, picked, closeSource =
   });
   const options = (targets.data?.items ?? []).filter((item) => item.id !== conversation.id).slice(0, 20);
   const all = ids.length === incoming.length;
+  // The server refuses to close a conversation someone replied in or wrote a note in (the channel's own notice is no one's work), so it is not offered then.
+  const untouched = timeline.every((item) => item.kind === 'incoming' || Boolean(item.notice_kind));
   const submit = async () => {
     if (ids.length === 0) return setProblem(m.pickOne);
     if (mode === 'move' && !target) return setProblem(m.pickTarget);
@@ -207,14 +210,14 @@ export function MoveDialog({ mode, conversation, timeline, picked, closeSource =
       <button type="button" onClick={onClose}>{m.cancel}</button>
       <button type="submit" className="primary-action" disabled={busy || (mode === 'split' && subject.trim() === '')}>{mode === 'move' ? m.moveButton : m.splitButton}</button>
     </>}>
-    <fieldset className="move-messages">
-      <legend>{m.which}</legend>
+    <div role="group" aria-labelledby={`${formID}-which`} className="move-messages">
+      <div className="heading-with-tip"><span id={`${formID}-which`} className="move-messages-label">{m.which}</span><HelpTip label={m.whichLabel} text={m.whichWhy} /></div>
       {incoming.map((item) => <label key={item.id} className="move-message">
         <input type="checkbox" checked={ids.includes(item.id)} onChange={() => toggle(item.id)} />
         <span><span className="move-message-text">{firstLine(item.body) || item.attachments[0]?.filename || '—'}</span>
           <time className="muted-copy" dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time></span>
       </label>)}
-    </fieldset>
+    </div>
     {mode === 'split' && <Field id={`${formID}-subject`} label={m.subject}>
       {(field) => <input {...field} autoFocus value={subject} maxLength={200} onChange={(event) => setSubject(event.target.value)} />}</Field>}
     {mode === 'move' && <>
@@ -226,8 +229,9 @@ export function MoveDialog({ mode, conversation, timeline, picked, closeSource =
       {options.length > 0 && <ConversationPicker label={m.target} value={target} onChange={setTarget} timezone={timezone}
         items={options.map((item) => ({ id: item.id, subject: item.subject, status: item.status, contactName: item.contact_name, updatedAt: item.updated_at,
           note: item.status === 'resolved' || item.status === 'closed' ? m.reopens : undefined }))} />}
-      {all && <label className="move-close"><input type="checkbox" checked={close} onChange={(event) => setClose(event.target.checked)} />
-        <span>{m.closeSource}<small className="muted-copy">{m.closeSourceHelp}</small></span></label>}
+      {all && untouched && <div className="move-close-row"><label className="move-close"><input type="checkbox" checked={close} onChange={(event) => setClose(event.target.checked)} />
+        <span>{m.closeSource}<small className="muted-copy">{m.closeSourceHelp}</small></span></label>
+        <HelpTip label={m.closeSourceLabel} text={m.closeSourceWhat} /></div>}
     </>}
     {problem && <p role="alert" className="error-copy">{problem}</p>}
   </Dialog>;

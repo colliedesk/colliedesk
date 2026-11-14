@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { messages } from '../../messages';
+import { SettingsEditsProvider } from './settings-edits';
 import { SettingsNav } from './settings-nav';
 import type { SettingsPath, Shown } from './settings-nav';
 import './settings-v2.css';
@@ -27,7 +28,7 @@ export function SettingsFrame({ page, title, lead, shown = everyPage, loading = 
       <header><h1>{title}</h1>{lead && <p>{lead}</p>}</header>
       {loading ? <p role="status" className="empty-copy">{messages.loading}</p> : <div className={page === '/settings' ? 'settings-layout settings-index' : 'settings-layout'}>
         <SettingsNav page={page} shown={shown} />
-        <div className="settings-sections">{children}</div>
+        <div className="settings-sections"><SettingsEditsProvider>{children}</SettingsEditsProvider></div>
       </div>}
     </main>
   );

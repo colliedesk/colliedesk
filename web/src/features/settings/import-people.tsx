@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { ImportPerson } from '../../api/imports';
 import type { Invite, TeamMember } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
+import { HelpTip } from '../../ui/help-tip';
 import { settingsMessages } from './settings-messages';
 import { importMessages as m } from './import-messages';
 
@@ -38,7 +39,7 @@ export function ImportPeople(props: ImportPeopleProps) {
   const invited = new Map(invites.filter(pendingInvite).map((invite) => [invite.email.toLowerCase(), invite]));
   const members = new Set(agents.map((agent) => agent.email.toLowerCase()));
   return <section className="settings-card" aria-labelledby="import-people-heading">
-    <div className="section-heading"><h2 id="import-people-heading">{m.peopleHeading}</h2><p>{m.peopleHelp}</p></div>
+    <div className="section-heading"><div className="heading-with-tip"><h2 id="import-people-heading">{m.peopleHeading}</h2><HelpTip label={m.peopleHeading} text={m.peopleWhy} /></div><p>{m.peopleHelp}</p></div>
     <div className="settings-body">
       {failed && <p role="alert" className="error-copy">{m.peopleFailed}{' '}
         <button type="button" className="link-action" onClick={onRetry}>{m.peopleRetry}</button></p>}

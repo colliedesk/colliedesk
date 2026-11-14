@@ -35,6 +35,14 @@ test('the contact page shows who the customer is and every conversation, importe
   expect(within(old).getByText('Imported')).toBeInTheDocument();
 });
 
+test('"Customer since" is a day without a time of day, and its tooltip gives the full time in the agent\'s timezone', () => {
+  wrap(<ContactPage contact={contact({ created_at: '2026-01-02T01:30:00Z' })} conversations={[]} page={1} pageSize={25} onPage={vi.fn()} timezone="America/New_York" />);
+  const since = screen.getByText('Customer since').closest('div') as HTMLElement;
+  const day = within(since).getByText('Jan 1, 2026');
+  expect(day.tagName).toBe('TIME');
+  expect(day).toHaveAttribute('data-tip', 'Jan 1, 2026, 8:30 PM EST');
+});
+
 test('the history comes in pages counted from the total', () => {
   const onPage = vi.fn();
   wrap(<ContactPage contact={contact({ conversation_count: 60 })} conversations={[row('c1', 'One')]} page={2} pageSize={25} onPage={onPage} />);
@@ -112,4 +120,13 @@ test('a click on the merge window\'s backdrop keeps the focus in it, so Escape c
   fireEvent.keyDown(dialog, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(opener).toHaveFocus();
+});
+
+test('the merge dialog asks for the other contact in one line, and says nothing is lost in a tip', () => {
+  api.contacts.mockResolvedValue({ items: [] });
+  wrap(<ContactPage contact={contact()} page={1} pageSize={25} onPage={vi.fn()} onMerge={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Merge a duplicate…' }));
+  const dialog = screen.getByRole('dialog', { name: 'Merge a duplicate into Mai Linh' });
+  expect(dialog).toHaveTextContent('Find the other contact of the same person.');
+  expect(within(dialog).getByRole('button', { name: 'About merging' })).toHaveAccessibleDescription('Nothing is deleted, and you can undo the merge here.');
 });

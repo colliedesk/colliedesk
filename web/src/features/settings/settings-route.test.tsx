@@ -1,8 +1,11 @@
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { expect, test, vi } from 'vitest';
 import { agentRoleRef, builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
+import { readSkipped, storeSkipped } from '../onboarding/setup-steps';
 import { AccountRoute, GeneralRoute, MembersRoute, SavedRepliesRoute } from './settings-route';
+import type { MembersTab } from './settings-route';
 import { AIAgentsSections } from './ai-agents-sections';
 import { DataRoute } from './data-route';
 
@@ -13,7 +16,7 @@ const api = vi.hoisted(() => ({
   createInvite: vi.fn(), revokeInvite: vi.fn(), revokeSession: vi.fn(), updateWorkspaceTimezone: vi.fn(), updateWorkspaceName: vi.fn(), updateAgentTimezone: vi.fn(),
   saveEmailChannel: vi.fn(), saveEmailSenderName: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
   exportWorkspace: vi.fn(), config: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
-  savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
+  setSetupGuideHidden: vi.fn(), savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
   connectGmail: vi.fn(), disconnectGmail: vi.fn(), createAgentToken: vi.fn(), roles: vi.fn(), setAgentRoles: vi.fn(),
 }));
 const errors = vi.hoisted(() => {
@@ -41,8 +44,8 @@ const ANN = '33333333-3333-4333-8333-333333333333';
 type Page = () => React.ReactNode;
 const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 // show draws one settings page (Account unless another is named) with what the server answers.
-function show(role: 'admin' | 'agent', sessions: unknown[] = [], Page: Page = AccountRoute, client = newClient()) {
-  api.me.mockResolvedValue(me(role));
+function show(role: 'admin' | 'agent', sessions: unknown[] = [], Page: Page = AccountRoute, client = newClient(), meChange: object = {}) {
+  api.me.mockResolvedValue({ ...me(role), ...meChange });
   api.config.mockResolvedValue({ billing: { enabled: false }, cloud_sign_in: { enabled: false, publishable_key: null }, product_analytics: { enabled: false, key: null, host: null, realm: null } });
   api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { roles: rolesOf(role) }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
   api.updateAgent.mockResolvedValue(teammate(ANN, 'ann@example.com', { deactivated_at: '2026-10-15T10:00:00Z' }));
@@ -85,6 +88,25 @@ test('signing out this device from Sessions reloads who is signed in, so the sig
 
 // A person whose roles hold none of the read permissions of a section is not shown it, and the page asks
 // the server for none of it: no refused call.
+// Account lists the browsers that are signed in now: a session that ended (revoked or expired) is not a place the person is signed in.
+test('Account lists active browsers only, and an ended session is not listed', async () => {
+  const session = (id: string, label: string, extra: Record<string, unknown>) => ({ id, agent_id: SAM, agent_email: 'sam@example.com', label, current: false,
+    created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null, ...extra });
+  show('agent', [
+    session('44444444-4444-4444-8444-444444444441', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/130.0 Safari/537.36', { current: true }),
+    session('44444444-4444-4444-8444-444444444442', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile Safari/604.1', {}),
+    session('44444444-4444-4444-8444-444444444443', 'Old laptop', { revoked_at: '2026-10-20T00:00:00Z' }),
+    session('44444444-4444-4444-8444-444444444444', 'Expired phone', { expires_at: '2026-10-01T00:00:00Z' }),
+  ]);
+  const sessions = await screen.findByRole('region', { name: 'Sessions' });
+  await waitFor(() => expect(within(sessions).getAllByRole('article')).toHaveLength(2));
+  expect(within(sessions).queryByText('Old laptop')).not.toBeInTheDocument();
+  expect(within(sessions).queryByText('Expired phone')).not.toBeInTheDocument();
+  expect(within(sessions).queryByText('Revoked')).not.toBeInTheDocument();
+  expect(within(sessions).queryByText('Expired')).not.toBeInTheDocument();
+  expect(within(sessions).getByText('This device')).toBeInTheDocument();
+});
+
 test('a narrow role sees only what it may read, and Settings asks for nothing else', async () => {
   show('agent');
   cleanup();
@@ -111,7 +133,7 @@ test('an admin renames the workspace in General and the new name is read back', 
   expect(field).toHaveAccessibleDescription(/help center title.*sender name/i);
   const before = api.me.mock.calls.length;
   fireEvent.change(field, { target: { value: ' Gamma Desk ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save workspace name' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Save/ }));
   await waitFor(() => expect(api.updateWorkspaceName).toHaveBeenCalledWith('Gamma Desk'));
   await waitFor(() => expect(api.me.mock.calls.length).toBeGreaterThan(before));
 });
@@ -144,7 +166,7 @@ test('a chosen timezone saves once, shows Saving…, then Saved', async () => {
   expect(api.updateWorkspaceTimezone).toHaveBeenCalledTimes(1);
   expect(api.updateWorkspaceTimezone.mock.calls[0][0]).toBe('Asia/Tokyo');
   finish();
-  expect(await screen.findByText('Saved')).toHaveAttribute('role', 'status');
+  expect(await screen.findByRole('status')).toHaveTextContent('Saved');
   expect(select).toBeEnabled();
 });
 
@@ -159,32 +181,96 @@ test('a failed timezone save shows the failure next to its control', async () =>
   expect(alert.closest('.settings-card')).toHaveTextContent('Workspace timezone');
 });
 
-// Members: the team, the invites that add to it and its roles.
-test('Members holds the team, the invites and the roles', async () => {
-  show('admin', [], MembersRoute);
+// Members: the team, the invites that add to it and its roles, one tab each; the tab is in the address.
+const members = (tab?: MembersTab, onTab?: (tab: MembersTab) => void) => () => <MembersRoute tab={tab} onTab={onTab} />;
+const tabNames = () => within(screen.getByRole('tablist', { name: 'Members' })).getAllByRole('tab').map((tab) => tab.textContent);
+
+test('Members opens on People, with four tabs: People, Invites, Groups (reserved) and Advanced', async () => {
+  show('admin', [], members());
   expect(await screen.findByRole('heading', { level: 1, name: 'Members' })).toBeInTheDocument();
-  for (const name of ['Team', 'Invites', 'Roles']) expect(await screen.findByRole('region', { name }), name).toBeInTheDocument();
-  // Invites sit right after the team they add to.
-  expect(screen.getByRole('region', { name: 'Team' }).nextElementSibling).toBe(screen.getByRole('region', { name: 'Invites' }));
+  expect(await screen.findByRole('region', { name: 'Team' })).toBeInTheDocument();
+  expect(tabNames()).toEqual(['People 2', 'Invites 0', 'Groups Coming', 'Advanced']);
+  // Each tab's name reads as words: the count and the tag are not run into the label.
+  expect(screen.getByRole('tab', { name: 'Groups Coming' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: /^People/ })).toHaveAttribute('aria-selected', 'true');
+  // Each other tab's section is on its own tab, not below the team.
+  for (const name of ['Invites', 'Roles']) expect(screen.queryByRole('region', { name }), name).not.toBeInTheDocument();
+});
+
+test('People says which roles everyone holds, and where the other roles are', async () => {
+  show('admin', [], members());
+  expect(await screen.findByText('Everyone is an Admin or an Agent. Custom roles: Advanced.')).toBeInTheDocument();
+});
+
+test('each tab of Members opens its own section: invites, the reserved groups, and the roles under Advanced', async () => {
+  show('admin', [], members('invites'));
+  expect(await screen.findByRole('region', { name: 'Invites' })).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Team' })).not.toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: /^Invites/ })).toHaveAttribute('aria-selected', 'true');
+  cleanup();
+  show('admin', [], members('advanced'));
+  expect(await screen.findByRole('region', { name: 'Roles' })).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Team' })).not.toBeInTheDocument();
+  cleanup();
+  show('admin', [], members('groups'));
+  const reserved = await screen.findByRole('tabpanel');
+  expect(within(reserved).getByText(/^Coming/)).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Team' })).not.toBeInTheDocument();
+});
+
+// The invite being typed belongs to the page, not to the tab: People and back, and the email and the picked roles are still there.
+test('a typed invite email and the picked roles stay while another tab of Members is open', async () => {
+  const Tabbed = () => { const [tab, setTab] = useState<MembersTab>('invites'); return <MembersRoute tab={tab} onTab={setTab} />; };
+  show('admin', [], () => <Tabbed />);
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Invite email' }), { target: { value: 'half-typed@example.com' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Roles: Agent' }));
+  fireEvent.click(within(document.getElementById('invite-roles')!).getByRole('checkbox', { name: /Admin/ }));
+  expect(screen.getByRole('button', { name: /^Roles: .*Admin/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: /^People/ }));
+  expect(screen.queryByRole('textbox', { name: 'Invite email' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: /^Invites/ }));
+  expect(await screen.findByRole('textbox', { name: 'Invite email' })).toHaveValue('half-typed@example.com');
+  expect(screen.getByRole('button', { name: /^Roles: .*Admin/ })).toBeInTheDocument();
+});
+
+// The note says which roles exist, so it waits for the roles instead of saying one thing and then another.
+test('the note under People is not drawn until the roles are known', async () => {
+  show('admin', [], members());
+  api.roles.mockReturnValue(new Promise(() => {}));
+  cleanup();
+  draw(members());
+  expect(await screen.findByRole('region', { name: 'Team' })).toBeInTheDocument();
+  expect(screen.queryByText(/Custom roles/)).not.toBeInTheDocument();
+});
+
+test('choosing a tab of Members tells the address, and the Invites tab counts the pending invites', async () => {
+  api.invites.mockResolvedValue({ items: [] });
+  const choose = vi.fn();
+  show('admin', [], members('people', choose));
+  api.invites.mockResolvedValue({ items: [{ id: 'i1', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com', created_at: '2026-10-28T07:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null }] });
+  fireEvent.click(await screen.findByRole('tab', { name: /^Advanced/ }));
+  expect(choose).toHaveBeenCalledWith('advanced', 'click');
 });
 
 test('an admin deactivates a teammate and the lists reload', async () => {
-  show('admin', [], MembersRoute);
-  fireEvent.click(await screen.findByRole('button', { name: 'Deactivate ann@example.com' }));
+  show('admin', [], members());
+  fireEvent.click(await screen.findByRole('button', { name: 'Actions for ann@example.com' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' }));
   fireEvent.click(within(screen.getByRole('group', { name: 'Deactivate ann@example.com?' })).getByRole('button', { name: 'Yes, deactivate' }));
   await waitFor(() => expect(api.updateAgent).toHaveBeenCalledWith(ANN, { active: false }));
   await waitFor(() => expect(api.agents.mock.calls.length).toBeGreaterThan(1));
 });
 
 test('an agent sees the team but no controls', async () => {
-  show('agent', [], MembersRoute);
+  show('agent', [], members());
   const team = await screen.findByRole('region', { name: 'Team' });
   expect(await within(team).findByText('ann@example.com')).toBeInTheDocument();
-  expect(within(team).queryByRole('button')).not.toBeInTheDocument();
+  // A help tip is an ⓘ button that explains; only the buttons that act are counted.
+  expect(within(team).queryAllByRole('button').filter((button) => !button.classList.contains('help-tip-button'))).toEqual([]);
 });
 
 test('a burst of Create invite presses sends one invite under one key, and the button waits for it', async () => {
-  show('admin', [], MembersRoute);
+  show('admin', [], members('invites'));
   let answer!: (value: unknown) => void;
   api.createInvite.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
   fireEvent.change(await screen.findByRole('textbox', { name: 'Invite email' }), { target: { value: 'new@example.com' } });
@@ -200,24 +286,118 @@ test('a burst of Create invite presses sends one invite under one key, and the b
   await waitFor(() => expect(create).toBeEnabled());
 });
 
+// Esc closes the role picker wherever the focus is in the invite form: on the Roles button that opened it as well as inside it.
+test('Esc with focus on the Roles button closes the picker and keeps the typed email', async () => {
+  show('admin', [], members('invites'));
+  const email = await screen.findByRole('textbox', { name: 'Invite email' });
+  fireEvent.change(email, { target: { value: 'half-typed@example.com' } });
+  const roles = await screen.findByRole('button', { name: 'Roles: Agent' });
+  fireEvent.click(roles);
+  expect(roles).toHaveAttribute('aria-expanded', 'true');
+  roles.focus();
+  fireEvent.keyDown(roles, { key: 'Escape' });
+  expect(roles).toHaveAttribute('aria-expanded', 'false');
+  expect(document.getElementById('invite-roles')).toBeNull();
+  expect(email).toHaveValue('half-typed@example.com');
+});
+
+test('Esc inside the open role picker closes it and puts the focus back on the Roles button', async () => {
+  show('admin', [], members('invites'));
+  const roles = await screen.findByRole('button', { name: 'Roles: Agent' });
+  fireEvent.click(roles);
+  const box = within(document.getElementById('invite-roles')!).getAllByRole('checkbox')[0];
+  box.focus();
+  fireEvent.keyDown(box, { key: 'Escape' });
+  expect(document.getElementById('invite-roles')).toBeNull();
+  expect(roles).toHaveFocus();
+});
+
 // Revoking an invite is its own permission (team:revoke), apart from creating one.
 test('Members offers Revoke on a pending invite only to a person who may revoke invites', async () => {
   const pending = { id: '44444444-4444-4444-8444-444444444444', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com',
     created_at: '2026-10-28T07:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null };
-  show('admin', [], MembersRoute);
+  show('admin', [], members('invites'));
   api.invites.mockResolvedValue({ items: [pending] });
   cleanup();
-  draw(MembersRoute);
+  draw(members('invites'));
   const invites = await screen.findByRole('region', { name: 'Invites' });
   await within(invites).findByText('kim@example.com');
-  expect(within(invites).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  fireEvent.click(within(invites).getByRole('button', { name: 'Actions for kim@example.com' }));
+  expect(screen.getByRole('menuitem', { name: 'Revoke' })).toBeInTheDocument();
   cleanup();
   api.me.mockResolvedValue({ ...me('admin'), permissions: permissionsOf('admin').filter((name) => name !== 'team:revoke') });
-  draw(MembersRoute);
+  draw(members('invites'));
   const without = await screen.findByRole('region', { name: 'Invites' });
   await within(without).findByText('kim@example.com');
   expect(within(without).getByRole('button', { name: 'Create invite' })).toBeInTheDocument();
-  expect(within(without).queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+  fireEvent.click(within(without).getByRole('button', { name: 'Actions for kim@example.com' }));
+  expect(screen.queryByRole('menuitem', { name: 'Revoke' })).not.toBeInTheDocument();
+});
+
+// The server does not email an invite: its link is shown once. A new link is a new invite for the same address and roles.
+// The old pending link is revoked after it when the person may revoke; the page says exactly what is true when it is not.
+const pendingKim = { id: '44444444-4444-4444-8444-444444444444', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com',
+  created_at: '2026-10-28T07:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null };
+const freshLink = { invite: { ...pendingKim, id: '55555555-5555-4555-8555-555555555555' }, url: 'https://desk.example.com/invite#fresh' };
+
+async function openNewLink(invite: object, change: { revoke?: 'ok' | 'refused'; without?: string } = {}) {
+  show('admin', [], members('invites'));
+  api.invites.mockResolvedValue({ items: [invite] });
+  api.createInvite.mockResolvedValue(freshLink);
+  api.revokeInvite.mockReset();
+  if (change.revoke === 'refused') api.revokeInvite.mockRejectedValue(new Error('refused')); else api.revokeInvite.mockResolvedValue(undefined);
+  if (change.without) api.me.mockResolvedValue({ ...me('admin'), permissions: permissionsOf('admin').filter((name) => name !== change.without) });
+  cleanup();
+  draw(members('invites'));
+  const invites = await screen.findByRole('region', { name: 'Invites' });
+  await within(invites).findByText('kim@example.com');
+  fireEvent.click(within(invites).getByRole('button', { name: 'Actions for kim@example.com' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'New invite link' }));
+  return invites;
+}
+
+test('New invite link makes an invite for the same address and roles, shows its link once, focuses it and revokes the old one', async () => {
+  const invites = await openNewLink(pendingKim);
+  await waitFor(() => expect(api.createInvite).toHaveBeenCalledWith('kim@example.com', [agentRoleRef.id], expect.stringMatching(/^[\x21-\x7e]{1,200}$/)));
+  const link = await within(invites).findByRole('textbox', { name: 'One-time invite link' });
+  expect(link).toHaveValue('https://desk.example.com/invite#fresh');
+  await waitFor(() => expect(link).toHaveFocus());
+  await waitFor(() => expect(api.revokeInvite).toHaveBeenCalled());
+  expect(api.revokeInvite.mock.calls[0][0]).toBe(pendingKim.id);
+  expect(await within(invites).findByText('New invite link made for kim@example.com.')).toHaveAttribute('role', 'status');
+});
+
+test('when the old invite cannot be revoked after the new link was made, the page says the old link still works', async () => {
+  const invites = await openNewLink(pendingKim, { revoke: 'refused' });
+  expect(await within(invites).findByRole('alert')).toHaveTextContent('New link made. The old link still works: revoke it.');
+  expect(within(invites).getByRole('textbox', { name: 'One-time invite link' })).toHaveValue('https://desk.example.com/invite#fresh');
+  expect(screen.queryByText('The settings action failed. Try again.')).toBeNull();
+  // The old invite is still listed, and can still be revoked from its menu.
+  expect(within(invites).getAllByText('kim@example.com').length).toBeGreaterThanOrEqual(1);
+});
+
+test('a person who may invite but not revoke is told the earlier link still works', async () => {
+  const invites = await openNewLink(pendingKim, { without: 'team:revoke' });
+  await within(invites).findByRole('textbox', { name: 'One-time invite link' });
+  expect(within(invites).getByText('New link made. The earlier link still works until it expires, or until someone who may revoke invites revokes it.')).toHaveAttribute('role', 'status');
+  expect(api.revokeInvite).not.toHaveBeenCalled();
+});
+
+// A pending invite already holds its address's seat, so only an expired one can meet a full plan.
+test('a new link for an expired invite that the plan has no seat for is refused with the server\'s words, and nothing is revoked', async () => {
+  const expired = { ...pendingKim, expires_at: '2026-10-29T07:00:00Z' };
+  show('admin', [], members('invites'));
+  api.invites.mockResolvedValue({ items: [expired] });
+  api.revokeInvite.mockReset();
+  api.createInvite.mockRejectedValue(new errors.PlanLimitError('Your plan has no seat left.'));
+  cleanup();
+  draw(members('invites'));
+  const invites = await screen.findByRole('region', { name: 'Invites' });
+  await within(invites).findByText('kim@example.com');
+  fireEvent.click(within(invites).getByRole('button', { name: 'Actions for kim@example.com' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'New invite link' }));
+  expect(await within(invites).findByRole('alert')).toHaveTextContent('Your plan has no seat left.');
+  expect(api.revokeInvite).not.toHaveBeenCalled();
 });
 
 // Saved replies: shared by the whole team.
@@ -232,7 +412,7 @@ test('a plain agent manages the shared saved replies and the list reloads after 
   api.savedReplies.mockResolvedValue({ items: [stored] });
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledWith('Closing', 'Thanks.', expect.stringMatching(/^[\x21-\x7e]{1,200}$/)));
   expect(await screen.findByText('Thanks.')).toBeInTheDocument();
   api.savedReplies.mockResolvedValue({ items: [] });
@@ -251,9 +431,9 @@ test('adding a saved reply again after a failed request names the same submit, s
   fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByRole('alert')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledTimes(2));
   const [first, second] = api.createSavedReply.mock.calls as unknown as [string, string, string][];
   expect(first[2]).toEqual(expect.any(String));
@@ -354,6 +534,8 @@ test('an admin finds the import and Export all data on Data', async () => {
   show('admin', [], DataRoute);
   expect(await screen.findByRole('heading', { level: 1, name: 'Data' })).toBeInTheDocument();
   expect(await screen.findByRole('button', { name: 'Export all data' })).toBeInTheDocument();
+  // What the ZIP holds is the tip of the heading, not a line under it.
+  expect(screen.getByRole('button', { name: 'About Export all data' })).toHaveAccessibleDescription('It holds every conversation, contact, tag, note and attachment.');
   expect(await screen.findByRole('heading', { level: 2, name: 'Connect your Freshdesk account' })).toBeInTheDocument();
   // The import was a page of its own; in Data it has the page's title, the settings menu and one main landmark.
   expect(screen.getByText('Import from Freshdesk')).toBeInTheDocument();
@@ -375,7 +557,7 @@ test('an agent does not see Export all data', async () => {
 test('Data tells a person who may neither import nor export that admins do it', async () => {
   show('agent', [], DataRoute);
   await screen.findByRole('heading', { level: 1, name: 'Data' });
-  expect(await screen.findByText('Only a workspace admin can import. Ask an admin to import your Freshdesk account.')).toBeInTheDocument();
+  expect(await screen.findByText('Only a workspace admin can import. Ask one to do it.')).toBeInTheDocument();
   expect(screen.getByText('Only workspace admins can export all data.')).toBeInTheDocument();
 });
 
@@ -416,4 +598,21 @@ test('a settings page opened at a section stays where the person scrolled while 
     await screen.findByRole('button', { name: 'Export all data' });
     expect(scrolled.mock.contexts).not.toContain(document.getElementById('export-heading'));
   } finally { leaveSettings(); }
+});
+
+
+test('Undo on "Show the setup guide" puts the browser\'s skipped state back as it was, not only the server\'s choice', async () => {
+  storeSkipped(SAM, true);
+  api.setSetupGuideHidden.mockImplementation((hidden: boolean) => Promise.resolve({ hidden }));
+  show('admin', [], AccountRoute, newClient(), { setup_guide_hidden: true });
+  const guide = await screen.findByRole('checkbox', { name: 'Show the setup guide' });
+  await waitFor(() => expect(guide).not.toBeChecked());
+  fireEvent.click(guide);
+  await waitFor(() => expect(api.setSetupGuideHidden.mock.lastCall?.[0]).toBe(false));
+  // Showing the guide again shows all of Quick start, so the skip is forgotten.
+  await waitFor(() => expect(readSkipped(SAM)).toBe(false));
+  fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(api.setSetupGuideHidden.mock.lastCall?.[0]).toBe(true));
+  await waitFor(() => expect(readSkipped(SAM)).toBe(true));
+  storeSkipped(SAM, false);
 });

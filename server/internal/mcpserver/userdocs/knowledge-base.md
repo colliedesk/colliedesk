@@ -324,7 +324,7 @@ articles that fit a conversation by themselves, in their own language and in eac
 are never read.
 
 To keep one published article away from AI, open it and select **Exclude from AI** under **Used by
-AI**. From then on drafts and suggestions skip it in every language; people and the help center
+AI** (on the right; on a phone, under the text). From then on drafts and suggestions skip it in every language; people and the help center
 still see it. The article says since when and by whom, and its history has the change. **Let AI use
 it again** undoes it. Neither changes the text, so an edit someone has open still saves. An agent
 token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`,
@@ -464,7 +464,10 @@ AI agent. Each person may ask for 600 previews a minute.
 #### Custom CSS
 
 Custom CSS is added after the brand's colors and fonts on every public page and in the preview, so
-its rules win over them. It is saved and served exactly as written, at most 32,768 bytes of UTF-8 (a
+its rules win over them. Nothing may load from elsewhere: `url()`, `@import` and `@font-face` are
+refused (so are image functions such as `image-set()`), and a refused save names the line and column. The
+color contrast checks of the brand do not cover custom CSS, so look at the preview before you save. It is
+saved and served exactly as written, at most 32,768 bytes of UTF-8 (a
 letter outside ASCII takes 2 to 4 bytes; the field counts them as you type). An empty field (or only
 spaces) removes it. A save through the API must send `custom_css` (null or `""` for none): a save
 without it is refused with 422 and changes nothing, so a page or an agent that does not know the field
@@ -522,7 +525,7 @@ the number finds it, and the page moves to the current address. A collection's a
 of address names, `/c/billing/cards`; changing one is not redirected. Addresses of a Freshdesk help center you imported
 (`/support/solutions/articles/<id>-...`) lead to the imported pages on every one of these addresses;
 see [Old help center links](import-freshdesk.md#old-help-center-links). **Changing the workspace
-address name** (Settings → Email) changes every help center address, and old links stop working.
+address name** (Settings → Channels → Email) changes every help center address, and old links stop working.
 
 ### In other languages
 
@@ -599,13 +602,18 @@ The daily check opens the address too and updates the line. A server without TLS
 `http://`, and the line does not mention HTTPS. During the trial the address is not opened, since the
 help center does not serve there yet.
 
-**Moving from Freshdesk: verify by TXT first, then change the CNAME.** Add only the `TXT` record and
+#### Moving from Freshdesk
+
+**Verify by TXT first, then change the CNAME.** The card says this under **Moving from Freshdesk?**;
+its ⓘ gives the short version and links here. Add only the `TXT` record and
 press **Check now**. The domain is then verified while your visitors still reach Freshdesk. Change the
 `CNAME` afterwards, to the target the card shows. The domain is already verified, so the first visit
 after the switch gets its certificate at once and does not wait for a DNS check. If you change the
 `CNAME` first, the first visitor makes the server check DNS and ask for the certificate, which takes
 longer. The old `*.freshdesk.com` addresses are covered in
 [Import from Freshdesk](import-freshdesk.md#old-freshdesk-com-addresses).
+
+#### Plans, limits and removal
 
 **Colliedesk Cloud:** a custom domain comes with every paid plan, one per workspace. During the trial
 you can set and verify it, to prepare the move, but the help center serves on it only once the

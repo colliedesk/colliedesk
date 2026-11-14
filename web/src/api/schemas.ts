@@ -260,7 +260,8 @@ export const consentLinkSchema = z.object({ url: z.string().url() }) satisfies z
 // The whole list and its schemas load with Settings, not with the inbox.
 // The sidebar lists the channels from the same answer, by name, so it reads only what it shows of each.
 export const channelCountsSchema = z.object({ types: z.array(z.object({ type: z.string(), count: z.number() })),
-  items: z.array(z.object({ id: z.string(), type: z.string(), name: z.string(), status: z.object({ state: z.string() }) })).catch([]) });
+  // last_inbound_at and the reason tell a channel that has a problem from one still being set up (features/settings/channel-problem.ts).
+  items: z.array(z.object({ id: z.string(), type: z.string(), name: z.string(), status: z.object({ state: z.string(), reason_code: z.string().nullish() }), last_inbound_at: z.string().nullish() })).catch([]) });
 const mailboxToMoveSchema = z.object({ channel_id: z.string().uuid(), name: z.string(), support_address: z.string(), old_help_desk: z.boolean() });
 export const emailChannelSettingsSchema = z.object({
   channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema, microsoft: microsoftSettingsSchema,

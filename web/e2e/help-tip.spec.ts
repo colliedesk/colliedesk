@@ -15,7 +15,10 @@ async function openOwnRoles(page: Page, touch: boolean) {
   await redeemLink(page, createWorkspaceWithSlug(`Help Tip ${suffix}`, email).url);
   await page.goto(`${servers.main}/settings/members`);
   const team = page.getByRole('region', { name: 'Team' });
-  const change = team.getByRole('button', { name: `Change roles: ${email}` });
+  // Change roles is in the row's actions menu.
+  const menu = team.getByRole('button', { name: `Actions for ${email}` });
+  await (touch ? menu.tap() : menu.click());
+  const change = team.getByRole('menuitem', { name: `Change roles: ${email}` });
   await (touch ? change.tap() : change.click());
   return { team, editor: team.getByRole('group', { name: /^Roles of / }), lock: team.getByRole('button', { name: 'Why Admin is locked' }) };
 }
@@ -43,6 +46,8 @@ test.describe('on a 390 px touch screen', () => {
     expect(box!.y + box!.height).toBeLessThanOrEqual(844 - 8);
 
     // The panel that scrolls the lock moves it out of sight; the tip must not stay pinned to the screen's edge.
+    // The People tab is shorter than the screen is tall, so the test gives the page length to scroll.
+    await page.evaluate(() => { const spacer = document.createElement('div'); spacer.style.height = '4000px'; document.querySelector('.settings-sections')?.append(spacer); });
     const scroll = (by: number) => lock.evaluate((element, distance) => {
       let at = element.parentElement;
       while (at && !(at.scrollHeight > at.clientHeight && /auto|scroll/.test(getComputedStyle(at).overflowY))) at = at.parentElement;

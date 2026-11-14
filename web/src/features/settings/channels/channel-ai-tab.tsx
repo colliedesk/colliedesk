@@ -6,11 +6,13 @@ import { intakeApi } from '../../../api/intake';
 import type { AILevel, AISettings, AISlotName, ChannelAI, ChannelAIInput } from '../../../api/ai';
 import type { ChannelDetail } from '../../../api/channels';
 import { formatDay } from '../../../lib/format-date';
+import { HelpTip } from '../../../ui/help-tip';
 import { AutoDraftDialog, AutoTriageDialog } from '../ai-level-dialogs';
 import { featureName, levelMeaning, levelName, levelsOf, scopeName } from '../ai-levels';
 import { IntakeSettings } from './channel-intake-settings';
 import { IntakeAutoDialog } from './intake-auto-dialog';
 import { channelsMessages as m } from './channels-messages';
+import { useInstantSave } from '../settings-edits';
 
 // A channel's AI tab: what each AI feature does by itself on the channel and on each scope of its type,
 // over the workspace's default (docs/user/ai.md "What AI does by itself, per channel"). The levels are
@@ -19,7 +21,7 @@ import { channelsMessages as m } from './channels-messages';
 // The features this tab sets; intake shows only on a chat type's intake scopes, with its settings.
 const allFeatures: AISlotName[] = ['triage', 'draft', 'intake'];
 
-type Change = { slot: AISlotName; scope: string; level: AILevel | null };
+type Change = { slot: AISlotName; scope: string; level: AILevel | null; options?: ChannelAIInput['options'] };
 
 // configured is what a scope asks of a feature before the workspace's consent: its own level, the
 // channel's, then the workspace's default.
@@ -34,8 +36,9 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
   const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings });
   const [asking, setAsking] = useState<Change>();
   const [intakeProblem, setIntakeProblem] = useState<string>();
+  const instant = useInstantSave();
   const save = useMutation({
-    mutationFn: (change: Change) => aiApi.setChannel(channel.id, change.slot, { scope: change.scope, level: change.level }),
+    mutationFn: (change: Change) => aiApi.setChannel(channel.id, change.slot, { scope: change.scope, level: change.level, ...(change.options ? { options: change.options } : {}) }),
     onSuccess: (next) => {
       client.setQueryData(['channel-ai', channel.id], next);
       return client.invalidateQueries({ predicate: (query) => ['ai-settings', 'channel-events'].includes(String(query.queryKey[0])) });
@@ -54,7 +57,18 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
     const raises = target !== configured(data, settings.data, change.scope, change.slot)
       && ((change.slot === 'triage' && target === 'auto') || (change.slot === 'draft' && target === 'suggest') || (change.slot === 'intake' && target === 'auto'));
     if (raises && slotOf(change.slot)) setAsking(change);
-    else save.mutate(change);
+    else apply(change);
+  };
+  // A level saves when it is picked and says so. Undo sends what the scope had, in one request: its level and, for intake,
+  // the settings that went with it (Follows deletes the scope's row and its settings, so a bare level would bring Auto back
+  // with default ones). Where those settings are not known there is no Undo. A refusal shows under the table.
+  const apply = (change: Change) => {
+    const item = levels.data?.scopes.find((entry) => entry.scope === change.scope)?.slots.find((candidate) => candidate.slot === change.slot);
+    const before = item?.level ?? null;
+    const settingsKept = change.slot !== 'intake' || before === null;
+    const restore: Change = { slot: change.slot, scope: change.scope, level: before, ...(change.slot === 'intake' && before !== null && item?.options ? { options: item.options as ChannelAIInput['options'] } : {}) };
+    const restorable = settingsKept || Boolean(item?.options);
+    void instant((input: Change) => save.mutateAsync(input), change, restore, restorable ? undefined : null);
   };
   // Intake's level and settings go in one change: the server takes the settings whole. A refusal rejects:
   // the settings form says it under itself, the Auto dialog (gone by then) through the tab.
@@ -80,7 +94,7 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
   });
   const askedSlot = asking ? slotOf(asking.slot) : undefined;
   return <div className="ch-ai">
-    <p className="ch-ai-lead">{m.aiLead}</p>
+    <p className="ch-ai-lead">{m.aiLead} <HelpTip label={m.aiLeadLabel} text={m.aiWhy} /></p>
     {!isAdmin && <p className="notice notice-plain" role="note"><span>{m.aiAdminsOnly}</span></p>}
     <table className="ch-ai-table">
       <thead><tr><th scope="col">{m.aiFeature}</th>{scopes.map((entry) => <th key={entry.scope} scope="col">{scopeName(entry.scope)}</th>)}</tr></thead>
@@ -117,14 +131,13 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
       settings={settings.data} isAdmin={isAdmin} onSave={saveIntake} />)}
     {intakeProblem && <p role="alert" className="error-copy">{intakeProblem}</p>}
     {save.isError && <p role="alert" className="error-copy">{save.error instanceof InvalidRequestError ? save.error.message : m.actionFailed}</p>}
-    <p className="help">{m.aiHelp}</p>
     {asking && asking.slot === 'intake' && <IntakeAutoDialog channelID={channel.id} scope={asking.scope}
       options={data.scopes.find((entry) => entry.scope === asking.scope)?.slots.find((item) => item.slot === 'intake')?.options ?? null} settings={settings.data}
       onClose={() => setAsking(undefined)} onTurnOn={(input) => { setAsking(undefined); void turnOnAuto(input); }} />}
     {asking && askedSlot?.slot === 'triage' && <AutoTriageDialog slot={askedSlot} onClose={() => setAsking(undefined)}
-      onTurnOn={() => { save.mutate(asking); setAsking(undefined); }} />}
+      onTurnOn={() => { apply(asking); setAsking(undefined); }} />}
     {asking && askedSlot?.slot === 'draft' && settings.data && <AutoDraftDialog slot={askedSlot} settings={settings.data} onClose={() => setAsking(undefined)}
-      onTurnOn={() => { save.mutate(asking); setAsking(undefined); }} />}
+      onTurnOn={() => { apply(asking); setAsking(undefined); }} />}
   </div>;
 }
 

@@ -31,6 +31,8 @@ test('a signed-out visitor is told how to get back in instead of seeing an empty
 test('a signed-out visitor of a self-hosted instance keeps the pair hint', () => {
   render(<AppShell signedOut><p>inbox</p></AppShell>);
   expect(screen.getByText(/collie pair/)).toBeInTheDocument();
+  // The command is a value to copy, so it stands alone; the sentence before it stays short.
+  expect(screen.getByText('collie pair --workspace <slug> --email <your email>').tagName).toBe('CODE');
 });
 
 test('the workspace and the signed-in address sit in an always-visible bar, not in a tooltip', () => {
@@ -175,6 +177,24 @@ test('the sidebar head names the workspace beside the logo, and the person at it
   expect(screen.getAllByRole('region', { name: 'Signed in as' })).toHaveLength(1);
 });
 
+test('the workspace name in the sidebar head is plain text with the full name in its tooltip, and takes no tab stop', () => {
+  localStorage.removeItem(sidebarStorageKey);
+  render(<AppShell me={{ ...me, workspace: { ...me.workspace, name: 'Northwind Outdoors' } }} brand={<a href="/">Colliedesk</a>}><p>inbox</p></AppShell>);
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  const name = within(rail).getByText('Northwind Outdoors');
+  // The text is the whole name (the ellipsis is drawn by the style), so a screen reader reads it once.
+  expect(name.closest('[data-tip]')).toHaveAttribute('data-tip', 'Northwind Outdoors');
+  expect(rail.querySelector('.workspace-name')).not.toHaveAttribute('tabindex');
+  expect(rail.querySelector('.workspace-name')).not.toHaveAttribute('role');
+  expect(rail.querySelector('.workspace-name')).not.toHaveAttribute('aria-label');
+  expect(within(rail).queryByRole('group', { name: 'Northwind Outdoors' })).not.toBeInTheDocument();
+  // Tab goes from the logo straight to the next control of the head.
+  const stops = Array.from(rail.querySelectorAll<HTMLElement>('.rail-head a, .rail-head button, .rail-head [tabindex]'));
+  expect(stops[0]).toHaveTextContent('Colliedesk');
+  // Nothing sits between the logo and the first button of the head (here the sidebar toggle).
+  expect(stops[1]).toHaveAttribute('aria-label', 'Collapse sidebar');
+});
+
 test('folded into its rail, the sidebar leaves the workspace and the address to the top bar', () => {
   localStorage.setItem(sidebarStorageKey, JSON.stringify({ width: 248, collapsed: true }));
   render(<AppShell me={me} page={{ title: 'Inbox', icon: null }}><p>inbox</p></AppShell>);
@@ -290,9 +310,9 @@ test('with no saved view and no channel, the sidebar shows neither heading', () 
   expect(screen.queryByText('Channels')).not.toBeInTheDocument();
 });
 
-test('Invite teammates is at the foot of the sidebar for someone who may invite, and opens Members', () => {
+test('Invite teammates is at the foot of the sidebar for someone who may invite, and opens the Invites tab of Members', () => {
   const { rerender } = render(<AppShell me={me} canInvite><p>inbox</p></AppShell>);
-  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Invite teammates' })).toHaveAttribute('href', '/settings/members');
+  expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Invite teammates' })).toHaveAttribute('href', '/settings/members?tab=invites');
   rerender(<AppShell me={me}><p>inbox</p></AppShell>);
   expect(screen.queryByRole('link', { name: 'Invite teammates' })).not.toBeInTheDocument();
 });

@@ -11,9 +11,6 @@ import { signUp } from './support/signup';
 const baseURL = servers.cloud;
 const provider = new IdentityProvider();
 
-test.beforeAll(async () => { await provider.start(); });
-test.afterAll(async () => { await provider.stop(); });
-
 test('test message: a new cloud workspace sends itself a test message from the empty inbox, answers it on the trial, and the reply is delivered', { tag: '@onboarding' }, async ({ page }) => {
   const suffix = uniqueSuffix();
   const adminEmail = `owner-${suffix}@acme.example`;
@@ -30,7 +27,7 @@ test('test message: a new cloud workspace sends itself a test message from the e
   // Back on the empty inbox (the setup flow has no rail; leaving it opens the inbox), one click brings a
   // conversation from the agent's own address.
   await page.getByRole('link', { name: 'Exit setup' }).click();
-  await page.getByRole('region', { name: 'Get started' }).getByRole('button', { name: 'Send yourself a test message' }).click();
+  await page.getByRole('region', { name: 'Get started' }).getByRole('button', { name: 'Send yourself a test message', exact: true }).click();
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('region', { name: /timeline/i }).getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
 
@@ -60,7 +57,7 @@ test('the Connection tab sends one test message before an inbound secret exists 
   await expect(page.getByRole('tab', { name: 'Connection' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create inbound secret' })).toBeVisible();
 
-  const send = page.getByRole('button', { name: 'Send yourself a test message' });
+  const send = page.getByRole('button', { name: 'Send yourself a test message', exact: true });
   await send.evaluate((button: HTMLButtonElement) => { button.click(); button.click(); button.click(); });
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('region', { name: /timeline/i }).getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();

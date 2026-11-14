@@ -55,3 +55,9 @@ test('the help center settings opened at #help-center-heading (the reply box lin
     delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   }
 });
+
+test('the title says where it shows and what an empty one uses, in one line', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, off) });
+  open(true);
+  expect(await screen.findByText('Shown on top of every page. Empty uses the workspace name.')).toBeInTheDocument();
+});

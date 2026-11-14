@@ -1,9 +1,12 @@
 # Manage your team
 
-**Settings → Members → Team** lists everyone who can sign in to the workspace: name, email, roles, whether
+**Settings → Members → People** lists everyone who can sign in to the workspace: name, email, roles, whether
 they are **Active** or **Deactivated**, and when they were last active. Seeing the list needs
 `team:read`. Renaming people, changing their roles, deactivating and reactivating them needs
-`team:manage_roles` (the Admin role has it); without it the list is read-only. To add someone, see
+`team:manage_roles` (the Admin role has it); without it the list is read-only. Each row you may change has a
+**⋯** button: its menu holds **Change roles**, **Rename**, **Deactivate** (**Reactivate** on a deactivated
+row). Enter or Space opens the menu, the arrow keys, Home and End move through it, and Esc closes it and puts
+the focus back on the button; Esc does not leave Settings while the menu is open. To add someone, see
 [Invite your team](invites.md). What each role holds is in
 [Roles and permissions](roles-and-permissions.md).
 
@@ -14,7 +17,7 @@ lists, on notes, and in the account menu. The `{{agent.name}}` variable of a sav
 
 - **Your own name:** in **Settings → Account → Profile**, type it in **Display name**, then select **Save
   name**.
-- **Someone else's name** (`team:manage_roles`): select **Rename** in their row, type the name, then select
+- **Someone else's name** (`team:manage_roles`): open **⋯** in their row, choose **Rename**, type the name, then select
   **Save**. Use it to correct a typo or to name someone who has not signed in yet.
 
 Spaces at the start and end are removed. A name has at most 80 characters and no line breaks. To
@@ -27,8 +30,8 @@ person the token acts as, and `colliedesk_team_member_update` with `display_name
 
 ## Change someone's roles
 
-A person can hold several roles and gets every permission of each. Select **Change roles** in their
-row, tick the roles they should hold, then select **Apply**. Nothing changes until you select
+A person can hold several roles and gets every permission of each. Open **⋯** in their row, choose
+**Change roles**, tick the roles they should hold, then select **Apply**. Nothing changes until you select
 **Apply**, and then it applies to their next action at once, on every device. Everyone needs at
 least one role.
 
@@ -48,10 +51,10 @@ id, under the same rules. See [Roles and permissions](roles-and-permissions.md#s
 
 ## Deactivate someone
 
-Use **Deactivate** instead of deleting. Nothing is lost: their name stays on old conversations and
+A deactivated person cannot sign in and does not use a seat. Use **Deactivate** instead of deleting. Nothing is lost: their name stays on old conversations and
 messages, and the export still lists them with `deactivated_at`.
 
-1. Select **Deactivate** in their row. The question shows how many open and pending conversations
+1. Open **⋯** in their row and choose **Deactivate**. The question shows how many open and pending conversations
    are assigned to them.
 2. Choose where those conversations go: **Move them to Unassigned** (default) or **Assign them to
    another agent**.
@@ -70,7 +73,7 @@ If you deactivate yourself, you are signed out. You can only do that while anoth
 
 ## Reactivate someone
 
-Select **Reactivate** in a deactivated row. On the hosted cloud this uses a seat again; if all seats
+Open **⋯** in a deactivated row and choose **Reactivate**. On the hosted cloud this uses a seat again; if all seats
 are taken you get the plan-limit message, and you free a seat first (deactivate someone or revoke an
 invite). Reactivating does not give back their conversations or devices. Send them a new invite link,
 or create a pairing link, so they can sign in. An invite to the email of a deactivated agent is
