@@ -22,7 +22,10 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
    (amber) and private notes (amber) keep their colours; nothing else is coloured. High is an arrow and grey
    text, never the warning orange (it sat 8° of hue from the brand and made a High ticket look like the logo).
    **Nothing is filled at rest** (owner 30/10/2026): priority, tags and status are marks and words; a fill means
-   hover, selection, a menu or a private note. Amber means focus,
+   hover, selection, a menu or a private note. One exception: the trial strip is ink (`--surface-inverse` with
+   `--text-inverse`, paper in dark), because as a neutral card it was lost among the others (owner 14/11/2026);
+   its warning mark is `--warn` mixed 60 % with `--text-inverse` in `components.css`
+   (6.5:1 light, 5.0:1 dark), not a token: `tokens.css` is also the operator console's, whose CSS budget is full. Amber means focus,
    private notes and the pending status, and nothing else: a warning uses `--warn` / `--warn-soft` (or a
    neutral card with a `--warn` icon), never the note colours; a plain notice is a neutral card. `web/scripts/brand-rules.test.mjs` checks it. In dark mode the
    logo tile keeps `#c2410c` (the mark never changes), while the price text on the site lightens to
@@ -166,9 +169,9 @@ the Clerk form.) Do not create a second palette.
 
 | Group | Tokens | Rule |
 |---|---|---|
-| Surfaces | `--surface-0` page and rail, `--surface-1` list, panels, cards, `--surface-2` hover, `--surface-3` active rail item and tag, `--surface-inverse` tooltip | Separate layers by surface step first. Add shadow only to floating layers. |
+| Surfaces | `--surface-0` page and rail, `--surface-1` list, panels, cards, `--surface-2` hover, `--surface-3` active rail item and tag, `--surface-inverse` tooltip and the trial strip | Separate layers by surface step first. Add shadow only to floating layers. |
 | Lines | `--line` hairline dividers and panel edges, `--line-control` secondary button outline, `--line-strong` input borders | Inputs keep `--line-strong` (3:1). Buttons are identified by their label, but their outline is about 2.3:1 so they do not look faded (owner feedback 16/10/2026: buttons looked washed out at 1.5:1). |
-| Text | `--text-1` primary, `--text-2` secondary, `--text-3` meta and labels, `--text-inverse` on the tooltip | `--text-3` is the lowest text tone. |
+| Text | `--text-1` primary, `--text-2` secondary, `--text-3` meta and labels, `--text-inverse` on the tooltip and the trial strip | `--text-3` is the lowest text tone. |
 | Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile` (orange `#c2410c`, the one brand hue), `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on ink `#171717`. Dark: near-black on `#fafafa`. `--accent-text` is ink; inline links are underlined. |
 | Focus and note | `--focus`, `--focus-ring`, `--note-bg`, `--note-line`, `--note-text` | Amber means focus, private notes and the pending status (`--pending`), and nothing else. Warnings use `--warn`. |
 | Status | `--danger`, `--warn`, `--ok`, `--open`, `--pending` and `*-soft` backgrounds | A dot or icon plus a word. Never colour alone. `--warn` marks a warning (unverified sender, help center off, SLA under 2 h), never a priority: High is a dark neutral chip (`--text-2` with `--surface-1` text) and its arrow. |
@@ -395,7 +398,7 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--text-3` #636363 | `--accent-soft` #efefef | 5.22 | 4.5 | meta on selected row |
 | `--on-accent` #ffffff | `--accent` #171717 | 17.93 | 4.5 | primary button |
 | `--on-accent` #ffffff | `--accent-hover` #3d3d3d | 10.86 | 4.5 | primary button hover |
-| `--text-inverse` #ffffff | `--surface-inverse` #171717 | 17.93 | 4.5 | tooltip |
+| `--text-inverse` #ffffff | `--surface-inverse` #171717 | 17.93 | 4.5 | tooltip, trial strip |
 | `--note-text` #7f5200 | `--note-bg` #fff6e0 | 6.27 | 4.5 | private note label |
 | `--text-1` #171717 | `--note-bg` #fff6e0 | 16.66 | 4.5 | private note body |
 | `--danger` #c0261b | `--danger-soft` #fdeceb | 5.20 | 4.5 | urgent chip |
@@ -454,7 +457,7 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 | `--text-3` #a3a3a3 | `--accent-soft` #222222 | 6.31 | 4.5 | meta on selected row |
 | `--on-accent` #0a0a0a | `--accent` #fafafa | 18.97 | 4.5 | primary button |
 | `--on-accent` #0a0a0a | `--accent-hover` #e0e0e0 | 15.00 | 4.5 | primary button hover |
-| `--text-inverse` #0a0a0a | `--surface-inverse` #fafafa | 18.97 | 4.5 | tooltip |
+| `--text-inverse` #0a0a0a | `--surface-inverse` #fafafa | 18.97 | 4.5 | tooltip, trial strip |
 | `--note-text` #f2cd8a | `--note-bg` #2a2213 | 10.38 | 4.5 | private note label |
 | `--text-1` #fafafa | `--note-bg` #2a2213 | 15.05 | 4.5 | private note body |
 | `--danger` #f2837a | `--danger-soft` #3a1c1b | 6.10 | 4.5 | urgent chip |

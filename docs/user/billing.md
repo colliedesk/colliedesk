@@ -18,6 +18,9 @@ Every new cloud workspace starts a 14-day free trial with every feature, for up 
 
 - A banner under the workspace name shows "Trial: N days left". Admins get a **Choose a plan**
   button in it, a plain one: [Quick start](setup-guide.md) keeps the next setup step.
+- Anyone can close the banner with its **×** button. This browser remembers it for that workspace.
+  The banner comes back once when three days are left, because the workspace then locks. A storage
+  warning stays until you free space or choose a plan.
 - A workspace that imports its history from Freshdesk gets a longer trial: 30 days in total, once.
   The banner then says the trial was extended.
 - One trial per email address. Writing the address with capitals, a `+tag` or (for Gmail) dots does
