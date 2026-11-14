@@ -12,7 +12,7 @@
 .results-title .results-muted { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); color: var(--text-3); font-size: var(--fs-small); line-height: 20px; }
 .results-muted { margin: 0; color: var(--text-3); font-size: var(--fs-small); }
 .results-windows { display: inline-flex; flex: none; border: 0; border-radius: var(--radius); padding: 2px; background: var(--surface-2); }
-.results-windows button { min-height: 32px; border: 0; border-radius: var(--radius-sm); box-shadow: none; background: transparent; color: var(--text-2); font-size: var(--fs-small); font-weight: 500; padding: 0 var(--space-3); }
+.results-windows button { min-height: 28px; border: 0; border-radius: var(--radius-sm); box-shadow: none; background: transparent; color: var(--text-2); font-size: var(--fs-small); font-weight: 500; padding: 0 var(--space-3); }
 .results-windows button[aria-pressed="true"] { background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-1); }
 
 .results-card { border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); min-width: 0; }
@@ -92,7 +92,7 @@
 .results-share-url { flex: 1; min-width: 0; margin: 0; border: 0; border-radius: var(--radius); background: var(--surface-2);
   padding: var(--space-2) var(--space-3); overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--fs-small); }
 .results-share-url code { font: inherit; }
-.results-switch { display: inline-flex; align-items: center; gap: var(--space-3); min-height: 32px; padding-block: var(--space-1); font-size: var(--fs-ui); font-weight: 500; cursor: pointer; }
+.results-switch { display: inline-flex; align-items: center; gap: var(--space-3); min-height: 28px; padding-block: var(--space-1); font-size: var(--fs-ui); font-weight: 500; cursor: pointer; }
 /* "Copy it now": the link is shown once, so the line reads as a warning (--warn, >= 4.5:1 on white). */
 .results-share-new .results-copy-now { color: var(--warn); font-weight: 500; }
 .results-agent-note { margin: 0; }

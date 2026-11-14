@@ -79,5 +79,5 @@
 /* Tap targets: the underline tabs are 36px in ui/controls.css, which a phone needs at 44px; the link to the
    conversation a decided card opened is a 32px (44px on a phone) target without moving its line. */
 @media (pointer: coarse), (max-width: 37.5rem) { .review-bar .seg-tabs-underline button { min-height: var(--touch); } }
-.intake-conversation > a { display: inline-flex; align-items: center; min-height: 32px; }
+.intake-conversation > a { display: inline-flex; align-items: center; min-height: 28px; }
 @media (pointer: coarse), (max-width: 30rem) { .intake-conversation > a { min-height: var(--touch); } }

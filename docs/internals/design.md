@@ -177,7 +177,7 @@ the Clerk form.) Do not create a second palette.
 | Avatars | `--avatar-lightness`, `--avatar-chroma`, `--avatar-text-lightness`, `--avatar-text-chroma` with a per-person `--avatar-hue` | See Rules: the hue tells people apart, low chroma, never on status. |
 | Shape | `--radius` 6 px controls, `--radius-lg` 10 px panels, cards, composer, `--radius-sm` 4 px chips and keycaps, `--radius-full` avatars and tag chips | |
 | Space | `--space-1` to `--space-24` on a 4 px grid, `--touch` 44 px | Touch targets are at least `--touch`. |
-| Type | `--font-sans`, `--font-mono`, `--fs-ui` 14 px, `--fs-small` 13 px, `--fs-label` 12 px | See Type. |
+| Type | `--font-sans`, `--font-mono`, `--fs-ui` 13 px, `--fs-small` 12 px, `--fs-label` 12 px | See Type. |
 | Elevation | `--shadow-1` cards, `--shadow-2` popovers and the composer, `--shadow-3` modals | |
 | Motion | `--ease`, `--dur-fast` 120 ms, `--dur` 180 ms | Both become 0 under `prefers-reduced-motion`. |
 
@@ -194,7 +194,7 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 - Fonts are self-hosted: `web/src/styles/fonts/` (woff2 subsets latin, latin-ext, vietnamese) and
   `fonts.css`, licence SIL OFL 1.1 (`fonts/OFL-*.txt`). Never load a font from Google Fonts or a
   CDN, and never use Be Vietnam Pro.
-- Body is `--fs-ui` 14 px; meta lines are 12 to 13 px.
+- Body is `--fs-ui` 13 px, as dense as the inputs; meta and secondary lines are 12 px (`--fs-small`, `--fs-label`).
 
 ## Logo
 
@@ -232,10 +232,11 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 
 ## Rules
 
-- Controls are 32 px with a mouse and 44 px on touch (`--control` is 32 px on `:root` and switches on `pointer: coarse`;
+- Controls are 28 px with a mouse and 44 px on touch (`--control` is 28 px on `:root` and switches on `pointer: coarse`;
   rail links, status tabs and list rows also grow to 44 px below 44 rem). Every button, field and tab takes
   `--control`, never its own height (owner 15/11/2026: 7 heights from 19 to 40 px had crept in); every app page
-  title is `--fs-heading` (26 px). `brand-rules.test.mjs` checks both.
+  title is `--fs-heading` (26 px). Controls are as dense as the inputs beside them (owner 15/11/2026: "so với ô input
+  mọi thứ đang to quá"): no stylesheet sets a 32 px control height outside a touch rule. `brand-rules.test.mjs` checks both.
 - A reference is an id: mono, `--text-3` in the list (`--text-2` in the header), never a fill (`.conv-ref`).
 - A response target is a clock mark and words: `--warn` due soon, `--danger` overdue, never a fill (`.sla-mark`).
 - Three button shapes only: primary (`--accent`, the orange), secondary (white with a light outline and a small

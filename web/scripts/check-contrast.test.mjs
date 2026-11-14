@@ -39,6 +39,12 @@ test('the primary action, links and active marks are the Collie orange', () => {
   expect(themeTokens(css, 'dark')).toMatchObject({ '--accent': '#fb8a4a', '--accent-strong': '#fb8a4a', '--on-accent': '#0a0a0a' });
 });
 
+// The app's text is as dense as its inputs (owner 15/11/2026): 13 px body, 12 px secondary lines.
+test('the app body is 13 px and secondary lines 12 px', () => {
+  expect(css).toMatch(/--fs-ui:\s*13px;/);
+  expect(css).toMatch(/--fs-small:\s*12px;/);
+});
+
 // The logo is a white collie head on an orange tile, the same in both themes, the favicon and the site.
 test('the logo tile is the brand orange in both themes', () => {
   for (const theme of ['light', 'dark']) expect(themeTokens(css, theme)['--logo-tile']).toBe('#c2410c');

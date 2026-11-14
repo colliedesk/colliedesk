@@ -762,7 +762,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-frame .kb-search input:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-1); }
 .kb-frame .segmented { border: 0; background: var(--surface-2); gap: 0; }
 /* 32 px to click (rule: controls >= 32 px with a mouse); the design draws 28. */
-.kb-frame .segmented label { min-height: 32px; padding: 0 var(--space-3); }
+.kb-frame .segmented label { min-height: 28px; padding: 0 var(--space-3); }
 .kb-frame .segmented label:has(input:checked) { box-shadow: var(--shadow-1); }
 .kb-cols-head { min-height: 36px; border-bottom: 1px solid var(--line); background: var(--surface-1); padding: 0 0 0 var(--space-4); color: var(--text-3); font-weight: 600; line-height: 16px; }
 .kb-list-scroll { background: var(--surface-1); }
@@ -820,7 +820,7 @@ span.kb-article-open { opacity: 0.35; }
   .kb-editor-notes { padding: var(--space-3) var(--space-4) 0; }
 }
 .kb-tabs { gap: 0; border: 0; background: var(--surface-2); }
-.kb-tabs button { --control: 32px; min-height: 32px; font-size: var(--fs-small); font-weight: 500; }
+.kb-tabs button { --control: 28px; min-height: 28px; font-size: var(--fs-small); font-weight: 500; }
 .kb-tabs button[aria-selected="true"] { box-shadow: var(--shadow-1); }
 
 /* H1-c: version history. 600 px; each version a row on a hairline, its restore button at the right. */
@@ -948,7 +948,7 @@ span.kb-article-open { opacity: 0.35; }
 /* ── rv3 review: hit areas, a few contrasts and edges. ── */
 /* KB-02 … KB-04, KB-06: links and small controls are 32 px to click with a mouse, 44 px with a finger. */
 :is(.kb-language-counts .link-action, .kb-language-visible, .kb-back, .kb-crumbs a, .media-review, .media-select-all, .kb-history .link-button, .kb-translation-list li > a) { display: inline-flex; align-items: center; min-height: var(--control, 32px); }
-.media-tabs button { --control: 32px; min-height: 32px; }
+.media-tabs button { --control: 28px; min-height: 28px; }
 @media (pointer: coarse), (max-width: 44rem) {
   :is(.kb-language-counts .link-action, .kb-language-visible, .kb-back, .kb-crumbs a, .media-review, .media-select-all, .kb-history .link-button, .kb-translation-list li > a, .media-tabs button) { min-height: var(--touch); }
 }

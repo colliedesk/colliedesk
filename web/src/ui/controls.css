@@ -5,7 +5,7 @@
 .seg-tabs { display: inline-flex; flex: 0 1 auto; min-width: 0; gap: 2px; overflow-x: auto; scrollbar-width: none;
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); padding: 3px; }
 .seg-tabs::-webkit-scrollbar { display: none; }
-.seg-tabs button { --control: 32px; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; border: 0; border-radius: var(--radius-sm);
+.seg-tabs button { --control: 28px; display: inline-flex; align-items: center; gap: 6px; min-height: 28px; border: 0; border-radius: var(--radius-sm);
   background: transparent; box-shadow: none; padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); font-weight: 500; white-space: nowrap;
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease); }
 .seg-tabs button:hover:not(:disabled) { background: color-mix(in srgb, var(--text-1) 5%, transparent); box-shadow: none; color: var(--text-1); }

@@ -6,7 +6,7 @@
   border-radius: var(--radius); background: var(--surface-1); box-shadow: 0 0 0 1px var(--line), var(--shadow-2); }
 .mention-picker-label, .mention-picker-empty { margin: 0; padding: var(--space-1) var(--space-2); color: var(--text-3); font-size: var(--fs-label); line-height: 16px; }
 .mention-picker ul { display: grid; gap: 2px; max-height: min(15rem, 25dvh); margin: 0; padding: 0; overflow-y: auto; list-style: none; }
-.mention-picker li { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; padding-inline: var(--space-2); border-radius: var(--radius-sm); cursor: pointer; }
+.mention-picker li { display: flex; align-items: center; gap: var(--space-2); min-height: 28px; padding-inline: var(--space-2); border-radius: var(--radius-sm); cursor: pointer; }
 .mention-picker li[aria-selected="true"] { background: var(--surface-2); }
 .mention-initials { flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-full);
   background: var(--surface-3); color: var(--text-2); font-size: 10px; line-height: 12px; }

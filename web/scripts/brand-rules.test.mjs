@@ -180,7 +180,7 @@ test('the email setup wizard styles only its own steps, never the setup guide ro
   expect(bare).toEqual([]);
 });
 
-// One control height (design.md, Rules): every button, field and tab is --control, 32 px with a mouse and 44 px by
+// One control height (design.md, Rules): every button, field and tab is --control, 28 px with a mouse and 44 px by
 // touch (owner 15/11/2026: "chỗ to chỗ nhỏ"). These rules once set 28, 36, 40 px or no height at all.
 test('frame controls and tabs take the one control height', () => {
   const layout = read('styles/layout.css');
@@ -192,7 +192,12 @@ test('frame controls and tabs take the one control height', () => {
   expect(rule(read('ui/controls.css'), '.seg-tabs-underline button')).toMatch(/min-height:\s*var\(--control\)/);
   expect(rule(read('features/inbox/mentions.css'), '.mentions-tab')).toMatch(/min-height:\s*var\(--control\)/);
   // --control is 32 px on :root and 44 px by touch, so a bare var(--control) is a real height everywhere.
-  expect(read('styles/base-plain.css')).toMatch(/:root\s*\{\s*--control:\s*32px;\s*\}/);
+  expect(read('styles/base-plain.css')).toMatch(/:root\s*\{\s*--control:\s*28px;\s*\}/);
+  // Dense like the input it sits beside (owner 15/11/2026: "so với ô input mọi thứ đang to quá"): no control
+  // outside the touch rules is taller than 28 px with a mouse.
+  const files = readdirSync(new URL('../src/', import.meta.url), { recursive: true }).filter((f) => f.endsWith('.css') && !f.startsWith('operator'));
+  const tall = files.flatMap((f) => read(f).split('\n').filter((line) => /(min-height|--control):\s*32px/.test(line)).map((line) => `${f}: ${line.trim().slice(0, 60)}`));
+  expect(tall).toEqual([]);
 });
 
 // One page title size: every app page title is --fs-heading (26 px). The setup flow and the sign-in panel are

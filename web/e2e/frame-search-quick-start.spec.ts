@@ -43,7 +43,7 @@ test.describe('at 1440 px', () => {
     await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: /Search/ })).toHaveCount(0);
     const fieldBox = await box(field);
     const barBox = await box(bar);
-    expect.soft(Math.round(fieldBox.height), 'the field is 32 px tall, the one control height').toBe(32);
+    expect.soft(Math.round(fieldBox.height), 'the field is 28 px tall, the one control height').toBe(28);
     expect.soft(Math.round(fieldBox.width), 'the field is 540 px wide at 1440 px').toBe(540);
     expect.soft(fieldBox.y >= barBox.y && fieldBox.y + fieldBox.height <= barBox.y + barBox.height, 'the field is inside the top bar').toBe(true);
     expect.soft(await noSidewaysScroll(page), 'no sideways scroll').toBe(true);
