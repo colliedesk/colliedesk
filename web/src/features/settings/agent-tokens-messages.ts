@@ -9,6 +9,7 @@ export const agentTokenMessages = {
   createTitle: 'Create a token',
   columns: { token: 'Token', access: 'Access', lastUsed: 'Last used', expires: 'Expires', actions: 'Actions' },
   noTokens: 'No agent tokens yet. Create one to connect an agent.',
+  revokedToken: (label: string) => `${label} revoked.`,
   revoke: 'Revoke',
   revoked: 'Revoked',
   expired: 'Expired',

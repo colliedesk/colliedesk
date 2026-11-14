@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, Ref } from 'react';
 import './row-menu.css';
 
@@ -12,7 +12,8 @@ export interface RowMenuItem {
 }
 
 // RowMenu is the "⋯" button at the end of a row with the row's actions under it. Enter or Space on the button opens
-// it with the first action focused; the arrow keys, Home and End move; Escape closes it and returns the focus to the
+// it with the first action focused; choosing an action returns the focus to the button (an action that opens a form
+// moves it there itself); the arrow keys, Home and End move; Escape closes it and returns the focus to the
 // button; Tab or a press outside closes it. While it is open it is in the page as role="menu", which is how Esc is
 // kept from leaving Settings (back-to-app.tsx).
 export function RowMenu({ label, items, buttonRef }: { label: string; items: RowMenuItem[]; buttonRef?: Ref<HTMLButtonElement> }) {
@@ -21,6 +22,16 @@ export function RowMenu({ label, items, buttonRef }: { label: string; items: Row
   const button = useRef<HTMLButtonElement | null>(null);
   const menu = useRef<HTMLDivElement>(null);
   const name = `Actions for ${label}`;
+  // When an action takes the whole menu away from its row (a revoked invite has none), the focus goes to the row, not to the
+  // page body, where Esc would leave Settings.
+  useLayoutEffect(() => () => {
+    const trigger = button.current;
+    if (!trigger || document.activeElement !== trigger) return;
+    const row = trigger.closest<HTMLElement>('article, tr, li');
+    if (!row) return;
+    if (!row.hasAttribute('tabindex')) row.setAttribute('tabindex', '-1');
+    row.focus();
+  }, []);
   const entries = () => [...(menu.current?.querySelectorAll<HTMLElement>('[role=menuitem]') ?? [])];
   useEffect(() => {
     if (!open) return undefined;
@@ -52,7 +63,7 @@ export function RowMenu({ label, items, buttonRef }: { label: string; items: Row
     </button>
     {open && <div ref={menu} id={id} className="row-menu" role="menu" aria-label={name} onKeyDown={keys}>
       {items.map((item) => <button key={item.key} type="button" role="menuitem" tabIndex={-1} className={item.danger ? 'danger-action' : undefined} aria-label={item.name}
-        onClick={() => { setOpen(false); item.onSelect(); }}>{item.label}</button>)}
+        onClick={() => { setOpen(false); button.current?.focus(); item.onSelect(); }}>{item.label}</button>)}
     </div>}
   </div>;
 }

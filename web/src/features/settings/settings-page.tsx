@@ -52,7 +52,9 @@ interface SettingsPageProps {
   canRevokeInvites?: boolean;
   onRevokeSession?: (id: string) => void;
   onRevokeInvite?: (id: string) => void;
-  onResendInvite?: (invite: Invite, revokeOld: boolean) => void;
+  myPermissions?: readonly string[];
+  onResendInvite?: (invite: Invite, mayRevoke: boolean) => Promise<boolean>;
+  inviteNotice?: { kind: 'status' | 'alert'; text: string };
   onSetWorkspaceTimezone?: (timezone: string) => Promise<unknown> | void;
   onSetAgentTimezone?: (timezone: string | null) => Promise<unknown> | void;
   loading?: boolean;
@@ -152,6 +154,6 @@ function MembersPanels(props: SettingsPageProps) {
   return <MembersTabs tab={props.membersTab ?? 'people'} onTab={(tab, how) => props.onMembersTab?.(tab, how)} counts={props.memberCounts ?? {}}
     people={<>{teamSection}{teamSection && props.inviteRoles && <p className="muted-copy">{props.inviteRoles?.length === 2 ? settingsMessages.defaultRolesNote : settingsMessages.customRolesNote}</p>}</>}
     invites={showInvites && <InvitesSection invites={props.invites ?? []} timezone={timezone} canCreateInvites={props.canCreateInvites ?? false} canRevokeInvites={props.canRevokeInvites} createdInvite={createdInvite}
-      creatingInvite={props.creatingInvite} inviteError={props.inviteError} roles={props.inviteRoles} onCreateInvite={props.onCreateInvite} onRevokeInvite={props.onRevokeInvite} onResendInvite={props.onResendInvite} draft={{ email, setEmail, picked, setPicked }} />}
+      creatingInvite={props.creatingInvite} inviteError={props.inviteError} roles={props.inviteRoles} myPermissions={props.myPermissions} onCreateInvite={props.onCreateInvite} onRevokeInvite={props.onRevokeInvite} onResendInvite={props.onResendInvite} inviteNotice={props.inviteNotice} draft={{ email, setEmail, picked, setPicked }} />}
     advanced={props.rolesSection} />;
 }

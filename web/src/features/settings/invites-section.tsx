@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Invite, Role } from '../../api/schemas';
 import { RoleCheckboxes } from './role-checkboxes';
 import { RowMenu } from './row-menu';
@@ -7,6 +7,7 @@ import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { settingsMessages } from './settings-messages';
+import { useEndedAnnouncement } from './use-ended-announcement';
 import { useInviteDraft } from './use-invite-draft';
 import type { InviteDraft } from './use-invite-draft';
 import './role-pickers.css';
@@ -31,15 +32,19 @@ interface InvitesSectionProps {
   inviteError?: string;
   // The roles an invite may give; a role the person may not give is listed, locked.
   roles?: Role[];
+  // myPermissions is what the person holds: an invite whose roles hold more is refused by the server, so no new link is offered for it.
+  myPermissions?: readonly string[];
   onCreateInvite?: (email: string, roleIds: string[]) => void;
   onRevokeInvite?: (id: string) => void;
-  // A new link for the invite's address and roles; revokeOld says the old pending link should stop working.
-  onResendInvite?: (invite: Invite, revokeOld: boolean) => void;
+  // A new link for the invite's address and roles; mayRevoke says the old pending link may be revoked after it. Resolves to
+  // whether the link was made. inviteNotice says what is true afterwards.
+  onResendInvite?: (invite: Invite, mayRevoke: boolean) => Promise<boolean>;
+  inviteNotice?: { kind: 'status' | 'alert'; text: string };
   // draft keeps the typed invite where the page can hold it; without one the form keeps its own.
   draft?: InviteDraft;
 }
 
-export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeInvites = false, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite, onResendInvite, draft }: InvitesSectionProps) {
+export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeInvites = false, createdInvite, creatingInvite = false, inviteError, roles = [], myPermissions, onCreateInvite, onRevokeInvite, onResendInvite, inviteNotice, draft }: InvitesSectionProps) {
   const createdInviteUrl = createdInvite?.url;
   const own = useInviteDraft();
   const { email, setEmail, picked, setPicked } = draft ?? own;
@@ -48,6 +53,24 @@ export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeI
   const chosen = picked ?? (agent ? [agent.id] : []);
   const [picking, setPicking] = useState(false);
   const rolesButton = useRef<HTMLButtonElement>(null);
+  // A new link for a row takes the focus to its field, where the one-time link is, and the page says what happened.
+  const linkField = useRef<HTMLInputElement>(null);
+  const focusLink = useRef(false);
+  useEffect(() => {
+    if (focusLink.current && createdInviteUrl) { linkField.current?.focus(); focusLink.current = false; }
+  }, [createdInviteUrl]);
+  const newLink = (invite: Invite) => {
+    focusLink.current = true;
+    void onResendInvite?.(invite, canRevokeInvites).then((made) => { if (!made) focusLink.current = false; });
+  };
+  const revoked = useEndedAnnouncement(invites, (invite) => invite.id, (invite) => inviteState(invite) === 'revoked', (invite) => settingsMessages.inviteRevoked(invite.email));
+  // The server refuses an invite whose roles hold a permission the person lacks (role_exceeds_yours): the menu does not offer a
+  // new link for one. A role the list does not hold, or no list of what the person holds, is left to the server, whose reason
+  // shows where a refused invite shows it.
+  const mayGive = (invite: Invite) => !myPermissions || invite.roles.every((held) => {
+    const role = roles.find((candidate) => candidate.id === held.id);
+    return !role || role.permissions.every((name) => myPermissions.includes(name));
+  });
   const chosenNames = roles.filter((role) => chosen.includes(role.id)).map((role) => role.name);
   return (
     <section className="settings-card" aria-labelledby="invites-heading"><div className="section-heading"><h2 id="invites-heading">{messages.invites}</h2><p>{settingsMessages.invitesDescription}</p></div>
@@ -64,16 +87,18 @@ export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeI
           </div>}
         </form>}
         {canCreateInvites && inviteError && <p role="alert" className="error-copy">{inviteError}</p>}
+        <p role="status" className="sr-only">{revoked}</p>
+        {canCreateInvites && inviteNotice && <p role={inviteNotice.kind === 'alert' ? 'alert' : 'status'} className={inviteNotice.kind === 'alert' ? 'error-copy' : 'muted-copy'}>{inviteNotice.text}</p>}
         {canCreateInvites && createdInvite && !createdInviteUrl && <p role="status">{settingsMessages.inviteLinkShownOnce}</p>}
         {canCreateInvites && createdInviteUrl && <label className="invite-link"><span className="field-label">{settingsMessages.inviteLink}</span>
-          <input aria-label={settingsMessages.inviteLink} readOnly value={createdInviteUrl} />
+          <input ref={linkField} aria-label={settingsMessages.inviteLink} readOnly value={createdInviteUrl} />
           <small>{settingsMessages.inviteLinkNotice}</small>
         </label>}
         {invites.length > 0 && <div className="data-list">{invites.map((invite) => {
           const state = inviteState(invite);
           const live = state === 'pending' || state === 'expired';
           const actions: RowMenuItem[] = [
-            ...(canCreateInvites && live ? [{ key: 'new-link', label: settingsMessages.newInviteLink, onSelect: () => onResendInvite?.(invite, canRevokeInvites && state === 'pending') }] : []),
+            ...(canCreateInvites && live && mayGive(invite) ? [{ key: 'new-link', label: settingsMessages.newInviteLink, onSelect: () => newLink(invite) }] : []),
             ...(canRevokeInvites && state === 'pending' ? [{ key: 'revoke', label: settingsMessages.revoke, danger: true, onSelect: () => onRevokeInvite?.(invite.id) }] : []),
           ];
           return <article key={invite.id}>

@@ -93,7 +93,7 @@ export function TeamSection({ members, currentAgentId, canManage, roles = [], my
                   onSelect: () => { if (!leaveRename()) return; setConfirming(null); setRenaming(member.id); } }] : []),
                 ...(!deactivated && !lastAdmin && confirming !== member.id ? [{ key: 'deactivate', label: settingsMessages.teamDeactivate, name: settingsMessages.teamDeactivateName(name), danger: true,
                   onSelect: () => { if (!leaveRename()) return; setRenaming(null); setConfirming(member.id); } }] : []),
-                ...(deactivated ? [{ key: 'reactivate', label: settingsMessages.teamReactivate, name: settingsMessages.teamReactivateName(name), onSelect: () => onReactivate?.(member.id) }] : []),
+                ...(deactivated ? [{ key: 'reactivate', label: settingsMessages.teamReactivate, name: settingsMessages.teamReactivateName(name), onSelect: () => { onReactivate?.(member.id); setStatus(settingsMessages.teamReactivated(name)); } }] : []),
               ]} /></span>}
             {changing === member.id && <ChangeRoles member={member} roles={roles} myPermissions={myPermissions} lastAdmin={lastAdmin}
               isSelf={member.id === currentAgentId}

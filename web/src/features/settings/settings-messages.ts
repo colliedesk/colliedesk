@@ -93,6 +93,7 @@ export const settingsMessages = {
   teamConfirmDeactivate: 'Yes, deactivate',
   teamCancel: 'Cancel',
   teamReactivate: 'Reactivate',
+  teamReactivated: (name: string) => `${name} is active again.`,
   teamReactivateName: (name: string) => `Reactivate ${name}`,
   teamReactivateHelp: 'Reactivating uses a seat and does not restore assignments. Send them a new invite link to sign in.',
   invitesDescription: 'A one-time sign-in link for a new teammate. The person joins with the roles you choose; someone already in the workspace gets them added to theirs.',
@@ -103,6 +104,10 @@ export const settingsMessages = {
   inviteLinkNotice: 'Copy this link now. It is not shown in the invite list.',
   revoke: 'Revoke',
   newInviteLink: 'New invite link',
+  newLinkMade: (email: string) => `New invite link made for ${email}.`,
+  newLinkOldWorks: 'New link made. The old link still works: revoke it.',
+  newLinkEarlierWorks: 'New link made. The earlier link still works until it expires, or until someone who may revoke invites revokes it.',
+  inviteRevoked: (email: string) => `Invite for ${email} revoked.`,
   saving: 'Saving…',
   saved: 'Saved',
   // The one save bar of a page, and the question when someone leaves it with text not yet saved.

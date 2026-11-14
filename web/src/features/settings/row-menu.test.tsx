@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { expect, test, vi } from 'vitest';
 import { RowMenu } from './row-menu';
 
@@ -62,4 +63,24 @@ test('a press outside closes the menu', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Actions for Ann' }));
   fireEvent.pointerDown(screen.getByRole('button', { name: 'elsewhere' }));
   expect(screen.queryByRole('menu')).toBeNull();
+});
+
+// A menu that closes must not leave the focus on the page body: from there Esc leaves Settings.
+test('choosing an action that opens nothing leaves the focus on the actions button', () => {
+  render(<RowMenu label="Ann" items={items()} />);
+  const button = screen.getByRole('button', { name: 'Actions for Ann' });
+  fireEvent.click(button);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+  expect(button).toHaveFocus();
+});
+
+test('when the action takes the menu away from its row, the focus goes to the row', () => {
+  function Row() {
+    const [ended, setEnded] = useState(false);
+    return <article aria-label="Ann row">{ended ? 'Revoked' : <RowMenu label="Ann" items={[{ key: 'revoke', label: 'Revoke', onSelect: () => setEnded(true) }]} />}</article>;
+  }
+  render(<Row />);
+  fireEvent.click(screen.getByRole('button', { name: 'Actions for Ann' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Revoke' }));
+  expect(screen.getByRole('article', { name: 'Ann row' })).toHaveFocus();
 });

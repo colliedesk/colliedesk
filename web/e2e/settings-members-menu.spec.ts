@@ -66,8 +66,14 @@ test('a pending invite gets a new link: the address and roles are the same, the 
   await row.getByRole('button', { name: 'Actions for kim@example.com' }).click();
   await expect(page.getByRole('menuitem')).toHaveText(['New invite link', 'Revoke']);
   await page.getByRole('menuitem', { name: 'New invite link' }).click();
-  const link = await page.getByRole('textbox', { name: 'One-time invite link' }).inputValue();
+  const linkField = page.getByRole('textbox', { name: 'One-time invite link' });
+  const link = await linkField.inputValue();
   expect(link).not.toBe(first.url);
+  // The new link takes the focus and the page says what happened; Esc from there does not leave Settings.
+  await expect(linkField).toBeFocused();
+  await expect(page.getByText('New invite link made for kim@example.com.')).toHaveAttribute('role', 'status');
+  await page.keyboard.press('Escape');
+  await expect(page).toHaveURL(`${baseURL}/settings/members?tab=invites`);
 
   const state = async (url: string) => ((await (await page.request.get(`${baseURL}/api/v1/auth/invite-preview?token=${new URL(url).searchParams.get('token') ?? new URL(url).hash.slice(1)}`)).json()) as { state?: string }).state;
   await expect.poll(() => state(first.url)).toBe('revoked');
@@ -118,4 +124,29 @@ test('on a phone the email checklist is one column and every step is inside the 
   const headings = await page.getByRole('heading', { level: 2 }).all();
   const lefts = await Promise.all(headings.map(async (heading) => Math.round((await heading.boundingBox())?.x ?? 0)));
   expect(new Set(lefts).size, 'the steps share one column').toBe(1);
+});
+
+test('a person who may invite but not revoke gets a new link and is told the earlier link still works', async ({ page, browser }) => {
+  await newDesk(page, 'E2E new link no revoke');
+  const headers = { Origin: baseURL };
+  const suffix = Date.now();
+  expect((await page.request.post(`${baseURL}/api/v1/roles`, { headers: { ...headers, 'Idempotency-Key': `inviter-${suffix}` }, data: { name: 'Inviter', permissions: ['team:read', 'team:invite', 'profile:update'] } })).status()).toBe(201);
+  const joined = await (await page.request.post(`${baseURL}/api/v1/auth/invites`, { headers: { ...headers, 'Idempotency-Key': `who-${suffix}` }, data: { email: `inviter-${suffix}@example.com`, roles: ['Inviter'] } })).json() as { url: string };
+  const context = await browser.newContext();
+  const inviter = await context.newPage();
+  // A role that reads no conversation lands on Settings, not the inbox: join by hand.
+  await inviter.goto(joined.url);
+  await inviter.getByRole('button', { name: /^Join / }).click();
+  await inviter.waitForLoadState('networkidle');
+  await inviter.setViewportSize({ width: 1440, height: 900 });
+  const made = await inviter.request.post(`${baseURL}/api/v1/auth/invites`, { headers: { ...headers, 'Idempotency-Key': `kim-${suffix}` }, data: { email: 'kim@example.com', roles: ['Inviter'] } });
+  expect(made.status(), await made.text()).toBe(201);
+  await inviter.goto(`${baseURL}/settings/members?tab=invites`);
+  await inviter.getByRole('button', { name: 'Actions for kim@example.com' }).click();
+  await expect(inviter.getByRole('menuitem')).toHaveText(['New invite link']);
+  await inviter.getByRole('menuitem', { name: 'New invite link' }).click();
+  await expect(inviter.getByText('New link made. The earlier link still works until it expires, or until someone who may revoke invites revokes it.')).toHaveAttribute('role', 'status');
+  const listed = await (await inviter.request.get(`${baseURL}/api/v1/auth/invites`)).json() as { items: { email: string; revoked_at: string | null }[] };
+  expect(listed.items.filter((invite) => invite.email === 'kim@example.com' && invite.revoked_at === null)).toHaveLength(2);
+  await context.close();
 });

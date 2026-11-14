@@ -4,6 +4,7 @@ import { formatDate } from '../../lib/format-date';
 import { agentTokenMessages as text } from './agent-tokens-messages';
 import { RevokeTokenDialog } from './revoke-token-dialog';
 import { RowMenu } from './row-menu';
+import { useEndedAnnouncement } from './use-ended-announcement';
 import { settingsMessages } from './settings-messages';
 import { permissionLabel } from './token-permissions';
 
@@ -39,8 +40,10 @@ interface AgentTokenListProps {
 // last used it (the session's last_seen_at) and when it ends. Revoke, from the row menu, asks first.
 export function AgentTokenList({ tokens, timezone, onRevoke, labelledBy }: AgentTokenListProps) {
   const [confirming, setConfirming] = useState<Session | null>(null);
+  const revoked = useEndedAnnouncement(tokens, (session) => session.id, (session) => ended(session) === 'revoked', (session) => text.revokedToken(session.label));
   if (tokens.length === 0) return <p className="muted-copy token-list-empty">{text.noTokens}</p>;
   return <>
+    <p role="status" className="sr-only">{revoked}</p>
     <table className="token-table" aria-labelledby={labelledBy}>
       <thead><tr><th scope="col">{text.columns.token}</th><th scope="col">{text.columns.access}</th><th scope="col">{text.columns.lastUsed}</th>
         <th scope="col">{text.columns.expires}</th><th scope="col"><span className="sr-only">{text.columns.actions}</span></th></tr></thead>

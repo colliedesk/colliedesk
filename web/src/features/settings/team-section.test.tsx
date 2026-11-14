@@ -350,3 +350,13 @@ test('Escape in the actions menu closes it and the focus returns to its button',
   expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Actions for ann@example.com' })).toHaveFocus();
 });
+
+test('reactivating says so and leaves the focus on the row\'s actions button', () => {
+  const onReactivate = vi.fn();
+  render(<TeamSection members={[admin, cy]} currentAgentId={admin.id} canManage timezone="UTC" onReactivate={onReactivate} />);
+  openMenu('cy@example.com');
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Reactivate cy@example.com' }));
+  expect(onReactivate).toHaveBeenCalledWith(cy.id);
+  expect(screen.getByRole('button', { name: 'Actions for cy@example.com' })).toHaveFocus();
+  expect(screen.getByRole('status')).toHaveTextContent('cy@example.com is active again.');
+});
