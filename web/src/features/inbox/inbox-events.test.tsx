@@ -12,7 +12,7 @@ const api = vi.hoisted(() => ({
   announcePresence: vi.fn(async (_id: string, _body: unknown): Promise<{ viewers: unknown[]; heartbeat_seconds: number }> => ({ viewers: [], heartbeat_seconds: 5 })), leavePresence: vi.fn(async () => undefined),
   me: vi.fn(), conversations: vi.fn(), conversation: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), config: vi.fn(),
-  savedReplies: vi.fn(async () => ({ items: [] })),
+  savedReplies: vi.fn(async () => ({ items: [] })), macros: vi.fn(async () => ({ items: [] })),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: '', smtp: { configured: false }, from_policy: 'verified', sending_from: null })),
 }));
 const analytics = vi.hoisted(() => ({ track: vi.fn(() => true) }));

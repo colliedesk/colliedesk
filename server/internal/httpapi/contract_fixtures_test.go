@@ -6,6 +6,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/cursor/cursortest"
 	"html"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -40,24 +41,27 @@ type contractFixture struct {
 	agentID                   string
 	contactID, conversationID string
 	// mergeDuplicateID is merged by the contract case; undoMergeID is a merge the undo case reverts.
-	mergeDuplicateID, undoMergeID string
-	inviteID, sessionID           string
-	updateTagID, deleteTagID      string
-	updateReplyID, deleteReplyID  string
-	updateReplySeen               string
-	trashReplyID, restoreReplyID  string
-	restoreReplySeen              string
-	deleteReplySeen               string
-	trashReplySeen                string
-	updateViewID, deleteViewID    string
-	updateViewSeen                string
-	trashViewID                   string
-	attachmentID                  string
-	mailImagePath                 string
-	redeemToken, logoutToken      string
-	usedInviteToken               string
-	inboundSecret                 string
-	failedReplyID                 string
+	mergeDuplicateID, undoMergeID                              string
+	inviteID, sessionID                                        string
+	updateTagID, deleteTagID                                   string
+	updateReplyID, deleteReplyID                               string
+	updateReplySeen                                            string
+	trashReplyID, restoreReplyID                               string
+	restoreReplySeen                                           string
+	deleteReplySeen                                            string
+	trashReplySeen                                             string
+	updateViewID, deleteViewID                                 string
+	updateViewSeen                                             string
+	trashViewID                                                string
+	updateMacroID, deleteMacroID, trashMacroID, applyMacroID   string
+	updateMacroSeen, deleteMacroSeen                           string
+	macroConversation, macroUndoConversation, macroApplication string
+	attachmentID                                               string
+	mailImagePath                                              string
+	redeemToken, logoutToken                                   string
+	usedInviteToken                                            string
+	inboundSecret                                              string
+	failedReplyID                                              string
 	// noteID is a note of the admin that the contract case asks the agent on.
 	noteID                   string
 	deleteChannelToken       string
@@ -161,6 +165,25 @@ func newContractFixture(t *testing.T) contractFixture {
 	if response := request(t, api, http.MethodDelete, "/api/v1/saved-views/"+trashViewID, nil, adminToken, nil); response.Code != http.StatusOK {
 		t.Fatalf("trash contract view status=%d body=%s", response.Code, response.Body.String())
 	}
+	updateMacroID := create(t, api, adminToken, "/api/v1/macros", map[string]any{"title": "Update contract macro", "scope": "shared", "body": "Hello {{customer.name}}"})
+	updateMacroSeen := macroSeen(t, api, adminToken, updateMacroID)
+	deleteMacroID := create(t, api, adminToken, "/api/v1/macros", map[string]any{"title": "Delete contract macro", "scope": "shared", "body": "Bye"})
+	deleteMacroSeen := macroSeen(t, api, adminToken, deleteMacroID)
+	trashMacroID := create(t, api, adminToken, "/api/v1/macros", map[string]any{"title": "Trashed contract macro", "scope": "personal", "body": "Back soon"})
+	if response := request(t, api, http.MethodDelete, "/api/v1/macros/"+trashMacroID+"?updated_at="+url.QueryEscape(macroSeen(t, api, adminToken, trashMacroID)), nil, adminToken, nil); response.Code != http.StatusOK {
+		t.Fatalf("trash contract macro status=%d body=%s", response.Code, response.Body.String())
+	}
+	applyMacroID := create(t, api, adminToken, "/api/v1/macros", map[string]any{"title": "Apply contract macro", "scope": "shared", "body": "Hi {{customer.name}}", "actions": map[string]any{"status": "pending"}})
+	macroConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Macro contract"})
+	undoMacroID := create(t, api, adminToken, "/api/v1/macros", map[string]any{"title": "Undo contract macro", "scope": "shared", "actions": map[string]any{"priority": "low"}})
+	macroUndoConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Macro undo"})
+	var applied struct {
+		Application struct {
+			ID string `json:"id"`
+		} `json:"application"`
+	}
+	decode(t, request(t, api, http.MethodPost, "/api/v1/conversations/"+macroUndoConversation+"/macros/"+undoMacroID+"/apply", nil, adminToken, nil), &applied)
+	macroApplication := applied.Application.ID
 
 	inviteID, agentURL := createContractInvite(t, api, adminToken, "agent@contract-all.example.com", "agent")
 	agentRedeem := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, agentURL)}, "", nil)
@@ -305,7 +328,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	oauthClientID := registerContractOAuthClient(t, api)
 	return contractFixture{trialOfferToken: trialOfferToken, trialAcceptToken: trialAcceptToken, oauthClientID: oauthClientID, intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, noteID: noteID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
-		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), usedInviteToken: linkToken(t, agentURL), logoutToken: logout.Token, kb: kb}
+		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, updateMacroID: updateMacroID, updateMacroSeen: updateMacroSeen, deleteMacroID: deleteMacroID, deleteMacroSeen: deleteMacroSeen, trashMacroID: trashMacroID, applyMacroID: applyMacroID, macroConversation: macroConversation, macroUndoConversation: macroUndoConversation, macroApplication: macroApplication, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), usedInviteToken: linkToken(t, agentURL), logoutToken: logout.Token, kb: kb}
 }
 
 // seedMailImage gives the conversation's incoming message HTML with one remote image and returns the

@@ -94,7 +94,7 @@ function options(host: string): Partial<PostHogConfig> {
 // the trial survey, which the admin sends by pressing Send.
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed';
 // The settings page opened from its menu (docs/user/telemetry.md lists the values it had while Settings was one page).
-export type SettingsSection = 'account' | 'general' | 'members' | 'channels' | 'targets' | 'ai' | 'saved_replies' | 'data' | 'billing';
+export type SettingsSection = 'account' | 'general' | 'members' | 'channels' | 'targets' | 'ai' | 'saved_replies' | 'macros' | 'data' | 'billing';
 export type SurveyId = 'switch_blocker_v1';
 export type InboxFilterKind = 'status' | 'priority' | 'assignee' | 'tag' | 'contact' | 'organization' | 'awaiting' | 'draft' | 'delivery'
   | 'source' | 'channel' | 'created' | 'updated' | 'sort';
@@ -105,6 +105,7 @@ export interface EventProperties {
   inbox_filtered: { filter: InboxFilterKind };
   inbox_searched: { has_results: boolean };
   saved_reply_inserted: undefined;
+  macro_applied: undefined;
   conversation_status_changed: { to: ConversationStatus };
   conversation_assigned: { to_self: boolean };
   bulk_action_applied: { action: 'status' | 'assign' | 'add_tag' | 'remove_tag'; count: number };

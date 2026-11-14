@@ -55,7 +55,7 @@ summary."
 
 ## What the agent can do
 
-Colliedesk has 250 tools. Claude Code acts as you, with everything you can do in the workspace
+Colliedesk has 256 tools. Claude Code acts as you, with everything you can do in the workspace
 you allowed, read from your roles on every call: a permission you lose stops it at once. A tool you
 have no permission for is refused with the permission it lacks. See
 [Roles and permissions](roles-and-permissions.md) and [Connected AI apps](sessions.md#connected-ai-apps).

@@ -33,7 +33,7 @@ test('the menu is the nine items and the reserved one of the design, grouped, wi
   expect(rowsOf(nav)).toEqual([
     ['Account', '/settings/account', null],
     ['General', '/settings/general', null], ['Members', '/settings/members', null], ['Channels', '/settings/channels', null], ['Response targets', '/settings/targets', null],
-    ['AI & agents', '/settings/ai', null], ['Saved replies', '/settings/saved-replies', null], ['Conversation fields', '/settings/fields', 'Coming'],
+    ['AI & agents', '/settings/ai', null], ['Saved replies', '/settings/saved-replies', null], ['Macros', '/settings/macros', null], ['Conversation fields', '/settings/fields', 'Coming'],
     ['Data', '/settings/data', null], ['Plan and billing', '/settings/billing', null],
   ]);
   expect(within(nav).getByText('Workspace')).toBeInTheDocument();
@@ -86,13 +86,13 @@ test('an admin sees every item and an agent everything but Data and Plan and bil
   const admin = menuFor('admin');
   expect(rowsOf(screen.getByRole('navigation', { name: 'Settings sections' })).map(([label, href]) => [label, href])).toEqual([
     ['Account', '/settings/account'], ['General', '/settings/general'], ['Members', '/settings/members'], ['Channels', '/settings/channels'], ['Response targets', '/settings/targets'],
-    ['AI & agents', '/settings/ai'], ['Saved replies', '/settings/saved-replies'], ['Conversation fields', '/settings/fields'], ['Data', '/settings/data'], ['Plan and billing', '/settings/billing'],
+    ['AI & agents', '/settings/ai'], ['Saved replies', '/settings/saved-replies'], ['Macros', '/settings/macros'], ['Conversation fields', '/settings/fields'], ['Data', '/settings/data'], ['Plan and billing', '/settings/billing'],
   ]);
   admin.unmount();
   menuFor('agent');
   expect(rowsOf(screen.getByRole('navigation', { name: 'Settings sections' })).map(([label, href]) => [label, href])).toEqual([
     ['Account', '/settings/account'], ['General', '/settings/general'], ['Members', '/settings/members'], ['Channels', '/settings/channels'], ['Response targets', '/settings/targets'],
-    ['AI & agents', '/settings/ai'], ['Saved replies', '/settings/saved-replies'], ['Conversation fields', '/settings/fields'],
+    ['AI & agents', '/settings/ai'], ['Saved replies', '/settings/saved-replies'], ['Macros', '/settings/macros'], ['Conversation fields', '/settings/fields'],
   ]);
 });
 

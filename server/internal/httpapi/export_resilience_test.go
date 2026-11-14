@@ -211,6 +211,7 @@ func (s idleSink) Tag(export.Tag) error                                         
 func (s idleSink) SavedReply(export.SavedReply) error                                   { return nil }
 func (s idleSink) SavedReplyVersion(export.SavedReplyVersion) error                     { return nil }
 func (s idleSink) SavedView(export.SavedView) error                                     { return nil }
+func (s idleSink) Macro(export.Macro) error                                             { return nil }
 func (s idleSink) KBCollection(export.KBCollection) error                               { return nil }
 func (s idleSink) KBArticle(export.KBArticle) error                                     { return nil }
 func (s idleSink) KBArticleVersion(export.KBArticleVersion) error                       { return nil }

@@ -21,6 +21,7 @@ const screens: Array<{ prefix: string; exact?: boolean; permission: TokenPermiss
   { prefix: '/settings/roles', permission: 'team:read', label: messages.roles },
   { prefix: '/settings/members', permission: 'team:read', label: messages.members },
   { prefix: '/settings/saved-replies', permission: 'saved_replies:read', label: messages.savedReplies },
+  { prefix: '/settings/macros', permission: 'macros:read', label: messages.macros },
   { prefix: '/settings/channels', permission: 'channels:read', label: messages.channels },
   // AI & agents itself also holds the agent tokens; a chat's transcript under it is the built-in AI's.
   { prefix: '/settings/ai/', permission: 'ai_settings:read', label: messages.aiSettings },

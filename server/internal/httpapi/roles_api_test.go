@@ -66,8 +66,8 @@ func TestEveryWorkspaceStartsWithAdminAndAgentAndMembersHoldWhatTheyHad(t *testi
 	}
 	kbCall(t, desk.api, http.MethodGet, "/api/v1/roles", nil, agent, http.StatusOK, &roles)
 	if len(roles.Items) != 2 || roles.Items[0].Name != "Admin" || roles.Items[1].Name != "Agent" ||
-		len(roles.Items[0].Permissions) != len(auth.AllPermissions()) || len(roles.Items[1].Permissions) != 42 {
-		t.Fatalf("roles = %+v, want Admin with every permission and Agent with 42", roles.Items)
+		len(roles.Items[0].Permissions) != len(auth.AllPermissions()) || len(roles.Items[1].Permissions) != len(auth.AgentRolePermissions()) {
+		t.Fatalf("roles = %+v, want Admin with every permission and Agent with %d", roles.Items, len(auth.AgentRolePermissions()))
 	}
 	if roles.Items[0].Defaults != nil || !slices.Equal(roles.Items[1].Defaults, auth.AgentRolePermissions()) {
 		t.Fatalf("defaults: Admin %v, Agent %v; want none and the Agent role's built-in list", roles.Items[0].Defaults, roles.Items[1].Defaults)

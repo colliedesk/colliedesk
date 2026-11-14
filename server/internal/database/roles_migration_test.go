@@ -196,8 +196,8 @@ func TestEveryWorkspaceGetsItsSystemRoles(t *testing.T) {
 			(SELECT permissions FROM roles WHERE workspace_id=$1 AND system='agent') FROM roles WHERE workspace_id=$1`, ws).Scan(&admin, &agent, &agentPermissions); err != nil {
 			t.Fatal(err)
 		}
-		if admin != 1 || agent != 1 || len(agentPermissions) != 42 {
-			t.Fatalf("workspace %s has %d Admin and %d Agent roles, Agent with %d permissions; want 1, 1 and 42", ws, admin, agent, len(agentPermissions))
+		if admin != 1 || agent != 1 || len(agentPermissions) != 46 {
+			t.Fatalf("workspace %s has %d Admin and %d Agent roles, Agent with %d permissions; want 1, 1 and 46", ws, admin, agent, len(agentPermissions))
 		}
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO roles(workspace_id,name,system,permissions) VALUES($1,'Second admin','admin',NULL)`, created); err == nil {

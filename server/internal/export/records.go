@@ -391,6 +391,22 @@ type SavedReply struct {
 	DeletedByAgentID *string    `json:"deleted_by_agent_id"`
 }
 
+// Macro is a reply template plus the actions it applies, personal or shared, also in the trash.
+// Actions keep assignee and tag ids; the body keeps its variables unfilled.
+type Macro struct {
+	ID               string          `json:"id"`
+	Title            string          `json:"title"`
+	Body             string          `json:"body"`
+	Scope            string          `json:"scope"`
+	OwnerAgentID     *string         `json:"owner_agent_id"`
+	Actions          json.RawMessage `json:"actions"`
+	CreatedByAgentID *string         `json:"created_by_agent_id"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DeletedAt        *time.Time      `json:"deleted_at"`
+	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+}
+
 // SavedView is a named set of inbox filters, personal (owner_agent_id set) or shared, also in the trash.
 type SavedView struct {
 	ID               string          `json:"id"`
@@ -1264,6 +1280,7 @@ type Sink interface {
 	SavedReply(SavedReply) error
 	SavedReplyVersion(SavedReplyVersion) error
 	SavedView(SavedView) error
+	Macro(Macro) error
 	KBCollection(KBCollection) error
 	KBArticle(KBArticle) error
 	KBArticleVersion(KBArticleVersion) error

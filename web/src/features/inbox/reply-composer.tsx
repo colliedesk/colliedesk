@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
-import type { SavedReply } from '../../api/schemas';
+import type { Macro, SavedReply } from '../../api/schemas';
 import { newSubmitKey } from '../../api/submit-key';
 import { renderSavedReply } from '../../lib/saved-reply-variables';
 import { AttachmentPicker, attachmentProblem } from './attachment-picker';
@@ -11,9 +11,10 @@ import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
 import { draftPrefix, parseDraft, readDraft, writeDraft } from './reply-draft-storage';
 import type { StoredDraft } from './reply-draft-storage';
-import { ConflictError, ReplyConflictError } from '../../api/client';
+import { ConflictError, InvalidRequestError, ReplyConflictError } from '../../api/client';
 import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
+import { macroMessages } from '../settings/macro-messages';
 import { composing, isTyping } from '../../lib/typing-target';
 import { messages } from '../../messages';
 import { ArrowUpIcon, BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
@@ -48,6 +49,12 @@ interface ReplyComposerProps {
   agentName?: string;
   onManageSavedReplies?: () => void;
   savedRepliesState?: 'loading' | 'failed' | 'ready';
+  // Macros fill the box and apply their actions. onApplyMacro does the apply; the box inserts the text.
+  macros?: Macro[];
+  macrosState?: 'loading' | 'failed' | 'ready';
+  onManageMacros?: () => void;
+  onApplyMacro?: (macro: Macro) => Promise<{ id: string; body: string; title: string }>;
+  onUndoMacro?: (applicationId: string) => Promise<unknown>;
   // An admin, who can turn the help center on from the articles list while it is off.
   canManage?: boolean;
   // Whether the box holds a reply to the customer not sent yet (never a private note), each time that
@@ -77,7 +84,7 @@ interface ReplyComposerProps {
 
 type Kind = 'outgoing' | 'note';
 // The list open under the box: saved replies or the articles to link; one at a time.
-type Picker = 'replies' | 'articles';
+type Picker = 'replies' | 'articles' | 'macros';
 const shortcuts: Record<string, Kind> = { r: 'outgoing', n: 'note' };
 
 
@@ -102,11 +109,12 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, resolveTells, draftKey, findSent, teammates = noTeammates }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, macros = [], macrosState, onManageMacros, onApplyMacro, onUndoMacro, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, resolveTells, draftKey, findSent, teammates = noTeammates }: ReplyComposerProps) {
   // What the role holds: a reply needs messages:send, the lists under the box their own read.
   const holds = useHolds();
   const mayReply = holds('messages:send');
   const maySavedReplies = holds('saved_replies:read');
+  const mayMacros = holds('macros:read') && Boolean(onApplyMacro);
   const mayArticles = holds('kb_articles:read');
   // With no channel to carry replies, or a role that may not write to customers, the box opens on a private
   // note, the one thing that can be sent.
@@ -265,6 +273,44 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const insertSavedReply = (reply: SavedReply) => {
     track('saved_reply_inserted');
     insertText(renderSavedReply(reply.body, { customerName, agentName }));
+  };
+  const [macroNotice, setMacroNotice] = useState<{ id: string; title: string; body: string } | null>(null);
+  const [applying, setApplying] = useState(false);
+  const applyMacro = async (macro: Macro) => {
+    if (!onApplyMacro || applying) return;
+    setApplying(true);
+    setProblem(undefined);
+    try {
+      const result = await onApplyMacro(macro);
+      setPicking(null);
+      if (result.body) insertText(result.body);
+      setMacroNotice({ id: result.id, title: result.title, body: result.body });
+      track('macro_applied');
+    } catch (error) {
+      setPicking(null);
+      setProblem(error instanceof InvalidRequestError ? error.message : macroMessages.applyFailed);
+    } finally {
+      setApplying(false);
+    }
+  };
+  const undoMacro = async () => {
+    if (!macroNotice || !onUndoMacro) return;
+    const notice = macroNotice;
+    try {
+      await onUndoMacro(notice.id);
+      // The inserted text may live in the box as a browser edit (so Ctrl+Z works) before React's
+      // state has it. Take that exact text back out of whatever the box shows.
+      const box = field.current;
+      const current = box?.value ?? body;
+      if (notice.body && current.includes(notice.body)) {
+        const next = current.replace(notice.body, '');
+        if (box) box.value = next;
+        setBody(next);
+      }
+      setMacroNotice(null);
+    } catch (error) {
+      setProblem(error instanceof InvalidRequestError ? error.message : macroMessages.undoFailed);
+    }
   };
   const closePicker = (restoreFocus: boolean) => {
     setPicking(null);
@@ -466,6 +512,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           // Until the chunk is there, the list's own box says it is loading, where the list will be.
           : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>
           : picking === 'replies' ? <pickers.module.SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />
+          : picking === 'macros' ? <pickers.module.SavedReplyPicker replies={macros} onPick={(macro) => void applyMacro(macro)} onClose={closePicker} onManage={onManageMacros} state={macrosState}
+            texts={{ label: messages.macros, search: macroMessages.search, loading: macroMessages.loading, failed: macroMessages.failed, none: macroMessages.none, noMatch: macroMessages.noMatch, manage: macroMessages.manage }} />
           : <pickers.module.ArticleLinkPicker box={field} onInsert={insertText} onClose={closePicker} canManage={canManage} />)}
         {assist && aiDraftsFor && !disabled && (assistPart.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
           : assistPart.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>
@@ -475,6 +523,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           render={(view) => <view.ReplyConflict replies={conflict.newer} timezone={timezone}
             onSendAnyway={() => { mark.current = conflict.latest; submit(resolveAfter.current); }}
             onEdit={() => { mark.current = conflict.latest; setConflict(undefined); field.current?.focus(); }} />} />}
+        {macroNotice && <p role="status" className="composer-notice">{macroNotice.body ? macroMessages.applied(macroNotice.title) : macroMessages.appliedActions(macroNotice.title)}{' '}
+          <button type="button" onClick={() => void undoMacro()}>{macroMessages.undo}</button></p>}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
         <div className="composer-actions">
@@ -495,6 +545,9 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           {maySavedReplies && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} data-tip={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
             <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>}
+          {mayMacros && <button type="button" className="saved-reply-button" disabled={disabled || applying} aria-haspopup="dialog" aria-expanded={picking === 'macros'} data-tip={messages.applyMacro}
+            onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('macros')}>
+            <BookmarkIcon /><span className="tool-label">{messages.applyMacro}</span></button>}
           {mayArticles && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} data-tip={messages.articles}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
             <BookIcon /><span className="tool-label">{messages.articles}</span></button>}

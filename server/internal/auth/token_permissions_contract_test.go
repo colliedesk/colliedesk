@@ -172,23 +172,38 @@ func TestLegacyTokensLoseExactlyWhatAlwaysAskedAPerson(t *testing.T) {
 }
 
 func TestTheAgentRoleStartsAsTheMigrationMadeIt(t *testing.T) {
-	data, err := os.ReadFile("../../migrations/20261102120000-roles.up.sql")
+	// The roles migration wrote the first list. A later migration may replace the function; the list
+	// AgentRolePermissions must match is the last definition, which is what a new workspace gets.
+	entries, err := os.ReadDir("../../migrations")
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := string(data)
-	block := text[strings.Index(text, "SELECT ARRAY["):]
-	block = block[:strings.Index(block, "]::text[]")]
 	var migration []string
-	for _, part := range strings.Split(block, "'") {
-		if strings.Contains(part, ":") {
-			migration = append(migration, part)
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".up.sql") {
+			continue
+		}
+		data, err := os.ReadFile("../../migrations/" + entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		if !strings.Contains(text, "FUNCTION colliedesk_agent_role_permissions") {
+			continue
+		}
+		block := text[strings.LastIndex(text, "SELECT ARRAY["):]
+		block = block[:strings.Index(block, "]::text[]")]
+		migration = nil
+		for _, part := range strings.Split(block, "'") {
+			if strings.Contains(part, ":") {
+				migration = append(migration, part)
+			}
 		}
 	}
 	if !slices.Equal(migration, AgentRolePermissions()) {
 		t.Fatalf("migration Agent role = %v\nauth.AgentRolePermissions = %v", migration, AgentRolePermissions())
 	}
-	if len(migration) != 42 {
-		t.Fatalf("the Agent role starts with %d permissions, want 42", len(migration))
+	if len(migration) != 46 {
+		t.Fatalf("the Agent role starts with %d permissions, want 46", len(migration))
 	}
 }

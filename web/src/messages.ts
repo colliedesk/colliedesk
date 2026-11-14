@@ -206,6 +206,8 @@ export const messages = {
   messageBody: 'Message body',
   messageKind: 'Message type',
   savedReplies: 'Saved replies',
+  macros: 'Macros',
+  applyMacro: 'Apply macro',
   insertSavedReply: 'Insert saved reply',
   articles: 'Articles',
   loadingList: 'Loading…',

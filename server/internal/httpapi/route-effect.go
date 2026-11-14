@@ -94,6 +94,7 @@ var routeEffects = map[string]Effect{
 	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":            Changes,
 	"DELETE /api/v1/saved-replies/{id}":                        Changes,
 	"DELETE /api/v1/saved-views/{id}":                          Changes,
+	"DELETE /api/v1/macros/{id}":                               Changes,
 	"DELETE /api/v1/kb/collections/{id}":                       Changes,
 	"DELETE /api/v1/kb/collections/{id}/translations/{locale}": Changes,
 	"DELETE /api/v1/kb/articles/{id}":                          Changes,
