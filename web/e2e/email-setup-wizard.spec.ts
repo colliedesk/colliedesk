@@ -74,7 +74,7 @@ test('email setup: a new workspace saves its address, the first forwarded mail f
   const setupURL = page.url();
   const test4 = page.getByRole('group', { name: 'Try it with a test message' });
   await expect(test4).toContainText('Step 4 of 4');
-  await test4.getByRole('button', { name: 'Send yourself a test message' }).click();
+  await test4.getByRole('button', { name: 'Send yourself a test message', exact: true }).click();
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   const reply = `Answering my test (${suffix}).`;
   await page.getByLabel('Message body').last().fill(reply);

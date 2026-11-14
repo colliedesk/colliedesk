@@ -78,7 +78,6 @@
 .email-home-fold[open] { padding-bottom: var(--space-4); }
 .email-home-fold > :not(summary) { margin-top: var(--space-2); }
 .email-home-danger summary { color: var(--danger, var(--text-1)); }
-.email-home-disconnect { margin: var(--space-2) 0 0; }
 
 /* Links inside the steps are fingertip-sized on a phone. */
 @media (pointer: coarse), (max-width: 30rem) { .setup-body a, .setup-body .link-action { display: inline-flex; align-items: center; min-height: var(--touch); } }

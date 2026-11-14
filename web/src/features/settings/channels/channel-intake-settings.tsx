@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { InvalidRequestError } from '../../../api/client';
 import type { AISettings, ChannelAIInput } from '../../../api/ai';
+import { HelpTip } from '../../../ui/help-tip';
 import { scopeName } from '../ai-levels';
 import { channelsMessages as m } from './channels-messages';
 
@@ -110,10 +111,10 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
   const heading = `${id}-heading`;
   return <form className="ch-intake" aria-labelledby={heading} onSubmit={(event) => void submit(event)} noValidate>
     <h3 id={heading}>{m.intakeSettings(scopeName(scope))}</h3>
-    <p className="ch-ai-lead">{follows ? m.intakeSettingsFollow(scopeName(scope)) : m.intakeSettingsLead}</p>
+    <p className="ch-ai-lead">{follows ? m.intakeSettingsFollow(scopeName(scope)) : <>{m.intakeSettingsLead} <HelpTip label={m.intakeSettings(scopeName(scope))} text={m.intakeSettingsWhy} /></>}</p>
     <fieldset className="ch-intake-group" disabled={locked}>
       <legend>{m.intakeThresholds}</legend>
-      <p className="help">{m.intakeThresholdsHelp}</p>
+      <p className="help">{m.intakeThresholdsHelp} <HelpTip label={m.intakeThresholds} text={m.intakeThresholdsWhy} /></p>
       <div className="ch-intake-row">
         {thresholds.map((item) => <label key={item.key} className="field"><span>{item.label}</span>
           <input type="number" min={0.5} max={0.99} step={0.01} inputMode="decimal" placeholder={item.byDefault} value={values[item.key]}
@@ -130,7 +131,7 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
     </fieldset>
     <fieldset className="ch-intake-group" disabled={locked}>
       <legend>{m.intakeSources}</legend>
-      <p className="help">{m.intakeSourcesHelp}</p>
+      <p className="help">{m.intakeSourcesHelp} <HelpTip label={m.intakeSources} text={m.intakeSourcesWhy} /></p>
       {sources.map((source) => {
         const missing = Boolean(source.consent) && !consents.has(source.consent ?? '');
         return <label key={source.key} className="ch-intake-check">
@@ -144,18 +145,19 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
     <fieldset className="ch-intake-group" disabled={locked}>
       <legend>{m.intakePrivacy}</legend>
       <div className="field"><label htmlFor={`${id}-keywords`}>{m.intakeKeywords}</label>
-        <textarea id={`${id}-keywords`} rows={3} aria-describedby={`${id}-keywords-help`} value={values.keywords} onChange={(event) => set('keywords', event.target.value)} />
-        <small className="help" id={`${id}-keywords-help`}>{m.intakeKeywordsHelp}</small></div>
+        <textarea id={`${id}-keywords`} rows={3} aria-describedby={`${id}-keywords-help ${id}-keywords-why`} value={values.keywords} onChange={(event) => set('keywords', event.target.value)} />
+        <small className="help" id={`${id}-keywords-help`}>{m.intakeKeywordsHelp}</small>
+        <HelpTip id={`${id}-keywords-why`} label={m.intakeKeywords} text={m.intakeKeywordsWhy} /></div>
       <div className="ch-intake-row">
         <label className="field"><span>{m.intakeAccountLabels}</span>
           <textarea rows={2} value={values.accounts} onChange={(event) => set('accounts', event.target.value)} /></label>
         <label className="field"><span>{m.intakeIDLabels}</span>
           <textarea rows={2} value={values.ids} onChange={(event) => set('ids', event.target.value)} /></label>
       </div>
-      <small className="help">{m.intakeLabelsHelp}</small>
+      <small className="help">{m.intakeLabelsHelp} <HelpTip label={m.intakePrivacy} text={m.intakeLabelsWhy} /></small>
       <fieldset className="ch-intake-patterns">
         <legend>{m.intakePatterns}</legend>
-        <small className="help">{m.intakePatternsHelp}</small>
+        <small className="help">{m.intakePatternsHelp} <HelpTip label={m.intakePatterns} text={m.intakePatternsWhy} /></small>
         {values.patterns.map((item, index) => <div key={index} className="ch-intake-pattern">
           <input aria-label={m.intakePattern(index + 1)} value={item.pattern} maxLength={200} spellCheck={false} className="mono"
             onChange={(event) => set('patterns', values.patterns.map((entry, at) => (at === index ? { ...entry, pattern: event.target.value } : entry)))} />
