@@ -47,7 +47,7 @@ sessions and tokens, and reporting a problem.
 
 ## Roles
 
-**Settings → Members → Roles** lists the workspace's roles, how many permissions each holds and who holds it.
+**Settings → Members → Advanced** lists the workspace's roles, how many permissions each holds and who holds it.
 Every workspace has two built-in roles:
 
 - **Admin** holds every permission, including ones added in later releases. It cannot be renamed,
@@ -86,7 +86,7 @@ team list appear only with their `:read` permission. **Settings** shows only the
 
 ## Give people roles
 
-In **Settings → Members → Team**, each person shows their roles. **Change roles** opens the list of roles:
+In **Settings → Members → People**, each person shows their roles. **Change roles** opens the list of roles:
 tick the ones they should hold and choose **Apply**. Everyone needs at least one role. An invite
 carries roles too: pick them in **Settings → Members → Invites** (Agent is selected); the person gets them when
 they join, added to any roles they already hold. See [Invite your team](invites.md) and
@@ -111,7 +111,7 @@ These hold for people and tokens alike:
 
 ## AI agent tokens
 
-Create a token in **Settings → AI & agents → External AI agents**. Creating a token is something only a person
+Create a token in **Settings → AI & agents → External agents**. Creating a token is something only a person
 does there; an AI agent cannot create one. Under **Access**, choose one of:
 
 - **Follow a role**: pick any role whose permissions you all hold: your own roles, a narrower one,
@@ -122,7 +122,7 @@ does there; an AI agent cannot create one. Under **Access**, choose one of:
   list is fixed when you create the token.
 
 Either way, a token never does more than you can do right now: if you lose a permission, every token
-of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → AI & agents → External AI agents**
+of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → AI & agents → External agents**
 shows each token as "Follows role …", "Fixed · N permissions", or "Stopped" with the reason. Revoke a
 token there. More about tokens: [Sessions and devices](sessions.md#agent-tokens).
 

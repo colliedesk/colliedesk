@@ -6,7 +6,7 @@ carries Claude's requests to your Colliedesk; the token is kept by Claude Deskto
 
 ## Before you start
 
-1. Sign in to Colliedesk and open **Settings → AI & agents → External AI agents**.
+1. Sign in to Colliedesk and open **Settings → AI & agents → External agents**.
 2. Name the token (for example "Claude Desktop on my laptop"), choose what it may do (follow a role,
    or pick permissions; leaving out sending to customers is a good start) and choose **Create token**.
    See [Agent tokens](sessions.md#agent-tokens).
@@ -115,7 +115,7 @@ Every tool and what it needs: [Connect an AI agent (MCP)](mcp.md#tools).
 ## Remove it
 
 In Claude Desktop, **Settings → Extensions**, remove Colliedesk. Without the extension, delete
-the `colliedesk` entry from the host's configuration and `~/.colliedesk-token`. Then revoke the token in **Settings → AI & agents → External AI agents** (its **⋯** menu, **Revoke**): it stops working at once, wherever it was
+the `colliedesk` entry from the host's configuration and `~/.colliedesk-token`. Then revoke the token in **Settings → AI & agents → External agents** (its **⋯** menu, **Revoke**): it stops working at once, wherever it was
 copied.
 
 ## Other hosts

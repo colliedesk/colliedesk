@@ -1,12 +1,11 @@
 # Sessions and devices
 
-**Settings → Account → Sessions** lists every browser or client signed in to your account, with when it
-was last used. A browser is named by its browser and system, for example **Chrome on Linux**; the
+**Settings → Account → Sessions** lists every browser or client signed in to your account now, with when it
+was last used. A session that ended (revoked, or ran out) is not listed. A browser is named by its browser and system, for example **Chrome on Linux**; the
 browser you are using is marked **This device**. This applies to pairing links and cloud sign-in alike;
 a client that sends no browser name shows **Browser session** or **Cloud sign-in**.
 
-- Select **Revoke** to sign a device out immediately. The device stays in the list as **Revoked**;
-  a session that ran out shows **Expired**.
+- Select **Revoke** to sign a device out immediately. It leaves the list, and its next request is refused.
 - On **This device** the button reads **Sign out**: it signs this browser out at once.
 - To sign out of the browser you are using, you can also select your name at the foot of the sidebar (your
   avatar, top right on a phone) and choose **Sign out**. The menu shows your name and roles; the workspace and
@@ -54,7 +53,7 @@ name>" in the conversation.
 ## Agent tokens
 
 An agent token lets an AI agent, such as Claude Code, Codex or a script, work your inbox as you,
-with the permissions you choose. It is a session with a label. **Settings → AI & agents → External AI agents**
+with the permissions you choose. It is a session with a label. **Settings → AI & agents → External agents**
 lists your tokens under **Agent tokens**, apart from your browser sessions (in Account): each row has the token's
 name and person, what it may do, **Last used** (when an agent last called with it) and **Expires** (the date it
 stops working). **Sessions**, further down the same page, lists them too. Someone with `team:revoke` sees and
@@ -65,7 +64,7 @@ To revoke a token, open the **⋯** menu at the end of its row and choose **Revo
 its next call, and notes and replies it wrote keep showing "by <your name> via <token label>". A revoked
 token cannot be brought back; its row then reads **Revoked** and has no actions.
 
-Create a token in **Settings → AI & agents → External AI agents**: choose **Create token** (it needs
+Create a token in **Settings → AI & agents → External agents**: choose **Create token** (it needs
 `team:create_tokens`, which the Agent and Admin roles hold). In the dialog, give it a name you will recognise in
 the list (1 to 80 characters, for
 example **Claude Code on my laptop**), then under **Access** choose one of:
@@ -120,7 +119,7 @@ it. A call without the permission it needs is refused with HTTP 403 `permission_
 permission and whether the token or you lack it
 ([details](roles-and-permissions.md#when-a-permission-is-missing)). A reply the token may not send
 can be left as a draft above the reply box (`ai_assist:create`) for a person to send. When an agent
-token revokes a session, the session list shows it as **Revoked** and the server log names the
+token revokes a session, the session leaves the list (the API lists it as revoked) and the server log names the
 token that did it.
 
 A token starts with `cdk_agent_` so that secret scanners recognise it if it ends up in a file by

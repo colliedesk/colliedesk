@@ -122,7 +122,7 @@ and reply targets steps the buttons stay pinned at the bottom of the screen, and
   (to read the AI settings), reply targets `workspace:update`, inviting `team:invite` and `team:read` (to list the invites and the roles), as in
   Settings. **Revoke** on a pending invite needs `team:revoke`.
   Answering the first email is everyone's step.
-- To hide Quick start for you only, open **Settings → Preferences** and turn off **Show the setup guide**; turn
+- To hide Quick start for you only, open **Settings → Account → Preferences** and turn off **Show the setup guide**; turn
   it on to bring it back (with **Try more**, if this browser skipped it). Other team members keep their own choice.
 
 Quick start refreshes when the inbox changes; it does not poll on its own.

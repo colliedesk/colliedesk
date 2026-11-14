@@ -13,14 +13,22 @@ change it. Customers see the workspace name in one place: it is the title of you
 **Settings** has one page per item of its menu, each at its own address. The menu shows only the pages
 you can use:
 
-- **Account** (`/settings/account`): your profile and timezone, your preferences, where you are signed
-  in, and the AI apps you connected.
+- **Account** (`/settings/account`): your profile and timezone, your preferences, the browsers you
+  are signed in on now (a session that ended is not listed), and the AI apps you connected.
 - **General** (`/settings/general`): the workspace name and timezone, and conversation numbers.
-- **Members** (`/settings/members`): the team, invites and roles.
-- **Channels**, **Response targets**, **AI & agents** (the built-in AI, agent tokens and their
-  sessions) and **Saved replies**.
+- **Members** (`/settings/members`): four tabs, kept in the address (`?tab=people`, `invites`,
+  `groups`, `advanced`). **People** is the team, **Invites** the invites that add people, **Groups**
+  is reserved (marked **Coming**), and **Advanced** holds the roles. New workspaces start with two
+  roles, Admin and Agent; custom roles are under **Advanced**.
+- **Channels** (`/settings/channels`): a dot after its name means a channel needs attention. Each
+  channel type, such as Email, opens from the Channels page, not from the menu.
+- **Response targets**, **Saved replies**.
+- **AI & agents** (`/settings/ai`): two tabs, **Built-in AI** and **External agents**
+  (`?tab=built-in`, `external`). Agent tokens are on **External agents**.
+- **Conversation fields** (`/settings/fields`): reserved, marked **Coming**. The page says what is
+  coming.
 - **Data** (`/settings/data`): import from Freshdesk and export all data.
-- **Plan and billing**, on Colliedesk Cloud.
+- **Plan and billing**, on Colliedesk Cloud. A dot after its name means the last payment failed.
 
 While you are in Settings, its menu takes the place of the sidebar, under **Back to app**. The sheet shows
 the page alone. **Back to app** returns to the page you were on before Settings: the conversation you
@@ -31,9 +39,14 @@ resize it, or fold it: folded, it keeps **Back to app** as an arrow, and the men
 open it again.
 
 The help center's settings are in the knowledge base, under **Knowledge base → Settings**, which is not a
-Settings page and keeps the app's sidebar. An old link to a section of Settings, such as
-`/settings#invites-heading`, opens the page that holds it now. On a phone, **Settings** shows the menu;
-open a page from it, and **‹ Settings** above its title goes back.
+Settings page and keeps the app's sidebar. An old link keeps working and opens the page, tab or section
+that holds the content now: `/settings/profile`, `/settings/preferences` and `/settings/sessions` open
+Account; `/settings/numbers` opens General; `/settings/roles` and `/settings/members?tab=roles` open
+Members → Advanced; `/settings/agents` opens AI & agents → External agents; `/settings/import`,
+`/settings/export` and `/settings/import-freshdesk` open Data; `/settings/help-center` opens
+Knowledge base → Settings. So do links to a section of the old one-page Settings, such as
+`/settings#invites-heading`. On a phone, **Settings** shows the menu; open a page from it, and
+**‹ Settings** above its title goes back.
 
 ## Rename the workspace
 

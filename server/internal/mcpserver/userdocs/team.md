@@ -1,6 +1,6 @@
 # Manage your team
 
-**Settings → Members → Team** lists everyone who can sign in to the workspace: name, email, roles, whether
+**Settings → Members → People** lists everyone who can sign in to the workspace: name, email, roles, whether
 they are **Active** or **Deactivated**, and when they were last active. Seeing the list needs
 `team:read`. Renaming people, changing their roles, deactivating and reactivating them needs
 `team:manage_roles` (the Admin role has it); without it the list is read-only. To add someone, see
