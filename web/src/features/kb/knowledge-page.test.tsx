@@ -69,11 +69,30 @@ test('a workspace without collections is asked for one first, and the new one op
   expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ name: 'Billing', parent_id: null });
 });
 
+test('with no collection yet, Cancel closes the new collection form and New collection opens and closes it again', async () => {
+  serve({ ...base, 'GET /api/v1/kb/collections': () => json(200, { items: [] }) });
+  open();
+  const form = await screen.findByRole('form', { name: 'New collection' });
+  const toggle = screen.getByRole('button', { name: 'New collection' });
+  fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByRole('form', { name: 'New collection' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Start with a collection/)).toBeInTheDocument();
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(toggle);
+  expect(screen.getByRole('form', { name: 'New collection' })).toBeInTheDocument();
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.click(toggle);
+  expect(screen.queryByRole('form', { name: 'New collection' })).not.toBeInTheDocument();
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+});
+
 test('a new collection is asked where it goes only once there is a collection to put it in', async () => {
   serve({ ...base, 'GET /api/v1/kb/collections': () => json(200, { items: [] }) });
   open();
   const first = await screen.findByRole('form', { name: 'New collection' });
   expect(within(first).queryByRole('combobox', { name: 'Inside' })).not.toBeInTheDocument();
+  // The form that opens on its own is the one New collection opens, so the button says it is open.
+  expect(screen.getByRole('button', { name: 'New collection' })).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('a new collection in a workspace with collections can go inside one of them', async () => {
