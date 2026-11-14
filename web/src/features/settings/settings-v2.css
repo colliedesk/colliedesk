@@ -170,3 +170,9 @@
 /* Links inside a sentence of a card (Roles: "Make a role", "Give to someone") get a 32px hit area without
    moving the line: vertical padding on an inline box does not change the line height (final review V11). */
 .settings-v2 :is(.roles-list, .settings-rows > .muted-copy, .role-form .muted-copy) a:not(.button) { padding-block: 9px; }
+
+/* A tab's panel (Members) holds its sections one under the other, as the page does without tabs. */
+.settings-v2 .settings-tab-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); min-width: 0; }
+/* The reserved places (Groups, Conversation fields) say what is coming in a card of text. */
+.coming-card .settings-body { display: grid; gap: var(--space-2); padding: var(--space-4); }
+.coming-card p { margin: 0; color: var(--text-2); }

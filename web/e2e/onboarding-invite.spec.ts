@@ -14,9 +14,10 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   const admin = await adminContext.newPage();
   await redeemLink(admin, createWorkspace(`Invite Desk ${suffix}`, adminEmail));
 
-  // Settings opens Account; invites are on Members, one page per item of the settings menu.
+  // Settings opens Account; invites are on Members, in the Invites tab.
   await admin.getByRole('link', { name: 'Settings' }).click();
   await admin.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Members' }).click();
+  await admin.getByRole('tab', { name: /^Invites/ }).click();
   await admin.getByLabel('Invite email').fill(teammateEmail);
   // An invite gives the Agent role unless the admin picks other roles.
   await expect(admin.getByRole('button', { name: 'Roles: Agent' })).toBeVisible();
@@ -78,8 +79,7 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   const teammateSession = sessions.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() });
   await expect(teammateSession).toHaveCount(1);
   await teammateSession.getByRole('button', { name: 'Revoke' }).click();
-  await expect(teammateSession).toContainText('Revoked');
-  await expect(teammateSession.getByRole('button', { name: 'Revoke' })).toHaveCount(0);
+  await expect(teammateSession).toHaveCount(0);
 
   expect((await teammate.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(401);
   // Still on the page, the teammate keeps working: the first refused request signs the app out.
@@ -106,7 +106,8 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   await expect(teammateRow).toContainText('Active');
   await expect(teammateRow).not.toContainText('Deactivated');
 
-  // An unused invite can be revoked; its link then signs nobody in.
+  // An unused invite can be revoked; its link then signs nobody in. Invites are their own tab.
+  await admin.getByRole('tab', { name: /^Invites/ }).click();
   await admin.getByLabel('Invite email').fill(`late-${suffix}@example.com`);
   await admin.getByRole('button', { name: 'Create invite' }).click();
   const lateURL = await admin.getByRole('textbox', { name: 'One-time invite link' }).inputValue();

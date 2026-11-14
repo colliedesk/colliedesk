@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { AIModelsInput, AIProviderInput, AISettings, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
+import type { AIView } from './settings-anchors';
 import type { Shown } from './settings-nav';
 
 export type AITab = 'features' | 'providers' | 'chat' | 'usage' | 'history';
@@ -47,6 +48,9 @@ export interface AIPageProps {
   // builtIn is false for a person whose roles may not read the AI settings (ai_settings:read): the page then
   // holds the AI agents alone.
   builtIn?: boolean;
-  // agents are the sections for AI agents working through a token, below the built-in AI.
+  // agents are the sections for AI agents working through a token: the External agents view, beside the built-in AI.
   agents?: ReactNode;
+  // The view open (the address's ?tab=) and the way to change it.
+  view?: AIView;
+  onView?: (view: AIView) => void;
 }

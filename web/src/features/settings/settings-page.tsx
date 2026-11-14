@@ -11,6 +11,8 @@ import type { SaveState } from './save-feedback';
 import { ConnectedAppsSection } from './connected-apps-section';
 import { SessionsSection } from './sessions-section';
 import { SettingsFrame } from './settings-frame';
+import { MembersTabs } from './members-tabs';
+import type { MembersTab } from './settings-anchors';
 import { TimezoneSelect } from './timezone-select';
 
 // The settings pages drawn here; AI & agents, Data and the others are pages of their own modules.
@@ -70,6 +72,10 @@ interface SettingsPageProps {
   mcpAddress?: string;
   // showBilling adds Plan and billing to the menu; only admins of a billed (cloud) workspace see it.
   showBilling?: boolean;
+  // Members: the tab open, the way to change it, and what the tabs count.
+  membersTab?: MembersTab;
+  onMembersTab?: (tab: MembersTab) => void;
+  memberCounts?: { people?: number; invites?: number };
 }
 
 const titles: Record<SettingsPageName, string> = { account: messages.account, general: messages.general, members: messages.members, 'saved-replies': messages.savedReplies };
@@ -88,12 +94,11 @@ export function SettingsPage(props: SettingsPageProps) {
         {canManageWorkspace && <GeneralSection {...props} />}
         {numbersSection}
       </>}
-      {page === 'members' && <>
-        {teamSection}
-        {showInvites && <InvitesSection invites={props.invites ?? []} timezone={timezone} canCreateInvites={props.canCreateInvites ?? false} canRevokeInvites={props.canRevokeInvites} createdInvite={props.createdInvite}
+      {page === 'members' && <MembersTabs tab={props.membersTab ?? 'people'} onTab={(tab) => props.onMembersTab?.(tab)} counts={props.memberCounts ?? {}}
+        people={<>{teamSection}{teamSection && <p className="muted-copy">{props.inviteRoles?.length === 2 ? settingsMessages.defaultRolesNote : settingsMessages.customRolesNote}</p>}</>}
+        invites={showInvites && <InvitesSection invites={props.invites ?? []} timezone={timezone} canCreateInvites={props.canCreateInvites ?? false} canRevokeInvites={props.canRevokeInvites} createdInvite={props.createdInvite}
           creatingInvite={props.creatingInvite} inviteError={props.inviteError} roles={props.inviteRoles} onCreateInvite={props.onCreateInvite} onRevokeInvite={props.onRevokeInvite} />}
-        {props.rolesSection}
-      </>}
+        advanced={props.rolesSection} />}
       {page === 'saved-replies' && savedRepliesSection}
     </SettingsFrame>
   );

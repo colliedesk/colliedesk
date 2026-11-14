@@ -1,3 +1,5 @@
+import { conversationFieldsTitle } from './settings-anchors';
+
 // Strings of the Settings sections other than the help center; they load with the Settings chunk, not with the first screen.
 export const settingsMessages = {
   notificationsLabel: 'Desktop notifications for new, assigned and customer-replied conversations',
@@ -21,6 +23,25 @@ export const settingsMessages = {
   showWholeText: 'Show all',
   showLessText: 'Show less',
   confirmDelete: 'Delete',
+  conversationFields: conversationFieldsTitle,
+  fieldsLead: 'Extra details on every conversation, like order number.',
+  fieldsComingTitle: 'Coming — imported from Freshdesk ticket fields',
+  fieldsComingBody: 'When this ships, the Freshdesk import brings your ticket fields across as conversation fields, with their values on old conversations. Until then, tags carry that detail.',
+  groupsComingTitle: 'Coming — groups imported from Freshdesk',
+  groupsComingBody: 'When this ships, you can put people in groups such as Billing or Technical, and the Freshdesk import brings your groups across. Until then, tags carry that detail.',
+  followProgress: 'Follow progress',
+  tabBuiltIn: 'Built-in AI',
+  tabExternal: 'External agents',
+  membersTabs: 'Members',
+  tabPeople: 'People',
+  tabInvites: 'Invites',
+  tabGroups: 'Groups',
+  tabAdvanced: 'Advanced',
+  defaultRolesNote: 'Everyone is an Admin or an Agent. Custom roles: Advanced.',
+  customRolesNote: 'Custom roles are under Advanced.',
+  coming: 'Coming',
+  navChannelProblem: 'A channel needs attention',
+  navPaymentFailed: 'The last payment failed',
   // One line under each page's title: what the page holds.
   pageLeads: {
     account: 'Your name, how Colliedesk works for you, and where you are signed in.',

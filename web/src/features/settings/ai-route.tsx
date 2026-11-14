@@ -6,6 +6,7 @@ import { aiApi } from '../../api/ai';
 import type { AIProviderInput, AISettings, AISlotInput, AISlotName } from '../../api/ai';
 import { aiMessages as m } from './ai-messages';
 import { AIPage } from './ai-page';
+import type { AIView } from './settings-anchors';
 import type { FieldError } from './ai-page';
 import { useCreateAction } from '../../api/use-create';
 import { AIChatSettingsRoute } from './ai-chat-route';
@@ -54,19 +55,22 @@ const neverSet = (settings?: AISettings) => Boolean(settings?.server) && Boolean
 
 // AIRoute is Settings → Built-in AI and a chat's transcript below it: path is what follows /settings/ai
 // ("chats/<id>", or "conversations/<id>/chat": the chat that handed off to a conversation).
-export function AIRoute({ path = '' }: { path?: string } = {}) {
+// tab is the address's ?tab=: built-in or external, the two views of the page; chat opens the built-in AI's chat tab,
+// where a transcript goes back to.
+export type AIRouteTab = 'built-in' | 'external' | 'chat';
+
+export function AIRoute({ path = '', tab }: { path?: string; tab?: AIRouteTab } = {}) {
   const navigate = useNavigate();
   const go = useCallback((href: string) => void navigate({ href }), [navigate]);
-  // tab=chat opens the AI chat tab, where a transcript goes back to.
-  const tab = new URLSearchParams(window.location.search).get('tab') === 'chat' ? 'chat' : undefined;
   const chat = /^chats\/([^/]+)$/.exec(path)?.[1];
   if (chat) return <AIChatSettingsRoute id={decodeURIComponent(chat)} navigate={go} />;
   const conversation = /^conversations\/([^/]+)\/chat$/.exec(path)?.[1];
   if (conversation) return <AIChatSettingsRoute conversation={decodeURIComponent(conversation)} navigate={go} />;
-  return <AISettingsRoute tab={tab} onOpenChat={(id) => go(`/settings/ai/chats/${encodeURIComponent(id)}`)} />;
+  return <AISettingsRoute tab={tab === 'chat' ? 'chat' : undefined} view={tab === 'external' ? 'external' : 'built-in'} onView={(next) => go(`/settings/ai?tab=${next}`)}
+    onOpenChat={(id) => go(`/settings/ai/chats/${encodeURIComponent(id)}`)} />;
 }
 
-function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: string) => void }) {
+function AISettingsRoute({ tab, view, onView, onOpenChat }: { tab?: 'chat'; view: AIView; onView: (view: AIView) => void; onOpenChat: (id: string) => void }) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   // A person whose roles may not read the AI settings sees the AI agents alone and is asked for nothing else.
@@ -121,7 +125,7 @@ function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: s
   return <AIPage chatChannels={chatChannels} isAdmin={isAdmin} workspaceName={me.data.workspace.name} timezone={me.data.timezone ?? 'UTC'}
     shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
       billing: billingShown, importData: isAdmin, ai: true }}
-    builtIn={readsAI} agents={<AIAgentsSections />}
+    builtIn={readsAI} agents={<AIAgentsSections />} view={view} onView={onView}
     settings={settings.data} loadFailed={settings.isError} showConsent={!dismissed && neverSet(settings.data)}
     busySlot={busySlot} busyProvider={busyProvider} error={error}
     onSetSlot={(name, input) => { consent.reset(); check.reset(); slot.mutate({ name, input }); }}

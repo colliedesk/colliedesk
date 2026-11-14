@@ -26,7 +26,7 @@ export function RolesRoute({ page }: { page: RolesPage }) {
   const billingShown = useBillingShown(can(me.data, 'billing:read'));
   return <SettingsFrame page="/settings/roles" title={m.heading} shown={{ ...everyPage, billing: billingShown }} className="roles-page">
     <RoleForm key={page.kind === 'edit' ? page.id : `new-${page.from ?? ''}`} page={page}
-      onDone={(status) => { carryRoleStatus(status); void navigate({ to: '/settings/members', hash: 'roles-heading' }); }} />
+      onDone={(status) => { carryRoleStatus(status); void navigate({ to: '/settings/members', search: { tab: 'advanced' }, hash: 'roles-heading' }); }} />
   </SettingsFrame>;
 }
 
@@ -103,7 +103,7 @@ function RoleForm({ page, onDone }: { page: RolesPage; onDone: (status: RolesSta
   if (editing && role.isPending) return <section className="settings-card" aria-busy="true"><div className="roles-loading">{[0, 1, 2, 3].map((row) => <span key={row} className="roles-skeleton" />)}</div></section>;
   if (editing && role.isError) {
     return <section className="settings-card"><div className="settings-body" role="alert"><p>{m.deletedWhileOpen}</p>
-      <span className="button-row"><a className="button" href="/settings/members#roles-heading">{m.backToRoles}</a></span></div></section>;
+      <span className="button-row"><a className="button" href="/settings/members?tab=advanced#roles-heading">{m.backToRoles}</a></span></div></section>;
   }
   const save = () => {
     setProblem(undefined);
@@ -142,7 +142,7 @@ function RoleForm({ page, onDone }: { page: RolesPage; onDone: (status: RolesSta
         </select></label>}
       {original && inUse && <p className="muted-copy">
         {original.members.length > 0 && <>{m.heldByLabel} <LinkedNames names={original.members.map((item) => item.name)} href="/settings/members#team-heading" />. </>}
-        {original.tokens.length > 0 && <>{m.followedByLabel(original.tokens.length)} <LinkedNames names={original.tokens.map((item) => `${item.label} (${item.owner})`)} href="/settings/ai#agent-tokens-heading" />.</>}
+        {original.tokens.length > 0 && <>{m.followedByLabel(original.tokens.length)} <LinkedNames names={original.tokens.map((item) => `${item.label} (${item.owner})`)} href="/settings/ai?tab=external#agent-tokens-heading" />.</>}
       </p>}
       {original?.system === 'agent' && <p className="notice notice-plain"><span>{m.agentBuiltIn(original.members.length)}</span></p>}
       <fieldset className="role-permissions"><legend>{m.permissions}</legend>
@@ -165,7 +165,7 @@ function RoleForm({ page, onDone }: { page: RolesPage; onDone: (status: RolesSta
           <button ref={saveButton} type="submit" className="primary-action" disabled={busy} aria-describedby={confirming ? 'role-confirm' : undefined}>{busy ? m.saving : confirming ? m.saveAndApply : m.save}</button>
           {confirming && <button type="button" onClick={() => setConfirming(false)}>{m.backToEditing}</button>}
           {original?.system === 'agent' && <button type="button" disabled={busy} onClick={resetToDefault}>{m.resetDefault}</button>}
-          <a className="button" href="/settings/members#roles-heading">{m.cancel}</a>
+          <a className="button" href="/settings/members?tab=advanced#roles-heading">{m.cancel}</a>
         </span>
       </div>}
       {original && original.system === null && !readOnly && <div className="role-delete">
@@ -176,7 +176,7 @@ function RoleForm({ page, onDone }: { page: RolesPage; onDone: (status: RolesSta
                 <button type="button" className="danger-action" disabled={busy} onClick={() => remove.mutate()}>{m.confirm}</button></span></div>
             : <button type="button" className="danger-action" onClick={() => setDeleting(true)}>{m.deleteRole}</button>
           : <p className="muted-copy">{m.inUse(original.members.length, original.invites, original.tokens.length)}{' '}
-              <a href="/settings/members#team-heading">Team</a> · <a href="/settings/members#invites-heading">Invites</a> · <a href="/settings/ai#agent-tokens-heading">Tokens</a></p>}
+              <a href="/settings/members#team-heading">Team</a> · <a href="/settings/members?tab=invites#invites-heading">Invites</a> · <a href="/settings/ai?tab=external#agent-tokens-heading">Tokens</a></p>}
       </div>}
     </form>
   </section>;

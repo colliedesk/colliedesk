@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import './controls.css';
 
-export interface TabItem<T extends string> { id: T; label: string; count?: number }
+export interface TabItem<T extends string> { id: T; label: string; count?: number | string }
 
 // tabID and panelID name a tab and its panel, so a page's panel can point back at its tab.
 export const tabID = (prefix: string, id: string) => `${prefix}-${id}`;

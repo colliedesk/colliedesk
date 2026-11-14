@@ -11,8 +11,10 @@ test('every old anchor of the one Settings page opens the page that now holds it
   expect(opened('#connected-apps-heading')).toBe('/settings/account#connected-apps-heading');
   expect(opened('#general-heading')).toBe('/settings/general#general-heading');
   expect(opened('#team-heading')).toBe('/settings/members#team-heading');
-  expect(opened('#invites-heading')).toBe('/settings/members#invites-heading');
-  expect(opened('#agents-heading')).toBe('/settings/ai#agents-heading');
+  expect(opened('#invites-heading')).toBe('/settings/members?tab=invites#invites-heading');
+  expect(opened('#roles-heading')).toBe('/settings/members?tab=advanced#roles-heading');
+  expect(opened('#agents-heading')).toBe('/settings/ai?tab=external#agents-heading');
+  expect(opened('#agent-tokens-heading')).toBe('/settings/ai?tab=external#agent-tokens-heading');
   expect(opened('#saved-replies-heading')).toBe('/settings/saved-replies#saved-replies-heading');
   expect(opened('#export-heading')).toBe('/settings/data#export-heading');
   expect(opened('#help-center-heading')).toBe('/knowledge/settings#help-center-heading');
@@ -21,7 +23,7 @@ test('every old anchor of the one Settings page opens the page that now holds it
 });
 
 test('the anchor may come without its #, as the router gives it', () => {
-  expect(settingsAddress('invites-heading', '')).toBe('/settings/members#invites-heading');
+  expect(settingsAddress('invites-heading', '')).toBe('/settings/members?tab=invites#invites-heading');
 });
 
 test('Settings without a known anchor opens Account', () => {

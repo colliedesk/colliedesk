@@ -86,7 +86,7 @@ test.describe('on a 390 px phone', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Members' })).toBeVisible();
     // The menu is not on this page: focus goes to the page's title instead of the top of the document.
     await expect(page.getByRole('heading', { level: 1, name: 'Members' })).toBeFocused();
-    await expect(page.getByRole('region', { name: 'Invites' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Team' })).toBeVisible();
     await expect(menu).toBeHidden();
     expect(await noSidewaysScroll(page), 'Members fits the phone').toBe(true);
 

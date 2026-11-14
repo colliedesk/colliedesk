@@ -22,8 +22,9 @@ import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signIn
 import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-intent';
 import { rememberSignupAttribution } from './lib/signup-attribution';
 import type { PlanIntent } from './features/settings/plan-intent';
-import { SettingsNavLinkContext } from './features/settings/settings-nav';
-import { settingsAddress } from './features/settings/settings-anchors';
+import { NavItemContent, SettingsNavLinkContext } from './features/settings/settings-nav';
+import { aiViews, conversationFieldsTitle, membersTabOf, movedPages, settingsAddress } from './features/settings/settings-anchors';
+import type { MembersTab } from './features/settings/settings-anchors';
 import type { NavItem } from './features/settings/settings-nav';
 import type { ReactNode } from 'react';
 import { AppShell } from './features/shell/app-shell';
@@ -230,7 +231,7 @@ function AppLayout() {
 function settingsRouterLink(item: NavItem) {
   // /settings/channels, the type homes under it and /settings/ai are routes with a splat, paths the route types do not list.
   return <Link to={item.to as Exclude<NavItem['to'], `/settings/channels${string}` | '/settings/ai'>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
-    aria-current={item.current ? 'page' : undefined}>{item.label}</Link>;
+    aria-current={item.current ? 'page' : undefined}><NavItemContent item={item} /></Link>;
 }
 
 // An unknown address inside the app says so and offers the way back, in the frame of every other page.
@@ -380,8 +381,25 @@ const accountRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sett
   component: () => <SettingsChunkPage title={messages.account} render={({ AccountRoute }) => <AccountRoute />} /> });
 const generalRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/general', loader: pageChunk(settingsRoutePart),
   component: () => <SettingsChunkPage title={messages.general} render={({ GeneralRoute }) => <GeneralRoute />} /> });
+// Members has four tabs, named in the address. 'roles' is what Advanced was called: it, and an old anchor to a section
+// that now sits on a tab, open that tab.
+type MembersSearch = { tab?: MembersTab | 'roles' };
+const sectionTab: Record<string, MembersTab> = { 'invites-heading': 'invites', 'roles-heading': 'advanced' };
 const membersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/members', loader: pageChunk(settingsRoutePart),
-  component: () => <SettingsChunkPage title={messages.members} render={({ MembersRoute }) => <MembersRoute />} /> });
+  validateSearch: (search: Record<string, unknown>): MembersSearch => (search.tab === 'roles' ? { tab: 'roles' } : membersTabOf(search.tab) ? { tab: membersTabOf(search.tab) } : {}),
+  beforeLoad: ({ search, location }) => {
+    const tab = search.tab === 'roles' ? 'advanced' : search.tab ?? sectionTab[location.hash.replace(/^#/, '')];
+    if (tab && tab !== search.tab) throw redirect({ to: '/settings/members', search: { tab }, hash: location.hash, replace: true });
+  },
+  component: function Members() {
+    const { tab } = membersRoute.useSearch();
+    const navigate = useNavigate();
+    return <SettingsChunkPage title={messages.members} render={({ MembersRoute }) =>
+      <MembersRoute tab={tab === 'roles' ? 'advanced' : tab} onTab={(next) => void navigate({ to: '/settings/members', search: { tab: next }, replace: true })} />} />;
+  } });
+// Reserved: the menu holds the place of Conversation fields, and the page says what is coming.
+const fieldsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/fields', loader: pageChunk(settingsRoutePart),
+  component: () => <SettingsChunkPage title={conversationFieldsTitle} render={({ FieldsRoute }) => <FieldsRoute />} /> });
 const savedRepliesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/saved-replies', loader: pageChunk(settingsRoutePart),
   component: () => <SettingsChunkPage title={messages.savedReplies} render={({ SavedRepliesRoute }) => <SavedRepliesRoute />} /> });
 // Agent requests were removed: an agent token acts at once when it holds the permission. An old bookmark opens the inbox.
@@ -454,13 +472,9 @@ const dataRoute = createRoute({
   loader: pageChunk(dataRoutePart),
   component: () => <Part part={dataRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ DataRoute }) => <DataRoute />} />,
 });
-const importRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/import-freshdesk',
-  beforeLoad: () => { throw redirect({ to: '/settings/data', replace: true }); } });
 // Settings → Members → a role: a new role (optionally from another) and one role. The list of roles is a
 // section of Members; its old address opens it there.
 const rolesFailed = <main className="settings-page"><PartUnavailable /></main>;
-const rolesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles',
-  beforeLoad: () => { throw redirect({ to: '/settings/members', hash: 'roles-heading', replace: true }); } });
 const newRoleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/roles/new', loader: pageChunk(rolesRoutePart),
   validateSearch: (search: Record<string, unknown>): { from?: string } => (typeof search.from === 'string' ? { from: search.from } : {}),
   component: function NewRole() {
@@ -472,9 +486,12 @@ const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setting
     const { roleId } = roleRoute.useParams();
     return <Part part={rolesRoutePart} failed={rolesFailed} render={({ RolesRoute }) => <RolesRoute page={{ kind: 'edit', id: roleId }} />} />;
   } });
-// Conversation numbers were a page of their own; they are a section of General now.
-const numbersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/numbers',
-  beforeLoad: () => { throw redirect({ to: '/settings/general', hash: 'numbers-heading', replace: true }); } });
+// Pages the menu merged into others keep their addresses: each opens the page, section or tab that holds its content
+// now (movedPages in settings-anchors.ts). The path is typed per route, so the router still knows every address.
+const moved = <P extends string>(path: P) => createRoute({ getParentRoute: () => rootRoute, path,
+  beforeLoad: () => { throw redirect({ href: movedPages[path], replace: true }); } });
+const movedRoutes = [moved('/settings/profile'), moved('/settings/preferences'), moved('/settings/sessions'), moved('/settings/numbers'), moved('/settings/roles'),
+  moved('/settings/agents'), moved('/settings/import'), moved('/settings/export'), moved('/settings/import-freshdesk'), moved('/settings/help-center')];
 // Settings → Response targets: business hours and the targets of each priority.
 const targetsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -485,12 +502,21 @@ const targetsRoute = createRoute({
   },
 });
 // Settings → Built-in AI, with a chat's transcript below it (/settings/ai/chats/<id>): the chunk reads its path.
+// ?tab= names the view: Built-in AI or External agents ('chat' is the built-in AI's chat tab, which a transcript goes back to).
+// An old anchor to the agent tokens opens External agents.
+type AISearch = { tab?: 'built-in' | 'external' | 'chat' };
+const agentAnchors = new Set(['agents-heading', 'agent-tokens-heading']);
 const aiRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/settings/ai/$', loader: pageChunk(aiRoutePart),
+  validateSearch: (search: Record<string, unknown>): AISearch => (search.tab === 'chat' ? { tab: 'chat' } : aiViews.find((view) => view === search.tab) ? { tab: search.tab as AISearch['tab'] } : {}),
+  beforeLoad: ({ search, location }) => {
+    if (!search.tab && agentAnchors.has(location.hash.replace(/^#/, ''))) throw redirect({ href: `/settings/ai?tab=external#${location.hash}`, replace: true });
+  },
   component: function AISettings() {
     // The path is read here, not in render: the part calls render only once its chunk has loaded.
     const path = aiRoute.useParams()._splat ?? '';
-    return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute path={path} />} />;
+    const { tab } = aiRoute.useSearch();
+    return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute path={path} tab={tab} />} />;
   },
 });
 // Settings → Channels is its own chunk; one component reads the rest of the address (channels-route.tsx).
@@ -618,7 +644,7 @@ const trialOfferRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, importRoute, rolesRoute, newRoleRoute, roleRoute, numbersRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 // Every router Link loads its page ahead when the pointer or the focus reaches it (plain links: lib/in-app-links.ts).
 export const router = createRouter({ routeTree, context: {}, defaultPreload: 'intent' });
 

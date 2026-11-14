@@ -17,6 +17,7 @@ import { History } from './ai-history-panel';
 import { AddDialog, DeleteDialog, KeyDialog } from './ai-provider-dialogs';
 import { AutomaticDialog } from './ai-automatic-dialog';
 import type { AIPageProps, AITab } from './ai-page-props';
+import { settingsMessages } from './settings-messages';
 import './ai-settings.css';
 
 export { recentMonths };
@@ -45,7 +46,7 @@ export function AIPage(props: AIPageProps) {
   const setSlot = (slot: AISlotName, input: AISlotInput) => { focusAfterSave(slot); props.onSetSlot(slot, input); };
   const [tab, setTab] = useState<AITab>(props.initialTab ?? 'features');
   const [dialog, setDialog] = useState<{ kind: 'add' } | { kind: 'automatic' } | { kind: 'auto-triage' | 'auto-draft'; slot: AISlot } | { kind: 'key' | 'delete'; provider: AIProvider }>();
-  const ids = { tabs: useId() };
+  const ids = { tabs: useId(), views: useId() };
   const full = settings ? settings.providers.length >= settings.provider_limit : false;
   // With no provider at all the Features tab carries its own Add provider in a notice, so the tab row does not repeat it.
   const noProvider = Boolean(settings) && settings?.providers.length === 0 && !settings?.server;
@@ -56,15 +57,21 @@ export function AIPage(props: AIPageProps) {
   const [month, setMonth] = useState(() => recentMonths()[0]);
   const show = (next: AITab) => { setTab(next); if (next === 'usage') props.onUsageMonth(month); };
   const openAdd = () => { setTab('providers'); setDialog({ kind: 'add' }); };
+  // Two views: the built-in AI, and the agents that work through a token. A person who may not read the AI
+  // settings has the agents alone, and a page given no agents has the built-in AI alone: neither has a tab row.
+  const views = props.builtIn !== false && props.agents !== undefined;
+  const view = props.builtIn === false ? 'external' : props.view ?? 'built-in';
+  const viewTabs = [{ id: 'built-in' as const, label: settingsMessages.tabBuiltIn }, { id: 'external' as const, label: settingsMessages.tabExternal }];
   return (
     <main className="settings-page panel ai-settings">
       <header><h1>{messages.aiAndAgents}</h1><p>{m.pageLead}</p></header>
       <div className="settings-layout">
         <SettingsNav page="/settings/ai" shown={props.shown} />
         <div className="settings-sections ai-page">
-          {props.builtIn !== false && <div className="section-heading ai-intro"><div className="heading-with-tip"><h2>{m.heading}</h2><HelpTip label={m.heading} text={m.description} /></div><p>{m.lead}</p></div>}
-          {props.loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
-          {props.builtIn === false ? null : !settings ? (!props.loadFailed && <div className="ai-loading" aria-busy="true" />) : <>
+          {views && <Tabs label={messages.aiAndAgents} variant="underline" tabs={viewTabs} value={view} onChange={(next) => props.onView?.(next)} prefix={ids.views} />}
+          {view === 'built-in' && props.builtIn !== false && <div className="section-heading ai-intro"><div className="heading-with-tip"><h2>{m.heading}</h2><HelpTip label={m.heading} text={m.description} /></div><p>{m.lead}</p></div>}
+          {view === 'built-in' && props.loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
+          {view === 'external' ? null : !settings ? (!props.loadFailed && <div className="ai-loading" aria-busy="true" />) : <>
             <div className="ai-tabs-row">
               <Tabs label={m.tabs} tabs={tabs} value={tab} onChange={show} prefix={ids.tabs} />
               {isAdmin && !(tab === 'features' && noProvider) && <button type="button" className="ai-add" aria-label={m.addProvider} onClick={openAdd} disabled={full}
@@ -82,7 +89,7 @@ export function AIPage(props: AIPageProps) {
               {tab === 'history' && <History events={settings.events} timezone={props.timezone} />}
             </div>
           </>}
-          {props.agents}
+          {view === 'external' && (views ? <div role="tabpanel" id={panelID(ids.views, view)} aria-labelledby={tabID(ids.views, view)}>{props.agents}</div> : props.agents)}
         </div>
       </div>
       {dialog?.kind === 'add' && settings && <AddDialog settings={settings} onClose={() => setDialog(undefined)} onAdd={props.onAdd} onListModels={props.onListModels} />}

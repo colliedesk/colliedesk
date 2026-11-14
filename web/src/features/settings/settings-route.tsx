@@ -13,6 +13,8 @@ import { settingsMessages } from './settings-messages';
 export { AccountRoute } from './account-route';
 export { GeneralRoute } from './general-route';
 export { MembersRoute } from './members-route';
+export { FieldsRoute } from './fields-route';
+export type { MembersTab } from './settings-anchors';
 export { SavedRepliesRoute } from './saved-replies-route';
 
 // SettingsIndexRoute is the menu itself as a page: /settings on a phone, where the menu and a page take
