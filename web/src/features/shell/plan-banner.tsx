@@ -4,7 +4,7 @@ import { formatBytes } from '../../lib/format-bytes';
 import { formatMonthDay } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
-import { ClockIcon, TriangleAlertIcon, XIcon } from '../../ui/icons';
+import { ArrowRightIcon, ClockIcon, TriangleAlertIcon, XIcon } from '../../ui/icons';
 import type { PlanIntent } from '../settings/plan-intent';
 import { closeTrialStrip, isTrialStripClosed, type TrialStripStage } from './trial-strip-closed';
 
@@ -69,7 +69,8 @@ export function PlanBanner({ plan, isAdmin, workspaceId, billing, timezone = 'UT
       </p>}
       {storageFull && <p role="status" className="plan-banner-warning"><TriangleAlertIcon />
         {messages.storageWarning(Math.floor((used / limit) * 100), formatBytes(used), formatBytes(limit))}</p>}
-      {isAdmin && onChoosePlan && <button type="button" onClick={onChoosePlan}>{planIntent === 'team25' ? messages.buyPlan(messages.plans.team25) : messages.choosePlan}</button>}
+      {isAdmin && onChoosePlan && <button type="button" className="plan-banner-action" onClick={onChoosePlan}>
+        {planIntent === 'team25' ? messages.buyPlan(messages.plans.team25) : messages.choosePlan}<ArrowRightIcon /></button>}
       {!closed && workspaceId !== undefined && <button type="button" className="icon-button plan-banner-close" aria-label={messages.hideTrialNotice}
         data-tip={messages.hideTrialNotice} onClick={close}><XIcon /></button>}
     </section>

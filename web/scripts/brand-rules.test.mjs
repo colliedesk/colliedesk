@@ -124,6 +124,17 @@ test('the trial strip is ink, and its warning mark reads on it', () => {
   expect(rule(css, '.plan-banner')).not.toMatch(amber);
 });
 
+// The strip is one 32 px line (owner 15/11/2026: the 44 px card with a white button was too big): the plan
+// choice is a text link with an arrow, and the close mark is a 24 px icon (44 px by touch).
+test('the trial strip is one slim line with a text action', () => {
+  const css = read('styles/components.css');
+  expect(rule(css, '.plan-banner')).toMatch(/min-height:\s*32px/);
+  const action = rule(css, '.plan-banner .plan-banner-action');
+  expect(action).toMatch(/background:\s*none/);
+  expect(action).toMatch(/text-decoration:\s*underline/);
+  expect(rule(css, '.plan-banner .plan-banner-close')).toMatch(/--control:\s*24px/);
+});
+
 // Rule 4: a box sits on a ring or a surface step, never a border and a ring at once.
 test('a panel sits on its ring, without a border', () => {
   expect(rule(read('styles/layout.css'), '.panel')).not.toMatch(/border:\s*1px/);

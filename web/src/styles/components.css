@@ -698,22 +698,27 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .icon-ok { color: var(--ok); }
 .icon-quiet { display: inline-flex; color: var(--text-3); }
 .plan-banner {
-  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-height: 44px;
-  margin: 0; border: 0; border-radius: var(--radius-lg); background: var(--surface-inverse); color: var(--text-inverse);
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4); font-size: var(--fs-small);
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-height: 32px;
+  margin: 0; border: 0; border-radius: var(--radius); background: var(--surface-inverse); color: var(--text-inverse);
+  padding: 0 var(--space-1) 0 var(--space-3); font-size: var(--fs-small);
 }
 /* The trial strip is ink (paper in dark), the one notice filled at rest, so it is not lost among the cards. */
 .plan-banner p { display: flex; align-items: center; gap: var(--space-2); min-width: 0; margin: 0; color: var(--text-inverse); }
-.plan-banner p strong { color: var(--text-inverse); font-weight: 600; }
+.plan-banner p strong { color: var(--text-inverse); font-weight: 500; }
+.plan-banner p .icon, .plan-banner p .icon-quiet svg { width: 14px; height: 14px; }
 .plan-banner p .icon { flex: none; }
 .plan-banner .icon-quiet { color: var(--text-inverse); }
 .plan-banner .icon-warn { color: color-mix(in srgb, var(--warn) 60%, var(--text-inverse)); }   /* 6.5:1 light, 5.0:1 dark */
-.plan-banner button:not(.plan-banner-close) { border-color: var(--surface-1); background: var(--surface-1); color: var(--text-1); }
-.plan-banner .plan-banner-close { color: var(--text-inverse); }
+.plan-banner .plan-banner-action { --control: 24px; gap: var(--space-1); padding: 0 var(--space-1); border: 0; background: none; box-shadow: none;
+  color: var(--text-inverse); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.plan-banner .plan-banner-action:hover:not(:disabled) { background: none; text-decoration-thickness: 2px; }
+.plan-banner .plan-banner-action svg { width: 14px; height: 14px; }
+.plan-banner .plan-banner-close { --control: 24px; color: var(--text-inverse); }
 .plan-banner .plan-banner-close:hover:not(:disabled) { color: var(--text-1); }
 .plan-banner .plan-banner-warning { flex-basis: 100%; order: 3; }
 .plan-banner button { margin-left: auto; }
-.plan-banner button + .plan-banner-close { margin-left: calc(-1 * var(--space-2)); }
+.plan-banner button + .plan-banner-close { margin-left: calc(-1 * var(--space-1)); }
+@media (pointer: coarse), (max-width: 44rem) { .plan-banner :is(.plan-banner-action, .plan-banner-close) { --control: var(--touch); } }
 
 .trial-survey {
   flex: none; display: grid; gap: var(--space-2); margin: 0; border: 1px solid var(--line);
@@ -745,7 +750,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .plan-banner { margin: var(--space-2) var(--space-2) 0; padding: var(--space-2) var(--space-3); }
   .plan-banner p { align-items: flex-start; }
   .plan-banner p .icon, .plan-banner p .icon-quiet { margin-top: 2px; }
-  .plan-banner button { margin-left: 0; --control: var(--touch); }
+  .plan-banner button { margin-left: 0; }
   .trial-survey { margin-right: var(--space-2); padding-inline: var(--space-3); }
   .trial-survey .button-row button { flex: 1 1 100%; --control: var(--touch); }
   .locked-screen { padding: var(--space-6) var(--space-4); }

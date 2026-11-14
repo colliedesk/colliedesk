@@ -144,3 +144,10 @@ test('Choose a plan is a plain button, never the filled primary action that woul
   render(<PlanBanner plan={trial} isAdmin timezone="UTC" now={at('2026-10-02T09:00:00Z')} onChoosePlan={vi.fn()} />);
   expect(screen.getByRole('button', { name: 'Choose a plan' })).not.toHaveClass('primary-action');
 });
+
+test('Choose a plan reads as a text link with an arrow that screen readers skip', () => {
+  render(<PlanBanner plan={trial} isAdmin timezone="UTC" now={at('2026-10-02T09:00:00Z')} onChoosePlan={vi.fn()} />);
+  const action = screen.getByRole('button', { name: 'Choose a plan' });
+  expect(action).toHaveClass('plan-banner-action');
+  expect(action.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+});
