@@ -24,7 +24,7 @@ test('on a wide screen the settings menu opens each page at its own address, and
   const menu = page.getByRole('navigation', { name: 'Settings sections' });
   for (const [label, path, title] of [['General', '/settings/general', 'General'], ['Members', '/settings/members', 'Members'], ['Channels', '/settings/channels', 'Channels'],
     ['Response targets', '/settings/targets', 'Response targets'], ['AI & agents', '/settings/ai', 'AI & agents'], ['Saved replies', '/settings/saved-replies', 'Saved replies'],
-    ['Data', '/settings/data', 'Data'], ['Account', '/settings/account', 'Account']]) {
+    ['Macros', '/settings/macros', 'Macros'], ['Data', '/settings/data', 'Data'], ['Account', '/settings/account', 'Account']]) {
     await menu.getByRole('link', { name: label, exact: true }).click();
     await expect(page).toHaveURL(`${baseURL}${path}`);
     await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
@@ -39,7 +39,8 @@ test('on a wide screen the settings menu opens each page at its own address, and
   await expect(page).toHaveURL(`${baseURL}/settings/data`);
   await expect(page.getByRole('region', { name: 'Export all data' })).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(`${baseURL}/settings/saved-replies`);
+  await expect(page).toHaveURL(`${baseURL}/settings/macros`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Macros' })).toBeVisible();
   await page.goForward();
   await expect(page).toHaveURL(`${baseURL}/settings/data`);
   await expect(page.getByRole('heading', { level: 1, name: 'Data' })).toBeVisible();

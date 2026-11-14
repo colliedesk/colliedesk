@@ -23,11 +23,11 @@ test('the current page is brought into the row again when links appear before it
   expect(scrolled.mock.contexts.at(-1)).toHaveTextContent('Channels');
 });
 
-// What each row of the menu says and opens, as the design lists it: nine items and one reserved, no sub-items.
+// What each row of the menu says and opens, as the design lists it, including Macros, and one reserved, no sub-items.
 const rowsOf = (nav: HTMLElement) => [...nav.querySelectorAll(':scope > div > ul > li > a')].map((link) =>
   [link.querySelector('.settings-nav-label')?.textContent, link.getAttribute('href'), link.querySelector('.settings-nav-tag')?.textContent ?? null]);
 
-test('the menu is the nine items and the reserved one of the design, grouped, with no sub-items', () => {
+test('the menu is the design list, including Macros, grouped, with no sub-items', () => {
   render(<SettingsNav page="/settings/account" shown={everything} />);
   const nav = screen.getByRole('navigation', { name: 'Settings sections' });
   expect(rowsOf(nav)).toEqual([

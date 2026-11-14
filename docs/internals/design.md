@@ -109,8 +109,8 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
 - The mascot is the white collie head on the orange tile (see Logo).
 - Settings (Paper "20 Settings", #528) is one page per item of its menu, each at `/settings/<page>`: Account;
-  Workspace: General, Members, Channels, Response targets, AI & agents, Saved replies (Autofix while in
-  preview); Data and billing: Data, Plan and billing. A page is its serif title, one line saying what it
+  Workspace: General, Members, Channels, Response targets, AI & agents, Saved replies, Macros, and Autofix while
+  in preview; Data and billing: Data, Plan and billing. A page is its serif title, one line saying what it
   holds, then its sections (`SettingsFrame`, `settings-frame.tsx`). The menu lists pages, never a section of
   another page, and a page shows only when the person can see one of its sections. `/settings` opens Account;
   on a phone it is the menu itself, and each page shows **‹ Settings** (named "All settings") above its title,

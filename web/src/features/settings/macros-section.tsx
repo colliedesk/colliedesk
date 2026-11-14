@@ -3,6 +3,7 @@ import { ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import type { Macro, MacroActions } from '../../api/schemas';
 import type { SettableStatus } from '../../api/schemas';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { macroMessages } from './macro-messages';
 import { Refused, useSaveChanges, useSettingsEdit } from './settings-edits';
 import { settingsMessages } from './settings-messages';
@@ -143,7 +144,7 @@ export function MacrosSection({ macros, trash, people, tags, onCreate, onUpdate,
         {open && <form className="saved-reply-form" aria-label={editing ? macroMessages.editMacro(draft.title) : macroMessages.addMacro}
           onSubmit={(event) => { event.preventDefault(); if (!busy) void saveChanges(); }}>
           <label className="field"><span>{macroMessages.title}</span><input autoFocus value={draft.title} maxLength={200} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
-          <label className="field"><span>{macroMessages.text}</span><textarea rows={4} value={draft.body} maxLength={20000} onChange={(event) => setDraft({ ...draft, body: event.target.value })} /></label>
+          <div className="field"><span className="heading-with-tip"><label htmlFor="macro-body">{macroMessages.text}</label><HelpTip label={macroMessages.text} text={macroMessages.placeholders} /></span><textarea id="macro-body" rows={4} value={draft.body} maxLength={20000} onChange={(event) => setDraft({ ...draft, body: event.target.value })} /></div>
           <p className="help">{macroMessages.textHint}</p>
           <fieldset><legend>{macroMessages.scope}</legend>
             <label><input type="radio" name="macro-scope" checked={draft.scope === 'shared'} onChange={() => setDraft({ ...draft, scope: 'shared' })} /> {macroMessages.shared}</label>
