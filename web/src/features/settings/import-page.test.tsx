@@ -150,6 +150,13 @@ test('an import whose end kept failing says so once, shows its report and offers
   expect(screen.getByRole('button', { name: 'New import' })).toBeInTheDocument();
 });
 
+test('a preview the server could not save says Freshdesk was read and offers to try again', () => {
+  page({ job: job({ state: 'failed', phase: 'preview', error_code: 'end_failed', error_message: 'save the preview: refused' }) });
+  expect(screen.getByRole('alert')).toHaveTextContent('Freshdesk was read, but the server could not record what it found.');
+  expect(screen.queryByText(/Freshdesk could not be read/)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+});
+
 test('an import that lost its key asks for it again and goes on', () => {
   const { onSetKey } = page({ job: job({ state: 'waiting_key', phase: 'full', has_key: false }) });
   fireEvent.change(screen.getByLabelText('API key of a Freshdesk admin'), { target: { value: 'again' } });

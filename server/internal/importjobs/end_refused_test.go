@@ -171,3 +171,44 @@ func TestACancelWhoseEndIsRefusedStaysACancelAndDoesNotRunAgain(t *testing.T) {
 		t.Fatalf("Freshdesk was asked %d times, want once: the stop was asked for", n)
 	}
 }
+
+// A preview whose last write (the job moving to previewed, with the Freshdesk agents it read) keeps being refused
+// fails at once with end_failed: a preview is not retried in the background, so it neither takes the slot of the
+// one active import nor reads Freshdesk again. The person sees why and can ask again.
+func TestAPreviewWhoseLastWriteKeepsBeingRefusedFailsWithoutReadingFreshdeskAgain(t *testing.T) {
+	for name, refuse := range map[string]func(e *env, t *testing.T){
+		"the job":              func(e *env, t *testing.T) { e.refuse(t, "UPDATE", "import_jobs", `NEW.state = 'previewed'`, 1000) },
+		"the Freshdesk agents": func(e *env, t *testing.T) { e.refuse(t, "INSERT", "import_people", "", 1000) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t, true)
+			job := e.preview(t, e.a)
+			refuse(e, t)
+			w := e.worker(t, e.keys)
+			var previews atomic.Int32
+			importjobs.StubImporter(w, nil, func(context.Context, freshdesk.Options) (*freshdesk.PreviewResult, error) {
+				previews.Add(1)
+				return &freshdesk.PreviewResult{Domain: "acme.freshdesk.com", AccountID: 777, Source: "freshdesk:account:777",
+					Agents: []freshdesk.PreviewAgent{{ID: 101, Name: "Alice", Email: "alice@old.example", Active: true}}}, nil
+			}, nil)
+			for range 5 {
+				tick(t, w)
+				e.due(t, job.ID)
+			}
+
+			got := e.get(t, job.ID)
+			if got.State != importjobs.StateFailed || code(got) != importjobs.CodeEndFailed || !e.keyErased(t, job.ID) {
+				t.Fatalf("preview = %+v (code %s), want failed with %q and its key erased", got, code(got), importjobs.CodeEndFailed)
+			}
+			if got.ErrorMessage == nil || !strings.Contains(*got.ErrorMessage, "write refused for the test") {
+				t.Fatalf("error message = %v, want it to say what refused the write", got.ErrorMessage)
+			}
+			if n := previews.Load(); n != 1 {
+				t.Fatalf("Freshdesk was read %d times, want once", n)
+			}
+			if a, err := e.service.Active(context.Background(), e.a.id); err != nil || a != nil {
+				t.Fatalf("active = %+v (%v), want no active import", a, err)
+			}
+		})
+	}
+}

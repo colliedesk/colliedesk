@@ -407,8 +407,17 @@ func (r *jobRun) preview(ctx context.Context, options freshdesk.Options) error {
 		return err
 	}
 	r.ended = true
-	return r.updateAnd(ctx, func(ctx context.Context, tx pgx.Tx) error { return savePeople(ctx, tx, r.item.workspaceID, result) },
+	err = r.updateAnd(ctx, func(ctx context.Context, tx pgx.Tx) error { return savePeople(ctx, tx, r.item.workspaceID, result) },
 		`state='previewed', account_source=$4, preview=$5, claim_token=NULL, lease_until=NULL, updated_at=$6`, result.Source, encoded, r.now())
+	if err == nil || errors.Is(err, errLeaseLost) {
+		return err
+	}
+	// The write that keeps what the preview read was refused. Left as it is, the job would keep its claim and
+	// read Freshdesk again each lease, for ever; reading it again does not change the write. Like any preview
+	// failure it ends now (the person is waiting and can ask again), with only the columns that end a job.
+	err = fmt.Errorf("save the preview: %w", err)
+	return errors.Join(err, r.settle(ctx, StateFailed, "", CodeEndFailed,
+		fmt.Sprintf("The server could not record the end of the preview: %v", err), nil, nil, r.job.endFailures+1))
 }
 
 // recent runs the recent pass and saves the move to the full pass before the full pass starts.

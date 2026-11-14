@@ -139,6 +139,7 @@ export const importMessages = {
     freshdesk_needs_admin_key: 'This key belongs to an agent without admin rights. Use the API key of a Freshdesk admin.',
     freshdesk_plan_no_api: 'The Freshdesk Free plan has no API, so nothing can be read. Start a 14-day trial of a higher Freshdesk plan, then try again during the trial.',
     freshdesk_unavailable: 'Freshdesk did not answer. Check the address and try again in a few minutes.',
+    end_failed: 'Freshdesk was read, but the server could not record what it found. Try again; if it stops the same way, report the problem.',
   } as Record<string, string>,
   previewFailureOther: 'Freshdesk could not be read. Check the address and the key, and try again.',
   noAPIHeading: 'Your Freshdesk plan has no API access',
