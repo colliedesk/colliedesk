@@ -20,6 +20,10 @@ test('hours on a UTC workspace read by someone on Asia/Tokyo: both zones are nam
   expect(await patch(page, '/api/v1/workspace/timezone', { timezone: 'UTC' })).toBe(200);
   expect(await patch(page, '/api/v1/agents/me/timezone', { timezone: 'Asia/Tokyo' })).toBe(200);
   await page.goto(`${baseURL}/settings/targets`);
+  // Still off: the card that offers the turn-on already says which zone the hours will count in.
+  const off = page.getByRole('region', { name: 'Response targets are off' });
+  await expect(off.getByText(/^Starts with: .*, UTC · first reply/)).toBeVisible();
+  await expect(off.getByText('Hours count in UTC; your dates show Asia/Tokyo.')).toBeVisible();
   await page.getByRole('button', { name: 'Turn on response targets' }).click();
 
   const hours = page.getByRole('region', { name: 'Business hours' });

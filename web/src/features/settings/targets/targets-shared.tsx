@@ -4,6 +4,7 @@ import { ChangedElsewhereError, InvalidRequestError } from '../../../api/client'
 import { responseTargetsApi, responseTargetsSchema } from '../../../api/response-targets';
 import type { ResponseTargets, ResponseTargetsChange } from '../../../api/response-targets';
 import { HelpTip } from '../../../ui/help-tip';
+import { sameZone } from '../timezone-select';
 import { saveState } from '../save-feedback';
 import { targetsMessages as m } from './targets-messages';
 
@@ -43,6 +44,12 @@ export function useSave() {
       void client.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
+}
+
+// Said when the zone the clock counts in is not the zone the reader's dates show: the two otherwise read as one.
+// It stays visible, whatever its length, because the person must pick a zone (or accept it) before trusting the hours.
+export function ZoneNote({ clock, mine }: { clock: string; mine: string }) {
+  return sameZone(clock, mine) ? null : <p className="muted-copy" data-quiet="state">{m.zonesDiffer(clock, mine)}</p>;
 }
 
 // tip is what the card explains beyond its one-line lead: how, why, a definition (design.md, "Quiet by default").

@@ -14,7 +14,7 @@ import { targetsMessages as m } from './targets-messages';
 import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoken, targetProblem, units, warnProblem } from './target-duration';
 import type { Duration, Unit } from './target-duration';
 import { OffCard } from './targets-off-card';
-import { Card, cardState, fieldErrors, useSave, withoutStamp } from './targets-shared';
+import { Card, ZoneNote, cardState, fieldErrors, useSave, withoutStamp } from './targets-shared';
 import { can } from '../../../lib/can';
 import '../../../ui/controls.css';
 import './targets.css';
@@ -54,10 +54,10 @@ export function TargetsRoute() {
         {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
         {doc.isPending ? <div className="tg-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
           : doc.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void doc.refetch()}>{m.tryAgain}</button></p>
-          : !doc.data.enabled && !refusal ? <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />
+          : !doc.data.enabled && !refusal ? <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} myZone={myZone} onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />
           : <>
               {doc.data.enabled ? <OnCard doc={doc.data} canManage={isAdmin} />
-                : <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} repairing onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />}
+                : <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} myZone={myZone} repairing onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />}
               <HoursCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} myZone={myZone} refused={refused} />
               <HolidaysCard doc={doc.data} canManage={isAdmin} refused={refused} />
               <TargetsCard doc={doc.data} canManage={isAdmin} refused={refused} />
@@ -83,11 +83,6 @@ function OnCard({ doc, canManage }: CardProps) {
           disabled={save.isPending} onChange={(event) => { feedback.touch(); save.mutate({ ...withoutStamp(doc), enabled: event.target.checked }); }} /></span><span>{m.measure}</span></label>{feedback.status}</span>
       : <p>{doc.enabled ? m.yes : m.no}</p>}
   </Card>;
-}
-
-// Said when the zone the clock counts in is not the zone the reader's dates show: the two otherwise read as one.
-function ZoneNote({ clock, mine }: { clock: string; mine: string }) {
-  return sameZone(clock, mine) ? null : <p className="muted-copy" data-quiet="state">{m.zonesDiffer(clock, mine)}</p>;
 }
 
 function HoursCard({ doc, canManage, workspaceZone, myZone, refused }: CardProps & { workspaceZone: string; myZone: string }) {

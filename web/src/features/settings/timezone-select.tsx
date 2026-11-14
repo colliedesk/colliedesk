@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { fallbackTimezones } from '../../lib/fallback-timezones';
 import { settingsMessages } from './settings-messages';
 import { useSaveFeedback } from './save-feedback';
@@ -20,8 +20,15 @@ interface TimezoneSelectProps {
 // person stops: on leaving the list, on Enter, or after this pause.
 const settleMs = 1500;
 
+// Building a formatter costs about 80 µs and the hours card renders on every keystroke, so each zone is resolved once.
+const canonicals = new Map<string, string>();
 function canonical(zone: string): string {
-  try { return new Intl.DateTimeFormat('en', { timeZone: zone }).resolvedOptions().timeZone; } catch { return zone; }
+  let known = canonicals.get(zone);
+  if (known === undefined) {
+    try { known = new Intl.DateTimeFormat('en', { timeZone: zone }).resolvedOptions().timeZone; } catch { known = zone; }
+    canonicals.set(zone, known);
+  }
+  return known;
 }
 
 // sameZone is true for two names of one zone (Asia/Saigon and Asia/Ho_Chi_Minh).
@@ -55,7 +62,9 @@ export function TimezoneSelect({ label, value, emptyOption, suggested, save, onC
   useEffect(() => { if (failed) sent.current = value; }, [failed, value]);
   useEffect(() => () => clearTimeout(timer.current), []);
   // Once the chosen zone is the suggested one, it stands in the list under its own name and the suggestion goes.
-  const offered = suggested && !(draft && sameZone(draft, suggested.zone)) ? suggested : undefined;
+  // The names of the suggested zone are worked out once, not once per listed zone on every render.
+  const suggestedNames = useMemo(() => (suggested ? new Set([suggested.zone, canonical(suggested.zone)]) : undefined), [suggested?.zone]);
+  const offered = suggested && suggestedNames && !(draft && (suggestedNames.has(draft) || suggestedNames.has(canonical(draft)))) ? suggested : undefined;
   const commit = (next: string) => {
     clearTimeout(timer.current);
     if (next === sent.current) return;
@@ -78,7 +87,7 @@ export function TimezoneSelect({ label, value, emptyOption, suggested, save, onC
           onKeyDown={(event) => { if (event.key === 'Enter') commit(draft); }}>
           {emptyOption && <option value="">{emptyOption}</option>}
           {offered && <option value={offered.zone}>{offered.label}</option>}
-          {zones(draft).filter((zone) => !offered || !sameZone(zone, offered.zone)).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+          {zones(draft).filter((zone) => !offered || !suggestedNames?.has(zone)).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
         </select>
         {feedback.pending ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}
       </span>

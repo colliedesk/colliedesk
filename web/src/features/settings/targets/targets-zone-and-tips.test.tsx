@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => {
   }
   class ConflictError extends InvalidRequestError {}
   class ChangedElsewhereError extends ConflictError {}
-  const api = { me: vi.fn(), config: vi.fn(), billing: vi.fn() };
+  const api = { me: vi.fn(), config: vi.fn(), billing: vi.fn(), setupProgress: vi.fn() };
   const responseTargetsApi = { get: vi.fn(), set: vi.fn(), setMyAlerts: vi.fn() };
   const channelsApi = { list: vi.fn() };
   return { api, responseTargetsApi, channelsApi, InvalidRequestError, ConflictError, ChangedElsewhereError };
@@ -38,6 +38,15 @@ const doc = (change: Partial<ResponseTargets> = {}): ResponseTargets => ({
   warn_before_minutes: 60, channel_ids: null, alert_email: true, my_alert_email: true, enabled_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-31T00:00:00Z', ...change,
 });
 
+const off = (): ResponseTargets => ({ ...doc(), enabled: false, hours: week.map((day) => ({ day, open: false, from: '08:00', to: '17:00' })), enabled_at: null, updated_at: null });
+// What the server names for the setup flow: the hours a workspace without any starts with, and the preset targets.
+const preset = (first: number, resolve: number) => ({ first_response_minutes: first, resolution_minutes: resolve });
+const setup = () => ({
+  reply_target_hours: { kept: false, day_minutes: 540, hours: week.map((day) => ({ day, open: !['sat', 'sun'].includes(day), from: '09:00', to: '18:00' })) },
+  reply_target_presets: [{ key: 'same_day', name: 'Same day', targets: { urgent: preset(60, 240), high: preset(120, 540), normal: preset(480, 1620), low: preset(540, 2700) } }],
+  reply_target_suggestion: { preset: 'same_day', basis: 'no_history', median_first_reply_minutes: null },
+});
+
 function show() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><TargetsRoute /></QueryClientProvider>);
@@ -47,6 +56,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.me.mockResolvedValue(me('admin', 'UTC', 'Asia/Ho_Chi_Minh'));
   api.config.mockResolvedValue({ billing: { enabled: false } });
+  api.setupProgress.mockResolvedValue(setup());
   responseTargetsApi.get.mockResolvedValue(doc());
   responseTargetsApi.set.mockImplementation(async (value: ResponseTargets) => ({ ...value, updated_at: '2026-10-31T01:00:00Z' }));
   channelsApi.list.mockResolvedValue({ items: [], types: [] });
@@ -129,4 +139,35 @@ test('an agent reads the same tip on Targets', async () => {
   show();
   const targets = await screen.findByRole('region', { name: 'Targets' });
   expect(within(targets).getByRole('button', { name: 'About Targets' })).toHaveAccessibleDescription(/^The clock runs only while a conversation is Open/);
+});
+
+test('off: the card that says what turning on starts with also says which zone the hours count in when it is not the reader\'s', async () => {
+  responseTargetsApi.get.mockResolvedValue(off());
+  show();
+  const card = await screen.findByRole('region', { name: 'Response targets are off' });
+  expect(await within(card).findByText(/^Starts with: Monday to Friday, 09:00 to 18:00, UTC · first reply/)).toBeInTheDocument();
+  expect(card).toHaveTextContent('Hours count in UTC; your dates show Asia/Ho_Chi_Minh.');
+  expect(within(card).getByRole('button', { name: 'Turn on response targets' })).toBeEnabled();
+});
+
+test('off: nothing is said about zones when the hours count in the reader\'s own zone', async () => {
+  api.me.mockResolvedValue(me('admin', 'Asia/Ho_Chi_Minh', 'Asia/Ho_Chi_Minh'));
+  responseTargetsApi.get.mockResolvedValue(off());
+  show();
+  const card = await screen.findByRole('region', { name: 'Response targets are off' });
+  expect(await within(card).findByText(/^Starts with: Monday to Friday, 09:00 to 18:00, Asia\/Ho_Chi_Minh · first reply/)).toBeInTheDocument();
+  expect(card).not.toHaveTextContent('Hours count in');
+});
+
+test('off, a turn-on the server refused: the editor below says the zones once, not the off card as well', async () => {
+  responseTargetsApi.get.mockResolvedValue(off());
+  responseTargetsApi.set.mockRejectedValueOnce(new mocks.InvalidRequestError('Check the targets.', { fields: { holidays: 'Holidays close every open day.' } }));
+  show();
+  const card = await screen.findByRole('region', { name: 'Response targets are off' });
+  const turnOn = await within(card).findByRole('button', { name: 'Turn on response targets' });
+  await waitFor(() => expect(turnOn).toBeEnabled());
+  fireEvent.click(turnOn);
+  const hours = await screen.findByRole('region', { name: 'Business hours' });
+  expect(hours).toHaveTextContent('Hours count in UTC; your dates show Asia/Ho_Chi_Minh.');
+  expect(screen.getAllByText('Hours count in UTC; your dates show Asia/Ho_Chi_Minh.')).toHaveLength(1);
 });
