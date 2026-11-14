@@ -34,7 +34,8 @@ test('a link to an old settings section opens the page that holds it now and lan
   await page.setViewportSize({ width: 1280, height: 600 });
   await page.goto(`${baseURL}/settings#agents-heading`);
   await expect(page).toHaveURL(`${baseURL}/settings/ai?tab=external#agents-heading`);
-  await expect(page.getByRole('heading', { name: 'External AI agents', exact: true })).toBeInViewport();
+  // The section's name is kept for the screen reader and for this anchor, not drawn again under its tab: the section is what lands.
+  await expect(page.getByRole('region', { name: 'External AI agents' })).toBeInViewport();
   await expect(page.getByRole('heading', { name: 'AI & agents', level: 1 })).not.toBeInViewport();
   await page.goto(`${baseURL}/settings/ai#agent-tokens-heading`);
   await expect(page).toHaveURL(`${baseURL}/settings/ai?tab=external#agent-tokens-heading`);

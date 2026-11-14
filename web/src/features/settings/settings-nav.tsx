@@ -10,6 +10,7 @@ import type { SettingsSection } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 import { ChevronLeftIcon } from '../../ui/icons';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
+import { channelNeedsAction } from './channel-problem';
 import { settingsMessages } from './settings-messages';
 
 // Settings is one page per item of this menu, with no sub-items. '/settings' is the menu itself, a page of its own
@@ -139,7 +140,7 @@ function LiveSettingsNav(props: NavProps) {
   const channels = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: shown.channels, staleTime: 60_000 });
   const billing = useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: shown.billing, staleTime: 60_000 });
   return <SettingsMenu {...props} dots={{
-    channels: shown.channels && channels.data?.items.some((channel) => channel.status.state === 'needs_attention'),
+    channels: shown.channels && channels.data?.items.some(channelNeedsAction),
     billing: shown.billing && (billing.data?.status === 'past_due' || billing.data?.status === 'unpaid'),
   }} />;
 }

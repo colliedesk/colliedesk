@@ -32,6 +32,56 @@ test('the menu lists the nine items and the reserved Conversation fields, with n
   await expect(menu.getByRole('link', { name: /^Conversation fields/ })).toHaveAttribute('aria-current', 'page');
 });
 
+// The dot on Channels says a channel that was working has a problem. A customer who has set nothing up, or is part way
+// through setting a channel up, sees none, though the server says needs_attention of a form that lists no origin yet.
+type ListedChannel = { id: string; status: { state: string; reason_code: string | null }; last_inbound_at: string | null; config?: { submit_path?: string } };
+const channelDot = (page: Page) => page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: /^Channels/ }).getByRole('img', { name: 'A channel needs attention' });
+const listChannels = async (page: Page) => (await (await page.request.get(`${baseURL}/api/v1/channels`)).json() as { items: ListedChannel[] }).items;
+
+test('a new workspace and a channel still in setup show no warning dot on Channels', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await newDesk(page, 'E2E settings no dot');
+  await page.goto(`${baseURL}/settings/members`);
+  await expect(page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: /^Channels/ })).toBeVisible();
+  expect(await listChannels(page)).toEqual([]);
+  await expect(channelDot(page)).toHaveCount(0);
+
+  // A web form that lists no origin yet is what the server calls needs_attention; it is setup, not a problem.
+  const headers = { Origin: baseURL };
+  const created = await page.request.post(`${baseURL}/api/v1/channels`, { headers, data: { type: 'web_form', name: 'Site form', config: { allowed_origins: [] } } });
+  expect(created.status()).toBe(201);
+  const [form] = await listChannels(page);
+  expect(form.status).toMatchObject({ state: 'needs_attention', reason_code: 'no_origins' });
+  expect(form.last_inbound_at).toBeNull();
+  await page.reload();
+  await expect(page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: /^Channels/ })).toBeVisible();
+  await expect(channelDot(page)).toHaveCount(0);
+});
+
+test('a channel that received a message and then fails puts one warning dot on Channels', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await newDesk(page, 'E2E settings dot');
+  const headers = { Origin: baseURL };
+  const site = 'https://dot.example';
+  const created = await page.request.post(`${baseURL}/api/v1/channels`, { headers, data: { type: 'web_form', name: 'Site form', config: { allowed_origins: [site] } } });
+  expect(created.status()).toBe(201);
+  const { id, config } = await created.json() as { id: string; config: { submit_path: string } };
+  const posted = await page.request.post(`${baseURL}${config.submit_path}`, { headers: { Origin: site, 'Content-Type': 'application/json' },
+    data: { name: 'Dot Customer', email: `dot-${Date.now()}@example.com`, message: 'Does the form work?' } });
+  expect(posted.status()).toBe(202);
+  await expect.poll(async () => (await listChannels(page))[0]?.last_inbound_at, { timeout: 30_000 }).not.toBeNull();
+  await page.goto(`${baseURL}/settings/members`);
+  await expect(page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: /^Channels/ })).toBeVisible();
+  await expect(channelDot(page)).toHaveCount(0);
+
+  // The form's last origin is removed: it is on and nothing can post to it any more.
+  const changed = await page.request.patch(`${baseURL}/api/v1/channels/${id}`, { headers, data: { config: { allowed_origins: [] } } });
+  expect(changed.status()).toBe(200);
+  expect((await listChannels(page))[0].status).toMatchObject({ state: 'needs_attention', reason_code: 'no_origins' });
+  await page.reload();
+  await expect(channelDot(page)).toHaveCount(1);
+});
+
 test('every old settings address opens the page, tab or section that holds its content now', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await newDesk(page, 'E2E settings old links');
@@ -109,11 +159,19 @@ test('AI & agents has the tabs Built-in AI and External AI agents in the address
   const tabs = page.getByRole('tablist', { name: 'AI & agents' });
   await expect(tabs.getByRole('tab')).toHaveText(['Built-in AI', 'External AI agents']);
   await expect(tabs.getByRole('tab', { name: 'Built-in AI' })).toHaveAttribute('aria-selected', 'true');
+  // The selected tab names the view: no heading repeats it, and the panel is named by its tab.
+  await expect(page.getByRole('heading', { level: 2, name: 'Built-in AI' })).toHaveCount(0);
+  await expect(page.getByRole('tabpanel', { name: 'Built-in AI' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: 'External AI agents' })).toHaveCount(0);
 
   await tabs.getByRole('tab', { name: 'External AI agents' }).click();
   await expect(page).toHaveURL(`${baseURL}/settings/ai?tab=external`);
-  await expect(page.getByRole('heading', { level: 2, name: 'External AI agents' })).toBeVisible();
+  // The section's name is kept for the screen reader and the anchor, and is not drawn again under the tab.
+  const sectionName = page.getByRole('heading', { level: 2, name: 'External AI agents' });
+  await expect(sectionName).toHaveCount(1);
+  expect((await sectionName.boundingBox())?.width ?? 99).toBeLessThanOrEqual(1);
+  await expect(page.getByRole('tabpanel', { name: 'External AI agents' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Agent tokens' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create token' })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Built-in AI' }).click();

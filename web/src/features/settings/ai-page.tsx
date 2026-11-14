@@ -77,7 +77,10 @@ export function AIPage(props: AIPageProps) {
         <div className="settings-sections ai-page">
           {views && <Tabs label={messages.aiAndAgents} variant="underline" tabs={viewTabs} value={view} onChange={(next, how) => props.onView?.(next, how)} prefix={ids.views} />}
           {view === 'built-in' && <BuiltInPanel panel={views ? { id: panelID(ids.views, 'built-in'), label: tabID(ids.views, 'built-in') } : undefined}>
-          {props.builtIn !== false && <div className="section-heading ai-intro"><div className="heading-with-tip"><h2>{m.heading}</h2><HelpTip label={m.heading} text={m.description} /></div><p>{m.lead}</p></div>}
+          {props.builtIn !== false && (views
+            // The selected tab names the view: the panel keeps its one line and its tip, not the name again.
+            ? <div className="section-heading ai-intro"><p>{m.lead} <HelpTip label={m.heading} text={m.description} /></p></div>
+            : <div className="section-heading ai-intro"><div className="heading-with-tip"><h2>{m.heading}</h2><HelpTip label={m.heading} text={m.description} /></div><p>{m.lead}</p></div>)}
           {props.loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
           {!settings ? (!props.loadFailed && <div className="ai-loading" aria-busy="true" />) : <>
             <div className="ai-tabs-row">

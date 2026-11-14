@@ -96,15 +96,27 @@ test('an admin sees every item and an agent everything but Data and Plan and bil
   ]);
 });
 
-// One dot on Channels when a channel has a problem; one on Plan and billing only when a payment failed.
-const problem = { types: [{ type: 'email', count: 1 }], items: [{ id: 'c1', type: 'email', name: 'Support', status: { state: 'needs_attention' } }] };
-const fine = { types: [{ type: 'email', count: 1 }], items: [{ id: 'c1', type: 'email', name: 'Support', status: { state: 'working' } }] };
+// One dot on Channels when a channel that was working has a problem; none for a workspace with no channel yet, nor for a
+// channel still being set up, which the server also reports as needing attention.
+const listed = (...items: unknown[]) => ({ types: [], items });
+const row = (state: string, reason: string | null, lastInbound: string | null) => ({ id: 'c1', type: 'email', name: 'Support', status: { state, reason_code: reason }, last_inbound_at: lastInbound });
 const dotOf = (name: string) => within(screen.getByRole('link', { name: new RegExp(`^${name}`) })).queryByRole('img');
-test('Channels shows one dot when a channel needs attention and none when all work', () => {
-  const { unmount } = menuFor('admin', { '["channels","counts"]': problem });
+test('a new workspace has no channel and no dot on Channels', () => {
+  menuFor('admin', { '["channels","counts"]': listed() });
+  expect(dotOf('Channels')).toBeNull();
+});
+
+test('a channel still in setup does not put a dot on Channels, though the server says it needs attention', () => {
+  menuFor('admin', { '["channels","counts"]': listed(row('needs_attention', 'no_origins', null), row('needs_attention', 'ai_chat_off', null)) });
+  expect(dotOf('Channels')).toBeNull();
+});
+
+test('a channel that was working and now fails puts one dot on Channels, and one that works none', () => {
+  const { unmount } = menuFor('admin', { '["channels","counts"]': listed(row('needs_attention', 'cannot_send', '2026-11-10T08:00:00Z'), row('needs_attention', 'gmail_broken', null)) });
   expect(dotOf('Channels')).toHaveAccessibleName('A channel needs attention');
+  expect(screen.getAllByRole('img', { name: 'A channel needs attention' })).toHaveLength(1);
   unmount();
-  menuFor('admin', { '["channels","counts"]': fine });
+  menuFor('admin', { '["channels","counts"]': listed(row('working', null, '2026-11-10T08:00:00Z')) });
   expect(dotOf('Channels')).toBeNull();
 });
 

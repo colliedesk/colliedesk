@@ -612,3 +612,17 @@ test('without agent tokens to show there is no External AI agents tab, and a lin
   expect(screen.queryByRole('tablist', { name: 'AI & agents' })).not.toBeInTheDocument();
   expect(screen.getByRole('switch', { name: 'Triage suggestions on' })).toBeInTheDocument();
 });
+
+// The tab names the view, so the panel does not name it again as a heading: its one line and its tip come first.
+test('under the selected Built-in AI tab there is no heading that repeats the tab, and the panel is named by its tab', () => {
+  page({ agents: <p>Agent tokens panel</p> });
+  expect(screen.queryByRole('heading', { level: 2, name: 'Built-in AI' })).not.toBeInTheDocument();
+  const panel = screen.getByRole('tabpanel', { name: 'Built-in AI' });
+  expect(within(panel).getByText('Drafts, triage and the AI chat. A person sends every reply.')).toBeInTheDocument();
+  expect(within(panel).getByRole('button', { name: /Built-in AI/ })).toBeInTheDocument();
+});
+
+test('a page with no tabs keeps the heading of its one view', () => {
+  page({});
+  expect(screen.getByRole('heading', { level: 2, name: 'Built-in AI' })).toBeInTheDocument();
+});
