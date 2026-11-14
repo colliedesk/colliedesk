@@ -102,6 +102,7 @@ export const settingsMessages = {
   inviteLink: 'One-time invite link',
   inviteLinkNotice: 'Copy this link now. It is not shown in the invite list.',
   revoke: 'Revoke',
+  newInviteLink: 'New invite link',
   saving: 'Saving…',
   saved: 'Saved',
   // The one save bar of a page, and the question when someone leaves it with text not yet saved.

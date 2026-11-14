@@ -254,7 +254,8 @@ test('choosing a tab of Members tells the address, and the Invites tab counts th
 
 test('an admin deactivates a teammate and the lists reload', async () => {
   show('admin', [], members());
-  fireEvent.click(await screen.findByRole('button', { name: 'Deactivate ann@example.com' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Actions for ann@example.com' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Deactivate ann@example.com' }));
   fireEvent.click(within(screen.getByRole('group', { name: 'Deactivate ann@example.com?' })).getByRole('button', { name: 'Yes, deactivate' }));
   await waitFor(() => expect(api.updateAgent).toHaveBeenCalledWith(ANN, { active: false }));
   await waitFor(() => expect(api.agents.mock.calls.length).toBeGreaterThan(1));
@@ -320,14 +321,55 @@ test('Members offers Revoke on a pending invite only to a person who may revoke 
   draw(members('invites'));
   const invites = await screen.findByRole('region', { name: 'Invites' });
   await within(invites).findByText('kim@example.com');
-  expect(within(invites).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  fireEvent.click(within(invites).getByRole('button', { name: 'Actions for kim@example.com' }));
+  expect(screen.getByRole('menuitem', { name: 'Revoke' })).toBeInTheDocument();
   cleanup();
   api.me.mockResolvedValue({ ...me('admin'), permissions: permissionsOf('admin').filter((name) => name !== 'team:revoke') });
   draw(members('invites'));
   const without = await screen.findByRole('region', { name: 'Invites' });
   await within(without).findByText('kim@example.com');
   expect(within(without).getByRole('button', { name: 'Create invite' })).toBeInTheDocument();
-  expect(within(without).queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+  fireEvent.click(within(without).getByRole('button', { name: 'Actions for kim@example.com' }));
+  expect(screen.queryByRole('menuitem', { name: 'Revoke' })).not.toBeInTheDocument();
+});
+
+// The server does not email an invite: its link is shown once. A new link for a pending invite is a new invite for the same
+// address and roles, and the old link stops working so one address never has two.
+test('New invite link makes an invite for the same address and roles, shows its link once and revokes the old one', async () => {
+  const pending = { id: '44444444-4444-4444-8444-444444444444', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com',
+    created_at: '2026-10-28T07:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null };
+  show('admin', [], members('invites'));
+  api.invites.mockResolvedValue({ items: [pending] });
+  api.createInvite.mockResolvedValue({ invite: { ...pending, id: '55555555-5555-4555-8555-555555555555' }, url: 'https://desk.example.com/invite#fresh' });
+  api.revokeInvite.mockReset();
+  api.revokeInvite.mockResolvedValue(undefined);
+  cleanup();
+  draw(members('invites'));
+  const invites = await screen.findByRole('region', { name: 'Invites' });
+  await within(invites).findByText('kim@example.com');
+  fireEvent.click(within(invites).getByRole('button', { name: 'Actions for kim@example.com' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'New invite link' }));
+  await waitFor(() => expect(api.createInvite).toHaveBeenCalledWith('kim@example.com', [agentRoleRef.id], expect.stringMatching(/^[\x21-\x7e]{1,200}$/)));
+  expect(await within(invites).findByRole('textbox', { name: 'One-time invite link' })).toHaveValue('https://desk.example.com/invite#fresh');
+  await waitFor(() => expect(api.revokeInvite).toHaveBeenCalled());
+  expect(api.revokeInvite.mock.calls[0][0]).toBe(pending.id);
+});
+
+test('a refused new invite link keeps the old invite and says why', async () => {
+  const pending = { id: '44444444-4444-4444-8444-444444444444', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com',
+    created_at: '2026-10-28T07:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null };
+  show('admin', [], members('invites'));
+  api.invites.mockResolvedValue({ items: [pending] });
+  api.revokeInvite.mockReset();
+  api.createInvite.mockRejectedValue(new errors.PlanLimitError('Your plan has no seat left.'));
+  cleanup();
+  draw(members('invites'));
+  const invites = await screen.findByRole('region', { name: 'Invites' });
+  await within(invites).findByText('kim@example.com');
+  fireEvent.click(within(invites).getByRole('button', { name: 'Actions for kim@example.com' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'New invite link' }));
+  expect(await within(invites).findByRole('alert')).toHaveTextContent('Your plan has no seat left.');
+  expect(api.revokeInvite).not.toHaveBeenCalled();
 });
 
 // Saved replies: shared by the whole team.

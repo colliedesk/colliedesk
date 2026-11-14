@@ -1,0 +1,14 @@
+/* The "⋯" menu at the end of a row (row-menu.tsx). */
+.row-menu-wrap { position: relative; display: flex; justify-content: flex-end; }
+.row-menu-button svg { fill: currentColor; }
+.row-menu { position: absolute; z-index: 5; top: calc(100% + var(--space-1)); right: 0; display: grid; min-width: 10rem; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-1); }
+.row-menu [role="menuitem"] { justify-content: flex-start; width: 100%; border-color: transparent; box-shadow: none; }
+
+/* Inside a data list the row's own rules (a grid cell for each div, no overflow on a span) would squeeze or clip the
+   button and its menu: the menu sits at the row's end, where its list can open over the rows below. */
+.data-list article > .row-menu-wrap, [aria-labelledby="invites-heading"] .data-list article > .row-menu-wrap { display: flex; grid-column: 2; width: auto; justify-self: end; }
+.team-list .team-actions { overflow: visible; }
+@media (pointer: coarse), (max-width: 40rem) { .row-menu-button { width: var(--touch); min-height: var(--touch); } }
+/* A row that lists its actions from the left (a phone) opens the list from the left too, so it stays on the screen. */
+@media (max-width: 40rem) { .team-actions .row-menu { left: 0; right: auto; } }

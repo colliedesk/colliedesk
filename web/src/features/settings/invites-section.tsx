@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import type { Invite, Role } from '../../api/schemas';
 import { RoleCheckboxes } from './role-checkboxes';
+import { RowMenu } from './row-menu';
+import type { RowMenuItem } from './row-menu';
 import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
@@ -31,11 +33,13 @@ interface InvitesSectionProps {
   roles?: Role[];
   onCreateInvite?: (email: string, roleIds: string[]) => void;
   onRevokeInvite?: (id: string) => void;
+  // A new link for the invite's address and roles; revokeOld says the old pending link should stop working.
+  onResendInvite?: (invite: Invite, revokeOld: boolean) => void;
   // draft keeps the typed invite where the page can hold it; without one the form keeps its own.
   draft?: InviteDraft;
 }
 
-export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeInvites = false, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite, draft }: InvitesSectionProps) {
+export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeInvites = false, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite, onResendInvite, draft }: InvitesSectionProps) {
   const createdInviteUrl = createdInvite?.url;
   const own = useInviteDraft();
   const { email, setEmail, picked, setPicked } = draft ?? own;
@@ -67,10 +71,15 @@ export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeI
         </label>}
         {invites.length > 0 && <div className="data-list">{invites.map((invite) => {
           const state = inviteState(invite);
+          const live = state === 'pending' || state === 'expired';
+          const actions: RowMenuItem[] = [
+            ...(canCreateInvites && live ? [{ key: 'new-link', label: settingsMessages.newInviteLink, onSelect: () => onResendInvite?.(invite, canRevokeInvites && state === 'pending') }] : []),
+            ...(canRevokeInvites && state === 'pending' ? [{ key: 'revoke', label: settingsMessages.revoke, danger: true, onSelect: () => onRevokeInvite?.(invite.id) }] : []),
+          ];
           return <article key={invite.id}>
             <div><strong>{invite.email}</strong><span>{invite.roles.map((role) => role.name).join(', ')}</span>
               <span>{settingsMessages.inviteStates[state]}</span><time>{formatDate(invite.expires_at, timezone)}</time></div>
-            {canRevokeInvites && state === 'pending' && <button type="button" className="danger-action" onClick={() => onRevokeInvite?.(invite.id)}>{settingsMessages.revoke}</button>}
+            {actions.length > 0 && <RowMenu label={invite.email} items={actions} />}
           </article>;
         })}</div>}
       </div>

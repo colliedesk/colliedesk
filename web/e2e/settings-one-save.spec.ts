@@ -147,7 +147,8 @@ test('a timezone picked from the list saves at once and Undo puts the previous o
 test('a rename typed on People survives the Invites tab and comes back open; clicks and arrow keys on a tab list never raise the question', async ({ page }) => {
   await newDesk(page, 'E2E one save arrows');
   await page.goto(`${baseURL}/settings/members`);
-  await page.getByRole('button', { name: /^Rename / }).first().click();
+  await page.getByRole('button', { name: /^Actions for / }).first().click();
+  await page.getByRole('menuitem', { name: /^Rename / }).click();
   const name = page.getByRole('textbox', { name: /^Display name of / });
   await name.fill('Typed name');
   const asked = answers(page, false);

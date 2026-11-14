@@ -15,7 +15,10 @@ async function openOwnRoles(page: Page, touch: boolean) {
   await redeemLink(page, createWorkspaceWithSlug(`Help Tip ${suffix}`, email).url);
   await page.goto(`${servers.main}/settings/members`);
   const team = page.getByRole('region', { name: 'Team' });
-  const change = team.getByRole('button', { name: `Change roles: ${email}` });
+  // Change roles is in the row's actions menu.
+  const menu = team.getByRole('button', { name: `Actions for ${email}` });
+  await (touch ? menu.tap() : menu.click());
+  const change = team.getByRole('menuitem', { name: `Change roles: ${email}` });
   await (touch ? change.tap() : change.click());
   return { team, editor: team.getByRole('group', { name: /^Roles of / }), lock: team.getByRole('button', { name: 'Why Admin is locked' }) };
 }

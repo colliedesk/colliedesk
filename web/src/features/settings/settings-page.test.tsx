@@ -44,7 +44,13 @@ test('shows the state of every invite and offers revoke only while it is pending
   expect(row('accepted@example.com')).toHaveTextContent('Accepted');
   expect(row('revoked@example.com')).toHaveTextContent('Revoked');
   expect(row('expired@example.com')).toHaveTextContent('Expired');
-  expect(within(invites).getAllByRole('button', { name: 'Revoke' })).toHaveLength(1);
+  // A row's actions are in its menu: a pending invite can get a new link or be revoked, an expired one a new link; an ended one has none.
+  expect(within(invites).getAllByRole('button', { name: /^Actions for / }).map((button) => button.getAttribute('aria-label'))).toEqual(['Actions for pending@example.com', 'Actions for expired@example.com']);
+  fireEvent.click(within(row('pending@example.com')).getByRole('button', { name: 'Actions for pending@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link', 'Revoke']);
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  fireEvent.click(within(row('expired@example.com')).getByRole('button', { name: 'Actions for expired@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link']);
   // The sessions, with their own Revoke buttons, are on Account now, not beside the invites.
   expect(screen.queryByRole('region', { name: 'Sessions' })).not.toBeInTheDocument();
 });
@@ -56,7 +62,8 @@ test('an invite stays listed without Revoke for a person who may invite but not 
   ]} />);
   const invites = screen.getByRole('region', { name: 'Invites' });
   expect(within(invites).getByText('pending@example.com')).toBeInTheDocument();
-  expect(within(invites).queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+  fireEvent.click(within(invites).getByRole('button', { name: 'Actions for pending@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link']);
 });
 
 // Agent tokens are listed in AI & agents (ai-agents-sections.tsx), with the same rows as before.
