@@ -1,12 +1,12 @@
 import { HelpTip } from '../../ui/help-tip';
 import { CopyButton } from './copy-button';
+import { settingsMessages } from './settings-messages';
 
 // How mail reaches a server that hosts no forwarding address: what the inbound URL is for, where its
 // guide is, and one request that proves it works.
 const text = {
-  what: 'Forward your mail to the inbound URL, with the secret.',
-  whatLabel: 'Forwarding to the inbound URL',
-  why: 'Ask whoever manages your email to send a copy of every message to the inbound URL above, with the inbound secret. The secret is a password for that only, not your email password. Your mailbox cannot send to the inbound URL by itself: a mail forwarder posts each message there over HTTPS, with the secret in the X-Colliedesk-Inbound-Secret header. A Cloudflare Email Worker, Postmark, Amazon SES, or a pipe on your mail server can do it.',
+  what: 'Have a forwarder send your mail to the inbound URL.',
+  why: 'Ask whoever manages your email to set up a forwarder that sends a copy of every message to the inbound URL above, with the inbound secret. The secret is a password for that only, not your email password. Your mailbox cannot send to the inbound URL by itself: the forwarder posts each message over HTTPS, with the secret in the X-Colliedesk-Inbound-Secret header. A Cloudflare Email Worker, Postmark, Amazon SES, or a pipe on your mail server can do it.',
   guide: 'Read how mail reaches the inbound URL',
   guideURL: 'https://colliedesk.com/docs/self-host/email#3-forward-mail-to-colliedesk',
   terminal: 'Test from a terminal instead',
@@ -29,7 +29,7 @@ export function testRequest(inboundURL: string, supportAddress: string, secret?:
 export function InboundURLGuide({ inboundURL, supportAddress, secret }: { inboundURL: string; supportAddress: string; secret?: string }) {
   const command = testRequest(inboundURL, supportAddress, secret);
   return <div className="email-channel-forwarding">
-    <p className="muted-copy">{text.what} <HelpTip label={text.whatLabel} text={text.why} link={{ href: text.guideURL, label: text.guide }} /></p>
+    <p className="muted-copy">{text.what} <HelpTip label={settingsMessages.inboundURL} text={text.why} link={{ href: text.guideURL, label: text.guide }} /></p>
     <details><summary>{text.terminal}</summary>
       <div className="copy-field">
         <label className="invite-link"><span className="field-label">{text.example}</span>

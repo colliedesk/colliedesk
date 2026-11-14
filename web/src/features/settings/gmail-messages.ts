@@ -16,8 +16,7 @@ export const gmailMessages = {
   microsoftSite: 'Microsoft',
   gmailConnectedWhy: 'Replies go out through Gmail and stay in its Sent folder; incoming mail still arrives by forwarding.',
   // Shown only on Colliedesk Cloud: the statement binds HC Labs' Google client, not a self-hosted server's.
-  gmailGoogleData: 'How Colliedesk handles Google data:',
-  gmailGoogleLimitedUse: 'Colliedesk’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements.',
+  gmailGoogleData: 'Colliedesk’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. How we handle Google data:',
   gmailPrivacyPolicy: 'Privacy policy',
   gmailPrivacyURL: 'https://colliedesk.com/privacy#google-user-data',
   gmailAdminOnly: 'Only an admin can connect Gmail.',
@@ -39,6 +38,7 @@ export const gmailMessages = {
   gmailOpenHolder: 'Open that channel',
   gmailAddressMismatch: (gmail: string, support: string) => `${gmail} is not this channel's support address. Replies still leave through it; connect Gmail again with ${support} to match.`,
   gmailOtherAddress: (gmail: string, support: string) => `Customers see ${gmail} as the sender; answers go to ${support}.`,
+  gmailSenderLabel: 'Sender address',
   gmailOtherAddressWhy: (support: string) => `Keep forwarding ${support} here, so their answers reach Colliedesk.`,
   gmailFailedTitle: 'Gmail stopped sending',
   gmailFailedBody: (reason: string, when: string) => `${reason} Since ${when}, replies are not sent through Gmail and not sent any other way.`,

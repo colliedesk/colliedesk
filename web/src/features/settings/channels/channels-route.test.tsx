@@ -685,7 +685,7 @@ test('back from an admin\'s approval, the block says to connect again', async ()
   channelsApi.email.mockResolvedValue({ ...withChannel, microsoft: { ...withChannel.microsoft, available: true, missing_settings: [] } });
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   show(EMAIL, { tab: 'replies', microsoft: 'admin_consent_done' });
-  expect(await screen.findByText('Your Microsoft 365 admin approved Colliedesk. Then select Connect Microsoft 365.')).toBeInTheDocument();
+  expect(await screen.findByText('Your Microsoft 365 admin approved Colliedesk. Select Connect Microsoft 365 to finish.')).toBeInTheDocument();
 });
 
 test('the Connection tab sends a test message in one click and links to the conversation it opened; the terminal request is a detail', async () => {

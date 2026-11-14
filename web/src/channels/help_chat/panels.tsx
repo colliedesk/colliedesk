@@ -90,7 +90,7 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
     {nameField}
     <label className="field"><span>{m.greeting}</span>
       <textarea rows={2} value={greeting} maxLength={limits.greeting} aria-describedby={`${greetingHint} ${greetingHint}-why`} onChange={(event) => { feedback.touch(); setGreeting(event.target.value); }} /></label>
-    <div className="heading-with-tip"><small id={greetingHint} className="muted-copy">{m.greetingHint} {m.count(greeting.length, limits.greeting)}</small>
+    <div className="heading-with-tip field-hint"><small id={greetingHint} className="muted-copy">{m.greetingHint} {m.count(greeting.length, limits.greeting)}</small>
       <HelpTip id={`${greetingHint}-why`} label={m.greeting} text={m.greetingWhy} /></div>
     <fieldset className="field"><legend>{m.suggestions}</legend>
       {suggestions.map((suggestion, index) => <span className="input-with-actions" key={index}>
@@ -107,7 +107,7 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
     <label className="field"><span>{m.instructions}</span>
       <textarea rows={4} value={instructions} maxLength={limits.instructions} aria-describedby={`${instructionsHint} ${instructionsHint}-why`}
         onChange={(event) => { feedback.touch(); setInstructions(event.target.value); }} /></label>
-    <div className="heading-with-tip"><small id={instructionsHint} className="muted-copy">{m.instructionsHint} {m.count(instructions.length, limits.instructions)}</small>
+    <div className="heading-with-tip field-hint"><small id={instructionsHint} className="muted-copy">{m.instructionsHint} {m.count(instructions.length, limits.instructions)}</small>
       <HelpTip id={`${instructionsHint}-why`} label={m.instructions} text={m.instructionsWhy} /></div>
     <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(label)}</button>
       {feedback.status}</span>
@@ -143,7 +143,7 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
       ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate({ widget_origins: lines(origins) }); }}>
           <label className="field"><span>{m.origins}</span>
             <textarea rows={3} value={origins} placeholder="https://shop.example.com" aria-describedby={`${hint} ${hint}-why`} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
-          <div className="heading-with-tip"><small id={hint} className="muted-copy">{m.originsHint}</small>
+          <div className="heading-with-tip field-hint"><small id={hint} className="muted-copy">{m.originsHint}</small>
             <HelpTip id={`${hint}-why`} label={m.origins} text={m.originsWhy} /></div>
           <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveSite)}</button>
             {feedback.status}</span>
@@ -172,7 +172,7 @@ function Connect({ canManage, create }: ConnectProps) {
   const nameField = <>
     <label className="field"><span>{m.name}</span>
       <input value={name} maxLength={80} aria-describedby={`${hint} ${hint}-why`} onChange={(event) => setName(event.target.value)} /></label>
-    <div className="heading-with-tip"><small id={hint} className="muted-copy">{m.nameHint}</small><HelpTip id={`${hint}-why`} label={m.name} text={m.nameWhy} /></div>
+    <div className="heading-with-tip field-hint"><small id={hint} className="muted-copy">{m.nameHint}</small><HelpTip id={`${hint}-why`} label={m.name} text={m.nameWhy} /></div>
   </>;
   return <SurfaceForm canManage={canManage} save={saveState(save)} label={m.add} nameField={nameField} onSave={(value) => save.mutate(value)} />;
 }

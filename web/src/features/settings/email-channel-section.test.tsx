@@ -348,8 +348,8 @@ test('a verified domain says every mailbox on it shares the verification', () =>
 
 test('on a server without hosted mail, the inbound URL says what it is for, links the guide and gives a test request with the new secret', () => {
   render(<EmailChannelSection settings={connected} timezone="UTC" canManage createdSecret="s3cret-value" part="connection" />);
-  expect(screen.getByText('Forward your mail to the inbound URL, with the secret.')).toBeInTheDocument();
-  const why = screen.getByRole('button', { name: 'About Forwarding to the inbound URL' });
+  expect(screen.getByText('Have a forwarder send your mail to the inbound URL.')).toBeInTheDocument();
+  const why = screen.getByRole('button', { name: 'About Inbound URL' });
   expect(why).toHaveAccessibleDescription(/Your mailbox cannot send to the inbound URL by itself/i);
   expect(why).toHaveAccessibleDescription(/not your email password/i);
   fireEvent.click(why);

@@ -425,7 +425,7 @@ test('step 2 on a server without a hosted address names the forwarder in one lin
   const panel = within(forward).getByRole('tabpanel');
   expect(ownText(panel.querySelector('p') as Element)).toBe('Gmail needs a forwarder.');
   expect(within(panel).getByRole('button', { name: 'Set it up under Other / own server' })).toBeInTheDocument();
-  expect(within(panel).getByRole('button', { name: 'About Gmail needs a forwarder.' }))
+  expect(within(panel).getByRole('button', { name: 'About Forwarder' }))
     .toHaveAccessibleDescription('Gmail forwards to an email address. This server receives mail at an inbound URL instead, so a forwarder sits between them.');
 });
 
@@ -462,4 +462,16 @@ test('how to disconnect an address is in the tip of the list heading, not on the
   expect(screen.getByRole('button', { name: 'About Support addresses' }))
     .toHaveAccessibleDescription('To disconnect an address, select Manage on its row, then Disconnect email. Its conversations stay.');
   expect(screen.getByRole('button', { name: 'About Support addresses' }).closest('details')).toBeNull();
+});
+
+test('the help tips of one setup page are named after their labels and none shares a name with another', async () => {
+  waitingChannel();
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { hosted_address: null }));
+  show(`${MAIN}/setup`, { step: 'forward' });
+  const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
+  fireEvent.click(within(forward).getByRole('tab', { name: 'Gmail' }));
+  const names = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')).filter((name): name is string => Boolean(name?.startsWith('About ')));
+  expect(names.length).toBeGreaterThan(0);
+  expect(new Set(names).size).toBe(names.length);
+  expect(names).toContain('About Forwarder');
 });

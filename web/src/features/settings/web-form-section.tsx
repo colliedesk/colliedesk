@@ -49,7 +49,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
               {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{settingsMessages.webFormAccept}</span></label>}
               <label className="field"><span>{settingsMessages.webFormOrigins}</span>
                 <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={`${originsHelp} ${originsHelp}-why`} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
-              <div className="heading-with-tip"><small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
+              <div className="heading-with-tip field-hint"><small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
                 <HelpTip id={`${originsHelp}-why`} label={settingsMessages.webFormOrigins} text={channelSetupMessages.webFormOriginsWhy} /></div>
               <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(settingsMessages.saveWebForm)}</button>
                 {feedback.status}</span>

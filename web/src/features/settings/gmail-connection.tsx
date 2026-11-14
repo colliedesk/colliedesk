@@ -73,12 +73,12 @@ const providers: Record<MailboxProvider, ProviderText> = {
   },
 };
 
-// returnText explains the outcome the provider sent back; button is what starts that provider's sign-in on
-// screen now. Unknown reasons get the generic text: the address is never shown as written.
-function returnText(returned: MailboxReturn, button: string): string {
+// returnText explains a connected or failed outcome the provider sent back. Unknown reasons get the generic text:
+// the address is never shown as written. An admin's approval is said by its own line, since the person finishes
+// by selecting the button that starts the sign-in.
+function returnText(returned: MailboxReturn): string {
   const text = providers[returned.provider ?? 'google'];
   if (returned.kind === 'connected') return text.justConnected;
-  if (returned.kind === 'admin_consent_done') return messages.microsoftAdminConsentDone(button);
   const reason = returned.reason ?? '';
   return Object.hasOwn(text.returnErrors, reason) ? text.returnErrors[reason] : text.connectFailed;
 }
@@ -101,8 +101,7 @@ function useRealm(): 'cloud' | 'self-hosted' | undefined {
 export function GmailDataDisclosure() {
   const cloud = useCloud();
   return cloud && <p className="muted-copy">
-    {messages.gmailGoogleData} <a href={messages.gmailPrivacyURL} target="_blank" rel="noopener noreferrer">{messages.gmailPrivacyPolicy}</a>{' '}
-    <HelpTip label={messages.gmailLabel} text={messages.gmailGoogleLimitedUse} />
+    {messages.gmailGoogleData} <a href={messages.gmailPrivacyURL} target="_blank" rel="noopener noreferrer">{messages.gmailPrivacyPolicy}</a>
   </p>;
 }
 
@@ -119,7 +118,7 @@ export function MicrosoftDataDisclosure() {
 // approval opens Microsoft's sign-in, which a work account may only pass with its admin's approval.
 export function MicrosoftRequestNote() {
   return <>
-    <p className="muted-copy">{messages.microsoftRequestNote} <HelpTip label={messages.microsoftLabel} text={messages.microsoftRequestWhy} /></p>
+    <p className="muted-copy">{messages.microsoftRequestNote} <HelpTip label={messages.microsoftRequestLabel} text={messages.microsoftRequestWhy} /></p>
     <MicrosoftDataDisclosure />
   </>;
 }
@@ -221,11 +220,14 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
         <HelpTip label={messages.mailboxHeading} text={connection ? text.connectedWhy : messages.mailboxWhy} /></div>
       <p className="muted-copy">{messages.mailboxDescription}</p>
       {returned && (returned.kind === 'error'
-        ? <p role="alert" className="error-copy">{returnText(returned, buttonFor(returned.provider ?? 'google'))}
+        ? <p role="alert" className="error-copy">{returnText(returned)}
             {returned.reason === 'address_mismatch' && returned.provider === 'microsoft' && <> {messages.microsoftAliasNotSupported(supportAddress)}</>}
             {returned.reason === 'address_mismatch' && <> {providers[returned.provider ?? 'google'].signInAs(supportAddress, buttonFor(returned.provider ?? 'google'))}</>}
             {returned.channel && <> <a href={`/settings/channels/${encodeURIComponent(returned.channel)}?tab=replies`}>{messages.gmailOpenHolder}</a></>}</p>
-        : <p role="status" className="muted-copy">{returnText(returned, buttonFor(returned.provider ?? 'google'))}</p>)}
+        // The admin approved: the person finishes by selecting the button, so the line stays whole.
+        : returned.kind === 'admin_consent_done'
+          ? <p role="status" className="muted-copy" data-quiet="state">{messages.microsoftAdminConsentDone(buttonFor('microsoft'))}</p>
+          : <p role="status" className="muted-copy">{returnText(returned)}</p>)}
       {error && <p role="alert" className="error-copy">{error}</p>}
       {/* The connected provider lost its settings: said plainly. Without a connection, the providers this
           server lacks are folded for the admin, or shown as before when there is none at all. */}
@@ -255,7 +257,7 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
       {connection && settings.address_matches === false
         ? <p role="note" className="warning-note">{text.addressMismatch(connection.address, supportAddress)}</p>
         : connection && connection.address !== supportAddress.toLowerCase() && <p className="muted-copy">{messages.gmailOtherAddress(connection.address, supportAddress)}{' '}
-          <HelpTip label={text.label} text={messages.gmailOtherAddressWhy(supportAddress)} /></p>}
+          <HelpTip label={messages.gmailSenderLabel} text={messages.gmailOtherAddressWhy(supportAddress)} /></p>}
       {/* Microsoft asked for an admin's approval while switching or using another account, or a reconnect after
           a sign-in policy blocked the account may need it again. */}
       {connection && canManage && microsoft?.available && (approvalOpen || (connection.status === 'failed' && active === 'microsoft')) && approval}

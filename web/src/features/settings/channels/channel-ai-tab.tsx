@@ -81,7 +81,7 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
   });
   const askedSlot = asking ? slotOf(asking.slot) : undefined;
   return <div className="ch-ai">
-    <p className="ch-ai-lead">{m.aiLead} <HelpTip label={m.tabAI} text={m.aiWhy} /></p>
+    <p className="ch-ai-lead">{m.aiLead} <HelpTip label={m.aiLeadLabel} text={m.aiWhy} /></p>
     {!isAdmin && <p className="notice notice-plain" role="note"><span>{m.aiAdminsOnly}</span></p>}
     <table className="ch-ai-table">
       <thead><tr><th scope="col">{m.aiFeature}</th>{scopes.map((entry) => <th key={entry.scope} scope="col">{scopeName(entry.scope)}</th>)}</tr></thead>

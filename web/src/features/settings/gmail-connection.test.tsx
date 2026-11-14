@@ -47,9 +47,7 @@ afterEach(() => window.history.replaceState(null, '', '/'));
 
 test('on Colliedesk Cloud the Connect button comes with the Limited Use statement and a link to how Google data is handled', () => {
   render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage />, cloud);
-  expect(screen.getByText('How Colliedesk handles Google data:')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'About Gmail' }))
-    .toHaveAccessibleDescription(/adheres to the Google API Services User Data Policy, including the Limited Use requirements/);
+  expect(screen.getByText(/adheres to the Google API Services User Data Policy, including the Limited Use requirements/)).toBeVisible();
   expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', 'https://colliedesk.com/privacy#google-user-data');
 });
 
@@ -102,7 +100,7 @@ test('a Gmail address other than the support address says where answers go', () 
   const other = { ...connected, connection: { ...connected.connection!, address: 'acme.help@gmail.com' } };
   render(<GmailConnection gmail={other} supportAddress="support@example.com" timezone="UTC" canManage />);
   expect(screen.getByText('Customers see acme.help@gmail.com as the sender; answers go to support@example.com.')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'About Gmail' })).toHaveAccessibleDescription('Keep forwarding support@example.com here, so their answers reach Colliedesk.');
+  expect(screen.getByRole('button', { name: 'About Sender address' })).toHaveAccessibleDescription('Keep forwarding support@example.com here, so their answers reach Colliedesk.');
 });
 
 test('a failed connection is an alert with the reason and a reconnect, never silent', () => {
@@ -206,4 +204,11 @@ test('the channel a refused account belongs to is read from the address and clea
 test('Google signing in another account says which account to choose', () => {
   render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage returned={{ kind: 'error', reason: 'address_mismatch' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Google signed in another account. A channel sends as its own support address. Select Connect Gmail and choose support@example.com at Google.');
+});
+
+test('every help tip of the mailbox block is named after the label it explains, and no two share a name', () => {
+  const other = { ...connected, connection: { ...connected.connection!, address: 'acme.help@gmail.com' } };
+  render(<GmailConnection gmail={other} supportAddress="support@example.com" timezone="UTC" canManage />, cloud);
+  const names = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')).filter((name) => name?.startsWith('About '));
+  expect(names).toEqual(['About Send from your mailbox', 'About Sender address']);
 });

@@ -88,7 +88,7 @@ export function ForwardStep({ channel, settings, canManage, timezone, provider, 
     <div role="tabpanel" id={panelID(prefix, tab)} aria-labelledby={tabID(prefix, tab)} className="setup-provider">
       {!hosted && tab !== 'other'
         ? <p className="muted-copy">{m.needsForwarder(shown.label)} <button type="button" className="link-action" onClick={() => onProvider('other')}>{m.openOther}</button>
-            {' '}<HelpTip label={m.needsForwarder(shown.label)} text={m.needsForwarderWhy(shown.label)} /></p>
+            {' '}<HelpTip label={m.forwarder} text={m.needsForwarderWhy(shown.label)} /></p>
         : <ol className="setup-instructions">{shown.steps.map((text, index) => <li key={text}>
             {shown.warning?.before === index && <p role="note" className="warning-note">{shown.warning.text}</p>}
             <span>{text}</span>

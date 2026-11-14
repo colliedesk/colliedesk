@@ -20,6 +20,7 @@ export const setupMessages = {
   copy: 'Copy',
   providerTabs: 'Your mail provider',
   needsForwarder: (provider: string) => `${provider} needs a forwarder.`,
+  forwarder: 'Forwarder',
   needsForwarderWhy: (provider: string) => `${provider} forwards to an email address. This server receives mail at an inbound URL instead, so a forwarder sits between them.`,
   openOther: 'Set it up under Other / own server',
   waitingFirstEmail: 'Waiting for first email',

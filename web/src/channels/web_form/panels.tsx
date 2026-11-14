@@ -42,7 +42,7 @@ function Connect({ canManage, create }: ConnectProps) {
     <label className="field"><span>{formMessages.name}</span>
       <input ref={field} value={name} maxLength={80} aria-invalid={taken ? true : undefined} aria-describedby={`${taken ? `${errorID} ` : ''}${hintID} ${hintID}-why`}
         onChange={(event) => setName(event.target.value)} /></label>
-    <div className="heading-with-tip"><small id={hintID} className="muted-copy">{formMessages.nameHint}</small>
+    <div className="heading-with-tip field-hint"><small id={hintID} className="muted-copy">{formMessages.nameHint}</small>
       <HelpTip id={`${hintID}-why`} label={formMessages.name} text={formMessages.nameWhy} /></div>
     {taken && <p role="alert" id={errorID} className="error-copy">{taken.error}{' '}
       {taken.conflict && <a href={`/settings/channels/${encodeURIComponent(taken.conflict.channel_id)}`}>{formMessages.open(taken.conflict.channel_name)}</a>}</p>}

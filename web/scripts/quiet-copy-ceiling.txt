@@ -144,6 +144,7 @@ features/settings/ai-messages.ts:aiMessages.rotateHelp	63
 features/settings/ai-messages.ts:aiMessages.usageHelp	133
 features/settings/connected-apps-section.tsx:connectedAppsMessages.description	256
 features/settings/connected-apps-section.tsx:connectedAppsMessages.removingInApp	76
+features/settings/gmail-messages.ts:gmailMessages.gmailGoogleData + features/settings/gmail-messages.ts:gmailMessages.gmailPrivacyPolicy	205
 features/settings/import-messages.ts:importMessages.adminsOnly	81
 features/settings/import-messages.ts:importMessages.apiCalls + features/settings/import-messages.ts:importMessages.rateLimitWait	200
 features/settings/import-messages.ts:importMessages.closeNote	69

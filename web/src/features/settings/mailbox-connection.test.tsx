@@ -192,7 +192,7 @@ test('the success and an admin\'s approval are statuses', () => {
   const { rerender } = render(block({ microsoft: { ...microsoft, connection: msConnection }, returned: { kind: 'connected', provider: 'microsoft' } }));
   expect(screen.getByRole('status')).toHaveTextContent('Microsoft 365 is connected.');
   rerender(block({ returned: { kind: 'admin_consent_done', provider: 'microsoft' } }));
-  expect(screen.getByRole('status')).toHaveTextContent('Your Microsoft 365 admin approved Colliedesk. Then select Connect Microsoft 365.');
+  expect(screen.getByRole('status')).toHaveTextContent('Your Microsoft 365 admin approved Colliedesk. Select Connect Microsoft 365 to finish.');
 });
 
 test('Microsoft\'s outcome is read once from the address, with its provider, and cleaned', () => {
@@ -217,7 +217,7 @@ test('on Colliedesk Cloud each provider links how its data is handled; Microsoft
 test('the approver of an agent\'s request to connect Microsoft 365 reads that a work account may need its admin first', () => {
   render(<MicrosoftRequestNote />);
   expect(screen.getByText('Approving opens Microsoft\'s sign-in page.')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'About Microsoft 365' })).toHaveAccessibleDescription('A work account may need its Microsoft 365 admin\'s approval first.');
+  expect(screen.getByRole('button', { name: 'About Microsoft sign-in' })).toHaveAccessibleDescription('A work account may need its Microsoft 365 admin\'s approval first.');
 });
 
 test('on Colliedesk Cloud a server without Microsoft settings leaves Microsoft 365 out, with no settings to name', () => {
@@ -249,7 +249,7 @@ test('an outcome names the button that is on screen now', () => {
   const { rerender } = render(block({ microsoft: { ...microsoft, connection: msConnection }, returned: { kind: 'error', reason: 'address_mismatch', provider: 'microsoft' } }));
   expect(screen.getByRole('alert')).toHaveTextContent('Select Use another Microsoft account and choose support@example.com at Microsoft.');
   rerender(block({ gmail: { ...gmail, connection: gmailConnection }, returned: { kind: 'admin_consent_done', provider: 'microsoft' } }));
-  expect(screen.getByRole('status')).toHaveTextContent('Your Microsoft 365 admin approved Colliedesk. Then select Use Microsoft 365 instead.');
+  expect(screen.getByRole('status')).toHaveTextContent('Your Microsoft 365 admin approved Colliedesk. Select Use Microsoft 365 instead to finish.');
 });
 
 test('a server that lost its Microsoft settings says what to set, not that a wrong secret is being retried', () => {

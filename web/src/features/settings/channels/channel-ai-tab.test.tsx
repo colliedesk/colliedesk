@@ -289,7 +289,7 @@ test('a scope that follows the default shows its settings read-only and says how
   aiApi.settings.mockResolvedValue({ ...settings(), slots: [slot('triage'), slot('draft'), { ...slot('intake'), default_level: 'suggest' }] } as unknown as AISettings);
   view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
-  expect(within(form).getByText('These follow the default. Pick a level for Groups above.')).toBeInTheDocument();
+  expect(within(form).getByText('Following the default. Pick Suggest or Auto for Groups above.')).toBeInTheDocument();
   expect(within(form).getByLabelText('Open a conversation')).toBeDisabled();
   expect(within(form).queryByRole('button', { name: 'Save intake settings' })).not.toBeInTheDocument();
 });
@@ -331,7 +331,7 @@ const ownText = (element: Element) => Array.from(element.childNodes).filter((nod
 test('the AI tab says what it sets in one line, and the levels explanation waits in a tip', async () => {
   view();
   expect(await screen.findByText('What each AI feature does by itself on this channel.')).toBeInTheDocument();
-  const tip = screen.getByRole('button', { name: 'About AI' });
+  const tip = screen.getByRole('button', { name: 'About AI on this channel' });
   expect(tip).toHaveAccessibleDescription(/A level left on the default follows the workspace’s, set in Settings → Built-in AI\./);
   expect(tip).toHaveAccessibleDescription(/People can always ask by hand \(Suggest, Draft with AI\) while the feature is on\./);
   expect(screen.queryByText(/Every change is in this channel’s history/, { selector: '.help' })).toBeNull();
@@ -355,8 +355,8 @@ test('the Auto dialog says in one line what Auto does, and when it waits for a p
   view();
   fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'auto' } });
   const dialog = await screen.findByRole('dialog', { name: 'Let AI decide on its own · Groups' });
-  expect(within(dialog).getByText('AI opens, joins or sets aside each message by itself.')).toBeInTheDocument();
-  const tip = await within(dialog).findByRole('button', { name: 'About Turn on Auto' });
-  expect(tip).toHaveAccessibleDescription(/When AI is not sure, the message waits in Review with its suggestion for a person to decide\./);
+  expect(within(dialog).getByText('AI decides what it is sure of; Review gets the rest.')).toBeInTheDocument();
+  const tip = await within(dialog).findByRole('button', { name: 'About Readiness' });
+  expect(tip).toHaveAccessibleDescription(/A message AI is not sure of waits in Review with its suggestion for a person to decide\./);
   expect(tip).toHaveAccessibleDescription(/A decision is labelled when a person followed or changed what AI suggested in Review\./);
 });

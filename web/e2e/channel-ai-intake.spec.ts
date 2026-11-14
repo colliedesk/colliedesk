@@ -54,7 +54,7 @@ test('intake on a chat channel: Suggest with settings of its own, then Auto asks
   // scope has its own level.
   await page.goto(`${origin}/settings/channels/${channel}?tab=ai`);
   const following = page.getByRole('form', { name: 'Intake settings · Groups' });
-  await expect(following).toContainText('These follow the default. Pick a level for Groups above.');
+  await expect(following).toContainText('Following the default. Pick Suggest or Auto for Groups above.');
   await expect(following.getByRole('button', { name: 'Save intake settings' })).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Intake · Groups' }).selectOption('suggest');
   const form = page.getByRole('form', { name: 'Intake settings · Groups' });

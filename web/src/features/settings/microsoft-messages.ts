@@ -3,6 +3,7 @@
 export const microsoftMessages = {
   microsoftLabel: 'Microsoft 365',
   microsoftRequestNote: 'Approving opens Microsoft\'s sign-in page.',
+  microsoftRequestLabel: 'Microsoft sign-in',
   microsoftRequestWhy: 'A work account may need its Microsoft 365 admin\'s approval first.',
   connectMicrosoft: 'Connect Microsoft 365',
   connectingMicrosoft: 'Opening Microsoft…',
@@ -51,7 +52,7 @@ export const microsoftMessages = {
   microsoftPrivacyURL: 'https://colliedesk.com/privacy#microsoft-user-data',
   microsoftSignInAs: (address: string, button: string) => `Select ${button} and choose ${address} at Microsoft.`,
   microsoftJustConnected: 'Microsoft 365 is connected.',
-  microsoftAdminConsentDone: (button: string) => `Your Microsoft 365 admin approved Colliedesk. Then select ${button}.`,
+  microsoftAdminConsentDone: (button: string) => `Your Microsoft 365 admin approved Colliedesk. Select ${button} to finish.`,
   microsoftConnectFailed: 'Microsoft 365 could not be connected. Try again.',
   microsoftReturnErrors: {
     signed_out: 'Microsoft 365 was not connected: sign in to Colliedesk in this browser, then select Connect Microsoft 365 again.',
