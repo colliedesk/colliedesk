@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useBlocker, useRouter } from '@tanstack/react-router';
 import { InvalidRequestError } from '../../api/client';
 import { settingsMessages } from './settings-messages';
@@ -115,12 +116,13 @@ export function useSettingsSaved(): (undo?: () => unknown) => void {
 }
 
 // useInstantSave saves a choice when it is made: save(next) runs, then the page says Saved with an Undo that runs
-// save(previous), one request. A refused save says nothing here; the control shows the reason it was given.
+// undo(previous), one request (save(previous) unless undo is given; null says Saved with no Undo, for a change that
+// cannot be put back exactly). A refused save says nothing here; the control shows the reason it was given.
 export function useInstantSave() {
   const saved = useSettingsSaved();
-  return useCallback(async <T,>(save: (value: T) => Promise<unknown> | void, next: T, previous: T, undo: (value: T) => Promise<unknown> | void = save) => {
+  return useCallback(async <T,>(save: (value: T) => Promise<unknown> | void, next: T, previous: T, undo: ((value: T) => Promise<unknown> | void) | null = save) => {
     try { await save(next); } catch { return; }
-    saved(() => undo(previous));
+    saved(undo ? () => undo(previous) : undefined);
   }, [saved]);
 }
 
@@ -210,6 +212,17 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
       setToast({ undo, error: error instanceof InvalidRequestError ? error.message : settingsMessages.undoFailed });
     }
   };
+  // A side sheet that is open holds the toast itself: it traps Tab, and the toast would be out of reach of the keyboard
+  // (and over its footer on a phone) anywhere else.
+  const [sheetSlot, setSheetSlot] = useState<Element | null>(null);
+  useEffect(() => {
+    if (!toast) return undefined;
+    const find = () => setSheetSlot(document.querySelector('[data-sheet-toast]'));
+    find();
+    const watch = new MutationObserver(find);
+    watch.observe(document.body, { childList: true, subtree: true });
+    return () => watch.disconnect();
+  }, [toast]);
   const labels = [...edits.current.values(), ...drafts.current.values()].map((item) => item.label);
   const changed = labels.length > 0;
   const unsaved = changed || guards.current.size > 0;
@@ -252,7 +265,9 @@ export function SettingsEditsProvider({ children }: { children: ReactNode }) {
     {routed && <LeaveGuard unsaved={anythingUnsaved} />}
     <p className="sr-only" aria-live="polite">{changed ? `${settingsMessages.unsavedChanges}: ${labels.join(', ')}.${failure ? ` ${failure.label}: ${failure.message}` : ''}` : ''}</p>
     {changed && <SaveBar labels={labels} saving={saving} failure={changed ? failure : undefined} onDiscard={discard} onSave={() => void save()} />}
-    {toast && <SavedToast raised={changed} error={toast.error} onUndo={toast.undo && (() => void undoToast())} onDismiss={() => setToast(undefined)} />}
+    {toast && (sheetSlot
+      ? createPortal(<SavedToast inSheet error={toast.error} onUndo={toast.undo && (() => void undoToast())} onDismiss={() => setToast(undefined)} />, sheetSlot)
+      : <SavedToast raised={changed} error={toast.error} onUndo={toast.undo && (() => void undoToast())} onDismiss={() => setToast(undefined)} />)}
   </Edits.Provider>;
 }
 

@@ -30,9 +30,11 @@ export function page(props: Partial<AIPageProps> = {}) {
     onAdd: vi.fn().mockResolvedValue(undefined), onListModels: vi.fn().mockResolvedValue([]), onSetKey: vi.fn().mockResolvedValue(undefined), onRemove: vi.fn().mockResolvedValue(undefined),
     onSetAutomatic: vi.fn().mockResolvedValue(undefined), onUsageMonth: vi.fn(),
   };
-  render(<AIPage isAdmin workspaceName="Northwind" timezone="UTC" shown={{ general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: false, ai: true }}
-    showConsent={false} settings={settings()} {...handlers} {...props} />);
-  return handlers;
+  const element = (change: Partial<AIPageProps>) => <AIPage isAdmin workspaceName="Northwind" timezone="UTC" shown={{ general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: false, ai: true }}
+    showConsent={false} settings={settings()} {...handlers} {...props} {...change} />;
+  const { rerender } = render(element({}));
+  // again draws the page once more with other props, as when the server's answer changes while a toast is up.
+  return { ...handlers, again: (change: Partial<AIPageProps>) => rerender(element(change)) };
 }
 
 export const server = { kind: 'anthropic' as const, label: 'Colliedesk AI', models: { triage: ['claude-haiku-5-5'], draft: ['claude-sonnet-5-5', 'claude-opus-5-5'] } };

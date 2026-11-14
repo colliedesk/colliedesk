@@ -131,7 +131,7 @@ function AISettingsRoute({ tab, view, onView, onOpenChat }: { tab?: 'chat'; view
     builtIn={readsAI} agents={agentTokensShown(me.data, sessions.data?.items) ? <AIAgentsSections /> : undefined} view={view} onView={onView}
     settings={settings.data} loadFailed={settings.isError} showConsent={!dismissed && neverSet(settings.data)}
     busySlot={busySlot} busyProvider={busyProvider} error={error}
-    onSetSlot={(name, input) => { consent.reset(); check.reset(); slot.mutate({ name, input }); }}
+    onSetSlot={(name, input) => { consent.reset(); check.reset(); return slot.mutateAsync({ name, input }); }}
     onConsent={() => { slot.reset(); check.reset(); consent.mutate(); }}
     onDismissConsent={() => { writeDismissed(workspaceID); setDismissed(true); }}
     onCheck={(id) => { slot.reset(); consent.reset(); check.mutate(id); }}

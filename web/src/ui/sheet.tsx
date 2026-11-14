@@ -33,6 +33,8 @@ export function Sheet({ title, onClose, closeLabel, children, footer }: {
         <header><h2 id={titleId}>{title}</h2>
           <button type="button" className="icon-button" aria-label={closeLabel} onClick={onClose}><XIcon /></button></header>
         <div className="sheet-body">{children}</div>
+        {/* Where a page's own message (the Saved toast of a switch in the sheet) sits: inside the sheet's tab order, above its footer. */}
+        <div className="sheet-toast" data-sheet-toast />
         <footer>{footer}</footer>
       </div>
     </div>

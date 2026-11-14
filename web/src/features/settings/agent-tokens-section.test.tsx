@@ -394,3 +394,11 @@ test('someone who may see and revoke tokens but not make one gets the list witho
   expect(screen.queryByRole('button', { name: 'Create token' })).toBeNull();
   expect(screen.queryByRole('heading', { name: 'Connect your agent' })).toBeNull();
 });
+
+test('a token that turns revoked is announced', () => {
+  const props = { roles: rolesOf('agent'), rolePermissions: new Map([[rolesOf('agent')[0].id, permissionsOf('agent')]]), held: permissionsOf('agent'), origin, onCreate: vi.fn(), timezone: 'UTC', onRevoke: vi.fn() };
+  const { rerender } = render(<AgentTokensSection {...props} tokens={tokens} />);
+  expect(screen.getByRole('status')).toHaveTextContent('');
+  rerender(<AgentTokensSection {...props} tokens={[...tokens.slice(0, 3), { ...tokens[3], revoked_at: '2026-11-12T03:00:00Z' }]} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Nightly tagging script revoked.');
+});

@@ -35,9 +35,9 @@ export function MembersRoute({ tab, onTab }: { tab?: MembersTab; onTab?: (tab: M
   const activePeople = team.data?.items.filter((member) => !member.deactivated_at).length;
   const pendingInvites = invites.section.invites.filter((invite) => !invite.used_at && !invite.revoked_at && Date.parse(invite.expires_at) > Date.now()).length;
   return <SettingsPage page="members" membersTab={tab} onMembersTab={onTab} memberCounts={{ people: activePeople, invites: readsTeam ? pendingInvites : undefined }} loading={loading} timezone={me.data?.timezone ?? 'UTC'} showBilling={billingShown} showInvites={readsTeam}
-    invites={invites.section.invites} canCreateInvites={can(me.data, 'team:invite')} canRevokeInvites={can(me.data, 'team:revoke')} inviteRoles={roles.data?.items}
+    invites={invites.section.invites} canCreateInvites={can(me.data, 'team:invite')} canRevokeInvites={can(me.data, 'team:revoke')} inviteRoles={roles.data?.items} myPermissions={me.data?.permissions}
     inviteError={invites.section.inviteError} createdInvite={invites.section.createdInvite} creatingInvite={invites.section.creatingInvite}
-    onCreateInvite={invites.section.onCreateInvite} onRevokeInvite={invites.section.onRevokeInvite}
+    onCreateInvite={invites.section.onCreateInvite} onRevokeInvite={invites.section.onRevokeInvite} onResendInvite={invites.section.onResendInvite} inviteNotice={invites.section.inviteNotice}
     error={invites.revokeFailed ? messages.settingsActionFailed : undefined}
     teamSection={readsTeam ? <TeamSection members={team.data?.items ?? []} currentAgentId={me.data?.agent.id} canManage={can(me.data, 'team:manage_roles')}
       roles={roles.data?.items} myPermissions={me.data?.permissions} timezone={me.data?.timezone ?? 'UTC'}

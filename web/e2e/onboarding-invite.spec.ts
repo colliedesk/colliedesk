@@ -98,11 +98,13 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   const team = admin.getByRole('region', { name: 'Team' });
   const teammateRow = team.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() });
   await expect(teammateRow).toContainText('Active');
-  await teammateRow.getByRole('button', { name: `Deactivate ${teammateEmail.toLowerCase()}` }).click();
+  await teammateRow.getByRole('button', { name: `Actions for ${teammateEmail.toLowerCase()}` }).click();
+  await teammateRow.getByRole('menuitem', { name: `Deactivate ${teammateEmail.toLowerCase()}` }).click();
   await team.getByRole('button', { name: 'Yes, deactivate' }).click();
   await expect(teammateRow).toContainText('Deactivated');
   expect((await admin.request.get(`${baseURL}/api/v1/agents`)).status()).toBe(200);
-  await teammateRow.getByRole('button', { name: `Reactivate ${teammateEmail.toLowerCase()}` }).click();
+  await teammateRow.getByRole('button', { name: `Actions for ${teammateEmail.toLowerCase()}` }).click();
+  await teammateRow.getByRole('menuitem', { name: `Reactivate ${teammateEmail.toLowerCase()}` }).click();
   await expect(teammateRow).toContainText('Active');
   await expect(teammateRow).not.toContainText('Deactivated');
 
@@ -113,7 +115,8 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   const lateURL = await admin.getByRole('textbox', { name: 'One-time invite link' }).inputValue();
   expect(lateURL).not.toBe(inviteURL);
   const late = invites.getByRole('article').filter({ hasText: `late-${suffix}@example.com` });
-  await late.getByRole('button', { name: 'Revoke' }).click();
+  await late.getByRole('button', { name: `Actions for late-${suffix}@example.com` }).click();
+  await late.getByRole('menuitem', { name: 'Revoke' }).click();
   await expect(late).toContainText('Revoked');
   const lateContext = await browser.newContext();
   const latePage = await lateContext.newPage();

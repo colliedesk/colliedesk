@@ -292,3 +292,14 @@
 /* Under the External AI agents tab the section's name is not said again: it stays for the screen reader and for the anchor
    that links to it (#agents-heading), and the card starts at Agent tokens. */
 .ai-view-panel .agent-tokens > .section-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* The step before chat intake turns on: three plain facts, then the one agreement. */
+.ai-intake-lead { margin: 0; font-size: var(--fs-small); color: var(--text-3); }
+.ai-intake-lead strong { font-weight: 400; }
+.ai-intake-facts { display: grid; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.ai-intake-facts > div { display: grid; gap: var(--space-1); padding: var(--space-3) var(--space-4); }
+.ai-intake-facts > div + div { border-top: 1px solid var(--line); }
+.ai-intake-facts dt { font-size: var(--fs-ui); font-weight: 600; }
+.ai-intake-facts dd { margin: 0; font-size: var(--fs-ui); color: var(--text-2); }
+.ai-intake-agree { display: flex; align-items: flex-start; gap: var(--space-3); min-height: var(--control); font-size: var(--fs-ui); }
+.ai-intake-agree input { margin: 2px 0 0; flex-shrink: 0; }

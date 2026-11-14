@@ -198,14 +198,16 @@ test('a person who may invite but not revoke sees a pending invite without Revok
   open('/setup/invite');
   await title('Invite your team');
   expect(await screen.findByText('kim@example.com')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Actions for kim@example.com' }));
+  expect(screen.queryByRole('menuitem', { name: 'Revoke' })).not.toBeInTheDocument();
 });
 
 test('a person who may invite and revoke can revoke a pending invite in the setup flow', async () => {
   serve({ role: 'agent', permissions: [...permissionsOf('agent'), 'team:invite', 'team:revoke'], setup: progress({ invite: 'invited' }), invites: [{ ...invite, expires_at: '2099-01-01T00:00:00Z' }] });
   open('/setup/invite');
   await title('Invite your team');
-  expect(await screen.findByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('button', { name: 'Actions for kim@example.com' }));
+  expect(screen.getByRole('menuitem', { name: 'Revoke' })).toBeInTheDocument();
 });
 
 test('the summary lists every step with its state, links back to each unfinished one and opens the inbox', async () => {

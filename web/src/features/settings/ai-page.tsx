@@ -50,7 +50,9 @@ function BuiltInPanel({ panel, children }: { panel?: { id: string; label: string
 export function AIPage(props: AIPageProps) {
   const { settings, isAdmin } = props;
   const focusAfterSave = useFocusAfterSave(props.busySlot);
-  const setSlot = (slot: AISlotName, input: AISlotInput) => { focusAfterSave(slot); props.onSetSlot(slot, input); };
+  const setSlot = (slot: AISlotName, input: AISlotInput) => { focusAfterSave(slot); return props.onSetSlot(slot, input); };
+  // A change that is not a switch (a dialog's Turn on, a level) shows a refusal in the page's notice: nothing waits for it here.
+  const setSlotNow = (slot: AISlotName, input: AISlotInput) => { void Promise.resolve(setSlot(slot, input)).catch(() => undefined); };
   const [tab, setTab] = useState<AITab>(props.initialTab ?? 'features');
   const [dialog, setDialog] = useState<{ kind: 'add' } | { kind: 'automatic' } | { kind: 'auto-triage' | 'auto-draft'; slot: AISlot } | { kind: 'key' | 'delete'; provider: AIProvider }>();
   const ids = { tabs: useId(), views: useId() };
@@ -92,7 +94,7 @@ export function AIPage(props: AIPageProps) {
             {props.error && <p role="alert" className="error-copy">{props.error}</p>}
             <div role="tabpanel" id={panelID(ids.tabs, tab)} aria-labelledby={tabID(ids.tabs, tab)} className="ai-panel-stack">
               {tab === 'features' && <Features {...props} settings={settings} onOpenAdd={openAdd} onOpenAutomatic={() => setDialog({ kind: 'automatic' })}
-                onConfirmAuto={(slot) => setDialog({ kind: slot.slot === 'draft' ? 'auto-draft' : 'auto-triage', slot })} onSetAuto={setSlot} />}
+                onConfirmAuto={(slot) => setDialog({ kind: slot.slot === 'draft' ? 'auto-draft' : 'auto-triage', slot })} onSetAuto={setSlotNow} onSetSlot={setSlot} />}
               {tab === 'chat' && <AIChatPanel timezone={props.timezone} onOpen={(id) => props.onOpenChat?.(id)} slot={settings.slots.find((slot) => slot.slot === 'chat')}
                 onSetCap={props.onSetChatCap} isAdmin={isAdmin} serverPrices={settings.server !== null} />}
               {tab === 'usage' && <Usage usage={props.usage} failed={props.usageFailed} month={month} onMonth={(next) => { setMonth(next); props.onUsageMonth(next); }} />}
@@ -110,9 +112,9 @@ export function AIPage(props: AIPageProps) {
       {dialog?.kind === 'automatic' && settings && <AutomaticDialog settings={settings} onClose={() => setDialog(undefined)} onSave={props.onSetAutomatic} />}
       {dialog?.kind === 'delete' && settings && <DeleteDialog provider={dialog.provider} settings={settings} onClose={() => setDialog(undefined)} onRemove={props.onRemove} />}
       {dialog?.kind === 'auto-draft' && settings && <AutoDraftDialog slot={dialog.slot} settings={settings} onClose={() => { setDialog(undefined); focusSwitch('draft'); }}
-        onTurnOn={() => { setDialog(undefined); setSlot('draft', { ...slotInput(dialog.slot), default_level: 'suggest' }); }} />}
+        onTurnOn={() => { setDialog(undefined); setSlotNow('draft', { ...slotInput(dialog.slot), default_level: 'suggest' }); }} />}
       {dialog?.kind === 'auto-triage' && <AutoTriageDialog slot={dialog.slot} onClose={() => { setDialog(undefined); focusSwitch('triage'); }}
-        onTurnOn={() => { setDialog(undefined); setSlot('triage', { ...slotInput(dialog.slot), default_level: 'auto' }); }} />}
+        onTurnOn={() => { setDialog(undefined); setSlotNow('triage', { ...slotInput(dialog.slot), default_level: 'auto' }); }} />}
     </main>
   );
 }

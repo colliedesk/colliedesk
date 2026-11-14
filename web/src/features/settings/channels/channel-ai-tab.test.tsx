@@ -365,3 +365,46 @@ test('the Auto dialog says in one line what Auto does, and when it waits for a p
   expect(tip).toHaveAccessibleDescription(/A message AI is not sure of waits in Review with its suggestion for a person to decide\./);
   expect(tip).toHaveAccessibleDescription(/A decision is labelled when a person followed or changed what AI suggested in Review\./);
 });
+
+// A channel's level is a choice: it saves when it is made, says "Saved" and offers Undo, which sends the level it had
+// before in one request.
+test('a level picked for a scope says Saved with Undo, and Undo sends the previous level', async () => {
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'off' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'off' }));
+  fireEvent.click(within((await screen.findByText('Saved')).closest('.settings-toast') as HTMLElement).getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenLastCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: { create_threshold: 0.8 } }));
+  expect(aiApi.setChannel).toHaveBeenCalledTimes(2);
+});
+
+test('a level the server refuses says nothing is saved', async () => {
+  aiApi.setChannel.mockRejectedValue(new Error('refused'));
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'off' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalled());
+  await new Promise((resolve) => { setTimeout(resolve, 30); });
+  expect(screen.queryByText('Saved')).toBeNull();
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+});
+
+// Choosing Follows deletes the scope's row and its settings on the server. Undo must put back exactly what was there: the
+// level with the settings it had (redact words, instructions, an override and its reason), never a bare Auto.
+const autoOptions = { create_threshold: 0.8, redact_keywords: ['mật khẩu'], instructions: 'Lệnh "Báo lỗi" mở phiếu.', gate_override: ['attach' as const], gate_override_reason: 'We checked 50 by hand' };
+
+test('Undo of Follows on an Auto scope sends the settings the scope had with its level', async () => {
+  aiApi.channel.mockResolvedValue(levels({ level: 'auto', effective_level: 'auto', options: autoOptions }));
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: '' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: null }));
+  fireEvent.click(within((await screen.findByText('Saved')).closest('.settings-toast') as HTMLElement).getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenLastCalledWith(CHAT, 'intake', { scope: 'group', level: 'auto', options: autoOptions }));
+});
+
+test('where the settings the scope had are not known, Saved offers no Undo: Auto is never put back without them', async () => {
+  aiApi.channel.mockResolvedValue(levels({ level: 'auto', effective_level: 'auto', options: null }));
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: '' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledTimes(1));
+  const toast = (await screen.findByText('Saved')).closest('.settings-toast') as HTMLElement;
+  expect(within(toast).queryByRole('button', { name: 'Undo' })).toBeNull();
+});

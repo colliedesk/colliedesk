@@ -493,7 +493,7 @@ const roleRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setting
 const moved = <P extends string>(path: P) => createRoute({ getParentRoute: () => rootRoute, path,
   beforeLoad: ({ location }) => { throw redirect({ href: movedAddress(path, location.searchStr, location.hash), replace: true }); } });
 const movedRoutes = [moved('/settings/profile'), moved('/settings/preferences'), moved('/settings/sessions'), moved('/settings/numbers'), moved('/settings/roles'),
-  moved('/settings/agents'), moved('/settings/import'), moved('/settings/export'), moved('/settings/import-freshdesk'), moved('/settings/help-center')];
+  moved('/settings/agents'), moved('/settings/import'), moved('/settings/export'), moved('/settings/import-freshdesk'), moved('/settings/help-center'), moved('/help-center/settings')];
 // Settings → Response targets: business hours and the targets of each priority.
 const targetsRoute = createRoute({
   getParentRoute: () => rootRoute,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { InvalidRequestError, PlanLimitError } from '../../api/client';
 import type { Role, TeamMember } from '../../api/schemas';
 import { RoleCheckboxes } from './role-checkboxes';
+import { RowMenu } from './row-menu';
 import { roleMessages } from './roles-messages';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
@@ -49,15 +50,14 @@ export function TeamSection({ members, currentAgentId, canManage, roles = [], my
   const leaveRename = () => { if (renaming && !confirmDrop(`rename:${renaming}`)) return false; dropDrafts('rename:'); return true; };
   const [changing, setChanging] = useState<string | null>(null);
   const [status, setStatus] = useState<string>();
-  // After a question or the rename form closes, focus goes to the row (done) or the button that opened it (cancelled).
-  const [refocus, setRefocus] = useState<{ id: string; target: 'row' | 'button' | 'rename' | 'roles' } | null>(null);
+  // After a question or the rename form closes, focus goes to the row (done) or the menu that opened it (cancelled).
+  const [refocus, setRefocus] = useState<{ id: string; target: 'row' | 'menu' } | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
-  const buttons = useRef(new Map<string, HTMLElement>());
-  const renameButtons = useRef(new Map<string, HTMLElement>());
-  const roleButtons = useRef(new Map<string, HTMLElement>());
+  // Every action of a row is in its "⋯" menu: when one closes or is cancelled, focus goes back to that button.
+  const menuButtons = useRef(new Map<string, HTMLElement>());
   useEffect(() => {
     if (!refocus) return;
-    ({ row: rows, button: buttons, rename: renameButtons, roles: roleButtons })[refocus.target].current.get(refocus.id)?.focus();
+    (refocus.target === 'row' ? rows : menuButtons).current.get(refocus.id)?.focus();
     setRefocus(null);
   }, [refocus]);
   // The server refuses to leave a workspace without an active member holding Admin; the button is not offered either.
@@ -80,38 +80,36 @@ export function TeamSection({ members, currentAgentId, canManage, roles = [], my
                 {member.display_name && <small>{member.email}</small>}</span>
               <span className="team-role role-chips" aria-label={settingsMessages.teamRoleOf(name)}>
                 {member.roles.map((role) => <span key={role.id} className="role-chip" title={role.name}>{role.name}</span>)}
-                {manage && !deactivated && changing !== member.id && <button type="button" aria-expanded={false} aria-controls={`roles-of-${member.id}`}
-                  ref={(node) => { if (node) roleButtons.current.set(member.id, node); else roleButtons.current.delete(member.id); }}
-                  aria-label={`${roleMessages.changeRoles}: ${name}`} onClick={() => { setStatus(undefined); setChanging(member.id); }}>{roleMessages.changeRoles}</button>}
               </span>
               <span>{deactivated ? settingsMessages.teamDeactivated : settingsMessages.teamActive}</span>
               <time>{member.last_active_at ? settingsMessages.teamLastActive(formatDate(member.last_active_at, timezone)) : settingsMessages.teamNeverSignedIn}</time>
             </div>
             {canManage && !manage && <span className="team-actions" aria-label={roleMessages.outranks} />}
-            {manage && <span className="team-actions">
-              {renaming !== member.id &&
-                <button type="button" aria-label={settingsMessages.teamRenameName(name)} ref={(node) => { if (node) renameButtons.current.set(member.id, node); else renameButtons.current.delete(member.id); }}
-                  onClick={() => { if (!leaveRename()) return; setConfirming(null); setRenaming(member.id); }}>{settingsMessages.teamRename}</button>}
-              {!deactivated && !lastAdmin && confirming !== member.id &&
-                <button type="button" className="danger-action" aria-label={settingsMessages.teamDeactivateName(name)} ref={(node) => { if (node) buttons.current.set(member.id, node); else buttons.current.delete(member.id); }} onClick={() => { if (!leaveRename()) return; setRenaming(null); setConfirming(member.id); }}>{settingsMessages.teamDeactivate}</button>}
-              {deactivated &&
-                <button type="button" aria-label={settingsMessages.teamReactivateName(name)} title={settingsMessages.teamReactivateHelp} onClick={() => onReactivate?.(member.id)}>{settingsMessages.teamReactivate}</button>}
-            </span>}
+            {manage && <span className="team-actions"><RowMenu label={name} buttonRef={(node) => { if (node) menuButtons.current.set(member.id, node); else menuButtons.current.delete(member.id); }}
+              items={[
+                ...(!deactivated && changing !== member.id ? [{ key: 'roles', label: roleMessages.changeRoles, name: `${roleMessages.changeRoles}: ${name}`,
+                  onSelect: () => { setStatus(undefined); setChanging(member.id); } }] : []),
+                ...(renaming !== member.id ? [{ key: 'rename', label: settingsMessages.teamRename, name: settingsMessages.teamRenameName(name),
+                  onSelect: () => { if (!leaveRename()) return; setConfirming(null); setRenaming(member.id); } }] : []),
+                ...(!deactivated && !lastAdmin && confirming !== member.id ? [{ key: 'deactivate', label: settingsMessages.teamDeactivate, name: settingsMessages.teamDeactivateName(name), danger: true,
+                  onSelect: () => { if (!leaveRename()) return; setRenaming(null); setConfirming(member.id); } }] : []),
+                ...(deactivated ? [{ key: 'reactivate', label: settingsMessages.teamReactivate, name: settingsMessages.teamReactivateName(name), onSelect: () => { onReactivate?.(member.id); setStatus(settingsMessages.teamReactivated(name)); } }] : []),
+              ]} /></span>}
             {changing === member.id && <ChangeRoles member={member} roles={roles} myPermissions={myPermissions} lastAdmin={lastAdmin}
               isSelf={member.id === currentAgentId}
-              onCancel={() => { setChanging(null); setRefocus({ id: member.id, target: 'roles' }); }}
+              onCancel={() => { setChanging(null); setRefocus({ id: member.id, target: 'menu' }); }}
               onApply={async (roleIds) => {
                 await onSetRoles?.(member.id, roleIds);
                 setChanging(null);
                 setStatus(roleMessages.nowHas(name, roles.filter((role) => roleIds.includes(role.id)).map((role) => role.name)));
-                setRefocus({ id: member.id, target: 'roles' });
+                setRefocus({ id: member.id, target: 'menu' });
               }} />}
             {renaming === member.id && <RenameForm member={member}
-              onCancel={() => { setRenaming(null); setRefocus({ id: member.id, target: 'rename' }); }}
+              onCancel={() => { setRenaming(null); setRefocus({ id: member.id, target: 'menu' }); }}
               onSave={async (next) => { await onRename?.(member.id, next); setRenaming(null); setRefocus({ id: member.id, target: 'row' }); }} />}
             {confirming === member.id && <DeactivateConfirm member={member} others={members.filter((other) => other.id !== member.id && other.deactivated_at === null)}
               isSelf={member.id === currentAgentId}
-              onCancel={() => { setConfirming(null); setRefocus({ id: member.id, target: 'button' }); }}
+              onCancel={() => { setConfirming(null); setRefocus({ id: member.id, target: 'menu' }); }}
               onConfirm={(reassignTo) => { setConfirming(null); setRefocus({ id: member.id, target: 'row' }); onDeactivate?.(member.id, reassignTo); }} />}
           </article>;
         })}</div>

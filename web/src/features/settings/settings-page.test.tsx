@@ -44,7 +44,13 @@ test('shows the state of every invite and offers revoke only while it is pending
   expect(row('accepted@example.com')).toHaveTextContent('Accepted');
   expect(row('revoked@example.com')).toHaveTextContent('Revoked');
   expect(row('expired@example.com')).toHaveTextContent('Expired');
-  expect(within(invites).getAllByRole('button', { name: 'Revoke' })).toHaveLength(1);
+  // A row's actions are in its menu: a pending invite can get a new link or be revoked, an expired one a new link; an ended one has none.
+  expect(within(invites).getAllByRole('button', { name: /^Actions for / }).map((button) => button.getAttribute('aria-label'))).toEqual(['Actions for pending@example.com', 'Actions for expired@example.com']);
+  fireEvent.click(within(row('pending@example.com')).getByRole('button', { name: 'Actions for pending@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link', 'Revoke']);
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  fireEvent.click(within(row('expired@example.com')).getByRole('button', { name: 'Actions for expired@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link']);
   // The sessions, with their own Revoke buttons, are on Account now, not beside the invites.
   expect(screen.queryByRole('region', { name: 'Sessions' })).not.toBeInTheDocument();
 });
@@ -56,7 +62,8 @@ test('an invite stays listed without Revoke for a person who may invite but not 
   ]} />);
   const invites = screen.getByRole('region', { name: 'Invites' });
   expect(within(invites).getByText('pending@example.com')).toBeInTheDocument();
-  expect(within(invites).queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument();
+  fireEvent.click(within(invites).getByRole('button', { name: 'Actions for pending@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link']);
 });
 
 // Agent tokens are listed in AI & agents (ai-agents-sections.tsx), with the same rows as before.
@@ -391,4 +398,30 @@ test('picking the default role again is not a change: only an email, or a role o
   await waitFor(() => expect(closingTabAsks()).toBe(true));
   fireEvent.click(admin);
   await waitFor(() => expect(closingTabAsks()).toBe(false));
+});
+
+// The server refuses an invite whose roles hold a permission the person lacks (403 role_exceeds_yours): the menu does not offer it.
+// The person here holds the Agent role's permissions and the right to invite, not the Admin role's.
+test('New invite link is not offered for an invite whose roles hold a permission the person lacks', () => {
+  const [agent, admin] = [rolesOf('agent')[0], rolesOf('admin')[0]];
+  const base = { created_by_email: 'admin@example.com', created_at: '2026-10-14T00:00:00Z', used_at: null, revoked_at: null, expires_at: new Date(Date.now() + 600_000).toISOString() };
+  render(<SettingsPage page="members" membersTab="invites" sessions={[]} timezone="UTC" canCreateInvites canRevokeInvites inviteRoles={builtInRoles}
+    myPermissions={[...permissionsOf('agent'), 'team:invite']} invites={[
+    { ...base, id: '11111111-1111-4111-8111-111111111111', email: 'agent@example.com', roles: [agent] },
+    { ...base, id: '22222222-2222-4222-8222-222222222222', email: 'admin@example.com', roles: [admin] },
+  ]} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Actions for agent@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New invite link', 'Revoke']);
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+  fireEvent.click(screen.getByRole('button', { name: 'Actions for admin@example.com' }));
+  expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Revoke']);
+});
+
+test('an invite that turns revoked is announced', () => {
+  const pending = { id: '11111111-1111-4111-8111-111111111111', email: 'pending@example.com', roles: rolesOf('agent'), created_by_email: 'admin@example.com',
+    created_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), used_at: null, revoked_at: null };
+  const props = { page: 'members' as const, membersTab: 'invites' as const, sessions: [], timezone: 'UTC', canCreateInvites: true, canRevokeInvites: true };
+  const { rerender } = render(<SettingsPage {...props} invites={[pending]} />);
+  rerender(<SettingsPage {...props} invites={[{ ...pending, revoked_at: '2026-10-14T00:01:00Z' }]} />);
+  expect(screen.getByText('Invite for pending@example.com revoked.')).toHaveAttribute('role', 'status');
 });

@@ -10,7 +10,7 @@ Invite people from **Settings → Members → Invites** (it needs `team:invite`,
 
 When the person joins, they get the invite's roles, added to any roles they already hold. See
 [Roles and permissions](roles-and-permissions.md) for what each role allows. Revoke an unused invite
-with **Revoke** in the invite list (`team:revoke`). Taking a role away from someone also revokes
+with **Revoke** in the row's **⋯** menu (`team:revoke`). Taking a role away from someone also revokes
 their unused invites that would give it back.
 
 Inviting someone who is already in the workspace adds the invite's roles and signs in as them, so
@@ -19,7 +19,17 @@ they hold. An AI agent's token cannot; it changes their roles in [Manage your te
 An invite link made before its address joined the workspace no longer signs anyone in.
 
 Each invite shows its state: **Pending** (not used yet), **Accepted**, **Revoked** or **Expired**, and
-its roles. Only a pending invite can be revoked. To end a teammate's access after they joined,
+its roles. Only a pending invite can be revoked. Colliedesk does not email an invite: its link is shown once,
+and it is not kept. If the link is lost, or the invite expired, choose **New invite link** in the row's **⋯**
+menu (`team:invite`): it makes a new invite for the same address and roles, shows its one-time link and moves the
+focus to it. The server keeps both invites, so the old link keeps working until it is revoked, expires or is used.
+When you may revoke (`team:revoke`), Colliedesk revokes the old pending invite right after the new link is made;
+if that revoke fails, the page says "New link made. The old link still works: revoke it." and the old invite stays
+listed. Without `team:revoke` the page says the earlier link still works until it expires, or until someone who may
+revoke invites revokes it. The menu offers no new link for an invite whose roles hold a permission you lack: the
+server refuses it (`role_exceeds_yours`). A pending invite already holds its address's seat, so a new link for it
+never meets a full plan; a new link for an expired invite takes a seat and is refused, with the plan's message, when
+the plan has none left. To end a teammate's access after they joined,
 deactivate them in [Manage your team](team.md).
 
 An AI agent whose [token](sessions.md#agent-tokens) holds `team:invite` creates an invite at once with

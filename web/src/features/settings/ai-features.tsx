@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { AISettings, AISlotName } from '../../api/ai';
+import { useRef, useState } from 'react';
+import type { AISettings, AISlot, AISlotInput, AISlotName } from '../../api/ai';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { selfHostGuide } from '../../lib/self-host-guide';
 import { HelpTip } from '../../ui/help-tip';
@@ -8,6 +8,9 @@ import { InfoIcon, PlusIcon, ServerIcon } from './ai-icons';
 import { Meter } from './ai-meter';
 import { AutoMovedNotice } from './ai-feature-levels';
 import { FeatureRow } from './ai-feature-row';
+import { IntakeConsent } from './ai-intake-consent';
+import { slotChange, slotChoices } from './ai-slot-choice';
+import { useInstantSave } from './settings-edits';
 import { FeatureSheet } from './ai-feature-sheet';
 import type { SheetActions } from './ai-feature-sheet';
 import type { AIPageProps } from './ai-page-props';
@@ -17,11 +20,26 @@ import type { AIPageProps } from './ai-page-props';
 export function Features(props: AIPageProps & SheetActions & { settings: AISettings; onOpenAdd: () => void }) {
   const { settings, isAdmin } = props;
   const [open, setOpen] = useState<AISlotName>();
+  const [asking, setAsking] = useState<AISlotName>();
+  const instant = useInstantSave();
   const server = settings.server;
   const nothing = !server && settings.providers.length === 0;
   const models = (slot: AISlotName) => server?.models[slot]?.[0] ?? '';
   const shown = settings.slots.filter((slot) => slot.slot !== 'intake' || props.chatChannels);
   const opened = shown.find((slot) => slot.slot === open);
+  const consenting = shown.find((slot) => slot.slot === asking);
+  // The feature turns on only once the person agrees; the switch then says Saved, and Undo turns only it off again, built from
+  // the feature as it is then.
+  const latest = useRef(settings);
+  latest.current = settings;
+  const agree = (slot: AISlot) => {
+    setAsking(undefined);
+    const now = (name: AISlotName) => latest.current.slots.find((item) => item.slot === name) ?? slot;
+    const input = (value: boolean) => slotChange(now(slot.slot), slotChoices(now(slot.slot), latest.current).chosen, { enabled: value });
+    void instant((value: boolean) => props.onSetSlot(slot.slot, input(value)), true, slot.enabled);
+  };
+  // The sheet's own choices (provider, model) show a refusal in the page's notice; nothing here waits for them.
+  const setInSheet = (slot: AISlotName, input: AISlotInput) => { void Promise.resolve(props.onSetSlot(slot, input)).catch(() => undefined); };
   return <div className="ai-panel-stack">
     {!isAdmin && <div className="notice notice-plain" role="note"><InfoIcon /><span><strong>{m.agentNotice}</strong> {m.agentNoticeMore}</span></div>}
     {isAdmin && <AutoMovedNotice settings={settings} slotName="triage" onTurnOn={props.onConfirmAuto} />}
@@ -57,10 +75,11 @@ export function Features(props: AIPageProps & SheetActions & { settings: AISetti
       </div>
     </div>}
     <ul className="panel ai-rows" aria-label={m.features}>
-      {shown.map((slot) => <FeatureRow key={slot.slot} slot={slot} settings={settings} isAdmin={isAdmin} busySlot={props.busySlot} onSetSlot={props.onSetSlot} onOpen={setOpen} />)}
+      {shown.map((slot) => <FeatureRow key={slot.slot} slot={slot} settings={settings} isAdmin={isAdmin} busySlot={props.busySlot} onSetSlot={props.onSetSlot} onOpen={setOpen} onAskToTurnOn={setAsking} />)}
     </ul>
     <p className="ai-rows-foot">{m.rowsFoot}</p>
     {opened && <FeatureSheet slot={opened} settings={settings} isAdmin={isAdmin} busy={props.busySlot === opened.slot} onClose={() => setOpen(undefined)}
-      onSetSlot={props.onSetSlot} onOpenAutomatic={props.onOpenAutomatic} onConfirmAuto={props.onConfirmAuto} onSetAuto={props.onSetAuto} onSourceConsent={props.onSourceConsent} />}
+      onSetSlot={setInSheet} onOpenAutomatic={props.onOpenAutomatic} onConfirmAuto={props.onConfirmAuto} onSetAuto={props.onSetAuto} onSourceConsent={props.onSourceConsent} />}
+    {consenting && <IntakeConsent slot={consenting} settings={settings} onClose={() => setAsking(undefined)} onAgree={() => agree(consenting)} />}
   </div>;
 }

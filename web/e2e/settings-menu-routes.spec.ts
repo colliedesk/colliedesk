@@ -92,7 +92,7 @@ test('every old settings address opens the page, tab or section that holds its c
     ['/settings/members?tab=roles', '/settings/members?tab=advanced'], ['/settings/roles', '/settings/members?tab=advanced'],
     ['/settings/agents', '/settings/ai?tab=external'],
     ['/settings/import', '/settings/data'], ['/settings/export', '/settings/data#export-heading'], ['/settings/import-freshdesk', '/settings/data'],
-    ['/settings/help-center', '/knowledge/settings'],
+    ['/settings/help-center', '/knowledge/settings'], ['/help-center/settings', '/knowledge/settings'],
   ]) {
     await page.goto(`${baseURL}${from}`);
     await expect.poll(() => at(page), from).toBe(to);

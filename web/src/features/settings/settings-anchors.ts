@@ -44,8 +44,9 @@ export const movedPages: Record<string, string> = {
   '/settings/import': '/settings/data',
   '/settings/export': '/settings/data#export-heading',
   '/settings/import-freshdesk': '/settings/data',
-  // The help center's settings are beside the articles they publish.
+  // The help center's settings are beside the articles they publish; both addresses a link may carry open them there.
   '/settings/help-center': '/knowledge/settings',
+  '/help-center/settings': '/knowledge/settings',
 };
 
 // movedAddress is where an old address opens, with what the link carried: its query goes on to the new page (the
