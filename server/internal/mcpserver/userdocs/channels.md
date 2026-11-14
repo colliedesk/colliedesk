@@ -16,6 +16,10 @@ page per type under it:
 
 Members of the team who are not admins see these pages and cannot change them.
 
+These pages keep to a name and one short line. The ⓘ beside a name or a field says how it works or why:
+hover it, focus it with the keyboard, or tap it. Steps that take a few minutes, such as forwarding mail,
+stay on the page as steps.
+
 ## The list
 
 Each channel shows its type, its name, one line about it (the support address, the website origins)

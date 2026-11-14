@@ -2,7 +2,8 @@
 // so it loads with the block's own chunk (performance.md), like gmail-messages.ts.
 export const microsoftMessages = {
   microsoftLabel: 'Microsoft 365',
-  microsoftRequestNote: 'Approving opens Microsoft\'s sign-in page. A work account may need its Microsoft 365 admin\'s approval first.',
+  microsoftRequestNote: 'Approving opens Microsoft\'s sign-in page.',
+  microsoftRequestWhy: 'A work account may need its Microsoft 365 admin\'s approval first.',
   connectMicrosoft: 'Connect Microsoft 365',
   connectingMicrosoft: 'Opening Microsoft…',
   reconnectMicrosoft: 'Reconnect Microsoft 365',
@@ -10,7 +11,8 @@ export const microsoftMessages = {
   microsoftAdminOnly: 'Only an admin can connect Microsoft 365.',
   // Before Microsoft verifies the publisher, an organization often lets only its admin approve an app that sends email.
   microsoftAdminApprovalSummary: 'Work account? Your IT admin may need to approve Colliedesk first',
-  microsoftAdminApprovalBody: (button: string) => `Many organizations only let an admin approve apps that send email. If Microsoft says you need admin approval, send this link to your Microsoft 365 admin. After they approve, select ${button} again.`,
+  microsoftAdminApprovalBody: (button: string) => `Send this link to your admin, then select ${button} again.`,
+  microsoftAdminApprovalWhy: 'Many organizations only let an admin approve apps that send email. Microsoft says so when it asks for admin approval.',
   microsoftAdminApprovalLink: 'Approval link for your Microsoft 365 admin',
   copyApprovalLink: 'Copy link',
   approvalLinkCopied: 'Link copied',
@@ -22,7 +24,7 @@ export const microsoftMessages = {
   microsoftRedirectUri: 'Redirect URI to register in Microsoft Entra',
   microsoftAdminConsentRedirectUri: 'Second redirect URI, for an admin’s approval',
   microsoftConnected: (address: string, when: string) => `Replies are sent through Microsoft 365 from ${address}, connected ${when}.`,
-  microsoftConnectedDescription: 'Replies go out through Microsoft 365 and stay in its Sent Items; incoming mail still arrives by forwarding. Colliedesk can only send; it cannot read the mailbox.',
+  microsoftConnectedWhy: 'Replies go out through Microsoft 365 and stay in its Sent Items; incoming mail still arrives by forwarding.',
   microsoftFailedTitle: 'Microsoft 365 stopped sending',
   microsoftFailedBody: (reason: string, when: string) => `${reason} Since ${when}, replies are not sent through Microsoft 365 and not sent any other way.`,
   microsoftFailureReasons: {
@@ -49,7 +51,7 @@ export const microsoftMessages = {
   microsoftPrivacyURL: 'https://colliedesk.com/privacy#microsoft-user-data',
   microsoftSignInAs: (address: string, button: string) => `Select ${button} and choose ${address} at Microsoft.`,
   microsoftJustConnected: 'Microsoft 365 is connected.',
-  microsoftAdminConsentDone: (button: string) => `Your Microsoft 365 admin approved Colliedesk. Select ${button} to finish.`,
+  microsoftAdminConsentDone: (button: string) => `Your Microsoft 365 admin approved Colliedesk. Then select ${button}.`,
   microsoftConnectFailed: 'Microsoft 365 could not be connected. Try again.',
   microsoftReturnErrors: {
     signed_out: 'Microsoft 365 was not connected: sign in to Colliedesk in this browser, then select Connect Microsoft 365 again.',

@@ -289,7 +289,7 @@ test('a scope that follows the default shows its settings read-only and says how
   aiApi.settings.mockResolvedValue({ ...settings(), slots: [slot('triage'), slot('draft'), { ...slot('intake'), default_level: 'suggest' }] } as unknown as AISettings);
   view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
-  expect(within(form).getByText('These follow the default. Pick Suggest or Auto for Groups above to set its own.')).toBeInTheDocument();
+  expect(within(form).getByText('These follow the default. Pick a level for Groups above.')).toBeInTheDocument();
   expect(within(form).getByLabelText('Open a conversation')).toBeDisabled();
   expect(within(form).queryByRole('button', { name: 'Save intake settings' })).not.toBeInTheDocument();
 });
@@ -322,4 +322,41 @@ test('a refusal names the field as the form does, and takes the focus', async ()
   const alert = await within(form).findByRole('alert');
   expect(alert).toHaveTextContent('Not saved: “Open a conversation” is between 0.5 and 0.99.');
   expect(document.activeElement).toBe(alert);
+});
+
+// Quiet by default: a row keeps its label and one short line; the how and why wait in a help tip, which is
+// the description of its control.
+const ownText = (element: Element) => Array.from(element.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent).join('').trim();
+
+test('the AI tab says what it sets in one line, and the levels explanation waits in a tip', async () => {
+  view();
+  expect(await screen.findByText('What each AI feature does by itself on this channel.')).toBeInTheDocument();
+  const tip = screen.getByRole('button', { name: 'About AI' });
+  expect(tip).toHaveAccessibleDescription(/A level left on the default follows the workspace’s, set in Settings → Built-in AI\./);
+  expect(tip).toHaveAccessibleDescription(/People can always ask by hand \(Suggest, Draft with AI\) while the feature is on\./);
+  expect(screen.queryByText(/Every change is in this channel’s history/, { selector: '.help' })).toBeNull();
+});
+
+test('each group of intake settings keeps one short line, and what explains it is the description of its tip or field', async () => {
+  view();
+  const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
+  for (const line of Array.from(form.querySelectorAll('.help, .ch-ai-lead'))) expect(ownText(line).length).toBeLessThanOrEqual(60);
+  expect(within(form).getByRole('button', { name: 'About Intake settings · Groups' })).toHaveAccessibleDescription('A field left empty keeps the default shown.');
+  expect(within(form).getByRole('button', { name: 'About Deciding alone (Auto)' })).toHaveAccessibleDescription('Below that, it only suggests in Review.');
+  expect(within(form).getByRole('button', { name: 'About What AI reads besides the messages' })).toHaveAccessibleDescription('What the customer wrote is always read.');
+  expect(within(form).getByRole('textbox', { name: 'Words that mark a secret' }))
+    .toHaveAccessibleDescription(/^One per line, in the channel’s language\. For example "mật khẩu" or "OTP"\. What follows them is hidden before AI reads it\.$/);
+  expect(within(form).getByRole('button', { name: 'About What AI never reads' })).toHaveAccessibleDescription(/Removing a word asks for the same approval as raising AI\./);
+  expect(within(form).getByRole('button', { name: 'About Patterns to mask' })).toHaveAccessibleDescription(/regular expression \(RE2\) and what AI sees instead/);
+});
+
+test('the Auto dialog says in one line what Auto does, and when it waits for a person in a tip', async () => {
+  aiApi.readiness.mockResolvedValue(readiness());
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'auto' } });
+  const dialog = await screen.findByRole('dialog', { name: 'Let AI decide on its own · Groups' });
+  expect(within(dialog).getByText('AI opens, joins or sets aside each message by itself.')).toBeInTheDocument();
+  const tip = await within(dialog).findByRole('button', { name: 'About Turn on Auto' });
+  expect(tip).toHaveAccessibleDescription(/When AI is not sure, the message waits in Review with its suggestion for a person to decide\./);
+  expect(tip).toHaveAccessibleDescription(/A decision is labelled when a person followed or changed what AI suggested in Review\./);
 });

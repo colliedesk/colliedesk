@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { aiApi } from '../../../api/ai';
 import type { AISettings, ChannelAIInput, IntakeReadiness } from '../../../api/ai';
 import { Dialog } from '../../../ui/dialog';
+import { HelpTip } from '../../../ui/help-tip';
 import { money } from '../ai-level-dialogs';
 import { scopeName } from '../ai-levels';
 import { channelsMessages as m } from './channels-messages';
@@ -77,7 +78,7 @@ export function IntakeAutoDialog({ channelID, scope, options, settings, onClose,
     {readiness.isError && <p role="alert" className="error-copy">{m.intakeReadinessFailed}</p>}
     {data && <>
       <ul className="ch-intake-gates">{data.actions.map((action) => <li key={action.action} data-gate={action.gate}>{gateText(action)}</li>)}</ul>
-      <p className="help">{m.intakeGateHelp}</p>
+      <p className="help">{m.intakeGateHelp} <HelpTip label={m.intakeAutoOn} text={m.intakeGateWhy} /></p>
       {data.actions.some((action) => action.gate !== 'open') && <fieldset className="ch-intake-group">
         <legend>{m.intakeOverride}</legend>
         {data.actions.filter((action) => action.gate !== 'open').map((action) => <label key={action.action} className="ch-intake-check">

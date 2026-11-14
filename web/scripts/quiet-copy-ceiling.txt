@@ -7,20 +7,6 @@
 # one line of 60 characters or less. The test also pins how many lines the list may hold. When a line gets shorter,
 # the gate asks you to write its new length here; when it gets short enough or goes away, to delete it.
 
-channels/email/email-shared.tsx:emailMessages.testHelp	157
-channels/email/setup-messages.ts:setupMessages.adminsOnly	78
-channels/email/setup-messages.ts:setupMessages.confirmationWaiting	77
-channels/email/setup-messages.ts:setupMessages.disconnectHelp	98
-channels/email/setup-messages.ts:setupMessages.intro	105
-channels/email/setup-messages.ts:setupMessages.needsForwarder + channels/email/setup-messages.ts:setupMessages.openOther	151
-channels/email/setup-messages.ts:setupMessages.repliesIntro	107
-channels/email/setup-messages.ts:setupMessages.testWaiting + channels/email/setup-messages.ts:setupMessages.testOpen	98
-channels/help_chat/panels.tsx:m.codeHelp	147
-channels/help_chat/panels.tsx:m.greetingHint + channels/help_chat/panels.tsx:m.count	89
-channels/help_chat/panels.tsx:m.instructionsHint + channels/help_chat/panels.tsx:m.count	83
-channels/help_chat/panels.tsx:m.nameHint	80
-channels/help_chat/panels.tsx:m.originsHint	106
-channels/web_form/panels.tsx:formMessages.nameHint	80
 channels/zalo/panels.tsx:autoCloseSentence	114
 channels/zalo/zalo-messages.ts:zaloMessages.addStaffHelp	126
 channels/zalo/zalo-messages.ts:zaloMessages.askDescriptionHint + channels/zalo/zalo-messages.ts:zaloMessages.count	117
@@ -156,28 +142,8 @@ features/settings/ai-messages.ts:aiMessages.modelsHelp	76
 features/settings/ai-messages.ts:aiMessages.modelsPicked	94
 features/settings/ai-messages.ts:aiMessages.rotateHelp	63
 features/settings/ai-messages.ts:aiMessages.usageHelp	133
-features/settings/channel-setup-messages.ts:channelSetupMessages.emailChannelDescription	271
-features/settings/channel-setup-messages.ts:channelSetupMessages.inboundSecretMissing	172
-features/settings/channel-setup-messages.ts:channelSetupMessages.webFormOriginsHelp	162
-features/settings/channels/channels-messages.ts:channelsMessages.aiHelp	143
-features/settings/channels/channels-messages.ts:channelsMessages.aiLead	136
-features/settings/channels/channels-messages.ts:channelsMessages.defaultHelp	142
-features/settings/channels/channels-messages.ts:channelsMessages.emptyBody	66
-features/settings/channels/channels-messages.ts:channelsMessages.historyHelp	84
-features/settings/channels/channels-messages.ts:channelsMessages.intakeAutoLead	178
-features/settings/channels/channels-messages.ts:channelsMessages.intakeGateHelp	173
-features/settings/channels/channels-messages.ts:channelsMessages.intakeKeywordsHelp	120
-features/settings/channels/channels-messages.ts:channelsMessages.intakeLabelsHelp	120
-features/settings/channels/channels-messages.ts:channelsMessages.intakePatternsHelp	173
-features/settings/channels/channels-messages.ts:channelsMessages.intakeSettingsLead	88
-features/settings/channels/channels-messages.ts:channelsMessages.intakeSourcesHelp	92
-features/settings/channels/channels-messages.ts:channelsMessages.intakeThresholdsHelp	95
 features/settings/connected-apps-section.tsx:connectedAppsMessages.description	256
 features/settings/connected-apps-section.tsx:connectedAppsMessages.removingInApp	76
-features/settings/gmail-connection.tsx:returnText + features/settings/microsoft-messages.ts:microsoftMessages.microsoftAliasNotSupported + features/settings/gmail-messages.ts:gmailMessages.gmailOpenHolder	162
-features/settings/gmail-messages.ts:gmailMessages.gmailGoogleData + features/settings/gmail-messages.ts:gmailMessages.gmailPrivacyPolicy	205
-features/settings/gmail-messages.ts:gmailMessages.gmailOtherAddress	84
-features/settings/gmail-messages.ts:gmailMessages.mailboxDescription	213
 features/settings/import-messages.ts:importMessages.adminsOnly	81
 features/settings/import-messages.ts:importMessages.apiCalls + features/settings/import-messages.ts:importMessages.rateLimitWait	200
 features/settings/import-messages.ts:importMessages.closeNote	69
@@ -188,10 +154,6 @@ features/settings/import-messages.ts:importMessages.keyHelpAgain	86
 features/settings/import-messages.ts:importMessages.oldHelpCenterHelp	143
 features/settings/import-messages.ts:importMessages.peopleHelp	191
 features/settings/import-messages.ts:importMessages.ticketsNote	106
-features/settings/inbound-url-guide.tsx:text.technical + features/settings/inbound-url-guide.tsx:text.guide	293
-features/settings/inbound-url-guide.tsx:text.what	210
-features/settings/microsoft-messages.ts:microsoftMessages.microsoftAdminApprovalBody	187
-features/settings/microsoft-messages.ts:microsoftMessages.microsoftRequestNote	107
 features/settings/numbers/numbers-messages.ts:numbersMessages.editHelp	135
 features/settings/numbers/numbers-messages.ts:numbersMessages.formatHint	103
 features/settings/numbers/numbers-messages.ts:numbersMessages.lead	206
@@ -219,8 +181,6 @@ features/settings/targets/targets-messages.ts:targetsMessages.alertsLead	124
 features/settings/targets/targets-messages.ts:targetsMessages.alertsOff	72
 features/settings/targets/targets-messages.ts:targetsMessages.targetsLead	81
 features/settings/targets/targets-messages.ts:targetsMessages.targetsNote	126
-features/settings/web-form-section.tsx:embedMessages.codeHelp	187
-features/settings/web-form-section.tsx:olderMessages.summary + features/settings/web-form-section.tsx:olderMessages.body	145
 features/shell/report-messages.ts:reportMessages.reportFromServer	184
 features/shell/report-messages.ts:reportMessages.reportIntro	62
 messages.ts:messages.cloudNewHere	88

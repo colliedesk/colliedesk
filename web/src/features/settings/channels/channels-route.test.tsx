@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ChannelsRoute } from './channels-route';
 import { permissionsOf, rolesOf } from '../../../test-roles';
@@ -183,7 +183,7 @@ test('the channel name explains in plain words what the default channel does', a
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   show(EMAIL);
   const name = await screen.findByRole('textbox', { name: 'Name' });
-  expect(name).toHaveAccessibleDescription(/^A channel is an email address or web form where conversations come in and go out\. /);
+  expect(name).toHaveAccessibleDescription(/^Shown in the inbox and in Settings\. A channel is an email address or web form where conversations come in and go out\. /);
   const sentences = (name.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ')
     .split(/(?<=\.) /).filter((sentence) => /channel/.test(sentence));
   expect(sentences).toHaveLength(2);
@@ -685,7 +685,7 @@ test('back from an admin\'s approval, the block says to connect again', async ()
   channelsApi.email.mockResolvedValue({ ...withChannel, microsoft: { ...withChannel.microsoft, available: true, missing_settings: [] } });
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   show(EMAIL, { tab: 'replies', microsoft: 'admin_consent_done' });
-  expect(await screen.findByText('Your Microsoft 365 admin approved Colliedesk. Select Connect Microsoft 365 to finish.')).toBeInTheDocument();
+  expect(await screen.findByText('Your Microsoft 365 admin approved Colliedesk. Then select Connect Microsoft 365.')).toBeInTheDocument();
 });
 
 test('the Connection tab sends a test message in one click and links to the conversation it opened; the terminal request is a detail', async () => {
@@ -930,4 +930,36 @@ test('a paused channel counts what it keeps again while its page is open, and an
   } finally {
     vi.useRealTimers();
   }
+});
+
+// Quiet by default: a field keeps its label and one short line; the how and why wait in a help tip that is
+// part of the field's description.
+const helpChatConfig = { channel_id: FORM, enabled: true, greeting: 'Hi!', suggestions: [], instructions: '', widget_origins: [] };
+const helpChat = () => channel('web_form', { type: 'help_chat', name: 'Help chat' });
+
+test('a help chat\'s greeting and instructions keep one short line, and the explanation is in their tip', async () => {
+  channelsApi.get.mockResolvedValue({ ...helpChat(), config: helpChatConfig });
+  show(FORM);
+  const greeting = await screen.findByRole('textbox', { name: 'Greeting' });
+  expect(greeting).toHaveAccessibleDescription(/^Shown first when a chat starts\. 3 \/ 300 It shows under “AI assistant · answers from your help articles”\.$/);
+  expect(screen.getByRole('button', { name: 'About Greeting' })).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Extra instructions' }))
+    .toHaveAccessibleDescription(/^Answers still come only from published articles\. 0 \/ 2,000 Instructions change how the AI answers; they cannot add facts\.$/);
+  for (const line of document.querySelectorAll('small.muted-copy')) expect((line.firstChild?.textContent ?? '').length).toBeLessThanOrEqual(60);
+});
+
+test('the sites a help chat may embed in are one line, and the rule for writing them is in the tip', async () => {
+  channelsApi.get.mockResolvedValue({ ...helpChat(), config: helpChatConfig });
+  show(FORM, { tab: 'embed' });
+  const origins = await screen.findByRole('textbox', { name: 'Sites that may embed the chat' });
+  expect(origins).toHaveAccessibleDescription('One per line, like https://shop.example.com. Write each site exactly as the browser shows it. No path, no wildcard. At most 20.');
+});
+
+test('adding a help chat or a web form says in one line what its name is for, and when it stays empty in a tip', async () => {
+  channelsApi.list.mockResolvedValue({ items: [], types: [{ type: 'help_chat', available: true, count: 0, default_channel_id: null }, ...types(0, 0)] });
+  show('new/help_chat');
+  expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveAccessibleDescription('Names this chat in the inbox and in Settings. Leave it empty to number it.');
+  cleanup();
+  show('new/web_form');
+  expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveAccessibleDescription('Names this form in the inbox and in Settings. Leave it empty to number it.');
 });

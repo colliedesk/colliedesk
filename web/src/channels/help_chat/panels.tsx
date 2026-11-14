@@ -6,6 +6,7 @@ import type { HelpChatConfig } from '../../api/channels';
 import { z } from 'zod';
 import { request } from '../../api/client';
 import { CopyButton } from '../../features/settings/copy-button';
+import { HelpTip } from '../../ui/help-tip';
 import { saveState, useSaveFeedback } from '../../features/settings/save-feedback';
 import type { SaveState } from '../../features/settings/save-feedback';
 import type { ChannelPanelProps, ConnectProps } from '../registry';
@@ -19,7 +20,8 @@ const helpCenter = () => request('/api/v1/help-center', helpCenterSchema);
 
 const m = {
   greeting: 'Greeting',
-  greetingHint: 'Shown first when a chat starts, under “AI assistant · answers from your help articles”.',
+  greetingHint: 'Shown first when a chat starts.',
+  greetingWhy: 'It shows under “AI assistant · answers from your help articles”.',
   suggestions: 'Suggested questions',
   suggestionsHint: 'A customer selects one to ask it.',
   suggestion: (n: number) => `Suggested question ${n}`,
@@ -27,17 +29,21 @@ const m = {
   addQuestion: 'Add a question',
   full: (n: number) => `${n} of ${limits.suggestions}. Remove one to add another.`,
   instructions: 'Extra instructions',
-  instructionsHint: 'The AI still answers only from published articles; instructions cannot add facts.',
+  instructionsHint: 'Answers still come only from published articles.',
+  instructionsWhy: 'Instructions change how the AI answers; they cannot add facts.',
   count: (n: number, max: number) => `${n.toLocaleString()} / ${max.toLocaleString()}`,
   save: 'Save',
   saveSite: 'Save sites',
   name: 'Name',
-  nameHint: 'Tells this chat apart in the inbox and in Settings. Leave it empty to number it.',
+  nameHint: 'Names this chat in the inbox and in Settings.',
+  nameWhy: 'Leave it empty to number it.',
   add: 'Add help chat',
   origins: 'Sites that may embed the chat',
-  originsHint: 'One per line, exactly as the browser shows it: https://shop.example.com. No path, no wildcard. At most 20.',
+  originsHint: 'One per line, like https://shop.example.com.',
+  originsWhy: 'Write each site exactly as the browser shows it. No path, no wildcard. At most 20.',
   code: 'Code for your site',
-  codeHelp: 'Paste it before </body> on every page that shows the chat button. The button takes your help center’s brand colour and adds no cookie to your site.',
+  codeHelp: 'Paste it before </body> on each page with the chat.',
+  codeWhy: 'The button takes your help center’s brand colour and adds no cookie to your site.',
   copyCode: 'Copy code',
   codeCopied: 'Code copied',
   chatPage: 'Open the chat page',
@@ -83,8 +89,9 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
   }}>
     {nameField}
     <label className="field"><span>{m.greeting}</span>
-      <textarea rows={2} value={greeting} maxLength={limits.greeting} aria-describedby={greetingHint} onChange={(event) => { feedback.touch(); setGreeting(event.target.value); }} /></label>
-    <small id={greetingHint} className="muted-copy">{m.greetingHint} {m.count(greeting.length, limits.greeting)}</small>
+      <textarea rows={2} value={greeting} maxLength={limits.greeting} aria-describedby={`${greetingHint} ${greetingHint}-why`} onChange={(event) => { feedback.touch(); setGreeting(event.target.value); }} /></label>
+    <div className="heading-with-tip"><small id={greetingHint} className="muted-copy">{m.greetingHint} {m.count(greeting.length, limits.greeting)}</small>
+      <HelpTip id={`${greetingHint}-why`} label={m.greeting} text={m.greetingWhy} /></div>
     <fieldset className="field"><legend>{m.suggestions}</legend>
       {suggestions.map((suggestion, index) => <span className="input-with-actions" key={index}>
         <input aria-label={m.suggestion(index + 1)} value={suggestion} maxLength={limits.suggestion} aria-describedby={suggestionsHint}
@@ -98,9 +105,10 @@ function SurfaceForm({ config, canManage, save, label, onSave, nameField }: Surf
     </fieldset>
     <small id={suggestionsHint} className="muted-copy">{m.suggestionsHint}</small>
     <label className="field"><span>{m.instructions}</span>
-      <textarea rows={4} value={instructions} maxLength={limits.instructions} aria-describedby={instructionsHint}
+      <textarea rows={4} value={instructions} maxLength={limits.instructions} aria-describedby={`${instructionsHint} ${instructionsHint}-why`}
         onChange={(event) => { feedback.touch(); setInstructions(event.target.value); }} /></label>
-    <small id={instructionsHint} className="muted-copy">{m.instructionsHint} {m.count(instructions.length, limits.instructions)}</small>
+    <div className="heading-with-tip"><small id={instructionsHint} className="muted-copy">{m.instructionsHint} {m.count(instructions.length, limits.instructions)}</small>
+      <HelpTip id={`${instructionsHint}-why`} label={m.instructions} text={m.instructionsWhy} /></div>
     <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(label)}</button>
       {feedback.status}</span>
   </form>;
@@ -134,15 +142,16 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
     {canManage
       ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate({ widget_origins: lines(origins) }); }}>
           <label className="field"><span>{m.origins}</span>
-            <textarea rows={3} value={origins} placeholder="https://shop.example.com" aria-describedby={hint} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
-          <small id={hint} className="muted-copy">{m.originsHint}</small>
+            <textarea rows={3} value={origins} placeholder="https://shop.example.com" aria-describedby={`${hint} ${hint}-why`} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
+          <div className="heading-with-tip"><small id={hint} className="muted-copy">{m.originsHint}</small>
+            <HelpTip id={`${hint}-why`} label={m.origins} text={m.originsWhy} /></div>
           <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveSite)}</button>
             {feedback.status}</span>
         </form>
       : <ul className="muted-copy">{config.widget_origins.map((origin) => <li key={origin}>{origin}</li>)}</ul>}
     {code && home
       ? <section className="embed-code" aria-labelledby="help-chat-code-heading">
-          <h3 id="help-chat-code-heading" className="field-label">{m.code}</h3>
+          <div className="heading-with-tip"><h3 id="help-chat-code-heading" className="field-label">{m.code}</h3><HelpTip label={m.code} text={m.codeWhy} /></div>
           <pre><code>{code}</code></pre>
           <p className="muted-copy">{m.codeHelp}</p>
           <span className="button-row"><CopyButton value={code} copiedText={m.codeCopied}>{m.copyCode}</CopyButton>
@@ -162,8 +171,8 @@ function Connect({ canManage, create }: ConnectProps) {
   const hint = useId();
   const nameField = <>
     <label className="field"><span>{m.name}</span>
-      <input value={name} maxLength={80} aria-describedby={hint} onChange={(event) => setName(event.target.value)} /></label>
-    <small id={hint} className="muted-copy">{m.nameHint}</small>
+      <input value={name} maxLength={80} aria-describedby={`${hint} ${hint}-why`} onChange={(event) => setName(event.target.value)} /></label>
+    <div className="heading-with-tip"><small id={hint} className="muted-copy">{m.nameHint}</small><HelpTip id={`${hint}-why`} label={m.name} text={m.nameWhy} /></div>
   </>;
   return <SurfaceForm canManage={canManage} save={saveState(save)} label={m.add} nameField={nameField} onSave={(value) => save.mutate(value)} />;
 }

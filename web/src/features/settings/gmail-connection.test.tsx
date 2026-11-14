@@ -47,7 +47,9 @@ afterEach(() => window.history.replaceState(null, '', '/'));
 
 test('on Colliedesk Cloud the Connect button comes with the Limited Use statement and a link to how Google data is handled', () => {
   render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage />, cloud);
-  expect(screen.getByText(/adheres to the Google API Services User Data Policy, including the Limited Use requirements/)).toBeInTheDocument();
+  expect(screen.getByText('How Colliedesk handles Google data:')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Gmail' }))
+    .toHaveAccessibleDescription(/adheres to the Google API Services User Data Policy, including the Limited Use requirements/);
   expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', 'https://colliedesk.com/privacy#google-user-data');
 });
 
@@ -99,7 +101,8 @@ test('a connected account shows the address and disconnects only after confirmin
 test('a Gmail address other than the support address says where answers go', () => {
   const other = { ...connected, connection: { ...connected.connection!, address: 'acme.help@gmail.com' } };
   render(<GmailConnection gmail={other} supportAddress="support@example.com" timezone="UTC" canManage />);
-  expect(screen.getByText('Customers see acme.help@gmail.com as the sender. Their answers still go to support@example.com, so keep forwarding it here.')).toBeInTheDocument();
+  expect(screen.getByText('Customers see acme.help@gmail.com as the sender; answers go to support@example.com.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Gmail' })).toHaveAccessibleDescription('Keep forwarding support@example.com here, so their answers reach Colliedesk.');
 });
 
 test('a failed connection is an alert with the reason and a reconnect, never silent', () => {
@@ -116,7 +119,8 @@ test('a failed connection is an alert with the reason and a reconnect, never sil
 test('agents see the state but no buttons', () => {
   render(<GmailConnection gmail={failed} supportAddress="support@example.com" timezone="UTC" canManage={false} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Gmail stopped sending');
-  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  // The only button is the help tip of the heading: nothing here changes anything.
+  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['About Send from your mailbox']);
 });
 
 test('a server without Google settings says whom to ask, not the variable names, and the redirect URI to register', () => {

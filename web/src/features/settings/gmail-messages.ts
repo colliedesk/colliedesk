@@ -3,7 +3,8 @@
 // (performance.md). Microsoft 365's own text is in microsoft-messages.ts.
 export const gmailMessages = {
   mailboxHeading: 'Send from your mailbox',
-  mailboxDescription: 'Connect the mailbox of your support address: replies are sent from that address and a copy stays in its Sent folder. Incoming mail still arrives by forwarding. Colliedesk can only send; it cannot read the mailbox.',
+  mailboxDescription: 'Colliedesk can only send; it cannot read the mailbox.',
+  mailboxWhy: 'Connect the mailbox of your support address: replies are sent from that address and a copy stays in its Sent folder. Incoming mail still arrives by forwarding.',
   mailboxAdminOnly: 'Only an admin can connect a mailbox.',
   gmailLabel: 'Gmail',
   useInstead: (provider: string) => `Use ${provider} instead`,
@@ -13,9 +14,10 @@ export const gmailMessages = {
   continueTo: (site: string) => `Continue to ${site}`,
   gmailSite: 'Google',
   microsoftSite: 'Microsoft',
-  gmailConnectedDescription: 'Replies go out through Gmail and stay in its Sent folder; incoming mail still arrives by forwarding. Colliedesk can only send; it cannot read the mailbox.',
+  gmailConnectedWhy: 'Replies go out through Gmail and stay in its Sent folder; incoming mail still arrives by forwarding.',
   // Shown only on Colliedesk Cloud: the statement binds HC Labs' Google client, not a self-hosted server's.
-  gmailGoogleData: 'Colliedesk’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. How we handle Google data:',
+  gmailGoogleData: 'How Colliedesk handles Google data:',
+  gmailGoogleLimitedUse: 'Colliedesk’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements.',
   gmailPrivacyPolicy: 'Privacy policy',
   gmailPrivacyURL: 'https://colliedesk.com/privacy#google-user-data',
   gmailAdminOnly: 'Only an admin can connect Gmail.',
@@ -36,7 +38,8 @@ export const gmailMessages = {
   gmailConnected: (gmail: string, when: string) => `Replies are sent through Gmail from ${gmail}, connected ${when}.`,
   gmailOpenHolder: 'Open that channel',
   gmailAddressMismatch: (gmail: string, support: string) => `${gmail} is not this channel's support address. Replies still leave through it; connect Gmail again with ${support} to match.`,
-  gmailOtherAddress: (gmail: string, support: string) => `Customers see ${gmail} as the sender. Their answers still go to ${support}, so keep forwarding it here.`,
+  gmailOtherAddress: (gmail: string, support: string) => `Customers see ${gmail} as the sender; answers go to ${support}.`,
+  gmailOtherAddressWhy: (support: string) => `Keep forwarding ${support} here, so their answers reach Colliedesk.`,
   gmailFailedTitle: 'Gmail stopped sending',
   gmailFailedBody: (reason: string, when: string) => `${reason} Since ${when}, replies are not sent through Gmail and not sent any other way.`,
   gmailNotAvailable: 'Gmail sending is not set up on this server: ask whoever runs it. They find the steps here:',
