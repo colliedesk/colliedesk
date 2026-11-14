@@ -55,8 +55,8 @@ export function inLaneOrder(items: IntakeGathering[]) {
 function StatsLine({ stats }: { stats: IntakeStats }) {
   if (stats.gatherings === 0) return <p className="review-stats muted-copy">{m.statsNone}</p>;
   const opened = (stats.by_state.created ?? 0) + (stats.by_state.attached ?? 0);
-  return <p className="review-stats muted-copy"><span>{m.stats(stats.gatherings, opened)}</span>
-    {stats.ai_decisions > 0 && <HelpTip label={m.statsCorrectedLabel} text={m.statsCorrected(stats.ai_corrected, stats.ai_decisions)} />}</p>;
+  return <p className="review-stats muted-copy"><span>{m.stats(stats.gatherings, opened)}
+    {stats.ai_decisions > 0 && <HelpTip label={m.statsCorrectedLabel} text={m.statsCorrected(stats.ai_corrected, stats.ai_decisions)} />}</span></p>;
 }
 
 // ReviewPage is the intake queue of chat channels (docs/user/review.md): Waiting, what AI set aside, and

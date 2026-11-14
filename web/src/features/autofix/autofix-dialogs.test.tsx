@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { CancelDialog, LinkDialog } from './autofix-dialogs';
 import { fixOf, withPR } from './autofix.test.fixture';
@@ -28,5 +28,4 @@ it('Cancel names what a fix still sending or sent to Cursor does, with no GitHub
 it('Link a pull request says in one line what it is for and where it must be', () => {
   render(<LinkDialog fix={fixOf()} busy={false} onLink={vi.fn()} onClose={vi.fn()} />);
   expect(screen.getByRole('dialog', { name: 'Link a pull request' })).toHaveTextContent('Colliedesk did not find it. It must be in northwind/web.');
-  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 });
