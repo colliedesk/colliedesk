@@ -107,6 +107,7 @@ export const settingsMessages = {
   discard: 'Discard',
   save: 'Save',
   leaveUnsaved: 'You have unsaved changes. Leave anyway?',
+  undoFailed: 'The change could not be undone. The value is as it was.',
   emailChannel: 'Email channel',
   supportAddress: 'Support address',
   saveSupportAddress: 'Save support address',

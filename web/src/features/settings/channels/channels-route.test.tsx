@@ -405,6 +405,20 @@ test('a refused web form save shows the server message, not the generic failure'
   await waitFor(() => expect(screen.getByText(/Invalid origin "\*": use an exact origin/)).toBeInTheDocument());
 });
 
+test('the web form save holds the bar on Saving… until the server answers, so a second press sends nothing', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  let finish: () => void = () => {};
+  channelsApi.update.mockReturnValue(new Promise((resolve) => { finish = () => resolve({ ...channel('web_form'), config: webFormConfig }); }));
+  show(FORM);
+  fireEvent.change(await screen.findByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://changed.example.com' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+  const saving = await screen.findByRole('button', { name: 'Saving…' });
+  expect(saving).toBeDisabled();
+  expect(channelsApi.update).toHaveBeenCalledTimes(1);
+  finish();
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Saving…' })).toBeNull());
+});
+
 test('the Embed tab saves only the origins: the switch alone turns the form on or off', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('web_form', { enabled: false }), config: { ...webFormConfig, enabled: false } });
   channelsApi.update.mockResolvedValue({ ...channel('web_form', { enabled: false }), config: { ...webFormConfig, enabled: false } });

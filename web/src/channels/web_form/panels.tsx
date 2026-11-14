@@ -16,7 +16,7 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
     onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: ['channels'] }), client.invalidateQueries({ queryKey: ['web-form'] })]),
   });
   return <WebFormSection part="embed" settings={channel.config as WebFormSettings} canManage={canManage} save={saveState(save)}
-    onSave={(_enabled, origins) => save.mutate(origins)} />;
+    onSave={(_enabled, origins) => save.mutateAsync(origins)} />;
 }
 
 // Connect adds the form, on, with the sites allowed to post to it.

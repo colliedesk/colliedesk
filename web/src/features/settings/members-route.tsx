@@ -45,7 +45,7 @@ export function MembersRoute({ tab, onTab }: { tab?: MembersTab; onTab?: (tab: M
       roles={roles.data?.items} myPermissions={me.data?.permissions} timezone={me.data?.timezone ?? 'UTC'}
       error={updateAgent.error instanceof PlanLimitError || updateAgent.error instanceof InvalidRequestError ? updateAgent.error.message : updateAgent.isError ? messages.settingsActionFailed : undefined}
       onSetRoles={(id, roleIds) => setRoles.mutateAsync({ id, roleIds })}
-      onRename={(id, name) => updateAgent.mutate({ id, display_name: name })}
+      onRename={(id, name) => updateAgent.mutateAsync({ id, display_name: name })}
       onDeactivate={(id, reassignTo) => updateAgent.mutate({ id, active: false, ...(reassignTo ? { reassign_to: reassignTo } : {}) })}
       onReactivate={(id) => updateAgent.mutate({ id, active: true })} /> : undefined}
     rolesSection={readsTeam ? <RolesSection /> : undefined} />;

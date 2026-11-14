@@ -5,6 +5,8 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { AIChatSession, AIChatSummary, AIChatUsage } from '../../api/ai';
 import { SettingsEditsProvider } from './settings-edits';
 import { AIChatPanel, ChatTranscript } from './ai-chat-panel';
+import { AIPage } from './ai-page';
+import { settings, slot } from './ai-fixtures';
 import { permissionsOf, rolesOf } from '../../test-roles';
 import { AIChatSettingsRoute } from './ai-chat-route';
 
@@ -112,7 +114,7 @@ test('on a workspace key an admin sets the monthly spend limit in dollars, and e
   const setCap = vi.fn().mockResolvedValue(undefined);
   const slot = { slot: 'chat', source: 'provider', provider_id: null, model: 'claude-haiku-5-5', fallback_model: null, effort: 'low', enabled: true, default_level: 'off' as const, automatic: false, auto_parts: [],
     active: true, off_reason: null, consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null } as const;
-  wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, auto_parts: [] }} onSetCap={setCap} />);
+  const view = wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, auto_parts: [] }} onSetCap={setCap} />);
   const field = await screen.findByRole('textbox', { name: 'Monthly spend limit (US dollars)' });
   fireEvent.change(field, { target: { value: 'ten' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -121,7 +123,11 @@ test('on a workspace key an admin sets the monthly spend limit in dollars, and e
   fireEvent.change(field, { target: { value: '12.5' } });
   fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(setCap).toHaveBeenCalledWith(12_500_000));
-  fireEvent.change(field, { target: { value: '' } });
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull());
+  // The limit is stored now: the page reads the slot again, and emptying the field removes it.
+  view.unmount();
+  wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, monthly_cap_micro_usd: 12_500_000, auto_parts: [] }} onSetCap={setCap} />);
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Monthly spend limit (US dollars)' }), { target: { value: '' } });
   fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
   await waitFor(() => expect(setCap).toHaveBeenLastCalledWith(null));
 });
@@ -227,4 +233,28 @@ test('before a chat is deleted for good, the dialog still says what goes and wha
   fireEvent.click(await screen.findByRole('button', { name: 'Delete chat' }));
   const dialog = await screen.findByRole('alertdialog');
   expect(within(dialog).getByText('The transcript is removed for good. The conversation it opened keeps its copy.')).toBeVisible();
+});
+
+
+test('a spend limit typed on the Chat tab is kept when another tab is opened and comes back: the text, the bar and Save all survive', async () => {
+  aiApi.chatUsage.mockResolvedValue(usage({ answer_limit: null, day_answer_limit: null, spent_micro_usd: 0, spent_percent: null }));
+  aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
+  const setCap = vi.fn().mockResolvedValue(undefined);
+  const chat = slot({ slot: 'chat' as never, source: 'provider', model: 'claude-haiku-5-5', enabled: true, active: true, monthly_cap_micro_usd: null } as never);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><AIPage isAdmin workspaceName="Northwind" timezone="UTC" showConsent={false} settings={settings({ slots: [chat] })} onSetChatCap={setCap}
+    shown={{ general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: false, ai: true }}
+    onSetSlot={vi.fn()} onConsent={vi.fn()} onDismissConsent={vi.fn()} onCheck={vi.fn()} onAdd={vi.fn()} onListModels={vi.fn()} onSetKey={vi.fn()} onRemove={vi.fn()} onSetAutomatic={vi.fn()} onUsageMonth={vi.fn()} /></QueryClientProvider>);
+  fireEvent.click(screen.getByRole('tab', { name: 'AI chat' }));
+  const field = await screen.findByRole('textbox', { name: /Monthly spend limit/ });
+  fireEvent.change(field, { target: { value: '12.5' } });
+  fireEvent.click(screen.getByRole('tab', { name: 'History' }));
+  expect(screen.queryByRole('textbox', { name: /Monthly spend limit/ })).toBeNull();
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent('Monthly spend limit');
+  fireEvent.click(screen.getByRole('tab', { name: 'AI chat' }));
+  expect(await screen.findByRole('textbox', { name: /Monthly spend limit/ })).toHaveValue('12.5');
+  fireEvent.click(screen.getByRole('tab', { name: 'History' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(setCap).toHaveBeenCalledWith(12_500_000));
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBeNull());
 });

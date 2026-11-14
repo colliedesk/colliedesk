@@ -10,6 +10,8 @@
 .settings-toast { position: fixed; left: 50%; bottom: var(--space-6); z-index: 20; transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-radius: var(--radius-lg); background: var(--surface-inverse); color: var(--text-inverse);
   font-size: var(--fs-ui); box-shadow: var(--shadow-2); }
+.settings-toast-raised { bottom: calc(var(--space-6) + 52px + var(--space-3)); }
+.settings-toast [role="alert"] { color: var(--text-inverse); }
 .settings-toast button { border-color: transparent; background: transparent; box-shadow: none; color: var(--text-inverse); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .settings-toast button:hover:not(:disabled) { background: rgb(127 127 127 / 0.2); border-color: transparent; color: var(--text-inverse); }
 .settings-toast .settings-toast-close { width: var(--control, 32px); padding: 0; text-decoration: none; }
@@ -20,4 +22,7 @@
   .settings-save-bar p { flex-basis: 100%; }
   .settings-save-bar button, .settings-toast button { min-height: var(--touch); }
   .settings-toast { bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); }
+  /* The bar wraps to two lines on a phone: the toast clears all of it. */
+  .settings-toast-raised { bottom: calc(var(--space-3) + env(safe-area-inset-bottom) + 108px + var(--space-3)); }
+  .settings-toast .settings-toast-close { width: var(--touch); }
 }

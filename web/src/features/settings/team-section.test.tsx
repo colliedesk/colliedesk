@@ -1,6 +1,8 @@
-import { fireEvent, render as renderPlain, screen, within } from '@testing-library/react';
+import { fireEvent, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
+import { InvalidRequestError } from '../../api/client';
 import type { Role, TeamMember } from '../../api/schemas';
 import { permissionsOf, roleOf, rolesOf } from '../../test-roles';
 import { settingsMessages } from './settings-messages';
@@ -231,7 +233,8 @@ test('an admin renames a member from their row, and saving an empty name clears 
   fireEvent.change(input, { target: { value: '  Robert  ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(onRename).toHaveBeenLastCalledWith(bob.id, 'Robert');
-  expect(screen.queryByRole('textbox', { name: 'Display name of Bob Builder' })).not.toBeInTheDocument();
+  // The form closes once the server has taken the name.
+  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Display name of Bob Builder' })).not.toBeInTheDocument());
 
   fireEvent.click(screen.getByRole('button', { name: 'Rename Bob Builder' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: '' } });
@@ -252,4 +255,46 @@ test('a member without a name is renamed from an empty field that shows the emai
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Rename ann@example.com' })).toHaveFocus();
   expect(onRename).not.toHaveBeenCalled();
+});
+
+
+test('a rename the server refuses keeps the form open with what was typed and the server\'s words', async () => {
+  const onRename = vi.fn().mockRejectedValue(new InvalidRequestError('That name is taken.'));
+  render(<TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />);
+  fireEvent.click(within(row('Bob Builder')).getByRole('button', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByText('That name is taken.')).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Display name of Bob Builder' })).toHaveValue('Robert');
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent('Rename Bob Builder');
+});
+
+test('a rename being typed survives the team list leaving the page (another tab) and coming back open', () => {
+  function Tabs() {
+    const [shown, setShown] = useState(true);
+    return <><button type="button" onClick={() => setShown(!shown)}>Toggle</button>{shown && <TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={vi.fn()} />}</>;
+  }
+  render(<Tabs />);
+  fireEvent.click(within(row('Bob Builder')).getByRole('button', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle' }));
+  expect(screen.getByRole('region', { name: 'Unsaved changes' })).toHaveTextContent('Rename Bob Builder');
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle' }));
+  expect(screen.getByRole('textbox', { name: 'Display name of Bob Builder' })).toHaveValue('Robert');
+});
+
+test('opening another row\'s rename or a deactivation while a name is typed asks first; declining keeps the typed name', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValueOnce(true);
+  render(<TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={vi.fn()} onDeactivate={vi.fn()} />);
+  fireEvent.click(within(row('Bob Builder')).getByRole('button', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: 'Robert' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Rename ann@example.com' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  expect(confirm).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('textbox', { name: 'Display name of Bob Builder' })).toHaveValue('Robert');
+  fireEvent.click(screen.getByRole('button', { name: 'Rename ann@example.com' }));
+  expect(confirm).toHaveBeenCalledTimes(3);
+  expect(screen.queryByRole('textbox', { name: 'Display name of Bob Builder' })).not.toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Display name of ann@example.com' })).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
 });
