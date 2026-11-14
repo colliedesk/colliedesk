@@ -9,7 +9,7 @@
 .settings-save-bar .settings-save-failure { order: 3; flex-basis: 100%; margin: 0 0 var(--space-2); color: var(--danger); font-size: var(--fs-small); }
 .settings-save-bar kbd { margin-left: var(--space-2); padding: 0; border: 0; background: transparent; box-shadow: none; color: inherit; font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 400; }
 
-.settings-toast { position: fixed; left: 50%; bottom: var(--space-6); z-index: 20; transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-3);
+.settings-toast { position: fixed; left: 50%; bottom: var(--space-6); z-index: 35; transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-radius: var(--radius-lg); background: var(--surface-inverse); color: var(--text-inverse);
   font-size: var(--fs-ui); box-shadow: var(--shadow-2); }
 .settings-toast-raised { bottom: calc(var(--space-6) + var(--settings-save-bar-height, 52px) + var(--space-3)); }

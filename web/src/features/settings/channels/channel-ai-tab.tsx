@@ -12,6 +12,7 @@ import { featureName, levelMeaning, levelName, levelsOf, scopeName } from '../ai
 import { IntakeSettings } from './channel-intake-settings';
 import { IntakeAutoDialog } from './intake-auto-dialog';
 import { channelsMessages as m } from './channels-messages';
+import { useInstantSave } from '../settings-edits';
 
 // A channel's AI tab: what each AI feature does by itself on the channel and on each scope of its type,
 // over the workspace's default (docs/user/ai.md "What AI does by itself, per channel"). The levels are
@@ -35,6 +36,7 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
   const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings });
   const [asking, setAsking] = useState<Change>();
   const [intakeProblem, setIntakeProblem] = useState<string>();
+  const instant = useInstantSave();
   const save = useMutation({
     mutationFn: (change: Change) => aiApi.setChannel(channel.id, change.slot, { scope: change.scope, level: change.level }),
     onSuccess: (next) => {
@@ -55,7 +57,12 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
     const raises = target !== configured(data, settings.data, change.scope, change.slot)
       && ((change.slot === 'triage' && target === 'auto') || (change.slot === 'draft' && target === 'suggest') || (change.slot === 'intake' && target === 'auto'));
     if (raises && slotOf(change.slot)) setAsking(change);
-    else save.mutate(change);
+    else apply(change);
+  };
+  // A level saves when it is picked and says so; Undo sends the level the scope had, in one request. A refusal shows under the table.
+  const apply = (change: Change) => {
+    const before = levels.data?.scopes.find((entry) => entry.scope === change.scope)?.slots.find((item) => item.slot === change.slot)?.level ?? null;
+    void instant((input: Change) => save.mutateAsync(input), change, { ...change, level: before });
   };
   // Intake's level and settings go in one change: the server takes the settings whole. A refusal rejects:
   // the settings form says it under itself, the Auto dialog (gone by then) through the tab.
@@ -122,9 +129,9 @@ export function ChannelAITab({ channel, isAdmin, timezone = 'UTC' }: { channel: 
       options={data.scopes.find((entry) => entry.scope === asking.scope)?.slots.find((item) => item.slot === 'intake')?.options ?? null} settings={settings.data}
       onClose={() => setAsking(undefined)} onTurnOn={(input) => { setAsking(undefined); void turnOnAuto(input); }} />}
     {asking && askedSlot?.slot === 'triage' && <AutoTriageDialog slot={askedSlot} onClose={() => setAsking(undefined)}
-      onTurnOn={() => { save.mutate(asking); setAsking(undefined); }} />}
+      onTurnOn={() => { apply(asking); setAsking(undefined); }} />}
     {asking && askedSlot?.slot === 'draft' && settings.data && <AutoDraftDialog slot={askedSlot} settings={settings.data} onClose={() => setAsking(undefined)}
-      onTurnOn={() => { save.mutate(asking); setAsking(undefined); }} />}
+      onTurnOn={() => { apply(asking); setAsking(undefined); }} />}
   </div>;
 }
 

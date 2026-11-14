@@ -42,6 +42,10 @@ test('intake on a chat channel: Suggest with settings of its own, then Auto asks
   await page.getByRole('combobox', { name: 'Chat intake provider' }).selectOption({ label: 'Office model' });
   await page.getByRole('button', { name: 'Done' }).click();
   await page.getByRole('switch', { name: 'Chat intake on' }).click();
+  // Turning intake on asks the person to agree first.
+  const consent = page.getByRole('dialog', { name: 'Turn on Chat intake' });
+  await consent.getByRole('checkbox', { name: /I agree that messages in linked chat channels are sent to Office model/ }).check();
+  await consent.getByRole('button', { name: 'Agree and turn on' }).click();
   await expect(page.getByRole('switch', { name: 'Chat intake on' })).toBeChecked();
   await page.getByRole('button', { name: 'Chat intake settings' }).click();
   const intakeDefault = page.getByRole('group', { name: 'Intake: default for channels' });

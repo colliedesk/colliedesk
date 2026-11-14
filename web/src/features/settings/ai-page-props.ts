@@ -22,7 +22,8 @@ export interface AIPageProps {
   busyProvider?: string;
   // error is the answer of the last page action (a feature or a check) that failed.
   error?: string;
-  onSetSlot: (slot: AISlotName, input: AISlotInput) => void;
+  // Resolves when the server took the change and rejects when it refused it: a switch says Saved only after the first.
+  onSetSlot: (slot: AISlotName, input: AISlotInput) => Promise<unknown> | void;
   onConsent: () => void;
   onDismissConsent: () => void;
   onCheck: (id: string) => void;

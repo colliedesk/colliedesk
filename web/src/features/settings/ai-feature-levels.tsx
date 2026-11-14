@@ -8,6 +8,7 @@ import { featureName, levelMeaning, levelName, levelsOf, scopeName } from './ai-
 import { money, parts } from './ai-level-dialogs';
 import type { Part } from './ai-level-dialogs';
 import { slotInput } from './ai-slot-input';
+import { useInstantSave } from './settings-edits';
 
 // levelItems are the levels a feature takes, each named for what it does.
 const levelItems = (slot: AISlotName) => levelsOf(slot).map((level) => ({ value: level, label: levelName[level] }));
@@ -76,18 +77,22 @@ export function IntakeSources({ settings, isAdmin, onSourceConsent }: { settings
   const given = new Set(settings.source_consents.map((consent) => consent.source_class));
   const [busy, setBusy] = useState<string>();
   const [problem, setProblem] = useState<string>();
-  const toggle = async (source: string, on: boolean) => {
+  const instant = useInstantSave();
+  // Giving or taking back a consent saves at once and says so; Undo does the opposite in one request. A refusal shows under the switches.
+  const give = async (source: string, on: boolean) => {
     if (!onSourceConsent) return;
     setBusy(source);
     setProblem(undefined);
     try {
       await onSourceConsent(source, on);
-    } catch {
+    } catch (error) {
       setProblem(m.actionFailed);
+      throw error;
     } finally {
       setBusy(undefined);
     }
   };
+  const toggle = (source: string, on: boolean) => instant((value: boolean) => give(source, value), on, !on);
   return <fieldset className="ai-sources-consent">
     <legend>{m.intakeSourcesLegend}</legend>
     <span className="ai-sources-tip"><HelpTip label={m.intakeSourcesLegend} text={m.intakeSourcesHelp} /></span>
