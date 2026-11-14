@@ -29,10 +29,11 @@ const previewBase = "/api/v1/kb"
 // therefore names paths of the origin rather than all of it ('self'), as the email frame does: images only from the workspace's
 // image and media routes (a CSS url() cannot reach any other route with the cookie), style only from
 // the help center's hashed sheets and the inline brand block (a theme not saved has no hashed brand
-// sheet), and nothing runs, submits, plays or changes the base address.
+// sheet), fonts only from beside site.css, and nothing runs, submits, plays or changes the base address.
 func previewPolicy(origin string) string {
 	return "default-src 'none'; img-src " + origin + domain.KBImagePath + " " + origin + domain.KBMediaPath + "; style-src " + origin + pathPrefix +
-		strings.TrimPrefix(stylePath, "/") + " 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'"
+		strings.TrimPrefix(stylePath, "/") + " 'unsafe-inline'; font-src " + origin + pathPrefix + strings.TrimPrefix(stylePath, "/") +
+		"; script-src 'none'; form-action 'none'; base-uri 'none'"
 }
 
 // previewStyle is the preview's first <style> element, right after the policy and before every other

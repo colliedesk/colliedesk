@@ -56,7 +56,7 @@ export const themeMessages = {
     'system-sans': 'Sans', 'humanist-sans': 'Humanist sans', 'geometric-sans': 'Geometric sans', 'classic-serif': 'Serif',
     'transitional-serif': 'Transitional serif', 'rounded-sans': 'Rounded sans', mono: 'Monospace',
   } as Record<string, string>,
-  fontsHelp: 'Fonts already on the reader\'s device: nothing is downloaded.',
+  fontsHelp: 'Serif comes with the help center, so every accent matches.',
   advanced: 'Advanced',
   customCSS: 'Custom CSS',
   customCSSHelp: 'For details the fields above do not cover.',

@@ -20,16 +20,42 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
-//go:embed templates/*.html static/site.css
+//go:embed templates/*.html static/site.css static/fonts/*.woff2
 var files embed.FS
 
-// pages are the parsed templates and the style sheet, named by its hash. fingerprint changes with
-// any template or style, so a page's ETag does too even on a build without a version.
+// pages are the parsed templates, the style sheet and its fonts, each named by its hash. fingerprint
+// changes with any template or style, so a page's ETag does too even on a build without a version.
 type pages struct {
 	templates   map[string]*template.Template
 	style       []byte
 	styleName   string
+	fonts       map[string][]byte
 	fingerprint string
+}
+
+// hashedFonts reads the fonts site.css names as url("fonts/<file>") and gives each a name that holds
+// its hash, served next to the sheet, and the sheet that names them so.
+func hashedFonts(style []byte) ([]byte, map[string][]byte) {
+	entries, err := files.ReadDir("static/fonts")
+	if err != nil {
+		panic(err)
+	}
+	fonts := map[string][]byte{}
+	for _, entry := range entries {
+		font, err := files.ReadFile("static/fonts/" + entry.Name())
+		if err != nil {
+			panic(err)
+		}
+		sum := sha256.Sum256(font)
+		name := strings.TrimSuffix(entry.Name(), ".woff2") + "-" + hex.EncodeToString(sum[:6]) + ".woff2"
+		from := `url("fonts/` + entry.Name() + `")`
+		if !bytes.Contains(style, []byte(from)) {
+			panic("site.css does not use static/fonts/" + entry.Name())
+		}
+		style = bytes.ReplaceAll(style, []byte(from), []byte(`url("`+name+`")`))
+		fonts[name] = font
+	}
+	return style, fonts
 }
 
 var pageNames = []string{"home", "collection", "article", "search", "missing", "busy"}
@@ -39,8 +65,9 @@ func parsePages() pages {
 	if err != nil {
 		panic(err)
 	}
+	style, fonts := hashedFonts(style)
 	sum := sha256.Sum256(style)
-	parsed := pages{templates: map[string]*template.Template{}, style: style, styleName: "site-" + hex.EncodeToString(sum[:6]) + ".css"}
+	parsed := pages{templates: map[string]*template.Template{}, style: style, styleName: "site-" + hex.EncodeToString(sum[:6]) + ".css", fonts: fonts}
 	all := sha256.New()
 	for _, name := range append([]string{"layout"}, pageNames...) {
 		source, err := files.ReadFile("templates/" + name + ".html")

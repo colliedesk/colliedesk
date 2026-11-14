@@ -9,7 +9,7 @@ import (
 )
 
 // pageCSP is the policy of every public help center page; custom CSS must leave it as it is.
-const pageCSP = "default-src 'none'; img-src 'self'; style-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+const pageCSP = "default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
 
 func TestHelpCenterThemeRefusesCustomCSSAtItsLineAndSavesNothing(t *testing.T) {
 	api, service := testAPI(t)

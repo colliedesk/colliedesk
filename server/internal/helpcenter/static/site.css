@@ -1,5 +1,7 @@
-/* Public help center. System fonts only: the page's CSP loads nothing from other hosts. It is the customer's
-   own site, so it is white-label ink and paper: neutral greys, ink links and buttons, no vendor colour. */
+/* Public help center. System fonts, except the serif heading font, which the help center serves itself
+   (static/fonts): a device's own serif may lack letters such as Vietnamese ử or ợ, and a heading would then
+   mix two typefaces. The page's CSP loads nothing from other hosts. It is the customer's own site, so it is
+   white-label ink and paper: neutral greys, ink links and buttons, no vendor colour. */
 :root {
   --paper: #fafafa;
   --surface: #ffffff;
@@ -13,7 +15,7 @@
   --tab: #f4f4f4;
   --thumb: rgba(23, 23, 23, 0.22);
   --thumb-hover: rgba(23, 23, 23, 0.42);
-  --serif: "Iowan Old Style", "Charter", "Bitstream Charter", "Sitka Text", Cambria, "Palatino Linotype", Georgia, serif;
+  --serif: "Noto Serif", "Iowan Old Style", "Charter", "Bitstream Charter", "Sitka Text", Cambria, "Palatino Linotype", Georgia, serif;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   --radius: 10px;
@@ -31,6 +33,20 @@
   --font-body: var(--sans);
   --font-head: var(--serif);
   color-scheme: light dark;
+}
+@font-face {
+  font-family: "Noto Serif";
+  src: url("fonts/noto-serif-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Serif";
+  src: url("fonts/noto-serif-600.woff2") format("woff2");
+  font-weight: 600 700;
+  font-style: normal;
+  font-display: swap;
 }
 
 @media (prefers-color-scheme: dark) {

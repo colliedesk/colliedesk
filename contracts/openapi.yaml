@@ -12037,8 +12037,10 @@ components:
       type: [string, 'null']
       enum: [system-sans, humanist-sans, geometric-sans, classic-serif, transitional-serif, rounded-sans, mono, null]
       description: >-
-        A font stack of the reader's own system: nothing is downloaded. Null is the default (system-sans
-        for text, classic-serif for headings).
+        A font stack of the reader's own system, except the serif stacks (classic-serif,
+        transitional-serif), which start with Noto Serif that the help center serves itself, so a heading
+        in Vietnamese or another Latin language with stacked accents has one typeface on every device.
+        Null is the default (system-sans for text, classic-serif for headings).
     FreshdeskRedirect:
       type: object
       required: [state, freshdesk_domain, address, keep_weeks, snippet, mapped]
