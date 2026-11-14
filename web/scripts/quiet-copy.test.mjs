@@ -112,8 +112,8 @@ test('the ceiling list keeps each line at its recorded length: a new line, a lon
 });
 
 // The ceiling list only shrinks, so its size is pinned here too: adding a line to the file fails this test.
-test('the ceiling list holds at most 244 lines', () => {
-  expect(readCeiling(readFileSync(ceilingFile, 'utf8')).size).toBeLessThanOrEqual(244);
+test('the ceiling list holds at most 81 lines', () => {
+  expect(readCeiling(readFileSync(ceilingFile, 'utf8')).size).toBeLessThanOrEqual(81);
 });
 
 test('every helper line of the web app longer than 60 characters is on the ceiling list at its recorded length', () => {
