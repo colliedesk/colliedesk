@@ -524,7 +524,7 @@ const movedAddresses: [from: string, to: string][] = [
   ['/settings/members?tab=roles', '/settings/members?tab=advanced'], ['/settings/roles', '/settings/members?tab=advanced'],
   ['/settings/agents', '/settings/ai?tab=external'],
   ['/settings/import', '/settings/data'], ['/settings/export', '/settings/data#export-heading'], ['/settings/import-freshdesk', '/settings/data'],
-  ['/settings/help-center', '/knowledge/settings'],
+  ['/settings/help-center', '/knowledge/settings'], ['/help-center/settings', '/knowledge/settings'],
   // The sections of the old one-page Settings.
   ['/settings#invites-heading', '/settings/members?tab=invites#invites-heading'], ['/settings#team-heading', '/settings/members#team-heading'],
   ['/settings#agents-heading', '/settings/ai?tab=external#agents-heading'], ['/settings#export-heading', '/settings/data#export-heading'],
