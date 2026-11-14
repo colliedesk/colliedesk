@@ -1,0 +1,44 @@
+/* Mentions (I9-a, I9-b, I9-c): the @ list of a private note, the line under a posted note, the Mentions list. */
+
+/* I9-a: the list at the @ of a note (reply-composer.tsx places it), 280px or the screen less 8px a side, the teammate
+   the keys mark tinted. It floats over the page, like the tooltips. */
+.mention-picker { position: fixed; z-index: 50; width: min(280px, calc(100vw - 16px)); padding: var(--space-1);
+  border-radius: var(--radius); background: var(--surface-1); box-shadow: 0 0 0 1px var(--line), var(--shadow-2); }
+.mention-picker-label, .mention-picker-empty { margin: 0; padding: var(--space-1) var(--space-2); color: var(--text-3); font-size: var(--fs-label); line-height: 16px; }
+.mention-picker ul { display: grid; gap: 2px; max-height: min(15rem, 25dvh); margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.mention-picker li { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; padding-inline: var(--space-2); border-radius: var(--radius-sm); cursor: pointer; }
+.mention-picker li[aria-selected="true"] { background: var(--surface-2); }
+.mention-initials { flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-full);
+  background: var(--surface-3); color: var(--text-2); font-size: 10px; line-height: 12px; }
+.mention-name { flex: 1; min-width: 0; overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.mention-name strong { font-weight: 600; }
+.mention-role { flex: none; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; }
+
+/* I9-b: the quiet line under a note that asks teammates. */
+.note-mentions { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
+.note-mentions p { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; }
+.note-mentions .icon { flex: none; width: 14px; height: 14px; }
+/* The note a Mentions row or a mention email opened. */
+.message-note:target { box-shadow: 0 0 0 2px var(--warn); }
+
+/* I9-c: the toolbar (Unread N / All / Mark all read) and the rows. */
+.mentions-list { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.mentions-toolbar { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-2) var(--space-4) var(--space-2) var(--space-8); border-bottom: 1px solid var(--line); }
+.mentions-tab { min-height: auto; border: 0; background: transparent; box-shadow: none; padding: 0; color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+.mentions-tab[aria-pressed="true"] { color: var(--text-1); font-weight: 600; }
+.mentions-mark { margin-left: auto; color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
+.mention-row { display: grid; gap: var(--space-1); padding: var(--space-3) var(--space-4) var(--space-3) var(--space-8); border-bottom: 1px solid var(--line);
+  color: inherit; text-decoration: none; font-size: var(--fs-ui); line-height: 20px; }
+.mention-row:hover { background: var(--surface-2); }
+.mention-row[aria-current="true"] { background: var(--surface-3); }
+.mention-row:focus-visible { outline-offset: -2px; }
+.mention-row time { color: var(--text-3); font-size: var(--fs-label); line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mention-dot { flex: none; width: 8px; height: 8px; border-radius: var(--radius-full); }
+.mention-row[data-unread] .mention-dot { background: var(--accent); }
+.mention-row[data-unread] :is(.row-customer, .conversation-subject) { font-weight: 600; }
+.mentions-older { margin: var(--space-3) var(--space-8); }
+/* A fingertip finds Unread and All on a narrow screen or a touch screen. */
+@media (pointer: coarse), (max-width: 30rem) { .mentions-tab { min-height: var(--touch); } }
+/* On a phone the list pane draws a line along its foot; an empty Mentions list has no rows to close, so no line runs
+   under its message. */
+@media (max-width: 44rem) { .list-pane:has(.mentions-list > .conversation-scroll > .empty-copy) { border-bottom: 0; } }

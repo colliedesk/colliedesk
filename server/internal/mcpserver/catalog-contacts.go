@@ -1,5 +1,7 @@
 package mcpserver
 
+import "github.com/colliedesk/colliedesk/server/internal/httpapi"
+
 // The tools below change customers (contacts) and start conversations by email.
 
 const contactMergeSchema = `{"type":"object","required":["merge_id","contact_id","merged_contact","conversations_moved","merged_at"],"properties":{` +
@@ -59,8 +61,9 @@ func contactUnmergeSpec() Spec {
 
 func conversationStartSpec() Spec {
 	return Spec{
-		Name:  "colliedesk_conversation_start",
-		Title: "Start a conversation by email",
+		Name:       "colliedesk_conversation_start",
+		BodyEffect: httpapi.Final,
+		Title:      "Start a conversation by email",
 		Description: `Open a new conversation with a customer and email them its first message (and cc) in one step. ` +
 			`It cannot be undone: an email that left cannot be called back. ` + confirmFirst +
 			`If the email is refused (no email channel, the channel is off, trial rules, cc rules) nothing is stored. The customer's answer joins the same conversation. ` +
@@ -70,8 +73,7 @@ func conversationStartSpec() Spec {
 			`Give contact_id for a customer found with colliedesk_contacts_find, or new_contact to add the customer in the same step (an address that is already a customer is refused and the error names that customer). ` +
 			`To open a conversation without emailing, use colliedesk_conversation_create. ` +
 			`files attaches up to 10 files to the first message, ` + inlineFilesLimitWords + ` in total per call (base64). `,
-		Destructive: true,
-		REST:        []string{"POST /api/v1/conversations", "GET /api/v1/conversations/{id}/messages"},
+		REST: []string{"POST /api/v1/conversations", "GET /api/v1/conversations/{id}/messages"},
 		Input: `{"type":"object","additionalProperties":false,"required":["subject","body"],"properties":{` +
 			`"contact_id":{"type":"string",` + uuid + `,"description":"The customer; give this or new_contact."},` +
 			`"new_contact":{"type":"object","additionalProperties":false,"required":["name","email"],"description":"A customer to add with the conversation; give this or contact_id.",` +

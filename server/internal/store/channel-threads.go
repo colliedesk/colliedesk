@@ -322,14 +322,22 @@ func (s *Store) ChannelSenders(ctx context.Context, workspaceID, channelID strin
 // MaxChatPage is the most items or threads a page holds.
 const MaxChatPage = 100
 
+// chatItemFileRows are the files of the chat item i, each with its index n (from 0): an item written with its
+// message (an import) has the message's files, in the order they were stored; any other item that came in has
+// the files fetched with it, in the order the channel sent them. The list an item shows and the file
+// GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index} serves both read these rows, so an index always
+// names the same file.
+const chatItemFileRows = `(SELECT a.filename AS name,a.content_type,'stored'::text AS status,a.size::bigint AS size,NULL::text AS error,a.storage_key,a.sha256,
+		(row_number() OVER (ORDER BY a.created_at,a.id))-1 AS n
+		FROM attachments a WHERE i.inbound_event_id IS NULL AND i.message_id IS NOT NULL AND i.direction='in' AND a.workspace_id=i.workspace_id AND a.message_id=i.message_id
+	UNION ALL SELECT f.name,f.content_type,f.status,f.size,f.error,f.storage_key,f.sha256,(row_number() OVER (ORDER BY f.idx))-1
+		FROM channel_inbound_files f WHERE NOT (i.inbound_event_id IS NULL AND i.message_id IS NOT NULL AND i.direction='in')
+			AND f.workspace_id=i.workspace_id AND f.event_id=i.inbound_event_id)`
+
 const chatItemColumns = `i.id::text,i.thread_id::text,i.direction,i.role,i.sender_kind,i.sender_value,i.sender_name,i.contact_id::text,i.agent_id::text,
 	i.body,i.external_id,i.quote_external_id,i.message_id::text,i.disposition,i.disposition_reason,i.occurred_at,
-	CASE WHEN i.inbound_event_id IS NULL AND i.message_id IS NOT NULL AND i.direction='in' THEN
-		-- An item written with its message (an import) has the message's files.
-		(SELECT COALESCE(json_agg(json_build_object('name',a.filename,'content_type',a.content_type,'status','stored','size',a.size,'error',NULL) ORDER BY a.created_at,a.id),'[]')
-			FROM attachments a WHERE a.workspace_id=i.workspace_id AND a.message_id=i.message_id)
-	ELSE (SELECT COALESCE(json_agg(json_build_object('name',f.name,'content_type',f.content_type,'status',f.status,'size',f.size,'error',f.error) ORDER BY f.idx),'[]')
-		FROM channel_inbound_files f WHERE f.workspace_id=i.workspace_id AND f.event_id=i.inbound_event_id) END,
+	(SELECT COALESCE(json_agg(json_build_object('name',x.name,'content_type',x.content_type,'status',x.status,'size',x.size,'error',x.error) ORDER BY x.n),'[]')
+		FROM ` + chatItemFileRows + ` x),
 	(SELECT o.status FROM channel_outbox o WHERE o.workspace_id=i.workspace_id AND o.thread_item_id=i.id)`
 
 func scanChatItem(row pgx.Row, extra ...any) (ChatItem, error) {
@@ -667,12 +675,12 @@ func queueThreadNotice(ctx context.Context, tx pgx.Tx, journal *journalWriter, e
 func loadThreadNotice(ctx context.Context, tx pgx.Tx, claim OutboxClaim, out channels.Outbound) (channels.Outbound, error) {
 	var place channels.Place
 	var quote, senderKind, senderValue, senderName, contactID *string
-	err := tx.QueryRow(ctx, `SELECT n.id::text,n.body,n.created_at,t.kind,t.external_id,COALESCE(t.name,''),n.quote_external_id,c.sender_kind,c.sender_value,c.sender_name,c.contact_id::text
+	err := tx.QueryRow(ctx, `SELECT n.id::text,n.body,n.created_at,COALESCE(n.disposition_reason,''),t.kind,t.external_id,COALESCE(t.name,''),n.quote_external_id,c.sender_kind,c.sender_value,c.sender_name,c.contact_id::text
 		FROM channel_thread_items n JOIN channel_threads t ON t.workspace_id=n.workspace_id AND t.id=n.thread_id
 		LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.contact_id FROM channel_thread_items i
 			WHERE i.workspace_id=n.workspace_id AND i.thread_id=n.thread_id AND i.direction='in' AND i.external_id=n.quote_external_id LIMIT 1) c ON true
 		WHERE n.workspace_id=$1 AND n.id=$2`, claim.WorkspaceID, claim.ThreadItemID).
-		Scan(&out.Message.ID, &out.Message.Body, &out.Message.CreatedAt, &place.Kind, &place.ExternalID, &place.Name, &quote, &senderKind, &senderValue, &senderName, &contactID)
+		Scan(&out.Message.ID, &out.Message.Body, &out.Message.CreatedAt, &out.Message.Notice, &place.Kind, &place.ExternalID, &place.Name, &quote, &senderKind, &senderValue, &senderName, &contactID)
 	if err != nil {
 		return out, fmt.Errorf("load chat notice %s: %w", claim.ThreadItemID, err)
 	}

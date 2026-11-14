@@ -7,7 +7,7 @@ type ReviewReason = NonNullable<IntakeGathering['review_reason']>;
 
 export const reviewMessages = {
   title: 'Review',
-  lead: 'What customers wrote in chat channels that the rules could not file alone: a group message without a command, a card put back, or one AI was not sure about. Decide each card once: open a conversation, add it to one, or set it aside.',
+  lead: 'What customers wrote in chat channels that waits for a person: a group message without a command, a card put back, one AI was not sure about, or every card while intake is at Suggest. Decide each card once: open a conversation, add it to one, or set it aside.',
   tabs: 'Review lists',
   waiting: 'Waiting',
   aiDismissed: 'AI dismissed',
@@ -18,6 +18,9 @@ export const reviewMessages = {
   loading: 'Loading cards…',
   failed: 'The cards could not be loaded.',
   tryAgain: 'Try again',
+  files: 'Files the customer sent',
+  fileNotReceived: (name: string, reason: string) => `${name} was not received: ${reason}`,
+  fileNotReceivedYet: (name: string) => `${name} has not been received yet`,
   loadMore: 'Show more',
   emptyWaiting: 'Nothing waits for a person. New cards appear here when a chat message needs one.',
   emptyDismissed: 'AI set nothing aside in this list.',
@@ -28,7 +31,7 @@ export const reviewMessages = {
   // Every AI decision counts, a suggestion as much as one it applied; changed is what a person decided otherwise.
   statsCorrected: (corrected: number, decisions: number) => `People changed ${corrected} of ${decisions} AI ${decisions === 1 ? 'decision' : 'decisions'}`,
   statsNone: 'Last 7 days: no cards yet',
-  deciding: (count: number) => `${count} more ${count === 1 ? 'card waits' : 'cards wait'} for AI to decide; the rules decide what it does not in time.`,
+  deciding: (count: number) => `${count} more ${count === 1 ? 'card waits' : 'cards wait'} for AI; what it does not decide in time waits here.`,
   messagesCount: (count: number) => `${count} ${count === 1 ? 'message' : 'messages'}`,
   groupPlace: (name: string | null) => (name ? `Group ${name}` : 'Group'),
   directPlace: 'One-to-one',
@@ -44,6 +47,7 @@ export const reviewMessages = {
     lane_blocked: 'Waiting for the card above',
     requeued: 'Put back',
     gate_closed: 'AI may not decide this yet',
+    ai_suggests: 'AI suggests, a person decides',
   } satisfies Record<ReviewReason, string>,
   requeuedBy: (name: string) => `Put back by ${name}`,
   takenBack: 'Taken back from a conversation',
@@ -71,6 +75,8 @@ export const reviewMessages = {
   ignoreReasons: { chat: 'Just chat', handled_in_chat: 'Answered in chat', duplicate: 'Already reported', other: 'Something else' } satisfies Record<IntakeIgnoreReason, string>,
   failedAction: 'It was not saved. Check your connection, then try again.',
   decidedElsewhere: (who: string, name: string) => `${who} decided ${name}'s card first.`,
+  changedMeanwhile: (name: string) => `${name} wrote again and it joined their card, so nothing was decided. Read the card again, then decide.`,
+  changedToAI: (name: string) => `${name} wrote again and it joined their card, so nothing was decided. AI is reading the whole card now; it comes back to Waiting if AI is not sure.`,
   putBack: 'Put back in queue',
   done: {
     created: (name: string) => `${name}'s card opened a conversation.`,
@@ -113,7 +119,7 @@ export const reviewMessages = {
     target_changed: 'Its conversation changed since',
     gate_closed: 'Not allowed to do this alone yet',
     limit: 'Today’s automatic decisions are used up',
-    error: 'AI did not answer in full; the rules decided',
+    error: 'AI did not answer in full, so a person decides',
     several_candidates: 'More than one conversation could fit',
     no_content: 'Nothing to decide on: no text or file',
   } as Partial<Record<string, string>>,

@@ -48,11 +48,10 @@ func aiSettingsGetSpec() Spec {
 			`(never a key, only its last four characters), each feature (triage suggestions, reply drafts, intake of chat messages) with its provider, model, ` +
 			`whether it is on and can run, and what it does by itself where no channel says otherwise (default_level), the levels channels set apart from it (channels), ` +
 			`the kinds of extra context intake may send (source_consents), and the newest 50 changes with who made them. Every feature starts off.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/ai"},
-		Input:    noArguments,
+		REST:  []string{"GET /api/v1/ai"},
+		Input: noArguments,
 		Output: `{"type":"object","required":["settings"],"properties":{"settings":{"type":"object","required":["server","providers","slots","events"],"properties":{` +
-			`"server":{"type":["object","null"]},"providers":{"type":"array","items":` + aiProviderSchema + `},"slots":{"type":"array","items":` + aiSlotSchema + `},` +
+			`"server":{"type":["object","null"]},"server_off":{"type":["object","null"],"description":"Set (with the provider's label) while the operator switched the server's provider off: no feature can pick source server then."},"providers":{"type":"array","items":` + aiProviderSchema + `},"slots":{"type":"array","items":` + aiSlotSchema + `},` +
 			`"events":{"type":"array","items":{"type":"object"}},"provider_limit":{"type":"integer"},"can_store_keys":{"type":"boolean"},"allow_private_base_urls":{"type":"boolean"}}}}}`,
 		run: aiSettingsGet,
 	}
@@ -65,8 +64,7 @@ func aiModelsListSpec() Spec {
 		Description: `List the models a key may use before adding the provider, to pick the models for colliedesk_ai_provider_add: anthropic (the Claude models, newest first) ` +
 			`or openai_compatible (GET {base_url}/models, sorted). Nothing is saved or billed. A provider that cannot list fails with ai_check_failed and check_error_code ` +
 			`(model_not_found when the server keeps no list: name the models yourself). The key passes through this conversation, so use a key you can revoke at the provider.`,
-		ReadOnly: true,
-		REST:     []string{"POST /api/v1/ai/models"},
+		REST: []string{"POST /api/v1/ai/models"},
 		Input: `{"type":"object","additionalProperties":false,"required":["kind"],"properties":{` +
 			`"kind":{"type":"string","enum":["anthropic","openai_compatible"]},"base_url":{"type":"string","maxLength":500},"api_key":{"type":"string","maxLength":500}}}`,
 		Output: `{"type":"object","required":["models"],"properties":{"models":{"type":"array","items":{"type":"string"}}}}`,
@@ -145,11 +143,10 @@ func aiProviderRemoveSpec() Spec {
 		Title: "Delete an AI provider",
 		Description: `Delete a provider and erase its key now. The features that used it turn off and stay off until someone picks another provider ` +
 			`(turned_off lists them). It cannot be undone: there is no trash, so to bring it back add the provider again with its key.`,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/ai/providers/{id}"},
-		Input:       `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `}}`,
-		Output:      `{"type":"object","required":["turned_off"],"properties":{"turned_off":{"type":"array","items":` + aiSlotName + `}}}`,
-		run:         aiProviderRemove,
+		REST:   []string{"DELETE /api/v1/ai/providers/{id}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `}}`,
+		Output: `{"type":"object","required":["turned_off"],"properties":{"turned_off":{"type":"array","items":` + aiSlotName + `}}}`,
+		run:    aiProviderRemove,
 	}
 }
 
@@ -157,15 +154,15 @@ func aiSlotSetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_ai_slot_set",
 		Title: "Set an AI feature",
-		Description: `Set one AI feature (triage suggestions, reply drafts, AI chat on the help center, or intake of chat messages): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. ` +
+		Description: `Set one AI feature (triage suggestions, reply drafts, AI chat on the help center, or intake of chat messages): where it runs (server, provider with provider_id, or none), the model (a workspace provider's; the server's provider runs the model its operator picks), effort, and on or off. ` +
 			`default_level is what it does by itself where no channel says otherwise: off (only when someone asks), suggest (triage suggests for every new conversation; drafts are written when a customer writes, never sent; intake suggests in Review) ` +
 			`or auto (triage only: suggestions apply the auto_parts, filling only what nobody set). Left out, it stays as it is; turned on, or moved to another provider, the feature starts at suggest (triage) or off. ` +
 			`Turning a feature on sends that feature's ticket data to its provider, and automatic apply changes tickets: say so to the person you work for before you turn one on.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/ai/slots/{slot}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":` + aiSlotName + `,` +
-			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",` + uuid + `},"model":{"type":"string","maxLength":200},` +
-			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept."},` +
+			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",` + uuid + `},"model":{"type":"string","maxLength":200,"description":"One of the provider's models; left out, its first. On the server's provider (source server) it is ignored: its operator picks the model."},` +
+			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept. On the server's provider it is ignored: its operator picks it."},` +
 			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},` +
 			`"default_level":` + aiLevelName + `,` +
 			`"automatic":{"type":"boolean","description":"Deprecated, use default_level: true is auto for triage and suggest for drafts."},` +
@@ -183,9 +180,8 @@ func aiUsageGetSpec() Spec {
 		Description: `Show one UTC month of the workspace's AI calls per feature and provider: calls, failed and automatic calls, tokens in and out, ` +
 			`what the server's provider spent in micro-dollars, and provider_cost: what the provider itself reported, in its own unit (OpenRouter: credits, not dollars), ` +
 			`with this month's allowance when the server sets one. No prompt or answer is ever stored.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/ai/usage"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{"month":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}$","description":"YYYY-MM; the current month when left out."}}}`,
+		REST:  []string{"GET /api/v1/ai/usage"},
+		Input: `{"type":"object","additionalProperties":false,"properties":{"month":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}$","description":"YYYY-MM; the current month when left out."}}}`,
 		Output: `{"type":"object","required":["usage"],"properties":{"usage":{"type":"object","required":["month","rows"],"properties":{"month":{"type":"string"},` +
 			`"allowance":{"type":["object","null"]},"rows":{"type":"array","items":{"type":"object"}}}}}}`,
 		run: aiUsageGet,
@@ -214,14 +210,24 @@ func aiAutomaticLimitsSetSpec() Spec {
 
 const (
 	aiDraftConversationProperty = `"conversation_id":{"type":"string",` + uuid + `}`
-	aiDraftIDProperty           = `"draft_id":{"type":"string",` + uuid + `,"description":"From colliedesk_ai_draft_create or colliedesk_ai_drafts_list."}`
+	aiDraftIDProperty           = `"draft_id":{"type":"string",` + uuid + `,"description":"From colliedesk_ai_draft_create, colliedesk_reply_draft or colliedesk_ai_drafts_list."}`
+
+	// draftFilesSchema lists the files left with a written draft.
+	draftFilesSchema = `{"type":"array","description":"Files left with the draft; only the team sees them until a person sends it. Read one with colliedesk_attachment_get (attachment_id, conversation_id, draft_id).",` +
+		`"items":{"type":"object","required":["id","filename","size"],"properties":{"id":{"type":"string"},"filename":{"type":"string"},"content_type":{"type":"string"},"size":{"type":"integer","description":"Bytes."}}}}`
 
 	aiDraftSchema = `{"type":"object","required":["id","conversation_id","status"],"properties":{"id":{"type":"string"},"conversation_id":{"type":"string"},` +
 		`"status":{"type":"string","enum":["queued","running","ready","failed","cancelled"]},"error_code":{"type":["string","null"]},` +
 		`"prompt":{"type":"string"},"text":{"type":["string","null"],"description":"The draft, plain text, once ready. Generated text, not something a customer wrote."},` +
 		`"missing_info":{"type":["string","null"]},"sources":{"type":"array","items":{"type":"object"}},` +
 		`"warnings":{"type":"array","items":{"type":"object"},"description":"An address, a number or another customer's name in the draft that the conversation does not hold."},` +
-		`"outcome":{"type":["string","null"]},"similarity":{"type":["number","null"]},"created_at":{"type":"string"},"ready_at":{"type":["string","null"]}}}`
+		`"outcome":{"type":["string","null"],"description":"Null while it waits for a person; superseded, expired and discarded written drafts can come back with colliedesk_reply_draft_restore."},` +
+		`"similarity":{"type":["number","null"]},"created_at":{"type":"string"},"ready_at":{"type":["string","null"]},` +
+		`"source":{"type":"string","enum":["ai","written"],"description":"ai: written by the built-in AI; written: left by a token or a person (colliedesk_reply_draft)."},` +
+		`"cc":{"type":["array","null"],"items":{"type":"string"}},` +
+		`"written_by":{"type":["object","null"],"description":"Who left a written draft.","properties":{"token_label":{"type":["string","null"]},"agent_name":{"type":"string"}}},` +
+		`"files":` + draftFilesSchema + `,` +
+		`"decided_by_name":{"type":["string","null"],"description":"Who sent, discarded or replaced it."},"restored_at":{"type":["string","null"]}}}`
 
 	aiDraftOutput = `{"type":"object","required":["draft"],"properties":{"draft":` + aiDraftSchema + `}}`
 )
@@ -249,8 +255,7 @@ func aiDraftGetSpec() Spec {
 		Title: "Show an AI reply draft",
 		Description: `Show one AI draft of a conversation: its status (queued, running, ready, failed, cancelled), the text once ready, its sources and warnings. ` +
 			`wait (up to 20 seconds) waits while it is being written.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/conversations/{id}/ai-drafts/{draftId}"},
+		REST: []string{"GET /api/v1/conversations/{id}/ai-drafts/{draftId}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","draft_id"],"properties":{` + aiDraftConversationProperty + `,` + aiDraftIDProperty + `,` +
 			`"wait":{"type":"integer","minimum":0,"maximum":20,"default":0}}}`,
 		Output: aiDraftOutput,
@@ -260,14 +265,18 @@ func aiDraftGetSpec() Spec {
 
 func aiDraftsListSpec() Spec {
 	return Spec{
-		Name:        "colliedesk_ai_drafts_list",
-		Title:       "List a conversation's AI drafts",
-		Description: `List a conversation's newest AI drafts (at most 20), newest first, with how each ended.`,
-		ReadOnly:    true,
-		REST:        []string{"GET /api/v1/conversations/{id}/ai-drafts"},
-		Input:       `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
-		Output:      `{"type":"object","required":["drafts"],"properties":{"drafts":{"type":"array","items":` + aiDraftSchema + `}}}`,
-		run:         aiDraftsList,
+		Name:  "colliedesk_ai_drafts_list",
+		Title: "List a conversation's AI drafts",
+		Description: `List a conversation's drafts, newest first, with how each ended: the built-in AI's and the written ones (colliedesk_reply_draft), ` +
+			`with their files. A written draft with outcome superseded, expired or discarded is an earlier draft: colliedesk_reply_draft_restore brings it back. ` +
+			`limit drafts come per call (20 unless set, at most 50); when next_before is not null, call again with it as before for the older ones.`,
+		REST: []string{"GET /api/v1/conversations/{id}/ai-drafts"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `,` +
+			`"before":{"type":"string",` + uuid + `,"description":"next_before of the page you read: lists the drafts older than it."},` +
+			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":20}}}`,
+		Output: `{"type":"object","required":["drafts","next_before"],"properties":{"drafts":{"type":"array","items":` + aiDraftSchema + `},` +
+			`"next_before":{"type":["string","null"],"description":"Pass it as before for the next page; null on the last page."}}}`,
+		run: aiDraftsList,
 	}
 }
 
@@ -307,9 +316,8 @@ func aiTriageGetSpec() Spec {
 		Title: "Show a conversation's AI triage suggestion",
 		Description: `Show the newest AI triage suggestion of a conversation (tags, priority, assignee, a one-sentence reason), or null. ` +
 			`A new ticket gets one by itself when triage is on. Nothing is applied until someone accepts it.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/conversations/{id}/ai-triage"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
+		REST:  []string{"GET /api/v1/conversations/{id}/ai-triage"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
 		Output: `{"type":"object","required":["suggestion"],"properties":{"suggestion":{"oneOf":[{"type":"null"},` + aiTriageSchema + `]},` +
 			`"auto_applied":{"description":"The newest suggestion AI applied by itself, which a later one asked for by hand does not hide.","oneOf":[{"type":"null"},` + aiTriageSchema + `]}}}`,
 		run: aiTriageGet,
@@ -406,11 +414,10 @@ func channelAIGetSpec() Spec {
 		Description: `Show what each AI feature does by itself on a channel and on each scope of its type (a chat's one-to-one messages and groups): ` +
 			`its own level (null: it follows the channel, then the workspace's default), the level that runs, and why it is off (workspace_off when the workspace has not turned the feature on). ` +
 			`Triage and drafts are on every channel; intake only on a chat channel's scopes, never on email or a web form.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/channels/{id}/ai"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
-		Output:   `{"type":"object","required":["channel_ai"],"properties":{"channel_ai":` + channelAISchema + `}}`,
-		run:      channelAIGet,
+		REST:   []string{"GET /api/v1/channels/{id}/ai"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `}}`,
+		Output: `{"type":"object","required":["channel_ai"],"properties":{"channel_ai":` + channelAISchema + `}}`,
+		run:    channelAIGet,
 	}
 }
 
@@ -428,13 +435,12 @@ func channelAIIntakeReadinessSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_ai_intake_readiness_get", Title: "Show whether intake's AI may act on its own",
 		Description: `Show, for a chat channel's scope, whether intake's AI may take each action (create, attach, ignore) on its own at auto: its gate (open, closed, overridden by an admin), ` +
-			`the labels it has (people following or correcting AI in the last 30 days, plus offline evaluations of the model and prompt it runs), what keeps it closed (labels, accuracy, severe, junk), ` +
+			`the labels it has (people following or correcting AI in the last 30 days, plus offline evaluations of the prompt it runs, on any model), what keeps it closed (labels, accuracy, severe, junk), ` +
 			`how much of what AI did on its own people corrected, and what a month costs. A closed action stays a suggestion.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/channels/{id}/ai/intake/readiness"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id","scope"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
-		Output:   `{"type":"object","required":["readiness"],"properties":{"readiness":` + intakeReadinessSchema + `}}`,
-		run:      channelAIIntakeReadiness,
+		REST:   []string{"GET /api/v1/channels/{id}/ai/intake/readiness"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["channel_id","scope"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
+		Output: `{"type":"object","required":["readiness"],"properties":{"readiness":` + intakeReadinessSchema + `}}`,
+		run:    channelAIIntakeReadiness,
 	}
 }
 
@@ -442,12 +448,11 @@ func channelAIIntakeEvaluationsListSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channel_ai_intake_evaluations_list", Title: "List intake's offline evaluations",
 		Description: `List the offline evaluations recorded for a chat channel's intake, newest first: the model and prompt version each ran, the dataset's SHA-256 and the counts per action. ` +
-			`Only a run of the model and prompt intake runs now counts towards readiness.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/channels/{id}/ai/intake/evaluations"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
-		Output:   `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object"}}}}`,
-		run:      channelAIIntakeEvaluationsList,
+			`Only a run of the prompt version intake runs now counts towards readiness, whichever model it ran.`,
+		REST:   []string{"GET /api/v1/channels/{id}/ai/intake/evaluations"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{` + channelIDInput + `,"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"}}}`,
+		Output: `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object"}}}}`,
+		run:    channelAIIntakeEvaluationsList,
 	}
 }
 
@@ -456,7 +461,7 @@ func channelAIIntakeEvaluationRecordSpec() Spec {
 		Name:  "colliedesk_channel_ai_intake_evaluation_record",
 		Title: "Record an intake evaluation",
 		Description: `Record the counts of an offline evaluation of a chat channel's scope (run with collie intake-eval): model, prompt_version, dataset_sha256 and, per action, ` +
-			`labels, correct, severe and light. It counts towards readiness only for that model and prompt version, and can open a gate, so record only counts you ran yourself.`,
+			`labels, correct, severe and light. It counts towards readiness while intake runs that prompt version, on any model, and can open a gate, so record only counts you ran yourself.`,
 		REST: []string{"POST /api/v1/channels/{id}/ai/intake/evaluations"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id","scope","model","prompt_version","dataset_sha256","counts"],"properties":{` + channelIDInput + `,` +
 			`"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"},"model":{"type":"string","minLength":1,"maxLength":200},"prompt_version":{"type":"string","minLength":1,"maxLength":80},` +

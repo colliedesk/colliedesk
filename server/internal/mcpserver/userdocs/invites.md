@@ -1,6 +1,6 @@
 # Invite your team
 
-Invite people from **Settings → Invites** (it needs `team:invite`, which the Admin role holds).
+Invite people from **Settings → Members → Invites** (it needs `team:invite`, which the Admin role holds).
 
 1. Enter the person's email in **Invite email**.
 2. Choose their **Roles** (**Agent** is selected). You can pick several; you can give only roles
@@ -13,6 +13,11 @@ When the person joins, they get the invite's roles, added to any roles they alre
 with **Revoke** in the invite list (`team:revoke`). Taking a role away from someone also revokes
 their unused invites that would give it back.
 
+Inviting someone who is already in the workspace adds the invite's roles and signs in as them, so
+only someone who may change their roles can do it: you need `team:manage_roles` and every permission
+they hold. An AI agent's token cannot; it changes their roles in [Manage your team](team.md) instead.
+An invite link made before its address joined the workspace no longer signs anyone in.
+
 Each invite shows its state: **Pending** (not used yet), **Accepted**, **Revoked** or **Expired**, and
 its roles. Only a pending invite can be revoked. To end a teammate's access after they joined,
 deactivate them in [Manage your team](team.md).
@@ -22,6 +27,27 @@ An AI agent whose [token](sessions.md#agent-tokens) holds `team:invite` creates 
 to you; nothing waits for approval. It lists invites with `colliedesk_invites_list` (`team:read`) and
 revokes one with `colliedesk_invite_revoke` (`team:revoke`). A token created before roles cannot
 create invites; create a new token for it.
+
+## What the invited person sees
+
+Opening the link shows **Join** and the workspace's name, who invited them, the email the invite is
+for, its roles and when it expires, before anything is used. **Join <workspace>** signs that browser
+in for 30 days and opens the inbox. Next time, on the hosted cloud, they sign in with a code sent to
+that email; on a server without cloud sign-in, they ask for a new link.
+
+When the link no longer works, the page says why and whom to ask:
+
+- **Expired**: the date it expired; ask the person who invited you for a new one.
+- **Revoked**: the invite was cancelled; ask the person who invited you if you still need access.
+- **Already used**: the person already joined; **Sign in** instead.
+
+If the workspace has no free seat (hosted cloud), the page says so, names who invited you, and says
+the link keeps working until it expires: once a seat is free, **Try again** joins. A link that is not
+an invite (a pairing link, or a mistyped one) shows the ordinary sign-in link page.
+
+Looking at an invite never uses it up. An AI agent or script can read the same facts with
+`GET /api/v1/auth/invite-preview?token=…`; it needs no session. A client address that tries 30
+tokens no link has within a minute must wait a minute before it opens or previews another link.
 
 ## Agent limit on the hosted cloud
 

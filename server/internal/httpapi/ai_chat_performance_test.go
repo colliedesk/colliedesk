@@ -42,17 +42,23 @@ func TestAIChatTurnSetupLatencyBudget(t *testing.T) {
 	})
 	ctx := context.Background()
 	workspaceID := queryString(t, pool, `SELECT id::text FROM workspaces WHERE slug=$1`, slug)
-	// The search reads the AI retrieval rows. TestAIRetrievalLatencyBudget seeds its own on the same fixture,
-	// so rows built here go again at the end, whichever gate runs first.
-	if queryString(t, pool, `SELECT count(*)::text FROM ai_retrieval_docs WHERE workspace_id=$1`, workspaceID) == "0" {
-		if _, err := store.New(pool).BuildAIRetrieval(ctx); err != nil {
+	// The search reads the AI retrieval rows. They are built here as the worker builds them (each
+	// article in its own language and in French) whatever ran before: TestAIRetrievalLatencyBudget seeds
+	// other rows on the same fixture, and a cleared fixture has nothing queued that would build them.
+	clearKBBudgetRetrieval(t, pool)
+	t.Cleanup(func() { clearKBBudgetRetrieval(t, pool) })
+	if _, err := pool.Exec(ctx, `INSERT INTO ai_retrieval_pending(workspace_id,kb_article_id)
+		SELECT a.workspace_id,a.id FROM kb_articles a JOIN workspaces w ON w.id=a.workspace_id WHERE w.name LIKE 'KB Budget %' AND a.status='published'`); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		built, err := store.New(pool).BuildAIRetrieval(ctx)
+		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() {
-			if _, err := pool.Exec(ctx, `DELETE FROM ai_retrieval_docs WHERE workspace_id IN (SELECT id FROM workspaces WHERE name LIKE 'KB Budget %')`); err != nil {
-				t.Errorf("remove the built retrieval rows: %v", err)
-			}
-		})
+		if built == 0 {
+			break
+		}
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,model,effort,enabled,consented_at) VALUES($1,'chat',true,'claude-haiku-5-5','low',true,now())
 		ON CONFLICT (workspace_id,slot) DO NOTHING`, workspaceID); err != nil {
@@ -73,19 +79,34 @@ func TestAIChatTurnSetupLatencyBudget(t *testing.T) {
 	setup := make([]time.Duration, 0, turns)
 	reads := make([]time.Duration, 0, turns)
 	word := queryString(t, pool, `SELECT substr(md5('1234'),1,6)`)
+	// Every other turn is a reader of the French pages (the fixture shows French, with 2,000
+	// translations, and hides German): the chat scores their language too and must keep the budget.
 	for i := 0; i <= turns; i++ {
-		req := newRequest(t, http.MethodPost, d.base+"/chat/turns", map[string]any{"question": fmt.Sprintf("How do I use %s with article %d?", word, i+1)}, "", nil)
+		path := d.base + "/chat/turns"
+		if i%2 == 1 {
+			path += "?lang=fr"
+		}
+		req := newRequest(t, http.MethodPost, path, map[string]any{"question": fmt.Sprintf("How do I use %s with article %d?", word, i+1)}, "", nil)
 		req.Host, req.RemoteAddr = d.host, fmt.Sprintf("198.51.101.%d:4000", i+1)
 		req.Header.Set("Origin", d.origin)
+		mu.Lock()
+		called = time.Time{}
+		mu.Unlock()
 		started := time.Now()
 		response := serve(d.site, req)
 		events := chatEvents(t, response)
-		if last := events[len(events)-1]; last.Type != "done" {
+		last := events[len(events)-1]
+		if last.Type != "done" {
 			t.Fatalf("turn %d ended with %+v", i, last)
 		}
 		mu.Lock()
 		took := called.Sub(started)
 		mu.Unlock()
+		// A turn that never reaches the provider times nothing: with no AI retrieval rows to excerpt it
+		// ends "no_source" at once, and the gate would pass on a negative time.
+		if took <= 0 {
+			t.Fatalf("turn %d ended %q without calling the provider, so the gate measured nothing (no AI retrieval rows to excerpt?)", i, last.Status)
+		}
 		cookie := chatCookie(t, response)
 		readStarted := time.Now()
 		if read := d.call(t, http.MethodGet, "/chat/session", nil, cookie); read.Code != http.StatusOK {

@@ -1,5 +1,7 @@
 package mcpserver
 
+import "github.com/colliedesk/colliedesk/server/internal/httpapi"
+
 // Spec is one tool: everything a registry, a document or a generator needs to know about it.
 type Spec struct {
 	Name        string
@@ -16,12 +18,11 @@ type Spec struct {
 	BodyNeeds []string
 	// Operator marks an operator tool: served on OperatorPath to operator tokens only, never to a workspace.
 	Operator   bool
-	ReadOnly   bool
 	Idempotent bool
-	// Destructive marks a tool whose effect cannot be undone now: it reaches a customer, deletes for
-	// good, or revokes. A delete that waits in a trash (saved replies, restorable for 30 days) is not
-	// destructive; its description says when it becomes permanent.
-	Destructive bool
+	// BodyEffect is what the body the tool always sends does on a route whose effect depends on the
+	// body (httpapi.ByBody): a note Changes, a reply is Final. ReadOnly and Destructive come from the
+	// routes (hints.go), never from a hand-written flag.
+	BodyEffect httpapi.Effect
 	// REST lists the routes the tool calls, as "METHOD pattern" strings of httpapi.Routes.
 	REST []string
 	// Input and Output are JSON schemas.
@@ -36,7 +37,7 @@ type Spec struct {
 func Catalog() []Spec {
 	specs := []Spec{
 		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), conversationPresenceSpec(), timeEntriesListSpec(), attachmentGetSpec(),
-		conversationUpdateSpec(), conversationsBulkUpdateSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
+		conversationUpdateSpec(), conversationsBulkUpdateSpec(), conversationsSpamSpec(), noteAddSpec(), noteMentionSpec(), mentionsListSpec(), mentionsMarkReadSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
 		conversationStartSpec(),
 		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), contactUpdateSpec(), contactMergeSpec(), contactUnmergeSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
 		savedRepliesListSpec(), savedReplyGetSpec(), savedReplyCreateSpec(), savedReplyUpdateSpec(), savedReplyDeleteSpec(),
@@ -47,11 +48,15 @@ func Catalog() []Spec {
 		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbArticleAIExcludeSpec(), kbArticleAIIncludeSpec(), kbImageUploadSpec(), kbImageGetSpec(),
 		kbMediaListSpec(), kbMediaGetSpec(), kbMediaUpdateSpec(), kbMediaTrashSpec(), kbMediaTrashListSpec(), kbMediaUndeleteSpec(), kbMediaPurgeSpec(), kbMediaReplaceSpec(), kbMediaReplaceUndoSpec(),
 		kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
+		helpCenterLanguagesGetSpec(), helpCenterLanguagesSetSpec(), kbTranslationsListSpec(), kbTranslationsTrashSpec(), kbTranslationCreateSpec(), kbTranslationGetSpec(),
+		kbTranslationUpdateSpec(), kbTranslationDeleteSpec(), kbTranslationUndeleteSpec(), kbTranslationHistorySpec(), kbTranslationVersionRestoreSpec(),
+		kbCollectionTranslationSetSpec(), kbCollectionTranslationDeleteSpec(),
 		helpCenterThemeGetSpec(), helpCenterThemeCheckSpec(), helpCenterSearchConsoleGetSpec(), helpCenterFreshdeskRedirectGetSpec(), helpCenterDomainGetSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
 		replyDraftSpec(),
-		workspaceExportSpec(), billingActionSpec(), emailChannelDisconnectSpec(),
-		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), problemReportSpec(),
+		replyDraftRestoreSpec(),
+		workspaceExportSpec(), billingActionSpec(), trialOfferAcceptSpec(), emailChannelDisconnectSpec(),
+		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), myMentionEmailSetSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
 		rolesListSpec(), roleCreateSpec(), roleUpdateSpec(), roleDeleteSpec(), roleResetSpec(), roleRestoreSpec(), memberRolesSetSpec(),
@@ -110,7 +115,7 @@ const (
 // conversationRowSchema lists how a conversation started from the registry (channel-values.go), so it is not a constant.
 var conversationRowSchema = `{"type":"object","required":["id","status","priority","assignee","tags","updated_at","untrusted_customer_content"],"properties":{` +
 	`"id":{"type":"string"},"display_ref":{"type":"string","description":"The code customers see and type back (#12); find one with ref."},` +
-	`"sla":{"type":"object","description":"Its response clocks (state overdue, due_soon, ok, paused, stopped or met; first_response and resolution with due_at, overdue, business_minutes_left); left out when it has none."},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
+	`"sla":{"type":"object","description":"Its response clocks (state overdue, due_soon, ok, paused, stopped or met; first_response and resolution with due_at, overdue, business_minutes_left); left out when it has none."},"status":{"type":"string","enum":["open","pending","resolved","closed","spam"]},` +
 	`"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee":` + personSchema + `,` +
 	`"tags":{"type":"array","items":{"type":"string"}},` +
 	`"channel":{"type":"string","enum":` + conversationChannelEnum + `,"description":"How it started: a customer's mail, the web form, an import from another helpdesk, a team member, or Report a problem."},` +

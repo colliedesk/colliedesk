@@ -1,8 +1,9 @@
 # Changelog
 
-Colliedesk is alpha: releases are `0.0.x`, and any release may change the interface or the
-database schema. Every release ships the migrations to upgrade from the previous one. Back up
-before upgrading ([data to back up](docs/self-host/database.md#data-to-back-up)).
+Colliedesk follows [Semantic Versioning](https://semver.org) from `1.0.0`: a breaking change needs
+a new major version. Every release ships the migrations to upgrade from the previous one. Back up
+before upgrading ([data to back up](docs/self-host/database.md#data-to-back-up)). What general
+availability guarantees: [docs/general-availability.md](docs/general-availability.md).
 
 From 0.0.2, the notes of each release are on the
 [releases page](https://github.com/colliedesk/colliedesk/releases), generated from the merged pull

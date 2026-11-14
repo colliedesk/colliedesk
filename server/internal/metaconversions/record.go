@@ -21,7 +21,15 @@ const (
 // maxUserAgent bounds what is kept of a browser's User-Agent header; real ones are far shorter.
 const maxUserAgent = 1024
 
-var currencyCode = regexp.MustCompile(`^[A-Za-z]{3}$`)
+// maxBrowserID bounds the Meta pixel's _fbp value; a real one is about 40 characters.
+const maxBrowserID = 64
+
+var (
+	currencyCode = regexp.MustCompile(`^[A-Za-z]{3}$`)
+	// browserIDPattern is the Meta pixel's _fbp cookie: fb, the subdomain index, the creation time in
+	// milliseconds and a random number. Anything else is not passed on.
+	browserIDPattern = regexp.MustCompile(`^fb\.[0-9]\.[0-9]+\.[0-9]+$`)
+)
 
 // StartTrial is a cloud sign-up that came from a Meta ad.
 type StartTrial struct {
@@ -36,6 +44,17 @@ type StartTrial struct {
 	ClientIP, UserAgent string
 	// SourceURL is the page the trial started on.
 	SourceURL string
+	// FBP is the sign-up request's _fbp cookie, as the Meta pixel on colliedesk.com set it after the visitor
+	// accepted cookies there; empty when the browser has none. A value not in Meta's format is dropped.
+	FBP string
+}
+
+// browserID returns fbp when it is a Meta pixel browser ID, else "".
+func browserID(fbp string) string {
+	if len(fbp) > maxBrowserID || !browserIDPattern.MatchString(fbp) {
+		return ""
+	}
+	return fbp
 }
 
 // fbc is Meta's click parameter for a server that keeps no _fbc cookie: version fb, subdomain index 1, the
@@ -52,9 +71,9 @@ func RecordStartTrial(ctx context.Context, db *database.DB, in StartTrial) error
 		userAgent = userAgent[:maxUserAgent]
 	}
 	err := db.InWorkspace(ctx, in.WorkspaceID, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO meta_conversion_events(workspace_id,event_name,event_time,fbc,client_ip,user_agent,event_source_url,next_attempt_at,created_at)
-			VALUES($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,''),$7,$3,$3) ON CONFLICT DO NOTHING`,
-			in.WorkspaceID, EventStartTrial, in.At, fbc(in.FBCLID, in.ClickIDSeenAt), in.ClientIP, userAgent, in.SourceURL)
+		_, err := tx.Exec(ctx, `INSERT INTO meta_conversion_events(workspace_id,event_name,event_time,fbc,fbp,client_ip,user_agent,event_source_url,next_attempt_at,created_at)
+			VALUES($1,$2,$3,$4,NULLIF($8,''),NULLIF($5,''),NULLIF($6,''),$7,$3,$3) ON CONFLICT DO NOTHING`,
+			in.WorkspaceID, EventStartTrial, in.At, fbc(in.FBCLID, in.ClickIDSeenAt), in.ClientIP, userAgent, in.SourceURL, browserID(in.FBP))
 		return err
 	})
 	if err != nil {
@@ -65,7 +84,7 @@ func RecordStartTrial(ctx context.Context, db *database.DB, in StartTrial) error
 
 // RecordSubscribe queues the Subscribe of a workspace's first payment, with the price in minor units
 // (cents) and its currency; once per workspace. Only a workspace whose sign-up came from a Meta ad has a
-// StartTrial to take the click, address and browser from; any other gets nothing. A price that is not
+// StartTrial to take the click, browser ID, address and browser from; any other gets nothing. A price that is not
 // positive or a currency that is not a three-letter code leaves the value out.
 func RecordSubscribe(ctx context.Context, db *database.DB, workspaceID string, at time.Time, sourceURL string, amountMinor int64, currency string) error {
 	var value *float64
@@ -76,8 +95,8 @@ func RecordSubscribe(ctx context.Context, db *database.DB, workspaceID string, a
 		value, code = &major, &upper
 	}
 	err := db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO meta_conversion_events(workspace_id,event_name,event_time,fbc,client_ip,user_agent,event_source_url,value,currency,next_attempt_at,created_at)
-			SELECT workspace_id, $2, $3, fbc, client_ip, user_agent, $4, $5, $6, $3, $3 FROM meta_conversion_events
+		_, err := tx.Exec(ctx, `INSERT INTO meta_conversion_events(workspace_id,event_name,event_time,fbc,fbp,client_ip,user_agent,event_source_url,value,currency,next_attempt_at,created_at)
+			SELECT workspace_id, $2, $3, fbc, fbp, client_ip, user_agent, $4, $5, $6, $3, $3 FROM meta_conversion_events
 			WHERE workspace_id=$1 AND event_name=$7 AND client_ip IS NOT NULL
 			ON CONFLICT DO NOTHING`, workspaceID, EventSubscribe, at, sourceURL, value, code, EventStartTrial)
 		return err

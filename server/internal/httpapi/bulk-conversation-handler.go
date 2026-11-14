@@ -51,7 +51,7 @@ func (a *API) bulkUpdateConversations(response http.ResponseWriter, request *htt
 		}
 	}
 	quiet := changes.Notify != nil && !*changes.Notify
-	if a.refuseStatusThatTells(response, request, principal(request), input.IDs, changes.Status, quiet) {
+	if invalidStatusChange(response, changes.Status) || a.refuseStatusThatTells(response, request, principal(request), input.IDs, changes.Status, quiet) {
 		return
 	}
 	update := store.BulkConversationUpdate{Status: changes.Status, AddTagIDs: changes.AddTagIDs, RemoveTagIDs: changes.RemoveTagIDs, ActorID: principal(request).Agent.ID, TokenID: tokenOf(request), Quiet: quiet}

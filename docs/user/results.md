@@ -1,8 +1,12 @@
-# Results
+# Reports
 
-**Results** (in the rail) shows how your team did in Freshdesk next to how it does in Colliedesk,
+**Reports** in the sidebar shows how your team did in Freshdesk next to how it does in Colliedesk,
 for the last 30 days (the default) or the last 7. Every number is a link: it opens the inbox on the
 conversations it counts, in any status, so you can check it. Every role can read the page.
+
+Each row is a metric's name, its number and one short line. The ⓘ beside the name says how the
+number is counted and which days it covers. Until you import from Freshdesk (or Help Scout) the
+page describes Colliedesk alone: there is no "before" column and nothing to compare.
 
 The numbers are worked out in the background, never while you wait: the page says when they were
 last updated (usually within the hour). Nothing on the page changes your conversations.
@@ -36,8 +40,8 @@ The same rules apply to both sides, so the two columns can be compared.
 **Which conversations.** Only conversations a customer started: the first message that is not a
 note came from the customer. Conversations your team started, problem reports and, on the
 Colliedesk side, conversations brought in by an import are left out. A conversation counts in a
-window by the day it was created. Spam that reached the inbox counts too: there is no way to tell it
-apart.
+window by the day it was created. A conversation marked as [spam](inbox.md#spam) is left out, and so
+is the time it spent in Spam: one taken out again counts as if it had stayed where it was.
 
 **Measured at a moment.** Each side counts only what had happened by its moment: the Colliedesk
 side now, the baseline when its import finished. A reply that came later does not count.
@@ -63,18 +67,21 @@ customer wrote again (even just "thanks!") or a teammate reopened it.
 **Conversations per week.** Conversations in the window divided by its weeks, or by the weeks since
 your first conversation if that came later. Until a customer has started a conversation in
 Colliedesk (right after you move), there is no weekly number and nothing to compare: the page says
-so instead of showing "100% fewer".
+so instead of showing "100% fewer". While less than a week of conversations exists, the row shows
+the count ("3 conversations") and how many days it has so far, not a weekly rate that would only
+extrapolate them.
 
 **Handle time.** The time your team logged on a conversation in Freshdesk, added up, for the
 resolved conversations; the median. Colliedesk does not record time yet
 ([issue #119](https://github.com/colliedesk/colliedesk/issues/119)).
 
 **Small samples.** A median, a 90th percentile or a reopen rate needs at least 5 conversations; with
-fewer the page says "Too few" and how many there are.
+fewer the row says what it needs and how many there are so far, for example "Needs 5 answered
+conversations · 0 so far · 0 waiting": the counts stay links to the conversations they name.
 
 **Status history.** Colliedesk records every status change since your server was updated to a
 version with this page (or since the workspace was created). A window that needs resolutions from
-before that says on which day it will be available.
+before that says "From" the day it will be available, and the day its status history must start.
 
 ## AI drafts
 
@@ -92,9 +99,9 @@ It assumes each of those conversations would have taken as long as it did in Fre
 ## Open the conversations behind a number
 
 Click a number (or a count under it, such as "8 waiting for a first reply"). The inbox opens with
-the filter **Counted in: …** and every status; **Back to Results** returns to the page. The numbers
+the filter **Counted in: …** and every status; **Back to Reports** returns to the page. The numbers
 are worked out again every hour or so and the list belongs to the count you clicked; a count
-replaced more than a day ago says "These numbers were refreshed. Open Results again."
+replaced more than a day ago says "These numbers were refreshed. Open Reports again."
 
 ## Share the numbers
 
@@ -113,7 +120,7 @@ next to the baseline, last week's volume and the AI drafts, with a link to the p
 never customer names or messages. Each of them turns it off (or on again) for themselves with **Email
 me on Mondays**; the email has the same link at the bottom. A workspace with no numbers yet gets no
 email. It needs the server's outgoing mail settings ([self-host email](../self-host/email.md)); without
-them the page says so.
+them the page says so and shows no switch, and your choice shows again once the server can send.
 
 ## For AI agents
 

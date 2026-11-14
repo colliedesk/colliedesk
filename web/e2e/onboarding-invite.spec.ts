@@ -14,7 +14,9 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   const admin = await adminContext.newPage();
   await redeemLink(admin, createWorkspace(`Invite Desk ${suffix}`, adminEmail));
 
+  // Settings opens Account; invites are on Members, one page per item of the settings menu.
   await admin.getByRole('link', { name: 'Settings' }).click();
+  await admin.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Members' }).click();
   await admin.getByLabel('Invite email').fill(teammateEmail);
   // An invite gives the Agent role unless the admin picks other roles.
   await expect(admin.getByRole('button', { name: 'Roles: Agent' })).toBeVisible();
@@ -31,7 +33,15 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
     data: { token: new URL(inviteURL).searchParams.get('token'), requested_role: 'admin', session_type: 'cookie' },
   });
   expect(escalate.status()).toBe(401);
-  await redeemLink(teammate, inviteURL);
+  // The invite page names the workspace, who invited and the role before the link is used.
+  await teammate.goto(inviteURL);
+  await expect(teammate.getByRole('heading', { level: 1, name: `Join Invite Desk ${suffix}` })).toBeVisible();
+  await expect(teammate.getByText(`${adminEmail} invited you to the support team.`)).toBeVisible();
+  const facts = teammate.getByRole('list', { name: 'Invite' });
+  await expect(facts).toContainText(teammateEmail.toLowerCase());
+  await expect(facts).toContainText('Agent');
+  await teammate.getByRole('button', { name: `Join Invite Desk ${suffix}` }).click();
+  await expect(teammate).toHaveURL(`${baseURL}/`);
   await expect(appNavigationWith(teammate, teammateEmail.toLowerCase())).toHaveCount(1);
   const me = await (await teammate.request.get(`${baseURL}/api/v1/auth/me`)).json() as { agent: { roles: { name: string }[]; email: string }; permissions: string[] };
   expect(me.agent).toMatchObject({ roles: [{ name: 'Agent' }], email: teammateEmail.toLowerCase() });
@@ -39,7 +49,7 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
 
   // Agents work conversations but cannot invite, manage the email channel or change the workspace timezone.
   await teammate.getByRole('link', { name: 'Settings' }).click();
-  await expect(teammate.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(teammate.getByRole('heading', { name: 'Account', level: 1 })).toBeVisible();
   await expect(teammate.getByRole('button', { name: 'Create invite' })).toHaveCount(0);
   await expect(teammate.getByLabel('Workspace timezone')).toHaveCount(0);
   // The email channel lives under Channels; an agent reads it there and cannot change it.
@@ -62,6 +72,8 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   // The admin sees the accepted invite and the teammate's device, then revokes the device.
   await admin.reload();
   await expect(invites.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() })).toContainText('Accepted');
+  // The devices signed in are listed on Account.
+  await admin.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Account' }).click();
   const sessions = admin.getByRole('region', { name: 'Sessions' });
   const teammateSession = sessions.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() });
   await expect(teammateSession).toHaveCount(1);
@@ -71,7 +83,7 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
 
   expect((await teammate.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(401);
   // Still on the page, the teammate keeps working: the first refused request signs the app out.
-  await teammate.getByRole('link', { name: 'Inbox' }).click();
+  await teammate.getByRole('link', { name: 'Back to app' }).click();
   await expect(teammate.getByRole('alert')).toContainText('You are signed out');
   await teammate.goto(baseURL);
   await expect(teammate.getByRole('alert')).toContainText('You are signed out');
@@ -82,6 +94,7 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   expect((await admin.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(200);
 
   // The team list shows the teammate; deactivating asks first, ends their access and can be undone.
+  await admin.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Members' }).click();
   const team = admin.getByRole('region', { name: 'Team' });
   const teammateRow = team.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() });
   await expect(teammateRow).toContainText('Active');
@@ -104,9 +117,14 @@ test('invite teammate: admin invites, teammate joins with the Agent role, admin 
   const lateContext = await browser.newContext();
   const latePage = await lateContext.newPage();
   await latePage.goto(lateURL);
-  await latePage.getByRole('button', { name: 'Continue to Colliedesk' }).click();
-  await expect(latePage.getByRole('alert')).toContainText('This link is invalid, expired, or already used.');
+  // The page says the invite was cancelled and whom to ask, and offers no Join.
+  await expect(latePage.getByRole('heading', { level: 1, name: 'This invite no longer works' })).toBeVisible();
+  await expect(latePage.getByText(`This invite to Invite Desk ${suffix} was cancelled. Ask ${adminEmail} if you still need access.`)).toBeVisible();
+  await expect(latePage.getByRole('button', { name: /^Join/ })).toHaveCount(0);
   await expect(latePage).toHaveURL(/\/sign-in\?token=/);
+  const lateRedeem = await latePage.request.post(`${baseURL}/api/v1/auth/redeem`, { data: { token: new URL(lateURL).searchParams.get('token'), session_type: 'cookie' } });
+  expect(lateRedeem.status()).toBe(401);
+  await expectReadablePage(latePage);
 
   await Promise.all([adminContext.close(), teammateContext.close(), lateContext.close()]);
 });

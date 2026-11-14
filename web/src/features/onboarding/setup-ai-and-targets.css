@@ -1,0 +1,107 @@
+/* The setup flow's AI drafts and reply targets steps: an example of Today, the facts, and the presets. They use
+   the flow's column; the presets sit side by side where the column is wide enough. */
+.setup-flow-column:has(.setup-steps-body) { max-width: 48rem; }
+.setup-steps-body { display: grid; gap: var(--space-6); }
+.setup-steps-body p { margin: 0; }
+.setup-small { color: var(--text-2); font-size: var(--fs-small); line-height: var(--lh-ui); }
+
+/* The example: a picture of a row of Today. Nothing in it is a control. */
+.setup-example { display: grid; gap: var(--space-2); margin: 0; }
+.setup-example-label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
+.setup-example-card { display: grid; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); list-style: none; }
+.setup-example-row {
+  display: grid; grid-template-columns: 6rem 5.5rem minmax(0, 9rem) minmax(0, 1fr) 16px auto; align-items: center; gap: var(--space-3);
+  min-height: 44px; padding: 0 var(--space-3); font-size: var(--fs-small);
+}
+.setup-example-card > .setup-example-row + .setup-example-row, .setup-example-card > .setup-example-row + .setup-example-body { border-top: 1px solid var(--line); }
+.setup-example-row svg { width: 16px; height: 16px; color: var(--text-3); }
+.setup-example-subject { overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
+.setup-example-waiting { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.setup-example-waiting[data-late] { color: var(--danger); font-weight: 500; }
+.setup-example-priority { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-2); }
+.setup-example-priority::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--open); }
+.setup-example-priority[data-priority="urgent"]::before { background: var(--danger); }
+.setup-example-avatar {
+  display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--radius-full); background: var(--surface-3);
+  color: var(--text-2); font-size: 10px; font-weight: 600;
+}
+.setup-example-body { display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-4) var(--space-4) calc(6rem + 5.5rem + var(--space-3) * 3); }
+.setup-example-meta { display: flex; align-items: center; gap: var(--space-2); color: var(--text-3); font-size: var(--fs-label); }
+.setup-example-meta svg { width: 14px; height: 14px; }
+.setup-example-draft { display: grid; gap: var(--space-1); padding: var(--space-3); border-radius: var(--radius); background: var(--surface-2); }
+.setup-example-draft p:first-child { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-label); }
+.setup-example-draft p:first-child span { color: var(--text-3); }
+.setup-example-draft svg { width: 14px; height: 14px; }
+.setup-example-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.setup-example-button {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 0 var(--space-3); border: 1px solid var(--line-control);
+  border-radius: var(--radius); color: var(--text-2); font-size: var(--fs-small); font-weight: 500; cursor: default;
+}
+.setup-example-note { margin-left: auto; color: var(--text-3); font-size: var(--fs-label); }
+
+.setup-thin { display: grid; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-lg); background: var(--surface-2); font-size: var(--fs-small); }
+.setup-thin p { color: var(--text-2); }
+.setup-thin-links { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+
+.setup-how { display: grid; margin: 0; padding: 0; list-style: none; }
+.setup-how li { display: grid; grid-template-columns: 2rem minmax(0, 1fr); padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.setup-how li > span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.setup-how p { color: var(--text-2); }
+
+.setup-done { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+.setup-done-mark { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ok); font-weight: 600; }
+.setup-done-mark::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--ok); }
+
+.setup-facts { display: grid; gap: var(--space-3); margin: 0; font-size: var(--fs-small); }
+.setup-facts > div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: var(--space-4); }
+.setup-facts dt { font-weight: 600; }
+.setup-facts dd { margin: 0; color: var(--text-2); line-height: var(--lh-ui); }
+
+/* The presets: three cards, each a radio with its name, a one-line promise and its table. */
+.setup-basis { color: var(--text-2); font-size: var(--fs-small); }
+.setup-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: 0; padding: 0; border: 0; }
+.setup-preset { display: grid; align-content: start; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.setup-preset[data-selected] { border: 2px solid var(--accent-strong); padding: calc(var(--space-4) - 1px); }
+.setup-preset-head { display: flex; align-items: center; gap: var(--space-2); min-height: 24px; cursor: pointer; }
+.setup-preset-head input { margin: 0; accent-color: var(--accent); }
+.setup-preset-tag { margin-left: auto; padding: 0 var(--space-2); border: 1px solid var(--line-strong); border-radius: var(--radius-full); font-size: var(--fs-label); white-space: nowrap; }
+.setup-preset-promise { color: var(--text-2); font-size: var(--fs-small); }
+.setup-preset-table { width: 100%; border-top: 1px solid var(--line); border-collapse: collapse; font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.setup-preset-table th, .setup-preset-table td { padding: var(--space-1) 0; text-align: right; font-weight: 400; }
+.setup-preset-table thead th { padding-top: var(--space-3); color: var(--text-2); }
+.setup-preset-table tbody th { color: var(--text-2); text-align: left; }
+.setup-hours {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: var(--surface-2); font-size: var(--fs-small);
+}
+
+/* Without "I'll do this later" (a step already on), the main button still sits at the right. */
+.setup-flow-buttons > .setup-flow-back + .primary-action { margin-left: auto; }
+
+/* The consent line under the main button belongs to the narrow layout, where the facts are below the fold. */
+.setup-flow-note { display: none; margin: 0; color: var(--text-2); font-size: var(--fs-label); text-align: center; }
+
+@media (max-width: 44rem) {
+  .setup-presets { grid-template-columns: minmax(0, 1fr); }
+  /* Stacked, only the chosen preset shows its table. */
+  .setup-preset:not([data-selected]) .setup-preset-table { display: none; }
+  /* Each preset's row is its radio's label: a fingertip-sized target. */
+  .setup-preset-head { min-height: 44px; }
+  .setup-example-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .setup-example-row .setup-example-priority, .setup-example-row svg { display: none; }
+  .setup-example-subject { grid-column: 1 / -1; color: var(--text-1); font-weight: 600; }
+  .setup-example-avatar { grid-row: 1; grid-column: 3; }
+  .setup-example-body { padding: var(--space-3); }
+  .setup-example-meta, .setup-example-actions { display: none; }
+  .setup-facts > div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  /* The moves stay at the bottom of the screen: the main button full width, the consent line, then Back and later. */
+  .setup-flow-actions[data-pinned] {
+    position: sticky; bottom: 0; z-index: 4; margin: 0 calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--line); background: var(--surface-1);
+  }
+  .setup-flow-actions[data-pinned] .setup-flow-buttons { display: grid; grid-template-columns: auto 1fr; }
+  .setup-flow-actions[data-pinned] .primary-action { grid-column: 1 / -1; grid-row: 1; min-height: var(--touch); margin-left: 0; }
+  .setup-flow-actions[data-pinned] .setup-flow-back { grid-row: 3; justify-self: start; border: 0; box-shadow: none; }
+  .setup-flow-actions[data-pinned] .setup-flow-later { grid-row: 3; grid-column: 2; justify-self: end; }
+  .setup-flow-actions[data-pinned] .setup-flow-note { display: block; grid-column: 1 / -1; grid-row: 2; }
+}

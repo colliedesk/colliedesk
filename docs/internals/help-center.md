@@ -155,9 +155,58 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   `page` past 1; an article and its Markdown have no query and the current slug. Search pages keep
   their query and carry `noindex`. Freshdesk keeps answering 200 on its old host behind a canonical
   tag, which is what this rule avoids.
-- **hreflang names only the page's own language and `x-default`.** Imported translations are kept
-  and exported but not rendered, so there is no other language's page to point at; when they are
-  served, each gets its address and the links grow.
+- **Languages below `/<locale>`** (`languages.go`; owner decision 2026-11-05). The primary language
+  keeps every address it had. A first path segment counts as a language only when it names one of
+  `HelpCenterSite.Languages` (shown languages, read with `OpenHelpCenterWorkspace`), in any case (301 to
+  its case), and only for a page path (`languagePage`: home, search, `/c/`, `/a/`, an old Freshdesk
+  path); everything else keeps its meaning, so `/fr/images/…`, `/fr/sitemap.xml` and a hidden language
+  are the help center's 404 (`TestHelpCenterLanguagesLeaveEveryExistingPathAsItWas`).
+  `/<primary>/...` moves to the path without it. A view carries `lang`: `base`/`address` stay the help
+  center's own (style sheets, images, videos, brand, chat), `root`/`rootAddress` are where its pages
+  are. The store reads a language with the `…In` queries (`HelpCenterCollectionsIn` names collections
+  and counts per language in one query, `HelpCenterArticlesIn`, `HelpCenterArticleIn` with the
+  article's `Alternates`, `SearchHelpCenterIn` on the translation's own `search` column); every one
+  joins only a published translation, of a published live article, in a visible language.
+- **An article not published in a language is a 302 to the primary page**, not a 404: a link a reader
+  shares from the language menu keeps working, and the translation may come later. One step, to the
+  primary article's own address (its slug read first), never through `/a/<n>-`.
+- **Browser language only on the primary home** (`homeLanguage`, `x/text/language` matcher, High
+  confidence or better): 302 `no-store`, `Vary: Accept-Language` on the home. Crawlers send no header;
+  the menu's link back is `?lang=<primary>`, which keeps the primary home (any other query still moves).
+- **One rule for the language menu and hreflang, on every page** (`view.languages`,
+  `TestTheLanguageMenuIsTheSameOnEveryPage`). The menu lists every language customers see, primary
+  first, in the admin's order: each links this page in that language where it exists, that language's
+  home otherwise (the primary home as `?lang=<primary>`). hreflang lists only the versions that exist:
+  the article's published translations in shown languages, a collection's languages with something
+  published below it (`shownIn`), the homes of languages with content; `x-default` is the primary page.
+  A shown language with nothing published yet has its home, which says so and links the primary
+  language (`ReadIn`); it is in the menu but not in hreflang or the sitemap, and is `noindex`. A help center with one
+  language has no menu and sends what it sent before (own language and `x-default`), and so does its
+  sitemap (no `xhtml` namespace). Structured data names the page's language (`inLanguage`).
+- **The help center's own words** (`ui-text.go`) follow the page's language: built-in sets for 15
+  languages, a language's base set for a regional tag (`fr-CA` → `fr`), English otherwise, never
+  Simplified Chinese for `zh-TW`/`zh-Hant`. The help chat's link and button on the page ("Ask AI") use
+  the set's `AskAI`. The chat's own words (`chat-text.go`, `ChatText`) have a set for each of those
+  languages, found by the same `textKey`: an article's box reads its page's set (`data-text`, so the
+  box config stays one per help center), the chat page and the site's frame get theirs in
+  `data-config` (`?lang` when shown, else the primary language), and `widget-config` returns the
+  button's labels and `lang` for the widget's optional `data-lang`. chat.js fills `{name}`-style
+  placeholders; `TestTheChatHasEveryWordInEveryLanguageTheHelpCenterHas` keeps every set complete
+  with the English placeholders, and the sets' hash is in the page ETag. The redaction marker
+  (`[contact details hidden — not in the articles]`) is part of the answer, not a word of the chat,
+  and stays English. Primary-language pages use the primary language's set, so a
+  help center whose primary language is not English changed words on upgrade. Labels an admin edits
+  are a later change. Formats with `%[n]` keep the order a language needs.
+- **ETag** adds the shown languages and the page's language, so a language shown or hidden (a content
+  version bump too) invalidates every page.
+- **Media of translations.** An image or video is public when a published article's current text, or
+  one of its published translations in a shown language, names it (`shownTextNames`).
+- **Help chat in a language.** The chat sends `?lang` (the chat page's own, or the `lang` of the help
+  center page holding the box); the server keeps it only when it is a shown language. Prompts read
+  `ChatKBArticlesIn`: an article published in that language is given in it, the others in their own;
+  the knowledge base fingerprint adds the language and translation only for a translated article, so
+  the primary language's cache key is what it was. Sources link `/<lang>/a/<number>`, which moves to
+  the primary page while no translation is published.
 - **The brand is a second style sheet, not inline style** (`theme.go`). `style-src 'self'` refuses
   inline style, and the CSP stays byte for byte as it is, so `brandCSS` writes the theme as custom
   properties of `site.css` into `<base>/_/brand-<sha256[:16]>.css`, served after `OpenHelpCenter`,
@@ -447,7 +496,9 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 
 - **A build without a version still changes its ETag.** Development builds have an empty version;
   the template hash in the ETag keeps an edited page from being revalidated as the old one.
-- **The labels are English.** `locale` sets `<html lang>`; translating the page chrome is not done.
+- **The labels follow the page's language.** `locale` (or the language of a `/<locale>/` page) sets
+  `<html lang>` and picks the help center's words (`ui-text.go`) and the chat's (`chat-text.go`); a
+  language without a built-in set shows English. Labels an admin edits are not done.
 - **The limiter is per process**, like the web form's. It counts per client address, so a scraper
   slows only itself; behind a proxy that address comes from `TRUSTED_PROXIES`, without it every
   visitor shares the proxy's address and one budget.

@@ -70,8 +70,7 @@ test('a team that imported Freshdesk drafts a reply with AI from its own solved 
     await expect.poll(() => psql(`SELECT (SELECT count(*) FROM ai_retrieval_docs d WHERE d.workspace_id=w.id AND d.kb_article_id IS NOT NULL)::text||'/'||
       (SELECT count(*) FROM ai_retrieval_docs d WHERE d.workspace_id=w.id AND d.conversation_id IS NOT NULL)::text FROM workspaces w WHERE w.slug='${workspace.slug}'`),
     { timeout: 30_000 }).toMatch(/^4\/[1-9]/);
-    await page.reload();
-    await page.getByRole('searchbox', { name: 'Search conversations' }).fill('Rotterdam');
+    await page.goto(`${baseURL}/?search=Rotterdam&status=all`);
     await page.getByRole('button', { name: /Fixture ticket 42:/ }).click();
     // On a phone the panel's button is on screen without scrolling.
     await page.setViewportSize({ width: 390, height: 844 });

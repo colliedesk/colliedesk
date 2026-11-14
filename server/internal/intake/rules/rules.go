@@ -1,6 +1,7 @@
 // Package rules is how a channel's own rules decide what a message is, as a pure function of what the
 // store read (docs/internals/channels.md "Rules decide first"): the frame's intake reads its decision,
-// and an AI decider may stand in only where the rules decided by default, never where they matched.
+// and an AI decider stands in for them on what a customer wrote (AIDecides), never where the message
+// named a command or a person decided.
 // Nothing here names a channel type.
 package rules
 
@@ -98,6 +99,13 @@ type Decision struct {
 	Action, Basis, Rule string
 	// ConversationID is the conversation an Attach adds the message to.
 	ConversationID string
+}
+
+// AIDecides says AI intake decides in the rules' place: every message a customer wrote, whatever
+// conversation its place or the message it replies to found, except one that names a command (a cancel
+// too) and one a person put in a conversation.
+func AIDecides(f Facts, d Decision) bool {
+	return !f.Commanded && !f.Cancel && d.Basis != Person
 }
 
 // Decide applies the rules in their order: a cancel, a person's choice, a scope's chatter, a review,

@@ -48,11 +48,12 @@ them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
 
 | Event | When | Fields |
 |---|---|---|
-| `trial_started` | A cloud sign-up creates a workspace and signs its admin in | `distinct_id` = the workspace id, `realm`, `version`, and `website_visitor_id` when the browser has the colliedesk.com analytics cookie (set only after the person accepted cookies on the website): the random id PostHog gave that visit, so the team can see which page led to the trial; the post or ad the sign-in link came from, when it had any: `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and the ad click IDs `ttclid` (TikTok) and `fbclid` (Meta), each only when it is a plain token of letters, digits, `.`, `_` and `-`; and `internal` = `true` when the admin's address (any spelling of that mailbox: `+tag`, Gmail dots) or its domain is listed in the server's `INTERNAL_SIGNUP_EMAILS`, or the sign-up came from a network in `INTERNAL_SIGNUP_NETWORKS` (the team's own tests, left out of the trial count; never the address itself) |
+| `trial_started` | A cloud sign-up creates a workspace and signs its admin in | `distinct_id` = the workspace id, `realm`, `version`, `signup_via` = `ai_app_connector` when the sign-in that started the trial came from an AI app connecting to Colliedesk (its sign-in returns to this server's `/oauth/authorize` page, as Claude's or ChatGPT's connector does) or `web` for every other sign-up (only one of these two values, never the page or its query), and `website_visitor_id` when the browser has the colliedesk.com analytics cookie (set only after the person accepted cookies on the website): the random id PostHog gave that visit, so the team can see which page led to the trial; the post or ad the sign-in link came from, when it had any: `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and the ad click IDs `ttclid` (TikTok) and `fbclid` (Meta), each only when it is a plain token of letters, digits, `.`, `_` and `-`; `referrer_host`, the host name of the site whose link first opened the sign-in page in that browser tab (for example `claude.ai`; only the host, never the page address or its query, and nothing when the browser named no outside site); and `internal` = `true` when the admin's address (any spelling of that mailbox: `+tag`, Gmail dots) or its domain is listed in the server's `INTERNAL_SIGNUP_EMAILS`, or the sign-up came from a network in `INTERNAL_SIGNUP_NETWORKS` (the team's own tests, left out of the trial count; never the address itself) |
 | `email_channel_saved` | An admin saves the workspace's support address | `distinct_id` = the workspace id, `realm`, `version` (never the address) |
 | `reply_sent` | A reply to a customer is sent from Colliedesk; a note is not a reply | `distinct_id` = the workspace id, `by` (`person`, or `ai_agent` for an agent token), `realm`, `version` (never the text or the recipient) |
 | `teammate_invited` | An admin invites a teammate | `distinct_id` = the workspace id, `realm`, `version` (never the invited address) |
-| `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`solo`, `small`, `team`, `team25` or `founding`), the same `utm_*`, `ttclid` and `fbclid` values as its `trial_started`, `realm`, `version` |
+| `trial_offer_accepted` | An admin accepts a trial offer link an operator sent | `distinct_id` = the workspace id, `extended` (`false` when the trial already ended later and was kept), `realm`, `version` |
+| `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`solo`, `small`, `team`, `team25` or `founding`), the same `utm_*`, `ttclid`, `fbclid` and `referrer_host` values as its `trial_started`, `realm`, `version` |
 
 Once a day, with the instance heartbeat, Colliedesk Cloud also sends one `workspace_snapshot` event
 per workspace, so the team can see how each customer is doing: `distinct_id` = the workspace id,
@@ -71,7 +72,10 @@ anything written in a conversation):
 | `ai_agent_replies_7d` | `1` | Of the replies in the last 7 days, those written with an agent token |
 | `conversations_open` | `1` | Conversations with status `open` |
 | `conversations_created_7d` | `1` | Conversations created in the last 7 days |
-| `email_channel` | `false` | Whether the workspace has an email channel |
+| `email_channel` | `false` | Whether the workspace has an email channel. On Colliedesk Cloud always `true`, because sign-up creates the hosted address; see `email_state` |
+| `email_state` | `waiting` | Whether email reaches the workspace, the same answer as the email step of its [setup guide](setup-guide.md): `working` (a customer message arrived on an email channel), `waiting` (an email channel works but nothing has arrived yet), `needs_attention` (its email channels are off or broken) or `none` (no email channel). Only the state: no address and no reason text |
+| `inbound_messages_7d` | `3` | Customer messages that arrived in the last 7 days, on any channel (messages imported from another helpdesk not counted). Only a count: no sender and no text |
+| `mailbox_connected` | `false` | Whether one of the workspace's email channels sends through a connected Gmail or Microsoft 365 mailbox (a connection whose grant failed does not count). Never the mailbox's address |
 | `web_form` | `true` | Whether the workspace has the web form on |
 | `tokens_active` | `1` | Agent tokens that are not revoked or expired |
 | `help_chat` | `false` | Whether the workspace has a [help chat](help-chat.md) channel on |
@@ -97,14 +101,17 @@ Each report carries only:
 
 - `fbc`: the click ID and the time the browser first saw it,
 - the IP address and browser (User-Agent) of the sign-up,
+- `fbp`: if the person accepted cookies on colliedesk.com, the random browser ID the Meta pixel stored
+  there in the `_fbp` cookie, which the browser sends with the sign-up,
 - `event_id` = the workspace id, so Meta counts a report once even when it is sent again,
 - for `Subscribe`, the plan's price and currency.
 
 It never carries an email address, a name, a company, the workspace name or anything from the
-workspace. Nothing is reported for a sign-up without `fbclid`. The website and the app load no Meta
-pixel and set no Meta cookie. The server sends the reports in the background, after the sign-up or the
-payment, and retries a failed one later; neither ever waits for Meta. Once the `Subscribe` report is sent,
-or 90 days after a sign-up, the server forgets the sign-up's IP address and browser.
+workspace. Nothing is reported for a sign-up without `fbclid`. The app loads no Meta pixel and sets no
+Meta cookie; the website loads the Meta pixel only after the visitor accepts cookies there. The server
+sends the reports in the background, after the sign-up or the payment, and retries a failed one later;
+neither ever waits for Meta. Once the `Subscribe` report is sent, or 90 days after a sign-up, the server
+forgets the sign-up's IP address, browser and browser ID.
 
 A self-hosted server never sends anything to Meta and has no setting to turn it on.
 
@@ -139,13 +146,31 @@ Each is sent only after the action succeeded.
 | `conversation_assigned` | `to_self` |
 | `bulk_action_applied` | `action`: `status`, `assign`, `add_tag` or `remove_tag`; `count` |
 | `reply_draft_decided` | `decision`: `sent` or `discarded`; sent when someone sends or discards a reply draft an AI made or an AI agent left |
-| `settings_section_opened` | `section`: the settings section |
+| `settings_section_opened` | `section`: the settings page opened from the settings menu: `account`, `general`, `members`, `channels`, `targets`, `ai`, `saved_replies`, `data` or `billing` (see [below](#settings-pages-before-and-after)) |
 | `workspace_export_requested` | none |
-| `onboarding_step_started` | `step`: `email`, `import`, `invite` or `first_reply`; sent when someone selects a step of the [setup guide](setup-guide.md) |
+| `onboarding_step_started` | `step`: `email`, `import`, `ai_drafts`, `reply_targets`, `invite` or `first_reply`; sent when someone selects a step of the [setup guide](setup-guide.md) |
 | `onboarding_step_completed` | `step`: as above; sent when the step turns done while the guide is shown |
 | `problem_reported` | none; sent after a [problem report](problem-reports.md) reached the support desk (the report itself goes to the server's support desk, not to PostHog) |
 
 When you sign out, the web app forgets the agent id, so later events no longer carry it.
+
+### Settings pages before and after
+
+Settings was one long page until each menu item became a page of its own
+([#528](https://github.com/colliedesk/colliedesk/issues/528)). Before, `settings_section_opened` named
+the section the menu scrolled to; now it names the page the menu opens. To keep an existing insight
+counting the same visits, match the old values to the new ones:
+
+| Old `section` | New `section` |
+|---|---|
+| `profile`, `preferences`, `sessions`, `connected_apps` | `account` |
+| `general` | `general` |
+| `team`, `invites` | `members` |
+| `agents`, `ai` | `ai` |
+| `export` | `data` |
+| `channels`, `saved_replies`, `billing` | unchanged |
+| `help_center` | no longer sent: the help center's settings are in Knowledge base → Settings |
+| none | `targets` (Response targets), and Data opened for the Freshdesk import, were not counted before |
 
 ### Trial question (Colliedesk Cloud only)
 

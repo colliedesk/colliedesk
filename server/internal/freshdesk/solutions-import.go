@@ -27,6 +27,11 @@ type kbState struct {
 	changedInBoth []string
 	unpublished   []string
 	gone          []string
+	// translationsChangedInBoth are translations ("<article>:<language>") a person changed in Colliedesk
+	// since the import; the run left them as they are.
+	translationsChangedInBoth []string
+	// languagesAdded are the help center languages this run added.
+	languagesAdded []string
 }
 
 func (r *run) kbWriteState() *kbState {
@@ -44,6 +49,11 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 		return nil
 	}
 	state := r.kbWriteState()
+	if !r.opts.DryRun {
+		if err := r.importKBLanguages(ctx); err != nil {
+			return err
+		}
+	}
 	for _, category := range kb.categories {
 		key := strconv.FormatInt(category.ID, 10)
 		meta := map[string]any{"freshdesk_id": category.ID, "kind": "category", "visible_in_portals": category.VisibleInPortals}
@@ -84,6 +94,11 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 		}
 		if id != "" {
 			state.collections["f"+key] = id
+		}
+	}
+	if !r.opts.DryRun {
+		if err := r.importKBCollectionNames(ctx); err != nil {
+			return err
 		}
 	}
 	for index, article := range kb.articles {
@@ -194,6 +209,12 @@ func (r *run) kbImageNames(markup string) map[string][2]string {
 		names[key] = [2]string{fitText(name, domain.MaxKBMediaName), fitText(alt, domain.MaxKBMediaAlt)}
 	}
 	return names
+}
+
+// seoField reads one of Freshdesk's search fields (seo_data), "" when it has none.
+func seoField(data map[string]any, key string) string {
+	value, _ := data[key].(string)
+	return value
 }
 
 // fitText makes text one line of at most limit characters, as the media library takes it.
@@ -452,8 +473,124 @@ func (r *run) keepKBArticle(ctx context.Context, key, target string) error {
 	})
 }
 
-// importKBTranslation stores one language of an imported article. Translations are kept and exported,
-// not shown yet; nobody edits them in Colliedesk, so a newer Freshdesk version always replaces them.
+// importKBLanguages makes the account's primary language the help center's when that is safe
+// (store.AdoptImportedPrimaryLanguage), and adds every other language it supports, shown to customers
+// when Freshdesk shows it on the portal (portal_languages). A language the help center already lists
+// keeps what an admin set.
+func (r *run) importKBLanguages(ctx context.Context) error {
+	settings := r.kb.settings
+	if settings == nil {
+		return nil
+	}
+	state := r.kbWriteState()
+	visible := map[string]bool{}
+	for _, language := range settings.PortalLanguages {
+		visible[language] = true
+	}
+	return r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+		adopted, previous, err := store.AdoptImportedPrimaryLanguage(ctx, tx, r.workspaceID, settings.PrimaryLanguage)
+		if err != nil {
+			return err
+		}
+		// Only a run that changed it records what it replaced: a later run that finds it set keeps the record.
+		if previous != "" {
+			if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entityKBPrimaryLanguage, sourceID: settings.PrimaryLanguage, status: ledgerDone,
+				meta: &ticketMeta{Previous: previous}}); err != nil {
+				return err
+			}
+		}
+		if !adopted && settings.PrimaryLanguage != "" {
+			r.warn("kb_primary_language_differs", "Freshdesk's primary language is "+settings.PrimaryLanguage+", but the help center already has articles or languages of its own, so its primary language was left as it is. "+
+				"Check it in Knowledge base → Languages; translations in the help center's own primary language are listed there as not shown.", settings.PrimaryLanguage)
+		}
+		added, err := store.ImportHelpCenterLanguages(ctx, tx, r.workspaceID, r.kb.languages, visible)
+		if err != nil {
+			return err
+		}
+		for _, locale := range added {
+			if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entityKBLanguage, sourceID: locale, status: ledgerDone, meta: &ticketMeta{Created: true}}); err != nil {
+				return err
+			}
+		}
+		state.languagesAdded = append(state.languagesAdded, added...)
+		return nil
+	})
+}
+
+// importKBCollectionNames writes the names and descriptions Freshdesk has in other languages for the
+// categories and folders this run placed. A folder flattened into "Advanced / Deep" gets the same name
+// from the names of its path in that language, each falling back to its primary name.
+func (r *run) importKBCollectionNames(ctx context.Context) error {
+	kb, state := r.kb, r.kbWriteState()
+	type pending struct {
+		key, collection, language, name, description string
+	}
+	var items []pending
+	for _, category := range kb.categories {
+		key := "c" + strconv.FormatInt(category.ID, 10)
+		for language, name := range kb.names[key] {
+			if id, ok := state.collections[key]; ok {
+				items = append(items, pending{key, id, language, name.Name, deref(name.Description)})
+			}
+		}
+	}
+	for _, folderID := range kb.order {
+		key := "f" + strconv.FormatInt(folderID, 10)
+		id, ok := state.collections[key]
+		if !ok {
+			continue
+		}
+		folder := kb.folders[folderID]
+		_, _, flattened := kb.collectionPlacement(folder)
+		for _, language := range kb.languages {
+			own, translated := kb.names[key][language]
+			if !flattened {
+				if translated {
+					items = append(items, pending{key, id, language, own.Name, deref(own.Description)})
+				}
+				continue
+			}
+			chain := kb.path(folder)[1:]
+			names, any := make([]string, 0, len(chain)), false
+			for _, step := range chain {
+				name := step.Name
+				if found, ok := kb.names["f"+strconv.FormatInt(step.ID, 10)][language]; ok {
+					name, any = found.Name, true
+				}
+				names = append(names, strings.TrimSpace(name))
+			}
+			if any {
+				items = append(items, pending{key, id, language, fitName(strings.Join(names, folderSeparator)), deref(own.Description)})
+			}
+		}
+	}
+	slices.SortFunc(items, func(a, b pending) int { return strings.Compare(a.key+":"+a.language, b.key+":"+b.language) })
+	for _, item := range items {
+		ledgerKey := item.key + ":" + item.language
+		meta, err := json.Marshal(map[string]any{"freshdesk": item.key, "language": item.language})
+		if err != nil {
+			return err
+		}
+		err = r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+			if _, err := store.ImportKBCollectionTranslation(ctx, tx, r.workspaceID, item.collection, item.language, item.name, item.description, meta); err != nil {
+				return err
+			}
+			collection := item.collection
+			return r.ledger.mark(ctx, tx, ledgerMark{entity: entityKBCollectionName, sourceID: ledgerKey, targetID: &collection, status: ledgerDone})
+		})
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			r.itemFailed(ctx, entityKBCollectionName, ledgerKey, "", err)
+		}
+	}
+	return nil
+}
+
+// importKBTranslation stores one language of an imported article with Freshdesk's status (2 is
+// published) and search fields. A newer Freshdesk version replaces it only while nobody changed it in
+// Colliedesk since the import; otherwise Colliedesk's version stays and it is listed.
 func (r *run) importKBTranslation(ctx context.Context, translation kbTranslation) error {
 	articleKey := strconv.FormatInt(translation.ID, 10)
 	key := articleKey + ":" + translation.language
@@ -479,6 +616,24 @@ func (r *run) importKBTranslation(ctx context.Context, translation kbTranslation
 	if !done {
 		r.itemFailed(ctx, entityKBTranslation, key, "", errors.New("its article was not imported; see its failure"))
 		return r.internalErr
+	}
+	keep := func() error {
+		state := r.kbWriteState()
+		state.translationsChangedInBoth = append(state.translationsChangedInBoth, key)
+		r.warn("kb_translation_changed_in_both", "This translation changed in Freshdesk and was also changed in Colliedesk after the import (an edit, a restore or a delete). The Colliedesk version was kept; compare it with Freshdesk by hand.", key)
+		return r.ledger.mark(ctx, nil, ledgerMark{entity: entityKBTranslation, sourceID: key, targetID: &articleID, status: ledgerDone})
+	}
+	// Checked before any image is fetched, and again under the article's lock when writing.
+	var exists, imported bool
+	if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+		var err error
+		exists, imported, err = store.KBTranslationImportedLast(ctx, tx, r.workspaceID, articleID, translation.language)
+		return err
+	}); err != nil {
+		return fmt.Errorf("read knowledge base translation: %w", err)
+	}
+	if exists && !imported {
+		return keep()
 	}
 	images, pending, failed, err := r.fetchKBImages(ctx, key, translation.Description)
 	if err != nil {
@@ -510,9 +665,20 @@ func (r *run) importKBTranslation(ctx context.Context, translation kbTranslation
 	if err != nil {
 		return fail(err)
 	}
-	if err := store.PutKBArticleTranslation(ctx, tx, r.workspaceID, articleID, store.KBImportTranslation{Locale: translation.language, Title: translation.Title,
-		BodyMD: body, SourceMeta: meta, SourceHTML: translation.Description, CreatedAt: translation.CreatedAt.UTC(), UpdatedAt: updated}); err != nil {
+	status := domain.KBDraft
+	if translation.Status == 2 {
+		status = domain.KBPublished
+	}
+	seoTitle, seoDescription := seoField(translation.SEOData, "meta_title"), seoField(translation.SEOData, "meta_description")
+	outcome, err := store.PutKBArticleTranslation(ctx, tx, r.workspaceID, articleID, store.KBImportTranslation{Locale: translation.language, Title: translation.Title,
+		BodyMD: body, Status: status, SEOTitle: seoTitle, SEODescription: seoDescription, SourceMeta: meta, SourceHTML: translation.Description,
+		CreatedAt: translation.CreatedAt.UTC(), UpdatedAt: updated})
+	if err != nil {
 		return fail(err)
+	}
+	if outcome == store.KBKept {
+		_ = tx.Rollback(ctx)
+		return keep()
 	}
 	ledgerStatus, errText := ledgerDone, ""
 	if failed > 0 {

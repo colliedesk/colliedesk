@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
-import { psql, servers, uniqueSuffix } from './support/cli';
+import { databaseFor, psql, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
 import { createWorkspaceWithSlug } from './support/workspace';
 
@@ -45,6 +45,7 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     // Settings → Built-in AI: raising the drafts' default for channels to Suggest asks first, with what
     // it costs on the team's own key.
     await page.goto(`${baseURL}/settings/ai`);
+    await page.getByRole('button', { name: 'Reply drafts settings' }).click();
     const drafts = page.getByRole('group', { name: 'Reply drafts: default for channels' });
     await drafts.getByRole('radio', { name: 'Suggest' }).click();
     const dialog = page.getByRole('dialog', { name: 'Write a draft for every customer message?' });
@@ -106,6 +107,79 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     // A phone: the card's buttons are in reach and nothing scrolls sideways.
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    model.close();
+  }
+});
+
+test('on a phone the automatic draft waits on one line: the messages keep the screen, and Send stays on it while the agent writes', async ({ page }) => {
+  test.setTimeout(60_000);
+  // The mail server sends replies by SMTP, as a real install does: no "outgoing email is not configured" notice
+  // stands between the conversation and the reply box.
+  const baseURL = servers.mail;
+  const headers = { Origin: baseURL };
+  const sql = (query: string) => psql(query, databaseFor(servers.mail));
+  const suffix = uniqueSuffix();
+  const support = `support-${suffix}@acme.example`;
+  const workspace = createWorkspaceWithSlug(`E2E Phone Drafts ${suffix}`, `admin-${suffix}@acme.example`, servers.mail);
+  const model = await draftModel();
+  try {
+    await redeemLink(page, workspace.url);
+    expect((await page.request.put(`${baseURL}/api/v1/channels/email`, { headers, data: { support_address: support } })).status()).toBe(200);
+    const { inbound_secret: secret } = await (await page.request.post(`${baseURL}/api/v1/channels/email/secret`, { headers })).json() as { inbound_secret: string };
+    const provider = await page.request.post(`${baseURL}/api/v1/ai/providers`, { headers,
+      data: { kind: 'openai_compatible', label: 'Office model', base_url: model.url, models: ['llama-4-scout'] } });
+    expect(provider.status(), await provider.text()).toBe(201);
+    const { id } = await provider.json() as { id: string };
+    expect((await page.request.put(`${baseURL}/api/v1/ai/slots/draft`, { headers, data: { source: 'provider', provider_id: id, enabled: true } })).status()).toBe(200);
+    await page.goto(`${baseURL}/settings/ai`);
+    await page.getByRole('button', { name: 'Reply drafts settings' }).click();
+    await page.getByRole('group', { name: 'Reply drafts: default for channels' }).getByRole('radio', { name: 'Suggest' }).click();
+    await page.getByRole('dialog', { name: 'Write a draft for every customer message?' }).getByRole('button', { name: 'Turn on' }).click();
+    const inbound = await page.request.post(`${baseURL}/api/v1/channels/email/inbound`, {
+      headers: { 'Content-Type': 'message/rfc822', 'X-Colliedesk-Inbound-Secret': secret },
+      data: Buffer.from([`From: Erin Customer <erin-${suffix}@customer.example>`, `To: ${support}`, `Subject: Printer down ${suffix}`,
+        `Message-ID: <phone-draft-${suffix}@customer.example>`, 'Date: Thu, 22 Oct 2026 09:00:00 +0000', 'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=utf-8', '', 'The office printer is down for everyone.', ''].join('\r\n')),
+    });
+    expect(inbound.status()).toBe(200);
+    const { conversation_id: conversation } = await inbound.json() as { conversation_id: string };
+    sql(`UPDATE ai_tasks SET next_run_at=now() WHERE conversation_id='${conversation}' AND kind='draft' AND automatic AND state='queued'`);
+
+    const card = page.getByRole('region', { name: 'Automatic AI draft' });
+    const reading = () => page.locator('.timeline-scroll').evaluate((element) => element.getBoundingClientRect().height / window.innerHeight);
+    // Phones taller than a short laptop (800 px) are phones too: the draft starts folded there as well.
+    for (const viewport of [{ width: 390, height: 844 }, { width: 412, height: 915 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto(`${baseURL}/conversations/${conversation}`);
+      await expect(card.getByRole('button', { name: 'Use draft' })).toBeVisible({ timeout: 30_000 });
+      await expect(card).not.toContainText('Hi Erin, the office printer is back');
+      expect((await card.boundingBox())!.height, `${viewport.width}: the draft is one line`).toBeLessThan(60);
+      expect(await reading(), `${viewport.width}: the messages keep over half the screen`).toBeGreaterThan(0.55);
+
+      // Writing: the draft stays one line (Show draft), the box and Send stay on screen.
+      const box = page.getByLabel('Message body');
+      await box.click();
+      await box.fill('Half a reply');
+      await expect(card.getByRole('button', { name: 'Show draft' })).toBeVisible();
+      expect((await card.boundingBox())!.height, `${viewport.width}: the draft is one line while writing`).toBeLessThan(60);
+      await expect(page.getByRole('button', { name: 'Send reply' })).toBeInViewport({ ratio: 1 });
+      await expect(box).toBeInViewport({ ratio: 1 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      // The keyboard up (a page this short): the draft steps aside so the box and Send fit; it is back after.
+      await page.setViewportSize({ width: viewport.width, height: 420 });
+      await expect(card).toBeHidden();
+      await expect(page.getByRole('button', { name: 'Send reply' })).toBeInViewport({ ratio: 1 });
+      await expect(box).toBeInViewport({ ratio: 1 });
+      await page.setViewportSize(viewport);
+      await expect(card).toBeVisible();
+      // Its Insert below and Replace my text are in the open draft.
+      await card.getByRole('button', { name: 'Show draft' }).click();
+      await expect(card).toContainText('Hi Erin, the office printer is back');
+      await expect(card.getByRole('button', { name: 'Insert below' })).toBeVisible();
+      await card.getByRole('button', { name: 'Hide' }).click();
+      await box.fill('');
+    }
   } finally {
     model.close();
   }

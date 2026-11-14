@@ -10,9 +10,8 @@ func resultsGetSpec() Spec {
 			`Nothing is computed when you call it: computed_at says when the numbers were worked out. A median below 5 values is null. ` +
 			`To read the conversations behind a number, call colliedesk_inbox_search with result "<snapshot id>:<window>.<metric>" (for example the current id and "30d.first_response"). ` +
 			`How each number is counted: colliedesk_docs_search "results".`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/results"},
-		Input:    noArguments,
+		REST:  []string{"GET /api/v1/results"},
+		Input: noArguments,
 		Output: `{"type":"object","required":["results"],"properties":{"results":{"type":"object","required":["current","baseline","baseline_state","hours_saved"],"properties":{` +
 			`"current":{"type":["object","null"]},"baseline":{"type":["object","null"]},` +
 			`"baseline_state":{"type":"string","enum":["none","computing","ready"]},"hours_saved":{"type":"object"},"error":{"type":["object","null"]}}}}}`,
@@ -29,11 +28,10 @@ func resultsShareLinkGetSpec() Spec {
 		Title: "Show the results share link",
 		Description: `Show whether the results page has an active share link (anyone with it sees the totals without signing in), who made it, when, and when it was last opened. ` +
 			`Never the link itself: it is shown once, to the person who makes it.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/results/share-link"},
-		Input:    noArguments,
-		Output:   shareLinkOutput,
-		run:      resultsShareLinkGet,
+		REST:   []string{"GET /api/v1/results/share-link"},
+		Input:  noArguments,
+		Output: shareLinkOutput,
+		run:    resultsShareLinkGet,
 	}
 }
 
@@ -52,14 +50,15 @@ func resultsShareLinkCreateSpec() Spec {
 
 func resultsShareLinkRevokeSpec() Spec {
 	return Spec{
-		Name:        "colliedesk_results_share_link_revoke",
-		Title:       "Turn off the results share link",
-		Description: `Turn off the results page's share link: anyone who opens it then reads that it was turned off. Safe to repeat.`,
-		Idempotent:  true,
-		REST:        []string{"DELETE /api/v1/results/share-link"},
-		Input:       noArguments,
-		Output:      shareLinkOutput,
-		run:         resultsShareLinkRevoke,
+		Name:  "colliedesk_results_share_link_revoke",
+		Title: "Turn off the results share link",
+		Description: `Turn off the results page's share link: anyone who opens it then reads that it was turned off. It cannot be undone: ` +
+			`colliedesk_results_share_link_create makes a new link at a new address. Safe to repeat.`,
+		Idempotent: true,
+		REST:       []string{"DELETE /api/v1/results/share-link"},
+		Input:      noArguments,
+		Output:     shareLinkOutput,
+		run:        resultsShareLinkRevoke,
 	}
 }
 

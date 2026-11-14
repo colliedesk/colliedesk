@@ -9,7 +9,7 @@ INSERT INTO channels (id, workspace_id, type, name, enabled, settings, external_
      md5('agent-acme-admin')::uuid, '2026-10-20 09:00:00+00', '2026-10-24 09:00:00+00',
      '2026-10-24 09:00:00+00', md5('agent-acme-admin')::uuid, '2026-10-24 09:00:00+00', md5('agent-acme-admin')::uuid, false),
     (md5('channel-acme-2')::uuid, md5('ws-acme')::uuid, 'web_form', 'Website form', false,
-     '{"join_policy": "never", "default_tags": ["web-form"]}', NULL,
+     '{"join_policy": {"kind": "never"}, "default_tags": ["web-form"]}', NULL,
      md5('agent-acme-admin')::uuid, '2026-10-24 10:00:00+00', '2026-10-24 11:00:00+00',
      '2026-10-24 11:00:00+00', md5('agent-acme-alex')::uuid, NULL, NULL, true);
 

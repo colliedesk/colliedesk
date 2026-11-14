@@ -1,67 +1,56 @@
-import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, KeyboardEvent } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { OnboardingGoal } from '../../api/schemas';
-import type { SetupProgress, SetupStepKey } from '../../api/schemas';
-import { preloadChannelsPage } from '../settings/channels/channels-preload';
+import type { OnboardingGoal, SetupProgress, SetupStepKey } from '../../api/schemas';
+import { preloadSetupStep } from './setup-flow-part';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
-import { CheckIcon, ChevronDownIcon } from '../../ui/icons';
 import { setupMessages } from './setup-messages';
-import { stepIsDone, visibleSteps } from './setup-steps';
+import { highlightedStep, nothingToDo, quickStartCount, setUpKeys, stepIsDone, visibleSteps } from './setup-steps';
+import type { Permissions } from '../../lib/can';
 import './setup-checklist.css';
+import { frameMessages } from '../shell/frame-messages';
 
-// Where each step is finished.
-const targets: Record<SetupStepKey, string> = { email: '/settings/channels/type/email', import: '/settings/import-freshdesk', invite: '/settings', first_reply: '/' };
-
-// Whether the agent left the guide open or folded, kept by this browser; without a stored choice, none.
-const storageKey = 'colliedesk-setup-dock-v1';
-function storedChoice(): boolean | undefined {
-  try {
-    const value = localStorage.getItem(storageKey);
-    return value === 'open' ? true : value === 'folded' ? false : undefined;
-  } catch { return undefined; }
-}
-function storeChoice(open: boolean) {
-  try { localStorage.setItem(storageKey, open ? 'open' : 'folded'); } catch { /* the choice holds for this visit */ }
-}
+// Each step is done on its screen of the setup flow.
+const target = (step: SetupStepKey) => `/setup/${step}`;
 
 interface SetupChecklistProps {
   progress: SetupProgress;
-  admin: boolean;
+  // me holds the permissions that decide which steps this person takes.
+  me: Permissions;
   goal?: OnboardingGoal | null;
-  // Open until the agent folds it, for an inbox with no conversation for the guide to cover.
-  defaultOpen?: boolean;
-  onHide: () => void;
+  workspaceName: string;
+  // skipped leaves Try more out; onSkip asks for it (true) or brings it back (false).
+  skipped?: boolean;
+  onSkip: (skipped: boolean) => void;
 }
 
-// SetupChecklist lists what is left before the team can receive and answer customer email. The
-// server orders the steps by the sign-up goal; this only drops the ones the agent cannot take.
-// It waits in a corner of the screen, folded to one button with the count, so it never covers a
-// conversation the agent did not ask it to.
-export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onHide }: SetupChecklistProps) {
+// The success disc with a tick, for a finished step.
+const DoneMark = () => <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+  <circle cx="12" cy="12" r="10" fill="currentColor" />
+  <path d="m7.5 12.5 3 3 6-6.5" fill="none" stroke="var(--on-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+</svg>;
+
+function Group({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  const id = useId();
+  return <section className="quick-start-group" aria-labelledby={id}>
+    <div className="quick-start-group-head"><h3 id={id}>{title}</h3>{action}</div>
+    <ol>{children}</ol>
+  </section>;
+}
+
+// SetupChecklist is what Quick start opens: how far the workspace is ("2 of 6" and a bar of one segment per step),
+// then Set up (what it takes to receive and answer customer email) and Try more (the invites, the two offers and an
+// AI agent), which the person may skip. The server orders the steps by the sign-up goal; this only drops the ones
+// the person's roles cannot take. Done steps are ticked and struck through; the next one to do is highlighted.
+export function SetupChecklist({ progress, me, goal, workspaceName, skipped = false, onSkip }: SetupChecklistProps) {
   const client = useQueryClient();
-  const steps = visibleSteps(progress, admin);
-  const done = steps.filter(stepIsDone).length;
-  const firstTodo = steps.find((step) => !stepIsDone(step))?.key;
-  const [choice, setChoice] = useState(storedChoice);
-  const open = choice ?? defaultOpen;
-  const launcher = useRef<HTMLButtonElement>(null);
-  const minimize = useRef<HTMLButtonElement>(null);
-  // Focus follows the agent's own open or fold, never a guide that arrives open.
-  const toggled = useRef(false);
-  const toggle = (next: boolean) => { toggled.current = true; setChoice(next); storeChoice(next); };
-  useEffect(() => {
-    if (!toggled.current) return;
-    toggled.current = false;
-    (open ? minimize : launcher).current?.focus();
-  }, [open]);
-  const fold = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return;
-    event.stopPropagation();
-    toggle(false);
-  };
-  const share = steps.length === 0 ? 0 : done / steps.length;
+  const steps = visibleSteps(progress, me);
+  const setUp = steps.filter((step) => setUpKeys.has(step.key));
+  const tryMore = steps.filter((step) => !setUpKeys.has(step.key));
+  const { done, total } = quickStartCount(progress, me, skipped);
+  const shown = skipped ? setUp : [...setUp, ...tryMore];
+  const next = highlightedStep(progress, me, skipped);
 
   // A step that turns done while this is on screen is reported once; what was done on arrival is not.
   const seenDone = useRef<Set<SetupStepKey>>(undefined);
@@ -72,61 +61,49 @@ export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onH
     }
     seenDone.current = now;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, admin]);
+  }, [progress, me]);
 
-  if (!open) {
+  const row = (step: (typeof steps)[number]) => {
+    const finished = stepIsDone(step);
+    const idle = nothingToDo(step);
     return (
-      <div className="setup-dock">
-        <button type="button" ref={launcher} className="setup-launcher" aria-expanded={false} onClick={() => toggle(true)}>
-          <span className="setup-ring" aria-hidden="true" style={{ '--share': share } as CSSProperties} />
-          <span className="setup-launcher-title">{setupMessages.heading}</span>
-          <span className="setup-count">{setupMessages.progress(done, steps.length)}</span>
-        </button>
-      </div>
+      <li key={step.key} className="checklist-step" data-state={finished ? 'done' : idle ? 'none' : 'todo'} data-step={step.key}>
+        <span className="setup-mark" aria-hidden="true">{finished && <DoneMark />}</span>
+        <a href={target(step.key)} className={step.key === next ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
+          onPointerEnter={() => preloadSetupStep(client, step.key)} onFocus={() => preloadSetupStep(client, step.key)}>
+          <span className="setup-title">{setupMessages.title[step.key]}</span>
+          <span className="setup-state" data-attention={step.state === 'needs_attention' || undefined}>
+            {progress.recommended === step.key && !finished && <><b>{setupMessages.recommended}</b>{' · '}</>}
+            {(setupMessages.state[step.key] as Record<string, string>)[step.state] ?? ''}
+          </span>
+        </a>
+        {!finished && !idle && <span className="setup-time">{setupMessages.time[step.key]}</span>}
+      </li>
     );
-  }
-  return (
-    <div className="setup-dock">
-      <section className="setup-guide" aria-label={setupMessages.heading} onKeyDown={fold}>
-        <header>
-          <h2>{setupMessages.heading}</h2>
-          <span className="setup-count">{setupMessages.progress(done, steps.length)}</span>
-          <button type="button" className="link-action" title={setupMessages.hideHint} onClick={onHide}>{setupMessages.hide}</button>
-          <button type="button" ref={minimize} className="icon-button setup-minimize" aria-label={setupMessages.minimize} aria-expanded
-            data-tip={setupMessages.minimize} onClick={() => toggle(false)}><ChevronDownIcon /></button>
-        </header>
-        <div className="setup-bar" role="progressbar" aria-label={setupMessages.progressLabel} aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={done}>
-          <span style={{ width: `${share * 100}%` }} />
-        </div>
-        <ol>
-          {goal === 'ai_agents' && <li className="setup-step" data-state="todo">
-            <span className="setup-mark" aria-hidden="true" />
-            <a href={messages.mcpURL} target="_blank" rel="noreferrer">
-              <span className="setup-title">{setupMessages.mcp.title}</span>
-              <span className="setup-state">{setupMessages.mcp.state}</span>
-            </a>
-            <span className="setup-time">{setupMessages.mcp.time}</span>
-          </li>}
-          {steps.map((step) => {
-            const finished = stepIsDone(step);
-            const primary = step.key === firstTodo;
-            return (
-              <li key={step.key} className="setup-step" data-state={finished ? 'done' : 'todo'} data-step={step.key}>
-                <span className="setup-mark" aria-hidden="true">{finished && <CheckIcon />}</span>
-                <a href={targets[step.key]} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
-                  onPointerEnter={() => preloadChannelsPage(client, targets[step.key])} onFocus={() => preloadChannelsPage(client, targets[step.key])}>
-                  <span className="setup-title">{setupMessages.title[step.key]}</span>
-                  <span className="setup-state" data-attention={step.state === 'needs_attention' || undefined}>
-                    {progress.recommended === step.key && !finished && <><b>{setupMessages.recommended}</b>{' · '}</>}
-                    {(setupMessages.state[step.key] as Record<string, string>)[step.state] ?? ''}
-                  </span>
-                </a>
-                {!finished && <span className="setup-time">{setupMessages.time[step.key]}</span>}
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+  };
+  // The AI agent guide is a page of the docs: never counted, first in Try more for a team that signed up for it.
+  const mcp = <li key="mcp" className="checklist-step" data-state="todo" data-step="mcp">
+    <span className="setup-mark" aria-hidden="true" />
+    <a href={messages.mcpURL} target="_blank" rel="noreferrer">
+      <span className="setup-title">{setupMessages.mcp.title}</span>
+      <span className="setup-state">{setupMessages.mcp.state}</span>
+    </a>
+    <span className="setup-time">{setupMessages.mcp.time}</span>
+  </li>;
+  const offered = tryMore.some((step) => !nothingToDo(step));
+  return <>
+    <header className="quick-start-head">
+      <div className="quick-start-title"><h2>{frameMessages.getReady(workspaceName)}</h2><span className="setup-count">{setupMessages.progress(done, total)}</span></div>
+      <div className="setup-segments" role="progressbar" aria-label={setupMessages.progressLabel} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+        {Array.from({ length: total }, (_, index) => <span key={index} data-done={index < done || undefined} />)}
+      </div>
+    </header>
+    <div className="quick-start-body">
+      {setUp.length > 0 && <Group title={setupMessages.setUp}>{setUp.map(row)}</Group>}
+      <Group title={setupMessages.tryMore} action={offered && <button type="button" className="link-action quick-start-skip" onClick={() => onSkip(!skipped)}>
+        {skipped ? setupMessages.unskip : setupMessages.skip}</button>}>
+        {!skipped && (goal === 'ai_agents' ? [mcp, ...tryMore.map(row)] : [...tryMore.map(row), mcp])}
+      </Group>
     </div>
-  );
+  </>;
 }

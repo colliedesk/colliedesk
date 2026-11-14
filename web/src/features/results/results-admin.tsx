@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ShareLink } from '../../api/results';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { resultsMessages as m } from './results-messages';
+import '../../ui/controls.css';
 
 export interface ResultsAdminProps {
   timezone: string;
@@ -53,7 +54,7 @@ export function ResultsAdmin(props: ResultsAdminProps) {
           <p className="results-share-state" data-on={link ? true : undefined}><span className="results-dot" aria-hidden="true" />
             {link ? m.admin.on(formatDay(link.created_at, timezone), link.created_by_name, link.last_viewed_at ? formatDate(link.last_viewed_at, timezone) : null) : m.admin.off}</p>
           {created && <div className="results-share-new">
-            <p>{m.admin.copyNow}</p>
+            <p className="results-copy-now">{m.admin.copyNow}</p>
             <div className="results-share-copy">
               {/* The whole address wraps: nothing of the token is hidden behind a scroll. */}
               <p className="results-share-url" aria-label={m.admin.linkLabel}><code>{created}</code></p>
@@ -73,12 +74,15 @@ export function ResultsAdmin(props: ResultsAdminProps) {
         <h3 id="results-weekly">{m.admin.weeklyHeading}</h3>
         {weekly && <>
           <p>{m.admin.weeklyAbout(weekly.timezone)}</p>
-          <label className="results-switch">
-            <input type="checkbox" role="switch" checked={weekly.subscribed} disabled={(!weekly.can_send && !weekly.subscribed) || weeklyBusy} onChange={(event) => onWeekly(event.target.checked)} />
-            <span>{m.admin.weeklyToggle}</span>
-          </label>
-          {weekly.can_send ? <p className="results-muted">{weekly.subscribed ? m.admin.weeklyOn(formatDay(weekly.next_at, weekly.timezone)) : m.admin.weeklyOff}</p>
-            : <div className="results-notice results-notice-warn"><p>{m.admin.noMail}</p><a href={m.admin.noMailURL} target="_blank" rel="noreferrer">{m.admin.noMailLink}</a></div>}
+          {/* While the server cannot send mail the switch would say on (or off) about an email that is never sent:
+              the card says why instead, and the person's choice shows again once mail works. */}
+          {weekly.can_send ? <>
+            <label className="results-switch">
+              <span className="switch"><input type="checkbox" role="switch" checked={weekly.subscribed} disabled={weeklyBusy} onChange={(event) => onWeekly(event.target.checked)} /></span>
+              <span>{m.admin.weeklyToggle}</span>
+            </label>
+            <p className="results-muted">{weekly.subscribed ? m.admin.weeklyOn(formatDay(weekly.next_at, weekly.timezone)) : m.admin.weeklyOff}</p>
+          </> : <div className="results-notice results-notice-warn"><p>{m.admin.noMail}</p><a href={m.admin.noMailURL} target="_blank" rel="noreferrer">{m.admin.noMailLink}</a></div>}
           {weeklyFailed && <p role="alert" className="error-copy">{m.admin.weeklyFailed}</p>}
         </>}
       </section>

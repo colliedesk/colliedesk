@@ -5,7 +5,7 @@
 </header>
 {{- if .Children}}
 <section aria-labelledby="sections">
-<h2 id="sections" class="section-label">Sections</h2>
+<h2 id="sections" class="section-label">{{.T.Sections}}</h2>
 <ul class="cards cards-compact">
 {{- range .Children}}
 <li class="card">
@@ -16,9 +16,9 @@
 <ul class="card-list">{{range .Articles}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
 {{- end}}
 {{- if .More}}
-<a class="card-more" href="{{.URL}}">All {{template "count" .Count}}<span aria-hidden="true"> →</span></a>
+<a class="card-more" href="{{.URL}}">{{.MoreLabel}}<span aria-hidden="true"> →</span></a>
 {{- else}}
-<p class="card-count">{{template "count" .Count}}</p>
+<p class="card-count">{{.CountLabel}}</p>
 {{- end}}
 </div>
 </li>
@@ -28,14 +28,14 @@
 {{- end}}
 {{- if .Articles}}
 <section aria-labelledby="articles">
-<h2 id="articles" class="section-label">Articles{{if gt .Pages 1}} <span class="quiet">· page {{.PageNumber}} of {{.Pages}}</span>{{end}}</h2>
+<h2 id="articles" class="section-label">{{.T.Articles}}{{if gt .Pages 1}} <span class="quiet">· {{.PageLabel}}</span>{{end}}</h2>
 <ul class="index">{{range .Articles}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
 </section>
 {{- end}}
 {{- if or .Previous .Next}}
-<nav class="pager" aria-label="Pages">
-{{- if .Previous}}<a rel="prev" href="{{.Previous}}"><span aria-hidden="true">← </span>Previous</a>{{end}}
-{{- if .Next}}<a rel="next" href="{{.Next}}">Next<span aria-hidden="true"> →</span></a>{{end}}
+<nav class="pager" aria-label="{{.T.Pages}}">
+{{- if .Previous}}<a rel="prev" href="{{.Previous}}"><span aria-hidden="true">← </span>{{.T.Previous}}</a>{{end}}
+{{- if .Next}}<a rel="next" href="{{.Next}}">{{.T.Next}}<span aria-hidden="true"> →</span></a>{{end}}
 </nav>
 {{- end}}
 {{end}}

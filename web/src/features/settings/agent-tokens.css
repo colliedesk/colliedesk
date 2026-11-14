@@ -1,22 +1,18 @@
-/* Settings → External AI agents: create a token, then the steps of each AI host. */
+/* Settings → External AI agents: the agent tokens, the dialog that creates one, then the steps of each AI host. */
 .agent-step { display: grid; gap: var(--space-3); min-width: 0; }
 .agent-step + .agent-step { border-top: 1px solid var(--line); padding-top: var(--space-5); }
-.step-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: inherit; font-weight: 600; }
-.step-no { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--surface-3); color: var(--text-1); font-size: var(--fs-label); font-weight: 600; }
-.token-form { display: grid; gap: var(--space-3); max-width: 34rem; }
-.token-form > p { margin: 0; }
+.step-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
 .tier-field { display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; min-width: 0; }
 .tier-field p { margin: 0; }
 .tier-picker { flex-wrap: wrap; }
 .tier-picker label:has(input:disabled) { color: var(--text-3); cursor: not-allowed; text-decoration: line-through; }
 .tier-picker input:disabled { cursor: not-allowed; }
-.token-created { display: grid; gap: var(--space-3); max-width: 40rem; }
+.token-created { display: grid; gap: var(--space-3); }
 /* The token wraps, so the whole of it shows on a phone too. */
-.token-value { font-family: var(--font-mono); font-size: var(--fs-small); word-break: break-all; resize: none; }
-.token-hidden-note { margin: 0; }
+.token-value { font-family: var(--font-mono); font-size: var(--fs-small); word-break: break-all; resize: none; background: var(--surface-2); }
 /* The host tabs fade only at their right edge: the first tab starts flush with the card. */
 .host-tabs { margin: 0; border-bottom: 1px solid var(--line);
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--space-6)), transparent); mask-image: linear-gradient(to right, #000 calc(100% - var(--space-6)), transparent); }
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--space-12)), transparent); mask-image: linear-gradient(to right, #000 calc(100% - var(--space-12)), transparent); }
 .host-panel { display: grid; gap: var(--space-3); min-width: 0; }
 .host-steps { display: grid; gap: var(--space-4); margin: 0; padding: 0; list-style: none; counter-reset: step; }
 .host-steps > li { display: grid; gap: var(--space-2); min-width: 0; counter-increment: step; }
@@ -24,17 +20,18 @@
 .host-steps p { margin: 0; }
 .snippet { display: grid; gap: var(--space-1); min-width: 0; }
 .snippet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.snippet-head .field-label { color: var(--text-1); font-size: var(--fs-small); font-weight: 500; }
 .snippet-head .button-row { flex-wrap: nowrap; align-items: center; }
-.snippet-head button { --control: 28px; font-size: var(--fs-label); }
+.snippet-head button { --control: 32px; min-height: var(--control); font-size: var(--fs-label); }
 /* A command is read before it is pasted, so a long one wraps instead of hiding its end. */
-.snippet pre { margin: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
-  padding: var(--space-2) var(--space-3); font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.snippet pre { margin: 0; overflow-x: auto; border: 0; border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line);
+  padding: var(--space-3); font-family: var(--font-mono); font-size: var(--fs-small); line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .snippet pre:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .agent-tokens .copied { align-self: center; color: var(--ok); font-size: var(--fs-label); font-weight: 600; }
 .agent-tokens .copied:empty { display: none; }
 .host-alt summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
 .host-alt[open] summary { margin-bottom: var(--space-3); }
-.host-foot, .check-it { margin: 0; font-size: var(--fs-small); }
+.host-foot, .check-it { margin: 0; color: var(--text-2); font-size: var(--fs-small); }
 .host-foot a { color: var(--accent-text); }
 .agent-tokens code { font-family: var(--font-mono); font-size: 0.92em; overflow-wrap: anywhere; }
 .deeplink { display: grid; gap: var(--space-2); justify-items: start; }
@@ -49,4 +46,82 @@
 .access-field { display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; min-width: 0; }
 .access-field p { margin: 0; }
 .access-option { display: grid; gap: var(--space-1); }
-.access-option > label { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 500; }
+.access-option > label { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control, 32px); font-weight: 500; }
+/* Show them / Hide them and Create another sit in a sentence: a 32px tall target, the line keeps its height. */
+.agent-tokens :is(.link-button, .host-foot a) { display: inline-block; margin-block: -7px; padding-block: 7px; }
+@media (pointer: coarse), (max-width: 30rem) { .agent-tokens :is(.link-button, .host-foot a) { padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); } }
+/* On a phone the five host tabs wrap onto a second line instead of scrolling: no tab is cut at the edge. */
+@media (max-width: 30rem) {
+  .host-tabs { flex-wrap: wrap; overflow: visible; -webkit-mask-image: none; mask-image: none; }
+}
+
+/* Agent tokens: a heading with Create token at its end, then one row per token (Token, Access, Last used,
+   Expires, the row menu), as in the design's S8-a. */
+/* The card is as wide as the page, its heading above the list (the design's External AI agents tab), so the
+   five columns fit; other settings cards keep their heading beside the body. */
+.settings-card.agent-tokens { grid-template-columns: minmax(0, 1fr); }
+.tokens-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-6); }
+.tokens-head > div { display: grid; gap: var(--space-1); min-width: 0; }
+.tokens-head p { margin: 0; color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+.tokens-head .primary-action { flex: none; }
+.token-list-empty { margin: 0; }
+.token-table { width: 100%; border-collapse: collapse; border-radius: var(--radius-lg); background: var(--surface-1);
+  box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgb(0 0 0 / 0.06); font-size: var(--fs-ui); }
+.token-table th { height: 36px; padding: 0 var(--space-2); border-bottom: 1px solid var(--line); color: var(--text-3); font-size: var(--fs-label); font-weight: 500;
+  line-height: 16px; text-align: left; }
+.token-table td { padding: var(--space-3) var(--space-2); vertical-align: middle; }
+.token-table :is(th, td):first-child { padding-left: var(--space-4); }
+.token-table :is(th, td):last-child { width: var(--control, 32px); padding-right: var(--space-4); }
+.token-table th:nth-child(2) { width: 248px; }
+.token-table th:is(:nth-child(3), :nth-child(4)) { width: 120px; }
+.token-table tbody tr + tr td { border-top: 1px solid var(--line); }
+.token-name { display: grid; min-width: 10rem; }
+.token-name strong { color: var(--text-1); font-weight: 600; line-height: 20px; overflow-wrap: anywhere; }
+.token-name span { color: var(--text-3); font-size: var(--fs-label); line-height: 16px; overflow-wrap: anywhere; }
+.token-access { display: grid; justify-items: start; gap: 2px; }
+.token-badge { display: inline-flex; align-items: center; min-height: 20px; border-radius: var(--radius-full); box-shadow: inset 0 0 0 1px var(--line-control);
+  padding: 0 var(--space-2); color: var(--text-1); font-size: var(--fs-label); font-weight: 500; line-height: 16px; }
+.token-may-do summary { cursor: pointer; list-style: none; color: var(--text-2); font-size: var(--fs-label); line-height: 16px; text-decoration: underline 1px; text-underline-offset: 2px; }
+.token-may-do summary::-webkit-details-marker { display: none; }
+.token-may-do summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.token-may-do ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); color: var(--text-2); font-size: var(--fs-label); line-height: 16px; }
+.token-stopped-line { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--warn); font-size: var(--fs-label); font-weight: 500; line-height: 16px; }
+.token-stopped-line .token-dot { margin-top: 4px; }
+.token-access-help { padding-left: 16px; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; }
+.token-dot { flex: none; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--warn); }
+.token-dot-hollow { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.token-when { color: var(--text-2); font-size: var(--fs-small); line-height: 20px; white-space: nowrap; }
+.token-expires { color: var(--text-3); }
+.token-end { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 500; }
+.token-ended .token-name strong { color: var(--text-3); }
+.token-menu-wrap { position: relative; display: flex; justify-content: flex-end; }
+.token-menu-button svg { fill: currentColor; }
+.token-menu { position: absolute; z-index: 5; top: calc(100% + var(--space-1)); right: 0; display: grid; min-width: 10rem; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-1); }
+.token-menu [role="menuitem"] { justify-content: flex-start; width: 100%; border-color: transparent; box-shadow: none; }
+/* On a phone each token is a block: its name, then its access, then the two dates with their names. */
+@media (max-width: 40rem) {
+  .tokens-head { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+  .token-table, .token-table tbody, .token-table tr { display: block; }
+  .token-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .token-table tr { position: relative; display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+  .token-table tbody tr + tr { border-top: 1px solid var(--line); }
+  .token-table td, .token-table tbody tr + tr td { display: block; width: auto; padding: 0; border: 0; }
+  .token-table td.token-name { display: grid; min-width: 0; padding-right: calc(var(--control, 32px) + var(--space-2)); }
+  .token-when::before { content: attr(data-label) ' · '; color: var(--text-3); }
+  .token-table td.token-actions { position: absolute; top: var(--space-2); right: var(--space-2); }
+}
+
+/* The dialogs: Create a token (S8-b, S8-c) and Revoke (S8-d). */
+.token-dialog { width: min(40rem, 100%); }
+.token-dialog .form-dialog-body { gap: var(--space-4); }
+.token-dialog .form-dialog-body > p { margin: 0; }
+.token-dialog-connect { display: grid; gap: var(--space-3); min-width: 0; border-top: 1px solid var(--line); padding-top: var(--space-4); }
+.token-dialog .form-dialog-body p.drafts-note { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--line); padding: var(--space-3); color: var(--text-2); font-size: var(--fs-small); line-height: 20px; }
+.drafts-note .token-dot { margin-top: 6px; }
+.drafts-note strong { color: var(--text-1); font-weight: 600; }
+.revoke-token-dialog { width: min(30rem, 100%); }
+.revoke-token-dialog .form-dialog-body p { margin: 0; color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+.token-danger-solid { border-color: var(--danger); background: var(--danger); color: var(--on-accent); font-weight: 500; }
+.token-danger-solid:hover:not(:disabled) { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 88%, #000); }

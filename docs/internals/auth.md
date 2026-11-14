@@ -63,9 +63,10 @@ set of them. Code: `auth/principal.go`, `auth/permissions.go`, `auth/legacy.go`,
   token) is not deleted (`role_in_use` names them). A token's call is checked against the token's
   permissions, not only the person's.
 - **Creating a token is person-only** (`personOnlyNeeding(team:create_tokens, …)`): a token that made
-  tokens would leave them behind after it was revoked. That is why `maxPersonOnly` is 4 in
-  `mcpserver/agent_parity_test.go` (the two agent-request decision routes, the mail image proxy and
-  token creation; raising it needs the maintainer's written approval). A token is created with
+  tokens would leave them behind after it was revoked. That is why `maxPersonOnly` is 5 in
+  `mcpserver/agent_parity_test.go` (the two agent-request decision routes, the mail image proxy, token
+  creation and allowing an AI app with OAuth, raised from 4 for #477; raising it needs the maintainer's
+  written approval). A token is created with
   `role_id` (any role whose permissions the caller all holds, else 403 `role_exceeds_yours`; 404 when
   there is no such role) or `permissions` (each held, else
   `role_exceeds_yours`), never both; a `scope` is 400. The CLI's `--scope` maps `read`/`draft`/`send`
@@ -138,7 +139,7 @@ null scope is a person's session. It reuses the session machinery on purpose: `l
   `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on an unclassified or stale
   `routeAccess` row, a `PersonOnly` row without `Why`, an uncovered callable route, a stale
   `mcpToolPending` entry, and a tool that calls a closed route; its message names the file to edit.
-  Ceilings: `maxClosedToTokens` and `maxMCPToolPending` are 0, `maxPersonOnly` 4.
+  Ceilings: `maxClosedToTokens` and `maxMCPToolPending` are 0, `maxPersonOnly` 5.
 - **The contract's `TokenPermission` enum is the Go list** in its order
   (`TestTokenPermissionEnumOfTheContractIsTheServersList`); the web matrix's copy is held to the
   contract by `token-permissions.test.ts`.
@@ -170,6 +171,74 @@ null scope is a person's session. It reuses the session machinery on purpose: `l
   check (`docs/internals/mcp.md`). A new route a tool uses needs a `routeAccess` row first.
 - The CLI (`collie token create`) resolves the workspace by slug through
   `PrivilegeWorkspaceBySlug`, like `pair`.
+
+## OAuth grants
+
+Decided in #477 (Long, 2026-11-06): an AI app connects to `/mcp` with OAuth 2.1, the person picks only
+the workspace, and the app acts as that person with everything they hold. Code: `auth/oauth.go`,
+`httpapi/oauth-handlers.go`, `httpapi/oauth-clients.go`, the consent page `web/src/features/auth/oauth-consent.tsx`.
+
+- **A grant is a session of scope `oauth`**, not a person's session (scope null): `Principal.IsToken()`
+  is true, so every person-only route refuses it (it cannot create tokens or allow another app), a
+  cookie holding one is refused, and messages it writes carry `agent_token_id` like any token's. Its
+  `given` is a copy of what the person holds now (`setAccess`), cut to `role_id` when the session that
+  allowed it was limited (an admin's Agent-limited session makes an Agent-limited grant). No one-year
+  cap: it lives 30 days after its last use, like a browser session. `role_ceiling` is written for a
+  rollback only.
+- **The grant's id never changes; its credentials rotate in `oauth_tokens`** (`kind` code, access,
+  refresh; RLS like every workspace table). `sessions.token_hash` of a grant is the hash of a random
+  `cdk_oag_` value nobody receives, so a grant authenticates only through an access token:
+  `Authenticate` finds `cdk_oat_` bearers in `oauth_tokens` (privileged lookup, then the session scoped
+  by id and an unexpired access row). Codes (`cdk_oac_`) and refresh tokens (`cdk_ort_`) are refused as
+  bearers. All four prefixes share the hash domain `colliedesk-oauth\x00` (`credentialHash`), so an
+  older image finds none of them (`TestOAuthAccessTokensCannotBeFoundByThePlainHashAnOlderImageUses`).
+- **Lifetimes.** Code 5 minutes, one use; a second use revokes the grant (RFC 6749 §4.1.2). Access token
+  1 hour. Refresh token rotated on every use; the one it replaced still works for 2 minutes
+  (`oauthRefreshGrace`) and gives another new pair without touching the others, so a client that lost
+  the answer, or two processes of Claude Code sharing one credential, never sign each other out
+  (`TestTwoRefreshesAtOnceWithOneTokenBothSucceed`). Used after that, it is a replay and revokes the
+  grant. Used refresh tokens are remembered a day, then forgotten (`invalid_grant` without a revoke).
+- **Clients are not stored.** Dynamic registration signs the app's name and redirects into the
+  `client_id` (`cdk_client_<payload>.<HMAC>`, key `oauth_client_key` in `server_secrets`), limited to 1000
+  valid registrations per client address an hour (a refused one is not counted). A client ID metadata document (an https `client_id`, Claude Code's) is
+  fetched through `netguard` (public addresses after resolution, every dial), no redirect, 64 KiB, 5 s,
+  cached 10 minutes; the document must name itself as `client_id`. Anyone can publish one, so the consent
+  page always names its host and calls the name verified only on a known vendor's host (`trustedClientHosts`:
+  exact or a subdomain at a dot, default port). Redirects: https (a metadata document's anywhere; a
+  dynamic registration's only on a `trustedClientHosts` host, checked when signing and again when a
+  signed id is read, so ids signed before the rule stop working), http only
+  to `localhost`/`127.0.0.1`/`::1` (any port, RFC 8252), a private scheme with a dot or a known desktop
+  app's (`cursor`, `vscode`…). Why: registration proves no host, and an open one let anyone mint an
+  app that sends a person's code to their own site (consent phishing, reported 10/11/2026); Claude and
+  ChatGPT use their metadata documents first and register only as a fallback, with callbacks on their
+  own hosts (`TestRegistrationTakesHttpsRedirectsOnlyOnKnownAIAppHosts`). The consent page warns when the
+  redirect is on this computer: any local program can listen there (MCP spec, localhost redirect risks). `GET /api/v1/oauth/client` is the only unauthenticated way to make the
+  server fetch one, 60 a minute per address.
+- **Issuer.** The authorization server is `APP_ORIGIN` for every workspace (Cloud's one `/mcp`).
+  `/.well-known/oauth-authorization-server` answers only there (its `issuer` must equal where it was
+  fetched); `/.well-known/oauth-protected-resource[/mcp]` answers on every host with that host's `/mcp`
+  as `resource`. A token is bound to the `resource` the app asked for (`APP_ORIGIN/mcp` or the
+  workspace's own host's), refused otherwise (`invalid_target`); the code exchange and refresh compare it.
+  The bound token also works on `/api/v1`, because every MCP tool calls the REST API with it in process.
+- **Consent.** No new sign-in. `/oauth/authorize` is a web app page (`frame-ancestors 'none'`, set by
+  `webui`) on the session of the host it opens on. On Cloud a browser without a session goes to the
+  sign-in page on `APP_ORIGIN` with `next=/oauth/authorize?…`; `ExchangeCloud` asks which workspace
+  (409 `workspaces`) and hands the browser off to the workspace's host, which opens the consent page;
+  the code it issues is traded at `APP_ORIGIN/oauth/token`. **Allow** (`POST /api/v1/oauth/authorize`)
+  is `personOnly` (`maxPersonOnly` 5, Long's approval quoted in `agent_parity_test.go`) and checks
+  `Origin` for every caller. A request the app got wrong after the redirect was checked goes back to
+  the app as an OAuth error; one with an unregistered redirect is shown on the page and never redirected.
+- **Rollback.** The down migration keeps grant rows (a note names them) as revoked legacy `read`
+  tokens and drops `oauth_tokens` (`TestOAuthGrantsRollbackKeepsTheNotesAGrantWroteAttributed`).
+
+### Traps
+
+- **A grant is never a person's session.** Making it one (scope null) would let an app allow other apps
+  and create tokens that outlive its disconnection. Keep `scope='oauth'`.
+- **One access hash per grant breaks real clients**: rotating it on refresh would sign out every other
+  process sharing the credential. Access tokens are rows; old ones expire on their own.
+- **Pending grants.** A grant whose code was never traded has `oauth_connected_at` null: it lists
+  nowhere and the next Allow of the same person deletes those older than an hour.
 
 ## Operators
 
@@ -205,6 +274,41 @@ hosts are made at sign-up. Passkeys registered on one subdomain do not work on a
 email claim defaults
 to `email`. `CLERK_PUBLISHABLE_KEY` is returned only by the public config endpoint and is safe for the
 browser; no Clerk Secret Key is required because Colliedesk never calls Clerk's Backend API.
+
+### Switching workspace
+
+Decided 2026-11-13 (owner: "best practice"): inside a workspace, the account menu lists the person's other
+workspaces, and choosing one signs them in there without a new code. Code: `listCloudWorkspaces`
+(`httpapi/cloud-auth-handlers.go`), `auth.Service.CloudWorkspaces`, `web/src/features/shell/other-workspaces.tsx`.
+
+- **The proof is the identity token, never the session.** `GET /api/v1/auth/cloud/workspaces` takes the
+  Clerk session token as bearer, verifies it like the exchange (its `azp` must be `APP_ORIGIN` or this
+  host's own origin) and answers the active workspaces of that email, from the same lookup as the 409
+  `workspaces` chooser. A workspace session's email is not proven: an admin can invite any address and use
+  the link, so a lookup by it would tell an outsider whether an address uses Colliedesk elsewhere. The route
+  is `notForPeople` (no session or agent token reaches it); the web sends it with `credentials: 'omit'`.
+  Tests: `TestTheVerifiedEmailListsOnlyItsOwnWorkspaces`, `TestOnlyAVerifiedIdentityTokenOfThisHostListsWorkspaces`.
+- **A workspace host can get that token.** Cloud's Clerk is a production instance on the root domain (its
+  publishable key names `clerk.colliedesk.com`), so one Clerk session serves `app.` and every
+  `<slug>.colliedesk.com`; the host's own sign-in page already exchanges it. The menu loads Clerk in its own
+  chunk when the pointer or the focus reaches the avatar, only where `workspace_hosts` and cloud sign-in are
+  both on.
+- **The switch is the existing chooser and hand-off.** Each entry links to `APP_ORIGIN/sign-in?workspace=<slug>`;
+  that page exchanges the live Clerk session with `workspace_slug` and hands the browser off to the chosen
+  host (one-minute `handoff` link). The session on the host it came from is untouched.
+- **Sign out and revoke end the Clerk session; expiry does not.** The account menu's Sign out, Sessions' Sign
+  out of this device, and a 401 `session_revoked` from any call are remembered (`web/src/lib/sign-out-intent.ts`)
+  and open `/sign-in?signed_out=true`, which signs Clerk out in that browser, so the next sign-in asks for a code.
+  An expired session, or none on `APP_ORIGIN` (whose desks run on their own hosts), opens `/sign-in` without the
+  marker: a live Clerk session signs the person straight back in, or shows the chooser.
+- **`session_revoked` tells only the browser holding the cookie.** `Authenticate` answers `ErrSessionRevoked`
+  (still an `ErrInvalidCredential`) when a cookie's own person session has `revoked_at` set (Sessions revoke,
+  sign-out from another device) or its person is deactivated (which also revokes the sessions). It reads that in
+  the session's workspace after the main lookup failed, and says it only on that workspace's host or `APP_ORIGIN`:
+  on another workspace's host, for a bearer, or for an expired or unknown session the answer stays 401
+  `unauthorized`. Whichever call learns it first counts, because that answer also clears the cookie. Tests:
+  `TestARevokedSessionIsToldItWasRevokedAndAnExpiredOneIsNot`, `TestADeactivatedPersonsSessionIsToldItWasRevoked`,
+  `TestAnotherWorkspaceHostNeverSaysASessionWasRevoked`.
 
 ### Cloud sign-up (hosted cloud only)
 

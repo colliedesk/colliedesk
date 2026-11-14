@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { CaptureResult, PostHog, PostHogConfig } from 'posthog-js';
 import { recordProductEvent } from './diagnostics';
+import type { SetupStepKey } from '../api/schemas';
 
 // Product analytics. The server's public config says whether to report (DISABLE_TELEMETRY or
 // DO_NOT_TRACK turn it off, on the cloud and self-hosted alike), and only then is posthog-js
@@ -92,8 +93,8 @@ function options(host: string): Partial<PostHogConfig> {
 // never a contact, a message, an id or anything a person typed. The one exception is the answer to
 // the trial survey, which the admin sends by pressing Send.
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed';
-export type SettingsSection = 'profile' | 'preferences' | 'general' | 'team' | 'invites' | 'agents' | 'sessions' | 'channels' | 'email_channel'
-  | 'web_form' | 'saved_replies' | 'help_center' | 'export' | 'billing' | 'ai';
+// The settings page opened from its menu (docs/user/telemetry.md lists the values it had while Settings was one page).
+export type SettingsSection = 'account' | 'general' | 'members' | 'channels' | 'targets' | 'ai' | 'saved_replies' | 'data' | 'billing';
 export type SurveyId = 'switch_blocker_v1';
 export type InboxFilterKind = 'status' | 'priority' | 'assignee' | 'tag' | 'contact' | 'organization' | 'awaiting' | 'draft' | 'delivery'
   | 'source' | 'channel' | 'created' | 'updated' | 'sort';
@@ -111,9 +112,9 @@ export interface EventProperties {
   settings_section_opened: { section: SettingsSection };
   workspace_export_requested: undefined;
   problem_reported: undefined;
-  // step is the setup guide row only: email, import, invite or first_reply.
-  onboarding_step_started: { step: 'email' | 'import' | 'invite' | 'first_reply' };
-  onboarding_step_completed: { step: 'email' | 'import' | 'invite' | 'first_reply' };
+  // step is the setup guide row only: email, import, ai_drafts, reply_targets, invite or first_reply.
+  onboarding_step_started: { step: SetupStepKey };
+  onboarding_step_completed: { step: SetupStepKey };
   survey_answered: { survey: SurveyId; answer: string };
   survey_dismissed: { survey: SurveyId };
 }

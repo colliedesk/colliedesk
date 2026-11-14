@@ -16,7 +16,7 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
   await expect(page).toHaveURL(`${servers.main}/`);
 
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge base' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Knowledge base' })).toBeVisible();
   const newCollection = page.getByRole('form', { name: 'New collection' });
   await newCollection.getByRole('textbox', { name: 'Name' }).fill('Getting started');
@@ -259,7 +259,7 @@ test('knowledge base: an article excluded from AI says since when and by whom, k
   await page.goto(url);
   await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
   await expect(page).toHaveURL(`${servers.main}/`);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge base' }).click();
   const newCollection = page.getByRole('form', { name: 'New collection' });
   await newCollection.getByRole('textbox', { name: 'Name' }).fill('Billing');
   await newCollection.getByRole('button', { name: 'Create collection' }).click();
@@ -284,4 +284,40 @@ test('knowledge base: an article excluded from AI says since when and by whom, k
   await page.locator('.kb-ai-note').getByRole('button', { name: 'Let AI use it again' }).click();
   await expect(page.getByRole('region', { name: 'Used by AI' }).getByRole('button', { name: 'Exclude from AI' })).toBeVisible();
   await expect(page.getByText('AI does not read this article.')).toHaveCount(0);
+});
+
+test('knowledge base: an article also listed in a second collection shows in both lists of the help center at one address, and leaves the second when removed', async ({ page }) => {
+  const suffix = `${Date.now()}-${process.pid}`;
+  const { url } = createWorkspaceWithSlug(`KB Listed ${suffix}`, `admin-${suffix}@example.com`);
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
+  await expect(page).toHaveURL(`${servers.main}/`);
+  const headers = { Origin: servers.main };
+  expect((await page.request.put(`${servers.main}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Listed help', locale: 'en' } })).status()).toBe(200);
+  const { id: billing } = await (await page.request.post(`${servers.main}/api/v1/kb/collections`, { headers, data: { name: 'Billing' } })).json() as { id: string };
+  await page.request.post(`${servers.main}/api/v1/kb/collections`, { headers, data: { name: 'Bookings' } });
+  const article = await (await page.request.post(`${servers.main}/api/v1/kb/articles`, { headers,
+    data: { collection_id: billing, title: 'Get a VAT invoice', body_md: 'Ask within 30 days.', status: 'published' } })).json() as { id: string; url: string };
+
+  await page.goto(`${servers.main}/knowledge/articles/${article.id}`);
+  await page.getByRole('combobox', { name: 'Also list in' }).selectOption({ label: 'Bookings' });
+  await expect(page.getByRole('button', { name: 'Remove Bookings' })).toBeVisible();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+
+  const { url: helpCenter } = await (await page.request.get(`${servers.main}/api/v1/help-center`)).json() as { url: string };
+  const address = new URL(article.url).pathname;
+  for (const collection of ['billing', 'bookings']) {
+    await page.goto(`${helpCenter}/c/${collection}`);
+    await expect(page.locator(`main a[href="${address}"]`)).toHaveText('Get a VAT invoice');
+  }
+
+  await page.goto(`${servers.main}/knowledge/articles/${article.id}`);
+  await page.getByRole('button', { name: 'Remove Bookings' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  await page.goto(`${helpCenter}/c/bookings`);
+  await expect(page.locator(`main a[href="${address}"]`)).toHaveCount(0);
+  await page.goto(article.url);
+  await expect(page.getByRole('heading', { level: 1, name: 'Get a VAT invoice' })).toBeVisible();
 });

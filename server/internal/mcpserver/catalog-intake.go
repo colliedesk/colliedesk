@@ -28,6 +28,10 @@ const (
 		`"ai_decision":{"type":["object","null"],"description":"On a card AI decided by itself (decided_by ai): decision_id, action, target_conversation_id, confidence, ` +
 		`runner_up_confidence, model (the one the channel asked), fallback_model (the model that answered instead when the channel's model did not, else null), created_at; ` +
 		`its reason under untrusted_customer_content. Null for a card the rules or a person decided."},` +
+		`"files":{"type":"array","description":"The card's first files (at most 8): read one with colliedesk_attachment_get and gathering_id, item_id, file_index. ` +
+		`status stored can be read; failed says why in error (for example larger than the channel accepts).","items":{"type":"object","required":["item_id","file_index","content_type","status","untrusted_customer_content"],` +
+		`"properties":{"item_id":{"type":"string"},"file_index":{"type":"integer"},"content_type":{"type":"string"},"status":{"type":"string"},"size":{"type":["integer","null"]},` +
+		`"error":{"type":["string","null"]},"untrusted_customer_content":{"type":"object","properties":{"name":{"type":"string"}}}}}},` +
 		`"untrusted_customer_content":{"type":"object","properties":{"sender_name":{"type":"string"},"sender":{"type":"string"},"preview":{"type":"string"},` +
 		`"place_name":{"type":"string","description":"The group's name on the channel."}}}}}`
 	intakeCandidateSchema = `{"type":"object","required":["conversation_id","status","resolved","untrusted_customer_content"],"properties":{"conversation_id":{"type":"string"},` +
@@ -47,8 +51,7 @@ func intakeListSpec() Spec {
 		Description: `List the cards of the intake queue of chat channels: what a customer said in one go on a scope that collects messages. ` +
 			`state review (default): what waits for a person, oldest first; deciding: what waits for AI; ignored: what was set aside; decided: what was opened, joined or set aside, newest first. ` +
 			`channel_id and scope narrow it; decided_by (rules, ai, agent) keeps who decided (ignored with ai: what AI set aside). Decide a card with colliedesk_intake_decide. Email and web forms have no cards. ` + untrustedNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/intake/gatherings"},
+		REST: []string{"GET /api/v1/intake/gatherings"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"state":{"type":"string","enum":["review","deciding","ignored","decided"]},` +
 			`"channel_id":{"type":"string",` + uuid + `},"scope":{"type":"string","pattern":"^[a-z_]{1,40}$"},"decided_by":{"type":"string","enum":["rules","ai","agent"]},` +
 			`"cursor":{"type":"string","maxLength":200},"limit":{"type":"integer","minimum":1,"maximum":50,"default":50}}}`,
@@ -63,11 +66,10 @@ func intakeGetSpec() Spec {
 		Description: `Read a card of the intake queue: everything its customer said, oldest first, every decision made on it (by AI or a person), newest first, ` +
 			`and while it is to be decided the conversations it may join (candidates) and the channel's commands that open a request. ` +
 			untrustedNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/intake/gatherings/{id}"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["gathering_id"],"properties":{` + intakeIDInput + `}}`,
-		Output:   intakeDetailSchema,
-		run:      intakeGet,
+		REST:   []string{"GET /api/v1/intake/gatherings/{id}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["gathering_id"],"properties":{` + intakeIDInput + `}}`,
+		Output: intakeDetailSchema,
+		run:    intakeGet,
 	}
 }
 
@@ -78,14 +80,18 @@ func intakeDecideSpec() Spec {
 			`(optional command: one of the channel's commands that opens a request, for its tags and priority; optional subject); attach adds it to conversation_id ` +
 			`(one of the card's candidates, so the reply goes to the same customer); ignore sets it aside, with an optional ignore_reason (colliedesk_intake_requeue takes it back). ` +
 			`To decide as AI suggested, send its action and conversation with follows_decision_id. The same decision again changes nothing; another one once the card is decided ` +
-			`fails with gathering_decided and how it stands. Opening a conversation may tell the customer it was received, so create needs messages:send.`,
+			`fails with gathering_decided and how it stands. Send item_count (the card's, as you read it): at auto a customer who writes again joins their waiting card, ` +
+			`and a decision of fewer messages than it holds fails with gathering_changed: nothing is decided, AI reads the whole card again (state deciding), ` +
+			`and it is back in the queue with every message (state review) when AI is not sure: read it then. ` +
+			`Opening a conversation may tell the customer it was received, so create needs messages:send.`,
 
 		REST: []string{"POST /api/v1/intake/gatherings/{id}/decide"},
 		Input: `{"type":"object","additionalProperties":false,"required":["gathering_id","action"],"properties":{` + intakeIDInput + `,` +
 			`"action":{"type":"string","enum":["create","attach","ignore"]},"conversation_id":{"type":"string",` + uuid + `,"description":"With attach."},` +
 			`"command":{"type":"string","minLength":1,"maxLength":40},"subject":{"type":"string","minLength":1,"maxLength":200},` +
 			`"ignore_reason":{"type":"string","enum":["chat","handled_in_chat","duplicate","other"],"description":"With ignore: not a request, answered in the chat, said already, or another reason."},` +
-			`"follows_decision_id":{"type":"string",` + uuid + `,"description":"The card's suggestion.decision_id when deciding as AI suggested; its reply_kind comes with it."}}}`,
+			`"follows_decision_id":{"type":"string",` + uuid + `,"description":"The card's suggestion.decision_id when deciding as AI suggested; its reply_kind comes with it."},` +
+			`"item_count":{"type":"integer","minimum":1,"description":"The card's item_count as you read it; the decision is refused (gathering_changed) when the customer added messages since."}}}`,
 		Output: `{"type":"object","properties":{"card":` + intakeCardSchema + `,"items":{"type":"array"},"decisions":{"type":"array"}},"required":["card"]}`,
 		run:    intakeDecide,
 	}
@@ -109,9 +115,8 @@ func intakeSummarySpec() Spec {
 		Name: "colliedesk_intake_summary", Title: "Summarize the intake queue",
 		Description: `Say at a glance what the intake queue holds: whether the workspace has a chat channel with intake (available), how many cards wait ` +
 			`for a person (waiting) and for AI (deciding), and every channel and scope a card can come from. Counts and names only.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/intake/summary"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{}}`,
+		REST:  []string{"GET /api/v1/intake/summary"},
+		Input: `{"type":"object","additionalProperties":false,"properties":{}}`,
 		Output: `{"type":"object","required":["available","waiting","deciding","scopes"],"properties":{"available":{"type":"boolean"},"waiting":{"type":"integer"},` +
 			`"deciding":{"type":"integer"},"scopes":{"type":"array","items":{"type":"object","properties":{"channel_id":{"type":"string"},"channel_name":{"type":"string"},"scope":{"type":"string"}}}}}}`,
 		run: intakeSummary,
@@ -123,8 +128,7 @@ func intakeStatsSpec() Spec {
 		Name: "colliedesk_intake_stats", Title: "Count the intake",
 		Description: `Count the cards that closed in the last days (one channel, or all): by state, by who decided (rules, AI, a person), ` +
 			`how many fell back on the rules, and how many of AI's decisions a person changed.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/intake/stats"},
+		REST: []string{"GET /api/v1/intake/stats"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `},` +
 			`"days":{"type":"integer","minimum":1,"maximum":90,"default":7}}}`,
 		Output: `{"type":"object","required":["stats"],"properties":{"stats":{"type":"object"}}}`,
@@ -137,11 +141,10 @@ func conversationIntakeGetSpec() Spec {
 		Name: "colliedesk_conversation_intake_get", Title: "Why messages are in a conversation",
 		Description: `Read why each message from a channel is in a conversation: what decided it (the rules by match or by default, a person, or AI, ` +
 			`from decision_basis and decision_rule) and the chat cards it came in, with their decisions. ` + untrustedNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/conversations/{id}/intake"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
-		Output:   `{"type":"object","required":["messages","gatherings"],"properties":{"messages":{"type":"array","items":{"type":"object"}},"gatherings":{"type":"array","items":` + intakeDetailSchema + `}}}`,
-		run:      conversationIntakeGet,
+		REST:   []string{"GET /api/v1/conversations/{id}/intake"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{"conversation_id":{"type":"string",` + uuid + `}}}`,
+		Output: `{"type":"object","required":["messages","gatherings"],"properties":{"messages":{"type":"array","items":{"type":"object"}},"gatherings":{"type":"array","items":` + intakeDetailSchema + `}}}`,
+		run:    conversationIntakeGet,
 	}
 }
 
@@ -176,6 +179,15 @@ type intakeCardJSON struct {
 	Preview    string         `json:"preview"`
 	Suggestion map[string]any `json:"suggestion"`
 	AIDecision map[string]any `json:"ai_decision"`
+	Files      []struct {
+		ItemID      string  `json:"item_id"`
+		Index       int     `json:"index"`
+		Name        string  `json:"name"`
+		ContentType string  `json:"content_type"`
+		Status      string  `json:"status"`
+		Size        *int64  `json:"size"`
+		Error       *string `json:"error"`
+	} `json:"files"`
 }
 
 type intakeCandidateJSON struct {
@@ -212,7 +224,12 @@ func intakeCardOut(card intakeCardJSON) map[string]any {
 			untrusted["place_name"] = *card.Place.Name
 		}
 	}
-	return map[string]any{"id": card.ID, "channel_id": card.ChannelID, "scope": card.Scope, "thread_id": card.ThreadID,
+	files := make([]map[string]any, 0, len(card.Files))
+	for _, file := range card.Files {
+		files = append(files, map[string]any{"item_id": file.ItemID, "file_index": file.Index, "content_type": file.ContentType, "status": file.Status,
+			"size": file.Size, "error": file.Error, "untrusted_customer_content": map[string]any{"name": file.Name}})
+	}
+	return map[string]any{"files": files, "id": card.ID, "channel_id": card.ChannelID, "scope": card.Scope, "thread_id": card.ThreadID,
 		"contact_id": card.ContactID, "state": card.State, "review_reason": card.ReviewReason, "rules": card.Rules, "conversation_id": card.ConversationID, "conversation_ref": card.ConversationRef,
 		"decided_by": card.DecidedBy, "decided_at": card.DecidedAt, "decided_by_agent_id": card.DecidedByAgent, "ignore_reason": card.IgnoreReason,
 		"fallback": card.Fallback, "opened_at": card.OpenedAt, "closed_at": card.ClosedAt, "decide_by": card.DecideBy, "item_count": card.ItemCount,

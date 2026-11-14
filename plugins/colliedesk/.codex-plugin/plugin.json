@@ -1,0 +1,34 @@
+{
+  "name": "colliedesk",
+  "version": "1.1.0",
+  "description": "Work your Colliedesk inbox from Codex and ChatGPT: the Colliedesk MCP server and skills to triage, draft replies, chase pending conversations and set up channels.",
+  "author": {
+    "name": "HC Labs",
+    "url": "https://colliedesk.com"
+  },
+  "homepage": "https://colliedesk.com/docs/connect-codex",
+  "repository": "https://github.com/colliedesk/colliedesk",
+  "license": "AGPL-3.0-only",
+  "keywords": ["helpdesk", "support", "inbox", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Colliedesk",
+    "shortDescription": "Work your support inbox",
+    "longDescription": "Colliedesk is an open-source helpdesk for small support teams. This plugin connects your Colliedesk workspace and lets you work the inbox from a conversation: find and read customer conversations, triage what nobody owns (status, priority, assignee, tags), draft replies built on your saved replies and help articles for a person to check and send, chase customers who stopped answering, and set up the email channel. It signs in with OAuth: you choose the workspace and allow it in your browser, and it acts as you, with the permissions your roles give you in that workspace. It reaches Colliedesk Cloud (app.colliedesk.com); a self-hosted Colliedesk server is added as its own MCP server. It sends a reply to a customer only when you ask it to.",
+    "developerName": "HC Labs",
+    "category": "Productivity",
+    "capabilities": ["Triage conversations", "Draft replies", "Chase pending conversations", "Set up the email channel"],
+    "websiteURL": "https://colliedesk.com",
+    "supportURL": "https://github.com/colliedesk/colliedesk/issues",
+    "privacyPolicyURL": "https://colliedesk.com/privacy",
+    "termsOfServiceURL": "https://colliedesk.com/terms",
+    "defaultPrompt": [
+      "Triage the open Colliedesk conversations nobody owns.",
+      "Draft a reply to the oldest open conversation in Colliedesk.",
+      "Which Colliedesk conversations wait on a customer for more than 3 days?"
+    ],
+    "composerIcon": "./.claude-plugin/icon.png",
+    "logo": "./.claude-plugin/icon.png"
+  }
+}

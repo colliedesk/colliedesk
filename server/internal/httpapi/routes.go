@@ -5,16 +5,16 @@ import "net/http"
 func (a *API) routeSpecs() []routeSpec {
 	routes := Routes()
 	handlers := []http.HandlerFunc{
-		a.getConfig, a.exchangeCloudSession, a.signUpCloud,
-		a.redeem, a.redeemOperatorLink, a.confirmOperatorCode, a.signInOperatorWithCloud, a.getOperatorMe, a.operatorLogout, a.createOperatorToken,
+		a.getConfig, a.exchangeCloudSession, a.listCloudWorkspaces, a.signUpCloud,
+		a.redeem, a.previewInvite, a.redeemOperatorLink, a.confirmOperatorCode, a.signInOperatorWithCloud, a.getOperatorMe, a.operatorLogout, a.createOperatorToken,
 		a.getOperatorStatus, a.getOperatorConfig, a.changeOperatorConfig, a.checkOperatorConfig, a.listOperatorConfigVersions, a.restoreOperatorConfigVersion,
 		a.confirmOperatorConfigTrial, a.revertOperatorConfigTrial, a.listOperatorProducts, a.addOperatorProduct, a.setOperatorProductOnSale,
 		a.listOperatorAudit, a.listOperatorRequests, a.getOperatorRequest, a.cancelOperatorRequest, a.listOperators, a.inviteOperator, a.revokeOperator, a.revokeOperatorSession,
 		a.logout, a.me, a.listSessions, a.revokeSession, a.createAgentToken,
 		a.createInvite, a.listInvites, a.revokeInvite,
-		a.listConversations, a.createConversation, a.bulkUpdateConversations, a.getConversation, a.updateConversation,
+		a.listConversations, a.createConversation, a.bulkUpdateConversations, a.getConversation, a.updateConversation, a.markSpam,
 		a.addConversationTag, a.removeConversationTag,
-		a.listMessages, a.createMessage, a.listTimeEntries, a.putConversationPresence, a.deleteConversationPresence, a.inboxActivity, a.downloadAttachment, a.mailImage,
+		a.listMessages, a.createMessage, a.listTimeEntries, a.putConversationPresence, a.deleteConversationPresence, a.inboxActivity, a.downloadAttachment, a.getAttachmentThumbnail, a.mailImage,
 		a.listContacts, a.createContact, a.getContact, a.updateContact, a.mergeContact, a.unmergeContact,
 		a.listAgents, a.updateWorkspaceTimezone, a.updateWorkspaceSlug, a.listNumberSeries, a.setNumberSeries, a.getResponseTargets, a.setResponseTargets, a.updateWorkspaceName, a.updateAgentTimezone, a.setMySLAAlerts, a.updateAgentDisplayName, a.updateAgent,
 		a.listTags, a.createTag, a.updateTag, a.deleteTag,
@@ -33,7 +33,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.retryMessageDelivery,
 		a.getEmailChannel, a.putEmailChannel, a.deleteEmailChannel, a.verifyEmailDomain, a.receiveInboundEmail, a.checkInboundRecipient, a.rotateEmailSecret,
 		a.connectGmail, a.disconnectGmail, a.finishGmailConnect,
-		a.getBilling, a.createCheckout, a.createPortal, a.createMigrationRequest, a.receivePolarWebhook, a.receiveResendWebhook, a.getFounding,
+		a.getBilling, a.createCheckout, a.createPortal, a.createMigrationRequest, a.getTrialOffer, a.acceptTrialOffer, a.receivePolarWebhook, a.receiveResendWebhook, a.getFounding,
 		a.exportWorkspace,
 		a.getWebForm, a.putWebForm, a.submitWebForm,
 		a.createExportLink, a.downloadExport,
@@ -52,7 +52,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getChannelAI, a.setChannelAI, a.setAISourceConsent, a.removeAISourceConsent,
 		a.getIntakeReadiness, a.recordIntakeEvaluation, a.listIntakeEvaluations,
 		a.getConversationChat, a.listChannelThreads, a.listThreadItems, a.listChannelSenders, a.listUnresolvedItems,
-		a.listIntakeGatherings, a.getIntakeGathering, a.decideIntakeGathering, a.requeueIntakeGathering, a.getIntakeSummary, a.getIntakeStats, a.getConversationIntake,
+		a.listIntakeGatherings, a.getIntakeGathering, a.getIntakeGatheringFile, a.decideIntakeGathering, a.requeueIntakeGathering, a.getIntakeSummary, a.getIntakeStats, a.getConversationIntake,
 		a.moveConversationMessages, a.listMessageMoves, a.undoMessageMove,
 		a.getEmailChannel, a.verifyEmailDomain, a.rotateEmailSecret, a.connectGmail, a.disconnectGmail, a.submitWebForm,
 		a.connectMicrosoft, a.disconnectMicrosoft, a.finishMicrosoftConnect, a.finishMicrosoftAdminConsent,
@@ -66,6 +66,12 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getForwardingConfirmation,
 		a.listRoles, a.createRole, a.getRole, a.updateRole, a.deleteRole, a.resetRole, a.restoreRole, a.setAgentRoles,
 		a.createReplyDraft,
+		a.restoreAIDraft, a.downloadAIDraftFile,
+		a.getHelpCenterLanguages, a.putHelpCenterLanguages, a.listKBLanguage, a.listTrashedKBTranslations,
+		a.createKBTranslation, a.getKBTranslation, a.updateKBTranslation, a.deleteKBTranslation, a.restoreKBTranslation,
+		a.listKBTranslationVersions, a.restoreKBTranslationVersion, a.putKBCollectionTranslation, a.deleteKBCollectionTranslation,
+		a.describeOAuthClient, a.allowOAuth,
+		a.addNoteMentions, a.listMentions, a.markMentionsRead, a.setMentionEmail,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

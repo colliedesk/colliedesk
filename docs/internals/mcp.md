@@ -19,7 +19,10 @@
   for a REST client. Do not copy any of them into a tool. Each REST call authenticates again
   (about 3 ms); that is the price of one code path.
 - **Gate.** `requireBearer` runs before the SDK reads any message. No `Authorization: Bearer`
-  header gives 401 with `WWW-Authenticate: Bearer`; cookies are never read. A person's own session
+  header gives 401 with `WWW-Authenticate: Bearer resource_metadata="<scheme>://<host>/.well-known/oauth-protected-resource/mcp"`
+  (the host the app asked), from which an OAuth client starts its sign-in, and a body that says how to
+  connect again in each app (`TestMCPNamesItsProtectedResourceMetadataAndTakesAnOAuthAccessToken`).
+  An agent token and an OAuth access token (`docs/internals/auth.md`, "OAuth grants") pass; cookies are never read. A person's own session
   as a bearer is also 401: it has no permissions of its own, no one-year cap and no attribution, so an AI client holding
   one would act with that person's full rights and leave no trace of the agent
   (`TestMCPRequiresABearerTokenAndNeverACookie`). Every refusal of a
@@ -83,7 +86,10 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
   needs a person in a browser (Gmail, Microsoft, GitHub consent, a fix's GitHub confirmation, billing
   checkout and portal) returns an address only the token's person can finish. `colliedesk_reply_draft`
   writes a draft card (`POST /conversations/{id}/reply-drafts`, `ai_assist:create`) for a person to
-  send. No tool creates a token: `POST /auth/tokens` is `PersonOnly`.
+  send, with files when it gets `files` (multipart, the same fields-then-files reader as a message).
+  `colliedesk_reply_draft_restore` brings an earlier written one back; a draft's file is read through
+  `colliedesk_attachment_get` with `draft_id` rather than a tool of its own. No tool creates a token:
+  `POST /auth/tokens` is `PersonOnly`.
 - **Tags are created by name.** `colliedesk_conversation_update` creates a name in `add_tags` that no
   tag has, because `POST /tags` is a `draft` route and triage must not stall on a missing tag. Every
   other check runs first (assignee, unknown `remove_tags`, a tag in both lists, the conversation
@@ -123,8 +129,10 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
   (`http.DetectContentType`), never the name or stored type, so an SVG (scriptable text) is never an
   image. Text in an image cannot be put under `untrusted_customer_content`: it is one more injection
   channel, so the description says so and `image: false` leaves the picture out. Anything else (PDF,
-  archive, larger image) is name, size, SHA-256 and sniffed type only; no PDF parser runs in the
-  server. The file name is customer text even on a team note, because a team member often forwards a
+  archive) is name, size, SHA-256 and sniffed type only; no PDF parser runs in the server. A larger
+  image comes back as its thumbnail (`GET /attachments/{id}/thumbnail`, at most 320 px, the one the
+  web app shows), with a hint that it is a preview; a picture the server cannot read keeps the old
+  hint and no image. The file name is customer text even on a team note, because a team member often forwards a
   customer's file. `conversation_get` lists attachment ids and sizes.
 - **Files go in as base64, at most 5 MiB a call.** MCP here is remote HTTP only, so a file reaches a
   tool as base64 in the arguments. `note_add`, `reply_send` and `conversation_start` decode `files`,

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -109,23 +110,13 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	}
 	// Counted only once the person has a session, so a failed sign-in is not a started trial. The
 	// answers are fixed lists, never free text, and the event carries no email.
-	properties := onboarding.Properties()
-	if tracked := attribution.Properties(); tracked != nil {
-		if properties == nil {
-			properties = map[string]any{}
-		}
-		maps.Copy(properties, tracked)
-	}
+	properties := map[string]any{"signup_via": a.signupVia(input.Next)}
+	maps.Copy(properties, onboarding.Properties())
+	maps.Copy(properties, attribution.Properties())
 	if visitor := telemetry.WebsiteVisitorID(request); visitor != "" {
-		if properties == nil {
-			properties = map[string]any{}
-		}
 		properties["website_visitor_id"] = visitor
 	}
 	if a.hot().InternalSignups.Match(verified, ip) {
-		if properties == nil {
-			properties = map[string]any{}
-		}
 		properties["internal"] = true
 	}
 	a.recordFunnel("trial_started", workspace.ID, properties)
@@ -137,17 +128,51 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusCreated, result)
 }
 
+// How a trial started, as trial_started's signup_via says: a fixed value, never the page itself.
+const (
+	signupViaWeb            = "web"
+	signupViaAIAppConnector = "ai_app_connector"
+)
+
+// signupVia says whether a sign-up came through an AI app's connector: its sign-in returns (next) to the
+// consent page an AI app opens to connect with OAuth. Only that page of this server counts, as a path or
+// under this server's origin; a query naming it, a longer path or another host is a sign-up on the web.
+func (a *API) signupVia(next string) string {
+	target, err := url.Parse(next)
+	if err != nil || target.Opaque != "" || target.User != nil {
+		return signupViaWeb
+	}
+	if (target.Scheme != "" || target.Host != "") && target.Scheme+"://"+target.Host != a.config.Origin {
+		return signupViaWeb
+	}
+	if target.Path != oauthAuthorizePagePath {
+		return signupViaWeb
+	}
+	return signupViaAIAppConnector
+}
+
 // queueStartTrial queues the report to Meta of a trial that came from a Meta ad. It only writes a row
-// (metaconversions.Worker sends it), and a failure is logged: the trial exists either way.
+// (metaconversions.Worker sends it), and a failure is logged: the trial exists either way. The Meta pixel's
+// _fbp cookie goes with it when the browser has one: colliedesk.com sets it on .colliedesk.com only after
+// the visitor accepted cookies there. Without a click ID nothing is queued, cookie or not.
 func (a *API) queueStartTrial(request *http.Request, workspaceID string, attribution domain.Attribution, clientIP string) {
 	if !a.config.MetaConversions.Enabled() || attribution.FBCLID == "" {
 		return
 	}
 	err := metaconversions.RecordStartTrial(request.Context(), a.db, metaconversions.StartTrial{
 		WorkspaceID: workspaceID, FBCLID: attribution.FBCLID, ClickIDSeenAt: attribution.ClickIDSeenAt, At: a.now(),
-		ClientIP: clientIP, UserAgent: request.UserAgent(), SourceURL: a.config.Origin + "/sign-in",
+		ClientIP: clientIP, UserAgent: request.UserAgent(), SourceURL: a.config.Origin + "/sign-in", FBP: cookieValue(request, "_fbp"),
 	})
 	if err != nil {
 		slog.Error("meta StartTrial not queued", "workspace", workspaceID, "error", err)
 	}
+}
+
+// cookieValue is the value of the named cookie on request, or "".
+func cookieValue(request *http.Request, name string) string {
+	cookie, err := request.Cookie(name)
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
 }

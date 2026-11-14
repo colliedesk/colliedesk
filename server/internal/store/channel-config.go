@@ -663,11 +663,16 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 	return public, nil
 }
 
-// channelReceivedBefore is true for a channel that received a customer message before its inbound
-// journal existed: a conversation on it, not imported, holding an incoming message. A channel with a
-// journal entry never asks.
-const channelReceivedBefore = `SELECT EXISTS(SELECT 1 FROM conversations v WHERE v.workspace_id=$1 AND v.channel_id=$2 AND v.origin IS NULL
+// receivedRule is true for a channel (the SQL expression channel, of workspace $1) that received a customer
+// message before its inbound journal existed: a conversation on it, not imported, holding an incoming
+// message. A channel with a journal entry never asks.
+func receivedRule(channel string) string {
+	return `EXISTS(SELECT 1 FROM conversations v WHERE v.workspace_id=$1 AND v.channel_id=` + channel + ` AND v.origin IS NULL
 	AND EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=v.workspace_id AND m.conversation_id=v.id AND m.kind='incoming'))`
+}
+
+// channelReceivedBefore is receivedRule for the channel $2.
+var channelReceivedBefore = `SELECT ` + receivedRule("$2")
 
 // AddChannelRow adds a channel of a type with its history entry, for a writer that
 // fills the type's own table itself in the same transaction (a new workspace's hosted email). Every
@@ -687,9 +692,14 @@ func AddChannelRow(ctx context.Context, tx pgx.Tx, workspaceID string, kind chan
 
 // ListChannels describes the workspace's live channels, oldest first.
 func (s *Store) ListChannels(ctx context.Context, workspaceID string, includeRemoved bool) ([]ChannelPublic, error) {
+	return s.listChannels(ctx, workspaceID, includeRemoved, "")
+}
+
+// listChannels is ListChannels of one type only; empty is every type.
+func (s *Store) listChannels(ctx context.Context, workspaceID string, includeRemoved bool, kind string) ([]ChannelPublic, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]ChannelPublic, error) {
-		rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+` FROM channels WHERE workspace_id=$1 AND ($2 OR deleted_at IS NULL)
-			ORDER BY deleted_at IS NOT NULL,created_at,id`, workspaceID, includeRemoved)
+		rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+` FROM channels WHERE workspace_id=$1 AND ($2 OR deleted_at IS NULL) AND ($3='' OR type=$3)
+			ORDER BY deleted_at IS NOT NULL,created_at,id`, workspaceID, includeRemoved, kind)
 		if err != nil {
 			return nil, fmt.Errorf("list channels: %w", err)
 		}

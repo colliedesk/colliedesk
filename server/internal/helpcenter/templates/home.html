@@ -1,14 +1,14 @@
 {{define "content"}}
 <section class="hero">
-<h1 class="hero-title">How can we help?</h1>
+<h1 class="hero-title">{{.T.HowCanWeHelp}}</h1>
 {{template "heroSearch" .}}
 {{- with .AskLink}}
-<p class="hero-ask">Prefer to ask in your own words? <a href="{{.}}">{{$.AskLabel}}<span aria-hidden="true"> →</span></a></p>
+<p class="hero-ask">{{$.T.PreferToAsk}} <a href="{{.}}">{{$.AskLabel}}<span aria-hidden="true"> →</span></a></p>
 {{- end}}
 </section>
 {{- if .Collections}}
 <section class="topics" aria-labelledby="topics">
-<h2 id="topics" class="section-label">Browse by topic</h2>
+<h2 id="topics" class="section-label">{{.T.BrowseByTopic}}</h2>
 <ul class="cards">
 {{- range .Collections}}
 <li class="card">
@@ -19,15 +19,16 @@
 <ul class="card-list">{{range .Articles}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
 {{- end}}
 {{- if .Children}}
-<ul class="chips" aria-label="Sections of {{.Name}}">{{range .Children}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ul>
+<ul class="chips" aria-label="{{.SectionsLabel}}">{{range .Children}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ul>
 {{- end}}
-<a class="card-more" href="{{.URL}}">{{if .More}}All {{template "count" .Count}}{{else}}Open {{.Name}}{{end}}<span aria-hidden="true"> →</span></a>
+<a class="card-more" href="{{.URL}}">{{.MoreLabel}}<span aria-hidden="true"> →</span></a>
 </div>
 </li>
 {{- end}}
 </ul>
 </section>
 {{- else}}
-<p class="empty">Nothing is published here yet. Check back soon.</p>
+<p class="empty">{{.T.NothingPublished}}</p>{{with .PrimaryHome}}
+<p class="empty">{{$.T.ReadIn}} <a href="{{.}}" lang="{{$.PrimaryLang}}">{{$.PrimaryName}}</a></p>{{end}}
 {{- end}}
 {{end}}

@@ -325,7 +325,7 @@ func (s *Service) ChatUsage(ctx context.Context, workspaceID string, month time.
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	usage := ChatUsage{Month: month.Format("2006-01"), ResetsAt: month.AddDate(0, 1, 0)}
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		slots, err := readSlots(ctx, tx, workspaceID, false)
+		slots, err := s.readSlots(ctx, tx, workspaceID, false)
 		if err != nil {
 			return err
 		}

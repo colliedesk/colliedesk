@@ -57,7 +57,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
         {settings && <TryForm path={settings.submit_path} />}
         {settings && <label className="invite-link"><span className="field-label">{settingsMessages.webFormSubmitUrl}</span>
           <input readOnly value={submitURL} /><small>{settingsMessages.webFormSubmitHelp}{' '}
-            <a href={tryMessages.guideURL} target="_blank" rel="noreferrer">{tryMessages.guide}</a></small></label>}
+            <a className="web-form-guide" href={tryMessages.guideURL} target="_blank" rel="noreferrer">{tryMessages.guide}</a></small></label>}
         {settings && embed && <EmbedCode url={submitURL} />}
         {older && <details className="muted-copy"><summary>{olderMessages.summary}</summary><p>{olderMessages.body(older)}</p></details>}
       </div>;

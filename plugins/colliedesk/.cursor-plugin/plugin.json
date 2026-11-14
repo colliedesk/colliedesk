@@ -1,0 +1,14 @@
+{
+  "name": "colliedesk",
+  "description": "Work your Colliedesk support inbox from Cursor: the Colliedesk MCP server and skills to triage, draft replies, chase pending conversations and set up channels.",
+  "author": {
+    "name": "HC Labs"
+  },
+  "homepage": "https://colliedesk.com/docs/connect-cursor",
+  "repository": "https://github.com/colliedesk/colliedesk",
+  "license": "AGPL-3.0-only",
+  "keywords": ["helpdesk", "support", "inbox", "mcp"],
+  "logo": ".claude-plugin/icon.png",
+  "skills": "./skills/",
+  "mcpServers": "./cursor-mcp.json"
+}

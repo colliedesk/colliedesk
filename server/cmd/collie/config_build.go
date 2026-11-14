@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/github"
@@ -35,13 +36,15 @@ const maxRetentionDeletionsPerDay = 20
 // builtConfig is every setting parsed, as serve starts with it. buildConfig is the one place that turns a
 // snapshot into it: serve, the CLI's checks and the import all call it, so they agree on what is valid.
 type builtConfig struct {
-	Billing                polar.Config
-	Email                  email.Config
-	Google                 google.Config
-	Microsoft              microsoft.Config
-	GitHub                 github.Config
-	HelpCenterDomain       string
-	AIServer               *ai.ServerProvider
+	Billing          polar.Config
+	Email            email.Config
+	Google           google.Config
+	Microsoft        microsoft.Config
+	GitHub           github.Config
+	HelpCenterDomain string
+	AIServer         *ai.ServerProvider
+	// AIServerOffLabel names the server's provider while the operator set it to Off and kept its models.
+	AIServerOffLabel       string
 	AllowPrivateBaseURLs   bool
 	TrustedProxies         []netip.Prefix
 	InternalSignups        httpapi.InternalSignups
@@ -84,12 +87,13 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 	keep(err)
 	built.AIServer, err = ai.ServerProviderFromEnv(getenv)
 	keep(err)
+	built.AIServerOffLabel, _ = ai.ServerTurnedOff(getenv)
 	switch value := strings.TrimSpace(getenv("AI_ALLOW_PRIVATE_BASE_URLS")); value {
 	case "", "0", "false":
 	case "1", "true":
 		built.AllowPrivateBaseURLs = true
 	default:
-		keep(errors.New("ai.allow_private_base_urls must be true or false"))
+		keep(configerr.Say("ai_allow_private_invalid", nil))
 	}
 	built.TrustedProxies, err = httpapi.ParseTrustedProxies(getenv("TRUSTED_PROXIES"))
 	keep(err)
@@ -105,14 +109,14 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 	keep(err)
 	if value := getenv("RETENTION_MAX_DELETIONS_PER_DAY"); value != "" && err == nil {
 		if count, _ := strconv.Atoi(value); count < 1 || count > maxRetentionDeletionsPerDay {
-			keep(fmt.Errorf("retention.max_deletions_per_day must be between 1 and %d", maxRetentionDeletionsPerDay))
+			keep(configerr.Say("retention_max_range", configerr.Params{"max": maxRetentionDeletionsPerDay}))
 		}
 	}
 	built.ProblemReportWorkspace = strings.TrimSpace(getenv("PROBLEM_REPORT_WORKSPACE"))
 	built.RequireTOTP = strings.TrimSpace(getenv("operator.require_totp")) == "true"
 	built.BillingAlertEmail = strings.TrimSpace(getenv("BILLING_ALERT_EMAIL"))
 	if built.BillingAlertEmail != "" && !strings.Contains(built.BillingAlertEmail, "@") {
-		keep(errors.New("billing.alert_email must be an email address"))
+		keep(configerr.Say("billing_alert_email_invalid", nil))
 	}
 	built.SwitchedOff = map[string]bool{}
 	for _, feature := range serverconfig.Features() {
@@ -121,12 +125,12 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 		case "false":
 			built.SwitchedOff[feature.Name] = true
 		default:
-			keep(fmt.Errorf("%s must be true or false", serverconfig.SwitchKey(feature.Name)))
+			keep(configerr.Say("feature_switch_invalid", configerr.Params{"key": serverconfig.SwitchKey(feature.Name)}))
 		}
 	}
 	if value := strings.TrimSpace(getenv("SMTP_PORT")); value != "" {
 		if port, err := strconv.Atoi(value); err != nil || port < 1 || port > 65535 {
-			keep(errors.New("smtp.port must be a port number between 1 and 65535"))
+			keep(configerr.Say("smtp_port_range", nil))
 		}
 	}
 	return built, errors.Join(errs...)
@@ -144,7 +148,15 @@ func redactSecrets(err error, snap serverconfig.Snapshot) error {
 	if err == nil {
 		return nil
 	}
+	// A param is checked as its text is: the console shows params too.
 	text := err.Error()
+	for _, leaf := range configerr.Leaves(err) {
+		if coded, ok := configerr.As(leaf); ok {
+			for _, value := range coded.Params {
+				text += "\n" + configerr.Text(value)
+			}
+		}
+	}
 	var leaked []string
 	for _, key := range serverconfig.Keys() {
 		if !key.Secret {
@@ -158,7 +170,7 @@ func redactSecrets(err error, snap serverconfig.Snapshot) error {
 	if len(leaked) == 0 {
 		return err
 	}
-	return fmt.Errorf("%s: not valid", strings.Join(leaked, ", "))
+	return configerr.Say("secret_not_valid", configerr.Params{"keys": strings.Join(leaked, ", ")})
 }
 
 // importGroupCheck validates one import group the way serve parses it, from getenv alone.

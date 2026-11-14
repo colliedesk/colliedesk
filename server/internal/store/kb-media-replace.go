@@ -132,6 +132,9 @@ func replaceInKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, articleID s
 			workspaceID, articleID, item.Locale, item.After); err != nil {
 			return 0, nil, err
 		}
+		if err := recordKBTranslationVersion(ctx, tx, workspaceID, articleID, item.Locale, actor, domain.KBArticleMediaReplaced, nil); err != nil {
+			return 0, nil, err
+		}
 		rewritten = append(rewritten, item)
 	}
 	after := domain.ReplaceKBMediaIDs(body, from, to)
@@ -207,6 +210,11 @@ func (s *Store) UndoKBMediaReplacement(ctx context.Context, workspaceID string, 
 			}
 			if tag.RowsAffected() == 0 && !slices.Contains(skipped, item.ArticleID) {
 				skipped = append(skipped, item.ArticleID)
+			}
+			if tag.RowsAffected() > 0 {
+				if err := recordKBTranslationVersion(ctx, tx, workspaceID, item.ArticleID, item.Locale, actor, domain.KBArticleMediaReplaced, nil); err != nil {
+					return domain.KBMediaReplacement{}, err
+				}
 			}
 			restored[item.ArticleID] = true
 		}

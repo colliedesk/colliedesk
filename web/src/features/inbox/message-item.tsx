@@ -5,10 +5,12 @@ import { formatBytes } from '../../lib/format-bytes';
 import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
-import { LockIcon, PaperclipIcon, SparklesIcon } from '../../ui/icons';
+import { LockIcon, SparklesIcon } from '../../ui/icons';
+import { AttachmentList } from './attachment-list';
 import { EmailFrame } from './email-frame';
 import { PlainTextBody } from './plain-text-body';
 import { MarkdownBody } from './markdown-body';
+import { boldMentions, NoteMentionsLine } from './note-mentions';
 
 interface MessageItemProps {
   item: Message;
@@ -23,6 +25,10 @@ interface MessageItemProps {
   note?: ReactNode;
   // channelName is the conversation's channel, the author of a notice it sent by itself (named even once removed).
   channelName?: string;
+  // onOpenMedia opens the conversation's gallery at a picture, video or voice clip of this message.
+  onOpenMedia?: (attachmentId: string) => void;
+  // The person reading: a note that asks them says who asked.
+  currentAgentId?: string;
 }
 
 export function MessageItem(props: MessageItemProps) {
@@ -36,7 +42,7 @@ function AutomatedResponse(props: MessageItemProps) {
   const { item } = props;
   const from = item.origin?.from ?? item.author_name ?? messages.someone;
   return (
-    <div className="message-event">
+    <div className="message-event" data-message-id={item.id}>
       <button type="button" className="message-event-row" aria-expanded={open} title={open ? messages.collapseAutomatedResponse : messages.expandAutomatedResponse}
         onClick={() => setOpen(!open)}>
         <span className="message-event-chevron" aria-hidden="true">›</span>
@@ -48,7 +54,7 @@ function AutomatedResponse(props: MessageItemProps) {
   );
 }
 
-function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, note, channelName }: MessageItemProps) {
+function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu, note, channelName, onOpenMedia, currentAgentId }: MessageItemProps) {
   const [plainText, setPlainText] = useState(false);
   const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.
@@ -66,7 +72,8 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
   const plainAuthor = item.author_name && !item.agent_token && !item.agent_request_id;
   const noticeAuthor = item.notice_kind ? channelName : undefined;
   return (
-    <article className={`message message-${item.kind}`}>
+    // The anchor a Mentions row or a mention email opens the conversation at.
+    <article className={`message message-${item.kind}`} id={`message-${item.id}`}>
       <header className="message-meta">
         <Avatar name={item.author_name ?? item.email?.from ?? (item.notice_kind ? noticeAuthor || messages.channelNoticeAuthor : kindLabel(item))} />
         <div className="message-byline">
@@ -92,8 +99,9 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy, label, menu,
       {item.origin && <OriginLine origin={item.origin} />}
       {showHTML && item.body_html
         ? <EmailFrame title={messages.originalMessage} html={item.body_html} />
-        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} keepBreaks={typedBreaks} /> : <MarkdownBody text={item.body} />}</div>}
-      {files.length > 0 && <AttachmentList items={files} />}
+        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} keepBreaks={typedBreaks} /> : <MarkdownBody text={item.kind === 'note' ? boldMentions(item.body, item.mentions) : item.body} />}</div>}
+      {item.kind === 'note' && item.mentions && <NoteMentionsLine mentions={item.mentions} writer={item.author_name} currentAgentId={currentAgentId} timezone={timezone} />}
+      {files.length > 0 && <AttachmentList items={files} onOpenMedia={onOpenMedia} />}
       {item.kind === 'outgoing' && item.cc.length > 0 && <div className="message-envelope"><span>{messages.ccLine(item.cc)}</span></div>}
       <DeliveryStatus item={item} onRetry={onRetryDelivery} />
       {item.body_html && (
@@ -160,15 +168,3 @@ function OriginLine({ origin }: { origin: MessageOrigin }) {
   );
 }
 
-function AttachmentList({ items }: { items: Attachment[] }) {
-  return (
-    <ul className="message-attachments" aria-label={messages.attachments}>
-      {items.map((file) => (
-        <li key={file.id}>
-          <PaperclipIcon /><a href={`/api/v1/attachments/${file.id}`} download={file.filename} title={messages.downloadAttachment(file.filename)}>{file.filename}</a>
-          <span className="attachment-size">{formatBytes(file.size)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}

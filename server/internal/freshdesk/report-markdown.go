@@ -44,7 +44,7 @@ func (r *Report) Markdown() string {
 		count EntityCount
 	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Inline images", r.InlineImages.EntityCount}, {"Time entries", r.TimeEntries}, {"Saved replies", r.SavedReplies.EntityCount},
 		{"Knowledge base collections", r.KnowledgeBase.Collections}, {"Knowledge base articles", r.KnowledgeBase.Articles},
-		{"Knowledge base translations", r.KnowledgeBase.Translations}, {"Knowledge base images", r.KnowledgeBase.Images.EntityCount}} {
+		{"Knowledge base translations", r.KnowledgeBase.Translations}, {"Knowledge base collection names", r.KnowledgeBase.CollectionNames}, {"Knowledge base images", r.KnowledgeBase.Images.EntityCount}} {
 		fmt.Fprintf(&b, "| %s | %d | %d | %d |\n", row.name, row.count.Source, row.count.Imported, row.count.Failed)
 	}
 	fmt.Fprintf(&b, "\nAttachment bytes: %d in Freshdesk, %d stored. SHA-256 re-verified from storage: %d.\n",
@@ -102,6 +102,8 @@ func (r *Report) Markdown() string {
 	writeList(&b, "Knowledge base limits this import would pass (nothing is imported until they fit)", r.KnowledgeBase.Refused)
 	writeList(&b, "Knowledge base articles imported as drafts, by reason (Freshdesk ids)", draftLines(r.KnowledgeBase.Drafts))
 	writeList(&b, "Knowledge base articles changed in Freshdesk and in Colliedesk; the Colliedesk version was kept (Freshdesk ids)", r.KnowledgeBase.ChangedInBoth)
+	writeList(&b, "Knowledge base translations changed in Freshdesk and in Colliedesk; the Colliedesk version was kept (Freshdesk article id:language)", r.KnowledgeBase.TranslationsChangedInBoth)
+	writeList(&b, "Help center languages added (shown to customers when the Freshdesk portal showed them; change it in Knowledge base → Languages)", r.KnowledgeBase.LanguagesAdded)
 	writeList(&b, "Knowledge base articles made drafts again: Freshdesk no longer shows them to everyone (Freshdesk ids)", r.KnowledgeBase.Unpublished)
 	writeList(&b, "Knowledge base articles deleted for good in Colliedesk, not imported again (Freshdesk ids)", r.KnowledgeBase.DeletedInColliedesk)
 	writeList(&b, "Knowledge base images already gone in Freshdesk (the article keeps the link)", kbGoneLines(r.KnowledgeBase.Images.GoneImages))

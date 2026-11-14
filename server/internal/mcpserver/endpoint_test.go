@@ -87,6 +87,7 @@ var toolNames = []string{
 	"colliedesk_conversation_start",
 	"colliedesk_conversation_update",
 	"colliedesk_conversations_bulk_update",
+	"colliedesk_conversations_spam",
 	"colliedesk_cursor_key_remove",
 	"colliedesk_cursor_key_set",
 	"colliedesk_docs_search",
@@ -118,6 +119,8 @@ var toolNames = []string{
 	"colliedesk_help_center_domain_set",
 	"colliedesk_help_center_freshdesk_redirect_get",
 	"colliedesk_help_center_get",
+	"colliedesk_help_center_languages_get",
+	"colliedesk_help_center_languages_set",
 	"colliedesk_help_center_search_console_get",
 	"colliedesk_help_center_search_console_update",
 	"colliedesk_help_center_theme_check",
@@ -159,6 +162,8 @@ var toolNames = []string{
 	"colliedesk_kb_articles_trash",
 	"colliedesk_kb_collection_create",
 	"colliedesk_kb_collection_delete",
+	"colliedesk_kb_collection_translation_delete",
+	"colliedesk_kb_collection_translation_set",
 	"colliedesk_kb_collection_undelete",
 	"colliedesk_kb_collection_update",
 	"colliedesk_kb_collections_list",
@@ -175,6 +180,15 @@ var toolNames = []string{
 	"colliedesk_kb_media_undelete",
 	"colliedesk_kb_media_update",
 	"colliedesk_kb_order_set",
+	"colliedesk_kb_translation_create",
+	"colliedesk_kb_translation_delete",
+	"colliedesk_kb_translation_get",
+	"colliedesk_kb_translation_history",
+	"colliedesk_kb_translation_undelete",
+	"colliedesk_kb_translation_update",
+	"colliedesk_kb_translation_version_restore",
+	"colliedesk_kb_translations_list",
+	"colliedesk_kb_translations_trash",
 	"colliedesk_kb_video_poster_set",
 	"colliedesk_kb_video_upload_cancel",
 	"colliedesk_kb_video_upload_complete",
@@ -183,19 +197,24 @@ var toolNames = []string{
 	"colliedesk_kb_video_upload_start",
 	"colliedesk_kb_video_upload_status",
 	"colliedesk_member_roles_set",
+	"colliedesk_mentions_list",
+	"colliedesk_mentions_mark_read",
 	"colliedesk_message_move_undo",
 	"colliedesk_message_moves_list",
 	"colliedesk_messages_move",
 	"colliedesk_microsoft_connect",
 	"colliedesk_microsoft_disconnect",
 	"colliedesk_my_display_name_set",
+	"colliedesk_my_mention_email_set",
 	"colliedesk_my_sla_alerts_set",
 	"colliedesk_my_timezone_set",
 	"colliedesk_note_add",
+	"colliedesk_note_mention",
 	"colliedesk_number_series_list",
 	"colliedesk_number_series_set",
 	"colliedesk_problem_report",
 	"colliedesk_reply_draft",
+	"colliedesk_reply_draft_restore",
 	"colliedesk_reply_retry",
 	"colliedesk_reply_send",
 	"colliedesk_response_targets_get",
@@ -235,6 +254,7 @@ var toolNames = []string{
 	"colliedesk_team_member_update",
 	"colliedesk_time_entries_list",
 	"colliedesk_token_revoke",
+	"colliedesk_trial_offer_accept",
 	"colliedesk_web_form_get",
 	"colliedesk_web_form_update",
 	"colliedesk_whoami",
@@ -264,10 +284,15 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_conversation_presence":               {idempotent: true},
 	"colliedesk_conversation_update":                 {idempotent: true},
 	"colliedesk_conversations_bulk_update":           {idempotent: true},
+	"colliedesk_conversations_spam":                  {idempotent: true},
 	"colliedesk_docs_search":                         {readOnly: true},
 	"colliedesk_inbox_activity":                      {readOnly: true},
 	"colliedesk_inbox_search":                        {readOnly: true},
 	"colliedesk_note_add":                            {},
+	"colliedesk_note_mention":                        {idempotent: true},
+	"colliedesk_mentions_list":                       {readOnly: true},
+	"colliedesk_mentions_mark_read":                  {idempotent: true},
+	"colliedesk_my_mention_email_set":                {idempotent: true},
 	"colliedesk_reply_retry":                         {destructive: true},
 	"colliedesk_reply_send":                          {destructive: true},
 	"colliedesk_saved_replies_list":                  {readOnly: true},
@@ -280,6 +305,19 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_saved_reply_undelete":                {},
 	"colliedesk_saved_reply_version_restore":         {},
 	"colliedesk_help_center_get":                     {readOnly: true},
+	"colliedesk_help_center_languages_get":           {readOnly: true},
+	"colliedesk_help_center_languages_set":           {idempotent: true},
+	"colliedesk_kb_translations_list":                {readOnly: true},
+	"colliedesk_kb_translations_trash":               {readOnly: true},
+	"colliedesk_kb_translation_create":               {},
+	"colliedesk_kb_translation_get":                  {readOnly: true},
+	"colliedesk_kb_translation_update":               {},
+	"colliedesk_kb_translation_delete":               {},
+	"colliedesk_kb_translation_undelete":             {},
+	"colliedesk_kb_translation_history":              {readOnly: true},
+	"colliedesk_kb_translation_version_restore":      {},
+	"colliedesk_kb_collection_translation_set":       {idempotent: true},
+	"colliedesk_kb_collection_translation_delete":    {},
 	"colliedesk_help_center_update":                  {idempotent: true},
 	"colliedesk_help_center_freshdesk_redirect_get":  {readOnly: true},
 	"colliedesk_help_center_search_console_get":      {readOnly: true},
@@ -350,6 +388,7 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_token_revoke":                        {destructive: true},
 	"colliedesk_whoami":                              {readOnly: true},
 	"colliedesk_billing_action":                      {},
+	"colliedesk_trial_offer_accept":                  {},
 	"colliedesk_email_channel_disconnect":            {destructive: true},
 	"colliedesk_channels_list":                       {readOnly: true},
 	"colliedesk_channels_get":                        {readOnly: true},
@@ -368,6 +407,7 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_microsoft_disconnect":                {destructive: true},
 	"colliedesk_problem_report":                      {},
 	"colliedesk_reply_draft":                         {},
+	"colliedesk_reply_draft_restore":                 {idempotent: true},
 	"colliedesk_workspace_export":                    {},
 	"colliedesk_workspace_slug_change":               {idempotent: true},
 	"colliedesk_number_series_list":                  {readOnly: true},
@@ -443,7 +483,8 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_results_get":                         {readOnly: true},
 	"colliedesk_results_share_link_get":              {readOnly: true},
 	"colliedesk_results_share_link_create":           {},
-	"colliedesk_results_share_link_revoke":           {idempotent: true},
+	"colliedesk_results_share_link_revoke":           {idempotent: true, destructive: true},
+	"colliedesk_cursor_key_remove":                   {destructive: true},
 	"colliedesk_results_email_set":                   {idempotent: true},
 	"colliedesk_setup_progress_get":                  {readOnly: true},
 	"colliedesk_setup_guide_set":                     {idempotent: true},
@@ -481,6 +522,10 @@ var wantAnnotations = map[string]struct {
 func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {
 	e := newEnv(t)
 	w := e.newWorkspace("List Desk", "admin@list.example.com")
+	openWorld := map[string]bool{}
+	for _, spec := range mcpserver.Catalog() {
+		openWorld[spec.Name] = spec.OpenWorld()
+	}
 	for _, version := range []string{"", "2025-11-25"} {
 		session := e.connect(w.read, version)
 		if info := session.InitializeResult().ServerInfo; info.Name != "colliedesk" || info.Version != testVersion {
@@ -504,8 +549,11 @@ func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {
 				if a == nil || a.ReadOnlyHint != want.readOnly || a.IdempotentHint != want.idempotent || a.Title == "" || tool.Title == "" {
 					t.Errorf("%s: annotations=%+v title=%q, want readOnly=%v idempotent=%v and a title", tool.Name, a, tool.Title, want.readOnly, want.idempotent)
 				}
-				if !want.readOnly && (a == nil || a.DestructiveHint == nil || *a.DestructiveHint != want.destructive) {
-					t.Errorf("%s: a writing tool must state destructiveHint=%v", tool.Name, want.destructive)
+				if a == nil || a.DestructiveHint == nil || *a.DestructiveHint != (want.destructive && !want.readOnly) {
+					t.Errorf("%s: every tool states destructiveHint, %v here", tool.Name, want.destructive && !want.readOnly)
+				}
+				if a == nil || a.OpenWorldHint == nil || *a.OpenWorldHint != openWorld[tool.Name] {
+					t.Errorf("%s: every tool states openWorldHint, %v here: true when it may reach people or systems outside the workspace", tool.Name, openWorld[tool.Name])
 				}
 				if want.destructive && !strings.Contains(tool.Description, "cannot be undone") {
 					t.Errorf("%s: a destructive tool must say it cannot be undone\n%s", tool.Name, tool.Description)

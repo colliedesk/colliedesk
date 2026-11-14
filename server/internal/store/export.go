@@ -119,12 +119,13 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 
 func exportWorkspaceRow(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
 	var workspace export.Workspace
-	err := tx.QueryRow(ctx, `SELECT id::text,slug,name,timezone,status_history_since FROM workspaces WHERE id=$1`, workspaceID).
-		Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone, &workspace.StatusHistorySince)
+	err := tx.QueryRow(ctx, `SELECT id::text,slug,name,timezone,status_history_since,timezone_chosen_at FROM workspaces WHERE id=$1`, workspaceID).
+		Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone, &workspace.StatusHistorySince, &workspace.TimezoneChosenAt)
 	if err != nil {
 		return fmt.Errorf("export workspace: %w", err)
 	}
 	workspace.StatusHistorySince = domain.UTC(workspace.StatusHistorySince)
+	workspace.TimezoneChosenAt = domain.UTCOptional(workspace.TimezoneChosenAt)
 	return sink.Workspace(workspace)
 }
 
@@ -189,7 +190,7 @@ func exportRoles(ctx context.Context, tx pgx.Tx, workspaceID string, sink export
 }
 
 func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,merged_into_id::text,created_at,updated_at,
+	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,merged_into_id::text,spam_since,created_at,updated_at,
 		(SELECT COALESCE(json_agg(json_build_object('channel_id',i.channel_id,'kind',i.kind,'value',i.value,'display_name',i.display_name)
 			ORDER BY i.created_at,i.id),'[]') FROM contact_identities i WHERE i.workspace_id=contacts.workspace_id AND i.contact_id=contacts.id)
 		FROM contacts WHERE workspace_id=$1 ORDER BY id`, workspaceID)
@@ -200,13 +201,17 @@ func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink exp
 	for rows.Next() {
 		var record export.Contact
 		var identities []byte
-		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.MergedIntoID, &record.CreatedAt, &record.UpdatedAt, &identities); err != nil {
+		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.MergedIntoID, &record.SpamSince, &record.CreatedAt, &record.UpdatedAt, &identities); err != nil {
 			return fmt.Errorf("export contacts: %w", err)
 		}
 		if err := json.Unmarshal(identities, &record.Identities); err != nil {
 			return fmt.Errorf("export contact identities: %w", err)
 		}
 		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		if record.SpamSince != nil {
+			at := domain.UTC(*record.SpamSince)
+			record.SpamSince = &at
+		}
 		if err := sink.Contact(record); err != nil {
 			return err
 		}
@@ -638,8 +643,11 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 // exportKB writes the whole knowledge base: collections and articles in the trash too, every version,
 // translation and image, and the help center settings. Articles carry the original HTML an import kept.
 func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,parent_id::text,name,slug,description,position,source_meta,created_at,updated_at,deleted_at,deleted_by_agent_id::text
-		FROM kb_collections WHERE workspace_id=$1 ORDER BY id`, workspaceID)
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,c.source_meta,c.created_at,c.updated_at,c.deleted_at,c.deleted_by_agent_id::text,
+			COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'source_meta',t.source_meta,
+				'created_at',to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
+				ORDER BY t.locale) FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id), '[]'::jsonb)
+		FROM kb_collections c WHERE c.workspace_id=$1 ORDER BY c.id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base collections: %w", err)
 	}
@@ -647,7 +655,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		var record export.KBCollection
 		var meta []byte
 		if err := rows.Scan(&record.ID, &record.ParentID, &record.Name, &record.Slug, &record.Description, &record.Position, &meta,
-			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
+			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID, &record.Translations); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base collections: %w", err)
 		}
@@ -662,7 +670,9 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		return err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT a.id::text,a.collection_id::text,a.position,a.number,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.status,a.published_at,a.author_agent_id::text,a.source_meta,a.source_html,
+	rows, err = tx.Query(ctx, `SELECT a.id::text,a.collection_id::text,
+			ARRAY[a.collection_id::text] || ARRAY(SELECT x.collection_id::text FROM kb_article_collections x
+				WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id AND x.collection_id<>a.collection_id ORDER BY x.collection_id),a.position,a.number,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.status,a.published_at,a.author_agent_id::text,a.source_meta,a.source_html,
 			COALESCE((SELECT array_agg(l.media_id::text ORDER BY l.media_id) FROM kb_article_media l JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id
 				WHERE l.workspace_id=a.workspace_id AND l.article_id=a.id AND m.kind='image'), '{}'),
 			a.created_at,a.updated_at,a.deleted_at,a.deleted_by_agent_id::text,a.ai_excluded_at,a.ai_excluded_by_agent_id::text
@@ -673,7 +683,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBArticle
 		var meta []byte
-		if err := rows.Scan(&record.ID, &record.CollectionID, &record.Position, &record.Number, &record.Title, &record.Slug, &record.BodyMD, &record.SEOTitle, &record.SEODescription, &record.Status, &record.PublishedAt,
+		if err := rows.Scan(&record.ID, &record.CollectionID, &record.CollectionIDs, &record.Position, &record.Number, &record.Title, &record.Slug, &record.BodyMD, &record.SEOTitle, &record.SEODescription, &record.Status, &record.PublishedAt,
 			&record.AuthorAgentID, &meta, &record.SourceHTML, &record.ImageIDs, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID,
 			&record.AIExcludedAt, &record.AIExcludedByAgentID); err != nil {
 			rows.Close()
@@ -715,7 +725,8 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		return err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT article_id::text,locale,title,body_md,source_meta,source_html,created_at,updated_at
+	rows, err = tx.Query(ctx, `SELECT article_id::text,locale,title,slug,body_md,status,published_at,seo_title,seo_description,outdated,outdated_at,author_agent_id::text,
+			source_meta,source_html,created_at,updated_at,deleted_at,deleted_by_agent_id::text
 		FROM kb_article_translations WHERE workspace_id=$1 ORDER BY article_id,locale`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base translations: %w", err)
@@ -723,18 +734,43 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBArticleTranslation
 		var meta []byte
-		if err := rows.Scan(&record.ArticleID, &record.Locale, &record.Title, &record.BodyMD, &meta, &record.SourceHTML, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		if err := rows.Scan(&record.ArticleID, &record.Locale, &record.Title, &record.Slug, &record.BodyMD, &record.Status, &record.PublishedAt, &record.SEOTitle, &record.SEODescription,
+			&record.Outdated, &record.OutdatedAt, &record.AuthorAgentID, &meta, &record.SourceHTML, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base translations: %w", err)
 		}
 		record.SourceMeta = meta
 		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		record.PublishedAt, record.OutdatedAt, record.DeletedAt = domain.UTCOptional(record.PublishedAt), domain.UTCOptional(record.OutdatedAt), domain.UTCOptional(record.DeletedAt)
 		if err := sink.KBArticleTranslation(record); err != nil {
 			rows.Close()
 			return err
 		}
 	}
 	if err := rowsError("export knowledge base translations", rows); err != nil {
+		return err
+	}
+
+	rows, err = tx.Query(ctx, `SELECT article_id::text,locale,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,status,
+			changed_by_agent_id::text,token_id::text,token_label,agent_request_id::text,created_at
+		FROM kb_article_translation_versions WHERE workspace_id=$1 ORDER BY article_id,locale,version`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export knowledge base translation versions: %w", err)
+	}
+	for rows.Next() {
+		var record export.KBArticleTranslationVersion
+		if err := rows.Scan(&record.ArticleID, &record.Locale, &record.Version, &record.Kind, &record.RestoredFromVersion, &record.Title, &record.Slug, &record.BodyMD,
+			&record.SEOTitle, &record.SEODescription, &record.Status, &record.ChangedByAgentID, &record.TokenID, &record.TokenLabel, &record.AgentRequestID, &record.CreatedAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("export knowledge base translation versions: %w", err)
+		}
+		record.CreatedAt = domain.UTC(record.CreatedAt)
+		if err := sink.KBArticleTranslationVersion(record); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err := rowsError("export knowledge base translation versions", rows); err != nil {
 		return err
 	}
 
@@ -825,6 +861,22 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	center.UpdatedAt = domain.UTC(center.UpdatedAt)
 	center.CustomDomainVerifiedAt = domain.UTCOptional(center.CustomDomainVerifiedAt)
+	rows, err = tx.Query(ctx, `SELECT locale,visible,position,created_at,updated_at FROM help_center_languages WHERE workspace_id=$1 ORDER BY position,locale`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export help center languages: %w", err)
+	}
+	center.Languages, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (export.HelpCenterLanguage, error) {
+		var language export.HelpCenterLanguage
+		err := row.Scan(&language.Locale, &language.Visible, &language.Position, &language.CreatedAt, &language.UpdatedAt)
+		language.CreatedAt, language.UpdatedAt = domain.UTC(language.CreatedAt), domain.UTC(language.UpdatedAt)
+		return language, err
+	})
+	if err != nil {
+		return fmt.Errorf("export help center languages: %w", err)
+	}
+	if center.Languages == nil {
+		center.Languages = []export.HelpCenterLanguage{}
+	}
 	return sink.HelpCenter(center)
 }
 
@@ -936,19 +988,36 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	usage.Close()
 	drafts, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,task_id::text,requested_by_agent_id::text,requested_by_token_id::text,prompt,status,source,cc,text,missing_info,
-			sources,warnings,model,outcome,similarity::float8,sent_message_id::text,automatic,answers_message_id::text,reply_needed,created_at,ready_at,decided_at,decided_by_agent_id::text,text_cleared_at
-		FROM ai_drafts WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+			sources,warnings,model,outcome,similarity::float8,sent_message_id::text,automatic,answers_message_id::text,reply_needed,created_at,ready_at,decided_at,decided_by_agent_id::text,text_cleared_at,
+			restored_at,restored_by_agent_id::text,
+			COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'filename',f.filename,'content_type',f.content_type,'size',f.size,'sha256',f.sha256,
+				'created_at',f.created_at,'key',f.storage_key) ORDER BY f.created_at,f.id) FROM ai_draft_files f WHERE f.workspace_id=d.workspace_id AND f.draft_id=d.id),'[]')
+		FROM ai_drafts d WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export AI drafts: %w", err)
 	}
 	defer drafts.Close()
 	for drafts.Next() {
 		var r export.AIDraft
-		var sources, warnings []byte
+		var sources, warnings, files []byte
 		if err := drafts.Scan(&r.ID, &r.ConversationID, &r.TaskID, &r.RequestedByAgentID, &r.RequestedByTokenID, &r.Prompt, &r.Status, &r.Source, &r.CC, &r.Text, &r.MissingInfo,
-			&sources, &warnings, &r.Model, &r.Outcome, &r.Similarity, &r.SentMessageID, &r.Automatic, &r.AnswersMessageID, &r.ReplyNeeded, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID, &r.TextClearedAt); err != nil {
+			&sources, &warnings, &r.Model, &r.Outcome, &r.Similarity, &r.SentMessageID, &r.Automatic, &r.AnswersMessageID, &r.ReplyNeeded, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID, &r.TextClearedAt,
+			&r.RestoredAt, &r.RestoredByAgentID, &files); err != nil {
 			return fmt.Errorf("export AI drafts: %w", err)
 		}
+		var stored []struct {
+			export.AIDraftFile
+			Key string `json:"key"`
+		}
+		if err := json.Unmarshal(files, &stored); err != nil {
+			return fmt.Errorf("export AI draft files: %w", err)
+		}
+		r.Files = make([]export.AIDraftFile, 0, len(stored))
+		for _, file := range stored {
+			file.StorageKey, file.CreatedAt = file.Key, domain.UTC(file.CreatedAt)
+			r.Files = append(r.Files, file.AIDraftFile)
+		}
+		r.RestoredAt = domain.UTCOptional(r.RestoredAt)
 		r.Sources, r.Warnings = sources, warnings
 		r.CreatedAt, r.ReadyAt, r.DecidedAt, r.TextClearedAt = domain.UTC(r.CreatedAt), domain.UTCOptional(r.ReadyAt), domain.UTCOptional(r.DecidedAt), domain.UTCOptional(r.TextClearedAt)
 		if err := sink.AIDraft(r); err != nil {

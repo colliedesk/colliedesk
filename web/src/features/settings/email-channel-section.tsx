@@ -210,7 +210,7 @@ const sharedDomain = (domain: string) => `The verification is for ${domain}: eve
 const repliesHeadings = { leave: 'How replies leave', name: 'The name customers see', domain: 'Your domain' };
 
 function DnsRecordsTable({ records, expiredAt, timezone }: { records: EmailDnsRecord[]; expiredAt: string | null; timezone: string }) {
-  if (records.length === 0) return <p className="muted-copy">{expiredAt ? settingsMessages.dnsRecordsExpired(formatDate(expiredAt, timezone)) : settingsMessages.dnsRecordsNotReady}</p>;
+  if (records.length === 0) return <p className="muted-copy" data-quiet="state">{expiredAt ? settingsMessages.dnsRecordsExpired(formatDate(expiredAt, timezone)) : settingsMessages.dnsRecordsNotReady}</p>;
   return <>
     <p className="muted-copy">{settingsMessages.dnsRecordsHelp}</p>
     {/* A narrow screen scrolls the table sideways inside its own frame, faded at the edges. */}

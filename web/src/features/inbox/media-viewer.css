@@ -1,0 +1,141 @@
+/* The media player and gallery (media-viewer.tsx). Loaded with that chunk, not with the inbox.
+   The seek bar is the one mark: an ink line on a hairline, its knob shown on hover and focus; the time is Plex Mono. */
+
+.media-player { container-type: inline-size; display: grid; min-width: 0; border-radius: var(--radius-sm); }
+.media-screen { position: relative; aspect-ratio: 16 / 9; border-radius: var(--radius-sm); background: #000; overflow: hidden; }
+.media-screen video { display: block; width: 100%; height: 100%; object-fit: contain; cursor: pointer; }
+.media-big-play {
+  position: absolute; inset: 50% auto auto 50%; display: grid; place-items: center; width: 56px; height: 56px; translate: -50% -50%;
+  border: 1px solid rgb(255 255 255 / 0.24); border-radius: var(--radius-full); background: rgb(10 10 10 / 0.6); color: #fafafa;
+  pointer-events: none; transition: background-color var(--dur-fast) var(--ease);
+}
+.media-screen:hover .media-big-play { border-color: rgb(255 255 255 / 0.4); background: rgb(10 10 10 / 0.8); }
+.media-big-play svg { width: 22px; height: 22px; margin-left: 3px; }
+.media-waiting {
+  position: absolute; inset: 50% auto auto 50%; width: 32px; height: 32px; translate: -50% -50%; border: 3px solid rgb(255 255 255 / 0.25);
+  border-top-color: #fafafa; border-radius: var(--radius-full); animation: media-spin 0.8s linear infinite;
+}
+@keyframes media-spin { to { rotate: 360deg; } }
+@media (prefers-reduced-motion: reduce) { .media-waiting { animation-duration: 2.4s; } }
+
+.media-controls { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: var(--space-1) 0; }
+.media-control {
+  --control: 32px; flex: none; width: var(--control); padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2);
+}
+.media-control:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); color: var(--text-1); }
+.media-control svg { width: 16px; height: 16px; }
+.media-toggle { color: var(--text-1); }
+.media-rate { width: auto; min-width: 44px; padding: 0 var(--space-1); font-family: var(--font-mono); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+.media-time { flex: none; color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-label); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.media-volume { display: inline-flex; flex: none; align-items: center; }
+.media-level { flex: none; width: 64px; }
+
+/* Sliders: native range inputs (keys, aria and touch for free), drawn in the app's ink. --filled is set by the player. */
+.media-range {
+  --track: var(--line); --ink: var(--text-1);
+  flex: 1 1 auto; min-width: 48px; min-height: 0; height: 20px; margin: 0; padding: 0; border: 0; border-radius: var(--radius-sm);
+  background: transparent; cursor: pointer; appearance: none; -webkit-appearance: none;
+}
+.media-range:hover:not(:disabled) { border-color: transparent; }
+.media-range:disabled { cursor: default; opacity: 0.45; }
+.media-range::-webkit-slider-runnable-track {
+  height: 4px; border-radius: var(--radius-full); background: linear-gradient(to right, var(--ink) var(--filled, 0%), var(--track) var(--filled, 0%));
+}
+.media-range::-webkit-slider-thumb {
+  width: 12px; height: 12px; margin-top: -4px; border: 0; border-radius: var(--radius-full); background: var(--ink); appearance: none; -webkit-appearance: none;
+  scale: 0; transition: scale var(--dur-fast) var(--ease);
+}
+.media-range:hover::-webkit-slider-thumb, .media-range:focus-visible::-webkit-slider-thumb, .media-range:active::-webkit-slider-thumb { scale: 1; }
+.media-range::-moz-range-track { height: 4px; border-radius: var(--radius-full); background: var(--track); }
+.media-range::-moz-range-progress { height: 4px; border-radius: var(--radius-full); background: var(--ink); }
+.media-range::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: var(--radius-full); background: var(--ink); }
+.media-range:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (pointer: coarse) { .media-range::-webkit-slider-thumb { scale: 1; } }
+
+/* Narrow players (a phone, a thin timeline, the gallery on a phone): the seek bar takes a row of its own, the
+   whole width, above the buttons, which never leave the player. */
+@container (max-width: 25rem) {
+  .media-controls { flex-wrap: wrap; gap: 0 var(--space-1); }
+  .media-seek { order: -1; flex-basis: 100%; }
+  .media-time { margin-right: auto; }
+}
+/* Narrower still: a phone sets the volume with its own keys, so the player drops its volume controls. */
+@container (max-width: 22rem) { .media-volume { display: none; } }
+@media (pointer: coarse), (max-width: 30rem) { .media-control { --control: var(--touch); } }
+
+/* Full screen: the player is the screen, on black, in the dark theme's ink whatever the app's theme. */
+.media-player.is-full {
+  --surface-2: #262626; --text-1: #fafafa; --text-2: #d4d4d4; --text-3: #a3a3a3; --line: #3a3a3a; --focus: #f0b44c;
+  display: flex; flex-direction: column; border-radius: 0; background: #000; color-scheme: dark; padding: 0 var(--space-4) var(--space-2);
+}
+.media-player.is-full .media-screen { flex: 1 1 auto; min-height: 0; aspect-ratio: auto; border-radius: 0; }
+
+/* The gallery: the whole window, always dark like a light box, so a picture reads the same in either theme. */
+.media-gallery-backdrop { position: fixed; z-index: 60; inset: 0; display: flex; background: #080808; animation: media-fade var(--dur) var(--ease); }
+@keyframes media-fade { from { opacity: 0; } }
+.media-gallery {
+  --surface-1: #141414; --surface-2: #262626; --surface-3: #333333; --text-1: #fafafa; --text-2: #d4d4d4; --text-3: #a3a3a3;
+  --line: #3a3a3a; --line-control: #4d4d4d; --line-strong: #787878; --accent-text: #fafafa; --accent-hover: #e0e0e0; --focus: #f0b44c;
+  color-scheme: dark; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; width: 100%; height: 100%; color: var(--text-1);
+}
+.media-gallery:focus { outline: none; }
+.media-gallery-bar { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-3) var(--space-4); }
+.media-gallery-count {
+  flex: none; border: 1px solid var(--line); border-radius: var(--radius-full); padding: 2px var(--space-2); color: var(--text-2);
+  font-family: var(--font-mono); font-size: var(--fs-label); font-variant-numeric: tabular-nums;
+}
+.media-gallery-title { flex: 1 1 auto; min-width: 0; }
+.media-gallery-title h2, .media-gallery-title p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-gallery-title h2 { font-size: var(--fs-ui); font-weight: 600; }
+.media-gallery-title p { color: var(--text-3); font-size: var(--fs-label); }
+.media-gallery-action {
+  display: inline-grid; flex: none; place-items: center; width: 40px; height: 40px; min-height: 0; padding: 0; border: 0; border-radius: var(--radius);
+  background: transparent; box-shadow: none; color: var(--text-2);
+}
+.media-gallery-action:hover:not(:disabled) { background: var(--surface-2); color: var(--text-1); }
+.media-gallery-action svg { width: 18px; height: 18px; }
+.media-gallery-stage { position: relative; display: flex; align-items: center; justify-content: center; gap: var(--space-3); min-height: 0; padding: 0 var(--space-4); }
+.media-gallery-figure { display: flex; flex: 1 1 auto; align-items: center; justify-content: center; min-width: 0; height: 100%; margin: 0; }
+.media-gallery-figure > img { max-width: 100%; max-height: 100%; border-radius: var(--radius-sm); object-fit: contain; animation: media-fade var(--dur) var(--ease); }
+.media-gallery-video .media-player { display: flex; flex-direction: column; width: 100%; max-width: 72rem; height: 100%; }
+.media-gallery-video .media-screen { flex: 1 1 auto; min-height: 0; aspect-ratio: auto; }
+.media-gallery-audio .media-player { width: min(32rem, 100%); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-2) var(--space-3); }
+.media-gallery-audio { flex-direction: column; gap: var(--space-6); }
+.media-gallery-audio-mark { display: grid; place-items: center; width: 120px; height: 120px; border: 1px solid var(--line); border-radius: var(--radius-full); color: var(--text-2); }
+.media-gallery-audio-mark svg { width: 44px; height: 44px; stroke-width: 1.5; }
+.media-gallery-failed { display: grid; justify-items: center; gap: var(--space-3); max-width: 28rem; color: var(--text-2); text-align: center; }
+.media-gallery-failed svg { width: 40px; height: 40px; color: var(--text-3); }
+.media-gallery-nav {
+  flex: none; width: 44px; height: 44px; min-height: 0; padding: 0; border: 0; border-radius: var(--radius-full); background: rgb(255 255 255 / 0.08);
+  box-shadow: none; color: var(--text-1);
+}
+.media-gallery-nav:hover:not(:disabled) { background: rgb(255 255 255 / 0.16); }
+.media-gallery-nav:disabled { opacity: 0.25; }
+.media-gallery-nav svg { width: 20px; height: 20px; }
+.media-gallery-strip { display: flex; gap: var(--space-2); justify-content: safe center; margin: 0; padding: var(--space-3) var(--space-4) var(--space-4); list-style: none; }
+.media-gallery-strip li { flex: none; }
+.media-gallery-strip button {
+  width: 56px; height: 56px; min-height: 0; padding: 0; border: 2px solid transparent; border-radius: var(--radius); background: var(--surface-2);
+  box-shadow: none; opacity: 0.55; overflow: hidden; transition: opacity var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.media-gallery-strip button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-2); opacity: 1; }
+.media-gallery-strip button[aria-current="true"] { border-color: var(--text-1); opacity: 1; }
+.media-gallery-strip img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.media-strip-box { display: block; width: 100%; height: 100%; }
+.media-strip-mark { display: grid; place-items: center; width: 100%; height: 100%; color: var(--text-3); }
+.media-strip-mark.is-broken { color: var(--text-3); opacity: 0.7; }
+
+/* A phone: the arrows sit on the picture's edges, and a swipe moves too. */
+@media (max-width: 30rem) {
+  .media-gallery-bar { gap: var(--space-2); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); }
+  .media-gallery-action { width: var(--touch); height: var(--touch); }
+  .media-gallery-stage { padding: 0; }
+  .media-gallery-nav { position: absolute; z-index: 1; top: 50%; translate: 0 -50%; background: rgb(10 10 10 / 0.6); }
+  .media-gallery-prev { left: var(--space-2); }
+  .media-gallery-next { right: var(--space-2); }
+  .media-gallery-audio { padding: 0 var(--space-4); }
+  .media-gallery-video .media-controls { padding: 0 var(--space-3); }
+  /* Clear of the arrows on the picture's edges. */
+  .media-gallery-failed { padding: 0 calc(44px + var(--space-4)); }
+  .media-gallery-strip button { width: 48px; height: 48px; }
+}

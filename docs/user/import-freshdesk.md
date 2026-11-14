@@ -1,7 +1,7 @@
 # Import from Freshdesk
 
 Colliedesk copies a Freshdesk account into a workspace through the Freshdesk API: in the app under
-**Settings > Import from Freshdesk** (admins, no terminal needed), or with the `collie import freshdesk`
+**Settings > Data > Import from Freshdesk** (admins, no terminal needed), or with the `collie import freshdesk`
 command on your own server. Both end with a reconcile report that compares what Freshdesk holds with
 what Colliedesk now holds. If anything is missing, the report says **FAILED** and lists the Freshdesk
 ids. If the totals could not be confirmed, it says **UNVERIFIED**. Run the import again to retry:
@@ -79,7 +79,9 @@ The whole knowledge base is imported on every run, whatever `--since` says:
 | A folder nested deeper | A third-level collection named after its folders, for example `Advanced / Deep`, listed under the warning `kb_folder_flattened` |
 | Article | Article in Markdown with its title, original created and updated dates, and the author when a Colliedesk agent has the same email |
 | Article images hosted by Freshdesk | Stored by Colliedesk in the knowledge base media library, named after the file in the image address, with the alt text of the image (at most 500 characters); the article points at the stored copy. Their bytes stay as Freshdesk served them |
-| Translations | Kept with the article and in the [export](export.md); not shown in Colliedesk yet |
+| Translations | [Translations](knowledge-base.md#translations) of the same article, with their status (published in Freshdesk stays published, everything else is a draft), search title and description. Tags stay in the export (`source_meta`) |
+| Category and folder names in other languages | The collection's [names in other languages](knowledge-base.md#collection-names) |
+| Supported languages | The help center's [languages](knowledge-base.md#languages): those your Freshdesk portal shows (`portal_languages`) are shown, the others hidden. The Freshdesk primary language becomes the help center's while it has no languages or articles of its own; otherwise it stays and the report warns `kb_primary_language_differs`. `import undo` gives back the primary language the help center had, unless someone changed it since (undo then says it kept it) |
 
 An article is **published** only when it is published in Freshdesk, every folder above it is
 visible to **All Users**, and its category is in your help center's portal. Everything else is
@@ -110,9 +112,14 @@ Colliedesk since: then your version stays and the report lists the article under
 private, or its category left the portal), the next run makes it a draft again, unless your team
 changed it since: then it stays published and the report warns (`kb_article_published_but_not_public`).
 When only a folder or a portal changes the other way, the article stays a draft; publish it in
-Colliedesk. `import undo` removes the imported articles and collections, but keeps an
-article your team edited, restored or deleted since, and the collections that hold it or your own
-articles. An imported image someone kept in the media library stays too, and undo says how many. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
+Colliedesk. The same goes for each translation: a newer Freshdesk translation replaces one nobody
+changed in Colliedesk, and the report lists the others under `kb_translation_changed_in_both`. An
+article whose text changed in Freshdesk while its translation did not gets that translation marked
+**Outdated**. `import undo` removes the imported articles and collections, but keeps an
+article your team edited, restored or deleted since, or one of whose translations your team changed
+or added, and the collections that hold it or your own articles. From an article that stays, undo
+removes the translations only the import wrote; it also removes the collection names the import
+wrote (not one a person set) and the languages it added that hold nothing any more. An imported image someone kept in the media library stays too, and undo says how many. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
 may lack the right), the status is `UNVERIFIED`.
 
 ### Old help center links
@@ -145,7 +152,8 @@ this only:
 - when the import knows the server's address. On the command line that is `APP_ORIGIN`, as the
   server has it; without it nothing is rewritten and the report says so;
 - for articles and saved replies nobody changed in Colliedesk since the import. Changed ones are left
-  as they are and listed. A translation follows its article;
+  as they are and listed. A translation has its own history: a translation someone changed is left,
+  even when its article was not;
 - for links to a page that is public now. A link to a draft, or to something not imported, stays as
   written and is listed. So does a link to an old portal page the help center has no counterpart for,
   such as `/support/tickets/new`.
@@ -182,7 +190,7 @@ center stays verified when your DNS switches. It reads the public home page of t
 script does not count.
 
 - A token is copied only when the help center has none of that kind yet. One you set in
-  [Settings → Help center → Search Console](knowledge-base.md#search-console-and-bing-webmaster-tools)
+  [Knowledge base → Settings → Search Console](knowledge-base.md#search-console-and-bing-webmaster-tools)
   is never replaced.
 - A value that is not 16 to 100 letters, digits, `-` or `_` is not copied; the report says so.
 - A dry run reads nothing. `import undo` leaves the tokens: they only prove who owns the address.
@@ -198,7 +206,7 @@ not change the import's status.
 
 If your help center had its own domain, point it at Colliedesk with a 301 at your DNS provider (see
 [Custom domain](knowledge-base.md#custom-domain)). If it was only on `acme.freshdesk.com`, Freshdesk
-cannot answer 301 from that address, so **Settings → Help center → Old Freshdesk links** gives you a
+cannot answer 301 from that address, so **Knowledge base → Settings → Old Freshdesk links** gives you a
 snippet to paste into the portal before you cancel:
 
 1. Say which Freshdesk plan the account is on. Only the **Pro** and **Enterprise** plans can add code to
@@ -235,7 +243,7 @@ never accepts it as a command-line argument and never prints it.
 
 ## Import in the app
 
-1. Open **Settings > Import from Freshdesk** (it needs the `imports:` permissions, which admins hold; an empty inbox links to it).
+1. Open **Settings > Data > Import from Freshdesk** (it needs the `imports:` permissions, which admins hold; an empty inbox links to it).
 2. Enter your `<account>.freshdesk.com` address and the API key of a Freshdesk **admin** (see
    "Before you start"). If your Freshdesk help center had a domain of its own, enter it under **Old
    help center address** (optional; see "Old help center links"). Then select **Read account**. Colliedesk reads the account and shows what it

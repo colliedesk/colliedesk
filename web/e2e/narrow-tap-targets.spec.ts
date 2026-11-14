@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { servers } from './support/cli';
-import { redeemLink } from './support/browser';
+import { expectIdentityVisible, openQuickStart, redeemLink } from './support/browser';
 import { createWorkspaceWithSlug } from './support/workspace';
 
 // A narrow window (a phone browser that does not report a touch pointer, or a small desktop window)
@@ -10,15 +10,15 @@ test.use({ viewport: { width: 375, height: 812 } });
 
 const controls = 'a, button, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea';
 
-// expectTapSized lists every visible control in scope shorter than 44 px.
-async function expectTapSized(scope: Locator, what: string): Promise<void> {
+// expectTapSized lists every visible control in scope (or every element the selector names) shorter than 44 px.
+async function expectTapSized(scope: Locator, what: string, selector = controls): Promise<void> {
   await expect(scope.first()).toBeVisible();
   const small = await scope.first().evaluate((root, selector) => Array.from(root.querySelectorAll<HTMLElement>(selector)).flatMap((element) => {
     const box = element.getBoundingClientRect();
     if (box.width === 0 || box.height === 0 || getComputedStyle(element).visibility === 'hidden') return [];
     const name = element.getAttribute('aria-label') ?? element.textContent?.trim().slice(0, 40) ?? element.tagName;
     return box.height < 44 ? [`${name}: ${Math.round(box.height)}px`] : [];
-  }), controls);
+  }), selector);
   expect(small, `${what}: every control is at least 44 px tall`).toEqual([]);
 }
 
@@ -30,7 +30,11 @@ async function newDesk(page: Page, label: string): Promise<void> {
 test('on a 375 px screen the empty inbox steps, the composer, every email setup step and the settings sections are tap-sized', async ({ page }) => {
   await newDesk(page, 'Narrow Desk');
   await page.goto(`${servers.main}/`);
-  await expectTapSized(page.getByRole('region', { name: 'Finish setting up' }), 'setup guide rows and Hide');
+  // The top row's Quick start and pen, the top bar's search icon, then the rows of Quick start and Skip these.
+  await expectTapSized(page.getByRole('navigation', { name: 'Main' }), 'Quick start and the pen', '.quick-start-button, .sidebar-new');
+  await expectTapSized(page.locator('.app-topbar'), 'the search icon and Help');
+  await expectTapSized(await openQuickStart(page), 'Quick start rows and Skip these');
+  await page.keyboard.press('Escape');
 
   const headers = { Origin: servers.main };
   const contact = await page.request.post(`${servers.main}/api/v1/contacts`, { headers, data: { name: 'Narrow Customer', email: `narrow-${Date.now()}@example.com` } });
@@ -44,6 +48,9 @@ test('on a 375 px screen the empty inbox steps, the composer, every email setup 
   expect(savedReply.status()).toBe(201);
   await page.goto(`${servers.main}/conversations/${conversation}`);
   await expect(page.getByLabel('Message body')).toBeVisible();
+  // A narrow screen keeps the reply box to one line until it is used: its tabs and tools show once tapped.
+  await expectTapSized(page.locator('.composer-card'), 'the compact reply box');
+  await page.getByLabel('Message body').click();
   await expectTapSized(page.locator('.composer-head'), 'composer tabs');
   await expectTapSized(page.locator('.composer-actions'), 'composer actions');
   await page.getByRole('button', { name: /Insert saved reply/ }).click();
@@ -53,7 +60,9 @@ test('on a 375 px screen the empty inbox steps, the composer, every email setup 
   await page.goto(`${servers.main}/settings/channels/type/email`);
   await expect(page.getByRole('textbox', { name: 'Support address' })).toBeVisible();
   await expectTapSized(page.locator('form').filter({ has: page.getByRole('textbox', { name: 'Support address' }) }), 'email channel form');
-  await expectTapSized(page.getByRole('navigation', { name: 'Settings sections' }), 'settings sections');
+  // On a phone a settings page shows the way back to the settings menu (a page of its own) instead of the menu.
+  expect((await page.getByRole('link', { name: 'All settings' }).boundingBox())?.height, 'way back to the settings menu').toBeGreaterThanOrEqual(44);
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeHidden();
 
   // Every step of the email setup, each with its controls open.
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${Date.now()}@narrow-desk.example`);
@@ -77,6 +86,26 @@ test('on a 375 px screen the empty inbox steps, the composer, every email setup 
   await expectTapSized(page.getByRole('complementary', { name: 'Customers see' }), 'email setup preview');
 });
 
+test('on a 375 px screen the Mentions tabs and Mark all read are tap-sized, and the empty list draws no line under its message', async ({ page }) => {
+  await newDesk(page, 'Mentions Tap');
+  await page.goto(`${servers.main}/mentions`);
+  const empty = page.getByText(/No unread mentions/);
+  await expect(empty).toBeVisible();
+  // The page under the message is blank: no border of the list, its pane or the inbox runs across it.
+  const below = (await empty.boundingBox())!.y + (await empty.boundingBox())!.height;
+  const lines = await page.locator('.inbox-shell').evaluate((shell, below) => [shell, ...Array.from(shell.querySelectorAll<HTMLElement>('*'))].flatMap((element) => {
+    const style = getComputedStyle(element);
+    const box = element.getBoundingClientRect();
+    if (box.width === 0 || box.height === 0) return [];
+    const drawn = (side: 'Top' | 'Bottom') => parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== 'none' && style[`border${side}Color`] !== 'rgba(0, 0, 0, 0)';
+    const name = `${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}`;
+    return [...(drawn('Top') && box.top > below ? [`${name} top at ${Math.round(box.top)}`] : []), ...(drawn('Bottom') && box.bottom > below ? [`${name} bottom at ${Math.round(box.bottom)}`] : [])];
+  }), below);
+  expect.soft(lines, 'no line under the empty Mentions message').toEqual([]);
+  await expectTapSized(page.locator('.mentions-toolbar'), 'Mentions tabs and Mark all read');
+  await page.screenshot({ path: test.info().outputPath('mentions-empty-375.png') });
+});
+
 test('on a 375 px screen the test message conversation, its email links and the contact history link are tap-sized', async ({ page }) => {
   await newDesk(page, 'Narrow Mail');
   await page.goto(`${servers.main}/settings/channels/type/email`);
@@ -91,4 +120,52 @@ test('on a 375 px screen the test message conversation, its email links and the 
   await expectTapSized(page.locator('.message-envelope'), 'incoming email links');
   await page.getByRole('button', { name: 'Show details' }).click();
   await expectTapSized(page.locator('.conversation-source'), 'contact history link');
+});
+
+test('on a 375 px screen every control of the setup flow\'s email step is tap-sized, and the workspace stays on screen', async ({ page }) => {
+  const suffix = `${Date.now()}-${process.pid}`;
+  const name = `Narrow Flow ${suffix}`;
+  const email = `owner-${suffix}@example.com`;
+  await redeemLink(page, createWorkspaceWithSlug(name, email).url);
+  await page.goto(`${servers.main}/setup/email`);
+  await expect(page.getByRole('textbox', { name: 'Support address' })).toBeVisible();
+  await expectTapSized(page.locator('.setup-flow'), 'setup flow, email step');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.evaluate(() => window.scrollY), 'the step scrolls').toBeGreaterThan(0);
+  await expectIdentityVisible(page, name, email);
+});
+
+test('on a 375 px screen the links inside a sentence on Members and on a web form channel are tap-sized', async ({ page }) => {
+  await newDesk(page, 'Narrow Links');
+  // A new workspace holds only the two built-in roles, so Roles offers to make one in a sentence.
+  await page.goto(`${servers.main}/settings/members`);
+  const makeRole = page.getByRole('link', { name: 'Make a role' });
+  await expect(makeRole).toBeVisible();
+  expect((await makeRole.boundingBox())?.height, 'Make a role').toBeGreaterThanOrEqual(44);
+  await makeRole.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: test.info().outputPath('members-375.png') });
+
+  const site = 'https://narrow-links.example';
+  const form = await page.request.post(`${servers.main}/api/v1/channels`, { headers: { Origin: servers.main }, data: { type: 'web_form', name: 'Website form', config: { allowed_origins: [site] } } });
+  expect(form.status()).toBe(201);
+  await page.goto(`${servers.main}/settings/channels/type/web_form`);
+  const guide = page.getByRole('link', { name: 'Read the web form guide' });
+  await expect(guide).toBeVisible();
+  expect((await guide.boundingBox())?.height, 'Read the web form guide').toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: test.info().outputPath('web-form-375.png'), fullPage: true });
+});
+
+test('on a 375 px screen the setup flow\'s AI drafts and reply targets steps are tap-sized, each preset row included', async ({ page }) => {
+  await newDesk(page, 'Narrow Offers');
+  // This server has no built-in AI: the drafts step offers to add a provider.
+  await page.goto(`${servers.main}/setup/ai_drafts`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Let AI draft your replies' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Add a provider/ })).toBeVisible();
+  await expectTapSized(page.locator('.setup-flow'), 'setup flow, AI drafts step');
+  await page.goto(`${servers.main}/setup/reply_targets`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Choose when a reply is due' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use Same day' })).toBeEnabled();
+  await expectTapSized(page.locator('.setup-flow'), 'setup flow, reply targets step');
+  // A preset is chosen by its row, the radio's label.
+  await expectTapSized(page.getByRole('group', { name: 'Reply targets' }), 'reply targets presets', 'label');
 });

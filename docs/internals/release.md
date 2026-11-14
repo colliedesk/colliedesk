@@ -32,13 +32,16 @@ To release one of those commits, re-run CI for it first or tag a later commit.
 
 ## Cutting a release
 
-1. Pick a `main` commit whose CI run passed (normally the head of `main`).
-2. Tag and push it:
+1. Run Release (`gh workflow run release.yml -R colliedesk/colliedesk -f part=minor`). It takes the
+   commit Colliedesk Cloud runs and the next version for `part` (`minor` by default, `patch` for fixes
+   only, `major` for a breaking change; `.github/scripts/release-next.sh`). The first release after
+   the `v0.0.N` ones is `v1.0.0`. Or tag a `main` commit whose CI run passed and push the tag:
    ```sh
-   git tag v0.1.0 <commit> && git push origin v0.1.0
+   git tag v1.2.0 <commit> && git push origin v1.2.0
    ```
-3. `.github/workflows/release.yml` then:
-   - rejects a tag that is not `vX.Y.Z` or `vX.Y.Z-prerelease`;
+2. `.github/workflows/release.yml` then:
+   - refuses a tag `.github/scripts/release-tag-check.sh` does not accept: `vX.Y.Z` from `v1.0.0`,
+     or one of the earlier `v0.0.N`; no other `0.x` and no pre-release suffix;
    - requires a successful CI push run on `main` for that commit;
    - rebuilds the image stamped with the tag and boots it;
    - requires `restore-workspace.sh` in the release commit (the upgrade guide links it at the tag);
@@ -51,8 +54,8 @@ To release one of those commits, re-run CI for it first or tag a later commit.
    - builds the client files (below) before publishing anything, and attests them;
    - creates a GitHub release with generated notes and attaches the client files.
 
-A tag with a hyphen (`v0.2.0-rc.1`) is a prerelease: it gets `X.Y.Z` only and the GitHub release is
-marked prerelease. Local and `go run` builds report `dev`.
+Pre-release tags (`v1.3.0-rc.1`) are refused by the tag check; `release.yml` still marks a release
+with a hyphen as a prerelease if that check ever allows one. Local and `go run` builds report `dev`.
 
 `install.sh` still defaults to `edge`. Switch its default to `latest` after the first stable release
 exists.

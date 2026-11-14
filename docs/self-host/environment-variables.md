@@ -149,15 +149,19 @@ provider that you pay for, the way Colliedesk Cloud does:
 
 ```sh
 docker compose exec server /app/collie config set ai.server.provider=anthropic \
-  'ai.server.models=triage=claude-haiku-5-5,draft=claude-sonnet-5-5|claude-opus-5-5' \
+  'ai.server.models=triage=claude-haiku-5-5,draft=claude-sonnet-5-5' \
   'ai.server.label=Company AI'          # optional; the name workspaces see (default "Server provider")
 docker compose exec -T server /app/collie config set-secret ai.server.api_key < key.txt
 # openai_compatible: also ai.server.base_url, with the version path, e.g. http://ollama:11434/v1
 ```
 
-`ai.server.models` lists, per feature (`triage`, `draft`, `chat`, `intake`), the models a workspace may pick, separated
-by `|`; the first is the default. A feature left out cannot use the server's provider. A change that
-sets some of these settings but not all that are needed is refused and says which are missing. The server's provider can reach any address, your own network included: you chose it. No
+`ai.server.models` sets, per feature (`triage`, `draft`, `chat`, `intake`), the model every workspace on the server's
+provider runs: a workspace picks the provider, never its model. Change it and every workspace follows at once.
+After a `|`, intake's second model is the one it tries when the first fails or answers what cannot be read;
+the other features use only the first. A feature left out cannot use the server's provider. A change that
+sets a provider but not all it needs is refused and says which are missing. Setting the provider to Off
+(`ai.server.provider` empty) turns the server's provider off and keeps the other settings for when it is on again:
+features set to it stop, and their admins see it greyed with the reason. The server's provider can reach any address, your own network included: you chose it. No
 workspace uses it until one of its admins turns a feature on.
 
 To bound what the server's provider spends, price its models and give each workspace a monthly

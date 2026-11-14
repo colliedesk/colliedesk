@@ -18,6 +18,8 @@ interface InvitesSectionProps {
   invites: Invite[];
   timezone: string;
   canCreateInvites: boolean;
+  // canRevokeInvites: Revoke on a pending invite needs team:revoke.
+  canRevokeInvites?: boolean;
   createdInvite?: { url?: string };
   // creatingInvite disables Create invite while one is in flight.
   creatingInvite?: boolean;
@@ -29,7 +31,7 @@ interface InvitesSectionProps {
   onRevokeInvite?: (id: string) => void;
 }
 
-export function InvitesSection({ invites, timezone, canCreateInvites, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite }: InvitesSectionProps) {
+export function InvitesSection({ invites, timezone, canCreateInvites, canRevokeInvites = false, createdInvite, creatingInvite = false, inviteError, roles = [], onCreateInvite, onRevokeInvite }: InvitesSectionProps) {
   const createdInviteUrl = createdInvite?.url;
   const [email, setEmail] = useState('');
   // An invite gives the Agent role unless the person picks others.
@@ -40,7 +42,7 @@ export function InvitesSection({ invites, timezone, canCreateInvites, createdInv
   const chosenNames = roles.filter((role) => chosen.includes(role.id)).map((role) => role.name);
   return (
     <section className="settings-card" aria-labelledby="invites-heading"><div className="section-heading"><h2 id="invites-heading">{messages.invites}</h2><p>{settingsMessages.invitesDescription}</p></div>
-      <div className="settings-body">
+      <div className="settings-body settings-rows">
         {canCreateInvites && <form className="invite-form" onSubmit={(event) => { event.preventDefault(); if (chosen.length > 0) onCreateInvite?.(email, chosen); }}>
           <label className="field"><span>{settingsMessages.inviteEmail}</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <div className="field"><span>{settingsMessages.inviteRole}</span>
@@ -62,7 +64,7 @@ export function InvitesSection({ invites, timezone, canCreateInvites, createdInv
           return <article key={invite.id}>
             <div><strong>{invite.email}</strong><span>{invite.roles.map((role) => role.name).join(', ')}</span>
               <span>{settingsMessages.inviteStates[state]}</span><time>{formatDate(invite.expires_at, timezone)}</time></div>
-            {canCreateInvites && state === 'pending' && <button type="button" className="danger-action" onClick={() => onRevokeInvite?.(invite.id)}>{settingsMessages.revoke}</button>}
+            {canRevokeInvites && state === 'pending' && <button type="button" className="danger-action" onClick={() => onRevokeInvite?.(invite.id)}>{settingsMessages.revoke}</button>}
           </article>;
         })}</div>}
       </div>

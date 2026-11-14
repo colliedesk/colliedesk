@@ -24,7 +24,8 @@ const customerStarted = `
 		ORDER BY m.created_at LIMIT 1) r ON true`
 
 // LoadLive reads the Colliedesk side measured at m: customer-started conversations not created by an
-// import or a problem report, their status history, and the AI drafts decided in the last 30 days.
+// import or a problem report and not in Spam, their status history without the stretches in Spam (a
+// conversation back from Spam is where it was before), and the AI drafts decided in the last 30 days.
 func LoadLive(ctx context.Context, tx pgx.Tx, workspaceID string, m time.Time) (Input, error) {
 	in := Input{Side: Live, Measured: m, End: m}
 	if err := tx.QueryRow(ctx, `SELECT status_history_since FROM workspaces WHERE id=$1`, workspaceID).Scan(&in.HistorySince); err != nil {
@@ -33,12 +34,12 @@ func LoadLive(ctx context.Context, tx pgx.Tx, workspaceID string, m time.Time) (
 	// Volume counts weeks from the first conversation in Colliedesk when it came after a window began
 	// (index conversations_live_created).
 	if err := tx.QueryRow(ctx, `SELECT min(created_at) FROM conversations
-		WHERE workspace_id=$1 AND channel NOT IN ('imported','problem_report')`, workspaceID).Scan(&in.First); err != nil {
+		WHERE workspace_id=$1 AND channel NOT IN ('imported','problem_report') AND status<>'spam'`, workspaceID).Scan(&in.First); err != nil {
 		return in, fmt.Errorf("read the first conversation: %w", err)
 	}
 	in.HistorySince, in.First = in.HistorySince.UTC(), utc(in.First)
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.created_at,f.created_at,r.created_at FROM conversations c `+customerStarted+`
-		WHERE c.workspace_id=$1 AND c.channel NOT IN ('imported','problem_report') AND c.created_at>$3 AND c.created_at<=$2`,
+		WHERE c.workspace_id=$1 AND c.channel NOT IN ('imported','problem_report') AND c.status<>'spam' AND c.created_at>$3 AND c.created_at<=$2`,
 		workspaceID, m, m.Add(-lookback))
 	if err != nil {
 		return in, fmt.Errorf("read conversations: %w", err)
@@ -53,7 +54,7 @@ func LoadLive(ctx context.Context, tx pgx.Tx, workspaceID string, m time.Time) (
 		index[c.ID], ids[i] = i, c.ID
 	}
 	changes, err := tx.Query(ctx, `SELECT conversation_id::text,from_status,to_status,changed_at FROM conversation_status_changes
-		WHERE workspace_id=$1 AND conversation_id=ANY($2::uuid[]) AND source='colliedesk' AND changed_at<=$3
+		WHERE workspace_id=$1 AND conversation_id=ANY($2::uuid[]) AND source='colliedesk' AND changed_at<=$3 AND 'spam'<>ALL(ARRAY[from_status,to_status])
 		ORDER BY conversation_id,changed_at,id`, workspaceID, ids, m)
 	if err != nil {
 		return in, fmt.Errorf("read status history: %w", err)

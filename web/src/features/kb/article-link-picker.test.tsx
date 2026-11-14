@@ -49,7 +49,7 @@ test('while the help center is off it says why there is nothing to link, and an 
   expect(await screen.findByText(/The help center is off, so no article has a public page to link to\./)).toHaveAttribute('role', 'status');
   fireEvent.click(screen.getByRole('button', { name: 'Open help center settings' }));
   // A new tab, so the draft in the reply box stays.
-  expect(opened).toHaveBeenCalledExactlyOnceWith('/settings#help-center-heading', '_blank', 'noopener');
+  expect(opened).toHaveBeenCalledExactlyOnceWith('/knowledge/settings#help-center-heading', '_blank', 'noopener');
   expect(screen.queryByRole('option')).not.toBeInTheDocument();
 });
 

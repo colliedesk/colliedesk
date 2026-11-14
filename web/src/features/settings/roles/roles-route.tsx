@@ -5,137 +5,36 @@ import { api, ConflictError, InvalidRequestError } from '../../../api/client';
 import type { Role, TokenPermission } from '../../../api/schemas';
 import { can } from '../../../lib/can';
 import { useBillingShown } from '../../billing/billing-shown';
-import { SettingsNav } from '../settings-nav';
-import type { Shown } from '../settings-nav';
+import { everyPage, SettingsFrame } from '../settings-frame';
 import { PermissionMatrix } from '../permission-matrix';
 import { roleMessages as m } from '../roles-messages';
 import { permissionLabel, outsidePermissions } from '../token-permissions';
 import { useCreateMutation } from '../../../api/use-create';
+import { carryRoleStatus } from './role-list';
+import type { RolesStatus } from './role-list';
 import '../permission-matrix.css';
 import './roles.css';
 
-// Settings → Roles: the workspace's roles, and one role to create, read, change or delete.
-// page: list, new (with an optional role to start from) or a role's id.
-export type RolesPage = { kind: 'list' } | { kind: 'new'; from?: string } | { kind: 'edit'; id: string };
-
-// undo, when given, is the role just deleted (id and name), which Undo restores.
-type RolesStatus = { text: string; undo?: { id: string; name: string }; team?: boolean };
-// carried is what a save says, kept for the list it opens: the form and the list are two routes, so the
-// list is a new page that would otherwise forget it.
-let carried: RolesStatus | undefined;
+// Settings → Members → a role: one role to create, read, change or delete. The list of roles is a section of
+// Members (role-list.tsx), where a save or a delete goes back to.
+// page: new (with an optional role to start from) or a role's id.
+export type RolesPage = { kind: 'new'; from?: string } | { kind: 'edit'; id: string };
 
 export function RolesRoute({ page }: { page: RolesPage }) {
   const navigate = useNavigate();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const billingShown = useBillingShown(can(me.data, 'billing:read'));
-  const shown: Shown = { general: false, team: false, channels: true, savedReplies: true, exportData: false, billing: billingShown, ai: true, roles: true };
-  const [status, setStatus] = useState<RolesStatus>();
-  const statusLine = useRef<HTMLParagraphElement>(null);
-  const client = useQueryClient();
-  // Once Undo worked the line says so and offers it no more; a failed Undo says that instead.
-  const restore = useCreateMutation({ create: (id: string, key: string) => api.restoreRole(id, key) });
-  const undo = async (role: { id: string; name: string }) => {
-    try {
-      const restored = await restore.mutateAsync(role.id);
-      void client.invalidateQueries({ queryKey: ['roles'] });
-      setStatus({ text: m.restored(restored.name) });
-    } catch (error) {
-      // A refusal (the role is gone, or its name was taken meanwhile) ends Undo; a failure on the way may be tried again.
-      const final = error instanceof InvalidRequestError || (error instanceof Error && error.message === 'API 404');
-      setStatus({ text: `${m.deleted(role.name)} ${final ? m.undoFailed : m.undoRetry}`, undo: final ? undefined : role });
-    }
-  };
-  const [focusStatus, setFocusStatus] = useState(false);
-  useEffect(() => {
-    if (carried) {
-      setStatus(carried);
-      setFocusStatus(true);
-      carried = undefined;
-    }
-  }, []);
-  // After a save or a delete the list opens with what happened, and focus goes there rather than to the page.
-  useEffect(() => {
-    if (focusStatus && status) {
-      statusLine.current?.focus();
-      setFocusStatus(false);
-    }
-  }, [focusStatus, status]);
-  return <main className="settings-page panel roles-page">
-    <header><h1>{m.heading}</h1></header>
-    <div className="settings-layout">
-      <SettingsNav page="/settings/roles" shown={shown} />
-      <div className="settings-sections">
-        {status && <p ref={statusLine} tabIndex={-1} role="status" className="notice notice-plain roles-status"><span>{status.text}</span>
-          {status.team && <a href="/settings#team-heading">{m.goToTeam}</a>}
-          {status.undo && <button type="button" className="link-action" disabled={restore.isPending} onClick={() => void undo(status.undo!)}>{m.undo}</button>}</p>}
-        {page.kind === 'list' ? <RoleList onStatus={setStatus} />
-          : <RoleForm key={page.kind === 'edit' ? page.id : `new-${page.from ?? ''}`} page={page} onDone={(text) => { carried = text; setStatus(text); void navigate({ to: '/settings/roles' }); }} />}
-      </div>
-    </div>
-  </main>;
-}
-
-// RoleList shows each role with what it holds and who holds it.
-function RoleList({ onStatus }: { onStatus: (status: { text: string } | undefined) => void }) {
-  const client = useQueryClient();
-  const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const roles = useQuery({ queryKey: ['roles'], queryFn: () => api.roles() });
-  const deleted = useQuery({ queryKey: ['roles', 'deleted'], queryFn: () => api.roles(true) });
-  const [showDeleted, setShowDeleted] = useState(false);
-  const manage = can(me.data, 'team:manage_roles');
-  const restore = useCreateMutation({ create: (id: string, key: string) => api.restoreRole(id, key), onSuccess: (role) => {
-    void client.invalidateQueries({ queryKey: ['roles'] });
-    onStatus({ text: m.restored(role.name) });
-  } });
-  return <section className="settings-card" aria-labelledby="roles-heading">
-    <div className="section-heading roles-heading">
-      <div><h2 id="roles-heading">{m.heading}</h2><p>{m.description}</p></div>
-      {manage && <a className="button primary-action roles-new" href="/settings/roles/new">{m.newRole}</a>}
-    </div>
-    <div className="settings-body">
-      {roles.isPending ? <div className="roles-loading" aria-busy="true">{[0, 1, 2].map((row) => <span key={row} className="roles-skeleton" />)}</div>
-        : roles.isError ? <div role="alert" className="notice"><span>{m.loadFailed}</span> <button type="button" onClick={() => void roles.refetch()}>{m.tryAgain}</button></div>
-        : <>
-          <div className="data-list roles-list">{roles.data.items.map((role) => <RoleRow key={role.id} role={role} manage={manage} />)}</div>
-          {roles.data.items.length === 2 && manage && <p className="muted-copy">{m.onlySystem} <a href="/settings/roles/new">{m.makeRole}</a></p>}
-        </>}
-      {(deleted.data?.items.length ?? 0) > 0 && <button type="button" className="link-action" aria-expanded={showDeleted} onClick={() => setShowDeleted((open) => !open)}>{m.deletedRoles(deleted.data!.items.length)}</button>}
-      {showDeleted && <div className="data-list roles-deleted">
-        {deleted.data?.items.length === 0 ? <p>{m.noDeletedRoles}</p> : deleted.data?.items.map((role) => <article key={role.id}>
-          <div><strong>{role.name}</strong><span>{m.permissionCount(role.permissions.length)}</span></div>
-          {manage && <button type="button" disabled={restore.isPending} onClick={() => restore.mutate(role.id)}>{m.restore}</button>}
-        </article>)}
-        {restore.isError && <p role="alert" className="error-copy">{restore.error.message}</p>}
-      </div>}
-    </div>
-  </section>;
-}
-
-function RoleRow({ role, manage }: { role: Role; manage: boolean }) {
-  const holders = role.members.map((member) => member.name);
-  const count = role.system === 'admin' ? m.everyPermission : m.permissionCount(role.permissions.length);
-  return <article className="role-row">
-    <div className="role-row-main">
-      <strong>{role.name}</strong>{role.system && <span className="muted-copy role-built-in">{m.builtIn}</span>}
-      {role.description && <span className="muted-copy role-description">{role.description}</span>}
-    </div>
-    <div className="role-row-meta">
-      <span className="role-meta-wide">{count}</span>
-      <span className="role-meta-wide">{m.heldBy(holders)}{holders.length === 0 && manage && <> · <a href="/settings#team-heading">{m.giveToSomeone}</a></>}</span>
-      <span className="role-meta-narrow">{m.meta(count, m.heldBy(holders))}</span>
-    </div>
-    <div className="role-row-actions button-row">
-      <a className="button" href={`/settings/roles/${role.id}`}>{role.editable ? m.edit : m.view}</a>
-      {manage && role.system !== 'admin' && role.assignable && <a className="button" href={`/settings/roles/new?from=${role.id}`}>{m.duplicate}</a>}
-    </div>
-  </article>;
+  return <SettingsFrame page="/settings/roles" title={m.heading} shown={{ ...everyPage, billing: billingShown }} className="roles-page">
+    <RoleForm key={page.kind === 'edit' ? page.id : `new-${page.from ?? ''}`} page={page}
+      onDone={(status) => { carryRoleStatus(status); void navigate({ to: '/settings/members', hash: 'roles-heading' }); }} />
+  </SettingsFrame>;
 }
 
 const AGENT_START: TokenPermission[] = [];
 
 // RoleForm creates a role, or shows and changes one. A change of permissions to a role someone holds or
 // a token follows is shown first, with who it reaches, and saved only on Save and apply.
-function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>; onDone: (status: RolesStatus) => void }) {
+function RoleForm({ page, onDone }: { page: RolesPage; onDone: (status: RolesStatus) => void }) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const roles = useQuery({ queryKey: ['roles'], queryFn: () => api.roles() });
@@ -204,7 +103,7 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
   if (editing && role.isPending) return <section className="settings-card" aria-busy="true"><div className="roles-loading">{[0, 1, 2, 3].map((row) => <span key={row} className="roles-skeleton" />)}</div></section>;
   if (editing && role.isError) {
     return <section className="settings-card"><div className="settings-body" role="alert"><p>{m.deletedWhileOpen}</p>
-      <span className="button-row"><a className="button" href="/settings/roles">{m.backToRoles}</a></span></div></section>;
+      <span className="button-row"><a className="button" href="/settings/members#roles-heading">{m.backToRoles}</a></span></div></section>;
   }
   const save = () => {
     setProblem(undefined);
@@ -242,8 +141,8 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
           {roles.data?.items.filter((item) => item.system !== 'admin').map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select></label>}
       {original && inUse && <p className="muted-copy">
-        {original.members.length > 0 && <>{m.heldByLabel} <LinkedNames names={original.members.map((item) => item.name)} href="/settings#team-heading" />. </>}
-        {original.tokens.length > 0 && <>{m.followedByLabel(original.tokens.length)} <LinkedNames names={original.tokens.map((item) => `${item.label} (${item.owner})`)} href="/settings#sessions-heading" />.</>}
+        {original.members.length > 0 && <>{m.heldByLabel} <LinkedNames names={original.members.map((item) => item.name)} href="/settings/members#team-heading" />. </>}
+        {original.tokens.length > 0 && <>{m.followedByLabel(original.tokens.length)} <LinkedNames names={original.tokens.map((item) => `${item.label} (${item.owner})`)} href="/settings/ai#agent-tokens-heading" />.</>}
       </p>}
       {original?.system === 'agent' && <p className="notice notice-plain"><span>{m.agentBuiltIn(original.members.length)}</span></p>}
       <fieldset className="role-permissions"><legend>{m.permissions}</legend>
@@ -266,7 +165,7 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
           <button ref={saveButton} type="submit" className="primary-action" disabled={busy} aria-describedby={confirming ? 'role-confirm' : undefined}>{busy ? m.saving : confirming ? m.saveAndApply : m.save}</button>
           {confirming && <button type="button" onClick={() => setConfirming(false)}>{m.backToEditing}</button>}
           {original?.system === 'agent' && <button type="button" disabled={busy} onClick={resetToDefault}>{m.resetDefault}</button>}
-          <a className="button" href="/settings/roles">{m.cancel}</a>
+          <a className="button" href="/settings/members#roles-heading">{m.cancel}</a>
         </span>
       </div>}
       {original && original.system === null && !readOnly && <div className="role-delete">
@@ -277,7 +176,7 @@ function RoleForm({ page, onDone }: { page: Exclude<RolesPage, { kind: 'list' }>
                 <button type="button" className="danger-action" disabled={busy} onClick={() => remove.mutate()}>{m.confirm}</button></span></div>
             : <button type="button" className="danger-action" onClick={() => setDeleting(true)}>{m.deleteRole}</button>
           : <p className="muted-copy">{m.inUse(original.members.length, original.invites, original.tokens.length)}{' '}
-              <a href="/settings#team-heading">Team</a> · <a href="/settings#invites-heading">Invites</a> · <a href="/settings#sessions-heading">Sessions</a></p>}
+              <a href="/settings/members#team-heading">Team</a> · <a href="/settings/members#invites-heading">Invites</a> · <a href="/settings/ai#agent-tokens-heading">Tokens</a></p>}
       </div>}
     </form>
   </section>;

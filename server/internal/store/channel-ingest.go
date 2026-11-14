@@ -134,7 +134,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// A decision of a gathering applies only while it is undecided and holds exactly these events.
 	var pending pendingGathering
 	if request.Intake != nil {
-		if pending, err = lockGathering(ctx, tx, request.WorkspaceID, request.Intake.GatheringID, request.EventIDs); err != nil {
+		if pending, err = lockGathering(ctx, tx, request.WorkspaceID, request.Intake.GatheringID, request.EventIDs, request.Intake); err != nil {
 			return result, err
 		}
 	}
@@ -543,7 +543,8 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	facts := rules.Facts{Commanded: commanded, CommandAction: command.Action, IntoConversation: request.IntoConversation, Replay: request.Replay,
 		CommandsOnly: scope.Mode == channels.ModeCommands, Flushing: request.Flushing, Review: channel.Settings.Review,
 		JoinOpen: scope.Unmatched == channels.UnmatchedJoinOpen, Notice: scope.Unmatched == channels.UnmatchedNotice}
-	// A batch of a chat's intake scope: AI may decide where the rules only have a default (auto).
+	// A batch of a chat's intake scope with intake on (suggest or auto): AI decides what a customer wrote,
+	// the rules only a command and a person's choice (rules.AIDecides).
 	level, err := intakeLevel(ctx, tx, channel, definition, in, request)
 	if err != nil {
 		return result, err
@@ -561,8 +562,8 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// What the rules decide before the thread is read: only keeping it or holding it for a person.
 	switch decision := rules.Decide(facts); decision.Action {
 	case rules.Archive:
-		if level == intakeAuto {
-			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+		if aiOn(level) && rules.AIDecides(facts, decision) {
+			return s.holdForIntake(ctx, tx, &journal, in, level, decision, finish)
 		}
 		// Chatter of a scope that opens conversations only on a command is kept, not opened. A message a
 		// join-open scope could join nowhere stays unresolved in its chat, where it is seen and counted.
@@ -589,16 +590,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 				return result, err
 			}
 		}
-		if level == intakeSuggest {
-			if _, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringApplied, decision: decision, decidedByRules: true}); err != nil {
-				return result, err
-			}
-		}
 		result.Status = channels.ResultArchived
 		return finish(result)
 	case rules.Review:
-		if level == intakeAuto {
-			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+		if aiOn(level) && rules.AIDecides(facts, decision) {
+			return s.holdForIntake(ctx, tx, &journal, in, level, decision, finish)
 		}
 		// Collected messages that named no command wait for a person to decide what they are.
 		if level == "" {
@@ -611,24 +607,17 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}); err != nil {
 			return held, err
 		}
-		id, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringReview, reviewReason: ReviewNoCommand, decision: decision})
-		if err != nil {
+		if _, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringReview, reviewReason: ReviewNoCommand, decision: decision}); err != nil {
 			return held, err
-		}
-		// A person decides; at suggest AI says what it would.
-		if level == intakeSuggest {
-			if err := enqueueIntake(ctx, tx, workspaceID, id, now); err != nil {
-				return held, err
-			}
 		}
 		return finish(held)
 	}
-	// At auto, what the rules decide only by default waits for intake, and nothing is created for it
-	// yet: the contact is found once the message is stored. A reopen command names the sender's own
+	// With intake on, what AI decides waits for it, and nothing is created for it yet: the contact is
+	// found once the message is stored. A reopen command names the sender's own
 	// conversation, which needs the contact first; it is a match, never held.
 	reopening := request.IntoConversation == "" && commanded && command.Action == channels.ActionReopen && in.Intent.Ref != ""
 	var contactID, legacyRef, priorStatus string
-	if level != intakeAuto || reopening {
+	if !aiOn(level) || reopening {
 		if contactID, err = s.contactForIdentity(ctx, tx, channel, in.Sender); err != nil {
 			return result, err
 		}
@@ -720,15 +709,33 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	if request.Intake != nil {
 		decision = request.Intake.basisOf(decision, pending)
 	}
-	if level == intakeAuto && decision.Basis == rules.Default {
-		return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
+	if aiOn(level) && rules.AIDecides(facts, decision) {
+		return s.holdForIntake(ctx, tx, &journal, in, level, decision, finish)
 	}
 	if contactID == "" {
 		if contactID, err = s.contactForIdentity(ctx, tx, channel, in.Sender); err != nil {
 			return result, err
 		}
 	}
+	// A sender marked as spam is filed in Spam (MarkSpam): its conversation opens there, or the one it joins
+	// moves there, so it tells nobody and runs no clock.
+	var spamSender bool
+	if err := tx.QueryRow(ctx, `SELECT spam_since IS NOT NULL FROM contacts WHERE workspace_id=$1 AND id=$2`, workspaceID, contactID).Scan(&spamSender); err != nil {
+		return result, fmt.Errorf("read the sender's spam rule: %w", err)
+	}
 	conversationID := decision.ConversationID
+	// A channel that joins only open conversations never adds to a resolved or closed one, whoever decided
+	// (the rules, AI intake, a person accepting a suggestion made before it was resolved): a new conversation
+	// starts. A reopen command naming it is the one way back.
+	if conversationID != "" && channel.Settings.JoinPolicy.JoinsOnlyOpen() && decision.Rule != rules.CommandReopen {
+		var open bool
+		if err := tx.QueryRow(ctx, `SELECT status IN ('open','pending') FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).Scan(&open); err != nil {
+			return result, fmt.Errorf("read the joined conversation's status: %w", err)
+		}
+		if !open {
+			conversationID = ""
+		}
+	}
 	// What intake said the batch adds to a conversation it joins; the rules never say.
 	replyKind := ""
 	if request.Intake != nil && conversationID != "" {
@@ -758,7 +765,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			}
 		}
 		result.Status = channels.ResultCreated
-		if conversationID, err = s.createChannelConversation(ctx, tx, channel, contactID, in, now); err != nil {
+		status := "open"
+		if spamSender {
+			status = "spam"
+		}
+		if conversationID, err = s.createChannelConversation(ctx, tx, channel, contactID, in, now, status); err != nil {
 			return result, err
 		}
 	} else {
@@ -780,8 +791,8 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if replyKind == ReplyAcknowledgement && status != "resolved" {
 			replyKind = ReplySubstantive
 		}
-		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') AND NOT $3 THEN 'open' ELSE status END,
-			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID, replyKind == ReplyAcknowledgement); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN $4 THEN 'spam' WHEN status IN ('resolved','closed') AND NOT $3 THEN 'open' ELSE status END,
+			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID, replyKind == ReplyAcknowledgement, spamSender); err != nil {
 			return result, fmt.Errorf("reopen conversation: %w", err)
 		}
 	}
@@ -833,22 +844,13 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	if level != "" {
+		// What the rules decided: intake off, or a command or a person's choice.
 		decided := gathering{state: GatheringAttached, decision: decision, conversationID: conversationID, contactID: contactID, decidedByRules: true}
-		switch {
-		case level == intakeSuggest && decision.Basis == rules.Default:
-			// The rules applied; AI only suggests what it would have done.
-			decided.state = GatheringApplied
-		case result.Status == channels.ResultCreated:
+		if result.Status == channels.ResultCreated {
 			decided.state = GatheringCreated
 		}
-		id, err := recordGathering(ctx, tx, &journal, in, decided)
-		if err != nil {
+		if _, err := recordGathering(ctx, tx, &journal, in, decided); err != nil {
 			return result, err
-		}
-		if decided.state == GatheringApplied {
-			if err := enqueueIntake(ctx, tx, workspaceID, id, now); err != nil {
-				return result, err
-			}
 		}
 	}
 	if result.Status == channels.ResultCreated && legacyRef != "" {
@@ -869,7 +871,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			notice, kind = channel.Settings.Notices.Reopened, channels.NoticeReopened
 		}
 	}
-	if (result.Status == channels.ResultCreated || reopened) && notice != "" {
+	if (result.Status == channels.ResultCreated || reopened) && notice != "" && !spamSender {
 		// {ref} is the code of the conversation, which the customer types back.
 		var ref string
 		if err := tx.QueryRow(ctx, `SELECT display_ref FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).Scan(&ref); err != nil {
@@ -1075,6 +1077,9 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 		return found, nil
 	}
 	joins := func(status string, updatedAt time.Time) bool {
+		if policy.JoinsOnlyOpen() {
+			return status == "open" || status == "pending"
+		}
 		if policy.Kind != channels.JoinWithinDays || (status != "resolved" && status != "closed") {
 			return true
 		}
@@ -1154,7 +1159,7 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 
 // createChannelConversation opens a conversation from the channel's first message, with the
 // channel's default tags, priority and assignee and those of the command it named.
-func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channel channels.Channel, contactID string, in channels.Inbound, now time.Time) (string, error) {
+func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channel channels.Channel, contactID string, in channels.Inbound, now time.Time, status string) (string, error) {
 	settings := channel.Settings
 	tags := append([]string{}, settings.DefaultTags...)
 	priority := settings.DefaultPriority
@@ -1189,9 +1194,9 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 	if series == "" {
 		series = DefaultNumberSeries
 	}
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id,number_series)
-		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid),$10) RETURNING id::text`,
-		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID, series).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id,number_series,status)
+		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid),$10,$11) RETURNING id::text`,
+		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID, series, status).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	if err := tagConversation(ctx, tx, channel.WorkspaceID, conversationID, tags); err != nil {

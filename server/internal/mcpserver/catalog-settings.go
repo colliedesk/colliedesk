@@ -14,10 +14,12 @@ const (
 
 	sessionSchema = `{"type":"object","required":["id","label","owner","state"],"properties":{"id":{"type":"string"},"label":{"type":"string"},` +
 		`"owner":{"type":"string","description":"Email of the team member it acts as"},"owner_name":{"type":"string"},` +
-		`"token":{"type":["object","null"],"description":"null for a person's sign-in. kind role (follows the role named in role), custom (a list picked when it was made) or legacy (made before roles); given is what it was given; stopped says why a role token does nothing now.",` +
-		`"properties":{"kind":{"type":"string","enum":["role","custom","legacy"]},"role":{"type":["string","null"]},"given":{"type":"array","items":{"type":"string"}},"legacy_tier":{"type":"string"},"stopped":{"type":"string"}}},` +
+		`"token":{"type":["object","null"],"description":"null for a person's sign-in. kind role (follows the role named in role), custom (a list picked when it was made) legacy (made before roles) or oauth (an AI app connected with OAuth: label is the app, it has what its person holds); given is what it was given; stopped says why a role token does nothing now.",` +
+		`"properties":{"kind":{"type":"string","enum":["role","custom","legacy","oauth"]},"role":{"type":["string","null"]},"given":{"type":"array","items":{"type":"string"}},"legacy_tier":{"type":"string"},"stopped":{"type":"string"}}},` +
 		`"permissions":{"type":"array","items":{"type":"string"},"description":"What an agent token was given (resource:action); empty for a person's sign-in"},` +
-		`"this_token":{"type":"boolean"},"state":{"type":"string","enum":["active","revoked","expired"]},"last_seen_at":{"type":"string"},"expires_at":{"type":"string"}}}`
+		`"this_token":{"type":"boolean"},"state":{"type":"string","enum":["active","revoked","expired"]},"last_seen_at":{"type":"string"},"expires_at":{"type":"string"},` +
+		`"app":{"type":"object","description":"Only for an AI app connected with OAuth (label is its name): the browser it was allowed from, when, and whether it must sign in again (disconnected or expired).",` +
+		`"properties":{"user_agent":{"type":"string"},"connected_at":{"type":"string"},"needs_reconnecting":{"type":"boolean"}}}}}`
 
 	// emailChannelInput names one email channel of several; without it a tool acts on the default one.
 	emailChannelInput  = `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"One email channel of several, from colliedesk_channels_list. Leave out for the default one (is_default in colliedesk_channels_list)."}}}`
@@ -34,6 +36,12 @@ const (
 		`"inbound_secret_set":{"type":"boolean","description":"The secret itself is never shown to an agent."},"inbound_url":{"type":"string"},"hosted_address":{"type":["string","null"]},` +
 		`"domain":{"type":"string"},"domain_verified":{"type":"boolean"},"dns_record_name":{"type":"string"},"dns_record_value":{"type":"string"},` +
 		`"smtp_configured":{"type":"boolean"},"sending_from":{"type":["string","null"]},` +
+		`"mail_through_mailbox":{"type":"boolean","description":"Whether customer mail has arrived through the support mailbox. Until it has, new customer mail may still arrive in the team's old help desk; a test message does not count. On Colliedesk Cloud a person moves the mail by forwarding the support mailbox to hosted_address. A mailbox cannot forward to inbound_url, an HTTP address: a self-hosted server needs a forwarder that posts each mail to inbound_url with the channel's inbound secret (docs/self-host/email.md)."},` +
+		`"mail_switch":{"type":"object","required":["imported","mailboxes"],"description":"The workspace's support mailboxes whose customer mail does not arrive here yet, the same for every email channel; the inbox shows one line while mailboxes is not empty. A hosted forwarding address has no mailbox to move and is never listed.",` +
+		`"properties":{"imported":{"type":"boolean","description":"Whether the workspace finished an import from another help desk (not undone)."},` +
+		`"mailboxes":{"type":"array","items":{"type":"object","required":["channel_id","name","support_address","old_help_desk"],"properties":{"channel_id":{"type":"string"},"name":{"type":"string"},"support_address":{"type":"string"},` +
+		`"old_help_desk":{"type":"boolean","description":"Whether new customer mail to this mailbox still arrives in the old help desk: the channel was added before the finished import. False for a mailbox added after it."}}}}}},` +
+		`"answers_before_forwarding":{"type":"string","enum":["colliedesk","support_mailbox"],"description":"Where a customer's answer to a reply goes while mail_through_mailbox is false: colliedesk (it joins the conversation) or support_mailbox (this server cannot receive it; it reaches Colliedesk only once the mailbox forwards here)."},` +
 		`"gmail":{"type":"object","description":"Gmail connected for sending: replies go out from address through Gmail. status failed means replies fail until a person reconnects (colliedesk_gmail_connect).",` +
 		`"required":["available","connected"],"properties":{"available":{"type":"boolean","description":"Whether this server can connect Gmail."},"connected":{"type":"boolean"},` +
 		`"address":{"type":"string"},"status":{"type":"string","enum":["connected","failed"]},"error":{"type":["string","null"]}}},` +
@@ -50,9 +58,8 @@ func workspaceSettingsGetSpec() Spec {
 		Title: "Show the workspace settings",
 		Description: `Show the workspace's name, address (slug) and timezone, and your own timezone (the team member this token acts as). ` +
 			`Times in Colliedesk are stored in UTC; the timezone decides how they are shown and what "today" means.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/auth/me"},
-		Input:    noArguments,
+		REST:  []string{"GET /api/v1/auth/me"},
+		Input: noArguments,
 		Output: `{"type":"object","required":["workspace","your_timezone"],"properties":{"workspace":{"type":"object","properties":{"name":{"type":"string"},"slug":{"type":"string"},"timezone":{"type":"string"}}},` +
 			`"your_timezone":{"type":"string"},"your_timezone_is_the_workspace_default":{"type":"boolean"}}}`,
 		run: workspaceSettingsGet,
@@ -140,7 +147,6 @@ func invitesListSpec() Spec {
 		Name:        "colliedesk_invites_list",
 		Title:       "List invites",
 		Description: `List the workspace's invites, newest first, with their state (pending, accepted, revoked, expired). The one-time link of an invite is never shown.`,
-		ReadOnly:    true,
 		REST:        []string{"GET /api/v1/auth/invites"},
 		Input:       noArguments,
 		Output:      `{"type":"object","required":["invites"],"properties":{"invites":{"type":"array","items":` + inviteSchema + `}}}`,
@@ -152,7 +158,8 @@ func inviteCreateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_invite_create",
 		Title: "Invite a team member",
-		Description: `Invite a person by email with one or more roles by name (the Agent role when you give none); they get those roles on joining, added to any they hold. ` +
+		Description: `Invite a person by email with one or more roles by name (the Agent role when you give none); they get those roles on joining. ` +
+			`Someone already in the workspace cannot be invited this way (already_a_member): change their roles with colliedesk_member_roles_set. ` +
 			`You can only give roles whose every permission you hold. On the hosted cloud a pending invite takes a seat. ` +
 			`The answer holds the one-time sign-in link, shown this once: it is a credential, so give it only to the invited person, privately. Revoke it with colliedesk_invite_revoke.`,
 		REST: []string{"POST /api/v1/auth/invites"},
@@ -168,7 +175,6 @@ func inviteRevokeSpec() Spec {
 		Name:        "colliedesk_invite_revoke",
 		Title:       "Revoke an invite",
 		Description: `Revoke a pending invite, so its link stops working and its seat is free. It cannot be undone: a new invite is needed. ` + confirmFirst,
-		Destructive: true,
 		REST:        []string{"DELETE /api/v1/auth/invites/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["invite_id"],"properties":{"invite_id":{"type":"string",` + uuid + `,"description":"From colliedesk_invites_list."}}}`,
 		Output:      `{"type":"object","required":["revoked"],"properties":{"revoked":{"type":"boolean"}}}`,
@@ -182,11 +188,10 @@ func sessionsListSpec() Spec {
 		Title: "List sessions and agent tokens",
 		Description: `List sign-ins and agent tokens, most recently used first: whose they are, how each token got its permissions (a role it follows, or a list picked when it was made), and whether they are active. ` +
 			`With team:revoke you see the whole workspace; otherwise only those of the person this token acts as. No token value is ever shown.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/auth/sessions"},
-		Input:    noArguments,
-		Output:   `{"type":"object","required":["sessions"],"properties":{"sessions":{"type":"array","items":` + sessionSchema + `}}}`,
-		run:      sessionsList,
+		REST:   []string{"GET /api/v1/auth/sessions"},
+		Input:  noArguments,
+		Output: `{"type":"object","required":["sessions"],"properties":{"sessions":{"type":"array","items":` + sessionSchema + `}}}`,
+		run:    sessionsList,
 	}
 }
 
@@ -197,11 +202,10 @@ func sessionRevokeSpec() Spec {
 		Description: `Sign out a session or revoke an agent token of the workspace, for example a lost laptop or a leaked token. It cannot be undone: the person signs in again, ` +
 			`or makes a new token. Your own person's sessions and tokens need nothing more; another person's need team:revoke, and you cannot sign out someone who holds a permission you lack. ` +
 			`To revoke the token you use now, call colliedesk_token_revoke. ` + confirmFirst,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/auth/sessions/{id}"},
-		Input:       `{"type":"object","additionalProperties":false,"required":["session_id"],"properties":{"session_id":{"type":"string",` + uuid + `,"description":"From colliedesk_sessions_list."}}}`,
-		Output:      `{"type":"object","required":["revoked"],"properties":{"revoked":{"type":"boolean"}}}`,
-		run:         sessionRevoke,
+		REST:   []string{"DELETE /api/v1/auth/sessions/{id}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["session_id"],"properties":{"session_id":{"type":"string",` + uuid + `,"description":"From colliedesk_sessions_list."}}}`,
+		Output: `{"type":"object","required":["revoked"],"properties":{"revoked":{"type":"boolean"}}}`,
+		run:    sessionRevoke,
 	}
 }
 
@@ -210,7 +214,6 @@ func webFormGetSpec() Spec {
 		Name:        "colliedesk_web_form_get",
 		Title:       "Show the web form settings",
 		Description: `Show whether the website contact form is on, which website origins may post to it, and the path they post to.`,
-		ReadOnly:    true,
 		REST:        []string{"GET /api/v1/channels/web-form"},
 		Input:       noArguments,
 		Output:      `{"type":"object","required":["web_form"],"properties":{"web_form":` + webFormSchema + `}}`,
@@ -239,11 +242,10 @@ func emailChannelGetSpec() Spec {
 		Title: "Show the email channel",
 		Description: `Show an email channel: the support address, whether an inbound secret is set (never the secret), where to forward mail, ` +
 			`the DNS record that verifies the sending domain, and the address replies are sent from. ` + emailChannelChoice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/channels/email", "GET /api/v1/channels/{id}/email"},
-		Input:    emailChannelInput,
-		Output:   `{"type":"object","required":["email_channel"],"properties":{"email_channel":` + emailChannelSchema + `}}`,
-		run:      emailChannelGet,
+		REST:   []string{"GET /api/v1/channels/email", "GET /api/v1/channels/{id}/email"},
+		Input:  emailChannelInput,
+		Output: `{"type":"object","required":["email_channel"],"properties":{"email_channel":` + emailChannelSchema + `}}`,
+		run:    emailChannelGet,
 	}
 }
 
@@ -288,9 +290,8 @@ func emailForwardingConfirmationGetSpec() Spec {
 			`This reads the newest one that reached the channel in the last 24 hours: code, confirm_url, received_at and the conversation it opened. ` +
 			`confirm_url is null unless the email passed the trusted sender check and the link is on Google's own host; give the code or link to the person who set up forwarding, never open it yourself. ` +
 			`Not found when none arrived. It reads only.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/channels/{id}/email/forwarding-confirmation"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"The email channel, from colliedesk_channels_list."}}}`,
+		REST:  []string{"GET /api/v1/channels/{id}/email/forwarding-confirmation"},
+		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"The email channel, from colliedesk_channels_list."}}}`,
 		Output: `{"type":"object","required":["code","confirm_url","received_at","conversation_id"],"properties":{"code":{"type":"string"},` +
 			`"confirm_url":{"type":["string","null"]},"received_at":{"type":"string"},"conversation_id":{"type":"string"}}}`,
 		run: emailForwardingConfirmationGet,
@@ -318,9 +319,8 @@ func billingGetSpec() Spec {
 		Description: `Show the hosted cloud plan: trial end, whether the workspace is locked, the subscription status and period end, seats used and the limits. ` +
 			`On a self-hosted server there is no plan. ` +
 			`To buy a plan, open the billing portal or ask for a Freshdesk migration, use colliedesk_billing_action. migration_requested_at is when someone last asked for one (null when none did).`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/billing"},
-		Input:    noArguments,
+		REST:  []string{"GET /api/v1/billing"},
+		Input: noArguments,
 		Output: `{"type":"object","properties":{"billing":{"type":"object","properties":{"plan":{"type":"string"},"status":{"type":"string"},"locked":{"type":"boolean"},` +
 			`"trial_ends_at":{"type":"string"},"current_period_end":{"type":["string","null"]},"cancel_at_period_end":{"type":"boolean"},"migration_requested_at":{"type":["string","null"]},"limits":{"type":"object"},"usage":{"type":"object"}}}},"required":["billing"]}`,
 		run: billingGet,

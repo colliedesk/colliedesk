@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { newSubmitKey } from '../../api/submit-key';
 import { renderSavedReply } from '../../lib/saved-reply-variables';
@@ -15,8 +16,12 @@ import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
 import { composing, isTyping } from '../../lib/typing-target';
 import { messages } from '../../messages';
-import { BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
+import { ArrowUpIcon, BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
 import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
+import { matchingTeammates, mentionAt, mentionedIn, MentionPicker, optionIdOf } from './mention-picker';
+import type { Teammate } from './mention-picker';
+import { mentionMessages } from './mention-messages';
+import { useCaretAnchor } from './caret-anchor';
 
 interface ReplyComposerProps {
   disabled?: boolean;
@@ -26,7 +31,10 @@ interface ReplyComposerProps {
   // Called with files only when some are chosen, and with cc (after the files, which may then be empty)
   // only for a reply that copies someone. aiDraft (last) names the AI draft a reply was written from.
   // With draftKey, every argument is passed and key (last) is the send's Idempotency-Key, kept with the draft.
-  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string, key?: string) => void | Promise<unknown>;
+  // A note that asks teammates passes their ids last (mentions), after key.
+  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string, key?: string, mentions?: string[]) => void | Promise<unknown>;
+  // The teammates a private note can ask by typing @ (askableTeammates); without any, @ is plain text.
+  teammates?: Teammate[];
   // findSent says whether the send under key stored its message; a draft kept with a send's key asks it once
   // when the box opens, and is dropped when it did. Without it such a draft is offered again.
   findSent?: (key: string) => Promise<boolean>;
@@ -74,6 +82,7 @@ const shortcuts: Record<string, Kind> = { r: 'outgoing', n: 'note' };
 
 
 const noAddresses: string[] = [];
+const noTeammates: Teammate[] = [];
 
 // inputOf names the files and copies of a send: each list counted first, a file by name, size and date (its
 // bytes are not read), so a changed attachment or Cc after a lost answer is a new message, never a replay.
@@ -93,7 +102,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, resolveTells, draftKey, findSent }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, resolveTells, draftKey, findSent, teammates = noTeammates }: ReplyComposerProps) {
   // What the role holds: a reply needs messages:send, the lists under the box their own read.
   const holds = useHolds();
   const mayReply = holds('messages:send');
@@ -198,6 +207,32 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     card.current?.querySelector<HTMLInputElement>('.composer-cc input')?.focus();
   }, [showCc]);
   const field = useRef<HTMLTextAreaElement>(null);
+  // The @ being typed in a private note and the teammate the list marks.
+  const [mention, setMention] = useState<{ start: number; query: string }>();
+  const [mentionIndex, setMentionActive] = useState(0);
+  const mentionList = useId();
+  const aiOffHintId = useId();
+  const asksTeammates = kind === 'note' && teammates.length > 0;
+  const mentionOptions = mention && asksTeammates ? matchingTeammates(teammates, mention.query) : [];
+  const mentionOpen = Boolean(mention && asksTeammates) && !disabled;
+  // Fewer matches as the name is typed keep the mark on the last one.
+  const mentionActive = Math.max(0, Math.min(mentionIndex, mentionOptions.length - 1));
+  const followCaret = (text: string, caretAt: number | null) => {
+    const found = asksTeammates && caretAt !== null ? mentionAt(text, caretAt) : undefined;
+    setMention((current) => (found && current && found.start === current.start && found.query === current.query ? current : found));
+    if (!found || found.start !== mention?.start) setMentionActive(0);
+  };
+  // The list opens at the @, like a chat app's: under its line from the @ on, above the line when the screen has no room
+  // under it, and never past an edge of the screen. It lives on the page's body, so a reply box that scrolls never cuts it.
+  const mentionAnchor = useCaretAnchor(field, mentionOpen ? mention : undefined);
+  const pickMention = (person: Teammate) => {
+    if (!mention) return;
+    const end = mention.start + 1 + mention.query.length;
+    const text = `@${person.name} `;
+    caret.current = mention.start + text.length;
+    setBody(body.slice(0, mention.start) + text + body.slice(end));
+    setMention(undefined);
+  };
   const [picking, setPicking] = useState<Picker | null>(null);
   const pickers = replyPickersPart.use();
   const [assist, setAssist] = useState(false);
@@ -264,6 +299,24 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     caret.current = next.length;
     setBody(next);
   };
+  // A phone gives the conversation the screen: the box is one line with Send reply until the agent goes into
+  // it, and stays open while it holds anything (text, files, copies, a list, a notice). It opens when the text
+  // box takes the focus (not a button: Chrome focuses one on mousedown, and the compact buttons would go before
+  // their click), never on the press itself: a touch's pointerdown comes before its focus, and a box that grew
+  // then would move away from the finger. It closes on a press outside (Safari focuses no button, so a blur
+  // alone would close it under the finger) or when the keyboard leaves it. components.css styles data-compact
+  // below 44 rem only.
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    // The @ list floats outside the card: a press on it is still in the box.
+    const onPress = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!card.current?.contains(target) && !mentionAnchor.ref.current?.contains(target)) setActive(false);
+    };
+    document.addEventListener('pointerdown', onPress);
+    return () => document.removeEventListener('pointerdown', onPress);
+  }, [active, mentionAnchor.ref]);
   const reply = kind === 'outgoing' ? body.trim() : '';
   const writing = reply !== '';
   useEffect(() => { onReplyDraft?.(writing); }, [writing, onReplyDraft]);
@@ -279,6 +332,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   // An address typed into Cc that cannot be added would otherwise be dropped from the reply unseen.
   const ccHolds = kind === 'outgoing' && showCc && ccBlocking;
   const canResolve = kind === 'outgoing' && Boolean(onResolve);
+  // The send shortcut as the keyboard writes it: ⌘↵ on a Mac, Ctrl ↵ elsewhere.
+  const sendKeys = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘↵' : 'Ctrl ↵';
   // Whether the last reply asked to resolve too, so Send anyway after a conflict keeps that choice.
   const resolveAfter = useRef(false);
   const blocked = kind === 'outgoing' && noReplies;
@@ -300,6 +355,9 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     const sentCc = kind === 'outgoing' ? cc : [];
     const seen = kind === 'outgoing' && latestReplyNumber !== undefined ? mark.current ?? latestReplyNumber : undefined;
     const fromDraft = kind === 'outgoing' ? aiDraft : undefined;
+    // Every active teammate whose @Name the note holds is asked, picked from the list or typed (a draft kept
+    // through a reload included); deleting the name takes the ask back.
+    const mentions = kind === 'note' ? mentionedIn(sent, teammates) : [];
     setConflict(undefined);
     // The kept draft holds the send's key before the request leaves: a reload meanwhile asks the server about
     // that key before offering the text again, and the same text sent again goes under the same key.
@@ -309,7 +367,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       pendingSend.current = { kind, body, key, input };
       writeDraft(draftKey, { kind, body, sendKey: key, sendInput: input });
     }
-    const send = (draftId?: string) => key ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, sentCc.length > 0 ? sentCc : undefined, seen, draftId, key)
+    const send = (draftId?: string) => mentions.length > 0 ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, undefined, undefined, undefined, key, mentions)
+      : key ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, sentCc.length > 0 ? sentCc : undefined, seen, draftId, key)
       : draftId ? onSubmit?.(kind, sent, sentFiles, sentCc, seen, draftId)
       : seen !== undefined ? onSubmit?.(kind, sent, sentFiles, sentCc, seen)
       : sentCc.length > 0 ? onSubmit?.(kind, sent, sentFiles, sentCc)
@@ -355,15 +414,28 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   }, [disabled, setKind, maySavedReplies]);
   const onFieldKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (composing(event.nativeEvent)) return;
+    // While the @ list is open the arrows move in it, Enter or Tab picks and Esc closes it; the text stays as typed.
+    if (mentionOpen && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const move = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+      if (move && mentionOptions.length > 0) { event.preventDefault(); setMentionActive((mentionActive + move + mentionOptions.length) % mentionOptions.length); return; }
+      if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey && mentionOptions[mentionActive]) { event.preventDefault(); pickMention(mentionOptions[mentionActive]); return; }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMention(undefined); return; }
+    }
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(event.shiftKey); }
     if (event.key === '/' && (event.metaKey || event.ctrlKey) && maySavedReplies) { event.preventDefault(); setPicking('replies'); }
+  };
+  const held = Boolean(body.trim()) || files.length > 0 || picking !== null || assist || ccOpen || ccEdited !== undefined || Boolean(conflict || problem || otherDraft)
+    || otherTab || aiWarnings.length > 0;
+  const compact = !active && !held;
+  const leave = (event: FocusEvent<HTMLDivElement>) => {
+    if (event.relatedTarget && !card.current?.contains(event.relatedTarget as Node)) setActive(false);
   };
   return (
     <div className="composer">
       {aiDraftsFor && !disabled && assistPart.status === 'ready' && <assistPart.module.AutoDraftCard conversationId={aiDraftsFor} customerName={customerName}
         timezone={timezone} hasText={Boolean(body.trim())} canManage={canManage} latestCustomerMessage={latestCustomerMessage} onUse={applyDraft}
         onTryAgain={() => setAssist(true)} />}
-      <div className="composer-card" data-kind={kind} ref={card}>
+      <div className="composer-card" data-kind={kind} data-compact={compact} data-writing={active} ref={card} onFocus={(event) => { if (event.target === (field.current as EventTarget | null)) setActive(true); }} onBlur={leave}>
         <div className="composer-head">
           <div className="composer-tabs" role="group" aria-label={messages.messageKind}>
             {mayReply && <button type="button" aria-pressed={kind === 'outgoing'} onClick={() => setKind('outgoing')}>
@@ -372,17 +444,20 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
               <LockIcon />{messages.noteMode}<kbd aria-hidden="true">N</kbd></button>
           </div>
           <div className="composer-head-end">
-            {kind === 'note' && <span className="composer-hint">{messages.noteHint}</span>}
-            {/* The keys sit up here, where there is room, so the buttons below keep one row. */}
-            <span className="composer-hint composer-keys" aria-hidden="true"><kbd>Ctrl</kbd><kbd>Enter</kbd> {messages.sendShortcut}
-              {canResolve && <span className="composer-keys-resolve">{messages.resolveShortcutAdd} <kbd>Shift</kbd> {messages.resolveShortcut}</span>}</span>
+            {kind === 'note' && <span className="composer-hint">{asksTeammates ? mentionMessages.noteHint : messages.noteHint}</span>}
           </div>
         </div>
         {aiWarnings.length > 0 && kind === 'outgoing' && (
           <p className="composer-warning" role="alert"><strong>{messages.checkBeforeSending}</strong> {aiWarnings.join(', ')}</p>
         )}
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
-          placeholder={kind === 'note' ? messages.notePlaceholder : noReplies ? messages.replyNotSendable : messages.replyPlaceholder} onChange={(event) => { setBody(event.target.value); setOtherTab(false); editedHere.current = true; }} />
+          aria-autocomplete={asksTeammates ? 'list' : undefined}
+          aria-controls={mentionOpen ? mentionList : undefined} aria-activedescendant={mentionOpen && mentionOptions.length > 0 ? optionIdOf(mentionList, mentionActive) : undefined}
+          onBlur={() => setMention(undefined)}
+          placeholder={kind === 'note' ? (asksTeammates ? mentionMessages.notePlaceholder : messages.notePlaceholder) : noReplies ? messages.replyNotSendable : messages.replyPlaceholder}
+          onChange={(event) => { setBody(event.target.value); setOtherTab(false); editedHere.current = true; followCaret(event.target.value, event.target.selectionStart); }} />
+        {mentionOpen && mention && createPortal(<MentionPicker id={mentionList} options={mentionOptions} query={mention.query} active={mentionActive}
+          onActive={setMentionActive} onPick={pickMention} ref={mentionAnchor.ref} style={mentionAnchor.style} />, document.body)}
         {otherTab && <p role="status" className="composer-hint">{messages.draftFromOtherTab}</p>}
         {otherDraft && <p role="status" className="composer-hint">{messages.otherTabDraftDiffers}{' '}
           <button type="button" className="link-action" onClick={() => adopt(otherDraft)}>{messages.useOtherTabDraft}</button>{' '}
@@ -403,17 +478,28 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
         <div className="composer-actions">
+          {/* Send leads the row with its shortcut, Send and resolve beside it; the tools follow on the right (I1-a, I7-a). */}
+          <button className="primary-action" type="button" disabled={disabled || cannotSend} aria-keyshortcuts="Control+Enter Meta+Enter" onClick={() => submit()}>
+            <span className="send-label">{kind === 'note' ? messages.privateNote : messages.reply}</span><kbd className="send-keys" aria-hidden="true">{sendKeys}</kbd><span className="send-icon"><ArrowUpIcon /></span>
+          </button>
+          {canResolve && <button type="button" className="send-and-resolve" disabled={disabled || cannotSend}
+            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)${resolveTells ? messages.sendAndResolveTells(resolveTells) : ''}`} onClick={() => submit(true)}>
+            {messages.sendAndResolve}</button>}
+          {/* The one-line box on a phone keeps a private note one press away, as its tab is when the box is open. */}
+          {compact && kind === 'outgoing' && <button type="button" className="compact-note" disabled={disabled} aria-label={messages.writeNote} data-tip={messages.writeNote}
+            onClick={() => { setKind('note'); field.current?.focus(); }}><LockIcon /></button>}
           {/* Attach is the first tool; the chosen files and their notes take a line above the row (components.css). */}
+          <span className="composer-tools-start" aria-hidden="true" />
           <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
-          {maySavedReplies && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
+          {maySavedReplies && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} data-tip={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
             <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>}
-          {mayArticles && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} title={messages.articles}
+          {mayArticles && <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} data-tip={messages.articles}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
             <BookIcon /><span className="tool-label">{messages.articles}</span></button>}
           {aiDraftsFor && (
-            <button type="button" className="saved-reply-button ai-tool" disabled={disabled} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
+            <button type="button" className="saved-reply-button ai-tool" disabled={disabled} data-tip={messages.draftWithAI} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
               onClick={() => { if (!(assist && drafting)) setAssist((open) => !open); }}>
               <SparklesIcon /><span className="tool-label">{assist && drafting ? messages.drafting : messages.draftWithAI}</span>
               {assistPart.status === 'ready' && !assist && !aiDraft && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
@@ -422,18 +508,13 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           {!aiDraftsFor && aiDraftsOff && canManage && (
             // Its name says what it is (the app's own Settings link keeps the name "Settings"); how to turn
             // drafts on is its description.
-            <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} title={messages.aiDraftsOffAdmin}>
-              <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></a>)}
+            <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} aria-describedby={aiOffHintId} data-tip={messages.aiDraftsOffAdmin}>
+              <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span>
+              <span id={aiOffHintId} className="sr-only">{messages.aiDraftsOffAdmin}</span></a>)}
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>
           )}
-          {canResolve && <button type="button" className="send-and-resolve" disabled={disabled || cannotSend}
-            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)${resolveTells ? messages.sendAndResolveTells(resolveTells) : ''}`} onClick={() => submit(true)}>
-            {messages.sendAndResolve}</button>}
-          <button className="primary-action" type="button" disabled={disabled || cannotSend} onClick={() => submit()}>
-            {kind === 'note' ? messages.privateNote : messages.reply}
-          </button>
         </div>
       </div>
     </div>

@@ -216,8 +216,14 @@ func TestRolesRollbackReopensRequestsAndDropsWrittenDrafts(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE agent_requests SET status='expired', decided_at=now(), reason='Expired after 7 days.' WHERE workspace_id=$1 AND status='expired' AND id=(SELECT id FROM agent_requests WHERE workspace_id=$1 ORDER BY id LIMIT 1)`, ids["one"]); err != nil {
 		t.Fatal(err)
 	}
-	if err := rollbackLatest(ctx, pool); err != nil {
-		t.Fatal(err)
+	// Later migrations are rolled back first, as an operator going back to the release before roles would.
+	for applied := true; applied; {
+		if err := rollbackLatest(ctx, pool); err != nil {
+			t.Fatal(err)
+		}
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE name=$1)`, rolesMigration).Scan(&applied); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var pending, otherExpired, drafts int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE status='pending' AND decided_at IS NULL AND reason IS NULL),

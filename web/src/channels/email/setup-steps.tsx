@@ -10,6 +10,7 @@ import { messages } from '../../messages';
 import { CopyButton } from '../../features/settings/copy-button';
 import { EmailChannelSection, gmailPart } from '../../features/settings/email-channel-section';
 import { GmailDataDisclosure, MicrosoftDataDisclosure } from '../../features/settings/gmail-connection';
+import type { MailboxReturn } from '../../features/settings/gmail-return';
 import { NameForm } from '../../features/settings/name-form';
 import { saveState } from '../../features/settings/save-feedback';
 import { settingsMessages } from '../../features/settings/settings-messages';
@@ -21,8 +22,9 @@ import { setupMessages as m } from './setup-messages';
 import { useInboundSecret, useMailbox } from './email-shared';
 import { GmailConfirmation } from './forwarding-confirmation';
 
-// useRefetchOnActivity reloads the channel whenever the app's inbox poll (useInboxActivity) brings a new or
-// changed conversation: the first forwarded email shows here without a second poll. Only while active.
+// useRefetchOnActivity reloads the channel and its email settings whenever the app's inbox poll
+// (useInboxActivity) brings a new or changed conversation: the first forwarded email shows here without a
+// second poll. Only while active.
 export function useRefetchOnActivity(channelID: string, active: boolean) {
   const client = useQueryClient();
   useEffect(() => {
@@ -33,6 +35,7 @@ export function useRefetchOnActivity(channelID: string, active: boolean) {
       if (!data?.new_conversations?.length && !data?.updated?.length) return;
       void client.invalidateQueries({ queryKey: ['channel', channelID] });
       void client.invalidateQueries({ queryKey: ['channels'] });
+      void client.invalidateQueries({ queryKey: ['email-channel', channelID] });
       void client.invalidateQueries({ queryKey: ['forwarding-confirmation', channelID] });
     });
   }, [client, channelID, active]);
@@ -72,6 +75,9 @@ export function ForwardStep({ channel, settings, canManage, timezone, provider, 
   const prefix = useId();
   const secret = useInboundSecret(channel.id, settings.channel?.secret_set === true, refresh);
   const received = channel.status.state === 'working' || Boolean(channel.last_inbound_at);
+  // A test message, Gmail's forwarding confirmation, dropped spam or an answer to a reply+ address makes the
+  // channel working, yet no customer mail came through the mailbox (the inbox says so too).
+  const noCustomerMail = received && settings.mail_through_mailbox === false;
   return <div className="setup-body">
     {hosted && <div className="copy-field setup-copy">
       <label className="invite-link"><span className="field-label">{m.forwardTo}</span><input readOnly value={hosted} /></label>
@@ -92,8 +98,8 @@ export function ForwardStep({ channel, settings, canManage, timezone, provider, 
       </>}
     </div>
     {(tab === 'gmail' || tab === 'workspace') && <GmailConfirmation channelID={channel.id} timezone={timezone} waiting={!received} />}
-    <p role="status" className={`setup-live ${received ? 'setup-live-ok' : ''}`}>
-      {received ? m.firstEmail(channel.last_inbound_at ? clockTime(channel.last_inbound_at, timezone) : '') : m.waitingFirstEmail}</p>
+    <p role="status" className={`setup-live ${received && !noCustomerMail ? 'setup-live-ok' : ''}`}>
+      {noCustomerMail ? m.noCustomerMailYet : received ? m.firstEmail(channel.last_inbound_at ? clockTime(channel.last_inbound_at, timezone) : '') : m.waitingFirstEmail}</p>
     <div className="setup-actions">
       <button type="button" className="primary-action" disabled={!received} onClick={onContinue}>{m.continue}</button>
       {!received && <><small className="muted-copy">{m.continueLocked}</small>
@@ -114,16 +120,23 @@ interface RepliesProps {
   onSkip: () => void;
   // beforeLeave runs just before the browser leaves for a mailbox provider's sign-in.
   beforeLeave: () => void;
+  // returned: the outcome that sign-in came back with, shown in the mailbox block (why it failed, the approval
+  // link a Microsoft 365 admin needs).
+  returned?: MailboxReturn;
 }
 
 const choices: RepliesChoice[] = ['gmail', 'microsoft', 'colliedesk'];
 
-export function RepliesStep({ channelID, settings, canManage, timezone, provider, done, onContinue, onSkip, beforeLeave }: RepliesProps) {
+export function RepliesStep({ channelID, settings, canManage, timezone, provider, done, onContinue, onSkip, beforeLeave, returned }: RepliesProps) {
   const client = useQueryClient();
   const refresh = () => Promise.all(['email-channel', 'channel', 'channels'].map((key) => client.invalidateQueries({ queryKey: key === 'channel' ? [key, channelID] : [key] })));
   const best = recommended(provider);
-  const [choice, setChoice] = useState<RepliesChoice>(best);
-  useEffect(() => setChoice(best), [best]);
+  // The choice open first: the provider a sign-in just came back from, else the mailbox already connected,
+  // else the recommended one. Its block says what happened.
+  const connected: RepliesChoice | undefined = settings.microsoft.connection ? 'microsoft' : settings.gmail.connection ? 'gmail' : undefined;
+  const initial: RepliesChoice = returned ? (returned.provider === 'microsoft' ? 'microsoft' : 'gmail') : connected ?? best;
+  const [choice, setChoice] = useState<RepliesChoice>(initial);
+  useEffect(() => setChoice(initial), [initial]);
   useEffect(gmailPart.preload, []);
   const mailbox = useMailbox(channelID, refresh, beforeLeave);
   const verifyDomain = useMutation({ mutationFn: () => channelsApi.emailVerifyDomain(channelID), onSettled: refresh });
@@ -152,13 +165,13 @@ export function RepliesStep({ channelID, settings, canManage, timezone, provider
         ? <>{verifyDomain.isError && !(verifyDomain.error instanceof InvalidRequestError) && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}
             <EmailChannelSection part="domain" settings={settings} timezone={timezone} canManage={canManage} onVerifyDomain={() => verifyDomain.mutate()} verifyPending={verifyDomain.isPending}
               verifyError={verifyDomain.error instanceof InvalidRequestError ? verifyDomain.error.message : undefined} /></>
-        : !connection && available && canManage
+        : !connection && available && canManage && !returned
           ? <>{mailboxFor === 'google' ? <GmailDataDisclosure /> : <MicrosoftDataDisclosure />}
               {mailbox.error && <p role="alert" className="error-copy">{mailbox.error}</p>}
               <span className="button-row"><button type="button" className="primary-action" disabled={Boolean(mailbox.pending)} onClick={() => mailbox.connect(mailboxFor)}>
                 {mailbox.pending ? m.opening : mailboxFor === 'google' ? m.connectGmail : m.connectMicrosoft}</button></span></>
           : <EmailChannelSection part="mailbox" settings={settings} timezone={timezone} canManage={canManage} onConnectMailbox={mailbox.connect} onDisconnectMailbox={mailbox.disconnect}
-              mailboxPending={mailbox.pending} mailboxError={mailbox.error} />}
+              mailboxPending={mailbox.pending} mailboxError={mailbox.error} mailboxReturned={returned} />}
     </div>
     <div className="setup-actions">
       {done && <button type="button" className="primary-action" onClick={onContinue}>{m.continue}</button>}

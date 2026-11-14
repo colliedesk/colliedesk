@@ -9,9 +9,11 @@ import { AIPage } from './ai-page';
 import type { FieldError } from './ai-page';
 import { useCreateAction } from '../../api/use-create';
 import { AIChatSettingsRoute } from './ai-chat-route';
+import { AIAgentsSections } from './ai-agents-sections';
 import { useBillingShown } from '../billing/billing-shown';
 import { can } from '../../lib/can';
 import { useIntakeSummary } from '../review/use-intake-summary';
+import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 
 const consentKey = 'colliedesk.ai-consent-dismissed';
 
@@ -67,7 +69,9 @@ export function AIRoute({ path = '' }: { path?: string } = {}) {
 function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: string) => void }) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings, enabled: Boolean(me.data) });
+  // A person whose roles may not read the AI settings sees the AI agents alone and is asked for nothing else.
+  const readsAI = can(me.data, 'ai_settings:read');
+  const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings, enabled: readsAI });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const isAdmin = can(me.data, 'ai_settings:update');
   const billingShown = useBillingShown(isAdmin);
@@ -108,11 +112,16 @@ function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: s
   const [usageMonth, setUsageMonth] = useState<string>();
   const usage = useQuery({ queryKey: ['ai-usage', usageMonth], queryFn: () => aiApi.usage(usageMonth ?? ''), enabled: isAdmin && Boolean(usageMonth) });
   const failed = [slot, consent, check].find((mutation) => mutation.isError)?.error;
+  // A link to the agent tokens (#agents-heading: a refused token call, an MCP answer; #agent-tokens-heading:
+  // the roles editor) arrives before the sections do; the built-in AI above them
+  // is drawn from its own request and pushes them down.
+  useScrollToHashWhenReady(!me.isPending);
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
   const error = failed ? refusal(failed).text : undefined;
   return <AIPage chatChannels={chatChannels} isAdmin={isAdmin} workspaceName={me.data.workspace.name} timezone={me.data.timezone ?? 'UTC'}
     shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
       billing: billingShown, importData: isAdmin, ai: true }}
+    builtIn={readsAI} agents={<AIAgentsSections />}
     settings={settings.data} loadFailed={settings.isError} showConsent={!dismissed && neverSet(settings.data)}
     busySlot={busySlot} busyProvider={busyProvider} error={error}
     onSetSlot={(name, input) => { consent.reset(); check.reset(); slot.mutate({ name, input }); }}

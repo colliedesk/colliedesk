@@ -3,6 +3,7 @@
 
 export const exampleOrigin = "https://desk.example.com";
 export const mcpServerName = "colliedesk";
+export const pluginMCPURL = "https://app.colliedesk.com/mcp";
 export const tokenEnv = "COLLIEDESK_TOKEN";
 export const tokenPrefix = "cdk_agent_";
 
@@ -17,10 +18,13 @@ export const connectHosts = [
 export type ConnectHostID = (typeof connectHosts)[number]['id'];
 
 export const connectSnippets = {
-  claudeCodeCLI: "claude mcp add --transport http colliedesk https://desk.example.com/mcp --header 'Authorization: Bearer ${COLLIEDESK_TOKEN}'",
-  claudeCodePlugin: "claude plugin install colliedesk --marketplace colliedesk/colliedesk --config url=https://desk.example.com/mcp",
-  claudeCodeToken: "/plugin configure colliedesk@colliedesk",
+  claudeCodeCLI: "claude mcp add --transport http colliedesk https://desk.example.com/mcp",
+  claudeCodeCLILogin: "claude mcp login colliedesk",
+  claudeCodeLogin: "claude mcp login plugin:colliedesk:colliedesk",
+  claudeCodePlugin: "claude plugin install colliedesk --marketplace colliedesk/colliedesk",
   codex: "codex mcp add colliedesk --url https://desk.example.com/mcp --bearer-token-env-var COLLIEDESK_TOKEN",
+  codexLogin: "codex mcp login colliedesk",
+  codexPlugin: "codex plugin marketplace add colliedesk/colliedesk\ncodex plugin add colliedesk@colliedesk",
   collieTokenFile: "(umask 077 \u0026\u0026 pbpaste \u003e ~/.colliedesk-token)",
   collieTokenFileWindows: "Get-Clipboard | Set-Content -NoNewline \"$HOME\\.colliedesk-token\"",
   collieUnix: "mkdir -p ~/.local/bin\ncurl -fsSL https://github.com/colliedesk/colliedesk/releases/latest/download/collie_$(uname -s)_$(uname -m).tar.gz | tar -xz -C ~/.local/bin collie\necho \"$HOME/.local/bin/collie\"",

@@ -56,7 +56,14 @@ const (
 	JoinWithinDays = "within_days"
 	// JoinNever opens a new conversation for every message.
 	JoinNever = "never"
+	// JoinOpenOnly joins only an open or pending conversation: a resolved or closed one is never added to,
+	// whatever matched it (a reply, the place's thread, AI intake); a new conversation starts instead. Only a
+	// reopen command naming the conversation reopens it.
+	JoinOpenOnly = "open_only"
 )
+
+// JoinsOnlyOpen says the policy never adds a message to a resolved or closed conversation.
+func (p JoinPolicy) JoinsOnlyOpen() bool { return p.Kind == JoinOpenOnly }
 
 // JoinPolicy says when a message joins the conversation its thread matches.
 type JoinPolicy struct {
@@ -473,6 +480,9 @@ type HelpCenter struct {
 	NotFound func(response http.ResponseWriter)
 	// Look is how the help center's own pages look, for a page of the type to look the same.
 	Look HelpCenterLook
+	// Languages are the languages besides the primary one that customers see; their pages are below
+	// <Base>/<locale>.
+	Languages []string
 }
 
 // HelpCenterLook is a help center's frame as its pages show it: language, title, address of its home

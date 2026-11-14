@@ -1,10 +1,9 @@
-import { useId, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ChangedElsewhereError, InvalidRequestError } from '../../../api/client';
+import { api } from '../../../api/client';
 import { channelsApi } from '../../../api/channels';
-import { responseTargetsApi, responseTargetsSchema, weekdays } from '../../../api/response-targets';
-import type { ResponseTargets, ResponseTargetsChange, Weekday } from '../../../api/response-targets';
+import { responseTargetsApi, weekdays } from '../../../api/response-targets';
+import type { ResponseTargets, Weekday } from '../../../api/response-targets';
 import { messages } from '../../../messages';
 import { useBillingShown } from '../../billing/billing-shown';
 import { saveState, useSaveFeedback } from '../save-feedback';
@@ -12,60 +11,20 @@ import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
 import { TimezoneSelect } from '../timezone-select';
 import { targetsMessages as m } from './targets-messages';
+import { durationOf, limitIn, maxTargetMinutes, maxWarnMinutes, minutesOf, spoken, targetProblem, units, warnProblem } from './target-duration';
+import type { Duration, Unit } from './target-duration';
+import { OffCard } from './targets-off-card';
+import { Card, cardState, fieldErrors, useSave, withoutStamp } from './targets-shared';
 import { can } from '../../../lib/can';
+import '../../../ui/controls.css';
 import './targets.css';
 
-// Settings → Response targets: one document the server keeps whole. Each card edits its part and saves
-// the document with the rest as it was read; admins change it, agents read it.
+// Settings → Response targets: one document the server keeps whole. While measuring is off the page is one
+// card; on, each card edits its part and saves the document with the rest as it was read. Admins change it,
+// agents read it.
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
 type Priority = (typeof priorities)[number];
-
-function fieldErrors(error: unknown): Record<string, string> {
-  if (!(error instanceof InvalidRequestError)) return {};
-  const fields = error.detail?.fields;
-  return fields && typeof fields === 'object' ? Object.fromEntries(Object.entries(fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {};
-}
-
-// What a PUT takes: the document without what only the server writes or what is the reader's own, with the
-// version it was read at (updated_at): a save after someone else's is refused, 409 changed_elsewhere.
-const withoutStamp = ({ enabled_at: _enabled, my_alert_email: _mine, ...rest }: ResponseTargets): ResponseTargetsChange => rest;
-// Hours in the form, minutes on the wire; a target is in half hours.
-const toHours = (minutes: number | null) => (minutes === null ? '' : String(minutes / 60));
-const toMinutes = (hours: string) => (hours.trim() === '' ? null : Math.round(Number(hours) * 60));
-const halfHours = (hours: string) => hours.trim() === '' || (Number(hours) > 0 && Number.isInteger(Number(hours) * 2));
-
-// A card's save state: someone else's save in between is said in words of this page.
-const cardState = (save: Parameters<typeof saveState>[0]) => {
-  const state = saveState(save);
-  return save.isError && save.error instanceof ChangedElsewhereError ? { ...state, error: m.changedElsewhere } : state;
-};
-
-function useSave() {
-  const client = useQueryClient();
-  return useMutation({
-    // Refused for someone else's save: the page shows theirs; what is being typed stays (the cards keep an edited form).
-    onError: (error) => {
-      if (!(error instanceof ChangedElsewhereError)) return;
-      const current = responseTargetsSchema.safeParse(error.detail?.current);
-      if (current.success) client.setQueryData<ResponseTargets>(['response-targets'], (old) => ({ ...current.data, my_alert_email: current.data.my_alert_email ?? old?.my_alert_email }));
-      else void client.invalidateQueries({ queryKey: ['response-targets'] });
-    },
-    mutationFn: (value: ResponseTargetsChange) => responseTargetsApi.set(value),
-    // A save answers the workspace's document; the reader's own email choice is not in it, so it is kept.
-    onSuccess: (saved) => {
-      client.setQueryData<ResponseTargets>(['response-targets'], (current) => ({ ...saved, my_alert_email: saved.my_alert_email ?? current?.my_alert_email }));
-      void client.invalidateQueries({ queryKey: ['conversations'] });
-    },
-  });
-}
-
-function Card({ id, title, lead, children }: { id: string; title: string; lead?: string; children: ReactNode }) {
-  return <section className="settings-card" aria-labelledby={id}>
-    <div className="section-heading"><h2 id={id}>{title}</h2>{lead && <p>{lead}</p>}</div>
-    <div className="settings-body">{children}</div>
-  </section>;
-}
 
 export function TargetsRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -77,7 +36,15 @@ export function TargetsRoute() {
   const channels = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list, enabled: can(me.data, 'channels:read') });
   const workspaceZone = me.data?.workspace.timezone ?? 'UTC';
   const live = channels.data?.items.filter((item) => !item.deleted_at) ?? [];
-  return <main className="settings-page panel">
+  // What the server refused when measuring was turned on, kept so the editor opens to fix it while still off.
+  // Its words go as soon as the document changed (any card saved), the editor stays until measuring is on.
+  const [refusal, setRefusal] = useState<{ fields: Record<string, string>; at: string | null }>();
+  const measuring = doc.data?.enabled;
+  const refused = refusal && refusal.at === (doc.data?.updated_at ?? null) ? refusal.fields : undefined;
+  const deleted = channels.data ? (doc.data?.channel_ids ?? []).filter((id) => !live.some((item) => item.id === id)) : [];
+  const canChoose = live.length >= 2 || deleted.length > 0 || Boolean(refusal);
+  useEffect(() => { if (measuring) setRefusal(undefined); }, [measuring]);
+  return <main className="settings-page panel targets-page">
     <header><h1>{m.heading}</h1><p>{m.description}</p></header>
     <div className="settings-layout">
       <SettingsNav page="/settings/targets" shown={shown} />
@@ -85,21 +52,24 @@ export function TargetsRoute() {
         {me.data && !isAdmin && <p className="notice notice-plain" role="note"><span>{m.adminsOnly}</span></p>}
         {doc.isPending ? <div className="tg-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
           : doc.isError ? <p role="alert" className="error-copy">{m.loadFailed} <button type="button" className="link-action" onClick={() => void doc.refetch()}>{m.tryAgain}</button></p>
+          : !doc.data.enabled && !refusal ? <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />
           : <>
-              <OnCard doc={doc.data} canManage={isAdmin} />
-              <HoursCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} />
-              <HolidaysCard doc={doc.data} canManage={isAdmin} />
-              <TargetsCard doc={doc.data} canManage={isAdmin} />
+              {doc.data.enabled ? <OnCard doc={doc.data} canManage={isAdmin} />
+                : <OffCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} repairing onRefused={(fields) => setRefusal({ fields, at: doc.data.updated_at })} />}
+              <HoursCard doc={doc.data} canManage={isAdmin} workspaceZone={workspaceZone} refused={refused} />
+              <HolidaysCard doc={doc.data} canManage={isAdmin} refused={refused} />
+              <TargetsCard doc={doc.data} canManage={isAdmin} refused={refused} />
               <AlertsCard doc={doc.data} canManage={isAdmin} />
-              {/* One channel: nothing to choose (design rule: only real choices). */}
-              {live.length >= 2 && <AppliesCard doc={doc.data} canManage={isAdmin} channels={live.map((item) => ({ id: item.id, name: item.name }))} />}
+              {/* One channel: nothing to choose (design rule: only real choices), unless the scope names a deleted one. */}
+              {canChoose && <AppliesCard doc={doc.data} canManage={isAdmin} channels={live.map((item) => ({ id: item.id, name: item.name }))} refused={refused} />}
             </>}
       </div>
     </div>
   </main>;
 }
 
-interface CardProps { doc: ResponseTargets; canManage: boolean }
+// refused: what the server refused on the turn-on that opened the editor, by field, shown beside it.
+interface CardProps { doc: ResponseTargets; canManage: boolean; refused?: Record<string, string> }
 
 function OnCard({ doc, canManage }: CardProps) {
   const save = useSave();
@@ -113,7 +83,7 @@ function OnCard({ doc, canManage }: CardProps) {
   </Card>;
 }
 
-function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZone: string }) {
+function HoursCard({ doc, canManage, workspaceZone, refused }: CardProps & { workspaceZone: string }) {
   // What is typed here lies over the document, field by field: a field nobody touched always shows the
   // document as it is now (after another card's save, or someone else's), a touched one keeps its words.
   const [zoneEdit, setZoneEdit] = useState<string>();
@@ -122,7 +92,7 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
-  const server = fieldErrors(save.error);
+  const server = { ...refused, ...fieldErrors(save.error) };
   const id = useId();
   const byDay = (day: Weekday) => ({ ...(doc.hours.find((item) => item.day === day) ?? { day, open: false, from: '08:00', to: '17:00' }), ...dayEdits[day] });
   const change = (day: Weekday, part: Partial<ResponseTargets['hours'][number]>) => {
@@ -176,13 +146,13 @@ function HoursCard({ doc, canManage, workspaceZone }: CardProps & { workspaceZon
   </Card>;
 }
 
-function HolidaysCard({ doc, canManage }: CardProps) {
+function HolidaysCard({ doc, canManage, refused }: CardProps) {
   const [date, setDate] = useState('');
   const [name, setName] = useState('');
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
-  const server = fieldErrors(save.error);
+  const server = { ...refused, ...fieldErrors(save.error) };
   const id = useId();
   const sorted = [...doc.holidays].sort((a, b) => a.date.localeCompare(b.date));
   const local = !date ? m.dateRequired : doc.holidays.some((item) => item.date === date) ? m.holidayTaken : undefined;
@@ -209,60 +179,73 @@ function HolidaysCard({ doc, canManage }: CardProps) {
   </Card>;
 }
 
-// The form's values of the targets: hours, empty for no target.
-const formOf = (targets: ResponseTargets['targets']) => Object.fromEntries(priorities.map((priority) => [priority,
-  { first: toHours(targets[priority].first_response_minutes), resolve: toHours(targets[priority].resolution_minutes) }])) as Record<Priority, { first: string; resolve: string }>;
+// A number and its unit, each with a name of its own (neither name contains the other).
+function DurationField({ id, label, unitLabel, value, errorId, onChange }: { id?: string; label: string; unitLabel: string; value: Duration; errorId?: string; onChange: (next: Duration) => void }) {
+  return <>
+    <input id={id} type="number" min={0} step="any" inputMode="decimal" aria-label={label} value={value.amount}
+      aria-invalid={errorId ? true : undefined} aria-describedby={errorId} onChange={(event) => onChange({ ...value, amount: event.target.value })} />
+    <select aria-label={unitLabel} value={value.unit} onChange={(event) => onChange({ ...value, unit: event.target.value as Unit })}>
+      {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+    </select>
+  </>;
+}
 
-function TargetsCard({ doc, canManage }: CardProps) {
-  // Typed values lie over the document box by box ("urgent.first", "warn"); an untouched box follows it.
-  const [edits, setEdits] = useState<Partial<Record<string, string>>>({});
-  const base = formOf(doc.targets);
-  const values = Object.fromEntries(priorities.map((priority) => [priority, { first: edits[`${priority}.first`] ?? base[priority].first,
-    resolve: edits[`${priority}.resolve`] ?? base[priority].resolve }])) as Record<Priority, { first: string; resolve: string }>;
-  const warn = edits.warn ?? toHours(doc.warn_before_minutes);
+function TargetsCard({ doc, canManage, refused }: CardProps) {
+  // Typed values lie over the document box by box ("urgent.first", "warn"), number and unit together;
+  // an untouched box follows the document.
+  const [edits, setEdits] = useState<Partial<Record<string, Duration>>>({});
+  const fromDoc = (priority: Priority, which: 'first' | 'resolve') => durationOf(doc.targets[priority][which === 'first' ? 'first_response_minutes' : 'resolution_minutes']);
+  const valueOf = (priority: Priority, which: 'first' | 'resolve') => edits[`${priority}.${which}`] ?? fromDoc(priority, which);
+  const warn = edits.warn ?? durationOf(doc.warn_before_minutes);
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
-  const server = fieldErrors(save.error);
+  const server = { ...refused, ...fieldErrors(save.error) };
   const id = useId();
-  const cellBad = (value: string) => checked && !halfHours(value);
-  const warnBad = checked && !(warn.trim() !== '' && Number(warn) >= 0 && Number.isInteger(Number(warn) * 2));
   const priorityName = (priority: Priority) => messages.priorities[priority];
+  const edit = (key: string) => (next: Duration) => { feedback.touch(); setEdits((all) => ({ ...all, [key]: next })); };
   if (!canManage) {
-    return <Card id={id} title={m.targetsHeading} lead={m.targetsLead}><dl className="tg-dl">
+    const read = (minutes: number | null) => (minutes === null ? m.none : spoken(minutes));
+    return <Card id={id} title={m.targetsHeading} lead={m.targetsReadLead}><dl className="tg-dl">
       {priorities.map((priority) => <Row key={priority} label={priorityName(priority)}
-        value={`${m.firstReply}: ${values[priority].first ? `${values[priority].first} h` : m.none} · ${m.resolve}: ${values[priority].resolve ? `${values[priority].resolve} h` : m.none}`} />)}
-      <Row label={m.dueSoon} value={`${warn} ${m.dueSoonUnit(Number(warn))}`} />
+        value={`${m.firstReply}: ${read(doc.targets[priority].first_response_minutes)} · ${m.resolve}: ${read(doc.targets[priority].resolution_minutes)}`} />)}
+      <Row label={m.dueSoon} value={doc.warn_before_minutes === 0 ? m.noReminder : `${spoken(doc.warn_before_minutes)} ${m.beforeTarget}`} />
     </dl><p className="muted-copy">{m.targetsNote}</p></Card>;
   }
+  // Checked on save; the limit is named in the unit the box shows.
+  const targetError = (value: Duration) => (!checked ? undefined
+    : { rule: m.targetRule, max: m.targetMax(limitIn(maxTargetMinutes, value.unit)), none: undefined }[targetProblem(value) ?? 'none']);
   const cell = (priority: Priority, which: 'first' | 'resolve', field: string) => {
-    const error = (cellBad(values[priority][which]) ? m.halfHours : undefined) ?? server[`targets.${priority}.${field}`];
-    return <td data-label={which === 'first' ? m.firstReply : m.resolve}><span className="tg-cell">
-      <input type="number" min={0.5} step={0.5} inputMode="decimal" aria-label={m.targetFor(which === 'first' ? m.firstReply : m.resolve, priorityName(priority))} value={values[priority][which]}
-        aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-${priority}-${which}` : undefined}
-        onChange={(event) => { feedback.touch(); setEdits((all) => ({ ...all, [`${priority}.${which}`]: event.target.value })); }} />
-      <span>{m.hoursUnit}</span></span>
-      {error && <span className="error-copy field-note" id={`${id}-${priority}-${which}`}>{error}</span>}</td>;
+    const value = valueOf(priority, which);
+    const error = targetError(value) ?? server[`targets.${priority}.${field}`];
+    const errorId = `${id}-${priority}-${which}`;
+    const what = which === 'first' ? m.firstReply : m.resolve;
+    return <td data-label={what}><span className="tg-cell">
+      <DurationField label={m.targetFor(what, priorityName(priority))} unitLabel={m.unitFor(what, priorityName(priority))} value={value} errorId={error ? errorId : undefined} onChange={edit(`${priority}.${which}`)} /></span>
+      {error && <span className="error-copy field-note" id={errorId}>{error}</span>}</td>;
   };
+  const warnError = server.warn_before_minutes ?? (!checked ? undefined
+    : { rule: m.warnRule, max: m.warnMax(limitIn(maxWarnMinutes, warn.unit)), none: undefined }[warnProblem(warn) ?? 'none']);
   return <Card id={id} title={m.targetsHeading} lead={m.targetsLead}>
     <form className="stacked-form" noValidate onSubmit={(event) => {
       event.preventDefault();
       setChecked(true);
-      const bad = priorities.some((priority) => !halfHours(values[priority].first) || !halfHours(values[priority].resolve)) || !(warn.trim() !== '' && Number(warn) >= 0 && Number.isInteger(Number(warn) * 2));
+      const bad = priorities.some((priority) => targetProblem(valueOf(priority, 'first')) || targetProblem(valueOf(priority, 'resolve'))) || warnProblem(warn);
       if (bad || feedback.pending) return;
-      save.mutate({ ...withoutStamp(doc), warn_before_minutes: toMinutes(warn) ?? 0,
-        targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: toMinutes(values[priority].first), resolution_minutes: toMinutes(values[priority].resolve) }])) as ResponseTargets['targets'] },
+      // Checked above: each is whole minutes, or null for an empty target box.
+      const minutes = (value: Duration) => minutesOf(value) ?? null;
+      save.mutate({ ...withoutStamp(doc), warn_before_minutes: minutes(warn) ?? 0,
+        targets: Object.fromEntries(priorities.map((priority) => [priority, { first_response_minutes: minutes(valueOf(priority, 'first')), resolution_minutes: minutes(valueOf(priority, 'resolve')) }])) as ResponseTargets['targets'] },
         { onSuccess: () => setEdits({}) });
     }}>
       <table className="tg-table">
         <thead><tr><th scope="col">{m.priority}</th><th scope="col">{m.firstReply}</th><th scope="col">{m.resolve}</th></tr></thead>
         <tbody>{priorities.map((priority) => <tr key={priority}><th scope="row">{priorityName(priority)}</th>{cell(priority, 'first', 'first_response_minutes')}{cell(priority, 'resolve', 'resolution_minutes')}</tr>)}</tbody>
       </table>
-      <div className={`field${warnBad || server.warn_before_minutes ? ' field-bad' : ''}`}>
+      <div className={`field${warnError ? ' field-bad' : ''}`}>
         <span className="tg-cell"><label htmlFor={`${id}-warn`}>{m.dueSoon}</label>
-          <input id={`${id}-warn`} type="number" min={0} step={0.5} inputMode="decimal" aria-label={m.dueSoonLabel} value={warn}
-            onChange={(event) => { feedback.touch(); setEdits((all) => ({ ...all, warn: event.target.value })); }} /><span>{m.dueSoonUnit(Number(warn))}</span></span>
-        {(warnBad || server.warn_before_minutes) && <span className="error-copy field-note">{server.warn_before_minutes ?? m.halfHours}</span>}
+          <DurationField id={`${id}-warn`} label={m.dueSoonLabel} unitLabel={m.dueSoonUnit} value={warn} errorId={warnError ? `${id}-warn-error` : undefined} onChange={edit('warn')} /><span>{m.beforeTarget}</span></span>
+        {warnError && <span className="error-copy field-note" id={`${id}-warn-error`}>{warnError}</span>}
       </div>
       <p className="muted-copy">{m.targetsNote}</p>
       <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveTargets)}</button>{feedback.status}</span>
@@ -270,14 +253,18 @@ function TargetsCard({ doc, canManage }: CardProps) {
   </Card>;
 }
 
-function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id: string; name: string }[] }) {
+function AppliesCard({ doc, canManage, channels, refused }: CardProps & { channels: { id: string; name: string }[] }) {
   const every = channels.map((item) => item.id);
+  // Ids of the scope that name no channel any more: listed ticked, for the person to untick. None is dropped on its own.
+  const deleted = (doc.channel_ids ?? []).filter((id) => !every.includes(id));
   // The choice follows the document until someone here changes it.
   const [chosenEdit, setChosenEdit] = useState<string[]>();
   const chosen = chosenEdit ?? doc.channel_ids ?? every;
   const [checked, setChecked] = useState(false);
   const save = useSave();
   const feedback = useSaveFeedback(cardState(save));
+  const server = { ...refused, ...fieldErrors(save.error) };
+  const refusedScope = Object.entries(server).find(([field]) => field.startsWith('channel_ids'))?.[1];
   const id = useId();
   if (!canManage) return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}><ul className="muted-copy">{channels.filter((item) => chosen.includes(item.id)).map((item) => <li key={item.id}>{item.name}</li>)}</ul></Card>;
   return <Card id={id} title={m.appliesHeading} lead={m.appliesLead}>
@@ -286,12 +273,13 @@ function AppliesCard({ doc, canManage, channels }: CardProps & { channels: { id:
       setChecked(true);
       if (chosen.length === 0 || feedback.pending) return;
       // Every channel is null: a channel added later is measured too.
-      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length ? null : chosen }, { onSuccess: () => setChosenEdit(undefined) });
+      save.mutate({ ...withoutStamp(doc), channel_ids: chosen.length === every.length && every.every((item) => chosen.includes(item)) ? null : chosen }, { onSuccess: () => setChosenEdit(undefined) });
     }}>
       <fieldset className="tg-channels"><legend className="sr-only">{m.appliesHeading}</legend>
-        {channels.map((item) => <label className="check-row" key={item.id}><input type="checkbox" checked={chosen.includes(item.id)}
+        {[...deleted.map((id) => ({ id, name: m.deletedChannel(id) })), ...channels].map((item) => <label className="check-row" key={item.id}><input type="checkbox" checked={chosen.includes(item.id)}
           onChange={(event) => { feedback.touch(); setChosenEdit(event.target.checked ? [...chosen, item.id] : chosen.filter((other) => other !== item.id)); }} /><span>{item.name}</span></label>)}
       </fieldset>
+      {refusedScope && <p className="error-copy" role="alert">{refusedScope}</p>}
       {checked && chosen.length === 0 && <p className="error-copy" role="alert">{m.pickOne}</p>}
       <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(m.saveApplies)}</button>{feedback.status}</span>
     </form>

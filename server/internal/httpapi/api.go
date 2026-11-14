@@ -112,6 +112,9 @@ type Config struct {
 	// LookupCNAME returns the end of a host name's CNAME chain, for the help center's custom domain
 	// check; nil uses the system resolver.
 	LookupCNAME func(ctx context.Context, host string) (string, error)
+	// OAuthMetadataClient fetches the client ID metadata documents of AI apps; nil is the guarded client
+	// (oauth-clients.go). Tests set one that reaches their local server.
+	OAuthMetadataClient *http.Client
 	// HelpCenterAddressTransport opens a custom domain's help center address after a DNS check proved
 	// the claim; nil dials public addresses only and checks certificates (helpcenter.NewAddressTransport).
 	HelpCenterAddressTransport http.RoundTripper
@@ -239,6 +242,8 @@ type API struct {
 	certificateNotes *webFormLimiter
 	// operatorSignIns limits the tries of operator links, tickets and client addresses.
 	operatorSignIns, operatorSignInIPs *webFormLimiter
+	// refusedLinks counts, per client address, the one-time links redeem and the invite preview refused.
+	refusedLinks *webFormLimiter
 	// helpCenterHostLookups counts each client address's lookups of host names the server does not know.
 	helpCenterHostLookups *webFormLimiter
 	// channelFileLookups counts each client address's requests for a channel type's public file.
@@ -252,6 +257,8 @@ type API struct {
 	cursorCalls *webFormLimiter
 	// problemReports limits the problem reports one agent may file per hour.
 	problemReports *webFormLimiter
+	// oauth limits client registrations and remembers client ID metadata documents.
+	oauth *oauthState
 	// testMessages limits the test messages a workspace sends itself per hour.
 	testMessages *webFormLimiter
 	// migrationRequests limits the Freshdesk migration requests a workspace sends per hour.
@@ -380,9 +387,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		carry = NewCarry(config)
 	}
 	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
-		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports,
+		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports, oauth: carry.oauth,
 		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
-		helpCenterHostLookups: carry.helpCenterHostLookups, channelFileLookups: carry.channelFileLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
+		helpCenterHostLookups: carry.helpCenterHostLookups, channelFileLookups: carry.channelFileLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, refusedLinks: carry.refusedLinks, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
@@ -415,6 +422,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	aiConfig.PlanLimits = limits
 	if config.SwitchedOff[serverconfig.FeatureAIServer] {
+		if aiConfig.Server != nil {
+			aiConfig.ServerOffLabel = aiConfig.Server.Label
+		}
 		aiConfig.Server, aiConfig.ServerOff = nil, true
 	}
 	if aiConfig.ChatGate == nil {
@@ -493,7 +503,8 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
 	mux.HandleFunc("OPTIONS "+webFormChannelPattern, api.preflightWebForm)
-	return &Server{Handler: withRequestID(api.observeTrial(api.channelFiles(mux))), api: api}
+	api.mountOAuth(mux)
+	return &Server{Handler: WithRequestID(api.observeTrial(api.channelFiles(mux))), api: api}
 }
 
 // observeTrial counts, while a trial change runs, the distinct client addresses this process sees, so the
@@ -514,8 +525,10 @@ func Routes() []Route {
 	return []Route{
 		{http.MethodGet, "/api/v1/config", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/cloud/exchange", auth.PermissionPublic},
+		{http.MethodGet, cloudWorkspacesPath, auth.PermissionPublic},
 		{http.MethodPost, cloudSignupPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
+		{http.MethodGet, "/api/v1/auth/invite-preview", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/operator/auth/redeem", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/operator/auth/totp", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/operator/auth/cloud", auth.PermissionPublic},
@@ -554,6 +567,7 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/conversations", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/conversations/{id}", auth.PermissionSession},
 		{http.MethodPatch, "/api/v1/conversations/{id}", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/conversations/spam", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionSession},
 		{http.MethodDelete, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/conversations/{id}/messages", auth.PermissionSession},
@@ -563,6 +577,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/conversations/{id}/presence/{clientId}", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/inbox/activity", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/attachments/{id}/thumbnail", auth.PermissionSession},
 		{http.MethodGet, mailimage.ProxyPath, auth.PermissionSession},
 		{http.MethodGet, "/api/v1/contacts", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/contacts", auth.PermissionSession},
@@ -671,6 +686,8 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/billing/migration-request", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/trial-offer", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/trial-offer/accept", auth.PermissionSession},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
 		{http.MethodPost, resendWebhookPath, auth.PermissionPublic},
 		{http.MethodGet, foundingPath, auth.PermissionPublic},
@@ -752,6 +769,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/channel-thread-items", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/intake/gatherings", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/intake/gatherings/{id}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}", auth.PermissionSession},
 		{http.MethodPost, intakeDecideRoute, auth.PermissionSession},
 		{http.MethodPost, "/api/v1/intake/gatherings/{id}/requeue", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/intake/summary", auth.PermissionSession},
@@ -820,6 +838,29 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/roles/{id}/restore", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/agents/{id}/roles", auth.PermissionSession},
 		{http.MethodPost, replyDraftsPath, auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts/{draftId}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts/{draftId}/files/{fileId}", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-center/languages", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/help-center/languages", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/translations", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/translations/trash", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/kb/articles/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/articles/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations/{locale}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}/translations/{locale}/versions", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations/{locale}/versions/{version}/restore", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/kb/collections/{id}/translations/{locale}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/collections/{id}/translations/{locale}", auth.PermissionSession},
+		// OAuth for AI apps: the consent page reads the app, then the person allows it.
+		{http.MethodGet, oauthClientRoutePath, auth.PermissionPublic},
+		{http.MethodPost, oauthAllowRoutePath, auth.PermissionSession},
+		// Mentions: a note asks teammates; each reads their own list and marks it read.
+		{http.MethodPut, "/api/v1/conversations/{id}/messages/{messageId}/mentions", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/mentions", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/mentions/read", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/agents/me/mention-email", auth.PermissionSession},
 	}
 }
 
@@ -842,6 +883,12 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 			// workspace host) is dropped, so the browser stops sending it.
 			if viaCookie && errors.Is(err, auth.ErrInvalidCredential) {
 				clearSessionCookie(response)
+			}
+			// Only the browser holding the cookie learns that its own session was revoked; the web app then
+			// ends the sign-in provider's session too, as on Sign out.
+			if errors.Is(err, auth.ErrSessionRevoked) {
+				writeError(response, http.StatusUnauthorized, "session_revoked", "This session was signed out from another device or by an admin. Sign in again.")
+				return
 			}
 			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
 			return

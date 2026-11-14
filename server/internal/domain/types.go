@@ -41,6 +41,17 @@ type Session struct {
 	LastSeenAt time.Time  `json:"last_seen_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
+	// App is the AI app an OAuth grant connected; nil for a person's session and an API token.
+	App *ConnectedApp `json:"app"`
+}
+
+// ConnectedApp is what Settings shows of an AI app connected with OAuth, one per sign-in (device).
+type ConnectedApp struct {
+	ClientID    string    `json:"client_id"`
+	UserAgent   string    `json:"user_agent"`
+	ConnectedAt time.Time `json:"connected_at"`
+	// NeedsReconnecting: the grant was disconnected, revoked or expired; the app must sign in again.
+	NeedsReconnecting bool `json:"needs_reconnecting"`
 }
 
 type Invite struct {
@@ -173,6 +184,15 @@ type Conversation struct {
 	MayTellCustomer bool `json:"may_tell_customer"`
 	// ChatChannelID is the channel of the chat it is in (its newest linked item's), read with it.
 	ChatChannelID *string `json:"-"`
+	// LatestCustomerMessage is what its customer wrote last, one line of it; read with the conversation
+	// list only (an inbox row shows it), nil there when the customer never wrote.
+	LatestCustomerMessage *CustomerMessageExcerpt `json:"latest_customer_message,omitempty"`
+}
+
+// CustomerMessageExcerpt is the start of a customer's message on one line, and when it arrived.
+type CustomerMessageExcerpt struct {
+	Excerpt   string    `json:"excerpt"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // ConversationSLA is a conversation's response clocks and the most pressing of their states: overdue,
@@ -359,6 +379,31 @@ type Message struct {
 	// NoticeKind marks a reply the channel sent by itself (received: its received notice); nil for a
 	// reply of the team.
 	NoticeKind *string `json:"notice_kind"`
+	// Mentions are the teammates a private note asks, in the order they were asked; empty otherwise.
+	Mentions []NoteMention `json:"mentions"`
+}
+
+// NoteMention is one teammate a private note asks: whether they get an email for it and when they read it.
+type NoteMention struct {
+	AgentID string     `json:"agent_id"`
+	Name    string     `json:"name"`
+	ByEmail bool       `json:"by_email"`
+	ReadAt  *time.Time `json:"read_at"`
+}
+
+// Mention is a note that asks the person reading their Mentions list, with where it is and who asked.
+type Mention struct {
+	ID             string        `json:"id"`
+	ConversationID string        `json:"conversation_id"`
+	MessageID      string        `json:"message_id"`
+	Subject        string        `json:"subject"`
+	DisplayRef     string        `json:"display_ref"`
+	Excerpt        string        `json:"excerpt"`
+	AuthorAgentID  *string       `json:"author_agent_id"`
+	AuthorName     *string       `json:"author_name"`
+	AgentToken     *MessageToken `json:"agent_token"`
+	CreatedAt      time.Time     `json:"created_at"`
+	ReadAt         *time.Time    `json:"read_at"`
 }
 
 // ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the

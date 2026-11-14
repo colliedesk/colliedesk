@@ -117,6 +117,37 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 	writeJSON(response, http.StatusOK, result)
 }
 
+// cloudWorkspacesPath lists the workspaces of a verified identity (listCloudWorkspaces).
+const cloudWorkspacesPath = "/api/v1/auth/cloud/workspaces"
+
+// listCloudWorkspaces answers the workspaces of the identity token's verified email, for the account menu's
+// switch. The email is the token's, never the session's: a workspace's agent email is not proven, since an
+// admin can invite any address and use the link. The token must be issued to this host's page (or to
+// APP_ORIGIN's), like the exchange's.
+func (a *API) listCloudWorkspaces(response http.ResponseWriter, request *http.Request) {
+	if a.cloud == nil {
+		writeError(response, http.StatusNotFound, "not_found", "Cloud sign-in is not configured.")
+		return
+	}
+	token, ok := bearerToken(request.Header.Get("Authorization"))
+	if !ok {
+		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid cloud session is required.")
+		return
+	}
+	email, err := a.cloud.Verify(request.Context(), token, a.requestOrigin(request))
+	if err != nil {
+		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid cloud session is required.")
+		return
+	}
+	choices, err := a.auth.CloudWorkspaces(request.Context(), email)
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	response.Header().Set("Cache-Control", "no-store")
+	writeJSON(response, http.StatusOK, map[string]any{"workspaces": choices})
+}
+
 func bearerToken(header string) (string, bool) {
 	const prefix = "Bearer "
 	if !strings.HasPrefix(header, prefix) {

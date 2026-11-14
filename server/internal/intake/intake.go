@@ -39,13 +39,31 @@ type Decision struct {
 	FollowsDecisionID string
 	// Detail is what an AI decision keeps of how it was made.
 	Detail store.AIDecisionDetail
+	// ItemCount is how many messages of the card the person read: when the customer added to it since,
+	// nothing is decided (store.ErrGatheringChanged). Nil decides what the card holds.
+	ItemCount *int
 }
 
-// ConflictError is a decision that came after another: the gathering stands as Outcome.
-type ConflictError struct{ Outcome store.GatheringOutcome }
+// ConflictError is a decision that came after another, or (Changed) about a card the customer added to
+// since its decider read it: the gathering stands as Outcome.
+type ConflictError struct {
+	Outcome store.GatheringOutcome
+	Changed bool
+}
 
 func (e *ConflictError) Error() string {
+	if e.Changed {
+		return store.ErrGatheringChanged.Error()
+	}
 	return fmt.Sprintf("this gathering was already decided (%s by %s)", e.Outcome.State, e.Outcome.DecidedBy)
+}
+
+// Unwrap makes a Changed conflict a store.ErrGatheringChanged.
+func (e *ConflictError) Unwrap() error {
+	if e.Changed {
+		return store.ErrGatheringChanged
+	}
+	return nil
 }
 
 // ErrInvalid is a decision that cannot be made (an unknown action, an attach without a conversation).
@@ -90,7 +108,8 @@ func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d
 	}
 	apply := store.IntakeApply{Decider: decider, Actor: actor, Decision: &store.IntakeDecisionInput{Action: d.Action, TargetConversationID: d.ConversationID,
 		Command: d.Command, Subject: d.Subject, ReplyKind: d.ReplyKind, Reason: d.Reason, IgnoreReason: d.IgnoreReason, Confidence: d.Confidence,
-		CorrectsDecisionID: d.CorrectsDecisionID, FollowsDecisionID: d.FollowsDecisionID, AIDecisionDetail: d.Detail}}
+		CorrectsDecisionID: d.CorrectsDecisionID, FollowsDecisionID: d.FollowsDecisionID, AIDecisionDetail: d.Detail},
+		Seen: d.Detail.ItemsSeen, ItemCount: d.ItemCount}
 	// A card of messages a person took back to the queue holds no held events: its messages move.
 	var detached *store.DetachedCard
 	if d.Action == Create || d.Action == Attach {
@@ -137,7 +156,7 @@ func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d
 		if same(outcome, d, decider) {
 			return outcome, nil
 		}
-		return outcome, &ConflictError{Outcome: outcome}
+		return outcome, &ConflictError{Outcome: outcome, Changed: errors.Is(err, store.ErrGatheringChanged)}
 	}
 	if err != nil {
 		return store.GatheringOutcome{}, err
@@ -184,6 +203,9 @@ func same(o store.GatheringOutcome, d Decision, decider string) bool {
 // Requeue takes a gathering that was set aside back to the queue; its decision stays in its history.
 func (s *Service) Requeue(ctx context.Context, workspaceID, gatheringID string, actor store.ChannelActor) (store.GatheringOutcome, error) {
 	err := s.store.SetGatheringState(ctx, workspaceID, gatheringID, Review, store.ReviewRequeued, store.IntakeApply{Decider: store.DecidedByAgent, Actor: actor}, s.now().UTC())
+	if errors.Is(err, store.ErrGatheringChanged) {
+		return store.GatheringOutcome{}, err
+	}
 	if errors.Is(err, store.ErrGatheringDecided) {
 		outcome, readErr := s.store.GatheringOutcomeOf(ctx, workspaceID, gatheringID)
 		if readErr != nil {
@@ -203,56 +225,32 @@ func (s *Service) Requeue(ctx context.Context, workspaceID, gatheringID string, 
 // sweepBatch bounds one sweep.
 const sweepBatch = 100
 
-// Sweep applies the rules' decision to the gatherings AI did not decide in time (fallback): what they
-// would open is replayed through the rules as they stand now, so a batch held while an earlier one of
-// its sender waited too continues the conversation that one opened, as without AI; what they would join
-// to a conversation (a join-open scope's only open one) joins it while it is still open; what they would hold
-// for a person goes to the queue, and the chatter of a scope that opens only on a command goes to the
-// queue too (an admin turned AI on so it is looked at). A gathering a person decided meanwhile is left as
-// it is. It returns how many it applied.
+// Sweep sends to the queue the gatherings AI did not decide in time: a person decides them. One whose
+// scope's intake was turned off since it was held is the rules' again, replayed as they stand now. A
+// gathering decided meanwhile is left as it is. It returns how many it handled.
 func (s *Service) Sweep(ctx context.Context) (int, error) {
 	due, err := s.store.DueGatherings(ctx, s.now().UTC(), sweepBatch)
 	if err != nil {
 		return 0, err
 	}
-	applied := 0
+	sent := 0
 	var errs []error
 	for _, g := range due {
-		err := s.applyRules(ctx, g, store.IntakeApply{Decider: store.DecidedByRules, Fallback: true}, store.ReviewAIUnavailable)
+		apply := store.IntakeApply{Decider: store.DecidedByRules, Fallback: true}
+		if g.Off {
+			_, err = s.pipeline.ApplyGathering(ctx, g.WorkspaceID, g.ID, "", apply)
+		} else {
+			err = s.store.SetGatheringState(ctx, g.WorkspaceID, g.ID, Review, store.ReviewAIUnavailable, apply, s.now().UTC())
+		}
 		switch {
 		case errors.Is(err, store.ErrGatheringDecided):
 		case err != nil:
 			errs = append(errs, fmt.Errorf("gathering %s: %w", g.ID, err))
 		default:
-			applied++
+			sent++
 		}
 	}
-	return applied, errors.Join(errs...)
-}
-
-// applyRules applies what the rules decided when a gathering closed: what they would open is replayed
-// through the rules as they stand now; what they would join joins it while it is still open, else a
-// person decides; what they would hold for a person goes to the queue; the chatter of a scope that opens
-// only on a command waits for a person with keptReason (AI was turned on so it is looked at).
-func (s *Service) applyRules(ctx context.Context, g store.DueGathering, apply store.IntakeApply, keptReason string) error {
-	switch g.RulesAction {
-	case rules.Create:
-		_, err := s.pipeline.ApplyGathering(ctx, g.WorkspaceID, g.ID, "", apply)
-		return err
-	case rules.Attach:
-		open, err := s.store.ConversationStillOpen(ctx, g.WorkspaceID, g.RulesTarget)
-		if err != nil {
-			return err
-		}
-		if open {
-			_, err = s.pipeline.ApplyGathering(ctx, g.WorkspaceID, g.ID, g.RulesTarget, apply)
-			return err
-		}
-		return s.store.SetGatheringState(ctx, g.WorkspaceID, g.ID, Review, store.ReviewTargetChanged, apply, s.now().UTC())
-	case rules.Review:
-		return s.store.SetGatheringState(ctx, g.WorkspaceID, g.ID, Review, store.ReviewNoCommand, apply, s.now().UTC())
-	}
-	return s.store.SetGatheringState(ctx, g.WorkspaceID, g.ID, Review, keptReason, apply, s.now().UTC())
+	return sent, errors.Join(errs...)
 }
 
 // Run sweeps every interval until the context ends.

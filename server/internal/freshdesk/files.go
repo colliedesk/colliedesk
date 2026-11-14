@@ -63,7 +63,7 @@ func (r *run) importAttachment(ctx context.Context, ticketKey, messageID string,
 	if err := store.VerifyObjects(ctx, tx, r.opts.Storage, object.Key); err != nil {
 		return err
 	}
-	targetID, err := r.saveAttachment(ctx, tx, entry, found, input)
+	targetID, staleThumb, err := r.saveAttachment(ctx, tx, entry, found, input)
 	if err != nil {
 		return err
 	}
@@ -72,6 +72,10 @@ func (r *run) importAttachment(ctx context.Context, ticketKey, messageID string,
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit attachment import: %w", err)
+	}
+	// The thumbnail of the bytes the row held before goes, unless another row still shows it.
+	if staleThumb != "" {
+		return store.DiscardObject(ctx, r.db, r.opts.Storage, r.workspaceID, staleThumb)
 	}
 	return nil
 }
@@ -93,19 +97,20 @@ func (r *run) checkDiskSpace(size int64) error {
 
 // saveAttachment writes the attachment row of a stored file: it reuses the row of a ledger entry
 // whose stored file was lost or changed, and inserts a new one otherwise.
-func (r *run) saveAttachment(ctx context.Context, tx pgx.Tx, entry ledgerEntry, found bool, input store.NewAttachment) (string, error) {
+// staleThumb is the thumbnail of the bytes a reused row held, to discard after the commit.
+func (r *run) saveAttachment(ctx context.Context, tx pgx.Tx, entry ledgerEntry, found bool, input store.NewAttachment) (id, staleThumb string, err error) {
 	if found && entry.TargetID != nil {
-		replaced, err := store.ReplaceAttachmentBytes(ctx, tx, r.workspaceID, *entry.TargetID, input)
+		replaced, stale, err := store.ReplaceAttachmentBytes(ctx, tx, r.workspaceID, *entry.TargetID, input)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		if replaced {
-			return *entry.TargetID, nil
+			return *entry.TargetID, stale, nil
 		}
 	}
 	item, err := store.InsertAttachment(ctx, tx, r.workspaceID, input)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return item.ID, nil
+	return item.ID, "", nil
 }

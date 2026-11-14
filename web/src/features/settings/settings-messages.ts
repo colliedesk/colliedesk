@@ -2,7 +2,6 @@
 export const settingsMessages = {
   notificationsLabel: 'Desktop notifications for new, assigned and customer-replied conversations',
   notificationsBlocked: 'Blocked by this browser. Allow notifications for this site in its site settings, then reload.',
-  helpCenterDescription: 'The public pages of your published knowledge base articles.',
   workspaceTimezone: 'Workspace timezone',
   sessionStates: { active: 'Active', stopped: 'Stopped', revoked: 'Revoked', expired: 'Expired' },
   followsRole: (role: string) => `Follows role ${role}`,
@@ -22,6 +21,15 @@ export const settingsMessages = {
   showWholeText: 'Show all',
   showLessText: 'Show less',
   confirmDelete: 'Delete',
+  // One line under each page's title: what the page holds.
+  pageLeads: {
+    account: 'Your name, how Colliedesk works for you, and where you are signed in.',
+    general: 'Your workspace name, its timezone and how conversations are numbered.',
+    members: 'Who works in this workspace, the roles they hold and the invites that add people.',
+    'saved-replies': 'Text your whole team inserts into a reply.',
+    data: 'Bring your Freshdesk history in, or take all your data out.',
+    index: 'Your account first, then what the workspace shares.',
+  },
   profileDescription: 'Dates and times show in your timezone.',
   yourTimezone: 'Your timezone',
   displayName: 'Display name',

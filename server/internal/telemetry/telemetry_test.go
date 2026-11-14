@@ -496,7 +496,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 	recorded := &capture{}
 	server := recorded.server(t)
 
-	if err := telemetry.New(db, cloudConfig(server.URL), server.Client()).SendOnce(context.Background()); err != nil {
+	if err := cloudReporter(db, server).SendOnce(context.Background()); err != nil {
 		t.Fatalf("SendOnce: %v", err)
 	}
 	if len(recorded.bodies) != 2 {
@@ -529,7 +529,8 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 	// too old); one open conversation made today; the web form switched on above; one token in use
 	// (one revoked, one expired); a Freshdesk import. Beta: Team plan, 45 days old; one agent left
 	// (the other is deactivated); the last sign-in 29 days ago; the revoked token used an hour ago
-	// does not count as a sign-in; an email channel.
+	// does not count as a sign-in; an email channel that has received nothing yet. Only Acme had a
+	// customer write in (1 hour ago); nobody connected a mailbox.
 	want := map[string]map[string]any{
 		acme: {
 			"plan": "trial", "trial_days_left": float64(6), "days_since_created": float64(10),
@@ -537,6 +538,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(1), "replies_30d": float64(2), "ai_agent_replies_7d": float64(1),
 			"conversations_open": float64(1), "conversations_created_7d": float64(1),
 			"email_channel": false, "web_form": true, "tokens_active": float64(1), "freshdesk_import": true,
+			"email_state": "none", "inbound_messages_7d": float64(1), "mailbox_connected": false,
 			"help_chat": false, "chat_answers_month": float64(0), "chat_handoffs_month": float64(0),
 			"time_to_first_result_seconds": float64(5420),
 			"workspace_name":               "Acme Support", "workspace_slug": "acme-support",
@@ -547,10 +549,12 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(0), "replies_30d": float64(0), "ai_agent_replies_7d": float64(0),
 			"conversations_open": float64(0), "conversations_created_7d": float64(0),
 			"email_channel": true, "web_form": false, "tokens_active": float64(0), "freshdesk_import": false,
+			"email_state": "waiting", "inbound_messages_7d": float64(0), "mailbox_connected": false,
 			"time_to_first_result_seconds": float64(172805),
 			"workspace_name":               "Beta Help", "workspace_slug": "beta-help",
 		},
-		gamma.ID: {"freshdesk_import": false, "time_to_first_result_seconds": nil, "workspace_name": "Gamma Desk"},
+		gamma.ID: {"freshdesk_import": false, "time_to_first_result_seconds": nil, "workspace_name": "Gamma Desk",
+			"email_state": "none", "inbound_messages_7d": float64(0), "mailbox_connected": false},
 	}
 	for id, fields := range want {
 		event, ok := byWorkspace[id]
@@ -566,7 +570,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			t.Errorf("workspace %s realm/version/$process_person_profile = %#v/%#v/%#v", id, event.Properties["realm"], event.Properties["version"], event.Properties["$process_person_profile"])
 		}
 		// The fields are exactly the ones docs/user/telemetry.md lists; a new one needs the docs first.
-		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,chat_answers_month,chat_handoffs_month,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,help_chat,plan,realm,replies_30d,replies_7d,time_to_first_result_seconds,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
+		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,chat_answers_month,chat_handoffs_month,conversations_created_7d,conversations_open,days_since_created,email_channel,email_state,freshdesk_import,help_chat,inbound_messages_7d,mailbox_connected,plan,realm,replies_30d,replies_7d,time_to_first_result_seconds,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
 		if got := keys(event.Properties); got != listed {
 			t.Errorf("workspace %s property keys = %s, want %s", id, got, listed)
 		}
@@ -604,7 +608,7 @@ func TestSnapshotsAreSentOncePerDay(t *testing.T) {
 	recorded := &capture{}
 	server := recorded.server(t)
 	for range 3 {
-		if err := telemetry.New(db, cloudConfig(server.URL), server.Client()).SendOnce(context.Background()); err != nil {
+		if err := cloudReporter(db, server).SendOnce(context.Background()); err != nil {
 			t.Fatalf("SendOnce: %v", err)
 		}
 	}
@@ -612,7 +616,7 @@ func TestSnapshotsAreSentOncePerDay(t *testing.T) {
 		t.Fatalf("requests = %v, want one heartbeat and one batch within a day", recorded.paths)
 	}
 	execSQL(t, db, `UPDATE instance SET last_reported_at = now() - interval '24 hours'`)
-	if err := telemetry.New(db, cloudConfig(server.URL), server.Client()).SendOnce(context.Background()); err != nil {
+	if err := cloudReporter(db, server).SendOnce(context.Background()); err != nil {
 		t.Fatalf("next-day SendOnce: %v", err)
 	}
 	if len(recorded.bodies) != 4 {
@@ -634,7 +638,7 @@ func TestFailedHeartbeatDoesNotSkipSnapshots(t *testing.T) {
 		}
 	}))
 	t.Cleanup(server.Close)
-	err := telemetry.New(db, cloudConfig(server.URL), server.Client()).SendOnce(context.Background())
+	err := cloudReporter(db, server).SendOnce(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "500") {
 		t.Fatalf("SendOnce error = %v, want one naming status 500", err)
 	}

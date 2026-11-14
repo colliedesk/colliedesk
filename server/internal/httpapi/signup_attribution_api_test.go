@@ -33,7 +33,7 @@ func TestSignupStoresTheAdLinkItCameFromAndCountsItWithTheTrial(t *testing.T) {
 		t.Fatalf("trial_started=%+v, want one", events)
 	}
 	properties := events[0].Properties
-	want := map[string]string{"source": "tiktok", "utm_source": "tiktok", "utm_medium": "paid", "utm_campaign": "launch", "utm_content": "post-07", "utm_term": "helpdesk", "fbclid": "IwAR_x-1.y"}
+	want := map[string]string{"source": "tiktok", "utm_source": "tiktok", "utm_medium": "paid", "utm_campaign": "launch", "utm_content": "post-07", "utm_term": "helpdesk", "fbclid": "IwAR_x-1.y", "signup_via": "web"}
 	if len(properties) != len(want) {
 		t.Fatalf("trial_started properties=%v, want exactly %v", properties, want)
 	}
@@ -88,5 +88,50 @@ func TestFirstPaymentCarriesTheAdLinkOfTheSignup(t *testing.T) {
 	}
 	if plain := byWorkspace[f.workspaceB]; len(plain) != 1 || plain["plan"] != "founding" {
 		t.Fatalf("workspace B properties=%v, want only plan founding", plain)
+	}
+}
+
+func TestSignupStoresTheSiteThatSentThePersonAndCountsItWithTheTrial(t *testing.T) {
+	funnel := &recordingFunnel{}
+	f := newSignupFixture(t, func(config *httpapi.Config) { config.Funnel = funnel })
+	// An AI assistant links straight to the sign-in page without utm_* keys: only the referring site says where the person came from.
+	created := f.signUpWith(t, "ines@referrer.example.com", defaultPeer, map[string]any{
+		"workspace_name": "Referred Acme", "source": "ai_claude", "attribution": map[string]any{"referrer": "claude.ai"},
+	})
+	wantResponse(t, created, http.StatusCreated, "")
+	me := f.meAfter(t, created)
+	if got := queryString(t, f.pool, `SELECT COALESCE(referrer_host,'none') FROM workspace_onboarding WHERE workspace_id=$1`, me.Workspace.ID); got != "claude.ai" {
+		t.Fatalf("stored referrer_host=%q, want claude.ai", got)
+	}
+	events := funnel.named("trial_started")
+	if len(events) != 1 || events[0].Properties["referrer_host"] != "claude.ai" || events[0].Properties["source"] != "ai_claude" {
+		t.Fatalf("trial_started=%+v, want one with referrer_host claude.ai and source ai_claude", events)
+	}
+}
+
+func TestSignupDropsAReferrerThatIsNotAHostName(t *testing.T) {
+	for _, referrer := range []string{"https://claude.ai/chat/1", "claude.ai/path", "Claude.AI", "localhost", "a b.example.com", "-bad.example.com"} {
+		t.Run(referrer, func(t *testing.T) {
+			f := newSignupFixture(t, nil)
+			created := f.signUpWith(t, "drop@referrer.example.com", defaultPeer, map[string]any{"workspace_name": "Dropped Acme", "attribution": map[string]any{"referrer": referrer}})
+			wantResponse(t, created, http.StatusCreated, "")
+			me := f.meAfter(t, created)
+			if got := queryString(t, f.pool, `SELECT COALESCE(referrer_host,'none') FROM workspace_onboarding WHERE workspace_id=$1`, me.Workspace.ID); got != "none" {
+				t.Fatalf("stored referrer_host=%q for %q, want none", got, referrer)
+			}
+		})
+	}
+}
+
+func TestFirstPaymentCarriesTheSiteThatSentTheSignup(t *testing.T) {
+	funnel := &recordingFunnel{}
+	f := newBillingFixtureWith(t, func(config *httpapi.Config) { config.Funnel = funnel })
+	if _, err := f.pool.Exec(t.Context(), `INSERT INTO workspace_onboarding(workspace_id, source, referrer_host) VALUES($1,'ai_claude','claude.ai')`, f.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	f.mustDeliver(t, "msg_referred_founding", f.foundingEvent(f.workspaceA, "sub_referred_founding"))
+	events := funnel.named("subscription_activated")
+	if len(events) != 1 || events[0].Properties["referrer_host"] != "claude.ai" || events[0].Properties["plan"] != "founding" {
+		t.Fatalf("subscription_activated=%+v, want one for plan founding with referrer_host claude.ai", events)
 	}
 }

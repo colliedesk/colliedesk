@@ -25,8 +25,10 @@ const (
 	maxClosedToTokens = 0
 	// Creating an agent token (a token that makes tokens outlives its own revocation), the signed image
 	// address of the email view (an agent reads the stored HTML and has no screen), and the operator's
-	// decision on an operator request (approve, reject).
-	maxPersonOnly = 4
+	// decision on an operator request (approve, reject), and allowing an AI app with OAuth (an app connected
+	// by another app would outlive its disconnection). Raised from 4 to 5 for #477 with the maintainer's
+	// approval, Long (buiduclong0511), 2026-11-06: "cách nào là cách chuẩn thì bạn làm theo cách đó".
+	maxPersonOnly = 5
 )
 
 const (

@@ -1,83 +1,231 @@
-/* App shell: a slim rail on the grey app background; each view sits in white panels with a small gap. */
-.app-shell { height: 100dvh; display: grid; grid-template-columns: 56px minmax(0, 1fr); background: var(--surface-0); }
-.app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.app-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
-.app-content > .inbox-shell { height: calc(100% - var(--space-2)); }  /* the sheet sits 8 px above the bottom edge */
+/* App shell: a sidebar on the grey app background beside one white sheet; the sheet's top bar names the page. */
+:root { --sidebar-width: 248px; }
+.app-shell { height: 100dvh; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); background: var(--surface-0); }
+.app-sidebar {
+  position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+  padding: 0 var(--space-2) var(--space-2); background: var(--surface-0); box-shadow: inset -1px 0 0 var(--line);
+}
+.app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); overflow: hidden; padding: var(--space-2) var(--space-2) var(--space-2) 0; }
+.app-sheet { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+/* Positioned, so an absolute child (an sr-only label, a hidden radio) never sizes the window and adds a second scrollbar. */
+.app-content { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: auto; }
+.app-content > .inbox-shell { height: 100%; }
 .app-content > .redeem-page { min-height: 100%; }
-/* The avatar opens the account menu; on a wide screen it sits at the foot of the rail. */
-.account-menu { position: relative; margin-top: auto; }
-.rail-avatar { width: 40px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; border-radius: 999px; }
+/* Sign-in and an AI app's consent page stand alone, outside the shell: their page is the whole window, no inset. */
+.app-main:has(> .redeem-page) { padding: 0; }
+.app-main:has(> .redeem-page) > .app-sheet, .app-main > .app-sheet:has(> .app-content > .redeem-page) { border-radius: 0; box-shadow: none; }
+/* The top bar of the sheet: the page's icon and name, the search field, and Help. */
+.app-topbar {
+  flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: 44px; padding: 0 var(--space-3) 0 var(--space-4);
+  background: var(--surface-1); box-shadow: inset 0 -1px 0 var(--line);
+}
+.topbar-title { flex: 0 1 340px; min-width: 0; display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+.topbar-title svg { flex: none; width: 14px; height: 14px; color: var(--text-3); stroke-width: 1.75; }
+.topbar-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The search field: 540 px at 1440 px, giving up width before the page's name does on a narrower screen. It looks
+   like a field (a ring of the text colour at 10 %, a light fill) and opens the search palette. It is 28 px tall and
+   its key cap's text 10 px, built from the spacing and type tokens: tokens.css is also the operator console's, whose
+   bundle budget has no room for new ones. */
+.topbar-search { --control: calc(var(--space-6) + var(--space-1)); flex: 0 1 540px; min-width: 0; justify-content: flex-start; gap: var(--space-2); height: var(--control);
+  padding: 0 var(--space-1) 0 var(--space-2); border: 0; background: color-mix(in srgb, var(--surface-2) 30%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-1) 10%, transparent);
+  color: var(--text-3); font-size: var(--fs-small); font-weight: 400; cursor: text; }
+.topbar-search:hover:not(:disabled) { border: 0; background: var(--surface-2); }
+.topbar-search svg { flex: none; width: 14px; height: 14px; stroke-width: 1.75; }
+.topbar-search-label { flex: 1; min-width: 0; overflow: hidden; line-height: 20px; text-align: left; text-overflow: ellipsis; }
+.topbar-search kbd { flex: none; display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 var(--space-1); border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3); font: 500 calc(var(--fs-label) - var(--space-1) / 2)/20px var(--font-sans); }
+.topbar-end { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.topbar-help { flex: none; display: inline-flex; align-items: center; min-height: var(--control, 32px); padding: 0 var(--space-1); border-radius: var(--radius);
+  color: var(--text-3); font-size: var(--fs-small); font-weight: 500; text-decoration: none; }
+.topbar-help:hover { color: var(--text-1); }
+/* Where the sidebar does not name them, the top bar does: always visible, never a tooltip, it is what tells a person
+   which workspace this browser acts in. */
+.identity-bar { flex: 0 1 auto; display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--fs-label); }
+.identity-bar strong { flex: none; max-width: 50%; overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.identity-bar span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
+.identity-bar span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
+.app-rail { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface-0); }
+.rail-brand { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius); }
+.rail-brand .logo-mark { width: 24px; height: 24px; }
+/* The head: the logo and the workspace (one line), then Quick start and the pen that starts a new conversation. */
+.workspace-name { flex: 1; min-width: 0; border-radius: var(--radius-sm); }
+.workspace-name strong { display: block; overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+/* The tooltip starts at the name and stays inside the sidebar, wrapping a long name instead of widening it. */
+.workspace-name[data-tip]::after { left: 0; translate: 0 0; width: max-content; max-width: calc(var(--sidebar-user-width, 248px) - 56px); white-space: normal; }
+.quick-start { position: relative; flex: none; display: flex; }
+:is(.quick-start-button, .sidebar-new) { position: relative; flex: none; width: var(--control, 32px); height: var(--control, 32px); padding: 0; border-color: transparent;
+  background: transparent; box-shadow: none; color: var(--text-1); }
+:is(.quick-start-button, .sidebar-new):hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.quick-start-button[aria-pressed="true"], .quick-start-button[aria-pressed="true"]:hover:not(:disabled) { background: var(--surface-3); }
+.quick-start-button svg { width: 16px; height: 16px; }
+.sidebar-new svg { flex: none; width: 14px; height: 14px; stroke-width: 1.75; }
+/* A Set up step is left: the amber dot at the ring's corner (the name says how many steps are left). */
+.quick-start-dot { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--warn); }
+/* Under the icon, inside the sidebar: a tooltip never scrolls the page sideways. Hidden while the checklist is open. */
+:is(.quick-start-button, .sidebar-new)[data-tip]::after { left: auto; right: 0; translate: 0 0; }
+.quick-start-button[aria-pressed="true"][data-tip]::after { display: none; }
+/* Its checklist: fixed to the screen where the icon opened it (quick-start.tsx), so the sidebar never clips it. */
+.quick-start-popover { position: fixed; z-index: 30; width: min(360px, calc(100vw - 2 * var(--space-2))); max-height: calc(100dvh - var(--space-12));
+  overflow-y: auto; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-3); }
+.sidebar-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; }
+.rail-links { display: flex; flex-direction: column; }
+.sidebar-section-title { margin: 0; padding: var(--space-5) var(--space-2) var(--space-2); color: var(--text-3); font: 500 var(--fs-label)/16px var(--font-sans); letter-spacing: 0; }
+.sidebar-section ul { margin: 0; padding: 0; list-style: none; }
+/* What a saved view holds: open, waiting on the customer, urgent, or a ring for anything else. */
+.view-mark { flex: none; position: relative; width: 16px; height: 16px; }
+.view-mark::before { content: ""; position: absolute; inset: 4px; border-radius: var(--radius-full); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.view-mark[data-mark="open"]::before { background: var(--open); box-shadow: none; }
+.view-mark[data-mark="pending"]::before { background: var(--pending); box-shadow: none; }
+.view-mark[data-mark="urgent"]::before { background: var(--danger); box-shadow: none; }
+.channel-warn { flex: none; width: 8px; height: 8px; margin: 0 var(--space-1); border-radius: var(--radius-full); background: var(--warn); }
+.sidebar-foot { flex: none; display: flex; flex-direction: column; padding-top: var(--space-2); box-shadow: inset 0 1px 0 var(--line); }
+.rail-link {
+  height: var(--control, 32px); display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius);
+  color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.rail-link:hover { background: var(--surface-2); color: var(--text-1); }
+.rail-link[aria-current="page"] { background: var(--surface-3); color: var(--text-1); }
+.rail-link svg { flex: none; width: 16px; height: 16px; color: var(--text-3); stroke-width: 1.75; }
+.rail-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The label is on screen, so the rail's tooltips would only repeat it. */
+.rail-link[data-tip]::after { display: none; }
+.app-rail .rail-badge { position: static; flex: none; width: var(--space-6); min-width: 0; padding: 0; border-radius: 0; background: none; color: var(--text-3); font-size: var(--fs-label); font-weight: 400; line-height: 16px; text-align: right; }
+/* Desktop: the sidebar's width is the person's (sidebar-layout.ts): dragged at its edge, or folded into the icon rail. */
+.rail-head { flex: none; display: flex; align-items: center; gap: var(--space-1); min-width: 0; height: 48px; margin-bottom: var(--space-2); padding: 0 var(--space-1); }
+.rail-head .workspace-name { margin-left: var(--space-1); }
+.sidebar-toggle { --control: 28px; flex: none; width: 28px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
+.sidebar-toggle:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); color: var(--text-1); }
+.sidebar-toggle svg { width: 16px; height: 16px; transform: scaleX(-1); }   /* the panel on the left */
+.sidebar-toggle[data-tip]::after { left: auto; right: 0; translate: 0 0; }   /* under the button, inside the sidebar: it never scrolls sideways */
+.sidebar-resizer { position: absolute; z-index: 4; top: 0; right: 0; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; }
+.sidebar-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 2px; background: transparent; transition: background-color var(--dur-fast) var(--ease); }
+.sidebar-resizer:hover::after { background: color-mix(in srgb, var(--line-control) 55%, var(--line)); }   /* a light hint, not a bar */
+.sidebar-resizer:is([data-dragging], :focus-visible)::after { background: var(--line-control); }
+/* The ring every control shows, drawn inside the handle: the sidebar's edge would cut one drawn outside. */
+.sidebar-resizer:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+html[data-sidebar-resizing], html[data-sidebar-resizing] * { cursor: col-resize; user-select: none; }
+html[data-sidebar-resizing] iframe { pointer-events: none; }
+@media (min-width: 64.01rem) {
+  .app-shell { --sidebar-width: var(--sidebar-user-width, 248px); transition: grid-template-columns var(--dur-fast) var(--ease); }
+  html[data-sidebar-resizing] .app-shell { transition: none; }
+  .app-shell[data-sidebar="collapsed"] { --sidebar-width: 56px; }
+  /* The buttons beside the name have room of their own around their icons, so the name gets the gaps between them. */
+  .app-shell[data-sidebar="expanded"] .rail-head { gap: 0; }
+  .app-shell[data-sidebar="expanded"] .rail-head .workspace-name { margin-left: var(--space-2); }
+  .app-shell[data-sidebar="collapsed"] .app-sidebar { padding: var(--space-2) 0; overflow: visible; }
+  .app-shell[data-sidebar="collapsed"] :is(.app-rail, .rail-links, .sidebar-foot) { align-items: center; }
+  .app-shell[data-sidebar="collapsed"] .rail-head { flex-direction: column; justify-content: center; gap: var(--space-1); height: auto; margin-bottom: var(--space-2); padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .sidebar-scroll { overflow: visible; }
+  .app-shell[data-sidebar="collapsed"] :is(.workspace-name, .sidebar-section) { display: none; }
+  .app-shell[data-sidebar="collapsed"] :is(.quick-start-button, .sidebar-new) { width: 40px; height: 40px; }
+  .app-shell[data-sidebar="collapsed"] :is(.quick-start-button, .sidebar-new)[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
+  .app-shell[data-sidebar="collapsed"] .current-user { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .app-shell[data-sidebar="collapsed"] .rail-avatar { width: 40px; justify-content: center; padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .rail-brand { width: 40px; height: 40px; }
+  .app-shell[data-sidebar="collapsed"] .sidebar-toggle svg { transform: none; }
+  .app-shell[data-sidebar="collapsed"] .sidebar-toggle[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
+  .app-shell[data-sidebar="collapsed"] .rail-links { gap: var(--space-1); }
+  /* Folded, Settings keeps Back to app as an arrow; the menu waits for the sidebar to open again. */
+  .app-shell[data-sidebar="collapsed"] .settings-rail .sidebar-scroll { display: none; }
+  .app-shell[data-sidebar="collapsed"] .settings-exit { flex: none; width: 40px; height: 40px; justify-content: center; padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .settings-exit :is(span, kbd) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .app-shell[data-sidebar="collapsed"] .rail-link { position: relative; width: 40px; height: 40px; justify-content: center; padding: 0; }
+  .app-shell[data-sidebar="collapsed"] .rail-link svg { width: 18px; height: 18px; }
+  .app-shell[data-sidebar="collapsed"] .rail-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .app-shell[data-sidebar="collapsed"] .rail-link[data-tip]::after { display: block; left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
+  .app-shell[data-sidebar="collapsed"] .app-rail .rail-badge { position: absolute; top: 2px; right: 2px; width: auto; min-width: 16px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; padding: 0 4px; text-align: center; }
+  .app-shell[data-sidebar="collapsed"] .account-popover { left: calc(100% + var(--space-2)); right: auto; bottom: 0; width: 16rem; }
+}
+@media (prefers-reduced-motion: reduce) { .app-shell { transition: none; } }
+/* A tablet always has the rail and a phone the top bar: nothing to resize or fold there. */
+@media (max-width: 64rem) {
+  .sidebar-toggle, .sidebar-resizer { display: none; }
+  .rail-head { flex-direction: column; }
+}
+@media (max-width: 44rem) { .rail-head { display: contents; } }
+/* The person at the foot of the sidebar (name, and the address under it) opens the account menu. */
+.account-menu { position: relative; }
+.rail-avatar { width: 100%; height: 40px; justify-content: flex-start; gap: var(--space-2); padding: 0 var(--space-2); border-color: transparent; background: transparent; box-shadow: none; }
 .rail-avatar:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.rail-avatar .avatar { width: 20px; height: 20px; font-size: 9px; }
+.current-user { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.current-user > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.current-user-name { color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 18px; }
+.current-user-email { color: var(--text-3); font-size: var(--fs-label); font-weight: 400; line-height: 16px; }
 .account-popover {
-  position: absolute; z-index: 20; left: calc(100% + var(--space-2)); bottom: 0; width: 16rem; display: grid; gap: var(--space-3);
+  position: absolute; z-index: 20; left: 0; right: 0; bottom: calc(100% + var(--space-1)); display: grid; gap: var(--space-3);
   border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-3);
 }
 .account-popover p { display: grid; gap: 2px; margin: 0; min-width: 0; }
 .account-popover strong, .account-popover span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-popover span { color: var(--text-3); font-size: var(--fs-small); }
 .account-popover button { width: 100%; }
-.rail-label { display: none; }
-/* Always visible, never a tooltip: it is what tells a person which workspace this browser acts in. */
-.identity-bar {
-  flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: 40px;
-  background: var(--surface-0); padding: 0 var(--space-3); font-size: var(--fs-label);
-}
-.identity-bar strong { flex: none; max-width: 50%; overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.identity-bar span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
-.identity-bar span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
-.app-rail { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-3) 0; background: var(--surface-0); }
-.rail-brand { width: 28px; height: 28px; display: grid; place-items: center; margin-bottom: var(--space-4); border-radius: var(--radius); }
-.rail-links { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
-.rail-link {
-  width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--radius); color: var(--text-3);
-  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
-}
-.rail-link:hover { background: var(--surface-2); color: var(--text-1); }
-.rail-link[aria-current="page"] { background: var(--surface-3); color: var(--text-1); }
-.rail-link svg { width: 20px; height: 20px; }
-.rail-link[data-tip]::after { left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
+.account-workspaces { display: grid; gap: var(--space-1); min-width: 0; }
+.account-workspaces a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* A panel is the white working surface: list, thread, details, settings. */
 .panel { border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
 
 /* Inbox: list | thread | details. */
 .inbox-shell {
-  height: calc(100% - var(--space-2)); display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) minmax(240px, 300px);
-  gap: 0; margin: 0 var(--space-2) var(--space-2) 0; border-radius: var(--radius-lg); background: var(--surface-1);
-  box-shadow: var(--shadow-1); overflow: hidden;
+  height: 100%; display: grid; grid-template-columns: 340px minmax(0, 1fr) 256px;
+  gap: 0; background: var(--surface-1); overflow: hidden;
 }
-/* One work surface: list, thread and details share one sheet, split by hairlines. */
+/* One work surface: list, thread and details share the app sheet, split by hairlines. */
 .inbox-shell > .panel { border-radius: 0; box-shadow: none; }
 .inbox-shell > .panel + .panel { border-left: 1px solid var(--line); }
 .list-pane:focus { outline: none; }
 .list-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
-.list-pane > header { display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-5) 0; border-bottom: 1px solid var(--line); }
+.list-pane > header { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3) var(--space-4) 0 var(--space-8); border-bottom: 1px solid var(--line); }
 .list-title { display: flex; align-items: baseline; gap: var(--space-2); }
-.list-title h1 { font: 500 24px/1.1 var(--font-display); letter-spacing: -0.02em; }
-.list-title span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.list-title h1 { font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
+.list-title > span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+/* Until the support mailbox forwards here: one line under the title, its action inline. */
+.mail-switch { margin: calc(-1 * var(--space-1)) 0 0; color: var(--text-2); font-size: var(--fs-small); }
 .conversation-center { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; overflow: hidden; }
 .details-panel { min-width: 0; min-height: 0; overflow-y: auto; }
+/* A wide screen gives the details room, so a name or a tag rarely has to wrap. */
+@media (min-width: 100rem) { .inbox-shell { grid-template-columns: 340px minmax(0, 1fr) 296px; } }
 
 /* Settings: one white panel; a section nav on the left, each section a heading column beside its controls. */
-.settings-page { min-height: calc(100% - var(--space-2)); margin: 0 var(--space-2) var(--space-2) 0; padding: var(--space-8) var(--space-10); }
+.settings-page { min-height: 100%; padding: var(--space-8) var(--space-10); }
+/* The sheet is the panel: a page that is a panel itself draws no second card inside it. */
+.app-content > .panel { border-radius: 0; box-shadow: none; }
 .settings-page > header { max-width: 84rem; margin-bottom: var(--space-6); }
-.settings-layout { max-width: 84rem; display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: var(--space-10); align-items: start; }
-.settings-nav { position: sticky; top: 0; display: grid; gap: var(--space-5); }
-.settings-nav ul { display: grid; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
-.settings-nav a { display: block; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--text-2); font-size: var(--fs-small); text-decoration: none; }
+/* The sheet holds the page alone: the menu is in the sidebar (settings-nav.tsx), or on a phone the page before it. */
+.settings-layout { max-width: 84rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+/* Settings in the sidebar: Back to app at the head (48px, as the workspace row it replaces), the menu under it. */
+.settings-rail-head { flex-direction: row; }
+.settings-exit { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); height: var(--control, 32px); padding: 0 var(--space-2); border-radius: var(--radius);
+  color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-decoration: none; }
+.settings-exit:hover { background: var(--surface-2); }
+.settings-exit svg { flex: none; width: 16px; height: 16px; }
+.settings-exit span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-exit kbd { flex: none; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--line); padding: 0 var(--space-1); color: var(--text-3); font: 500 var(--fs-label)/20px var(--font-mono); }
+.settings-rail .settings-nav { position: static; padding-top: var(--space-2); }
+/* The workspace, above the person: the foot is where Settings names who this browser acts as. */
+.settings-rail .sidebar-foot .workspace-name { flex: none; padding: var(--space-1) var(--space-2) 0; }
+/* A card puts its heading beside its controls only where both get room; the column it sits in decides, not the window. */
+.settings-sections { container-type: inline-size; }
+.settings-nav { position: sticky; top: 0; display: grid; gap: var(--space-4); }
+.settings-nav ul { display: grid; gap: 0; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.settings-nav a { display: flex; align-items: center; min-height: var(--control, 32px); border-radius: var(--radius); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
 @media (pointer: coarse), (max-width: 30rem) { .settings-nav a { display: flex; align-items: center; min-height: var(--touch); } }
 .settings-nav a:hover { background: var(--surface-2); color: var(--text-1); }
-.settings-nav a[aria-current="page"] { background: var(--surface-2); color: var(--text-1); font-weight: 600; }
-.settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
+.settings-nav a[aria-current="page"] { background: var(--surface-3); color: var(--text-1); font-weight: 500; }
+.settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
 .settings-nav .settings-group-label { padding: 0 var(--space-2); }
 .settings-nav .settings-nav-sub { margin: 2px 0 0; padding-left: var(--space-3); }
 .settings-sections > .settings-group-label { padding: var(--space-6) 0 var(--space-2); }
 .settings-sections > .settings-group-label:first-child, .settings-sections > .error-copy + .settings-group-label { padding-top: 0; }
 .settings-card h2 { scroll-margin-top: var(--space-6); }
-.settings-page > header h1 { font: 500 28px/1.1 var(--font-display); letter-spacing: -0.02em; }
-.settings-page > header p { margin-top: var(--space-1); color: var(--text-2); }
+.settings-page > header h1 { font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
+.settings-page > header p { margin-top: var(--space-1); color: var(--text-2); font-size: var(--fs-ui); }
 .settings-page > .error-copy { margin-bottom: var(--space-4); }
 .settings-card { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: var(--space-4) var(--space-10); border-top: 1px solid var(--line); padding: var(--space-6) 0; }
+/* After the card's own columns, so a narrow column wins. */
+@container (max-width: 44rem) { .settings-card { grid-template-columns: minmax(0, 1fr); } }
 .section-heading h2 { font-size: 14px; font-weight: 600; }
 .section-heading p { margin-top: var(--space-1); color: var(--text-3); font-size: var(--fs-small); }
 .settings-body { display: grid; align-content: start; gap: var(--space-4); }
@@ -96,6 +244,7 @@
 .signin-tagline { max-width: 26rem; font: 500 30px/1.12 var(--font-display); letter-spacing: -0.02em; }
 .signin-footnote { margin-top: auto; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
 .signin-status { max-width: 26rem; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
+.signin-status a { color: var(--on-brand-panel); text-decoration: underline; text-underline-offset: 2px; }
 .signin-brand .signin-footnote { margin-top: var(--space-8); }
 .signin-split .redeem-panel { align-self: center; justify-self: center; border: 0; box-shadow: none; }
 .signin-split .redeem-panel .brand-lockup { display: none; }
@@ -107,17 +256,68 @@
 .redeem-panel > .signin-offer { margin: 0 0 var(--space-3); color: var(--text-1); font-weight: 600; }
 .redeem-panel > .primary-action { width: 100%; margin-top: var(--space-6); --control: 44px; font-size: var(--fs-ui); }
 .redeem-panel > .error-copy { margin-top: var(--space-4); }
+/* An AI app's consent page: its sentences and its two buttons keep the panel's spacing. */
+.oauth-consent > p { margin: var(--space-3) 0 0; }
+.oauth-consent .consent-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
+.oauth-consent .consent-actions > * { flex: 1 1 8rem; --control: 44px; font-size: var(--fs-ui); }
 .brand-lockup { display: flex; align-items: center; gap: var(--space-3); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .cloud-sign-in { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
 .cloud-sign-in h2 { font-size: 14px; font-weight: 600; }
 .workspace-choices { display: grid; gap: var(--space-2); }
 .workspace-choices button { justify-content: flex-start; --control: 44px; }
 
-@media (max-width: 75rem) {
+/* Below 80 rem (1280 px, the most common laptop width keeps three columns) the sidebar leaves the thread too little room: Details opens as a drawer
+   (inbox-page.tsx asks the same width). */
+@media (max-width: 79.99rem) {
   .inbox-shell { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
   .details-panel { display: none; }
 }
-@media (max-width: 56rem) {
+/* Beside the 248 px sidebar (64–90 rem, laptops up to 1440 px) the list, and Details from 80 rem, are a little narrower,
+   so the thread and its reply box keep their room: the tools and both send buttons stay on one row. */
+@media (min-width: 64.01rem) and (max-width: 79.99rem) {
+  .inbox-shell { grid-template-columns: 288px minmax(0, 1fr); }
+}
+@media (min-width: 80rem) and (max-width: 89.99rem) {
+  .inbox-shell { grid-template-columns: 288px minmax(0, 1fr) 240px; }
+  .details-section { padding-inline: var(--space-4); }
+  .details-panel .property-row { --label: 64px; }
+}
+/* The narrower list keeps the tabs' words apart (12 px between them) with smaller type; a search's five tabs scroll. */
+@media (min-width: 64.01rem) and (max-width: 89.99rem) {
+  .list-pane .status-tabs { gap: var(--space-1); }
+  .list-pane .status-tabs label { font-size: var(--fs-small); }
+}
+/* With the sidebar or rail beside it the thread of a 705–1439 px screen is narrow: the reply box keeps its tools and both send
+   buttons on one row by giving up some padding and spacing. */
+@media (min-width: 44.01rem) and (max-width: 89.99rem) {
+  .inbox-shell .composer { padding-inline: var(--space-4); }
+  .inbox-shell .composer-actions { gap: var(--space-1); padding-inline: var(--space-1); }
+}
+/* A tablet or a small laptop: the sidebar folds into an icon rail (each link keeps its name and a tooltip) and the
+   workspace and address move to a bar over the sheet, so the thread keeps its room. */
+@media (min-width: 44.01rem) and (max-width: 64rem) {
+  :root { --sidebar-width: 56px; }
+  .app-sidebar { padding: var(--space-2) 0; }
+  .app-rail, .sidebar-foot { align-items: center; }
+  .rail-links { align-items: center; gap: var(--space-1); }
+  .rail-head { justify-content: center; height: auto; margin-bottom: var(--space-2); padding: 0; }
+  .sidebar-scroll { overflow: visible; }
+  :is(.workspace-name, .sidebar-section) { display: none; }
+  :is(.quick-start-button, .sidebar-new) { width: 40px; height: 40px; }
+  :is(.quick-start-button, .sidebar-new)[data-tip]::after { left: calc(100% + var(--space-2)); right: auto; top: 50%; translate: 0 -50%; }
+  .current-user { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .rail-avatar { width: 40px; justify-content: center; padding: 0; }
+  .rail-brand { width: 40px; height: 40px; }
+  .rail-link { position: relative; width: 40px; height: 40px; justify-content: center; padding: 0; }
+  .rail-link svg { width: 20px; height: 20px; }
+  .rail-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .rail-link[data-tip]::after { display: block; left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
+  .app-rail .rail-badge { position: absolute; top: 2px; right: 2px; width: auto; min-width: 16px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; padding: 0 4px; text-align: center; }
+  .account-popover { left: calc(100% + var(--space-2)); right: auto; bottom: 0; width: 16rem; }
+  /* The tooltips stand beside the rail: it never clips them. */
+  .app-sidebar { overflow: visible; }
+}
+@media (max-width: 64rem) {
   /* minmax(0, 1fr): the column never grows to fit a wide child, so a phone never scrolls sideways. */
   .redeem-page.signin-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .signin-brand { gap: var(--space-3); padding: var(--space-6); }
@@ -125,7 +325,6 @@
   .signin-tagline { font-size: 16px; }
   .signin-brand .signin-footnote { display: none; }
   .signin-split .redeem-panel { align-self: start; padding: var(--space-8) var(--space-6); }
-  .settings-card { grid-template-columns: 1fr; }
   .settings-page { padding: var(--space-6); }
   .settings-layout { grid-template-columns: 1fr; gap: var(--space-4); }
   /* Narrow: the section nav is one row of links that scrolls sideways. */
@@ -140,16 +339,27 @@
   .settings-nav a { white-space: nowrap; border: 1px solid var(--line); padding: var(--space-1) var(--space-3); }
 }
 @media (max-width: 44rem) {
-  /* The page scrolls; the top bar (its links and buttons are --touch tall) stays, and the identity bar under it. */
-  :root { --top-bar: calc(var(--touch) + 2 * var(--space-2) + 1px); scroll-padding-top: calc(var(--top-bar) + 2.25rem); }
+  /* The page scrolls; the top bar (its links and buttons are --touch tall) stays, and the identity bar under it.
+     The sidebar wrapper dissolves: its rail is the top bar. */
+  :root { --sidebar-width: 0px; --top-bar: calc(var(--touch) + 2 * var(--space-2) + 1px); scroll-padding-top: calc(var(--top-bar) + 2.25rem); }
   .app-shell { height: auto; min-height: 100dvh; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
-  .app-rail { position: sticky; top: 0; z-index: 3; flex-direction: row; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
-  .rail-brand { margin: 0 var(--space-2) 0 0; }
+  .app-sidebar { display: contents; }
+  .app-rail { position: sticky; top: 0; z-index: 3; flex: none; flex-direction: row; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+  .rail-brand { flex: none; margin: 0 var(--space-2) 0 0; }
+  /* The phone's top bar holds the logo, Quick start, the pen, the places, Settings and the person: search is the icon
+     of the bar under it, and the lists and the invite are a tap away in the inbox's filters and in Settings. */
+  .sidebar-scroll, .sidebar-foot { display: contents; }
+  :is(.workspace-name, .sidebar-section, .sidebar-invite) { display: none; }
+  :is(.quick-start-button, .sidebar-new) { width: var(--touch); height: var(--touch); }
+  :is(.quick-start-button, .sidebar-new)[data-tip]::after { display: none; }
+  .current-user { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   /* Labelled links can be wider than a small tablet: scroll, never push the page. */
-  .rail-links { flex: 1 1 auto; min-width: 0; flex-direction: row; overflow-x: auto; scrollbar-width: none; }
-  .rail-link[data-tip]::after { display: none; }
-  .rail-link { width: auto; height: var(--touch); grid-auto-flow: column; gap: var(--space-2); padding: 0 var(--space-3); }
-  .rail-label { display: inline; font-size: var(--fs-small); font-weight: 500; }
+  .rail-links { flex: 1 1 auto; min-width: 0; flex-direction: row; gap: var(--space-1); padding-top: 0; overflow-x: auto; scrollbar-width: none; }
+  .rail-links::-webkit-scrollbar { display: none; }
+  .rail-link { position: relative; flex: none; width: auto; height: var(--touch); gap: var(--space-2); padding: 0 var(--space-3); color: var(--text-3); }
+  .rail-link svg { width: 20px; height: 20px; color: currentColor; }
+  .rail-label { flex: none; overflow: visible; font-size: var(--fs-small); font-weight: 500; }
+  .app-rail .rail-badge { position: absolute; top: 2px; right: 2px; width: auto; min-width: 16px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; padding: 0 4px; text-align: center; }
 }
 @media (max-width: 34rem) {
   /* Four destinations do not fit labelled on a phone: icons only, each still named (aria-label), the
@@ -162,35 +372,77 @@
   .app-rail { padding-inline: var(--space-2); }
   .rail-brand { margin-right: 0; }
   .rail-link { gap: var(--space-1); }
+  /* Inbox, Mentions, Help center and Reports touch edge to edge, each still 44 px to tap. */
+  .rail-links { gap: 0; }
+  /* The logo, Quick start and the pen give up a little width (still 44 px tall) so the places fit beside them. */
+  .app-rail { gap: 0; }
+  .rail-brand { width: 36px; }
+  :is(.quick-start-button, .sidebar-new) { width: var(--space-8); }
 }
 /* A short wide screen (a phone on its side): the reply box and what stands above it (a reply warning, a
    draft) scroll on their own instead of being cut below the pane. */
 @media (min-width: 44.01rem) {
   .conversation-center .composer { max-height: 75dvh; overflow-y: auto; }
 }
+/* On a phone the settings menu is a page of its own (/settings) and every other settings page goes back to
+   it, as the inbox list and a conversation take turns: the way back shows where the menu was. */
+/* The way back to the settings menu, a phone's only. */
+.settings-layout > .settings-back { display: none; }
 @media (max-width: 44rem) {
-  .app-main, .app-content { overflow: visible; }
-  .account-menu { margin: 0 0 0 auto; }
-  .rail-avatar, .rail-brand { width: var(--touch); height: var(--touch); }
-  .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); }
-  .identity-bar { position: sticky; top: var(--top-bar); z-index: 2; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+  .settings-layout > .settings-back { display: inline-flex; align-items: center; gap: var(--space-1); justify-self: start; min-height: var(--touch); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
+  .settings-nav:not(.settings-nav-index) { display: none; }
+  /* A channel's own way back to Channels is the one back link of its page. */
+  .settings-layout:has(.ch-back) > .settings-back { display: none; }
+  /* The way back sits above the page's title (the title is the page's header, the link is inside its layout). */
+  .settings-page:has(> .settings-layout > .settings-back) { display: flex; flex-direction: column; }
+  .settings-page:has(> .settings-layout > .settings-back) > .settings-layout { display: contents; }
+  .settings-page > .settings-layout > .settings-back { order: -1; align-self: flex-start; margin-bottom: var(--space-2); }
+  .settings-nav-index { display: grid; gap: var(--space-4); overflow: visible; padding-bottom: 0; mask-image: none; }
+  .settings-nav-index > div { display: block; }
+  .settings-nav-index .settings-group-label { display: block; }
+  .settings-nav-index ul { display: grid; gap: 0; margin: var(--space-2) 0 0; }
+  .settings-nav-index .settings-nav-parent { display: block; }
+  .settings-nav-index .settings-nav-sub { display: grid; padding-left: var(--space-3); }
+  .settings-nav-index a { white-space: normal; border: 0; padding: 0 var(--space-2); }
+}
+@media (max-width: 44rem) {
+  .app-main, .app-content, .app-sheet { overflow: visible; }
+  .app-main { gap: 0; padding: 0; }
+  .app-sheet { border-radius: 0; box-shadow: none; }
+  .account-menu { flex: none; margin: 0 0 0 auto; }
+  .rail-avatar, .rail-brand { width: var(--touch); height: var(--touch); justify-content: center; padding: 0; }
+  .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); width: 16rem; }
+  /* The top bar is the phone's identity bar: it stays under the row of places while the page scrolls. The row
+     already marks the page, so the bar names the workspace and the person instead. */
+  .app-topbar { position: sticky; top: var(--top-bar); z-index: 2; height: auto; min-height: 40px; padding: var(--space-1) var(--space-3); }
+  .topbar-title { display: none; }
+  /* Search is an icon here, a fingertip wide, before the workspace and the person. */
+  .topbar-search { flex: none; order: 2; width: var(--touch); height: var(--touch); justify-content: center; padding: 0; background: transparent; box-shadow: none; }
+  .topbar-search svg { width: 18px; height: 18px; }
+  .topbar-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .topbar-search kbd { display: none; }
+  .topbar-end { order: 1; justify-content: space-between; }
   .app-content > .inbox-shell { height: auto; }
-  .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; margin: 0; border-radius: 0; box-shadow: none; overflow: visible; }
+  .list-pane > header { padding-inline: var(--space-4); }
+  .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; overflow: visible; }
   .panel { border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; }
   .inbox-shell > .panel + .panel { border-left: 0; }
   /* The list and an opened conversation take turns: the list scrolls with the page, the conversation fills the
      screen under the bars like on a wide screen, its timeline scrolling between the title and the reply box. */
   .inbox-shell[data-view="list"] > .conversation-center, .inbox-shell[data-view="thread"] > .list-pane { display: none; }
   .app-shell:has(.inbox-shell[data-view="thread"]) { height: 100dvh; min-height: 0; }
-  .app-shell:has(.inbox-shell[data-view="thread"]) .app-main { overflow: hidden; }
+  .app-shell:has(.inbox-shell[data-view="thread"]) :is(.app-main, .app-sheet) { min-height: 0; overflow: hidden; }
   /* Nothing scrolls the page here, and app-main would be the bar's scroll container: it stays in the flow. */
-  .app-shell:has(.inbox-shell[data-view="thread"]) .identity-bar { position: static; }
+  .app-shell:has(.inbox-shell[data-view="thread"]) .app-topbar { position: static; }
   .app-shell:has(.inbox-shell[data-view="thread"]) .app-content { overflow: auto; }
   .app-content > .inbox-shell[data-view="thread"] { height: 100%; grid-template-rows: minmax(0, 1fr); }
   .inbox-shell[data-view="thread"] .composer { max-height: 60dvh; overflow-y: auto; }
-  .settings-page { margin: 0; padding: var(--space-5) var(--space-4); }
+  .settings-page { padding: var(--space-5) var(--space-4); }
   .settings-card { padding: var(--space-5) 0; }
 }
+
+/* A page's way back is a text link with a full-height hit area (32 px; --touch on a phone through --control). */
+.page-back { display: inline-flex; align-items: center; min-height: var(--control, 32px); }
 
 /* Serif is for page titles; an h2 in a settings header (AI empty state) is sans. */
 .settings-page header > h2 { font-family: var(--font-sans); letter-spacing: 0; }

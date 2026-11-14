@@ -200,7 +200,7 @@ func missing(report *Report) []string {
 	}{{"contacts", report.Contacts}, {"tickets", report.Tickets.EntityCount}, {"messages", report.Messages},
 		{"attachments", report.Attachments.EntityCount}, {"inline images", report.InlineImages.Recoverable()}, {"time entries", report.TimeEntries}, {"saved replies", report.SavedReplies.EntityCount},
 		{"knowledge base collections", report.KnowledgeBase.Collections}, {"knowledge base articles", report.KnowledgeBase.Articles},
-		{"knowledge base translations", report.KnowledgeBase.Translations}, {"knowledge base images", report.KnowledgeBase.Images.recoverable()}} {
+		{"knowledge base translations", report.KnowledgeBase.Translations}, {"knowledge base collection names", report.KnowledgeBase.CollectionNames}, {"knowledge base images", report.KnowledgeBase.Images.recoverable()}} {
 		if !report.DryRun && row.count.Imported < row.count.Source {
 			out = append(out, fmt.Sprintf("%s: %d of %d not imported", row.name, row.count.Source-row.count.Imported, row.count.Source))
 		}

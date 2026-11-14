@@ -29,7 +29,7 @@ There are 62 permissions. **Admin** holds them all; **Agent** holds the 42 below
 | Knowledge base articles | `kb_articles:read`, `kb_articles:create`, `kb_articles:update`, `kb_articles:delete`, `kb_articles:publish` |
 | Knowledge base media | `kb_media:read`, `kb_media:create`, `kb_media:update`, `kb_media:delete`; Admin only: `kb_media:purge` |
 | Help center | `help_center:read`; Admin only: `help_center:update` |
-| Results | `results:read`; Admin only: `results:share` |
+| Reports | `results:read`; Admin only: `results:share` |
 | Your profile | `profile:update` |
 | Team | `team:read`, `team:create_tokens`; Admin only: `team:invite`, `team:revoke`, `team:manage_roles` |
 | Channels | `channels:read`; Admin only: `channels:update`, `channels:manage_credentials` |
@@ -47,7 +47,7 @@ sessions and tokens, and reporting a problem.
 
 ## Roles
 
-**Settings → Roles** lists the workspace's roles, how many permissions each holds and who holds it.
+**Settings → Members → Roles** lists the workspace's roles, how many permissions each holds and who holds it.
 Every workspace has two built-in roles:
 
 - **Admin** holds every permission, including ones added in later releases. It cannot be renamed,
@@ -72,22 +72,23 @@ gives it and no token follows it; otherwise the page names them. A deleted role 
 
 ## What a person with a narrow role sees
 
-The app shows only what your roles let you read. The left rail lists the areas you can open (Inbox
-with `conversations:read`, Knowledge with `kb_articles:read`, or the media library with only
-`kb_media:read`, Results with `results:read`; Settings always). A role without `conversations:read`
+The app shows only what your roles let you read. The sidebar lists the areas you can open (Inbox
+with `conversations:read`, Knowledge base with `kb_articles:read`, or the media library with only
+`kb_media:read`, Reports with `results:read`; Settings always). Its saved views need `saved_views:read`, its
+channels `channels:read`, and **Invite teammates** `team:invite`. A role without `conversations:read`
 opens on the first of those instead of the inbox. Opening a screen your roles do not cover says so:
 "Your roles do not let you open …", names the permission it needs, and links the areas you can open.
 
-In a conversation, **Reply** is shown only with `messages:send`, and **New conversation** only with
+In a conversation, **Reply** is shown only with `messages:send`, and **New conversation** (in the sidebar) only with
 `messages:send`, `channels:read` and `contacts:read`. Without `messages:read` a conversation opens
 but says its messages are not shown. Saved replies, saved views, knowledge base articles, tags and the
 team list appear only with their `:read` permission. **Settings** shows only the sections you can read.
 
 ## Give people roles
 
-In **Settings → Team**, each person shows their roles. **Change roles** opens the list of roles:
+In **Settings → Members → Team**, each person shows their roles. **Change roles** opens the list of roles:
 tick the ones they should hold and choose **Apply**. Everyone needs at least one role. An invite
-carries roles too: pick them in **Settings → Invites** (Agent is selected); the person gets them when
+carries roles too: pick them in **Settings → Members → Invites** (Agent is selected); the person gets them when
 they join, added to any roles they already hold. See [Invite your team](invites.md) and
 [Manage your team](team.md).
 
@@ -110,7 +111,7 @@ These hold for people and tokens alike:
 
 ## AI agent tokens
 
-Create a token in **Settings → External AI agents**. Creating a token is something only a person
+Create a token in **Settings → AI & agents → External AI agents**. Creating a token is something only a person
 does there; an AI agent cannot create one. Under **Access**, choose one of:
 
 - **Follow a role**: pick any role whose permissions you all hold: your own roles, a narrower one,
@@ -121,7 +122,7 @@ does there; an AI agent cannot create one. Under **Access**, choose one of:
   list is fixed when you create the token.
 
 Either way, a token never does more than you can do right now: if you lose a permission, every token
-of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → Sessions**
+of yours loses it too, and if you are deactivated, your tokens stop working. **Settings → AI & agents → External AI agents**
 shows each token as "Follows role …", "Fixed · N permissions", or "Stopped" with the reason. Revoke a
 token there. More about tokens: [Sessions and devices](sessions.md#agent-tokens).
 
@@ -142,7 +143,7 @@ used to wait for a person's approval: `results:share`, `team:invite`, `team:crea
 `team:manage_roles`, `team:revoke`, `channels:update`, `channels:manage_credentials`,
 `workspace:update`, `workspace:export`, `billing:manage`, `imports:undo`, `ai_settings:update`,
 `autofix:send` and `autofix_settings:update`. A call that needs one of them is refused; create a new
-token for it. Sessions shows such a token as "Created before roles" with the tier it had.
+token for it. The token list on **AI & agents** shows such a token as "Created before roles" with the tier it had.
 
 ## When a permission is missing
 

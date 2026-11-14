@@ -28,7 +28,7 @@ func writeFeatureOff(response http.ResponseWriter) {
 // repository or a key, the billing portal that cancels) and the routes that keep its data whole: webhooks,
 // consent callbacks.
 func featureOfRoute(route Route) string {
-	if route.Permission == auth.PermissionPublic && route.Pattern != "/api/v1/auth/cloud/exchange" && route.Pattern != cloudSignupPath {
+	if route.Permission == auth.PermissionPublic && route.Pattern != "/api/v1/auth/cloud/exchange" && route.Pattern != cloudWorkspacesPath && route.Pattern != cloudSignupPath {
 		return ""
 	}
 	switch {
@@ -40,7 +40,7 @@ func featureOfRoute(route Route) string {
 		return serverconfig.FeatureAutofix
 	case route.Pattern == "/api/v1/billing/checkout":
 		return serverconfig.FeatureBilling
-	case route.Pattern == "/api/v1/auth/cloud/exchange":
+	case route.Pattern == "/api/v1/auth/cloud/exchange" || route.Pattern == cloudWorkspacesPath:
 		return serverconfig.FeatureCloudSignIn
 	case route.Pattern == cloudSignupPath:
 		return serverconfig.FeatureSignup

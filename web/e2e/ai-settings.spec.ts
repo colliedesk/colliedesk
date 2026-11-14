@@ -45,11 +45,11 @@ test('a self-hosted admin adds a provider on the network, turns reply drafts on,
     await expect(page).toHaveURL(`${baseURL}/`);
 
     await page.goto(`${baseURL}/settings`);
-    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Built-in AI', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'No AI provider on this server yet' })).toBeVisible();
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'AI & agents', exact: true }).click();
+    await expect(page.getByText('No AI provider yet.')).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Reply drafts on' })).toBeDisabled();
 
-    await page.getByRole('button', { name: 'Add provider' }).first().click();
+    await page.getByRole('button', { name: 'Add provider' }).click();
     const dialog = page.getByRole('dialog', { name: 'Add a provider' });
     await dialog.getByText('Other or self-hosted', { exact: true }).click();
     await dialog.getByLabel('Name', { exact: true }).fill('Office model');
@@ -65,12 +65,15 @@ test('a self-hosted admin adds a provider on the network, turns reply drafts on,
     await dialog.getByRole('button', { name: 'Check and save' }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByText('Office model')).toBeVisible();
-    await expect(page.getByText('Working')).toBeVisible();
+    await expect(page.getByText('Working', { exact: true })).toBeVisible();
     expect(model.calls).toEqual(['missing', 'llama-4-scout']);
 
     await page.getByRole('tab', { name: 'Features' }).click();
+    // The row opens the feature's sheet: provider and model are set there, the switch stays on the row.
+    await page.getByRole('button', { name: 'Reply drafts settings' }).click();
     await page.getByRole('combobox', { name: 'Reply drafts provider' }).selectOption({ label: 'Office model' });
     await expect(page.getByRole('combobox', { name: 'Reply drafts model' })).toHaveValue('llama-4-scout');
+    await page.getByRole('button', { name: 'Done' }).click();
     await page.getByRole('switch', { name: 'Reply drafts on' }).click();
     await expect(page.getByRole('switch', { name: 'Reply drafts on' })).toBeChecked();
 

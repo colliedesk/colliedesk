@@ -57,9 +57,9 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 			}
 			return nil
 		})
-		batch.Queue(helpCenterCollectionsSQL, workspaceID).Query(func(rows pgx.Rows) error {
+		batch.Queue(helpCenterCollectionsSQL, workspaceID, "").Query(func(rows pgx.Rows) error {
 			var err error
-			got.Collections, err = pgx.CollectRows(rows, scanPublicKBCollection)
+			got.Collections, err = pgx.CollectRows(rows, scanPublicKBCollection(""))
 			return err
 		})
 		collectArticles := func(rows pgx.Rows) error {

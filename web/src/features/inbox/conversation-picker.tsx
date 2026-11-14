@@ -14,7 +14,7 @@ export function ConversationPicker({ label, items, value, onChange, timezone }: 
   return <fieldset className="candidate-list">
     <legend className="sr-only">{label}</legend>
     {items.map((item) => <label key={item.id} className="candidate-row">
-      <input type="radio" name={name} value={item.id} checked={value === item.id} onChange={() => onChange(item.id)} />
+      <span className="candidate-check"><input type="radio" name={name} value={item.id} checked={value === item.id} onChange={() => onChange(item.id)} /></span>
       <span className="candidate-subject">{item.subject}</span>
       <span className="candidate-meta">
         <StatusLabel status={item.status} />

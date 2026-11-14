@@ -9,7 +9,7 @@ import { ImportLinksSummary } from './import-links';
 import { importMessages as m } from './import-messages';
 import { ImportSteps } from './import-steps';
 import { onlyArchiveRefused } from './import-verdict';
-import { SettingsNav } from './settings-nav';
+import './settings-v2.css';
 
 const defaultRecentDays = 90;
 
@@ -52,25 +52,19 @@ const shownHistory = (history: ImportJob[], job?: ImportJob) => history.filter((
 
 export function ImportPage(props: ImportPageProps) {
   const { isAdmin, job, history, loadFailed } = props;
-  return (
-    <main className="settings-page panel import-page">
-      <header><h1>{m.heading}</h1><p>{m.description}</p></header>
-      <div className="settings-layout">
-        <SettingsNav page="/settings/import-freshdesk" shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: Boolean(props.showBilling), importData: isAdmin, ai: true }} />
-        <div className="settings-sections">
-          {!isAdmin ? <p className="muted-copy">{m.adminsOnly}</p> : <>
-            {loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
-            {props.error && <p role="alert" className="error-copy">{props.error}</p>}
-            <section className="settings-card" aria-labelledby="import-current-heading">
-              <Current {...props} />
-            </section>
-            {props.peopleSection}
-            {shownHistory(history, job).length > 0 && <History {...props} />}
-          </>}
-        </div>
-      </div>
-    </main>
-  );
+  const sections = <div className="settings-sections">
+    {!isAdmin ? <p className="muted-copy">{m.adminsOnly}</p> : <>
+      {loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
+      {props.error && <p role="alert" className="error-copy">{props.error}</p>}
+      <section className="settings-card" aria-labelledby="import-current-heading">
+        <Current {...props} />
+      </section>
+      {props.peopleSection}
+      {shownHistory(history, job).length > 0 && <History {...props} />}
+    </>}
+  </div>;
+  // The page around it (Settings → Data, or a step of the setup flow) has the title and the frame.
+  return <div className="import-page import-embedded">{sections}</div>;
 }
 
 function Current(props: ImportPageProps) {
@@ -143,7 +137,6 @@ function ConnectForm({ onPreview, busy, initialDomain = '' }: ImportPageProps & 
       <small id={ids.oldHelpCenterHelp} className="muted-copy">{m.oldHelpCenterHelp}</small>
       <div className="button-row import-actions"><button type="submit" className="primary-action" disabled={busy}>{m.readAccount}</button></div>
     </form>
-    <p className="muted-copy">{m.freePlanNote}</p>
   </Heading>;
 }
 

@@ -7,7 +7,7 @@ suggestion, unless an admin turns on [Apply suggestions automatically](#apply-su
 which lets the picked parts (tags, priority, assignee) apply by themselves and can be undone, and a
 draft never reaches a customer until someone presses **Send**. The AI chat is the one feature that
 answers customers by itself: only once an admin turns it on, and only from the help center's public
-articles. **Settings → Built-in AI** decides which model each feature uses and records who agreed to
+articles. **Settings → AI & agents** decides which model each feature uses and records who agreed to
 send data to it.
 
 ## Every feature starts off
@@ -15,7 +15,20 @@ send data to it.
 No AI feature runs until an admin turns it on, on Colliedesk Cloud too. Turning a feature on is your
 consent that its ticket data goes to the provider it uses; Colliedesk records who agreed and when,
 and asks again whenever the feature moves to another provider. Turn a feature off at any time in
-**Settings → Built-in AI → Features**.
+**Settings → AI & agents → Features**.
+
+Each feature is one row there: its name, a short line, its state (**On · Suggest**, **On**, **Off**) and
+its switch. The switch turns the feature on or off and saves at once. The rest of the row opens the
+feature's settings in a panel beside the list: its provider and model, its automatic runs, its **Default for
+channels** and the channels that differ. Choices in the panel save at once; **Done** closes it. Without a
+provider yet, one notice offers **Add provider** and the setup guide. A switch that is off has its reason in
+the lock beside it: no provider yet, no provider picked for that feature (open its row and pick one), or you
+are not an admin. On a phone the tabs (Features, Providers, AI chat, Usage, History) scroll
+sideways, with a fade at the edge that hides some.
+
+The [setup flow](setup-guide.md#setup-flow) offers one of them to a new team: its **Turn on AI drafts** step
+turns Reply drafts on with **Default for channels** set to **Suggest**, through the same call as Settings, so
+the consent is recorded the same way. It leaves triage suggestions off.
 
 ## Where a feature runs
 
@@ -25,14 +38,16 @@ Each feature (**Triage suggestions**, **Reply drafts**, and **Chat intake** for 
    is **Colliedesk AI**: Anthropic's Claude models, run for HC Labs and included in your plan. On your
    own server it is whatever the operator configured (see
    [environment variables](../self-host/environment-variables.md#ai-provider)); without one, Settings
-   explains the two ways to get started. If the operator switches the server's provider off, the features
-   set to it stop and Settings says so; they run again once it is on, or pick another provider.
+   offers **Add provider** and the setup guide. You pick only the provider: the operator picks the model each
+   feature runs on it, Settings shows it, and when the operator changes it your features follow. If the operator switches the server's provider off, nobody can pick
+   it, and the features set to it stop: Settings shows it greyed, and says why when you point at it or tab to it.
+   They run again once it is on, or pick another provider.
 2. **A provider you add.** Your workspace pays that provider directly.
 3. **None.** The feature stays off.
 
 ## Add your own provider
 
-In **Settings → Built-in AI → Providers**, admins choose **Add provider**:
+In **Settings → AI & agents → Providers**, admins choose **Add provider**:
 
 1. **Anthropic**: an API key from console.anthropic.com. Requests go to the Claude API.
 2. **OpenAI**: an API key from platform.openai.com. The address is filled in.
@@ -106,7 +121,7 @@ meanwhile is dropped without calling anyone. A locked workspace runs none.
 ## Reply drafts
 
 With **Reply drafts** on, the reply box of a conversation has **Draft with AI**; while they are off it
-shows **Off** to admins only, as a link to **Settings → Built-in AI**; agents see no AI tool until it is on. Say what the reply
+shows **Draft with AI** and **Off** to admins only, as a link to **Settings → AI & agents**; agents see no AI tool until it is on. Say what the reply
 should say (optional, up to 2,000 characters: "offer a refund", "ask for the order number"), or leave
 it empty for a reply to the customer's newest message. You keep working while it is written; the
 conversation never waits for the model.
@@ -133,13 +148,13 @@ Colliedesk keeps how each draft ended (sent nearly as written, sent edited, disc
 expired), so a team can see whether drafts help, and an article's **Used by AI** box says how many
 drafts used it this month. A reply sent from a draft says so on the timeline: **from an AI draft, sent as written** or
 **from an AI draft, edited**. A draft that failed says why, with **Try again** (the same prompt) and,
-when a setting is the cause (the provider's key or credit, the included AI), the way to Settings → Built-in AI.
+when a setting is the cause (the provider's key or credit, the included AI), the way to Settings → AI & agents.
 A draft's text and prompt are erased 90 days after it ended; the numbers stay. At most 30 drafts a
 minute are asked for in a workspace.
 
 ### Write a draft when a customer writes
 
-Admins can let drafts write themselves: **Settings → Built-in AI**, under **Reply drafts**, set **Default
+Admins can let drafts write themselves: **Settings → AI & agents**, under **Reply drafts**, set **Default
 for channels** to **Suggest** (or do it on one channel, in its **AI** tab). A dialog says first what it
 would have meant in the last 30 days (how many customer messages, about what a draft costs, and how
 much of the included AI it may use, or that your own key is billed). It is **Off** until an admin
@@ -186,7 +201,7 @@ all** (or **Accept the rest**) takes what is left, and **Dismiss** drops it. Tag
 removed, and anything accepted is changed back like any other change. **Suggest again** asks by
 hand. When the automatic limit below is reached, the card says automatic suggestions are paused
 until the next midnight UTC (shown in your timezone) and **Suggest now** still asks for one. A
-failure says why and what to do next, for example to open **Settings → Built-in AI** when the included AI is
+failure says why and what to do next, for example to open **Settings → AI & agents** when the included AI is
 used up.
 
 Imported tickets get no suggestion. A suggestion nobody used for 7 days expires; its reason is erased
@@ -194,7 +209,7 @@ Imported tickets get no suggestion. A suggestion nobody used for 7 days expires;
 
 ### Apply suggestions automatically
 
-Admins can let suggestions apply by themselves: **Settings → Built-in AI**, under **Triage suggestions**, set
+Admins can let suggestions apply by themselves: **Settings → AI & agents**, under **Triage suggestions**, set
 **Default for channels** to **Auto** (or do it on one channel, in its **AI** tab; a dialog says what it does
 first). Turning triage on starts at **Suggest**; moving it to another provider goes back to Suggest, and
 it stays there until an admin picks Auto again. **Off** makes suggestions only when someone asks. Pick what applies by itself: **Tags** and **Priority** (the default) and
@@ -221,9 +236,9 @@ Each feature has a level: what it does without anyone asking.
 |---|---|---|---|
 | Triage | Only when someone presses **Suggest** | Suggests for every new conversation | Applies the picked parts by itself (above), with **Undo** |
 | Reply drafts | Only **Draft with AI** | Writes a draft when a customer writes | Never: AI never sends |
-| Intake (chat channels only) | The channel's rules decide | The rules decide; AI leaves a suggestion for review | AI decides what is clear enough; otherwise the rules decide. Until a channel's own decisions show AI is ready, AI only suggests here too, and the rules decide at once |
+| Intake (chat channels only) | The channel's rules decide | Every message a customer wrote waits in Review with AI's suggestion; a person decides | AI applies what it is sure enough of (the scope's threshold); everything else waits in Review with its suggestion. Until a channel's own decisions show AI is ready for an action, that action waits in Review too |
 
-The workspace's level is **Default for channels** under each feature in **Settings → Built-in AI**. A
+The workspace's level is **Default for channels** in each feature's panel (open its row) in **Settings → AI & agents**. A
 channel can set its own level for a feature, and a chat channel for each of its scopes (one-to-one
 messages, groups), for example triage Auto on the support mailbox and Off on the sales one. A scope
 without its own level follows the channel, and the channel follows the workspace. A level never goes
@@ -239,9 +254,8 @@ on each chat channel's scope, where its readiness is known.
 
 When a feature moves to another provider, or is turned on again, its consent is new: every channel
 that ran it by itself goes a step down (Auto to Suggest; drafts written by themselves to drafts asked
-for), and the history says why. Intake also goes back to Suggest on a channel when it moves to
-another model, since what it was checked on was the old model's decisions. Restoring a workspace from
-a backup does the same.
+for), and the history says why. Another model of the same provider changes nothing else: levels stay,
+and intake's labels keep counting. Restoring a workspace from a backup lowers levels as a new provider does.
 
 People with `ai_settings:update` (the Admin role has it) set a channel's levels in **Settings → Channels → <the channel> → AI**: a row per feature, a
 column per scope, each set to the default it follows or to Off, Suggest or Auto; under it, what the level
@@ -274,7 +288,7 @@ of 200 characters; a pattern that can match no character at all (an empty string
 Taking a word or a pattern out masks less; like any change to intake's settings, it needs `ai_settings:update`.
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
-once an admin agreed to each: in **Settings → Built-in AI** under Chat intake (**Images customers sent**,
+once an admin agreed to each: in **Settings → AI & agents** under Chat intake (**Images customers sent**,
 **The customer's profile**, each a switch that gives or takes back the consent), or with
 `colliedesk_ai_source_consent_set` (taken back with `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
 Pictures go to intake's AI only when the workspace agreed to send them, the channel's images source is
@@ -287,10 +301,10 @@ decided like any other.
 
 At **Auto**, intake's AI opens, joins or sets aside a card by itself only for an action its labels show it
 gets right on that channel's scope (it never writes to the customer: a conversation it opens sends the
-channel's own received notice, if it has one, as when the rules open one); any other action stays a suggestion on the card and the rules decide
-at once. Labels are only explicit ones: a person who decides a card as AI suggested (it was right), decides
+channel's own received notice, if it has one, as when the rules open one); any other action stays a suggestion on the card, which waits
+for a person in Review. Labels are only explicit ones: a person who decides a card as AI suggested (it was right), decides
 otherwise or moves the messages AI placed (it was wrong), and offline evaluations an operator recorded for
-the model intake runs and this server's prompt version (`collie intake-eval`, see
+this server's prompt version, on whichever model they ran (`collie intake-eval`, see
 [Score AI intake on your own cases](../self-host/intake-eval.md)). A decision nobody looked at counts for nothing: silence
 is not a label.
 
@@ -300,8 +314,8 @@ is not a label.
 | Add to a conversation | 30 labels, 95 % right | a new request merged into an old conversation (by people's labels in the last 30 days, or in an evaluation) |
 | Set aside | 30 labels, 95 % right | a request set aside (by people's labels in the last 30 days, or in an evaluation) |
 
-People's labels count for 30 days; an evaluation counts only for the model and prompt version it ran, and
-a newer run of the same dataset replaces it. Since cards at Auto go to the rules when AI may not act, most
+People's labels count for 30 days, and an evaluation for the prompt version it ran; both keep counting when
+intake moves to another model. A newer run of the same dataset replaces it. Since cards at Auto go to the rules when AI may not act, most
 never reach a person: in practice a gate opens with an evaluation, or with an admin's override.
 An admin may open an action by hand before its labels do (`gate_override` with a `gate_override_reason`,
 which needs `ai_settings:update`). Readiness is `GET /api/v1/channels/{id}/ai/intake/readiness?scope=`
@@ -316,10 +330,9 @@ Raising intake to **Auto** on a scope opens a dialog first: each action with whe
 and for an admin, **Let it … alone anyway** with the reason the history keeps. The level and the override
 are saved together. Lowering a level never asks.
 
-When intake moves to another model or provider, a scope at Auto goes back to Suggest and the AI tab says
-so ("Groups: Auto was lowered to Suggest on Oct 24, 2026: intake moved to another model, so what it was
-checked on no longer holds", or for a provider, "intake moved to another provider, which needs consent
-again") with **Turn Auto back on**, which asks with the same dialog.
+When intake moves to another provider, a scope at Auto goes back to Suggest and the AI tab says so
+("Groups: Auto was lowered to Suggest on Oct 24, 2026: intake moved to another provider, which needs
+consent again") with **Turn Auto back on**, which asks with the same dialog. Another model keeps the level.
 
 ## When intake's model fails
 
@@ -328,8 +341,7 @@ times out, is busy, refuses for its rate, is gone, or answers what Colliedesk ca
 or an account out of credit is not tried again on the other model. Each call is in the usage. Set it
 with `fallback_model` on `PUT /api/v1/ai/slots/intake` or `colliedesk_ai_slot_set` (an empty string
 removes it); Settings does not show it yet. The provider cannot
-drop a model intake uses this way. A new fallback model takes intake back to Suggest on every channel,
-as another model does.
+drop a model intake uses this way. A new fallback model keeps intake's levels, as another model does.
 
 ## Limits
 
@@ -338,11 +350,11 @@ as another model does.
    workspace, of which 100 a day may be drafts, whichever provider runs it, so a flood of
    tickets cannot run up a bill. Intake's decisions on chat channels count too, at most 300 a day of
    them (`intake_per_day`), so a busy group cannot spend the day's triage and drafts. Past the daily
-   limit automatic suggestions wait until 00:00 UTC; what an agent asks for still runs. Admins change both numbers in **Settings → Built-in AI → Features**
-   (**Automatic runs**, **Change**). Each task counts once, however many times it is retried.
+   limit automatic suggestions wait until 00:00 UTC; what an agent asks for still runs. Admins change both numbers in **Settings → AI & agents → Features**
+   (open **Triage suggestions**, then **Automatic runs**, **Change**). Each task counts once, however many times it is retried.
 2. **Included AI.** The server's provider can come with a monthly allowance (on Colliedesk Cloud,
    included in your plan). When it is used up, features on the server's provider stop until the first
-   day of the next month (UTC), and Settings says so; your own providers keep working. **Settings → Built-in AI →
+   day of the next month (UTC), and Settings says so; your own providers keep working. **Settings → AI & agents →
    Usage** shows what is used. A call that starts sets aside the most it can cost, so calls running at
    the same time never spend more than is left; the last few cents of a month can stay unused.
 
@@ -358,12 +370,12 @@ channel too. Its use, its chats and their transcripts are on the **AI chat** tab
 
 ## History and usage
 
-**Settings → Built-in AI → History** lists who added, changed or deleted a provider or a key, and who turned a
+**Settings → AI & agents → History** lists who added, changed or deleted a provider or a key, and who turned a
 feature on, off or elsewhere, with keys shown only by their last 4 characters. Every call to a provider
 leaves one usage record (the feature, the model, tokens in and out, whether it failed, and for the
 server's provider its cost at that day's prices), never the text sent or received. When the provider
 reports what a call cost (OpenRouter does with every answer), that is kept too, in the provider's own
-unit: OpenRouter's credits, never converted to dollars. **Settings → Built-in AI →
+unit: OpenRouter's credits, never converted to dollars. **Settings → AI & agents →
 Usage** sums a month per feature and provider. Both are in the [export](export.md).
 
 ## Agents and external AI agents

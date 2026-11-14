@@ -110,6 +110,13 @@ test('an admin connects Microsoft 365, replies leave from the mailbox with threa
   const question = block.getByRole('group', { name: 'Disconnect Microsoft 365?' });
   await expect(question.getByRole('link', { name: 'My Apps' })).toHaveAttribute('href', 'https://myapps.microsoft.com');
   await expect(question.getByRole('link', { name: 'Microsoft account permissions' })).toHaveAttribute('href', 'https://account.live.com/consent/Manage');
+  // Esc closes the question (a panel on the page, not a dialog) and does not also leave Settings.
+  await expect(question.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(question).toHaveCount(0);
+  await expect(page).toHaveURL(/\/settings\/channels\//);
+  await block.getByRole('button', { name: 'Disconnect Microsoft 365' }).click();
+  await expect(question).toBeVisible();
   await question.getByRole('button', { name: 'Yes, disconnect Microsoft 365' }).click();
   await expect(block.getByRole('button', { name: 'Connect Microsoft 365' })).toBeVisible();
 });
@@ -149,4 +156,44 @@ test('a personal Outlook.com mailbox connects by its sign-in name', async ({ pag
   await block.getByRole('button', { name: 'Connect Microsoft 365' }).click();
   await signInAtMicrosoft(page, support, 'personal');
   await expect(block).toContainText(`Replies are sent through Microsoft 365 from ${support}`);
+});
+
+// startFlowReplies saves the support address in the setup flow's email step, skips the wait for the first
+// email, and opens the replies part with Microsoft 365 chosen.
+async function startFlowReplies(page: Page, support: string) {
+  await page.goto(`${origin}/setup/email`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Receive customer email' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Support address' }).fill(support);
+  await page.getByRole('button', { name: 'Save support address' }).click();
+  await page.getByRole('button', { name: 'Create inbound secret' }).click();
+  await page.getByRole('group', { name: 'Forward its mail to Colliedesk' }).getByRole('button', { name: 'Skip for now' }).click();
+  const replies = page.getByRole('group', { name: /Send replies from/ });
+  await replies.getByRole('radio', { name: /Microsoft 365/ }).check();
+  return replies;
+}
+
+test('in the setup flow, an admin connects Microsoft 365 for replies and is back on the flow\'s email step, connected', async ({ page }) => {
+  const suffix = await signIn(page, 'E2E Flow Microsoft');
+  const support = `support-${suffix}@contoso.example`;
+  const replies = await startFlowReplies(page, support);
+  await replies.getByRole('button', { name: 'Connect Microsoft 365' }).click();
+  await signInAtMicrosoft(page, support);
+  // The provider's redirect lands on the channel page, which sends the browser back into the flow.
+  await expect(page).toHaveURL(`${origin}/setup/email`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Receive customer email' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Setup flow' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Microsoft 365 is connected.' })).toBeVisible();
+  await expect(page.getByText(`Replies are sent through Microsoft 365 from ${support}`)).toBeVisible();
+});
+
+test('in the setup flow, a cancelled Microsoft sign-in comes back to the flow with the reason and the admin approval link', async ({ page }) => {
+  const suffix = await signIn(page, 'E2E Flow Approval');
+  const replies = await startFlowReplies(page, `help-${suffix}@fabrikam.example`);
+  await replies.getByRole('button', { name: 'Connect Microsoft 365' }).click();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page).toHaveURL(`${origin}/setup/email`);
+  await expect(page.getByRole('navigation', { name: 'Setup flow' })).toBeVisible();
+  const block = page.getByRole('region', { name: 'Send from your mailbox' });
+  await expect(block.getByRole('alert')).toContainText('send your Microsoft 365 admin the approval link below');
+  expect(await block.getByRole('textbox', { name: 'Approval link for your Microsoft 365 admin' }).inputValue()).toContain('/organizations/v2.0/adminconsent');
 });

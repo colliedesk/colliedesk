@@ -404,3 +404,26 @@ func TestRemovingAChannelSaysWhichHeldMessagesAreCardsOfTheQueue(t *testing.T) {
 		t.Fatalf("remove: %d %s", response.Code, response.Body.String())
 	}
 }
+
+// A person who decides a card with fewer messages than it holds now (the customer wrote again and it joined
+// the card) is refused with gathering_changed and how the card stands; with the card's count it decides.
+func TestADecisionOfACardTheCustomerAddedToIsRefused(t *testing.T) {
+	d := newLevelDesk(t)
+	card := d.heldCard(t, d.workspaceA, d.chatA, "u1", "the stock export fails")
+	path := "/api/v1/intake/gatherings/" + card + "/decide"
+	if response := request(t, d.api, http.MethodPost, path, map[string]any{"action": "ignore", "item_count": 0}, d.adminA, nil); response.Code != http.StatusBadRequest ||
+		!strings.Contains(response.Body.String(), "item_count") {
+		t.Fatalf("item_count 0: %d %s", response.Code, response.Body.String())
+	}
+	response := request(t, d.api, http.MethodPost, path, map[string]any{"action": "ignore", "item_count": 2}, d.adminA, nil)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"code":"gathering_changed"`) ||
+		!strings.Contains(response.Body.String(), `"state":"review"`) || !strings.Contains(response.Body.String(), "Read the card again") {
+		t.Fatalf("a count the card does not hold: %d %s", response.Code, response.Body.String())
+	}
+	if got := queryString(t, d.pool, `SELECT state FROM intake_gatherings WHERE id=$1`, card); got != "review" {
+		t.Fatalf("card after the refusal = %s", got)
+	}
+	if response := request(t, d.api, http.MethodPost, path, map[string]any{"action": "ignore", "item_count": 1}, d.adminA, nil); response.Code != http.StatusOK {
+		t.Fatalf("the card's count: %d %s", response.Code, response.Body.String())
+	}
+}

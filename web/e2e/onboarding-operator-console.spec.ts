@@ -52,10 +52,8 @@ test('operator console: the installer\'s operator link signs in, the operator se
   const test = await waitForMail(email, 30_000, 'This is a test from the operator console');
   expect(test.subject).toBe('Colliedesk test email');
 
-  await page.getByRole('button', { name: 'Review and save' }).click();
-  const review = page.getByRole('dialog', { name: 'Review 3 changes' });
-  await expect(review.getByText('Will be saved as v')).toBeVisible();
-  await review.getByRole('button', { name: 'Save and apply' }).click();
+  // Save checks the change and, as it asks for nothing more here (no authenticator, no stored password), saves it at once.
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   const savedStatus = page.getByRole('status').filter({ hasText: /Saved v\d+\. Every server applies it within a few seconds\./ });
   await expect(savedStatus).toBeVisible();
   const saved = Number((await savedStatus.textContent())?.match(/Saved v(\d+)/)?.[1]);

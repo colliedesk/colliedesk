@@ -1,6 +1,6 @@
 # Sessions and devices
 
-**Settings → Sessions** lists every browser or client signed in to your account, with when it
+**Settings → Account → Sessions** lists every browser or client signed in to your account, with when it
 was last used. A browser is named by its browser and system, for example **Chrome on Linux**; the
 browser you are using is marked **This device**. This applies to pairing links and cloud sign-in alike;
 a client that sends no browser name shows **Browser session** or **Cloud sign-in**.
@@ -8,29 +8,66 @@ a client that sends no browser name shows **Browser session** or **Cloud sign-in
 - Select **Revoke** to sign a device out immediately. The device stays in the list as **Revoked**;
   a session that ran out shows **Expired**.
 - On **This device** the button reads **Sign out**: it signs this browser out at once.
-- To sign out of the browser you are using, you can also select your avatar at the foot of the left rail (top
-  right on a phone) and choose **Sign out**. The menu shows your name and roles; the workspace and your address
-  are in the bar above every page.
+- To sign out of the browser you are using, you can also select your name at the foot of the sidebar (your
+  avatar, top right on a phone) and choose **Sign out**. The menu shows your name and roles; the workspace and
+  your address are always on screen, in the sidebar or the top bar.
 - You see your own sessions. Someone with `team:revoke` (the Admin role has it) sees every session in
   the workspace and can revoke those of anyone who does not hold more than they do.
 - A session signed in through the API with `requested_role: agent` shows **Limited to Agent**: it
   acts with the Agent role only, even if you hold more. Any other sign-in acts with all your roles.
 
 A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session
-shows **You are signed out** instead of the inbox. On instances with cloud sign-in it opens the
-sign-in page instead and signs the browser out of the sign-in provider too, so the next sign-in
-asks for a code again. To sign in again on a revoked device, ask an admin for a new link.
+shows **You are signed out** instead of the inbox. To sign in again on a revoked device, ask an admin for
+a new link.
+
+On instances with cloud sign-in, a browser without a valid session opens the sign-in page instead.
+- After you choose **Sign out** (in the account menu, or for **This device** in Sessions), the page says
+  **You are signed out** and also signs the browser out of the sign-in provider. The next sign-in asks
+  for a code again.
+- The same happens on a device whose session was revoked: from **Revoke** in Sessions on another device,
+  by an admin, or because the person was deactivated. That device needs a new code to sign in again.
+- A session that expired does not sign you out of the sign-in provider. While that sign-in is still valid
+  in this browser, the page signs you back in without a code.
+
+## Connected AI apps
+
+An AI app you connect with OAuth (see [Connect an app with OAuth](mcp.md#connect-an-app-with-oauth))
+acts as you in the workspace you allowed it in, with everything you can do there, as your roles are on
+each call: a permission taken from you is taken from the app at once, and given back, it works again
+without connecting again. **Settings → Account → Connected AI apps** lists each connection:
+
+- the app's name and the browser you allowed it from (no IP address is kept);
+- when you connected it and when it was last used;
+- **Active**, or **Needs reconnecting** when it was disconnected, ran out after 30 days without use, or
+  your account was deactivated, with how to connect again in each app;
+- **Disconnect**, which stops it at once: its next call gets HTTP 401.
+
+Each sign-in is its own row, so the same app on two computers shows twice. Claude and ChatGPT call from
+their own servers, so their row is one per account, not per computer. Someone with `team:revoke` sees
+and disconnects the apps of every person they do not rank below. Deactivating a person disconnects
+their apps; after they are reactivated they connect again.
+
+Allowing an app is something only a person does in a browser: an app or an agent token cannot allow
+another app (HTTP 403 `person_only`). A note or a reply an app writes shows "by <your name> via <app
+name>" in the conversation.
 
 ## Agent tokens
 
 An agent token lets an AI agent, such as Claude Code, Codex or a script, work your inbox as you,
-with the permissions you choose. It is a session with a label. It appears in **Settings → Sessions**
-next to your browser sessions, with what it was given as a badge and the date it stops working.
-**Revoke** ends it at once, as for any session. Someone with `team:revoke` sees and revokes the
-tokens of every person they do not rank below.
+with the permissions you choose. It is a session with a label. **Settings → AI & agents → External AI agents**
+lists your tokens under **Agent tokens**, apart from your browser sessions (in Account): each row has the token's
+name and person, what it may do, **Last used** (when an agent last called with it) and **Expires** (the date it
+stops working). **Sessions**, further down the same page, lists them too. Someone with `team:revoke` sees and
+revokes the tokens of every person they do not rank below; AI & agents is in their settings menu even when they
+may not create tokens or read the built-in AI.
 
-Create a token in **Settings → External AI agents** (it needs `team:create_tokens`, which the Agent
-and Admin roles hold). Give it a name you will recognise in Sessions (1 to 80 characters, for
+To revoke a token, open the **⋯** menu at the end of its row and choose **Revoke**. Colliedesk asks first, naming the token: revoking ends it at once, the agent that uses it is refused on
+its next call, and notes and replies it wrote keep showing "by <your name> via <token label>". A revoked
+token cannot be brought back; its row then reads **Revoked** and has no actions.
+
+Create a token in **Settings → AI & agents → External AI agents**: choose **Create token** (it needs
+`team:create_tokens`, which the Agent and Admin roles hold). In the dialog, give it a name you will recognise in
+the list (1 to 80 characters, for
 example **Claude Code on my laptop**), then under **Access** choose one of:
 
 - **Follow a role**: pick any role whose permissions you all hold: your own roles, a narrower one,
@@ -43,19 +80,24 @@ example **Claude Code on my laptop**), then under **Access** choose one of:
   list is fixed when you create the token. An orange dot marks what reaches outside the workspace (a
   customer, the public help center, another service).
 
+When the token may not **Send to customers** but may leave AI drafts, the dialog says so: the agent leaves
+reply drafts above the reply box for a person to send. With Send to customers on, the agent's replies reach
+customers at once; nothing waits for approval.
+
 Either way, a token never does more than you can do right now: if you lose a permission, every
 token of yours loses it too, and if you are deactivated, your tokens stop working. See
 [Roles and permissions](roles-and-permissions.md) for the list of permissions.
 
-Choose **Create token**. The token is shown once, with **Copy token**. Choose **I saved it, hide the
-token** when you have it; leaving the page hides it too, and Colliedesk cannot show it again. If you
-lose it, create a new token and revoke the old one. The new token appears in Sessions at once. Below
-it, **Connect your agent** has the steps for Claude Code, Codex, Cursor, VS Code and Claude Desktop
+Choose **Create token** in the dialog. The token is shown once, with **Copy token**. Choose **I saved it,
+hide the token** when you have it; closing the dialog or leaving the page hides it too, and Colliedesk cannot
+show it again. If you lose it, create a new token and revoke the old one. The new token appears in the list at
+once. Under the token, and under the list on the page, **Connect your agent** has the steps for Claude Code,
+Codex, Cursor, VS Code and Claude Desktop
 with your address filled in, and the way to remove each one; while the token is shown, **Add to
 Cursor** puts it into Cursor in one click. To check that an agent is connected, ask it "Who am I in
 Colliedesk?": it answers with your name, your roles and what the token may do.
 
-In Sessions a token shows one of:
+In the list a token shows one of:
 
 - **Follows role Agent** (or the role it follows); open it to see **What it may do**.
 - **Fixed · 5 permissions**: a token made with a list.

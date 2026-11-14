@@ -34,7 +34,8 @@ import { useBillingShown } from '../../billing/billing-shown';
 //   /settings/channels/type/<type>     the type's home when it has one; otherwise, and always with a tab or a
 //                                      mailbox outcome in the address, the workspace's channel of that type
 
-export interface ChannelsSearch { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string }
+// step names the setup step a link opens (the inbox opens forward, step 2).
+export interface ChannelsSearch { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string; step?: string }
 
 export interface ChannelsRouteProps {
   // path is what follows /settings/channels/ ('' for the list).
@@ -73,7 +74,7 @@ export function ChannelsRoute({ path, search, navigate }: ChannelsRouteProps) {
   else if (path === '') content = <ChannelsList {...page} tab={search.tab === 'history' ? 'history' : 'channels'} />;
   else if (first === 'new') content = <NewChannel {...page} type={second ?? ''} />;
   else if (first === 'type') content = carriesChannelState(search) ? <TypeShortcut {...page} type={second ?? ''} search={search} /> : <TypeHome {...page} type={second ?? ''} search={search} />;
-  else if (second === 'setup') content = <ChannelSetup {...page} id={first} />;
+  else if (second === 'setup') content = <ChannelSetup {...page} id={first} step={search.step} />;
   else content = <ChannelPage {...page} id={first} tab={search.tab} search={search} />;
   return (
     <main className="settings-page panel channels-settings">
@@ -179,7 +180,7 @@ function ChannelsList({ navigate, isAdmin, timezone, tab }: PageProps & { tab: '
   return <>
     <div className="ch-tabs-row">
       <Tabs label={m.tabs} prefix={prefix} value={tab} onChange={show} tabs={[{ id: 'channels', label: m.tabChannels, count: list?.items.length }, { id: 'history', label: m.tabHistory }]} />
-      {isAdmin && list && list.items.length > 0 && <button type="button" className="ch-add" onClick={() => setAdding(true)}><PlusIcon /><span>{m.addChannel}</span></button>}
+      {isAdmin && list && list.items.length > 0 && <button type="button" className="ch-add primary-action" onClick={() => setAdding(true)}><PlusIcon /><span>{m.addChannel}</span></button>}
     </div>
     <div role="tabpanel" id={panelID(prefix, tab)} aria-labelledby={tabID(prefix, tab)} className="ch-stack">
       {tab === 'history' ? <History timezone={timezone} />
@@ -309,7 +310,7 @@ function NewChannel({ type, navigate, isAdmin, timezone }: PageProps & { type: s
     <a href={base} className="ch-back">{m.backToChannels}</a>
     <Part part={ui.panels} failed={<PartUnavailable />} render={({ Connect, Setup }) => (Setup
       ? <Setup canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} named />
-      : <section className="settings-card" aria-labelledby="ch-new-heading">
+      : <section className="settings-card ch-new" aria-labelledby="ch-new-heading">
           <div className="section-heading"><h2 id="ch-new-heading">{ui.connectLabel}</h2>{!isAdmin && <p>{m.adminsOnly}</p>}</div>
           <Connect canManage={isAdmin} timezone={timezone} create={create(false)} />
         </section>)} />
@@ -330,7 +331,7 @@ function TypeHome({ type, search, navigate, isAdmin, timezone }: PageProps & { t
 }
 
 // ChannelSetup is a channel's guided setup; a type without one shows the channel's page.
-function ChannelSetup({ id, navigate, isAdmin, timezone }: PageProps & { id: string }) {
+function ChannelSetup({ id, step, navigate, isAdmin, timezone }: PageProps & { id: string; step?: string }) {
   const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2 });
   const channels = useChannels();
   const channel = detail.data;
@@ -342,7 +343,7 @@ function ChannelSetup({ id, navigate, isAdmin, timezone }: PageProps & { id: str
   return <>
     <a href={`${base}/type/${ui.type}`} className="ch-back">{ui.label}</a>
     <Part part={ui.panels} failed={<PartUnavailable />} render={({ Setup }) => (Setup
-      ? <Setup channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} />
+      ? <Setup channel={channel} step={step} canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} />
       : <ChannelPage id={id} navigate={navigate} isAdmin={isAdmin} timezone={timezone} search={{}} />)} />
   </>;
 }
@@ -353,7 +354,8 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   // in the setup, with the outcome.
   const mailboxOutcome = search.gmail || search.gmail_error || search.microsoft || search.microsoft_error;
   useEffect(() => {
-    if (mailboxOutcome && takeSetupReturn(id)) navigate(withSearch(`${base}/${id}/setup`, { ...search, tab: undefined }), true);
+    const back = mailboxOutcome ? takeSetupReturn(id) : undefined;
+    if (back) navigate(withSearch(back.to ?? `${base}/${id}/setup`, { ...search, tab: undefined }), true);
   }, [mailboxOutcome, id, search, navigate]);
   // While its processing is paused, what it keeps grows: the page counts it again every 20 seconds.
   const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2,

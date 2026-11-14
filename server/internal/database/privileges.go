@@ -95,6 +95,10 @@ const (
 	// the least recently served while the cache is over its byte cap. Only keys and sizes leave the
 	// transaction; the stored bytes go through the scoped DiscardObject.
 	PrivilegeMailImageSweep Privilege = "mail-image-sweep"
+	// PrivilegeDraftFileSweep removes, in every workspace, the files of reply drafts that were sent,
+	// stopped, or whose text was erased. Only keys leave the transaction; the stored bytes go through the
+	// scoped DiscardObject.
+	PrivilegeDraftFileSweep Privilege = "draft-file-sweep"
 	// PrivilegeBillingReconcile reads every workspace id and every stored Polar subscription, so the
 	// operator command can compare them with Polar's list. Writes go through the scoped path.
 	PrivilegeBillingReconcile Privilege = "billing-reconcile"
@@ -143,6 +147,10 @@ const (
 	// connectors leave the transaction; each fix is then read, sent and moved in its own workspace.
 	PrivilegeAutofixClaim Privilege = "autofix-claim"
 	// PrivilegeResultsShareToken resolves the workspace of a results share link from its token hash.
+	// PrivilegeTrialOffer resolves the workspace of a trial offer from its token hash (to refuse the offer of
+	// another workspace without naming it) or from its id (the operator's revoke). Only the workspace id
+	// leaves the transaction; the offer is read, accepted or revoked in its own workspace.
+	PrivilegeTrialOffer        Privilege = "trial-offer"
 	PrivilegeResultsShareToken Privilege = "results-share-token"
 	// PrivilegeGitHubInstallation routes the Colliedesk GitHub App's webhook: it finds the one workspace
 	// that owns a GitHub installation id (unique on the server) and reads and records the delivery ids
@@ -167,7 +175,8 @@ const (
 	PrivilegeOperator Privilege = "operator"
 	// PrivilegeOperatorPreview counts, for the operator console's previews, what a change would do across
 	// workspaces: how many lock when billing turns on, whether a workspace slug exists, and how many channels
-	// and workspaces use a feature an operator switches off (mailbox connections, the server's AI). Only a count or
+	// and workspaces use a feature an operator switches off (mailbox connections, the server's AI), and how many of
+	// the server's AI calls its provider refused for want of credit. Only a count, a time or
 	// a yes or no leaves the transaction; no row is returned.
 	PrivilegeOperatorPreview Privilege = "operator-preview"
 	// PrivilegeMetaConversionClaim gives up the Meta Conversions API events of every workspace that are too
@@ -175,4 +184,8 @@ const (
 	// Only workspace ids and event names leave the transaction; each event is then read, sent and settled in
 	// its own workspace.
 	PrivilegeMetaConversionClaim Privilege = "meta-conversion-claim"
+	// PrivilegeMentionEmailClaim lists the mention emails of every workspace that are queued, or left
+	// sending by a stopped server, for the mention email sender. Only workspace ids and mention ids leave
+	// the transaction; each email is then claimed, read, sent and settled in its own workspace.
+	PrivilegeMentionEmailClaim Privilege = "mention-email-claim"
 )

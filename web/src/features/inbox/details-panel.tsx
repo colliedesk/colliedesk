@@ -1,10 +1,11 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { UpdateConversationRequest } from '../../api/client';
-import type { TeamMember, Conversation, ConversationOrigin, Tag } from '../../api/schemas';
+import type { TeamMember, Conversation, ConversationOrigin, SettableStatus, Tag } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
-import { clockLine, slaOf } from '../../lib/sla';
+import { clockLine, rowDue, slaOf } from '../../lib/sla';
 import { messages } from '../../messages';
-import { CheckIcon } from '../../ui/icons';
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, UserIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
 import { AITriageSlot } from './ai-triage-slot';
 import { StatusLabel } from './conversation-labels';
@@ -55,7 +56,8 @@ function StatusPick({ conversation, onUpdate }: { conversation?: Conversation; o
   const told = others.filter((value) => notices?.includes(value));
   const quiet = others.filter((value) => !told.includes(value));
   return <div className="property-row status-pick-row"><span id={`${id}-label`}>{messages.status}</span>
-    <ActionMenu<Conversation['status']> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} disabled={!conversation || !onUpdate}
+    {/* A conversation in Spam keeps its status until Not spam (the header) takes it out. */}
+    <ActionMenu<SettableStatus> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} disabled={!conversation || !onUpdate || status === 'spam'}
       summary={<span id={`${id}-value`}><StatusLabel status={status} /></span>}
       onToggle={(open) => { if (open) setTell(true); }}
       onApply={(value) => conversation && onUpdate?.(conversation.id, !asks || tell ? { status: value } : { status: value, notify: false })}>
@@ -89,7 +91,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
       {aiTriage && conversation && <AITriageSlot conversationId={conversation.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
         currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} onWaiting={onTriageWaiting} />}
       <section className="details-section">
-        <h2>{messages.properties}</h2>
+        <h2 className="sr-only">{messages.properties}</h2>
         <StatusPick key={conversation?.id} conversation={conversation} onUpdate={onUpdate} />
         <label className="property-row"><span>{messages.priority}</span><select value={conversation?.priority ?? 'normal'} disabled={!conversation}
           onChange={(event) => conversation && onUpdate?.(conversation.id, { priority: event.target.value as UpdateConversationRequest['priority'] })}>
@@ -105,37 +107,67 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
           {!readsTeam && conversation?.assignee_id && conversation.assignee_id !== currentAgentId && <option value={conversation.assignee_id}>{messages.anotherTeammate}</option>}
           <option value="">{messages.unassigned}</option>
         </select></label>
+        <div className="property-row tags-row"><span>{messages.tags}</span>
+          {/* Without the tag list (tags:read) the conversation's own tags are named, and nothing else is offered. */}
+          {!readsTags ? <span className="tag-names">{tagNames(conversation)}</span> : <PropertyMenu className="tags-pick" label={messages.tags} disabled={!conversation} summary={tagNames(conversation)}>
+            {tags.length === 0 && <p className="muted-copy">{messages.noTagsYet}</p>}
+            {tags.map((tag) => {
+              const checked = conversation?.tags.some((item) => item.id === tag.id) ?? false;
+              return <label className="tag-check" key={tag.id}><input type="checkbox" checked={checked}
+                onChange={() => conversation && (checked ? onRemoveTag?.(conversation.id, tag.id) : onAddTag?.(conversation.id, tag.id))} />{tag.name}</label>;
+            })}
+            {holds('tags:create') && <form className="tag-create" onSubmit={(event) => { event.preventDefault(); createTag(); }}>
+              <input aria-label={messages.newTagName} placeholder={messages.newTagName} value={tagName} onChange={(event) => setTagName(event.target.value)} />
+              <button type="submit" disabled={!conversation || !tagName.trim()}>{messages.createTag}</button>
+            </form>}
+          </PropertyMenu>}
+        </div>
+        {conversation && slaOf(conversation) && <DueRow sla={slaOf(conversation)!} timezone={timezone} canManage={canManage} />}
       </section>
-      {conversation && slaOf(conversation) && <Targets sla={slaOf(conversation)!} timezone={timezone} canManage={canManage} />}
-      <fieldset className="details-section" disabled={!conversation}><legend>{messages.tags}</legend>
-        {/* Without the tag list (tags:read) the conversation's own tags are named, and nothing else is offered. */}
-        {!readsTags ? <p className="tag-names">{conversation?.tags.map((tag) => tag.name).join(', ') || messages.noTagsYet}</p> : <div className="tag-choices">
-          {tags.length === 0 && <p className="muted-copy">{messages.noTagsYet}</p>}
-          {tags.map((tag) => {
-            const checked = conversation?.tags.some((item) => item.id === tag.id) ?? false;
-            return <label className="tag-check" key={tag.id}><input type="checkbox" checked={checked}
-              onChange={() => conversation && (checked ? onRemoveTag?.(conversation.id, tag.id) : onAddTag?.(conversation.id, tag.id))} />{tag.name}</label>;
-          })}
-        </div>}
-        {readsTags && holds('tags:create') && <form className="tag-create" onSubmit={(event) => { event.preventDefault(); createTag(); }}>
-          <input aria-label={messages.newTagName} placeholder={messages.newTagName} value={tagName} onChange={(event) => setTagName(event.target.value)} />
-          <button type="submit" disabled={!conversation || !tagName.trim()}>{messages.createTag}</button>
-        </form>}
-      </fieldset>
       {conversation && (
-        <section className="details-section conversation-source">
+        <section className="details-section conversation-source" aria-labelledby="details-customer">
+          <h2 id="details-customer">{messages.customer}</h2>
+          <strong className="customer-name">{conversation.contact_name}</strong>
           {conversation.contact_organization && <div className="property-row conversation-organization"><span>{messages.organization}</span>
             {onShowOrganizationConversations
               ? <button type="button" className="link-button" title={messages.showOrganizationConversations(conversation.contact_organization)}
                 onClick={() => onShowOrganizationConversations(conversation.contact_organization ?? '')}>{conversation.contact_organization}</button>
               : <span>{conversation.contact_organization}</span>}</div>}
-          {onShowContactConversations && <button type="button" className="link-button" onClick={() => onShowContactConversations(conversation.contact_id)}>
-            {messages.showContactConversations(conversation.contact_name)}</button>}
+          {onShowContactConversations && <button type="button" className="details-link" onClick={() => onShowContactConversations(conversation.contact_id)}>
+            <UserIcon /><span>{messages.showContactConversations(conversation.contact_name)}</span><ChevronRightIcon /></button>}
         </section>
       )}
       {conversation?.origin && <ConversationOriginBlock origin={conversation.origin} timezone={timezone} />}
     </aside>
   );
+}
+
+// The Tags row names the conversation's tags on one line, as the design writes them ("billing · refund").
+const tagNames = (conversation?: Conversation) => conversation?.tags.map((tag) => tag.name).join(' · ') || messages.none;
+
+// PropertyMenu is a property's value that opens a popover in place: ticking in it keeps it open, so several
+// tags change in one visit. Escape or focus leaving closes it.
+function PropertyMenu({ className, label, summary, disabled, children }: { className: string; label: string; summary: ReactNode; disabled?: boolean; children: ReactNode }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  const close = () => { if (menu.current) menu.current.open = false; };
+  return <details ref={menu} className={`action-menu property-menu ${className}`} data-disabled={disabled || undefined}
+    onKeyDown={(event) => { if (event.key === 'Escape' && menu.current?.open) { event.stopPropagation(); close(); menu.current.querySelector('summary')?.focus(); } }}
+    onBlur={(event) => { if (!menu.current?.contains(event.relatedTarget as Node | null)) close(); }}>
+    <summary aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}><span>{summary}</span><ChevronDownIcon /></summary>
+    <div className="action-popover" role="group" aria-label={label}>{children}</div>
+  </details>;
+}
+
+// The Due row: when the reply is due, or how late, as the list row says it; its menu holds each clock in full.
+function DueRow({ sla, timezone, canManage }: { sla: NonNullable<ReturnType<typeof slaOf>>; timezone: string; canManage: boolean }) {
+  const due = rowDue(sla, timezone);
+  const first = clockLine(sla.first_response, timezone);
+  const text = due?.text ?? first.text;
+  const tone = due ? (due.late ? 'late' : undefined) : first.tone;
+  return <div className="property-row due-row"><span>{messages.dueAt}</span>
+    <PropertyMenu className="due-pick" label={messages.targets} summary={<span className={tone ? `target-${tone}` : undefined} title={due?.full}>{text}</span>}>
+      <Targets sla={sla} timezone={timezone} canManage={canManage} />
+    </PropertyMenu></div>;
 }
 
 function ConversationOriginBlock({ origin, timezone }: { origin: ConversationOrigin; timezone: string }) {

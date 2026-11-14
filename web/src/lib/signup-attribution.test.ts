@@ -57,3 +57,36 @@ test('what was remembered is gone after a day, after clearing, or when storage h
   window.sessionStorage.setItem('colliedesk.signup-attribution', '{"values":{"utm_source":"a b"},"at":1}');
   expect(readSignupAttribution()).toBeUndefined();
 });
+
+test('the site whose link first opened the sign-in page in this tab is sent with the sign-up, as a host name only', () => {
+  // An AI assistant links straight to the app without utm_* keys; the browser names only the referring page.
+  rememberSignupAttribution('', 'https://claude.ai/chat/abc?q=helpdesk', 'app.colliedesk.com');
+  // The identity provider's return is a new page load whose referrer is the provider: the first site stands.
+  rememberSignupAttribution('?__clerk_status=verified', 'https://accounts.google.com/', 'app.colliedesk.com');
+  expect(readSignupAttribution()).toEqual({ referrer: 'claude.ai' });
+});
+
+test('a first landing without an outside referrer keeps none, so the identity provider is never taken for the source', () => {
+  rememberSignupAttribution('', '', 'app.colliedesk.com');
+  rememberSignupAttribution('', 'https://accounts.google.com/', 'app.colliedesk.com');
+  expect(readSignupAttribution()).toBeUndefined();
+  window.sessionStorage.clear();
+  rememberSignupAttribution('', 'https://app.colliedesk.com/inbox', 'app.colliedesk.com');
+  rememberSignupAttribution('', 'https://clerk.colliedesk.com/', 'app.colliedesk.com');
+  expect(readSignupAttribution()).toBeUndefined();
+});
+
+test('the referring site goes with the ad keys, and is forgotten with them', () => {
+  rememberSignupAttribution('?utm_source=x&utm_content=post-07', 'https://www.colliedesk.com/pricing', 'app.colliedesk.com');
+  expect(readSignupAttribution()).toEqual({ utm_source: 'x', utm_content: 'post-07', referrer: 'www.colliedesk.com' });
+  clearSignupAttribution();
+  expect(readSignupAttribution()).toBeUndefined();
+});
+
+test('a referrer that is not a web address with a host name is not kept', () => {
+  rememberSignupAttribution('', 'android-app://com.slack/', 'app.colliedesk.com');
+  expect(readSignupAttribution()).toBeUndefined();
+  window.sessionStorage.clear();
+  window.sessionStorage.setItem('colliedesk.signup-referrer', '{"host":"https://evil.example/x","at":' + Date.now() + '}');
+  expect(readSignupAttribution()).toBeUndefined();
+});

@@ -46,11 +46,14 @@ function results(overrides: Partial<Results> = {}): Results {
   });
 }
 
+// line finds a one-line paragraph by its whole text, links in it included.
+const line = (text: string) => screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === text);
+
 function renderPage(props: Partial<ResultsPageProps> = {}) {
   const onWindow = vi.fn();
   render(<ResultsPage results={results()} loading={false} failed={false} onRetry={() => {}} window="30d" onWindow={onWindow} timezone="Europe/Berlin"
     isAdmin now={now} link={({ result, className, children }) => <a href={`/?status=all&result=${result}`} className={className}>{children}</a>}
-    importLink={<a href="/settings/import-freshdesk">Open the import</a>} {...props} />);
+    importLink={<a href="/settings/data">Open the import</a>} {...props} />);
   return { onWindow };
 }
 
@@ -58,17 +61,20 @@ describe('ResultsPage', () => {
   it('shows each number next to the baseline, how it is counted, and the conversations it counts', () => {
     const { onWindow } = renderPage();
     const first = screen.getByRole('region', { name: 'First response time' });
-    expect(within(first).getByText(/Time from a customer’s first message/)).toBeVisible();
+    expect(within(first).getByRole('button', { name: 'About First response time' })).toHaveAccessibleDescription(/Time from a customer’s first message/);
     expect(within(first).getByRole('link', { name: '3 h 12 min' })).toHaveAttribute('href', '/?status=all&result=22222222-2222-4222-8222-222222222222:30d.first_response');
     expect(within(first).getByRole('link', { name: '41 min' })).toHaveAttribute('href', '/?status=all&result=11111111-1111-4111-8111-111111111111:30d.first_response');
-    expect(within(first).getByRole('link', { name: '8 waiting for a first reply' })).toHaveAttribute('href', '/?status=all&result=11111111-1111-4111-8111-111111111111:30d.first_response_waiting');
+    expect(within(first).getByRole('link', { name: '8 waiting' })).toHaveAttribute('href', '/?status=all&result=11111111-1111-4111-8111-111111111111:30d.first_response_waiting');
     expect(within(first).getByText('2 h 31 min faster')).toBeVisible();
     expect(within(first).getByText('79% less time')).toBeVisible();
 
     const reopened = screen.getByRole('region', { name: 'Reopened within 7 days' });
-    expect(within(reopened).getByText('Freshdesk does not share reopen history, so there is nothing to compare.')).toBeVisible();
+    expect(within(reopened).getByText('Freshdesk shares no reopen history.')).toBeVisible();
     expect(within(reopened).getByRole('link', { name: '6%' })).toBeVisible();
-    expect(within(screen.getByRole('region', { name: 'Handle time' })).getByText('Colliedesk does not record time yet (issue #119).')).toBeVisible();
+    const handle = screen.getByRole('region', { name: 'Handle time' });
+    expect(within(handle).getByText('Colliedesk does not record time yet.')).toBeVisible();
+    // Customers read this page: it never points them at the project's issue tracker.
+    expect(handle).not.toHaveTextContent(/issue #\d+/);
     expect(within(screen.getByRole('region', { name: 'Conversations per week' })).getByText('6% fewer')).toBeVisible();
 
     const ai = screen.getByRole('region', { name: 'AI drafts' });
@@ -123,12 +129,112 @@ describe('ResultsPage', () => {
       first_response: { median_seconds: null, p90_seconds: null, answered: 3, waiting: 0 } });
     early.current!.history_since = '2026-10-02T00:00:00Z';
     renderPage({ results: early });
-    expect(screen.getAllByText('Available on Nov 8').length).toBe(2);
+    // The window needs status history from Sep 16 (its first day, 7 days before the resolve window opens); history starts Oct 2.
+    expect(screen.getAllByText('From Nov 8 · needs resolve history since Sep 16').length).toBe(2);
     expect(screen.getByText(/the comparison appears on Nov 8/)).toBeVisible();
     expect(screen.getByText(/Colliedesk has recorded when conversations are resolved since Oct 2/)).toBeVisible();
     expect(screen.queryByText(/start on Nov 8/)).toBeNull();
-    expect(screen.getByText('Too few (3)')).toBeVisible();
-    expect(screen.getByText('Answered conversations are 3. A median needs at least 5.')).toBeVisible();
+    const first = screen.getByRole('region', { name: 'First response time' });
+    expect(line('Needs 5 answered conversations · 3 so far · 0 waiting')).toBeVisible();
+    expect(within(first).queryByText(/Too few/)).toBeNull();
+  });
+
+  it('a metric with too little data says what it needs in one line, with the count so far', () => {
+    const thin = results({ baseline: null, baseline_state: 'none', hours_saved: { '30d': null, '7d': null } });
+    thin.current!.windows['30d'] = window({ first_response: { median_seconds: null, p90_seconds: null, answered: 0, waiting: 0 },
+      reopened: { rate: null, reopened: 0, resolutions: 2 }, resolution: { median_seconds: null, resolved: 4, unresolved: 1, without_resolve_time: 0 } });
+    renderPage({ results: thin });
+    expect(line('Needs 5 answered conversations · 0 so far · 0 waiting')).toBeVisible();
+    expect(line('Needs 5 resolved · 4 so far · 1 open or settling')).toBeVisible();
+    expect(line('Needs 5 resolutions · 2 so far')).toBeVisible();
+  });
+
+  it('keeps the links to the conversations waiting for a reply and to the unresolved ones while a median is not there yet', () => {
+    const thin = results({ baseline: null, baseline_state: 'none', hours_saved: { '30d': null, '7d': null } });
+    thin.current!.windows['30d'] = window({ first_response: { median_seconds: null, p90_seconds: null, answered: 3, waiting: 8 },
+      resolution: { median_seconds: null, resolved: 2, unresolved: 6, without_resolve_time: 0 } });
+    renderPage({ results: thin });
+    const current = '11111111-1111-4111-8111-111111111111';
+    const first = screen.getByRole('region', { name: 'First response time' });
+    expect(within(first).getByRole('link', { name: '8 waiting' })).toHaveAttribute('href', `/?status=all&result=${current}:30d.first_response_waiting`);
+    expect(within(first).getByRole('link', { name: '3 so far' })).toHaveAttribute('href', `/?status=all&result=${current}:30d.first_response`);
+    const resolve = screen.getByRole('region', { name: 'Time to resolve' });
+    expect(within(resolve).getByRole('link', { name: '6 open or settling' })).toHaveAttribute('href', `/?status=all&result=${current}:30d.unresolved`);
+  });
+
+  it('keeps a line with a large count to 60 characters, and the waiting link wins over the prose', () => {
+    const busy = results({ baseline: null, baseline_state: 'none', hours_saved: { '30d': null, '7d': null } });
+    busy.current!.windows['30d'] = window({ first_response: { median_seconds: null, p90_seconds: null, answered: 4, waiting: 123456 },
+      resolution: { median_seconds: null, resolved: 4, unresolved: 12345, without_resolve_time: 0 } });
+    renderPage({ results: busy });
+    for (const name of ['First response time', 'Time to resolve']) {
+      const row = screen.getByRole('region', { name });
+      for (const text of Array.from(row.querySelectorAll('.results-muted')).map((node) => node.textContent ?? '')) expect(text.length, text).toBeLessThanOrEqual(60);
+    }
+    expect(within(screen.getByRole('region', { name: 'First response time' })).getByRole('link', { name: '123456 waiting' })).toBeVisible();
+    expect(within(screen.getByRole('region', { name: 'Time to resolve' })).getByRole('link', { name: '12345 open or settling' })).toBeVisible();
+  });
+
+  it('a phone card names the days its own number counts: resolve rows start 7 days before the others', () => {
+    renderPage();
+    // Created Sep 23 – Oct 23 for what customers started; Sep 16 – Oct 16 for what had 7 days to settle.
+    const labelOf = (name: string) => Array.from(screen.getByRole('region', { name }).querySelectorAll('.results-cell-label .results-narrow')).map((node) => node.textContent);
+    expect(labelOf('First response time')).toEqual(['Created Aug 2 – Sep 1', 'Created Sep 23 – Oct 23']);
+    expect(labelOf('Conversations per week')).toEqual(['Created Aug 2 – Sep 1', 'Created Sep 23 – Oct 23']);
+    for (const name of ['Time to resolve', 'Reopened within 7 days', 'Handle time']) expect(labelOf(name), name).toEqual(['Created Jul 26 – Aug 25', 'Created Sep 16 – Oct 16']);
+  });
+
+  it('keeps how a number is counted in a tip beside its name, not in the row', () => {
+    renderPage();
+    for (const [name, how] of [['Time to resolve', /counting only resolutions that stayed resolved for 7 days/], ['Conversations per week', /divided by the weeks in the window/]] as const) {
+      const row = screen.getByRole('region', { name });
+      expect(within(row).getByRole('button', { name: `About ${name}` })).toHaveAccessibleDescription(how);
+      // The tip's text is in the page for the accessible description, but nobody sees it until the tip opens.
+      expect(within(row).getByText(how)).not.toBeVisible();
+    }
+    expect(screen.queryByText('How we count:')).toBeNull();
+    // The two windows differ by the 7 days a resolution needs to settle: the tip says which window it counts.
+    expect(within(screen.getByRole('region', { name: 'Time to resolve' })).getByRole('button', { name: 'About Time to resolve' }))
+      .toHaveAccessibleDescription(/Colliedesk: conversations created Sep 16 – Oct 16\. Freshdesk: .* Jul 26 – Aug 25\./);
+  });
+
+  it('shows no helper line longer than 60 characters under a metric, with or without an import', () => {
+    for (const given of [results({ baseline: null, baseline_state: 'none', hours_saved: { '30d': null, '7d': null } }), results()]) {
+      const { unmount } = render(<ResultsPage results={given} loading={false} failed={false} onRetry={() => {}} window="30d" onWindow={() => {}} timezone="Europe/Berlin"
+        isAdmin now={now} link={({ result, className, children }) => <a href={`/?result=${result}`} className={className}>{children}</a>} importLink={null} />);
+      for (const row of Array.from(document.querySelectorAll('.results-row'))) {
+        for (const line of Array.from(row.querySelectorAll('.results-muted'))) expect((line.textContent ?? '').length, line.textContent ?? '').toBeLessThanOrEqual(60);
+      }
+      unmount();
+    }
+  });
+
+  it('describes Colliedesk alone until a Freshdesk import exists, and says so only once there is something to compare', () => {
+    const { unmount } = render(<ResultsPage results={results({ baseline: null, baseline_state: 'none', hours_saved: { '30d': null, '7d': null } })} loading={false} failed={false}
+      onRetry={() => {}} window="30d" onWindow={() => {}} timezone="Europe/Berlin" isAdmin now={now} link={({ children }) => <>{children}</>} importLink={null} />);
+    expect(screen.getByText('How your team is doing in Colliedesk. Every number opens the conversations it counts.')).toBeVisible();
+    expect(screen.queryByText(/How your team did in Freshdesk/)).toBeNull();
+    unmount();
+    renderPage();
+    expect(screen.getByText('How your team did in Freshdesk, next to how it does in Colliedesk. Every number opens the conversations it counts.')).toBeVisible();
+  });
+
+  it('does not announce a comparison that is not coming when nothing was imported', () => {
+    const fresh = results({ baseline: null, baseline_state: 'none', hours_saved: { '30d': null, '7d': null } });
+    fresh.current!.windows['30d'] = window({ available_on: '2026-12-21T00:00:00Z', resolution: null, reopened: null });
+    renderPage({ results: fresh });
+    expect(screen.queryByText(/not compared yet/)).toBeNull();
+    expect(screen.getAllByText('From Dec 21 · needs resolve history since Sep 16').length).toBe(2);
+  });
+
+  it('shows the count, not a bold weekly rate, while less than a week of conversations exists', () => {
+    const young = results({ baseline: null, baseline_state: 'none', hours_saved: { '30d': null, '7d': null } });
+    young.current!.windows['30d'] = window({ volume: { count: 3, from: '2026-10-20T12:00:00Z', days: 2.8, per_week: 7.5 } });
+    renderPage({ results: young });
+    const volume = screen.getByRole('region', { name: 'Conversations per week' });
+    expect(within(volume).getByRole('link', { name: '3 conversations' })).toBeVisible();
+    expect(within(volume).getByText('A weekly rate needs a week · 2 days so far')).toBeVisible();
+    expect(within(volume).queryByText(/a week$/)).toBeNull();
   });
 
   it('right after the move, compares no weekly volume and says Colliedesk has no conversation yet', () => {
@@ -155,7 +261,7 @@ describe('ResultsPage', () => {
     old.baseline!.stats_read = 0;
     renderPage({ results: old });
     expect(screen.getByText(/needs one more import/)).toBeVisible();
-    expect(screen.getByText('Your earlier import did not read resolve times from Freshdesk.')).toBeVisible();
+    expect(screen.getByText('The earlier import skipped resolve times.')).toBeVisible();
   });
 
   it('shows the compute error to admins only', () => {
@@ -167,7 +273,7 @@ describe('ResultsPage', () => {
   it('says what to do when the page cannot load', () => {
     const onRetry = vi.fn();
     renderPage({ results: undefined, failed: true, onRetry });
-    expect(screen.getByRole('alert')).toHaveTextContent('Results did not load');
+    expect(screen.getByRole('alert')).toHaveTextContent('Reports did not load');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onRetry).toHaveBeenCalled();
   });

@@ -17,8 +17,7 @@ cancel the subscription in the billing portal (**Open billing portal**).
 Every new cloud workspace starts a 14-day free trial with every feature, for up to 25 agents. No card is needed.
 
 - A banner under the workspace name shows "Trial: N days left". Admins get a **Choose a plan**
-  button in it. In a new workspace the [setup guide](setup-guide.md)'s next step stays the main button; Choose a plan is
-  a plain one.
+  button in it, a plain one: [Quick start](setup-guide.md) keeps the next setup step.
 - A workspace that imports its history from Freshdesk gets a longer trial: 30 days in total, once.
   The banner then says the trial was extended.
 - One trial per email address. Writing the address with capitals, a `+tag` or (for Gmail) dots does
@@ -42,6 +41,26 @@ Every new cloud workspace starts a 14-day free trial with every feature, for up 
   that nothing is deleted and that export stays available, and links to **Plan and billing**. Each of them
   gets each email once. A workspace that has a plan, or whose trial is over, gets none. If the trial end
   moves (for example after a Freshdesk import extends it), the new end gets its own two emails.
+
+### A trial offer from Colliedesk
+
+If your trial ran out while you were still trying Colliedesk, Colliedesk may email you a one-time
+link to continue it.
+
+1. Open the link. Opening it changes nothing yet.
+2. If you are not signed in, sign in as an admin of the workspace; you come back to the same page.
+3. The page names your workspace and says "Continue your trial: 14 days, starting when you press
+   Continue." Select **Continue trial**.
+4. Your trial now ends 14 days from that moment, and a locked workspace opens at once. If your trial
+   already ended later than that, it stays as it was.
+
+- Only an admin (`billing:manage`) of that workspace can accept. An agent who opens it sees which
+  admins can.
+- The link works once, for at most 30 days. An expired, withdrawn or already used link says so, with
+  your trial's end and support@colliedesk.com. A workspace that already has a plan needs no trial:
+  the page says so and nothing changes.
+- An AI agent with `billing:manage` can accept the link for you with the MCP tool
+  `colliedesk_trial_offer_accept`.
 
 ### Limits during the trial
 
@@ -108,7 +127,7 @@ If you move to a smaller plan in the billing portal while you have more agents t
 nobody is removed. Agents are paused before admins, the most recently added first: they can only
 sign out and see why. The first admin of the workspace is never paused, and a paused admin can still
 open the billing portal. An agent you reactivate keeps the place of when they were first added. Admins see a notice on every page. Deactivate agents
-in **Settings → Team**, or upgrade again, and the paused agents can work again at once.
+in **Settings → Members → Team**, or upgrade again, and the paused agents can work again at once.
 
 The plan belongs to the workspace, not to a person. Paid plans have no reply cap and no recipient rule. Every paid plan has an attachment storage cap
 (see "Attachment storage" below). Prices are in US dollars.
@@ -146,7 +165,8 @@ The workspace is **locked**. Nothing is deleted. Everyone who signs in sees a pa
 trial (or the subscription) has ended, instead of the inbox.
 
 - **Admins** can choose a plan (or open **Manage billing** when a subscription ended or failed), select **Export all data**,
-  or write to support@colliedesk.com if they need more time. The page says nothing is deleted. Choosing a plan and
+  or write to support@colliedesk.com if they need more time; support may answer with a
+  [trial offer](#a-trial-offer-from-colliedesk). The page says nothing is deleted. Choosing a plan and
   paying opens the workspace again within a few moments of the provider confirming the payment.
 - **Agents** are told to ask an admin to choose a plan, with the admins' names when the workspace is on its trial, and can sign out.
 - Customers who write to a locked workspace get a bounce. Nothing is stored, so nothing is lost

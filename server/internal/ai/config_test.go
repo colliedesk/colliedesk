@@ -34,8 +34,20 @@ func TestServerProviderFromEnv(t *testing.T) {
 		t.Fatalf("local server = %+v %v", local, err)
 	}
 
+	// Off in the operator console keeps the other values: the server has no provider, nothing is refused, and
+	// workspaces are told the provider they picked is off.
+	off := map[string]string{"AI_SERVER_API_KEY": "sk-secret", "AI_SERVER_MODELS": "draft=m", "AI_SERVER_LABEL": "Colliedesk AI"}
+	if server, err := ai.ServerProviderFromEnv(getenv(off)); server != nil || err != nil {
+		t.Fatalf("provider off = %+v %v", server, err)
+	}
+	if label, turnedOff := ai.ServerTurnedOff(getenv(off)); !turnedOff || label != "Colliedesk AI" {
+		t.Fatalf("turned off = %q %v", label, turnedOff)
+	}
+	if _, turnedOff := ai.ServerTurnedOff(getenv(nil)); turnedOff {
+		t.Fatal("a server that never had a provider is not turned off")
+	}
+
 	for name, values := range map[string]map[string]string{
-		"key only":        {"AI_SERVER_API_KEY": "sk-secret"},
 		"no key":          {"AI_SERVER_PROVIDER": "anthropic", "AI_SERVER_MODELS": "draft=m"},
 		"no models":       {"AI_SERVER_PROVIDER": "anthropic", "AI_SERVER_API_KEY": "sk-secret"},
 		"no base URL":     {"AI_SERVER_PROVIDER": "openai_compatible", "AI_SERVER_MODELS": "draft=m"},

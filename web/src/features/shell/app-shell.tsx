@@ -1,8 +1,23 @@
-import { useEffect } from 'react';
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { Me } from '../../api/schemas';
 import { messages } from '../../messages';
+import { PanelRightIcon, PenIcon } from '../../ui/icons';
+import { lazyPart, Part } from '../../ui/lazy-part';
+import { BackToApp } from '../settings/back-to-app';
+import { SettingsMenuSlot } from '../settings/settings-nav';
 import { AccountMenu } from './account-menu';
+import type { WorkspaceSwitch } from './account-menu';
+import type { PaletteSource } from './palette-entries';
+import { useSidebarLayout } from './sidebar-layout';
+import type { SidebarChannel, SidebarView } from './sidebar-items';
+import { InviteLink, SidebarLists } from './sidebar-parts';
+import { SidebarResizer } from './sidebar-resizer';
+import { TopBar } from './top-bar';
+import type { PageTitle } from './top-bar';
+
+// The palette is a chunk of its own: it starts loading when a pointer or the focus reaches the search field.
+const palettePart = lazyPart(() => import('./command-palette'));
 
 interface AppShellProps {
   me?: Me;
@@ -10,22 +25,39 @@ interface AppShellProps {
   // appVersion is the server's version, sent with a problem report.
   appVersion?: string;
   brand?: ReactNode;
+  // links are the sidebar's destinations (Inbox, Knowledge base, Reports); footLinks sit at its foot (Settings).
   links?: ReactNode;
-  // notice sits under the identity bar on every view, for example the trial banner.
+  footLinks?: ReactNode;
+  // page is the icon and name the top bar shows for the page on screen.
+  page?: PageTitle;
+  // palette is what the top bar's search offers (its field and Ctrl K or ⌘K open it); none, no search.
+  palette?: PaletteSource;
+  // quickStart sits in the sidebar head beside the workspace; onNewConversation is there for someone who may start one.
+  quickStart?: ReactNode;
+  onNewConversation?: () => void;
+  views?: SidebarView[];
+  channels?: SidebarChannel[];
+  canInvite?: boolean;
+  // notice sits above the sheet on every view, for example the trial banner.
   notice?: ReactNode;
-  // lockedScreen replaces the view when the workspace is locked; the identity bar stays.
+  // lockedScreen replaces the view when the workspace is locked; the workspace and the person stay on screen.
   lockedScreen?: ReactNode;
   onSignOut?: () => void;
   signOutFailed?: boolean;
   signingOut?: boolean;
+  // workspaceSwitch lets the account menu offer the person's other workspaces.
+  workspaceSwitch?: WorkspaceSwitch;
+  // settingsExit puts Settings in the sidebar: its menu under Back to app, instead of the app's places and lists.
+  settingsExit?: { href: string; onBack: () => void };
   children: ReactNode;
 }
 
-// AppShell is the icon rail plus the active view. A bar that is always visible names the workspace
-// and person a browser is signed in as, so a second link can never silently switch workspaces, and the view is replaced
-// by a way back in when there is no session.
+// AppShell is the sidebar plus the active view on a white sheet under its top bar. The workspace and the person a
+// browser is signed in as are always on screen, so a second link can never silently switch workspaces: the open
+// sidebar names both (its head and its foot), and where it does not (folded, a tablet, a phone) the top bar does.
+// The view is replaced by a way back in when there is no session.
 // Tooltips can be dismissed with Escape (WCAG 1.4.13) and return on the next pointer move or focus change.
-function useDismissibleTooltips() {
+export function useDismissibleTooltips() {
   useEffect(() => {
     const root = document.documentElement;
     const dismiss = (event: KeyboardEvent) => { if (event.key === 'Escape') root.setAttribute('data-tips-off', ''); };
@@ -42,32 +74,129 @@ function useDismissibleTooltips() {
   }, []);
 }
 
-export function AppShell({ me, appVersion, signedOut = false, brand, links, notice, lockedScreen, onSignOut, signOutFailed, signingOut, children }: AppShellProps) {
+// The width from which the sidebar shows names (layout.css): narrower, it is a rail or a phone's top bar.
+const namesQuery = '(min-width: 64.01rem)';
+const showsNames = () => window.matchMedia?.(namesQuery).matches ?? true;
+const subscribeNames = (change: () => void) => {
+  const query = window.matchMedia?.(namesQuery);
+  query?.addEventListener('change', change);
+  return () => query?.removeEventListener('change', change);
+};
+
+// usePalette opens the search palette from the field or from Ctrl K / ⌘K anywhere, centred on the field, and gives the
+// focus back to where it was when the palette closes without a choice.
+function usePalette(enabled: boolean) {
+  const field = useRef<HTMLButtonElement>(null);
+  const returnTo = useRef<HTMLElement | null>(null);
+  const [anchor, setAnchor] = useState<{ center: number; top: number } | null>(null);
+  const isOpen = useRef(false);
+  const open = useCallback(() => {
+    palettePart.preload();
+    // Pressed again while open, the shortcut leaves the palette as it is.
+    if (isOpen.current) return;
+    isOpen.current = true;
+    const focused = document.activeElement;
+    returnTo.current = focused instanceof HTMLElement && focused !== document.body ? focused : field.current;
+    const box = field.current?.getBoundingClientRect();
+    // A field on screen anchors it; on a phone (an icon) or without one, the palette takes the middle.
+    setAnchor(box && box.width > 64 ? { center: box.left + box.width / 2, top: Math.max(box.top - 4, 8) } : { center: window.innerWidth / 2, top: 8 });
+  }, []);
+  const close = useCallback((restoreFocus: boolean) => {
+    isOpen.current = false;
+    setAnchor(null);
+    const target = returnTo.current;
+    returnTo.current = null;
+    if (restoreFocus && target?.isConnected) target.focus();
+  }, []);
+  useEffect(() => {
+    if (!enabled) return;
+    const shortcut = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'k' || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      open();
+    };
+    document.addEventListener('keydown', shortcut);
+    return () => document.removeEventListener('keydown', shortcut);
+  }, [enabled, open]);
+  return { field, anchor, open, close };
+}
+
+export function AppShell({ me, appVersion, signedOut = false, brand, links, footLinks, page, palette, quickStart, onNewConversation, views, channels, canInvite = false,
+  notice, lockedScreen, onSignOut, signOutFailed, signingOut, workspaceSwitch, settingsExit, children }: AppShellProps) {
   useDismissibleTooltips();
+  const sidebar = useSidebarLayout();
+  const { collapsed } = sidebar.layout;
+  const wide = useSyncExternalStore(subscribeNames, showsNames);
+  const toggleLabel = collapsed ? messages.expandSidebar : messages.collapseSidebar;
+  const [menuSlot, setMenuSlot] = useState<HTMLElement | null>(null);
+  // Signed out, the old session's identity would be a false claim, so neither the sidebar nor the top bar names it.
+  const session = me && !signedOut ? me : undefined;
+  const inSettings = Boolean(session && settingsExit && !lockedScreen);
+  // The open sidebar shows the workspace and the person; it is then the region that names them. Settings has no
+  // workspace row at its head, so it shows the name above the account row at its foot.
+  const sidebarNames = Boolean(session) && wide && !collapsed;
+  const search = usePalette(Boolean(session && palette));
   const view = signedOut
     ? <main className="redeem-page"><section className="redeem-panel">
         <p role="alert" className="error-copy">{messages.signedOut}</p>
         <p className="muted-copy">{messages.signedOutSelfHosted}</p>
       </section></main>
     : lockedScreen ?? children;
+  const toggle = <button type="button" className="sidebar-toggle" aria-label={toggleLabel} data-tip={toggleLabel} aria-expanded={!collapsed}
+    onClick={() => sidebar.set({ ...sidebar.layout, collapsed: !collapsed })}><PanelRightIcon /></button>;
+  const account = session && <AccountMenu me={session} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut}
+    workspaceSwitch={workspaceSwitch} />;
   return (
-    <div className="app-shell">
-      <nav className="app-rail" aria-label={messages.mainNavigation}>
-        {brand}
-        {/* Signed out, every destination ends on the same screen, so the rail offers none. */}
-        {!signedOut && <div className="rail-links">{links}</div>}
-        {me && !signedOut && <AccountMenu me={me} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut} />}
-      </nav>
+    <SettingsMenuSlot.Provider value={inSettings ? menuSlot : undefined}>
+    <div className="app-shell" data-sidebar={collapsed ? 'collapsed' : 'expanded'}
+      style={{ '--sidebar-user-width': `${sidebar.layout.width}px` } as CSSProperties}>
+      {/* On a desktop the sidebar can be resized from its edge and folded into an icon rail; both are kept per browser. */}
+      <div className="app-sidebar" {...(sidebarNames ? { role: 'region', 'aria-label': messages.signedInAs } : {})}>
+        {inSettings && settingsExit ? <div className="app-rail settings-rail">
+          <div className="rail-head settings-rail-head"><BackToApp {...settingsExit} />{toggle}</div>
+          {/* Each Settings page puts its menu here (settings-nav.tsx). Folded into the rail there is no room for its names. */}
+          <div className="sidebar-scroll" ref={setMenuSlot} />
+          <div className="sidebar-foot">{session && <strong className="workspace-name">{session.workspace.name}</strong>}{account}</div>
+        </div> : <nav className="app-rail" aria-label={messages.mainNavigation}>
+          <div className="rail-head">
+            {brand}
+            {/* The name takes the room the head has; what does not fit is told in full on hover. The text is the whole name, so a
+                screen reader reads it once, and the top bar's search field names it for a keyboard. */}
+            {session && <span className="workspace-name" data-tip={session.workspace.name}><strong>{session.workspace.name}</strong></span>}
+            {session && quickStart}
+            {session && onNewConversation && <button type="button" className="sidebar-new" aria-label={messages.newConversation} data-tip={messages.newConversation}
+              data-opens="new-conversation" onClick={onNewConversation}><PenIcon /></button>}
+            {toggle}
+          </div>
+          {/* Signed out, every destination ends on the same screen, so the rail offers none. */}
+          {/* The places and the lists scroll between the head and the foot, so the person at the foot stays on screen. */}
+          <div className="sidebar-scroll">
+            {!signedOut && <div className="rail-links">{links}</div>}
+            {session && <SidebarLists views={views} channels={channels} />}
+          </div>
+          {session && <div className="sidebar-foot">
+            {canInvite && <InviteLink />}
+            {footLinks}
+            {account}
+          </div>}
+          {!session && !signedOut && footLinks}
+        </nav>}
+        <SidebarResizer {...sidebar} />
+      </div>
       <div className="app-main">
-        {/* Signed out, the old session's identity would be a false claim, so the bar goes with it. */}
-        {me && !signedOut && <section className="identity-bar" aria-label={messages.signedInAs}>
-          <strong>{me.workspace.name}</strong><span>{me.agent.email}</span>
-        </section>}
-        {me && !signedOut && !lockedScreen && notice}
-        <div className="app-content">
-          {view}
+        {session && !lockedScreen && notice}
+        {/* The white sheet the view sits on, under its top bar. */}
+        <div className="app-sheet">
+          {session && <TopBar page={lockedScreen ? undefined : page} identity={sidebarNames ? undefined : session}
+            search={palette ? { workspace: session.workspace.name, onOpen: search.open, onNear: palettePart.preload, field: search.field } : undefined} />}
+          <div className="app-content">
+            {view}
+          </div>
         </div>
       </div>
+      {session && palette && search.anchor && <Part part={palettePart} render={({ CommandPalette }) =>
+        <CommandPalette {...palette} workspaceId={session.workspace.id} anchor={search.anchor ?? undefined} onClose={search.close} />} />}
     </div>
+    </SettingsMenuSlot.Provider>
   );
 }

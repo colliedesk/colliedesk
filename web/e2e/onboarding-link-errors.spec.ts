@@ -68,8 +68,11 @@ test('link errors: expired, reused, revoked, mistyped, missing and another works
   await expect(appNavigationWith(alphaPage, `Alpha Desk ${suffix}`)).toHaveCount(0);
   // Nothing cached from workspace A may show inside B: not its conversations, not its agents.
   await expect(alphaPage.getByRole('button', { name: new RegExp(`Alpha only ${suffix}`) })).toHaveCount(0);
-  await expect(alphaPage.getByRole('option', { name: 'Me', exact: true })).toHaveCount(1);
-  await expect(alphaPage.getByRole('option', { name: `alpha-${suffix}@example.com` })).toHaveCount(0);
+  // B has no conversation open, so its agents show in the Filter menu: the signed-in agent as Me, never A's agent.
+  await alphaPage.locator('.filter-bar summary').filter({ hasText: 'Filter' }).click();
+  const assignee = alphaPage.getByRole('group', { name: 'Assignee' });
+  await expect(assignee.getByRole('checkbox', { name: 'Me', exact: true })).toHaveCount(1);
+  await expect(assignee.getByRole('checkbox', { name: `alpha-${suffix}@example.com` })).toHaveCount(0);
 
   // A visitor with no session who opens the app sees how to get in, not an empty inbox.
   const stranger = await (await browser.newContext()).newPage();

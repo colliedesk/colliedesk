@@ -95,10 +95,10 @@ func TestEveryBatchOfAnIntakeScopeIsAGathering(t *testing.T) {
 	}
 }
 
-// At auto, a batch the rules would only decide by default waits for the decider, held and counted like
-// any held message, with what the rules would do; a batch with evidence (a command) is decided at once.
-// Nothing is created for it meanwhile: no conversation, no contact.
-func TestAtAutoWhatTheRulesDecideByDefaultWaitsForTheDecider(t *testing.T) {
+// At auto, a batch a customer wrote waits for the decider, held and counted like any held message, with
+// what the rules would do; a command is decided at once. Nothing is created for it meanwhile: no
+// conversation, no contact.
+func TestAtAutoWhatACustomerWroteWaitsForTheDecider(t *testing.T) {
 	d := newLoopDesk(t, intakeLoop())
 	d.intakeAt(t, "auto")
 	contacts := d.one(t, `SELECT count(*)::text FROM contacts WHERE workspace_id=$1`)
@@ -124,6 +124,66 @@ func TestAtAutoWhatTheRulesDecideByDefaultWaitsForTheDecider(t *testing.T) {
 	d.flush(t)
 	if got := d.one(t, `SELECT state||'/'||rules_rule||'/'||decided_by FROM intake_gatherings WHERE workspace_id=$1 AND lane_key LIKE '%:loopback_user:b'`); got != "created/command_open/rules" {
 		t.Fatalf("a command at auto = %s", got)
+	}
+}
+
+// With intake on, what a customer wrote is AI's to decide even when the rules would continue a
+// conversation (the place's thread key, a reply to one of its messages): a new question can open its own.
+// A command is the rules' at once. Past its time a card waits for a person and joins nothing on its own.
+func TestWithIntakeOnAIDecidesWhatTheRulesWouldContinue(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	d.intakeAt(t, "auto")
+	ctx := context.Background()
+	actor := store.ChannelActor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	first, err := d.intake().Decide(ctx, d.workspaceID, d.gatheringOf(t, "a"), intake.Decision{Action: intake.Create}, store.DecidedByAgent, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := `SELECT state||'/'||rules_action||'/'||rules_rule||'/'||COALESCE((rules_target=$3::uuid)::text,'-') FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "how many boxes can I add to a crate?"})
+	d.flush(t)
+	held := d.gatheringOf(t, "a")
+	if got := d.one(t, card, held, first.ConversationID); got != "deciding/attach/thread_key/true" {
+		t.Fatalf("a's next batch = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`); got != "1" {
+		t.Fatalf("messages while AI decides = %s", got)
+	}
+	second, err := d.intake().Decide(ctx, d.workspaceID, held, intake.Decision{Action: intake.Create}, store.DecidedByAI, store.ChannelActor{})
+	if err != nil || second.ConversationID == "" || second.ConversationID == first.ConversationID {
+		t.Fatalf("AI opens a new request = %+v, %v (first %s)", second, err, first.ConversationID)
+	}
+	// A reply to a message of a conversation waits for AI too.
+	d.send(t, channeltest.LoopbackEvent{ID: "a-3", From: "a", Group: "g1", Text: "this one", Reference: "a-1"})
+	d.flush(t)
+	if got := d.one(t, card, d.gatheringOf(t, "a"), first.ConversationID); got != "deciding/attach/thread_reference/true" {
+		t.Fatalf("a reply = %s", got)
+	}
+	// Past its time it waits for a person: nothing joins on its own.
+	*d.clock = d.clock.Add(3 * time.Minute)
+	if n, err := d.intake().Sweep(ctx); err != nil || n != 1 {
+		t.Fatalf("sweep = %d, %v", n, err)
+	}
+	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, d.gatheringOf(t, "a")); got != "review/ai_unavailable" {
+		t.Fatalf("past its time = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`); got != "2" {
+		t.Fatalf("messages past its time = %s", got)
+	}
+	// A command is the rules' at once.
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Text: "report bug: the printer is down"})
+	d.flush(t)
+	if got := d.one(t, `SELECT state||'/'||rules_rule||'/'||decided_by FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, d.gatheringOf(t, "b")); got != "created/command_open/rules" {
+		t.Fatalf("a command = %s", got)
+	}
+	// At suggest the rules continue nothing either: the card waits for AI, then for a person.
+	d.intakeAt(t, "suggest")
+	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Group: "g1", Text: "hello"})
+	d.flush(t)
+	if got := d.one(t, `SELECT state FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, d.gatheringOf(t, "c")); got != "deciding" {
+		t.Fatalf("at suggest = %s", got)
 	}
 }
 
@@ -222,10 +282,9 @@ func TestAPersonAndTheSweepDecideAGatheringOnce(t *testing.T) {
 	}
 }
 
-// Past its time, a gathering AI did not decide gets the rules' decision (T-R2): what they would open is
-// opened, what they hold for a person waits in the queue, and a commands-only scope's chatter goes to the
-// queue because AI was meant to look at it.
-func TestPastItsTimeTheRulesDecide(t *testing.T) {
+// Past its time, a gathering AI did not decide waits for a person: nothing is opened or joined on its own,
+// a commands-only scope's chatter included.
+func TestPastItsTimeAPersonDecides(t *testing.T) {
 	d := newLoopDesk(t, intakeLoop())
 	d.intakeAt(t, "auto")
 	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
@@ -237,8 +296,11 @@ func TestPastItsTimeTheRulesDecide(t *testing.T) {
 	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 1 {
 		t.Fatalf("sweep = %d, %v", n, err)
 	}
-	if got := d.one(t, `SELECT state||'/'||decided_by||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1`); got != "created/rules/true" {
+	if got := d.one(t, `SELECT state||'/'||review_reason||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1`); got != "review/ai_unavailable/true" {
 		t.Fatalf("gathering = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); got != "0" {
+		t.Fatalf("conversations = %s", got)
 	}
 	if got := d.one(t, `SELECT decision_basis||':'||decision_rule FROM channel_inbound_events WHERE workspace_id=$1`); got != "default:new_thread" {
 		t.Fatalf("journal = %s", got)
@@ -256,78 +318,17 @@ func TestPastItsTimeTheRulesDecide(t *testing.T) {
 	if got := d.one(t, `SELECT state||'/'||review_reason||'/'||rules_action||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, d.gatheringOf(t, "c")); got != "review/ai_unavailable/archive/true" {
 		t.Fatalf("chatter = %s", got)
 	}
-	// A batch behind a card of its lane waits in the queue right after it.
+	// At auto a batch behind a card of its lane joins it, and the card goes back to be decided.
+	first := d.gatheringOf(t, "c")
 	d.send(t, channeltest.LoopbackEvent{ID: "c-2", From: "c", Group: "g2", Text: "hello again"})
 	d.flush(t)
-	behind := d.gatheringOf(t, "c")
-	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, behind); got != "review/lane_blocked" {
-		t.Fatalf("behind a card = %s", got)
+	if got := d.one(t, `SELECT state||'/'||(decide_by IS NOT NULL)::text||'/'||(SELECT count(*) FROM channel_inbound_events e WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id)::text
+		FROM intake_gatherings g WHERE g.workspace_id=$1 AND g.lane_key LIKE '%:loopback_user:c'`); got != "deciding/true/2" {
+		t.Fatalf("the card of c = %s", got)
 	}
 	items := `SELECT string_agg(disposition||'/'||disposition_reason,',') FROM channel_thread_items WHERE workspace_id=$1 AND gathering_id=$2::uuid`
-	if got := d.one(t, items, behind); got != "pending_review/lane_blocked" {
-		t.Fatalf("items behind a card = %s", got)
-	}
-	// Once a person decided the card before it, it goes back to be decided.
-	first := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1 AND review_reason='ai_unavailable'`)
-	if _, err := d.intake().Decide(context.Background(), d.workspaceID, first, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); err != nil {
-		t.Fatal(err)
-	}
-	if got := d.one(t, `SELECT state||'/'||(decide_by IS NOT NULL)::text FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, behind); got != "deciding/true" {
-		t.Fatalf("after the card before it = %s", got)
-	}
-	if got := d.one(t, items, behind); got != "gathering/deciding" {
-		t.Fatalf("items after the card before it = %s", got)
-	}
-}
-
-// When the rules decide in AI's place, they decide as they would now (T-6): a sender's second batch,
-// held while the first waited too, continues the conversation the first one opened instead of opening
-// another, and so does one that waited behind a card a person decided. The journal says which rule it was.
-func TestPastItsTimeTheRulesDecideAsTheyWouldNow(t *testing.T) {
-	d := newLoopDesk(t, intakeLoop())
-	d.intakeAt(t, "auto")
-	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
-	d.flush(t)
-	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "since this morning"})
-	d.flush(t)
-	*d.clock = d.clock.Add(3 * time.Minute)
-	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 2 {
-		t.Fatalf("sweep = %d, %v", n, err)
-	}
-	if got := d.gatherings(t); got != "created/create/new_thread/rules:1,attached/create/new_thread/rules:1" {
-		t.Fatalf("gatherings = %s", got)
-	}
-	if got := d.one(t, `SELECT count(DISTINCT conversation_id)::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`); got != "1" {
-		t.Fatalf("conversations = %s", got)
-	}
-	if got := d.one(t, `SELECT decision_basis||':'||decision_rule FROM channel_inbound_events WHERE workspace_id=$1 AND external_event_id='a-2'`); got != "match:thread_key" {
-		t.Fatalf("journal of the second = %s", got)
-	}
-	// Behind a card a person decides: the next batch waits, then the rules continue what the person opened.
-	ctx := context.Background()
-	actor := store.ChannelActor{AgentID: d.agentID}
-	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Text: "printer?"})
-	d.flush(t)
-	first := d.gatheringOf(t, "b")
-	if _, err := d.intake().Decide(ctx, d.workspaceID, first, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, actor); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.intake().Requeue(ctx, d.workspaceID, first, actor); err != nil {
-		t.Fatal(err)
-	}
-	d.send(t, channeltest.LoopbackEvent{ID: "b-2", From: "b", Group: "g1", Text: "it is the one on floor 2"})
-	d.flush(t)
-	behind := d.gatheringOf(t, "b")
-	if _, err := d.intake().Decide(ctx, d.workspaceID, first, intake.Decision{Action: intake.Create}, store.DecidedByAgent, actor); err != nil {
-		t.Fatal(err)
-	}
-	*d.clock = d.clock.Add(3 * time.Minute)
-	if _, err := d.intake().Sweep(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if got := d.one(t, `SELECT g.state||'/'||(g.conversation_id=f.conversation_id)::text FROM intake_gatherings g, intake_gatherings f
-		WHERE g.workspace_id=$1 AND g.id=$2::uuid AND f.id=$3::uuid`, behind, first); got != "attached/true" {
-		t.Fatalf("behind the decided card = %s", got)
+	if got := d.one(t, items, first); got != "gathering/deciding,gathering/deciding" {
+		t.Fatalf("items of the card = %s", got)
 	}
 }
 

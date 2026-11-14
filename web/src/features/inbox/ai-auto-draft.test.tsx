@@ -7,16 +7,16 @@ import type { AIDraft } from './ai-draft-api';
 const conversation = '22222222-2222-4222-8222-222222222222';
 
 function draft(change: Partial<AIDraft> = {}): AIDraft {
-  return { id: '55555555-5555-4555-8555-555555555555', conversation_id: conversation, status: 'ready', source: 'ai', cc: null, written_by: null, error_code: null, prompt: '', text: 'Hi Jordan, I refunded INV-20932.',
+  return { id: '55555555-5555-4555-8555-555555555555', conversation_id: conversation, status: 'ready', source: 'ai', cc: null, written_by: null, files: [], error_code: null, prompt: '', text: 'Hi Jordan, I refunded INV-20932.',
     missing_info: null, sources: [], warnings: [], model: 'claude-sonnet-5-5', outcome: null, similarity: null, sent_message_id: null, requested_by_agent_id: null,
     automatic: true, answers_message_id: '66666666-6666-4666-8666-666666666666', reply_needed: true, created_at: '2026-10-22T10:31:00Z', ready_at: '2026-10-22T10:31:20Z',
-    decided_at: null, ...change };
+    decided_at: null, decided_by_name: null, restored_at: null, ...change };
 }
 
 function serve(items: AIDraft[], onDiscard = vi.fn()) {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (String(url).endsWith('/discard')) { onDiscard(); return new Response(JSON.stringify(items[0]), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
-    return new Response(JSON.stringify({ items }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ items, next_before: null }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }));
 }
 
@@ -76,7 +76,7 @@ test('a failed draft can be tried again, which opens Draft with AI, or dismissed
   const asked = vi.fn();
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST') { asked(); return new Response(JSON.stringify(draft({ automatic: false, status: 'queued', text: null })), { status: 201, headers: { 'Content-Type': 'application/json' } }); }
-    return new Response(JSON.stringify({ items: [draft({ status: 'failed', error_code: 'refused', text: null })] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ next_before: null, items: [draft({ status: 'failed', error_code: 'refused', text: null })] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }));
   const onTryAgain = vi.fn();
   const { unmount } = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -136,4 +136,21 @@ test('discard takes it away', async () => {
   show();
   fireEvent.click(await screen.findByRole('button', { name: 'Discard' }));
   await waitFor(() => expect(onDiscard).toHaveBeenCalled());
+});
+
+test('on a phone the draft starts folded whatever the screen height, so the conversation keeps the screen', async () => {
+  // A 412×915 phone is taller than a short laptop (800 px), and still a phone: 44 rem wide or less.
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('max-width: 44rem'), media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  serve([draft()]);
+  show();
+  expect(await screen.findByRole('button', { name: 'Show draft' })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByText('Hi Jordan, I refunded INV-20932.')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Use draft' })).toBeInTheDocument();
+});
+
+test('a tall wide screen still opens the draft', async () => {
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  serve([draft()]);
+  show();
+  expect(await screen.findByText('Hi Jordan, I refunded INV-20932.')).toBeInTheDocument();
 });

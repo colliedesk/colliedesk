@@ -51,9 +51,10 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
   const created = await inbound.json() as { status: string; conversation_id: string };
   expect(created.status).toBe('created');
 
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  await page.getByRole('link', { name: 'Back to app' }).click();
   await page.getByRole('button', { name: new RegExp(`Order ${suffix} never arrived`) }).click();
-  await expect(page.getByText('My order never arrived. Receipt attached.')).toBeVisible();
+  // The list row quotes the same words; the message itself is in the timeline.
+  await expect(page.getByRole('region', { name: /timeline/i }).getByText('My order never arrived. Receipt attached.')).toBeVisible();
   const receipt = page.getByRole('link', { name: 'receipt.pdf' });
   expect(await (await page.request.get(`${baseURL}${await receipt.getAttribute('href')}`)).text()).toBe('%PDF-1.4 receipt bytes');
   await expect(page.getByRole('status')).toHaveCount(0);
@@ -87,6 +88,6 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
   expect(await answer.json()).toMatchObject({ status: 'threaded', conversation_id: created.conversation_id });
 
   await page.reload();
-  await expect(page.getByText('Thanks, it just arrived.')).toBeVisible();
+  await expect(page.getByRole('region', { name: /timeline/i }).getByText('Thanks, it just arrived.')).toBeVisible();
   await expect(page.getByRole('button', { name: new RegExp(`Order ${suffix} never arrived`) })).toHaveCount(1);
 });

@@ -100,6 +100,8 @@ type restMessage struct {
 	ReplyNumber   *int      `json:"reply_number"`
 	// NoticeKind names a message the channel sent by itself (a received or status notice).
 	NoticeKind *string `json:"notice_kind"`
+	// Mentions are the teammates a note asks.
+	Mentions   []restNoteMention `json:"mentions"`
 	AgentToken *struct {
 		Label     string `json:"label"`
 		AgentName string `json:"agent_name"`
@@ -156,4 +158,11 @@ type restActivity struct {
 		ConversationID string       `json:"conversation_id"`
 		Viewers        []restViewer `json:"viewers"`
 	} `json:"viewing"`
+}
+
+type restNoteMention struct {
+	AgentID string     `json:"agent_id"`
+	Name    string     `json:"name"`
+	ByEmail bool       `json:"by_email"`
+	ReadAt  *time.Time `json:"read_at"`
 }

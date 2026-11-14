@@ -213,8 +213,8 @@ the fallback model after a timeout, rate limit, overload, server error, `model_n
 `invalid_response`, or a schema answer that is not JSON. Errors another model would get too (a key,
 credit, a request too large) are not tried again. Each call is its own usage row and passes the budget
 on its own. The provider cannot drop the fallback model (`ai_model_in_use`); moving intake to another
-provider drops it, and a new one lowers intake's channel levels as another model does
-(`model_changed`), since the gate's labels were the old models' decisions.
+provider drops it. A new one, like another model, keeps intake's channel levels: the gate counts labels of
+any model (decided 2026-11-08; `model_changed` stays only in older histories).
 
 `ai_usage.cost_micro_usd` is computed when a call of the server's provider finishes, per hop at the
 served model's price from `AI_SERVER_PRICES` (unknown model: the highest declared price of each kind,
@@ -263,6 +263,28 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    the id: losing the metric is better than refusing a reply. `DraftOutcomes` counts them for #100.
 6. **Drafts left.** The allowance shows about how many drafts what is left pays for, at the workspace's
    average draft cost over 30 days, or a typical draft (6,000 tokens in, 500 out) before its first.
+7. **Written drafts keep their history and files.** A written draft (`source='written'`) supersedes the
+   earlier one of the same agent and token, which stays. `RestoreDraft` reopens that same row
+   (`outcome` back to null, `ready_at` and `restored_at` now, `restored_by_agent_id`) and supersedes the
+   one that waited: a copy would change the id an agent holds and count the files twice. Superseded,
+   expired and discarded written drafts come back (discard is not a one-way door, the resolve trigger
+   included); sent ones, AI ones (their outcome feeds `DraftOutcomes` and Results) and erased ones do
+   not (`ai_draft_not_restorable`). Writing and restoring take one advisory lock per author
+   (workspace, conversation, agent, token) before they supersede, so racing calls leave exactly one
+   draft waiting; a partial unique index was not used because older data may break it.
+8. **A draft's files.** `ai_draft_files` rows reference attachment objects, so `DiscardObject` keeps
+   their bytes, and a trigger counts their size toward the workspace's storage while the row exists.
+   The send that names `ai_draft_id` copies the kept files (`ai_draft_file_ids`, nil = all) into
+   attachment rows on the same keys and deletes the draft's rows in the same transaction, so nothing
+   is counted twice; the left-out keys go through `DiscardObject` after the commit. Rows of a sent,
+   cancelled or erased draft go in the daily `SweepDraftFiles`; the Freshdesk undo adds the keys of
+   undone conversations' drafts to its orphans. The file ids must be the draft's own (400 otherwise),
+   and the draft's files plus the reply's uploads stay within one message (10 files, 10 MiB).
+   The draft's rows are gone after the send, so the Idempotency-Key row keeps `draft_selection` (the
+   draft, the files asked for, the files that went); a repeat that differs is `idempotency_key_reused`.
+9. **The list is paged.** `GET …/ai-drafts` takes `before` (the `next_before` of the page read, a
+   draft id) and `limit` (20, at most 50), ordered by `(created_at, id)` descending, so every earlier
+   draft that still holds files can be reached.
 
 ## Triage suggestions
 
@@ -381,9 +403,9 @@ feature does by itself: `off`, `suggest`, `auto`.
    provider or model, or the feature turned on again), the workspace's level starts over (triage
    `suggest`, others `off`) and `lowerChannelLevels` lowers every channel row a step (auto → suggest,
    drafts suggest → off) in the same transaction, with `reason: recipient_changed` in both histories.
-   Another model of the same provider changes no consent and, for triage and drafts, nothing else (as
-   before levels); for intake it lowers the channels' `auto` (`model_changed`), since its gate was
-   passed with that model's decisions. A call that could never run (a scope the channel lacks, intake
+   Another model of the same provider changes no consent and nothing else, intake included: its gate
+   counts labels of any model (decided 2026-11-08; before, it lowered intake's `auto` with
+   `model_changed`, which older histories still show). A call that could never run (a scope the channel lacks, intake
    on email) is refused before a token's request is filed (`CheckChannelLevel`).
    Deleting a provider sets the slot off; channel rows stay and read `workspace_off`. A restore lowers
    both the same way.

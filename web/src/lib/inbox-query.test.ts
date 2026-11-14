@@ -19,8 +19,9 @@ test('a value the inbox does not know is dropped from the address, so an old or 
 });
 
 test('no status in the address is the Open view; All is said out loud', () => {
-  expect(apiQuery({}, 1)).toBe('status=open&page=1&page_size=50');
-  expect(apiQuery({ status: 'all', search: 'refund' }, 2)).toBe('search=refund&page=2&page_size=50');
+  // The inbox starts on Due first (the design's list order); the address leaves it out.
+  expect(apiQuery({}, 1)).toBe('sort=due&status=open&page=1&page_size=50');
+  expect(apiQuery({ status: 'all', search: 'refund' }, 2)).toBe('sort=due&search=refund&page=2&page_size=50');
   expect(apiQuery({ priority: 'high,urgent', has_pending_draft: true, sort: 'waiting_longest', tag: 'a,b', tag_match: 'all' }, 1))
     .toBe('priority=high%2Curgent&tag=a%2Cb&tag_match=all&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50');
 });
@@ -45,10 +46,11 @@ test('a chip removes one value of a list and the whole filter when it was the la
   expect(withoutValue({ has_pending_draft: true }, 'has_pending_draft')).toEqual({});
 });
 
-test('the default view is Open, newest activity first, nothing else', () => {
+test('the default view is Open, due first, nothing else', () => {
   expect(isDefaultQuery({})).toBe(true);
   expect(isDefaultQuery({ status: 'open' })).toBe(true);
-  expect(isDefaultQuery({ sort: 'updated_desc' })).toBe(true);
+  expect(isDefaultQuery({ sort: 'due' })).toBe(true);
+  expect(isDefaultQuery({ sort: 'updated_desc' })).toBe(false);
   expect(isDefaultQuery({ status: 'all' })).toBe(false);
   expect(isDefaultQuery({ awaiting: 'team' })).toBe(false);
 });
@@ -57,7 +59,7 @@ test('a results number opens its conversations in any status, and is never saved
   const result = '11111111-1111-4111-8111-111111111111:30d.first_response';
   const query = inboxQueryFromSearch({ status: 'all', result });
   expect(query).toEqual({ status: 'all', result });
-  expect(apiQuery(query, 1)).toBe(`result=${encodeURIComponent(result)}&page=1&page_size=50`);
+  expect(apiQuery(query, 1)).toBe(`sort=due&result=${encodeURIComponent(result)}&page=1&page_size=50`);
   expect(inboxQueryFromSearch({ result: 'not-a-number' })).toEqual({});
   expect(filtersOf(query)).toEqual({});
   expect(queryOf({ result } as never)).toEqual({ status: 'all' });
@@ -66,14 +68,14 @@ test('a results number opens its conversations in any status, and is never saved
 test('a channel filter keeps channel ids only, goes to the API, and is saved in a view as a list', () => {
   const id = '55555555-5555-4555-8555-555555555555';
   expect(inboxQueryFromSearch({ channel_id: `${id},nope` })).toEqual({ channel_id: id });
-  expect(apiQuery({ channel_id: id }, 1)).toBe(`channel_id=${id}&status=open&page=1&page_size=50`);
+  expect(apiQuery({ channel_id: id }, 1)).toBe(`channel_id=${id}&sort=due&status=open&page=1&page_size=50`);
   expect(filtersOf({ status: 'all', channel_id: id })).toEqual({ channel_id: [id] });
   expect(queryOf({ channel_id: [id] })).toEqual({ status: 'all', channel_id: id });
 });
 
 test('a code in the address finds its conversation in every status', () => {
   expect(inboxQueryFromSearch({ ref: ' CHD-2026-0142 ' })).toEqual({ ref: 'CHD-2026-0142', status: 'all' });
-  expect(apiQuery(inboxQueryFromSearch({ ref: 'CHD-2026-0142' }), 1)).toBe('ref=CHD-2026-0142&page=1&page_size=50');
+  expect(apiQuery(inboxQueryFromSearch({ ref: 'CHD-2026-0142' }), 1)).toBe('ref=CHD-2026-0142&sort=due&page=1&page_size=50');
   expect(inboxQueryFromSearch({ ref: 'CHD-2026-0142', status: 'pending' })).toEqual({ ref: 'CHD-2026-0142', status: 'pending' });
 });
 

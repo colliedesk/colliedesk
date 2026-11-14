@@ -48,7 +48,7 @@
 .ai-triage-line b { font-weight: 600; }
 .ai-triage-line-sum { min-width: 0; color: var(--text-2); overflow-wrap: anywhere; }
 .ai-triage-line time { color: var(--text-3); font-size: var(--fs-label); }
-.ai-triage-line button { margin-left: auto; --control: 30px; padding: 0 var(--space-3); }
+.ai-triage-line button { margin-left: auto; --control: 32px; padding: 0 var(--space-3); }
 .ai-triage-timeline { display: none; }
 /* A phone shows the whole suggestion on the timeline, where it is reached without opening the
    details sheet; a tablet keeps the line, and the details drawer whose toggle says a suggestion waits. */
@@ -57,3 +57,10 @@
   .ai-triage-timeline { display: grid; }
 }
 @media (pointer: coarse), (max-width: 30rem) { .ai-triage-line button { min-height: var(--touch); } }
+/* In the details: a card set apart by a hairline, not a dashed draft box. */
+.details-section.ai-triage { margin: var(--space-3) var(--space-3) 0; border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--surface-0); padding: var(--space-3); }
+.details-section.ai-triage + .details-section { border-top: 0; }
+.details-section.ai-triage h2 { margin: 0; color: var(--text-2); font-size: var(--fs-label); }
+.details-section.ai-triage .ai-triage-message { font-size: var(--fs-label); line-height: 1.5; }
+.details-section.ai-triage .ai-triage-actions :is(button, a) { --control: 30px; min-height: 30px; font-size: var(--fs-small); }

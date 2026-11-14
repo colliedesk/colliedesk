@@ -13,7 +13,7 @@ var (
 	// conversationFiltersSchema is the ConversationFilters object of the REST contract. Tags,
 	// assignees and contacts are ids here (colliedesk_tags_list, colliedesk_agents_list, colliedesk_contacts_find).
 	conversationFiltersSchema = `{"type":"object","additionalProperties":false,"description":"The filters of colliedesk_inbox_search as stored: lists for several values, ids for tags, team members and the contact. {} is every conversation.","properties":{` +
-		`"status":{"type":"array","maxItems":4,"items":{"type":"string","enum":["open","pending","resolved","closed"]}},` +
+		`"status":{"type":"array","maxItems":5,"items":{"type":"string","enum":["open","pending","resolved","closed","spam"]}},` +
 		`"priority":{"type":"array","maxItems":4,"items":{"type":"string","enum":["low","normal","high","urgent"]}},` +
 		`"assignee":{"type":"array","maxItems":50,"items":{"type":"string","description":"me, unassigned, anyone or a team member id"}},` +
 		`"tag":{"type":"array","maxItems":50,"items":{"type":"string",` + uuid + `}},"tag_match":{"type":"string","enum":["any","all"]},` +
@@ -43,11 +43,10 @@ func savedViewsListSpec() Spec {
 		Title: "List saved inbox views",
 		Description: `List the saved inbox views this token's person can use: the views shared with the team, then their own personal views, by name. ` +
 			`trash true lists instead the views deleted in the last 30 days, which colliedesk_saved_view_restore brings back. ` + savedViewNotice,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/saved-views", "GET /api/v1/saved-views/trash", "GET /api/v1/auth/me"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{"trash":{"type":"boolean","default":false}}}`,
-		Output:   `{"type":"object","required":["saved_views"],"properties":{"saved_views":{"type":"array","items":` + savedViewSchema + `}}}`,
-		run:      savedViewsList,
+		REST:   []string{"GET /api/v1/saved-views", "GET /api/v1/saved-views/trash", "GET /api/v1/auth/me"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{"trash":{"type":"boolean","default":false}}}`,
+		Output: `{"type":"object","required":["saved_views"],"properties":{"saved_views":{"type":"array","items":` + savedViewSchema + `}}}`,
+		run:    savedViewsList,
 	}
 }
 

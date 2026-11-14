@@ -56,6 +56,14 @@ func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 		"sitemap":            base + "/sitemap.xml",
 		"llms.txt":           base + "/llms.txt",
 		"article markdown":   base + "/a/2-article-2.md",
+		// The French pages of every article translated.
+		"fr home":            base + "/fr",
+		"fr collection":      base + "/fr/c/budget",
+		"fr collection last": base + fmt.Sprintf("/fr/c/budget?page=%d", domain.MaxKBArticles/2/50),
+		"fr article":         base + "/fr/a/1000-article-fr-1000",
+		"fr article 100k":    base + "/fr/a/2-article-fr-2",
+		"fr search":          base + "/fr/search?q=" + word + "+" + other,
+		"fr search title":    base + "/fr/search?q=Article+fr+1998",
 	}
 	for name, path := range paths {
 		p95 := helpCenterP95(t, site, path)

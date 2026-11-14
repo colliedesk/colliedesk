@@ -28,11 +28,10 @@ func autofixSettingsGetSpec() Spec {
 		Description: `Show Autofix's settings: whether the server's GitHub App is set up (available), the GitHub installations (status blocked_all_repositories: it reaches every ` +
 			`repository of its account and must be narrowed to selected ones on GitHub before a repository can be connected), the connected repositories (a paused one ` +
 			`takes no new fix and says why) and the coding agents (Claude, Copilot, Cursor; never a key, only who set Cursor's and when).`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/autofix/settings"},
-		Input:    noArguments,
-		Output:   autofixSettingsSchema,
-		run:      autofixSettingsGet,
+		REST:   []string{"GET /api/v1/autofix/settings"},
+		Input:  noArguments,
+		Output: autofixSettingsSchema,
+		run:    autofixSettingsGet,
 	}
 }
 
@@ -42,9 +41,8 @@ func githubRepositoriesListSpec() Spec {
 		Title: "List the repositories a GitHub installation reaches",
 		Description: `List, read from GitHub now, the repositories an installation of the Colliedesk GitHub App can reach, each with its visibility and the connected ` +
 			`repository it is (connected_repo_id, null when not connected). Only private ones can be connected with colliedesk_autofix_repo_connect.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/autofix/github/installations/{id}/repositories"},
-		Input:    `{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{` + installationIDProperty + `}}`,
+		REST:  []string{"GET /api/v1/autofix/github/installations/{id}/repositories"},
+		Input: `{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{` + installationIDProperty + `}}`,
 		Output: `{"type":"object","required":["repositories"],"properties":{"repositories":{"type":"array","items":{"type":"object","required":["github_repo_id","full_name","visibility","connected_repo_id"],"properties":{` +
 			`"github_repo_id":{"type":"integer"},"full_name":{"type":"string"},"visibility":{"type":"string","enum":["private","internal","public"]},"connected_repo_id":{"type":["string","null"]}}}}}}`,
 		run: githubRepositoriesList,
@@ -71,11 +69,10 @@ func githubDisconnectSpec() Spec {
 		Description: `Uninstall the Colliedesk GitHub App from an account on GitHub and remove the installation (installation_id from colliedesk_autofix_settings_get). ` +
 			`Its repositories stay, paused (removed_from_app), so their fixes still show where they went; fixes in progress on them are cancelled (repo_disconnected), which cannot be undone: send them again by hand. ` +
 			`Connecting GitHub again with colliedesk_github_connect brings the repositories back.`,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/autofix/github/installations/{id}"},
-		Input:       `{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{` + installationIDProperty + `}}`,
-		Output:      autofixSettingsSchema,
-		run:         githubDisconnect,
+		REST:   []string{"DELETE /api/v1/autofix/github/installations/{id}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{` + installationIDProperty + `}}`,
+		Output: autofixSettingsSchema,
+		run:    githubDisconnect,
 	}
 }
 
@@ -115,11 +112,10 @@ func autofixRepoDisconnectSpec() Spec {
 		Title: "Disconnect a repository from Autofix",
 		Description: `Disconnect a repository: no new fix goes to it, and its fixes in progress are cancelled (repo_disconnected); its fixes keep the repository's name. ` +
 			`Connect it again with colliedesk_autofix_repo_connect; the cancelled fixes cannot be undone (send them again).`,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/autofix/repos/{id}"},
-		Input:       `{"type":"object","additionalProperties":false,"required":["repo_id"],"properties":{` + autofixRepoIDProperty + `}}`,
-		Output:      `{"type":"object","required":["disconnected"],"properties":{"disconnected":{"type":"boolean"}}}`,
-		run:         autofixRepoDisconnect,
+		REST:   []string{"DELETE /api/v1/autofix/repos/{id}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["repo_id"],"properties":{` + autofixRepoIDProperty + `}}`,
+		Output: `{"type":"object","required":["disconnected"],"properties":{"disconnected":{"type":"boolean"}}}`,
+		run:    autofixRepoDisconnect,
 	}
 }
 

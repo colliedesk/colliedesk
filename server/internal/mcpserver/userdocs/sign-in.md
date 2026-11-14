@@ -3,15 +3,16 @@
 Colliedesk has no passwords. You sign in with a one-time link.
 
 - **Pairing link**: printed by the `create-workspace` or `pair` command for a specific person.
-- **Invite link**: created by an admin in **Settings → Invites** (see [Invite your team](invites.md)).
+- **Invite link**: created by an admin in **Settings → Members → Invites** (see [Invite your team](invites.md)).
 
 Each link works once and expires after 15 minutes. Colliedesk stores only a hash of the link,
 so nobody, including us, can read it back later. If a link is invalid, expired or already used,
-ask your admin for a new one.
+ask your admin for a new one. An invite link names its workspace, who invited you and your roles before
+you join, and says which of these happened when it no longer works ([Invite your team](invites.md)).
 
 Opening a link signs that browser in for 30 days; using Colliedesk extends it. A link for another
-workspace switches the browser to that workspace; a bar at the top of every page always shows which workspace and
-address you are signed in as. You can see and
+workspace switches the browser to that workspace; every page always shows which workspace and address you are
+signed in as (in the sidebar, or in the top bar when the sidebar is folded or on a phone). You can see and
 revoke every signed-in device in [Sessions and devices](sessions.md).
 
 ## Cloud sign-in
@@ -27,6 +28,24 @@ Signing in does not by itself add you to a workspace. Your verified primary emai
 agent in at least one workspace. If it belongs to several workspaces, choose the workspace after
 authentication. Colliedesk then creates its own ordinary browser session; the identity provider does
 not receive or manage that Colliedesk session.
+
+Where each workspace has its own address (`<workspace>.colliedesk.com` on Colliedesk Cloud), the main
+address (`app.colliedesk.com`) takes a person with one workspace straight to it. A person with several
+workspaces is asked which one to open every time.
+
+### Switch workspace
+
+When your email belongs to more than one workspace, the account menu (your name at the foot of the
+sidebar, or your avatar on a phone) lists your other workspaces under **Switch workspace**.
+
+1. Open the account menu.
+2. Select the workspace to open.
+
+It opens signed in, without a new code, while your cloud sign-in in this browser is still valid. You
+stay signed in to the workspace you came from. The list comes from the email you verified with the
+sign-in provider. It leaves out a workspace where you were deactivated. If you signed in with a link
+and not with cloud sign-in, the menu has no list. In that case, open `app.colliedesk.com/sign-in` to
+choose a workspace.
 
 ## Create a workspace (hosted cloud)
 
@@ -44,7 +63,7 @@ usual, and [Plan and billing](billing.md) then shows Team 25 first. No other `pl
 
 The same page asks three short questions, each with a fixed list of answers: what you want
 Colliedesk to do for you first, your role, and where you heard of Colliedesk. Your first goal decides
-which step the [setup guide](setup-guide.md) in the inbox lists and recommends first (for example **Import from Freshdesk** when you are moving
+which step [Quick start](setup-guide.md) (the setup guide) lists and recommends first (for example **Import from Freshdesk** when you are moving
 off a helpdesk), and the answers help us send you emails that fit. On the trial page the web form needs
 an answer to each. A visitor who came to buy (`/sign-in?buy=founding`) or for a plan
 (`plan=team25`) is asked for the workspace name only: the three questions sit under "Tell us about your

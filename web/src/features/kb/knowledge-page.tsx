@@ -15,6 +15,8 @@ import type { CollectionValues } from './collection-panel';
 import { kbApi } from './kb-api';
 import type { KBArticleStatus, KBArticleSummary, KBCollection } from './kb-api';
 import { kbMessages } from './kb-messages';
+import { CollectionNames } from './collection-names';
+import { languageName, translationMessages } from './translation-messages';
 import { KBDialog, KBHead } from './kb-ui';
 import { Icon } from './editor/icons';
 import { buildTree, flatten, indent, maxDepth, reason } from './kb-tree';
@@ -170,7 +172,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
       {publicNow === false && <div className="kb-notice" role="status">
         <Icon name="globe" />
         <span><strong>{kbMessages.helpCenterIsOff}</strong> {kbMessages.helpCenterIsOffDetail}</span>
-        {holds('help_center:update') && <a className="button-link" href="/settings#help-center-heading">{kbMessages.turnOnInSettings}</a>}
+        {holds('help_center:update') && <a className="button-link" href="/knowledge/settings#help-center-heading">{kbMessages.turnOnInSettings}</a>}
       </div>}
       {trashOpen && <KBTrash timezone={timezone} onChanged={() => void refresh()} onClose={closeTrash} />}
       <OrderAnnouncement message={moves.message} />
@@ -254,6 +256,8 @@ interface CollectionHeadProps {
 // CollectionHead names the chosen collection, with its description and what can be done to it.
 function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave, onConfirm, onDelete, order }: CollectionHeadProps) {
   const { collection } = node;
+  const [naming, setNaming] = useState(false);
+  const refresh = useRefreshKB();
   return (
     <div className="kb-collection-head">
       <div className="kb-collection-title">
@@ -274,11 +278,13 @@ function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave,
             {node.depth < maxDepth
               ? <button type="button" aria-label={kbMessages.newSubcollectionOf(collection.name)} onClick={() => onForm('new-inside')}>{kbMessages.newSubcollection}</button>
               : <span className="kb-hint">{kbMessages.maxDepth}</span>}
+            <button type="button" aria-label={translationMessages.collectionNamesOf(collection.name)} onClick={() => setNaming(true)}>{translationMessages.namesInLanguages}</button>
             <button type="button" className="danger-action" aria-label={kbMessages.deleteCollectionName(collection.name)} onClick={() => onConfirm(true)}>{kbMessages.deleteCollection}</button>
             {order}
           </div>}
       {form === 'edit' && <CollectionForm key={collection.updated_at} tree={tree} node={node} onSubmit={onSave} onCancel={() => onForm(null)} />}
       {form === 'new-inside' && <CollectionForm tree={tree} parentId={collection.id} onSubmit={onSave} onCancel={() => onForm(null)} />}
+      {naming && <CollectionNames collection={collection} onChanged={refresh} onClose={() => setNaming(false)} />}
     </div>
   );
 }
@@ -322,6 +328,11 @@ function ArticleRow({ article, collection, timezone, isPublic, order }: ArticleR
 // KBTrash holds the deleted articles and collections, each restorable for 30 days.
 function KBTrash({ timezone, onChanged, onClose }: { timezone: string; onChanged: () => void; onClose: () => void }) {
   const [now] = useState(() => new Date());
+  // A translation's id here is "<article id>/<locale>"; one press is one restore (Idempotency-Key).
+  const undeleteTranslation = useCreateAction(({ id, updatedAt }: { id: string; updatedAt: string }, key: string) => {
+    const [articleId, locale] = id.split('/');
+    return kbApi.restoreTranslation(articleId!, locale!, updatedAt, key);
+  });
   return (
     <KBDialog title={kbMessages.trash} className="kb-trash" phone="full" closeLabel={kbMessages.closeTrash} onClose={onClose}>
       <SavedReplyTrash timezone={timezone} now={now} heading={kbMessages.articleTrash} description={kbMessages.articleTrashDescription}
@@ -332,6 +343,13 @@ function KBTrash({ timezone, onChanged, onClose }: { timezone: string; onChanged
         empty={kbMessages.collectionTrashEmpty} failedMessage={kbMessages.collectionActionFailed} text={(item) => item.description}
         load={async () => ({ items: (await kbApi.trashedCollections()).items.map((item) => ({ ...item, title: item.name })) })}
         onUndelete={async (id, updatedAt) => { await kbApi.restoreCollection(id, updatedAt); onChanged(); }} />
+      <SavedReplyTrash timezone={timezone} now={now} heading={translationMessages.translationTrash} description={translationMessages.translationTrashDescription}
+        empty={translationMessages.translationTrashEmpty} failedMessage={kbMessages.articleActionFailed} text={() => ''}
+        load={async (cursor) => {
+          const page = await kbApi.trashedTranslations(cursor);
+          return { ...page, items: page.items.map((item) => ({ ...item, id: `${item.article_id}/${item.locale}`, title: `${item.title} · ${languageName(item.locale)} · ${item.article_title}` })) };
+        }}
+        onUndelete={async (id, updatedAt) => { await undeleteTranslation.run({ id, updatedAt }); onChanged(); }} />
     </KBDialog>
   );
 }

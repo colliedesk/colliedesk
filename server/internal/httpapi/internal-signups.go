@@ -1,9 +1,10 @@
 package httpapi
 
 import (
-	"fmt"
 	"net/netip"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/configerr"
 )
 
 // InternalSignups recognises the team's own cloud sign-ups, so their trial_started event says
@@ -28,7 +29,7 @@ func ParseInternalSignups(emails, networks string) (InternalSignups, error) {
 		}
 		local, domain, found := strings.Cut(entry, "@")
 		if !found || domain == "" {
-			return InternalSignups{}, fmt.Errorf("INTERNAL_SIGNUP_EMAILS entry %q is not @domain or an email address", entry)
+			return InternalSignups{}, configerr.Say("internal_signup_email_invalid", configerr.Params{"entry": entry})
 		}
 		if local == "" {
 			internal.domains[domain] = true

@@ -28,6 +28,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
+	"github.com/colliedesk/colliedesk/server/internal/mentionmail"
 	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -185,7 +186,8 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if httpapi.Outbound(channelConfig).Worker {
 		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
 		worker := emailoutbox.New(channelStore, sender,
-			emailoutbox.Options{Wake: wake, FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
+			emailoutbox.Options{Wake: wake, FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain,
+				ReceivesPlatformReplies: emailConfig.ReceivesPlatformReplies(), Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
 				SwitchedOff: map[string]bool{domain.MailboxGoogle: off[serverconfig.FeatureGmail], domain.MailboxMicrosoft: off[serverconfig.FeatureMicrosoft]}})
 		g.Go(func(ctx context.Context) { worker.Run(ctx, 5*time.Second) })
 		// A quiet Microsoft 365 mailbox would lose its grant after 90 days unused; this refreshes it weekly
@@ -211,6 +213,10 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		alerts := sla.Alerts{Store: channelStore, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,
 			Origin: origin, HelpCenterDomain: helpCenterDomain}
 		g.Go(func(ctx context.Context) { alerts.Run(ctx, time.Minute) })
+		// A teammate a private note mentions is emailed once, from the same address (docs/user/mentions.md).
+		mentions := mentionmail.Sender{Store: channelStore, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,
+			Origin: origin, HelpCenterDomain: helpCenterDomain}
+		g.Go(func(ctx context.Context) { mentions.Run(ctx, 15*time.Second) })
 	}
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
 	// What chat intake did not decide in time gets the channel's rules (docs/internals/channels.md "Intake").
@@ -244,7 +250,8 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if telemetryConfig.OffReason == "DISABLE_TELEMETRY is set" && os.Getenv("DISABLE_TELEMETRY") == "" {
 		telemetryConfig.OffReason = "telemetry.enabled is false"
 	}
-	usage := telemetry.New(db, telemetryConfig, nil)
+	// The cloud's workspace snapshots read each workspace's email step through the channel types this server runs.
+	usage := telemetry.New(db, telemetryConfig, nil).WithStore(channelStore)
 	g.Go(func(ctx context.Context) { usage.Run(ctx, logger) })
 	// Trials and first payments of sign-ups from Meta ads are reported to Meta from the hosted cloud only;
 	// a self-hosted server reads no variable for it (docs/internals/ad-conversions.md).
@@ -285,6 +292,10 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
 	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: config.AllowPrivateBaseURLs, PlanLimits: billingOn}
+	if aiServer == nil && config.AIServerOffLabel != "" {
+		// Provider set to Off with its models kept: workspaces that picked it see it greyed, as when switched off.
+		aiConfig.ServerOff, aiConfig.ServerOffLabel = true, config.AIServerOffLabel
+	}
 	apiConfig := httpapi.Config{Cursor: p.cursor, AI: aiConfig, ImportKeys: p.importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth,
 		Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: config.MailImageCacheBytes,
 		KBVideoMaxBytes: config.KBVideoMaxBytes, RequestPool: p.requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey,
@@ -329,7 +340,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		consoleSignIn.PublishableKey = cloudAuth.PublishableKey
 	}
 	// The help center is outermost: a request to a help center host never reaches the app, the API or MCP.
-	inner := mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators}, webui.Handler(api, consoleSignIn))
+	inner := mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators, Origin: origin}, webui.Handler(api, consoleSignIn))
 	g.handler = operatorHost(origin, p.operatorOrigin, api.WrapHelpCenter(inner), inner, webui.OperatorHandler("", consoleSignIn))
 	return g
 }

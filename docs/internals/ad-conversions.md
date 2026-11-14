@@ -19,10 +19,18 @@ trials instead of clicks. The user-facing description of what is sent is in `doc
   | `META_CONVERSIONS_TEST_EVENT_CODE` | Optional. Sends every event to Events Manager → Test events only. Unset it after the check. |
 
 - **Minimum payload.** `fbc` (`fb.1.<first-seen ms>.<fbclid>`: no `_fbc` cookie exists, so subdomain
-  index 1 and the time the sign-in page first saw the click ID, as Meta's fbp/fbc page says), client
-  IP, user agent, `event_id` = workspace id, `action_source` = `website`, `event_source_url` =
+  index 1 and the time the sign-in page first saw the click ID, as Meta's fbp/fbc page says), `fbp`
+  when the sign-up request carries the Meta pixel's `_fbp` cookie, client IP, user agent, `event_id` = workspace id, `action_source` = `website`, `event_source_url` =
   `APP_ORIGIN/sign-in` or `/settings/billing`, and for `Subscribe` `value` + `currency` from Polar's
   `amount` (cents) and `currency`. Never email, name, company or workspace name.
+- **`fbp` only from the cookie, only with a click ID.** colliedesk.com loads the Meta pixel after
+  the visitor accepts cookies (colliedesk.com#139); fbevents.js sets `_fbp` on `.colliedesk.com`
+  (checked in Chrome on 2026-11-04), so the browser sends it with the sign-up request to
+  app.colliedesk.com (`fetch` with `credentials: 'same-origin'`). The server stores it in
+  `meta_conversion_events.fbp` only when it matches `fb.<digit>.<ms>.<digits>` and is at most 64
+  characters; anything else is dropped and the event goes without it. The `fbclid` gate does not
+  change: a sign-up with `_fbp` and no click ID sends nothing, as the privacy page promises.
+  `Subscribe` copies `fbp` from the `StartTrial` row like `fbc`.
 - **Graph API `v26.0`** (`metaconversions.GraphVersion`), the newest version on 2026-11-01 (released
   2026-07-29). Meta retires a version about two years after release; move it before then.
 
@@ -38,8 +46,8 @@ trials instead of clicks. The user-facing description of what is sent is in `doc
    A retry sends the same `event_id` and `event_time`.
 3. Meta refuses a request whose `event_time` is more than 7 days old, so a row still unsent after
    7 days less an hour gets `abandoned_at`. The log says `meta conversions given up`.
-4. `client_ip` and `user_agent` are cleared when `Subscribe` is sent, when a row is given up, and
-   90 days after a sign-up (Meta's own click cookie lasts 90 days).
+4. `client_ip`, `user_agent` and `fbp` are cleared when `Subscribe` is sent, when a row is given up,
+   and 90 days after a sign-up (Meta's own click cookie lasts 90 days).
 
 ## Checking it
 
@@ -55,8 +63,10 @@ trials instead of clicks. The user-facing description of what is sent is in `doc
 > Warning: while `META_CONVERSIONS_TEST_EVENT_CODE` is set, every real event also goes to Test
 > events only, so Meta stops learning from real trials. Unset it on the same day.
 
-1. In Events Manager, open the `Colliedesk` dataset, then **Test events**. Copy the test code
-   (`TEST…`). It is not a secret.
+1. In Events Manager, open the `Colliedesk` dataset, then **Test events** (channel "Website",
+   "Confirm that your server's events are set up correctly"). Copy the test code (`TEST…`). It is
+   not a secret. Keep that page open until step 6: the code belongs to this page session and
+   changes when the page is opened again, and an event sent with an older code does not show.
 2. An agent sets `META_CONVERSIONS_TEST_EVENT_CODE` to that code on Cloud and restarts the server.
 3. Open a private browser window.
 4. Open `https://app.colliedesk.com/sign-in?intent=trial&fbclid=test123`.
@@ -65,6 +75,11 @@ trials instead of clicks. The user-facing description of what is sent is in `doc
    so each new test needs a new address and workspace.
 6. Within one minute, Test events shows one `StartTrial`. Its event id is the workspace id.
 7. An agent unsets the variable and restarts the server.
+
+An agent runs the whole check alone. The email form's bot check stops an automated browser, so the
+agent signs in a test account with a one-time sign-in token from Clerk's Backend API instead, in
+the same tab that opened the ad link, then fills the workspace form. Only the email code is
+skipped; the attribution, the workspace form and the event are the real ones.
 
 `Subscribe` needs a real payment, so it is not part of this test. After the first paid workspace that
 came from an ad, check its row instead. If Test events stays empty, `SELECT event_name, attempts,
@@ -77,3 +92,9 @@ The sign-in page reads `fbclid` from its own address. colliedesk.com carries an 
 colliedesk.com#131; kept in the tab's `sessionStorage` at most a day, no cookie). The Founding link's
 redirect to sign-in keeps them too. A visitor who closes the tab and comes back later without the ad
 link signs up without a click ID, so no event is sent for them.
+
+The sign-in page also keeps the host of the page that first opened it in the tab (`referrer`, stored as
+`workspace_onboarding.referrer_host`): an AI assistant such as claude.ai links straight to the app with
+no `utm_*` keys, and the browser's referrer is the only trace of it. Trap: the identity provider's return
+is a new page load whose `document.referrer` is the provider, so only the tab's first landing counts, and a
+first landing with no outside referrer is remembered as none (`signup-attribution.ts`).

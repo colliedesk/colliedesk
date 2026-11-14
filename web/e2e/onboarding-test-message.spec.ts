@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openQuickStart } from './support/browser';
 import { servers, uniqueSuffix } from './support/cli';
 import { IdentityProvider } from './support/identity-provider';
 import { waitForMail } from './support/mailpit';
@@ -21,16 +22,17 @@ test('test message: a new cloud workspace sends itself a test message from the e
   await page.goto(baseURL);
   await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText(/Trial ends [A-Z][a-z]{2} \d{1,2}/);
 
-  await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Receive customer email/ }).click();
+  await (await openQuickStart(page)).getByRole('link', { name: /Receive customer email/ }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(support);
   await page.getByRole('button', { name: 'Save support address' }).click();
   await expect(page.getByRole('group', { name: 'Forward its mail to Colliedesk' })).toContainText('Step 2 of 4');
 
-  // Back on the empty inbox, one click brings a conversation from the agent's own address.
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  // Back on the empty inbox (the setup flow has no rail; leaving it opens the inbox), one click brings a
+  // conversation from the agent's own address.
+  await page.getByRole('link', { name: 'Exit setup' }).click();
   await page.getByRole('region', { name: 'Get started' }).getByRole('button', { name: 'Send yourself a test message' }).click();
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
+  await expect(page.getByRole('region', { name: /timeline/i }).getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
 
   // The trial lets this reply go: its only recipient is the workspace's own, verified agent.
   const reply = `Answering my own test (${suffix}).`;
@@ -51,7 +53,7 @@ test('the Connection tab sends one test message before an inbound secret exists 
   const adminEmail = `owner-${suffix}@acme.example`;
   expect((await signUp(page, provider, adminEmail, `Connection Test ${suffix}`)).status()).toBe(201);
   await page.goto(baseURL);
-  await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Receive customer email/ }).click();
+  await (await openQuickStart(page)).getByRole('link', { name: /Receive customer email/ }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${suffix}@acme.example`);
   await page.getByRole('button', { name: 'Save support address' }).click();
   await page.getByRole('link', { name: 'Manage this address' }).click();
@@ -61,7 +63,7 @@ test('the Connection tab sends one test message before an inbound secret exists 
   const send = page.getByRole('button', { name: 'Send yourself a test message' });
   await send.evaluate((button: HTMLButtonElement) => { button.click(); button.click(); button.click(); });
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
+  await expect(page.getByRole('region', { name: /timeline/i }).getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
   const list = page.getByRole('region', { name: 'Conversation list' });
   await expect(list.getByText('Test message from Colliedesk')).toHaveCount(1);
 });

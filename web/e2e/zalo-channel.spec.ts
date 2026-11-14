@@ -132,10 +132,12 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   const secret = `oa-secret-${suffix}`;
   const series = `t${suffix.replace(/[^0-9]/g, '').slice(-8)}`;
   await redeemLink(page, createWorkspace(`Zalo Numbers ${suffix}`, `admin-${suffix}@example.com`, baseURL));
-  const year = Number(new Intl.DateTimeFormat('en', { timeZone: 'UTC', year: 'numeric' }).format(new Date()));
+  // The creator's first sign-in starts the workspace on the browser's timezone, the zone the year counts in.
+  const zone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const year = Number(new Intl.DateTimeFormat('en', { timeZone: zone, year: 'numeric' }).format(new Date()));
 
-  // The series, in Settings → Conversation numbers.
-  await page.goto(`${baseURL}/settings/numbers`);
+  // The series, in Settings → General → Conversation numbers.
+  await page.goto(`${baseURL}/settings/general`);
   await page.getByRole('button', { name: 'Add a series' }).click();
   const add = page.getByRole('dialog', { name: 'Add a number series' });
   await add.getByLabel('Name').fill(series);
@@ -166,12 +168,12 @@ test('zalo channel: a series of its own numbers what the OA opens, the inbox sho
   await page.goto(`${baseURL}/`);
   await expect(async () => {
     await page.reload();
-    await expect(page.locator('.conversation-meta .conv-ref', { hasText: code })).toBeVisible({ timeout: 1000 });
+    await expect(page.locator('.conversation-row .conv-ref', { hasText: code })).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   await expect(page.getByRole('button', { name: `Copy reference ${code}` })).toBeVisible();
 
   // The code, typed another way, finds it; a link with it says so in a chip.
-  await page.getByRole('searchbox').first().fill(code.toLowerCase().replace('0142', '142'));
+  await page.goto(`${baseURL}/?search=${encodeURIComponent(code.toLowerCase().replace('0142', '142'))}&status=all`);
   await expect(page.locator('.conversation-row').first()).toContainText(code);
   await page.goto(`${baseURL}/?ref=${encodeURIComponent(code)}`);
   await expect(page.getByRole('list', { name: 'Active filters' })).toContainText(`Reference: ${code}`);

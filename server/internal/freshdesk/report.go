@@ -111,10 +111,12 @@ type KnowledgeBaseCount struct {
 	// NotAvailable is true when the account has no knowledge base (the category list answered 404).
 	NotAvailable bool `json:"not_available"`
 	// Collections are the categories and folders.
-	Collections  EntityCount  `json:"collections"`
-	Articles     EntityCount  `json:"articles"`
-	Translations EntityCount  `json:"translations"`
-	Images       KBImageCount `json:"images"`
+	Collections  EntityCount `json:"collections"`
+	Articles     EntityCount `json:"articles"`
+	Translations EntityCount `json:"translations"`
+	// CollectionNames are the categories' and folders' names in other languages.
+	CollectionNames EntityCount  `json:"collection_names"`
+	Images          KBImageCount `json:"images"`
 	// Published lists the articles imported as published; Drafts the others, by reason.
 	Published []string            `json:"published"`
 	Drafts    map[string][]string `json:"drafts"`
@@ -127,6 +129,11 @@ type KnowledgeBaseCount struct {
 	Notes    []string `json:"notes"`
 	// ChangedInBoth are articles changed in Freshdesk and in Colliedesk since the import; Colliedesk's version was kept.
 	ChangedInBoth []string `json:"changed_in_both"`
+	// TranslationsChangedInBoth are translations ("<article>:<language>") changed in Freshdesk and in
+	// Colliedesk since the import; Colliedesk's version was kept.
+	TranslationsChangedInBoth []string `json:"translations_changed_in_both"`
+	// LanguagesAdded are the languages this run added to the help center (shown when Freshdesk's portal shows them).
+	LanguagesAdded []string `json:"languages_added"`
 	// Unpublished are imported articles made drafts again because Freshdesk no longer shows them to everyone.
 	Unpublished []string `json:"unpublished"`
 	// DeletedInColliedesk are imported articles deleted for good in Colliedesk; an import does not bring them back.

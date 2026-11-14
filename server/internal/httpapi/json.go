@@ -11,8 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -45,7 +47,7 @@ func writeErrorWith(response http.ResponseWriter, status int, code, message stri
 	writeJSON(response, status, map[string]any{"error": errorBody(response, body)})
 }
 
-// errorBody adds the request id (the X-Request-Id header withRequestID set) to an error object, so a person
+// errorBody adds the request id (the X-Request-Id header WithRequestID set) to an error object, so a person
 // reporting a failure can quote the id that finds it in the server log.
 func errorBody(response http.ResponseWriter, body map[string]any) map[string]any {
 	if id := response.Header().Get(requestIDHeader); id != "" {
@@ -69,6 +71,21 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrAIDraftNotReady):
 		writeError(response, http.StatusConflict, "ai_draft_not_ready", "That AI draft is not ready to send from this conversation: it is still being written, or it was already sent, discarded or replaced. Send the reply without ai_draft_id, or ask for a new draft.")
 		return
+	case errors.Is(err, store.ErrDraftFileUnknown):
+		writeError(response, http.StatusBadRequest, "invalid_request", "ai_draft_file_ids names a file that is not one of this draft's files. "+
+			"Read the draft's files (GET /api/v1/conversations/{id}/ai-drafts/{draftId}) and send only their ids, or leave ai_draft_file_ids out to send them all.")
+		return
+	case errors.Is(err, store.ErrReplyTooManyFiles):
+		writeError(response, http.StatusRequestEntityTooLarge, "attachments_too_many", "The draft's files and the files sent with the reply are more than "+
+			strconv.Itoa(attachments.MaxOutgoingFiles)+" files. Nothing was sent: keep fewer of the draft's files (ai_draft_file_ids).")
+		return
+	case errors.Is(err, store.ErrReplyFilesTooLarge):
+		writeError(response, http.StatusRequestEntityTooLarge, "attachments_too_large", tooLargeMessage+" The draft's files count too: keep fewer of them (ai_draft_file_ids).")
+		return
+	case errors.Is(err, store.ErrConversationSpam):
+		writeError(response, http.StatusConflict, "conversation_spam", "A conversation in Spam keeps its status: mark it Not spam first "+
+			"(PUT /api/v1/conversations/spam with spam: false), which puts it back where it was. Nothing was changed.")
+		return
 	case errors.Is(err, domain.ErrLastAdmin):
 		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Give the Admin role to another active member first.")
 		return
@@ -76,6 +93,10 @@ func writeStoreError(response http.ResponseWriter, err error) {
 		return
 	case errors.Is(err, domain.ErrAgentDeactivated):
 		writeError(response, http.StatusConflict, "agent_deactivated", domain.ErrAgentDeactivated.Error()+".")
+		return
+	case errors.Is(err, domain.ErrAlreadyMember):
+		writeError(response, http.StatusConflict, "already_a_member", domain.ErrAlreadyMember.Error()+
+			". An agent token cannot invite them; change their roles with PUT /api/v1/agents/{id}/roles.")
 		return
 	case errors.As(err, new(*domain.ContactExistsError)):
 		var exists *domain.ContactExistsError

@@ -662,6 +662,9 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 			return out, fmt.Errorf("load delivery %s: %w", claim.OutboxID, err)
 		}
 		out.Message.CC, out.Conversation.Origin, out.Prepared = cc, channels.Type(origin), meta
+		if notice != nil {
+			out.Message.Notice = *notice
+		}
 		if out.Recipient, err = replyRecipient(ctx, tx, claim.WorkspaceID, out.Conversation.ID, channel.ID); err != nil {
 			return out, err
 		}

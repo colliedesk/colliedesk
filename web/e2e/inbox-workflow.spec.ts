@@ -88,6 +88,8 @@ test('redeems a CLI pairing link and completes the inbox workflow', async ({ pag
   await assignee.selectOption('');
   await expect.poll(async () => (await currentConversation()).assignee_id).toBeNull();
 
+  // Tags is one row; its menu holds the tags and the new tag box, and stays open while tags change.
+  await details.locator('.tags-pick summary').click();
   await details.getByLabel('New tag name').fill('E2E tag');
   await details.getByRole('button', { name: 'Create tag' }).click();
   const tag = details.getByRole('checkbox', { name: 'E2E tag' });

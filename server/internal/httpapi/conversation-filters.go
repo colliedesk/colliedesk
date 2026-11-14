@@ -20,7 +20,9 @@ var conversationFilterKeys = []string{"status", "priority", "assignee", "tag", "
 	"has_pending_draft", "delivery_failed", "source", "channel", "created_after", "created_before", "updated_after", "updated_before", "sort", "search", "sla"}
 
 var (
-	conversationStatuses   = []string{"open", "pending", "resolved", "closed"}
+	// The statuses a list filters by: spam is the Spam view. settableStatuses are the ones a status change sets.
+	conversationStatuses   = []string{"open", "pending", "resolved", "closed", "spam"}
+	settableStatuses       = []string{"open", "pending", "resolved", "closed"}
 	conversationPriorities = []string{"low", "normal", "high", "urgent"}
 	conversationSorts      = []string{store.ConversationSortUpdatedDesc, store.ConversationSortUpdatedAsc, store.ConversationSortCreatedDesc,
 		store.ConversationSortCreatedAsc, store.ConversationSortPriority, store.ConversationSortWaitingLongest, store.ConversationSortDue}

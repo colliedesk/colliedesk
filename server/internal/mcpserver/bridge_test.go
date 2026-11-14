@@ -3,6 +3,7 @@ package mcpserver_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"strings"
 	"sync"
@@ -137,7 +138,9 @@ func TestBridgeExplainsARevokedToken(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); strings.Count(got, "Create a new agent token in Settings → Sessions") != 2 || !strings.Contains(got, `"id":1`) || !strings.Contains(got, `"id":2`) {
+	// The answers are JSON, which writes & as \u0026.
+	explained, _ := json.Marshal("Create a new agent token in Settings → AI & agents")
+	if got := out.String(); strings.Count(got, strings.Trim(string(explained), `"`)) != 2 || !strings.Contains(got, `"id":1`) || !strings.Contains(got, `"id":2`) {
 		t.Errorf("want an explained error for each request: %s", got)
 	}
 }

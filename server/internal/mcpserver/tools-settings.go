@@ -38,6 +38,11 @@ type restSession struct {
 	LastSeenAt  time.Time       `json:"last_seen_at"`
 	ExpiresAt   time.Time       `json:"expires_at"`
 	RevokedAt   *time.Time      `json:"revoked_at"`
+	App         *struct {
+		UserAgent         string    `json:"user_agent"`
+		ConnectedAt       time.Time `json:"connected_at"`
+		NeedsReconnecting bool      `json:"needs_reconnecting"`
+	} `json:"app"`
 }
 
 type restEmailSettings struct {
@@ -75,6 +80,17 @@ type restEmailSettings struct {
 			Error   *string `json:"error"`
 		} `json:"connection"`
 	} `json:"microsoft"`
+	MailThroughMailbox      bool   `json:"mail_through_mailbox"`
+	AnswersBeforeForwarding string `json:"answers_before_forwarding"`
+	MailSwitch              struct {
+		Imported  bool `json:"imported"`
+		Mailboxes []struct {
+			ChannelID      string `json:"channel_id"`
+			Name           string `json:"name"`
+			SupportAddress string `json:"support_address"`
+			OldHelpDesk    bool   `json:"old_help_desk"`
+		} `json:"mailboxes"`
+	} `json:"mail_switch"`
 }
 
 func workspaceSettingsGet(c *call, _ map[string]any) (any, error) {
@@ -289,6 +305,9 @@ func sessionsList(c *call, _ map[string]any) (any, error) {
 		}
 		sessions[index] = map[string]any{"id": session.ID, "label": session.Label, "owner": session.AgentEmail, "owner_name": session.AgentName, "token": sessionToken(session.Token), "permissions": session.Permissions,
 			"this_token": session.Current, "state": state, "last_seen_at": utc(session.LastSeenAt), "expires_at": utc(session.ExpiresAt)}
+		if app := session.App; app != nil {
+			sessions[index]["app"] = map[string]any{"user_agent": app.UserAgent, "connected_at": utc(app.ConnectedAt), "needs_reconnecting": app.NeedsReconnecting}
+		}
 	}
 	return map[string]any{"sessions": sessions}, nil
 }
@@ -343,7 +362,13 @@ func webFormUpdate(c *call, arguments map[string]any) (any, error) {
 // no room for one either.
 func emailChannelView(settings restEmailSettings) map[string]any {
 	view := map[string]any{"connected": settings.Channel != nil, "inbound_url": settings.InboundURL, "hosted_address": settings.HostedAddress,
-		"smtp_configured": settings.SMTP.Configured, "sending_from": settings.SendingFrom}
+		"smtp_configured": settings.SMTP.Configured, "sending_from": settings.SendingFrom,
+		"mail_through_mailbox": settings.MailThroughMailbox, "answers_before_forwarding": settings.AnswersBeforeForwarding}
+	mailboxes := make([]map[string]any, 0, len(settings.MailSwitch.Mailboxes))
+	for _, mailbox := range settings.MailSwitch.Mailboxes {
+		mailboxes = append(mailboxes, map[string]any{"channel_id": mailbox.ChannelID, "name": mailbox.Name, "support_address": mailbox.SupportAddress, "old_help_desk": mailbox.OldHelpDesk})
+	}
+	view["mail_switch"] = map[string]any{"imported": settings.MailSwitch.Imported, "mailboxes": mailboxes}
 	gmail := map[string]any{"available": settings.Gmail.Available, "connected": false}
 	if connection := settings.Gmail.Connection; connection != nil {
 		gmail["connected"], gmail["address"], gmail["status"], gmail["error"] = true, connection.Address, connection.Status, connection.Error

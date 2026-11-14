@@ -24,6 +24,13 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    only shrink (ceilings in the test).
    `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails otherwise, and
    `TestEveryAPIPathTheWebAppCallsIsARoute` keeps the web app on those routes.
+   A tool's `readOnlyHint` and `destructiveHint` come from what its routes do (`routeEffects` in
+   `server/internal/httpapi/route-effect.go`: a GET reads, a POST, PUT or PATCH changes, every DELETE
+   and every route that differs from its method has a row), never from a flag on the tool. A route
+   that starts to send, delete for good or revoke updates its row, and every tool on it follows.
+   `openWorldHint` comes from `routesReachingOutside` in the same file: a route that emails or
+   messages a customer, calls a third party, or changes the public help center gets a row there.
+   `TestEveryRouteSaysWhatItDoes` and `TestToolsOnABodyDecidedRouteSayWhatTheirBodyDoes` fail otherwise.
 7. **Easy for people and for agents.** Two users judge every feature, and both must find it easy.
    A person finishes the task in the fewest steps and screens, and every screen says the next step.
    An AI agent finishes the same task in the fewest MCP calls: a tool's name and description say
@@ -32,6 +39,7 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    before and after. Gates: `TestEveryToolHasADocSentence`, `TestLookupToolsReturnNamesNotJustIDs`,
    `TestToolArgumentsAreValidatedAgainstTheSchema`,
    `TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`, `TestInboxSearchLatencyBudget`,
+   `TestToolsListStaysWithinItsBudget` (the tool list a client loads, `docs/internals/performance.md`),
    the onboarding journeys below; agent journeys with call budgets are tracked in #374.
 
 ## Glossary
@@ -75,6 +83,9 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 - Tests first (red → green), at the public seams: HTTP API, CLI, web components.
 - Go tests use a real PostgreSQL (`TEST_DATABASE_URL`); never mock the database.
 - `make test` before pushing; `make e2e` for user-visible flows.
+- A page that loads from its own chunk (`ui/lazy-part.tsx`) gives its route `loader: pageChunk(part)` (`web/src/app.tsx`),
+  so the router keeps the current page until the next one can show; the first load shows the rail at once. `web/src/routes-never-blank.test.tsx` opens every
+  route with no chunk loaded and fails on a blank page (`docs/internals/performance.md`).
 - Market is international: timestamps are stored and returned in UTC; the UI formats them in the
   agent's IANA timezone. No country-specific defaults.
 
@@ -134,7 +145,7 @@ trial in the funnel and emails the team. Test locally or with the e2e suite firs
   sees it at once.
 - **Every count of trials, activation or payments leaves out internal sign-ups.** Only
   `trial_started` carries the flag: drop a workspace's later events (`email_channel_saved`,
-  `reply_sent`, `teammate_invited`, `subscription_activated`, `workspace_snapshot`) by its
+  `reply_sent`, `teammate_invited`, `trial_offer_accepted`, `subscription_activated`, `workspace_snapshot`) by its
   workspace id from an internal `trial_started`. A new query, alert or report that skips this
   inflates the funnel.
 - `TestInternalSignupIsMarkedOnTrialStarted` guards the flag. Never weaken it; a new place that
@@ -142,20 +153,33 @@ trial in the funnel and emails the team. Test locally or with the e2e suite firs
 
 ## Releases
 
-Colliedesk is **alpha**: releases are `v0.0.N`. Merging to `main` never makes a release, and
+Colliedesk is **generally available**: releases follow Semantic Versioning from `v1.0.0`. A breaking
+change to the API, the CLI or the export format needs a new major version; new features raise the
+minor version, fixes only the patch version. Merging to `main` never makes a release, and
 nothing makes one on a schedule. A release is cut only when Chính (`hiimchinh`) or Long
-(`buiduclong0511`) asks: run `gh workflow run release.yml -R colliedesk/colliedesk`, or they press
+(`buiduclong0511`) asks: run `gh workflow run release.yml -R colliedesk/colliedesk -f part=minor`
+(`patch` for fixes only, `major` for a breaking change; `minor` is the default), or they press
 Run workflow themselves (it needs write access to this repository). It
 releases the commit Colliedesk Cloud runs (`version` in `GET /api/v1/config`), never the head of
-`main`, as the next `v0.0.N`, and fails when Cloud runs nothing newer than the last release.
+`main`, as the next version for that part (`.github/scripts/release-next.sh`; the first release after
+the `v0.0.N` ones is `v1.0.0`), and fails when Cloud runs nothing newer than the last release.
 Release notes are generated from merged pull request titles, so write titles a user can read.
 A run that failed after creating its tag is finished by running Release again.
 `latest` follows the newest release.
-Never call a release, page or doc "beta", and never tag `v0.1.0` or higher, until the HC Labs
-owner announces beta. Two gates refuse other tags: the repository tag ruleset
-`alpha-release-tags-only` (no bypass, so GitHub rejects the push even from an admin) and
-`.github/scripts/release-tag-check.sh` in `release.yml`. Never edit either one without the
-owner's announcement quoted in the PR or ruleset change.
+Never call a release, page or doc "alpha" or "beta", never tag another `0.x` version, and never tag a
+pre-release suffix. Two gates refuse other tags: the repository tag ruleset on `v*` tags (no bypass,
+so GitHub rejects the push even from an admin) and `.github/scripts/release-tag-check.sh` in
+`release.yml` (`tests/release-tag-test.sh`). Never edit either one without the owner's words quoted in
+the PR or ruleset change.
+[docs/general-availability.md](docs/general-availability.md) says what general availability
+guarantees (upgrades, export, Cloud backups, uptime, self-hosted installs). A change that makes one of
+its statements untrue updates that page in the same PR.
+The Claude Code, Cursor and Codex plugin (`plugins/colliedesk`) has its own version, `version` in
+`.claude-plugin/plugin.json`: a PR that changes anything in that folder raises it (patch for a fix or
+wording, minor for a new skill or file, major when an install stops working as before), or installs
+from the colliedesk marketplace never get the change. `.codex-plugin/plugin.json` carries the same
+version. CI enforces both
+(`.github/scripts/plugin-version-check.py`, `tests/plugin-version-check-test.py`).
 
 ## Issues and the roadmap
 
@@ -185,8 +209,10 @@ the issue tracker backs. CI (`roadmap` job, part of `ci-ok`) enforces this; foll
 - Check before pushing: `python3 -I .github/scripts/roadmap-check.py ROADMAP.md` (needs `gh`
   logged in). Add `ROADMAP_CLOSING="N"` to check a PR that closes issue N.
 
-## Clean room
+## Learning from other projects
 
-Do not open, copy, translate or paraphrase the source code of other helpdesks, especially
-copyleft-licensed ones. Product ideas come from public descriptions only. Code copied from
-MIT-licensed projects needs its notice in `THIRD-PARTY-NOTICES.md`.
+Reading the public source code of other helpdesks and tools to learn how they solve a problem is
+fine; take the idea, then write Colliedesk's own code for it. Never copy, translate or port code
+line by line from a copyleft-licensed project (GPL, AGPL) or from code under a non-open-source
+license (for example an `enterprise/` folder). Code copied from MIT- or Apache-licensed projects
+keeps its notice in `THIRD-PARTY-NOTICES.md`.

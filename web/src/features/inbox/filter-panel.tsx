@@ -7,10 +7,11 @@ import type { Results } from '../../api/results';
 import { knownChannels } from '../../api/schemas';
 import type { Conversation, Tag, TeamMember } from '../../api/schemas';
 import { messages } from '../../messages';
-import { FilterIcon, XIcon } from '../../ui/icons';
+import { ArrowUpDownIcon, FilterIcon, XIcon } from '../../ui/icons';
 import { zonedDay } from '../../lib/zoned-day';
 import { listOf, withoutValue } from '../../lib/inbox-query-edit';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
+import { defaultSort } from '../../lib/inbox-query';
 import { trackFilterChanges } from './filter-analytics';
 import { channelLabel, filterMessages as text } from './filter-messages';
 import { slaOf } from '../../lib/sla';
@@ -28,6 +29,8 @@ export interface FilterPartProps {
   conversations?: Conversation[];
   // The signed-in agent: listed as Me, never a second time under their name.
   currentAgentId?: string;
+  // Sort before Filter, as the one-row list toolbar draws them; beside the search box Filter comes first.
+  sortFirst?: boolean;
 }
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
@@ -38,7 +41,7 @@ const dateFilters = [['created', 'created_after', 'created_before'], ['updated',
 
 // How a conversation started without a channel, offered in every workspace.
 const origins: readonly string[] = ['imported', 'agent'];
-const offeredSorts: readonly string[] = ['updated_desc', 'waiting_longest', 'priority'];
+const offeredSorts: readonly string[] = ['due', 'updated_desc', 'waiting_longest', 'priority'];
 
 // The day before an exclusive end is the last day the person picked.
 function lastDay(before: string, timeZone: string): string {
@@ -105,20 +108,24 @@ export function FilterBar(props: FilterPartProps) {
     menu.current.open = false;
     menu.current.querySelector('summary')?.focus();
   };
-  const sort = query.sort ?? 'updated_desc';
+  const sort = query.sort ?? defaultSort;
   const active = menuKeys.filter((key) => has(query, key)).length
     + (!has(query, 'created_after') && has(query, 'created_before') ? 1 : 0) + (!has(query, 'updated_after') && has(query, 'updated_before') ? 1 : 0);
+  // An icon with the order in its tip; the native list of orders opens over it.
+  const sortPick = <label className="sort-pick" data-tip={`${messages.inboxSort}: ${text.sorts[sort as keyof typeof text.sorts] ?? sort}`}><ArrowUpDownIcon />
+    <select className="sort-field" aria-label={messages.inboxSort} value={sort} onChange={(event) => set('sort', event.currentTarget.value === defaultSort ? undefined : event.currentTarget.value)}>
+      {offeredSorts.concat(offeredSorts.includes(sort) ? [] : [sort]).map((value) => <option key={value} value={value}>{text.sorts[value as keyof typeof text.sorts] ?? value}</option>)}
+    </select></label>;
+  // The menu keeps its place among the children either way, so it stays open when the layout changes under it.
   return (
     <>
+      {props.sortFirst && sortPick}
       <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut} onToggle={(event) => { if (event.currentTarget.open) setOpened(true); }}>
-        <summary><FilterIcon /><span>{messages.filter}</span>
+        <summary data-tip={messages.filter}><FilterIcon /><span className="sr-only">{messages.filter}</span>
           {active > 0 && <span className="filter-count" aria-label={messages.filtersActive(active)}>{active}</span>}</summary>
         <div className="filter-popover" role="group" aria-label={messages.filter}><FilterPanel {...props} opened={opened} /></div>
       </details>
-      <select className="sort-field" aria-label={messages.inboxSort} value={sort} onChange={(event) => set('sort', event.currentTarget.value === 'updated_desc' ? undefined : event.currentTarget.value)}>
-        {/* Due first is offered once a listed conversation has targets. */}
-        {Object.entries(text.sorts).filter(([value]) => offeredSorts.includes(value) || value === sort || (value === 'due' && props.conversations?.some((item) => slaOf(item)))).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-      </select>
+      {!props.sortFirst && sortPick}
     </>
   );
 }

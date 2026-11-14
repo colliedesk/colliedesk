@@ -1,7 +1,7 @@
 # Report a problem
 
 If something in Colliedesk does not work, press **Report a problem** in the account menu (your
-avatar at the bottom of the left rail). You describe what happened, and Colliedesk adds the facts a
+name at the foot of the sidebar). You describe what happened, and Colliedesk adds the facts a
 person needs to check it. Nothing is stored or sent until you press **Send**.
 
 ## What a report contains
@@ -41,7 +41,8 @@ An agent may send 5 reports an hour. The 6th is refused until an hour has passed
 
 ## Request ids
 
-Every answer of the API has an `X-Request-Id` header, and every error body has `error.request_id`.
+Every answer of the API and of the MCP endpoints (`/mcp`, `/mcp/operator`) has an `X-Request-Id`
+header, and every error body of the API has `error.request_id`.
 The server log lines of that request carry the same id. If you put a reverse proxy in front of
 Colliedesk, it may set `X-Request-Id` itself (8 to 64 characters: letters, digits, `.`, `_`, `-`); the
 server keeps it. Otherwise the server makes a 12-character id.

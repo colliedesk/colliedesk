@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// seedKB gives the workspace a collection, an article with a version, a translation, an image linked
+// seedKB gives the workspace two collections, an article listed in both with a version, a translation, an image linked
 // to the article, and help center settings, each named after the workspace.
 func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name string) {
 	t.Helper()
@@ -18,7 +18,9 @@ func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name stri
 		a AS (INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md) SELECT $1,id,1,$2,'a','text' FROM c RETURNING id,collection_id),
 		v AS (INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,title,slug,body_md,status,collection_id)
 			SELECT $1,id,1,'create',$2,'a','text','draft',collection_id FROM a RETURNING 1),
-		tr AS (INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md) SELECT $1,id,'de',$2,'text' FROM a RETURNING 1),
+		c2 AS (INSERT INTO kb_collections(workspace_id,name,slug) VALUES($1,$2,'more') RETURNING id),
+		x AS (INSERT INTO kb_article_collections(workspace_id,article_id,collection_id) SELECT $1,a.id,c2.id FROM a,c2 RETURNING 1),
+		tr AS (INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug) SELECT $1,id,'de',$2,'text','t' FROM a RETURNING 1),
 		i AS (INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type) VALUES($1,$1::text||'/00/'||$3,$3,10,'image/png') RETURNING id),
 		l AS (INSERT INTO kb_article_media(workspace_id,article_id,media_id,current) SELECT $1,a.id,i.id,true FROM a,i RETURNING 1),
 		b AS (INSERT INTO kb_media_batches(workspace_id,action,media_ids) SELECT $1,'trash',ARRAY[i.id] FROM i RETURNING 1),
@@ -30,7 +32,7 @@ func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name stri
 	}
 }
 
-var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "help_centers"}
+var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_article_collections", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "help_centers"}
 
 func TestKnowledgeBaseTablesAreScopedByRowLevelSecurity(t *testing.T) {
 	pool := testPool(t)
@@ -79,6 +81,11 @@ func TestKnowledgeBaseTablesAreScopedByRowLevelSecurity(t *testing.T) {
 		SELECT $1,a.id,i.id FROM kb_articles a, kb_media i WHERE a.workspace_id=$1 AND i.workspace_id=$2`, ids.a, ids.b)
 	if err == nil {
 		t.Fatal("an article of alpha was linked to media of beta")
+	}
+	_, err = pool.Exec(ctx, `INSERT INTO kb_article_collections(workspace_id,article_id,collection_id)
+		SELECT $1,a.id,c.id FROM kb_articles a, kb_collections c WHERE a.workspace_id=$1 AND c.workspace_id=$2`, ids.a, ids.b)
+	if err == nil {
+		t.Fatal("an article of alpha was listed in a collection of beta")
 	}
 	single := singleConnection(t, pool)
 	role := pgx.Identifier{policyRole(t, pool)}.Sanitize()

@@ -202,6 +202,30 @@ settings it rides with).
 - **Cloud sign-in off keeps the console's own verifier** (`operatorCloud`): only the app's exchange and
   sign-up close. The guard makes it a trial with a phrase, and the one-time link always opens the console.
 
+## Message codes
+
+The console speaks English and Vietnamese, the server only English. So the server never writes a sentence for
+the console alone: each message the console shows from it (a setting's error, a live test, a guard's preview or
+refusal, a refused request) carries a stable `code` and `params` beside its English, and the console translates
+by code. The English stays in the API for every client, the CLI and AI agents.
+
+- **One template per code**, in `server/internal/configerr/codes.go`: `configerr.Say(code, params)` renders the
+  English from it (`{name}`, `{"name"}` quoted, `{n?one|many}`), so the text and the code cannot disagree.
+  `Config` are the parsers' codes: their text names variables and `friendlyConfigError` rewrites text and params
+  to setting names. `Messages` are the rest, sent as written.
+- **Where they travel**: `field_errors` beside `errors` (check) or `fields` (a refused save), `test.code` and
+  `test.params`, `preview_code`/`refused_code` with their params on a guard, `message_code` and `params` on an
+  error. `OperatorMessageCode` in the contract lists every code.
+- **Params never hold a secret's value.** `redactSecrets` checks params as it checks the text; a value it would
+  leak turns the whole error into `secret_not_valid`, which names the secrets.
+- **The console**: English shows the server's text. Another language's chunk sets `lazyWords.coded`, which
+  `api.ts` runs on every answer to rewrite the coded texts in place; a text without a code stays English.
+  `web/src/operator/codes.en.json` is written from the templates by
+  `TestTheConsoleTableOfCodesIsTheServersEnglish` (`UPDATE_CODES=1` writes it and the contract's list), and
+  `codes.test.ts` holds each translation to its placeholders.
+- **A new message** the console shows: add its template, say it with `configerr.Say`, give it an example in
+  `codeExamples`, run the test with `UPDATE_CODES=1`, then `corepack pnpm generate:api` and add its translation.
+
 ## Traps
 
 - A moved variable left in the environment is never read. It is logged at every start (error when it

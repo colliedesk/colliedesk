@@ -9,12 +9,12 @@ customer alone, quoting the message they answer.
 
 An admin, in this order:
 
-1. **A provider for AI**, unless the server's provider will do: **Settings → Built-in AI → Providers →
+1. **A provider for AI**, unless the server's provider will do: **Settings → AI & agents → Providers →
    Add provider** ([Add your own provider](ai.md#add-your-own-provider)).
 2. **The OA**: [connect it](#connect-an-oa), [verify the webhook address](#verify-the-webhook-address)
    in the Zalo app, paste the **Webhook URL** there, and set the OA secret key before deliveries arrive;
    then add the tokens, so replies can be sent.
-3. **Chat intake**: its row in **Settings → Built-in AI → Features** shows once the workspace has a chat
+3. **Chat intake**: its row in **Settings → AI & agents → Features** shows once the workspace has a chat
    channel such as the OA. Pick its provider and model and turn it on: that is your consent to send it the
    chats. **Images customers sent** and **The customer's profile**, under it, are each a consent of their own
    ([Every feature starts off](ai.md#every-feature-starts-off)).
@@ -26,9 +26,12 @@ An admin, in this order:
    accounts, so what they write in a group is never a request.
 6. **Messages**: the commands customers type, what the OA says, the words for each status and when a
    resolved conversation closes ([The Messages tab](#the-messages-tab)).
-7. **Review**: decide the cards in [Review](review.md). A card decided as AI suggested, or otherwise, is
+7. **Resolved means done**: a message never joins a resolved or closed conversation, whether the rules,
+   AI intake (Suggest or Auto) or a reply to an old message would have put it there: it starts a new
+   conversation. Only the customer's **Reopen** command reopens one.
+8. **Review**: decide the cards in [Review](review.md). A card decided as AI suggested, or otherwise, is
    what tells whether AI is ready.
-8. **Auto**: raise Intake for Groups to Auto. The dialog says which actions are ready, and **Let it … alone
+9. **Auto**: raise Intake for Groups to Auto. The dialog says which actions are ready, and **Let it … alone
    anyway** opens one before its labels do ([When AI acts on its own](ai.md#when-ai-acts-on-its-own)).
 
 ## Connect an OA
@@ -57,7 +60,7 @@ The channel's page then has four tabs of its own, before AI and History:
    [Verify the webhook address](#verify-the-webhook-address).
    **References** picks the [number series](inbox.md#conversation-numbers) the OA's conversations are
    numbered in and shows the code the next one gets (`CHD-2026-0143`); the series themselves are changed in
-   Settings → Conversation numbers.
+   Settings → General → Conversation numbers.
 2. **Groups**: every group that wrote to the OA (and every group linked before it did). **Link…** files the
    group under an organization, written as your contacts' organization is: a conversation of that group
    then names it. **Unlink** stops that for new conversations; earlier ones keep their organization.
@@ -151,7 +154,8 @@ alike).
 Each of these is sent by the OA itself, never counts as your team's first reply, and is left unsent
 while empty:
 
-1. **When a conversation opens**: `{ref}` becomes its code.
+1. **When a conversation opens**: `{ref}` becomes its code. In a group, where Zalo shows no quote, it
+   starts with a tag of the customer who opened it (Zalo's mention), so they see the request is theirs.
 2. **When a customer asks for help**: the answer to Help, in a chat or a group; it opens nothing. A chat
    gets it at most once in the time set in **Answer help in one chat at most every** (300 seconds unless
    you change it; 0 answers every time).
@@ -177,7 +181,9 @@ and for a chat moved into another conversation, without a quote. `{ref}` is the
 conversation's code and `{subject}` its subject; an empty box sets that status quietly:
 
 1. **When set to Pending**.
-2. **When set to Resolved**: also sent by **Send and resolve**.
+2. **When set to Resolved**: also sent by **Send and resolve**. In a group it starts with a tag of the
+   conversation's customer, as the notice of a conversation that opens does. A mention the customer wrote
+   in the subject tags no one there.
 3. **When set to Closed**: also sent when a conversation closes by itself.
 
 Reopening is told with **When a resolved or closed conversation is reopened** above. To change a status

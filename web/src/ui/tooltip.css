@@ -1,0 +1,30 @@
+/* The same look as the icon tooltips (data-tip), for text that needs a real layer. */
+.tooltip {
+  z-index: 50; max-width: min(320px, calc(100vw - 16px)); border-radius: var(--radius-sm); background: var(--surface-inverse);
+  color: var(--text-inverse); box-shadow: var(--shadow-2); padding: var(--space-1) var(--space-2); font-family: var(--font-sans);
+  font-size: var(--fs-label); font-weight: 500; line-height: 1.4; pointer-events: none;
+}
+
+/* HelpTip (help-tip.tsx): a 16 px ⓘ or lock in the line of its row. Padding with an equal negative margin gives the
+   button a 32 px target with a mouse and 44 px by touch (--control) without making the row taller. */
+.help-tip { display: inline-flex; vertical-align: middle; }
+.heading-with-tip { display: flex; align-items: center; gap: var(--space-1); }
+.help-tip-button {
+  --hit: var(--control, 32px);
+  width: auto; min-height: 0; border: 0; border-radius: var(--radius-full); background: none; box-shadow: none;
+  padding: calc((var(--hit) - 16px) / 2); margin: calc((16px - var(--hit)) / 2); color: var(--text-3); cursor: help;
+}
+.help-tip-button:hover:not(:disabled), .help-tip-button[data-open] { background: none; color: var(--text-1); }
+/* The tip can hold a link, so it takes the pointer; it wraps within the screen width the tooltip already keeps. */
+.help-tip-layer { width: max-content; pointer-events: auto; white-space: normal; text-align: left; font-weight: 400; animation: help-tip-in var(--dur-fast) var(--ease); }
+.help-tip-layer a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+/* A press on the tip's text focuses the layer, so the tip stays open; that focus draws no ring. */
+.help-tip-layer:focus { outline: none; }
+/* Floating UI's hide(): the button scrolled out of its panel, so its tip goes too. */
+.help-tip-layer[data-reference-hidden] { visibility: hidden; }
+/* Rules for the text of a row (`.data-list span`: one grey line, cut with …) must not reach the tip, nor clip the
+   button's target: these selectors are more specific than any of them. */
+.help-tip:has(> .help-tip-button) { overflow: visible; min-width: auto; }
+.help-tip .help-tip-layer, .help-tip .help-tip-layer span { overflow: visible; color: var(--text-inverse); text-overflow: clip; white-space: normal; }
+@keyframes help-tip-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .help-tip-layer { animation: none; } }

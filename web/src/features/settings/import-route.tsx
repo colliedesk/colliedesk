@@ -25,6 +25,7 @@ export function currentJob(items: ImportJob[], justAsked?: string): ImportJob | 
   return items.find((job) => open.has(job.state)) ?? items.find((job) => job.id === justAsked && ended(job)) ?? items.find((job) => !ended(job)) ?? items[0];
 }
 
+// ImportRoute is the import of a Freshdesk account, shown in Settings → Data and in the setup flow; both pages give it its frame.
 export function ImportRoute() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -46,7 +47,8 @@ export function ImportRoute() {
   });
   const parsed = job?.kind === 'undo' ? undoReportSchema.safeParse(report.data) : importReportSchema.safeParse(report.data);
   const [connecting, setConnecting] = useState(false);
-  const refresh = () => client.invalidateQueries({ queryKey: ['imports'] });
+  // A preview or an import moves the setup progress's import step too.
+  const refresh = () => Promise.all(['imports', 'setup'].map((key) => client.invalidateQueries({ queryKey: [key] })));
   const after = { onSuccess: () => { setConnecting(false); void refresh(); } };
   const preview = useCreateMutation({ create: ({ domain, key, old }: { domain: string; key: string; old?: string }, submitKey: string) => importsApi.preview(domain, key, submitKey, old),
     onSuccess: (created) => { setJustAsked(created.id); after.onSuccess(); } });
@@ -93,7 +95,7 @@ export function ImportRoute() {
     mutation.mutate(value);
   };
   const peopleFailed = peopleActions.find((mutation) => mutation.isError)?.error;
-  if (!me.data) return <main className="settings-page" aria-busy="true" />;
+  if (!me.data) return <div className="ch-loading" aria-busy="true" />;
   // The section shows once the account was read: with its agents, or with why they could not be loaded.
   const peopleSection = peopleJob && (people.isError || (people.data && people.data.items.length > 0))
     ? <ImportPeople people={people.data?.items ?? []} agents={team.data?.items ?? []} invites={invites.data?.items ?? []} createdInvites={createdInvites}

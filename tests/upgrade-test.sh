@@ -86,7 +86,8 @@ else
       git -C "$ROOT" show "$previous_tag:install.sh" >"$TMP/install.sh"; } ||
     fail "cannot read install.sh of $previous_tag; set PREVIOUS_INSTALL_SH"
 fi
-sed -n "/^cat >\"\$TARGET_DIR\/compose.yaml\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
+# From 1.0.0 install.sh writes compose.yaml.next and then moves it over compose.yaml.
+sed -n "/^cat >\"\$TARGET_DIR\/compose\.yaml\(\.next\)\{0,1\}\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
 mkdir -p "$TMP/initdb"
 sed -n "/^cat >\"\$TARGET_DIR\/initdb\/10-colliedesk-owner.sh\" <<'INITDB'$/,/^INITDB$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/initdb/10-colliedesk-owner.sh"
 chmod 755 "$TMP/initdb/10-colliedesk-owner.sh"
@@ -344,23 +345,31 @@ check_inbox acme owner@acme.example
 check_inbox beta admin@beta.example
 
 # The settings the previous release read from the environment are in the database now, imported once,
-# and the doctor says they can go from the environment (exit 1: warnings, no error).
-[ "$(dc exec -T server /app/collie config get smtp.host 2>/dev/null)" = 'smtp.host=smtp.invalid' ] ||
-  fail 'the candidate did not import SMTP_HOST into its database'
-[ "$(dc exec -T server /app/collie config get trusted_proxies 2>/dev/null)" = 'trusted_proxies=127.0.0.0/8,10.9.0.0/16' ] ||
-  fail 'the candidate did not import TRUSTED_PROXIES into its database'
-imports=$(echo "SELECT count(*) FROM operator_audit WHERE action = 'env.import';" | psql_as postgres colliedesk -At)
-[ "$imports" -ge 1 ] || fail 'the import from the environment left no audit line'
-doctor_status=0
-dc exec -T server /app/collie config doctor >"$TMP/doctor.out" 2>&1 || doctor_status=$?
-[ "$doctor_status" = 1 ] && grep -q 'SMTP_HOST is still set in the environment and equals' "$TMP/doctor.out" ||
-  { cat "$TMP/doctor.out" >&2; fail "collie config doctor exited $doctor_status, want 1 naming SMTP_HOST still in the environment"; }
-dc logs --no-color server 2>/dev/null | grep -q 'a setting is still in the environment' ||
-  fail 'the candidate did not warn that settings are still in the environment'
-dc restart server >/dev/null 2>&1 && dc up -d --wait server >/dev/null 2>&1 || fail "$CANDIDATE did not restart"
-[ "$(echo "SELECT count(*) FROM operator_audit WHERE action = 'env.import';" | psql_as postgres colliedesk -At)" = "$imports" ] ||
-  fail 'a restart imported the environment again'
-step 'settings imported from the environment once; the doctor names the leftovers'
+# and the doctor says they can go from the environment (exit 1: warnings, no error). From 1.0.0 the
+# installer's compose file no longer passes them, so a previous release from then on already keeps
+# them in its database: the operator set SMTP there, which the new installer below must keep.
+if grep -q 'SMTP_HOST' "$TMP/compose.yaml"; then
+  [ "$(dc exec -T server /app/collie config get smtp.host 2>/dev/null)" = 'smtp.host=smtp.invalid' ] ||
+    fail 'the candidate did not import SMTP_HOST into its database'
+  [ "$(dc exec -T server /app/collie config get trusted_proxies 2>/dev/null)" = 'trusted_proxies=127.0.0.0/8,10.9.0.0/16' ] ||
+    fail 'the candidate did not import TRUSTED_PROXIES into its database'
+  imports=$(echo "SELECT count(*) FROM operator_audit WHERE action = 'env.import';" | psql_as postgres colliedesk -At)
+  [ "$imports" -ge 1 ] || fail 'the import from the environment left no audit line'
+  doctor_status=0
+  dc exec -T server /app/collie config doctor >"$TMP/doctor.out" 2>&1 || doctor_status=$?
+  [ "$doctor_status" = 1 ] && grep -q 'SMTP_HOST is still set in the environment and equals' "$TMP/doctor.out" ||
+    { cat "$TMP/doctor.out" >&2; fail "collie config doctor exited $doctor_status, want 1 naming SMTP_HOST still in the environment"; }
+  dc logs --no-color server 2>/dev/null | grep -q 'a setting is still in the environment' ||
+    fail 'the candidate did not warn that settings are still in the environment'
+  dc restart server >/dev/null 2>&1 && dc up -d --wait server >/dev/null 2>&1 || fail "$CANDIDATE did not restart"
+  [ "$(echo "SELECT count(*) FROM operator_audit WHERE action = 'env.import';" | psql_as postgres colliedesk -At)" = "$imports" ] ||
+    fail 'a restart imported the environment again'
+  step 'settings imported from the environment once; the doctor names the leftovers'
+else
+  dc exec -T server /app/collie config set smtp.host=smtp.invalid >/dev/null 2>&1 ||
+    fail 'collie config set smtp.host failed on the upgraded install'
+  step 'the previous release passed no settings in the environment; SMTP set in the database'
+fi
 
 # The operator then runs the new installer on the same directory: it keeps the compose file it replaces as
 # compose.yaml.bak, passes only the bootstrap variables, imports the settings .env still holds through
@@ -374,7 +383,12 @@ rerun=$(COLLIE_DESK_IMAGE=$CANDIDATE sh "$ROOT/install.sh" --dir "$TMP" --name '
   { printf '%s\n' "$rerun" >&2; fail 'the new installer failed on the upgraded install'; }
 printf '%s\n' "$rerun" | grep -q 'Existing workspace initialization was kept' || { printf '%s\n' "$rerun" >&2; fail 'the installer did not keep the existing install'; }
 if printf '%s\n' "$rerun" | grep -q 'Operator console (one-time link)'; then fail 'the installer printed an operator link again'; fi
-cmp -s "$TMP/compose.previous" "$TMP/compose.yaml.bak" || fail 'the installer did not keep the compose file it replaced as compose.yaml.bak'
+# A compose file the installer writes the same stays as it is, with no backup.
+if cmp -s "$TMP/compose.previous" "$TMP/compose.yaml"; then
+  [ ! -e "$TMP/compose.yaml.bak" ] || fail 'the installer kept a backup of a compose file it did not change'
+else
+  cmp -s "$TMP/compose.previous" "$TMP/compose.yaml.bak" || fail 'the installer did not keep the compose file it replaced as compose.yaml.bak'
+fi
 if grep -q 'SMTP_HOST' "$TMP/compose.yaml"; then fail 'the new compose file still passes SMTP_HOST'; fi
 [ "$(dc exec -T server /app/collie config get internal_signup.emails 2>/dev/null)" = 'internal_signup.emails=@upgrade.example' ] ||
   fail 'the installer did not import INTERNAL_SIGNUP_EMAILS from .env'

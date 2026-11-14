@@ -72,7 +72,7 @@ func Run(t *testing.T, h Harness) {
 	if definition.Identified {
 		t.Run("the same message twice is stored once", c.duplicate)
 	}
-	t.Run("an answer joins its conversation and reopens it", c.answer)
+	t.Run("an answer joins its conversation: reopens it, or opens a new one where the type joins only open ones", c.answer)
 	t.Run("what arrives while the channel is off follows its type's rule", c.off)
 	t.Run("a channel's messages never reach another workspace", c.crossWorkspace)
 	if definition.Defaults.RateLimits.PerSender > 0 {
@@ -240,6 +240,18 @@ func (c *contract) answer(t *testing.T) {
 	conversationID := *first[0].ConversationID
 	if _, err := c.h.Pool.Exec(context.Background(), `UPDATE conversations SET status='resolved' WHERE workspace_id=$1 AND id=$2`, d.workspaceID, conversationID); err != nil {
 		t.Fatal(err)
+	}
+	if c.definition.Defaults.JoinPolicy.JoinsOnlyOpen() {
+		// A type that joins only open conversations starts a new one, and the resolved one gets nothing.
+		next := c.receive(t, d.channel, c.h.Raw(t, d.channel, Spec{ID: "q2", From: "cy", Text: "One more thing.", Answers: "q1"}))
+		if next[0].ConversationID == nil || *next[0].ConversationID == conversationID {
+			t.Fatalf("answer to a resolved conversation landed in %v, want a new one", next[0].ConversationID)
+		}
+		var status string
+		if err := c.h.Pool.QueryRow(context.Background(), `SELECT status FROM conversations WHERE id=$1`, conversationID).Scan(&status); err != nil || status != "resolved" {
+			t.Fatalf("status=%q (%v), want the resolved conversation left resolved", status, err)
+		}
+		return
 	}
 	next := c.receive(t, d.channel, c.h.Raw(t, d.channel, Spec{ID: "q2", From: "cy", Text: "One more thing.", Answers: "q1"}))
 	if next[0].ConversationID == nil || *next[0].ConversationID != conversationID {

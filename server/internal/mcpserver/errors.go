@@ -2,7 +2,6 @@ package mcpserver
 
 import (
 	"errors"
-	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -15,10 +14,10 @@ type toolError struct{ message string }
 func (e *toolError) Error() string { return e.message }
 
 // refuse turns a failure of a REST call into the message a model sees. notFound is the text for a
-// 404, which only the tool knows how to word.
+// 404, which only the tool knows how to word. Each refusal records its kind for the tool call log line.
 func (c *call) refuse(err error, notFound string) error {
 	if errors.Is(err, errTooLarge) {
-		return &toolError{"The answer is too large to return in one call (over 16 MiB). Open this in the web app, or ask an admin to export the data."}
+		return c.refusal("too_large", "The answer is too large to return in one call (over 16 MiB). Open this in the web app, or ask an admin to export the data.")
 	}
 	failure, ok := err.(*restError)
 	if !ok {
@@ -26,40 +25,54 @@ func (c *call) refuse(err error, notFound string) error {
 	}
 	switch {
 	case failure.Status == 403 && (failure.Code == "permission_missing" || failure.Code == "role_exceeds_yours" || failure.Code == "member_outranks_you"):
-		return &toolError{permissionText(c, failure)}
+		return c.refusal("permission_missing", permissionText(c, failure))
 	case failure.Status == 403 && failure.Code == "person_only":
-		return &toolError{personOnlyText(failure)}
+		return c.refusal("person_only", personOnlyText(failure))
 	case failure.Status == 401:
-		return &toolError{"This Colliedesk token is no longer valid: it was revoked or it expired. Ask the person you work for to create a new one in Settings → External AI agents."}
+		return c.refusal("token_invalid", "This Colliedesk token is no longer valid: it was revoked or it expired. Ask the person you work for to create a new one in Settings → External AI agents.")
 	case failure.Status == 402 && failure.Code == "workspace_locked":
-		return &toolError{"This workspace is locked: its trial ended and no plan is active. Only exporting the data works until someone with billing:manage chooses a plan, so no inbox tool can read or change anything now."}
+		return c.refusal("workspace_locked", "This workspace is locked: its trial ended and no plan is active. Only exporting the data works until someone with billing:manage chooses a plan, so no inbox tool can read or change anything now.")
 	case failure.Status == 402:
-		return &toolError{"Colliedesk refused because of the plan: " + failure.Message}
+		return c.refusal("plan_refused", "Colliedesk refused because of the plan: "+failure.Message)
 	case failure.Status == 403:
-		return &toolError{"Colliedesk refused this: " + failure.Message}
+		return c.refusal("forbidden", "Colliedesk refused this: "+failure.Message)
 	case failure.Status == 404 && notFound != "":
-		return &toolError{notFound}
+		return c.refusal("not_found", notFound)
 	case failure.Status == 404:
-		return &toolError{"Colliedesk could not find that."}
+		return c.refusal("not_found", "Colliedesk could not find that.")
+	case failure.Status == 409 && failure.Code == "conversation_spam":
+		return c.refusal("conflict", "A conversation in Spam keeps its status, so nothing was changed. Take it out with colliedesk_conversations_spam (spam: false), "+
+			"which puts it back in the status it had; then change it.")
 	case failure.Status == 409:
-		return &toolError{"Colliedesk refused this: " + failure.Message}
+		return c.refusal("conflict", "Colliedesk refused this: "+failure.Message)
 	case failure.Status == 400 || failure.Status == 422:
 		// Each refused field with why, so the next call fixes it.
 		text := "Colliedesk rejected the request: " + failure.Message
 		for _, field := range slices.Sorted(maps.Keys(failure.Fields)) {
 			text += " " + field + ": " + failure.Fields[field]
 		}
-		return &toolError{text}
+		return c.refusal("rejected", text)
 	case failure.Status == 503 && failure.Message != "":
-		return &toolError{"Colliedesk cannot do this right now: " + failure.Message}
+		return c.refusal("unavailable", "Colliedesk cannot do this right now: "+failure.Message)
 	case failure.Status == 429:
 		wait := ""
 		if failure.RetryAfter != "" {
 			wait = " Try again in " + failure.RetryAfter + " seconds."
 		}
-		return &toolError{"Colliedesk is rate limiting this workspace." + wait}
+		return c.refusal("rate_limited", "Colliedesk is rate limiting this workspace."+wait)
 	}
 	return failure
+}
+
+// refusal is a planned refusal with message, remembered with its kind (a short fixed word such as
+// not_found) so the tool call log line can name why the call failed without its text.
+func (c *call) refusal(kind, message string) error {
+	refused := &toolError{message}
+	if c.refusals == nil {
+		c.refusals = map[*toolError]string{}
+	}
+	c.refusals[refused] = kind
+	return refused
 }
 
 // permissionText keeps Colliedesk's own sentence (it names the permission and how to get it) and adds
@@ -98,7 +111,6 @@ func failureText(c *call, err error) string {
 	if toolErr, ok := err.(*toolError); ok {
 		message, planned = toolErr.message, true
 	} else {
-		slog.Error("MCP tool failed", "tool", c.spec.Name, "error", err)
 		message = "Colliedesk hit an internal problem while running " + c.spec.Name + "."
 	}
 	switch {

@@ -2,6 +2,9 @@
 // opens, so they live in the knowledge base chunk and not in the first bundle.
 export const kbMessages = {
   heading: 'Knowledge base',
+  // The Settings tab of the knowledge base: the help center's own settings, which were a section of Settings.
+  settingsTab: 'Settings',
+  helpCenterDescription: 'The public pages of your published knowledge base articles.',
   description: 'Articles in Markdown, grouped in collections. Published articles appear on the help center while it is on.',
   allArticles: 'All articles',
   collections: 'Collections',
@@ -79,7 +82,12 @@ export const kbMessages = {
   articleSettings: 'Publishing and placement',
   movedCollection: 'Moved',
   restoreNeedsSave: 'Save or undo your changes first: restoring a version replaces the text on screen.',
-  articleCollection: 'Collection',
+  articleCollections: 'Collections',
+  homeCollection: 'Home',
+  alsoListIn: 'Also list in',
+  alsoListInPlaceholder: 'Also list in…',
+  removeCollection: (name: string) => `Remove ${name}`,
+  collectionsHelp: 'The first one is the home: it gives the breadcrumb. Adding or removing others never changes the address.',
   chooseCollection: 'Choose a collection',
   articleSlug: 'Address name',
   articleSlugHelp: (number: number | undefined, slug: string) =>

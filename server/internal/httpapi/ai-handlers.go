@@ -265,6 +265,9 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "ai_triage_nothing", "This suggestion names nothing to apply: the conversation already has it, or a person set it first.")
 	case errors.Is(err, ai.ErrTriageDecided):
 		writeError(response, http.StatusConflict, "ai_triage_decided", "This suggestion is not ready, or was already accepted, dismissed or replaced.")
+	case errors.Is(err, ai.ErrDraftNotRestorable):
+		writeError(response, http.StatusConflict, "ai_draft_not_restorable", "Only an earlier written draft can be brought back: this one was sent, "+
+			"was written by the built-in AI (ask for a new one), or its text was erased 90 days after it ended.")
 	case errors.Is(err, ai.ErrDraftDecided):
 		writeError(response, http.StatusConflict, "ai_draft_decided", "This AI draft was already sent, discarded or replaced.")
 	case errors.Is(err, ai.ErrAllowanceReached):
@@ -352,12 +355,30 @@ func (a *API) createAIDraft(response http.ResponseWriter, request *http.Request)
 }
 
 func (a *API) listAIDrafts(response http.ResponseWriter, request *http.Request) {
-	drafts, err := a.ai.ListDrafts(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	query := request.URL.Query()
+	limit := ai.DefaultDraftPage
+	if value := query.Get("limit"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > ai.MaxDraftPage {
+			writeError(response, http.StatusBadRequest, "invalid_request", "limit is 1 to "+strconv.Itoa(ai.MaxDraftPage)+" drafts.")
+			return
+		}
+		limit = parsed
+	}
+	drafts, next, err := a.ai.ListDrafts(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), query.Get("before"), limit)
+	if errors.Is(err, ai.ErrDraftCursor) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "before is the next_before of the page you read: the id of a draft of this conversation.")
+		return
+	}
 	if err != nil {
 		writeAIError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"items": drafts})
+	var nextBefore *string
+	if next != "" {
+		nextBefore = &next
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"items": drafts, "next_before": nextBefore})
 }
 
 func (a *API) getAIDraft(response http.ResponseWriter, request *http.Request) {

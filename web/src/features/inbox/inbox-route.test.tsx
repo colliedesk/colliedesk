@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
+import { askInbox } from '../shell/inbox-intents';
+import { readRecent } from '../shell/recent-items';
 import { testRouter } from './test-router';
 import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
@@ -35,6 +37,10 @@ const views = vi.hoisted(() => ({
 }));
 vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
+// The drafts of the open conversation; a test sets what the server holds.
+const drafts = vi.hoisted(() => ({ list: vi.fn(async (_conversation: string, _before?: string): Promise<unknown> => ({ items: [], next_before: null })) }));
+vi.mock('./ai-draft-api', async (original) => ({ ...(await original<typeof import('./ai-draft-api')>()),
+  aiDraftApi: { list: drafts.list, get: vi.fn(), create: vi.fn(), discard: vi.fn(), restore: vi.fn() } }));
 beforeEach(() => testRouter.reset());
 
 const conversation = (id: string, subject: string) => ({ latest_reply_number: 0,
@@ -92,7 +98,7 @@ test('a ticket opened by its address asks for its messages and time entries at o
 
 // A ticket opened by its address that is not in the list shows nothing of another ticket: not its header, not its
 // composer. A reply typed under the wrong header would go to the wrong customer.
-test('a ticket opened by address that is not in the list never shows another ticket\'s header, and its composer stays disabled, while its detail is missing', async () => {
+test('a ticket opened by address that is not in the list never shows another ticket\'s header, and offers no reply box, while its detail is missing', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
   testRouter.params = { conversationId: bravo.id };
@@ -113,7 +119,7 @@ test('a ticket opened by address that is not in the list never shows another tic
     await waitFor(() => expect(api.messages).toHaveBeenCalledWith(bravo.id));
     await screen.findByRole('button', { name: /alpha conversation/i }); // the list has arrived, the detail has not
     expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
-    for (const box of screen.getAllByLabelText('Message body')) expect(box).toBeDisabled(); // nothing can be sent yet
+    expect(screen.queryByLabelText('Message body')).toBeNull(); // nothing can be sent yet: there is no reply box
     expect(api.messages).not.toHaveBeenCalledWith(alpha.id);
     resolveDetail(bravo);
     expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
@@ -144,7 +150,7 @@ test('a ticket whose detail fails to load never gets a usable composer, and noth
     await waitFor(() => expect(api.conversation).toHaveBeenCalledWith(bravo.id));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
-    for (const box of screen.getAllByLabelText('Message body')) expect(box).toBeDisabled();
+    expect(screen.queryByLabelText('Message body')).toBeNull();
     expect(api.createMessage).not.toHaveBeenCalled();
   } finally {
     testRouter.params = {};
@@ -362,6 +368,7 @@ test('typing in search keeps the previous rows until the new response arrives', 
   api.timeEntries.mockResolvedValue({ items: [] });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
   await screen.findByRole('button', { name: /alpha conversation/i });
+  act(() => askInbox('search'));
   fireEvent.change(screen.getByRole('searchbox', { name: /search/i }), { target: { value: 'beta' } });
   await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(2));
   expect(screen.getByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();
@@ -470,6 +477,45 @@ test('a brand-new workspace still shows "Get started"', async () => {
   api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
   renderRoute();
   expect(await screen.findByRole('region', { name: /get started/i })).toBeInTheDocument();
+});
+
+const setupSteps = (states: Record<string, string> = {}) => {
+  const all = { email: 'none', import: 'none', ai_drafts: 'none', reply_targets: 'none', invite: 'alone', first_reply: 'none', ...states } as Record<string, string>;
+  return { steps: Object.entries(all).map(([key, state]) => ({ key, name: key, state, detail: null })), complete: false, recommended: null };
+};
+
+test('an empty inbox offers an admin the first undone setup step, the one Quick start highlights', async () => {
+  quietApis();
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: 'Sam' }, permissions: permissionsOf('admin') });
+  api.setupProgress.mockResolvedValue(setupSteps());
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  const start = await screen.findByRole('region', { name: /get started/i });
+  expect(await within(start).findByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/setup/email');
+});
+
+test('an empty inbox names the step Quick start highlights: an address waiting for its first email is still that step', async () => {
+  quietApis();
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: 'Sam' }, permissions: permissionsOf('admin') });
+  api.setupProgress.mockResolvedValue(setupSteps({ email: 'waiting' }));
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  const start = await screen.findByRole('region', { name: /get started/i });
+  expect(await within(start).findByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/setup/email');
+});
+
+test('an empty inbox is text only when the person has no step left to take', async () => {
+  quietApis();
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: 'Sam' }, permissions: permissionsOf('agent') });
+  api.setupProgress.mockResolvedValue(setupSteps({ first_reply: 'sent' }));
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  const start = await screen.findByRole('region', { name: /get started/i });
+  await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
+  expect(within(start).queryByRole('link')).not.toBeInTheDocument();
 });
 
 test('resolving the open conversation keeps it on screen although it left the Open list', async () => {
@@ -656,7 +702,7 @@ test('Manage saved replies opens Settings in a new tab, so a draft is not lost',
   await waitFor(() => expect(screen.getByRole('button', { name: 'Insert saved reply' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Manage saved replies' }));
-  expect(open).toHaveBeenCalledExactlyOnceWith('/settings', '_blank', 'noopener');
+  expect(open).toHaveBeenCalledExactlyOnceWith('/settings/saved-replies', '_blank', 'noopener');
   open.mockRestore();
 });
 
@@ -674,12 +720,12 @@ test('the filters in the address are the list, and changing one keeps the open c
   api.messages.mockResolvedValue({ items: [] });
   api.timeEntries.mockResolvedValue({ items: [] });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
-  await waitFor(() => expect(api.conversations).toHaveBeenCalledWith('priority=high%2Curgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50', expect.anything()));
+  await waitFor(() => expect(api.conversations).toHaveBeenCalledWith('priority=high%2Curgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50&counts=true', expect.anything()));
   expect(await screen.findByRole('list', { name: 'Active filters' })).toHaveTextContent('Reply draft waiting to be sent');
   fireEvent.click(screen.getByRole('button', { name: 'Remove filter Priority: High' }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/conversations/$conversationId', params: { conversationId: alpha.id },
     search: { priority: 'urgent', has_pending_draft: true, sort: 'waiting_longest' }, replace: false });
-  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50', expect.anything()));
+  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50&counts=true', expect.anything()));
   // Opening another conversation carries the filters, so Back and a shared link show the same list.
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/conversations/$conversationId', params: { conversationId: alpha.id },
@@ -705,7 +751,7 @@ test('a saved view is saved from the filters on screen and opens them again', as
   fireEvent.click(within(menu).getByRole('button', { name: 'Save view' }));
   await waitFor(() => expect(views.create).toHaveBeenCalledWith({ name: 'Pending, our turn', scope: 'personal', filters: { status: ['pending'], awaiting: 'team' } }, expect.any(String)));
   fireEvent.click(await within(menu).findByRole('button', { name: 'Urgent' }));
-  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&page=1&page_size=50', expect.anything()));
+  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&sort=due&page=1&page_size=50&counts=true', expect.anything()));
 });
 
 test('on the trial with an unverified domain, New conversation says it cannot send yet; once verified it starts the conversation', async () => {
@@ -726,7 +772,7 @@ test('on the trial with an unverified domain, New conversation says it cannot se
   const { unmount } = render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
   await screen.findAllByText('Alpha conversation');
   await waitFor(() => expect(api.emailChannel).toHaveBeenCalled());
-  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  act(() => askInbox('new-conversation'));
   const dialog = await screen.findByRole('dialog', { name: 'Start a conversation' });
   await waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent(/trial/));
   unmount();
@@ -740,7 +786,7 @@ test('on the trial with an unverified domain, New conversation says it cannot se
   render(<QueryClientProvider client={second}><InboxRoute /></QueryClientProvider>);
   await screen.findAllByText('Alpha conversation');
   await waitFor(() => expect(api.emailChannel).toHaveBeenCalled());
-  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  act(() => askInbox('new-conversation'));
   const ready = await screen.findByRole('dialog', { name: 'Start a conversation' });
   expect(within(ready).queryByRole('status')).not.toBeInTheDocument();
   fireEvent.change(within(ready).getByLabelText('Find a customer by name or email'), { target: { value: 'pat' } });
@@ -764,12 +810,29 @@ test('New conversation takes no input until the plan and the email channel are k
     smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
   await screen.findAllByText('Alpha conversation');
-  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  act(() => askInbox('new-conversation'));
   const dialog = await screen.findByRole('dialog', { name: 'Start a conversation' });
   // Typing now could be lost: the trial may refuse the email once the plan is known.
   expect(within(dialog).getByLabelText('Subject')).toBeDisabled();
   expect(within(dialog).getByLabelText('Message')).toBeDisabled();
   expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
+});
+
+test('Search and New conversation asked from the sidebar on another page are done once the inbox opens', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  // Asked while another page is on screen: the inbox is not mounted yet.
+  askInbox('search');
+  const first = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  await screen.findAllByText('Alpha conversation');
+  await waitFor(() => expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveFocus());
+  first.unmount();
+  askInbox('new-conversation');
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByRole('dialog', { name: 'Start a conversation' })).toBeInTheDocument();
 });
 
 test('the open ticket is announced only after its own requests and the side lists went out, and names who else is writing', async () => {
@@ -931,7 +994,7 @@ test('a conversation whose channel is off says its reply waits, and an admin is 
   api.timeEntries.mockResolvedValue({ items: [] });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
-  const notice = await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/);
+  const notice = (await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/)).closest('p')!;
   // One channel of a type: no mailbox name on the rows or the thread.
   expect(document.querySelector('.channel-pill')).toBeNull();
   expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings/channels/55555555-5555-4555-8555-555555555555');
@@ -955,7 +1018,7 @@ test('a web form conversation with no email connected can still be answered, and
   api.timeEntries.mockResolvedValue({ items: [] });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
-  const notice = await screen.findByText('Replies to this conversation are not emailed until you connect your support email.');
+  const notice = (await screen.findByText('Replies to this conversation are not emailed until you connect your support email.')).closest('p')!;
   expect(screen.queryByText(/was removed/)).toBeNull();
   fireEvent.change(screen.getAllByLabelText('Message body').at(-1)!, { target: { value: 'Hello' } });
   expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeEnabled();
@@ -1063,7 +1126,7 @@ test('the composer warns about the mailbox a reply leaves from, and leads to tha
     api.emailChannel.mockResolvedValue(settings('billing@desk.example', 'connected') as never);
     api.emailChannelOf.mockResolvedValue(settings('sales@desk.example', 'failed'));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
-    const notice = await screen.findByText(/Gmail stopped sending/);
+    const notice = (await screen.findByText(/Gmail stopped sending/)).closest('p')!;
     expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', `/settings/channels/${sales.id}?tab=replies`);
   } finally {
     api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
@@ -1122,83 +1185,33 @@ test('a reply that lands after the person opened another conversation reloads th
   expect(api.messages).not.toHaveBeenCalledWith(beta.id);
 });
 
-const unfinished = { steps: [
-  { key: 'email', state: 'none', detail: null }, { key: 'import', state: 'none', detail: null },
-  { key: 'invite', state: 'alone', detail: null }, { key: 'first_reply', state: 'none', detail: null },
-], complete: false, recommended: null };
-const adminMe = (hidden: boolean) => ({ timezone: 'UTC', agent: { id: 'a-1', roles: rolesOf('admin'), email: 'ann@example.com', display_name: 'Ann' }, permissions: permissionsOf('admin'), onboarding_goal: null, setup_guide_hidden: hidden });
+const adminMe = () => ({ timezone: 'UTC', agent: { id: 'a-1', roles: rolesOf('admin'), email: 'ann@example.com', display_name: 'Ann' }, permissions: permissionsOf('admin'),
+  onboarding_goal: null, setup_guide_hidden: false, workspace: { id: 'w-1', slug: 'ann', name: 'Ann Desk', timezone: 'UTC' } });
 
-test('a workspace with conversations keeps the setup guide folded in the corner until the agent opens it', async () => {
-  localStorage.clear();
+test('the inbox floats no setup guide over its list: Quick start in the sidebar holds the steps', async () => {
   quietApis();
-  api.me.mockResolvedValue(adminMe(false));
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.conversations.mockReset();
-  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
-  renderRoute();
-  const launcher = await screen.findByRole('button', { name: /Finish setting up/ });
-  expect(launcher).toHaveTextContent('0 of 4');
-  expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();
-  fireEvent.click(launcher);
-  const guide = screen.getByRole('region', { name: 'Finish setting up' });
-  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
-});
-
-test('a brand-new workspace without an email channel opens the setup guide by itself: there is nothing for it to cover', async () => {
-  localStorage.clear();
-  quietApis();
-  api.me.mockResolvedValue(adminMe(false));
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.channelCounts.mockResolvedValue({ types: [] });
-  api.conversations.mockReset();
-  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
-  renderRoute();
-  const guide = await screen.findByRole('region', { name: 'Finish setting up' });
-  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toBeInTheDocument();
-  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
-});
-
-test('a brand-new workspace that can send itself a test message keeps the guide folded, so it never covers that button', async () => {
-  localStorage.clear();
-  quietApis();
-  api.me.mockResolvedValue(adminMe(false));
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
-  api.conversations.mockReset();
-  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
-  renderRoute();
-  expect(await screen.findByRole('button', { name: 'Send yourself a test message' })).toBeInTheDocument();
-  expect(await screen.findByRole('button', { name: /Finish setting up/ })).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
-});
-
-test('Hide removes the guide and asks the server to remember it for this agent', async () => {
-  quietApis();
-  api.me.mockResolvedValue(adminMe(false));
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.conversations.mockReset();
-  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
-  renderRoute();
-  fireEvent.click(await screen.findByRole('button', { name: /Finish setting up/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-  await waitFor(() => expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument());
-  expect(screen.queryByRole('button', { name: /Finish setting up/ })).not.toBeInTheDocument();
-  expect(api.setSetupGuideHidden).toHaveBeenCalledWith(true);
-});
-
-test('a hidden guide shows nothing, even though its data left with the session', async () => {
-  quietApis();
+  api.me.mockResolvedValue(adminMe());
   api.setupProgress.mockClear();
-  api.setupProgress.mockResolvedValue(unfinished);
-  api.me.mockResolvedValue(adminMe(true));
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
   renderRoute();
   await screen.findByRole('button', { name: /alpha conversation/i });
-  await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
-  expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /Finish setting up/ })).not.toBeInTheDocument();
+  expect(screen.queryByText('Finish setting up')).not.toBeInTheDocument();
+  expect(api.setupProgress).not.toHaveBeenCalled();
+});
+
+test('a conversation the person opens heads Recent in the search palette', async () => {
+  localStorage.clear();
+  quietApis();
+  api.me.mockResolvedValue(adminMe());
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), conversation('22222222-2222-4222-8222-222222222222', 'Beta conversation')], page: 1, page_size: 50 });
+  renderRoute();
+  // The first row on screen by itself is not one the person opened.
+  await screen.findByRole('button', { name: /beta conversation/i });
+  expect(readRecent('w-1')).toEqual([]);
+  fireEvent.click(screen.getByRole('button', { name: /beta conversation/i }));
+  await waitFor(() => expect(readRecent('w-1')).toEqual([expect.objectContaining({ kind: 'conversation', id: '22222222-2222-4222-8222-222222222222', title: 'Beta conversation' })]));
 });
 
 // A chat conversation's replies leave through its chat channel: no email settings are asked for it.
@@ -1235,7 +1248,9 @@ test('a role that reads only conversations asks for nothing else and is offered 
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
   expect(await screen.findByRole('button', { name: /Private note/, pressed: true })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /^Reply/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+  // The sidebar offers no New conversation to this role, and a request for one opens nothing.
+  act(() => askInbox('new-conversation'));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(screen.queryByRole('textbox', { name: /new tag name/i })).not.toBeInTheDocument();
   for (const call of [api.agents, api.tags, api.savedReplies, api.emailChannel]) expect(call).not.toHaveBeenCalled();
 });
@@ -1253,5 +1268,136 @@ test('a role without messages:read is told why the messages are not shown, and n
   expect(await screen.findByText('Your roles do not let you read the messages of a conversation (messages:read).')).toBeInTheDocument();
   expect(api.messages).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: /Views/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+  act(() => askInbox('new-conversation'));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+// A written draft waiting on a conversation; outcome discarded is what resolving or closing makes of it.
+const writtenDraft = (conversationId: string, outcome: 'discarded' | null) => ({ id: '77777777-7777-4777-8777-777777777777', conversation_id: conversationId,
+  status: 'ready', source: 'written', cc: null, written_by: { token_label: 'Claude', agent_name: 'Alice' }, files: [], error_code: null, prompt: '',
+  text: 'Your refund is on its way.', missing_info: null, sources: [], warnings: [], model: null, outcome, similarity: null, sent_message_id: null,
+  requested_by_agent_id: null, automatic: false, answers_message_id: null, reply_needed: null, created_at: '2026-10-14T00:00:00Z', ready_at: '2026-10-14T00:00:00Z',
+  decided_at: outcome ? '2026-10-14T01:00:00Z' : null, decided_by_name: null, restored_at: null });
+
+test('resolving a conversation takes its waiting draft away at once: it moves to Earlier drafts', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.updateConversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  let resolved = false;
+  api.conversations.mockImplementation(async () => ({ items: [{ ...alpha, status: resolved ? 'resolved' : 'open' }], page: 1, page_size: 50 }));
+  api.updateConversation.mockImplementation(async () => { resolved = true; return { ...alpha, status: 'resolved' }; });
+  // The server discards the waiting draft when the conversation is resolved.
+  drafts.list.mockImplementation(async () => ({ items: [writtenDraft(alpha.id, resolved ? 'discarded' : null)], next_before: null }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('region', { name: /draft from claude/i })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: /draft from claude/i })).not.toBeInTheDocument());
+  expect(await screen.findByText('Earlier drafts (1)')).toBeInTheDocument();
+});
+
+test('a bulk close takes the waiting draft of the open conversation away at once', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  let closed = false;
+  api.conversations.mockImplementation(async () => ({ items: [{ ...alpha, status: closed ? 'closed' : 'open' }], page: 1, page_size: 50 }));
+  api.bulkUpdateConversations.mockReset();
+  api.bulkUpdateConversations.mockImplementation(async () => { closed = true; return { updated: 1 }; });
+  drafts.list.mockImplementation(async () => ({ items: [writtenDraft(alpha.id, closed ? 'discarded' : null)], next_before: null }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByRole('region', { name: /draft from claude/i })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
+  fireEvent.click(within(screen.getByRole('group', { name: /bulk actions/i })).getByRole('button', { name: 'Closed' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: /draft from claude/i })).not.toBeInTheDocument());
+});
+
+// The inbox's line about moving the mail and the reply box's note read the email settings: the default
+// mailbox's for the line, the mailbox the open conversation's replies leave from for the note.
+const SUPPORT = '88888888-8888-4888-8888-888888888888';
+const SALES = '55555555-5555-4555-8555-555555555555';
+const switchSettings = (id: string, address: string, waiting: string[], answers: 'colliedesk' | 'support_mailbox' = 'colliedesk') => ({
+  channel: { channel_id: id, support_address: address, domain_verified_at: null }, inbound_url: 'https://desk.example.com/x', hosted_address: null,
+  smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: address,
+  mail_through_mailbox: !waiting.includes(id), answers_before_forwarding: answers,
+  mail_switch: { imported: true, mailboxes: waiting.map((channel) => ({ channel_id: channel, name: channel === SALES ? 'Sales' : 'Support',
+    support_address: channel === SALES ? 'sales@desk.example' : 'support@desk.example', old_help_desk: true })) },
+});
+const salesRef = { id: SALES, type: 'email', name: 'Sales', enabled: true, deleted: false, replies_via: { id: SALES, type: 'email', name: 'Sales', enabled: true, instead_of: null } };
+const answerToMailbox = 'The customer\'s answer goes to your mailbox until it forwards here.';
+const openOn = (ref: unknown) => {
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel_ref: ref };
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  testRouter.params = { conversationId: alpha.id };
+  return alpha;
+};
+
+test('Move your mail is offered to whoever may change channels, also without the AI settings permission, and only to them', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  api.emailChannel.mockResolvedValue(switchSettings(SUPPORT, 'support@desk.example', [SUPPORT]) as never);
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: [...permissionsOf('agent'), 'channels:update'] });
+    const first = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByRole('link', { name: 'Move your mail' })).toHaveAttribute('href', `/settings/channels/${SUPPORT}/setup?step=forward`);
+    first.unmount();
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: [...permissionsOf('agent'), 'ai_settings:update'] });
+    renderRoute();
+    expect(await screen.findByText(/An admin can move it\./)).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Move your mail' })).toBeNull();
+  } finally {
+    api.emailChannel.mockReset();
+  }
+});
+
+test('the reply box speaks of the mailbox the open conversation\'s replies leave from, not of the default one', async () => {
+  try {
+    // The default mailbox does not forward yet; Sales, which carries this conversation's replies, does.
+    openOn(salesRef);
+    api.emailChannel.mockResolvedValue(switchSettings(SUPPORT, 'support@desk.example', [SUPPORT], 'support_mailbox') as never);
+    api.emailChannelOf.mockResolvedValue(switchSettings(SALES, 'sales@desk.example', [SUPPORT], 'support_mailbox'));
+    const first = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByText(/New customer mail to support@desk\.example still arrives/)).toBeInTheDocument();
+    await waitFor(() => expect(api.emailChannelOf).toHaveBeenCalledWith(SALES));
+    expect(screen.queryByText(answerToMailbox)).toBeNull();
+    first.unmount();
+
+    // Sales does not forward yet: its answer goes to its mailbox.
+    api.emailChannelOf.mockResolvedValue(switchSettings(SALES, 'sales@desk.example', [SUPPORT, SALES], 'support_mailbox'));
+    const second = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByText(answerToMailbox)).toBeInTheDocument();
+    second.unmount();
+
+    // Replies that leave through a chat have no mailbox: nothing is said, whatever the default mailbox's state.
+    openOn({ id: '44444444-4444-4444-8444-444444444444', type: 'zalo', name: 'Zalo', enabled: true, deleted: false,
+      replies_via: { id: '44444444-4444-4444-8444-444444444444', type: 'zalo', name: 'Zalo', enabled: true, instead_of: null } });
+    renderRoute();
+    expect(await screen.findByText(/New customer mail to support@desk\.example still arrives/)).toBeInTheDocument();
+    expect(screen.queryByText(answerToMailbox)).toBeNull();
+  } finally {
+    api.emailChannel.mockReset();
+    api.emailChannelOf.mockReset();
+  }
+});
+
+test('with a conversation open on another mailbox, the default mailbox is asked for beside it, not after it', async () => {
+  try {
+    openOn(salesRef);
+    api.conversations.mockReturnValue(new Promise(() => {})); // the list never answers in this test
+    api.emailChannelOf.mockReturnValue(new Promise(() => {})); // nor does Sales' settings
+    api.emailChannel.mockReturnValue(new Promise(() => {}) as never);
+    renderRoute();
+    await waitFor(() => expect(api.emailChannelOf).toHaveBeenCalledWith(SALES));
+    expect(api.emailChannel).toHaveBeenCalled();
+  } finally {
+    api.emailChannel.mockReset();
+    api.emailChannelOf.mockReset();
+  }
 });

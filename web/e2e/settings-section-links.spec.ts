@@ -4,9 +4,11 @@ import { createWorkspaceWithSlug } from './support/workspace';
 
 const baseURL = servers.main;
 
-// A link to a Settings section lands on it although the sections are drawn only once their data arrives.
-// The API answers late here, as over a real network, so the router's own look for the section finds nothing.
-test('a link to a settings section lands on it, opened directly or from another settings page', async ({ page }) => {
+// Settings was one page with a section per anchor; each section now lives on the page of its menu item (#528).
+// A link to an old anchor (a bookmark, a sent email, an MCP answer) opens that page at the section, although
+// the sections are drawn only once their data arrives. The API answers late here, as over a real network,
+// so the router's own look for the section finds nothing.
+test('a link to an old settings section opens the page that holds it now and lands on the section', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const suffix = `${Date.now()}-${process.pid}`;
   const { url } = createWorkspaceWithSlug(`E2E section links ${suffix}`, `admin-${suffix}@example.com`);
@@ -15,15 +17,33 @@ test('a link to a settings section lands on it, opened directly or from another 
   await expect(page).toHaveURL(`${baseURL}/`);
   await page.route('**/api/v1/**', (route) => setTimeout(() => void route.continue(), 400));
 
+  // Data is longer than this window: the import's form comes first, Export all data after it.
+  await page.setViewportSize({ width: 1280, height: 600 });
   await page.goto(`${baseURL}/settings#export-heading`);
+  await expect(page).toHaveURL(`${baseURL}/settings/data#export-heading`);
   await expect(page.getByRole('heading', { name: 'Export all data' })).toBeInViewport();
-  await expect(page.getByRole('heading', { name: 'Profile' })).not.toBeInViewport();
+  await expect(page.getByRole('heading', { name: 'Data', level: 1 })).not.toBeInViewport();
+  await page.setViewportSize({ width: 1280, height: 800 });
 
-  await page.goto(`${baseURL}/settings/ai`);
-  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Sessions', exact: true }).click();
-  await expect(page).toHaveURL(`${baseURL}/settings#sessions-heading`);
+  await page.goto(`${baseURL}/settings#sessions-heading`);
+  await expect(page).toHaveURL(`${baseURL}/settings/account#sessions-heading`);
   await expect(page.getByRole('heading', { name: 'Sessions', exact: true })).toBeInViewport();
-  await expect(page.getByRole('heading', { name: 'Profile' })).not.toBeInViewport();
+
+  // A refused token call (the server's `where`) and an MCP answer link the tokens; the roles editor links their sessions.
+  // AI & agents starts with the built-in AI, which is drawn from a request of its own and pushes them down.
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await page.goto(`${baseURL}/settings#agents-heading`);
+  await expect(page).toHaveURL(`${baseURL}/settings/ai#agents-heading`);
+  await expect(page.getByRole('heading', { name: 'External AI agents', exact: true })).toBeInViewport();
+  await expect(page.getByRole('heading', { name: 'AI & agents', level: 1 })).not.toBeInViewport();
+  await page.goto(`${baseURL}/settings/ai#agent-tokens-heading`);
+  await expect(page.locator('#agent-tokens-heading')).toBeInViewport();
+  await expect(page.getByRole('heading', { name: 'AI & agents', level: 1 })).not.toBeInViewport();
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  await page.goto(`${baseURL}/settings#invites-heading`);
+  await expect(page).toHaveURL(`${baseURL}/settings/members#invites-heading`);
+  await expect(page.getByRole('heading', { name: 'Invites', exact: true })).toBeVisible();
 
   // The email channel and the web form were sections here; their old anchors open their pages in Settings.
   await page.goto(`${baseURL}/settings#email-channel-heading`);
@@ -33,4 +53,9 @@ test('a link to a settings section lands on it, opened directly or from another 
   await page.goto(`${baseURL}/settings#web-form-heading`);
   await expect(page).toHaveURL(`${baseURL}/settings/channels/new/web_form`);
   await expect(page.getByRole('heading', { name: 'Web form', exact: true })).toBeVisible();
+
+  // The help center's settings moved to the Help center area.
+  await page.goto(`${baseURL}/settings#help-center-heading`);
+  await expect(page).toHaveURL(`${baseURL}/knowledge/settings#help-center-heading`);
+  await expect(page.getByRole('heading', { name: 'Help center', exact: true })).toBeVisible();
 });

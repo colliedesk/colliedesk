@@ -11,17 +11,66 @@ token that holds `messages:send` only when you want it to write to customers.
 - URL: `https://<your-colliedesk>/mcp`. It uses MCP Streamable HTTP without sessions, protocol
   versions `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`.
 <!-- /generated -->
-- Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie or a
-  person's own session token is never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
-- Create the token in **Settings → External AI agents**, as described in
+- Sign-in: **OAuth** for an AI app (Claude, ChatGPT, Codex, Cursor, Claude Code, VS Code): add the
+  URL in the app and it opens a Colliedesk page in your browser that asks you to **Allow** it. Or an
+  **agent token** in the `Authorization: Bearer <token>` header, for a script. A browser cookie or a
+  person's own session token is never accepted on `/mcp`. A missing or invalid credential gets HTTP
+  401 with a `WWW-Authenticate` header that names where the app signs in
+  (`resource_metadata="https://<your-colliedesk>/.well-known/oauth-protected-resource/mcp"`) and says
+  how to connect again.
+- An app connected with OAuth acts as you, with everything you can do in the workspace you allowed it
+  in, as your roles are on each call; see [Connected AI apps](sessions.md#connected-ai-apps).
+- An agent token is created in **Settings → AI & agents → External AI agents**, as described in
   [Agent tokens](sessions.md#agent-tokens): it follows a role (one whose permissions you all hold), or holds a fixed
-  list of your permissions. Give it only what the job needs. The token is shown once; revoke it in
-  **Settings → Sessions**.
+  list of your permissions. Give it only what the job needs. The token is shown once; revoke it from its
+  row in **Settings → AI & agents → External AI agents**.
+
+### Connect an app with OAuth
+
+On Colliedesk Cloud, Claude (web, desktop and mobile) lists Colliedesk in its connectors directory:
+open [Colliedesk in the Claude directory](https://claude.ai/directory/connectors/colliedesk), choose
+**Connect**, and go on at step 2. Every other app, and a self-hosted Colliedesk, starts at step 1.
+
+1. In the app, add a remote MCP server (a "custom connector" in Claude and ChatGPT) with the URL
+   `https://<your-colliedesk>/mcp`. On Colliedesk Cloud the URL is `https://app.colliedesk.com/mcp` for
+   every workspace. Leave any token or header field empty.
+2. The app opens a Colliedesk page in your browser. Sign in if it asks (on Cloud, choose the workspace
+   there), check the app's name, the workspace and where the answer goes, and choose **Allow**.
+   **Cancel** tells the app no. When the answer goes to a program on your computer (Claude Code,
+   Codex), the page warns you: allow only if you just started connecting from that computer.
+3. The app is connected. It shows in **Settings → Account → Connected AI apps**.
+
+If you build your own app: an app that registers itself (dynamic client registration) can send people
+back only to this computer (`localhost`), to its own app scheme (`cursor://…`), or to a known AI app's
+website (Claude, ChatGPT, OpenAI, Anthropic, Cursor). Any other website publishes a client ID metadata
+document and uses its https address as `client_id`.
+
+Each sign-in is its own connection: the same app on two computers shows twice, and disconnecting one
+leaves the other. An app you do not use for 30 days is disconnected; it asks you to sign in again.
+
+If a connection stops working (you disconnected it, it expired, or your account was deactivated), the
+app gets HTTP 401 and asks you to sign in again. To connect again:
+
+- **Claude** and **ChatGPT**: **Disconnect** the Colliedesk connector, then **Connect**.
+- **Claude Code**: run `/mcp`, choose `colliedesk` (`plugin:colliedesk:colliedesk` when it came with the
+  [Colliedesk plugin](connect-claude-code.md)) and **Authenticate**, or `claude mcp login <that name>`.
+- **Codex**: `codex mcp login colliedesk`.
+- **Cursor**: Settings → MCP, log in to `colliedesk` again.
+
+To use another workspace, connect again and choose that workspace. Removing the server in the app does
+not disconnect it in Colliedesk; **Disconnect** in Settings does.
 
 The agent does what the token's [permissions](roles-and-permissions.md) allow, at once; nothing waits
 for a person to approve it, and it never does more than the person who made the token can do right
 now. The **Needs** column below names the permissions each tool needs. `colliedesk_whoami` answers
 your name and roles, how the token was made and its permissions.
+
+A new workspace has no conversations until your customers' mail reaches it. When you connect an AI
+app first, ask it how to start: the server tells the model to read the [setup steps](setup-guide.md)
+(`colliedesk_setup_progress_get`) and help with the one recommended, for email by giving you the
+support address to forward to (`colliedesk_email_channel_get`), sending a test message that opens a
+first conversation (`colliedesk_email_test_message_send`) and reading Google's forwarding
+confirmation code (`colliedesk_email_forwarding_confirmation_get`).
 
 A tool the token has no permission for fails with the message, `missing_permissions` and
 `missing_from` of [a refused call](roles-and-permissions.md#when-a-permission-is-missing): `token`
@@ -58,11 +107,15 @@ with `billing` and leave a note with a summary."
 | `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer, and who else has it open | `contacts:read`, `conversations:read`, `messages:read`, `team:read` |
 | `colliedesk_conversation_presence` | Shows the team that the agent is working on a conversation (as "your name via the token label", for 2 minutes), lists who else has it open and warns when someone has a reply not sent yet; `leave` takes it off the list | `conversations:read` |
 | `colliedesk_time_entries_list` | Lists the time logged on a conversation, with the total | `conversations:read`, `team:read` |
-| `colliedesk_attachment_get` | Reads an attachment: name, size, type, the text of a plain text file, and a PNG, JPEG, GIF or WebP image up to 2 MiB | `messages:read` |
+| `colliedesk_attachment_get` | Reads an attachment, or a file of a reply draft (with `conversation_id` and `draft_id`): name, size, type, the text of a plain text file, and a PNG, JPEG, GIF or WebP image up to 2 MiB | `ai_assist:read`, `messages:read` |
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `conversations:update`, `tags:create`, `tags:read`, `team:read` |
 | `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `conversations:update`, `tags:read`, `team:read` |
-| `colliedesk_note_add` | Adds a private note, with files if needed (up to 10, 5 MiB a call) | `messages:note` |
-| `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Takes files (up to 10, 5 MiB a call) and the `ai_draft_id` it was written from. Cannot be undone | `conversations:read`, `messages:note`, `messages:read`, `messages:send`, `team:read` |
+| `colliedesk_conversations_spam` | Moves up to 50 conversations into Spam with their senders (their later mail goes there too; no clock, not in Reports), or back where they were with `spam` false; all or nothing | `conversations:update` |
+| `colliedesk_note_add` | Adds a private note, with files if needed (up to 10, 5 MiB a call), and asks teammates in it | `messages:note` |
+| `colliedesk_note_mention` | Asks more teammates on a note you wrote; only the new ones are told | `messages:note` |
+| `colliedesk_mentions_list` | Lists the notes that ask you, unread first by default, with the unread count | `messages:read` |
+| `colliedesk_mentions_mark_read` | Marks your mentions read, or unread again: some, those on one conversation, or all | `messages:read` |
+| `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Takes files (up to 10, 5 MiB a call) and the `ai_draft_id` it was written from; without `ai_draft_file_ids` every file of that draft is sent. Cannot be undone | `conversations:read`, `messages:note`, `messages:read`, `messages:send`, `team:read` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `messages:send` |
 | `colliedesk_conversation_create` | Opens a conversation with a customer; sends nothing | `messages:send` |
 | `colliedesk_conversation_start` | Opens a conversation and emails its first message to the customer in one step, for a customer found or one added with it (`new_contact`); nothing is stored if the email is refused. Takes files (up to 10, 5 MiB a call). Cannot be undone | `messages:read`, `messages:send` |
@@ -127,6 +180,19 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `kb_media:create` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `kb_media:update` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `help_center:read` |
+| `colliedesk_help_center_languages_get` | Lists the help center's languages, which are shown to customers, and how many articles are translated, outdated and missing in each | `help_center:read` |
+| `colliedesk_help_center_languages_set` | Sets the help center's languages besides the primary one, and which of them customers see | `help_center:update` |
+| `colliedesk_kb_translations_list` | Lists the articles missing, outdated or translated in one language | `kb_articles:read` |
+| `colliedesk_kb_translations_trash` | Lists the translations in the trash | `kb_articles:read` |
+| `colliedesk_kb_translation_create` | Adds an article's version in another language of the help center | `kb_articles:create` |
+| `colliedesk_kb_translation_get` | Reads a translation with its text and the article it translates | `kb_articles:read` |
+| `colliedesk_kb_translation_update` | Changes, publishes or unpublishes a translation, or marks it up to date or outdated | `kb_articles:update` |
+| `colliedesk_kb_translation_delete` | Moves a translation to the trash for 30 days | `kb_articles:delete` |
+| `colliedesk_kb_translation_undelete` | Takes a translation out of the trash | `kb_articles:delete` |
+| `colliedesk_kb_translation_history` | Lists the versions of a translation | `kb_articles:read` |
+| `colliedesk_kb_translation_version_restore` | Makes an earlier version of a translation current again | `kb_articles:update` |
+| `colliedesk_kb_collection_translation_set` | Sets a collection's name and description in another language | `kb_articles:update` |
+| `colliedesk_kb_collection_translation_delete` | Removes a collection's name in one language | `kb_articles:update` |
 | `colliedesk_help_center_theme_get` | Reads the public help center's logo, colors, fonts, custom CSS and links | `help_center:read` |
 | `colliedesk_help_center_theme_check` | Checks a candidate brand, custom CSS and color contrast without saving it; can render a page preview | `help_center:read` |
 | `colliedesk_help_center_search_console_get` | Reads the Google and Bing Search Console verification tokens of the help center | `help_center:read` |
@@ -134,9 +200,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_help_center_domain_get` | Reads the custom domain, its DNS records and the last check | `help_center:read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any token |
 | `colliedesk_docs_search` | Searches these user guides | any token |
-| `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself and carries no files | `ai_assist:create` |
+| `colliedesk_reply_draft` | Leaves a reply draft, with files if needed (up to 10, 5 MiB a call), that a person edits, sends or discards; never emails by itself. A new draft goes on top and the earlier one stays | `ai_assist:create` |
+| `colliedesk_reply_draft_restore` | Brings an earlier written draft (replaced, expired or discarded) back above the reply box, with its files | `ai_assist:create` |
 | `colliedesk_workspace_export` | Gives a one-time download link of a workspace export | `workspace:export` |
 | `colliedesk_billing_action` | Starts a plan checkout or opens the billing portal for the person to pay, or requests a Freshdesk data migration | `billing:manage` |
+| `colliedesk_trial_offer_accept` | Reads or accepts a trial offer link an operator sent: the trial then ends 14 days from that moment | `billing:manage` |
 | `colliedesk_email_channel_disconnect` | Disconnects the default email channel. Cannot be undone | `channels:manage_credentials` |
 | `colliedesk_email_secret_rotate` | Gives an email channel a new inbound secret, shown once. Cannot be undone | `channels:manage_credentials` |
 | `colliedesk_gmail_connect` | Starts connecting Gmail for sending replies; the person behind the token agrees on Google's page | `channels:manage_credentials` |
@@ -149,6 +217,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_response_targets_get` | Reads the business hours and the response targets by priority | `conversations:read` |
 | `colliedesk_response_targets_set` | Changes the business hours or the response targets | `workspace:update` |
 | `colliedesk_my_sla_alerts_set` | Turns your own reminder and overdue emails on or off | `profile:update` |
+| `colliedesk_my_mention_email_set` | Turns your own mention emails on or off | `profile:update` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | any token |
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | any token |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `workspace:update` |
@@ -232,7 +301,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_message_move_undo` | Undoes a move of customer messages | `conversations:update` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `ai_assist:create` |
 | `colliedesk_ai_draft_get` | Shows an AI draft, waiting up to 20 seconds while it is written | `ai_assist:read` |
-| `colliedesk_ai_drafts_list` | Lists a conversation's newest AI drafts | `ai_assist:read` |
+| `colliedesk_ai_drafts_list` | Lists a conversation's drafts in pages (`before`, `limit`), the AI's and the written ones, with their files; earlier written ones can be restored | `ai_assist:read` |
 | `colliedesk_ai_draft_discard` | Stops an AI draft being written or discards a ready one | `ai_assist:create` |
 | `colliedesk_ai_triage_get` | Shows a conversation's newest [AI triage suggestion](ai.md#triage-suggestions): tags, priority, assignee and a reason | `ai_assist:read` |
 | `colliedesk_ai_triage_create` | Asks for a triage suggestion again | `ai_assist:create` |
@@ -242,9 +311,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_results_get` | Shows the [results page](results.md): your numbers for the last 30 and 7 days next to the history you imported | `results:read` |
 | `colliedesk_results_share_link_get` | Shows whether the results page has an active share link, who made it and when it was last opened; never the link itself | `results:share` |
 | `colliedesk_results_share_link_create` | Creates a share link of the results page; the old link stops working | `results:share` |
-| `colliedesk_results_share_link_revoke` | Turns off the results page's share link | `results:share` |
+| `colliedesk_results_share_link_revoke` | Turns off the results page's share link. Cannot be undone | `results:share` |
 | `colliedesk_results_email_set` | Turns your weekly results email on or off (admins only) | `profile:update` |
-| `colliedesk_setup_progress_get` | Shows the four getting-started steps (email, import, invite, first reply) and where each stands | `conversations:read` |
+| `colliedesk_setup_progress_get` | Shows the six getting-started steps by name (email, import, AI drafts, reply targets, invite, first reply), where each stands, and the reply targets presets | `conversations:read` |
 | `colliedesk_setup_guide_set` | Hides the [setup guide](setup-guide.md) from your inbox, or shows it again | `profile:update` |
 | `colliedesk_channels_list` | Lists the channels with their state and the channel types the server runs | `channels:read` |
 | `colliedesk_channels_get` | Shows one channel and its configuration | `channels:read` |
@@ -281,10 +350,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_coding_agent_disable` | Turns off a coding agent for Autofix; fixes not sent yet are cancelled, fixes already sent go on | `autofix_settings:update` |
 | `colliedesk_coding_agent_check` | Checks a coding agent: the GitHub App and private repositories, or Cursor's key and its repositories | `autofix_settings:read` |
 | `colliedesk_cursor_key_set` | Sets the Cursor key Autofix sends fixes with, after Cursor accepts it. The key passes through the conversation | `autofix_settings:manage_credentials` |
-| `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again | `autofix_settings:manage_credentials` |
+| `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again. Cannot be undone | `autofix_settings:manage_credentials` |
 <!-- /generated -->
 
-Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the
+Tools marked "Cannot be undone" carry the MCP `destructiveHint: true` (every other tool states `false`), and their descriptions tell the
 model to show you what it will do and wait for your yes, unless you already asked for exactly that.
 Many clients also ask you before such a call.
 
@@ -344,8 +413,9 @@ approves it in the console with their authenticator code.
   too, author name included.
 - **Attachments.** `colliedesk_attachment_get` returns the text of a plain UTF-8 text file, cut
   after 20,000 characters, and a PNG, JPEG, GIF or WebP image of at most 2 MiB as an image the
-  model can look at (`image: false` leaves it out). The type is judged from the bytes, never from
-  the file name; an SVG is text, never an image. Any other file (a PDF, an archive, a larger image)
+  model can look at (`image: false` leaves it out). A larger image comes back as a preview of at
+  most 320 pixels, the thumbnail the web app shows, and the hint says so. The type is judged from the
+  bytes, never from the file name; an SVG is text, never an image. Any other file (a PDF, an archive)
   comes back as its name, size, SHA-256 and detected type only: open it in the web app. The file
   name and text are customer text. **An image cannot be marked as customer text:** whatever it
   shows (a screenshot of instructions, text in a photo) reaches the model as it is. The tool
@@ -370,6 +440,9 @@ approves it in the console with their authenticator code.
 
 ## Limits and errors
 
+- Every tool call writes one line to the server log with the workspace, the tool, the kind of token and
+  how the call ended, never its arguments or answer. The line stays on the server; see
+  [which MCP tools an AI app called](../self-host/troubleshooting.md#see-which-mcp-tools-an-ai-app-called).
 - A locked workspace (hosted cloud, trial over, nothing paid) answers every tool except `whoami` and
   `docs_search`, which read no workspace data, with a message that only exporting data works.
 - A conversation id from another workspace answers "No conversation <id> in this workspace".
@@ -388,6 +461,11 @@ approves it in the console with their authenticator code.
 - `colliedesk_conversations_bulk_update` is all or nothing: if one id is not a conversation of the
   workspace, nothing changes. It takes only existing tag names and cannot set priority; use
   `colliedesk_conversation_update` for those.
+- `colliedesk_conversations_spam` with `spam: true` files junk in [Spam](inbox.md#spam) and marks its
+  senders; `spam: false` (Not spam) puts each conversation back in the status it had. A conversation in
+  Spam keeps its status: `colliedesk_conversation_update` and `colliedesk_conversations_bulk_update`
+  refuse to change it and say to take it out first. `colliedesk_inbox_search` with `status: "spam"` lists
+  them.
 - A status set with `colliedesk_conversation_update` or `colliedesk_conversations_bulk_update` on a
   conversation whose chat channel has words for it [tells the customer](inbox.md#telling-the-customer); that
   change needs `messages:send`, and without it the call is refused and names the channel.

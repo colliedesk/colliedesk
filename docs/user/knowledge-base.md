@@ -6,15 +6,16 @@ help center while an admin has it turned on; a draft is seen only by agents. Eve
 a version you can restore, and a deleted article or collection waits in a trash for 30 days. AI
 agents can do the same (see [AI agents](#ai-agents)).
 
-Open it from **Knowledge** in the left rail (on a phone, in the bar at the top). Moving from
+Open it from **Knowledge base** in the sidebar (on a phone, in the bar at the top). Moving from
 Freshdesk? `collie import freshdesk` brings your Freshdesk knowledge base over with its collections,
 dates and images; see [Import from Freshdesk](import-freshdesk.md#knowledge-base).
 
 ## Collections
 
 A collection groups articles, like a Freshdesk category, folder and subfolder: collections go three
-levels deep. Every article belongs to one collection, so a new knowledge base starts by asking for
-one, for example "Getting started".
+levels deep. Every article has a home collection, so a new knowledge base starts by asking for
+one, for example "Getting started". An article can also be listed in more collections; see
+[Several collections](#several-collections).
 
 - **Add**: select **New collection**, type a **Name** (and a description if you like), choose where it
   goes under **Inside** (asked once there is a collection to put it in), then **Create collection**. To add one inside the collection you are looking
@@ -50,6 +51,34 @@ before, Colliedesk takes their change into account and moves yours again; if tha
 says so and nothing changes. If someone else moved or deleted the very row you moved, the page says
 so and shows the list as it is now. The order is not part of an article's history, so restoring a
 version does not move an article.
+
+### Several collections
+
+One answer often belongs under two topics, for example "Get a VAT invoice" under both **Billing** and
+**Bookings**. Keep one article and list it in both, instead of two copies that drift apart.
+
+1. Open the article. In **Placement**, **Collections** shows its home collection, marked **Home**.
+2. Choose a collection in **Also list in…**. It appears as a row under the home.
+3. Select **Save**.
+
+The help center now lists the article in each of these collections. Every link opens the same
+address, `/a/<number>-<address name>`. Adding or removing a collection never changes that address.
+
+- **The home** gives the article's breadcrumb on the help center and its place when you order a
+  collection by hand. In the other collections the article comes after that collection's own
+  articles, by title. Choosing another home moves the article; if it was listed there already, it
+  is no longer an extra row.
+- **Remove** a collection with **×** on its row, then **Save**. Only that listing goes; the article,
+  its address and its other collections stay.
+- **Search, sitemap.xml, llms.txt and AI answers** return the article once, at its address.
+- **The articles list** of a collection in Colliedesk shows the articles whose home it is. The
+  number next to a collection counts those too.
+- **Delete a collection** that an article is only listed in: the article stays in its home and
+  leaves that list. Restore the collection from the trash and the article is listed there again.
+  A collection that is still the home of an article cannot be deleted, as before.
+- **Import**: the Freshdesk import brings each article into one collection, as Freshdesk has it.
+- **AI agents** do the same with `collection_ids` (the home first) on `colliedesk_kb_article_create`
+  and `colliedesk_kb_article_update`; every article answer carries `collection_ids`.
 
 ## Find an article
 
@@ -89,7 +118,7 @@ Every action on an article is in the bar at the top: **Save**, **Publish** for a
 **Delete article…**. The column on the right only shows the article's **Visibility** (with **Turn on
 help center** while it is off), the images that still need alt text, and its **Placement**
 (collection and address name). On a phone the bar is at the bottom of the screen: the status,
-**Details** (visibility, alt text, collection, address), **⋯** and **Save**.
+**Details** (visibility, alt text, collections, address), **⋯** and **Save**.
 
 **Write** shows the Markdown, **Preview** shows how the article reads, and **Side by side** (in a wide
 window) shows both. A wide window opens an article side by side, unless it is longer than 20,000
@@ -289,34 +318,94 @@ an article by surprise. Save or undo your own changes first.
 ## Keep an article away from AI
 
 AI features (reply drafts and triage suggestions, once an admin turns them on) find the published
-articles that fit a conversation by themselves, in every language an article has, and quote them;
-nobody has to sort the knowledge base for AI. A draft, an article in the trash and an internal note
-of a conversation are never read.
+articles that fit a conversation by themselves, in their own language and in each published
+[translation](#translations), and quote them; nobody has to sort the knowledge base for AI. A draft
+(of an article or of a translation), anything in the trash and an internal note of a conversation
+are never read.
 
 To keep one published article away from AI, open it and select **Exclude from AI** under **Used by
-AI**. From then on drafts and suggestions skip it in every language; people and the help center
+AI** (on the right; on a phone, under the text). From then on drafts and suggestions skip it in every language; people and the help center
 still see it. The article says since when and by whom, and its history has the change. **Let AI use
 it again** undoes it. Neither changes the text, so an edit someone has open still saves. An agent
 token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`,
 `kb_articles:update`).
+
+## Translations
+
+A translation is the same article in another language, not a new article: it has the article's
+number, collection and place, and its own title, text, address name, search title and description,
+status (draft or published) and [history](#history). Customers see a translation only while it is
+published, its article is published, and its language is shown.
+
+### Languages
+
+**Knowledge base → Languages** lists the help center's languages. The primary language is the one
+the articles are written in (set it with the help center's **Language** in
+[Help center settings](#help-center-settings)). Add another language with its code (`fr`, `de`,
+`pt-BR`); it starts **hidden**, so you can translate first and show it when it is ready. Tick
+**Shown to customers** to show it, untick it to hide it again; nothing is deleted either way. The
+arrows set the order of the language menu. A language that still holds translations or collection
+names, in the trash too, cannot be removed: hide it, or delete what is written in it first.
+
+Each language says how many articles are published, drafts, **not translated** and **outdated** in
+it. Select a count to list those articles; each opens its translation.
+
+### Translate an article
+
+Open an article: **Translations** in its sidebar lists every language with the translation's status,
+**Outdated** when the article changed since, or **Not translated**. Select a language to open the
+translation beside the original (side by side on a wide screen, one above the other on a phone).
+A new translation starts empty; **Start from the original text** copies the article's text to
+translate over it. **Save translation** keeps it as a draft; **Publish** puts it on the help center
+once the language is shown. Steps: open the article, select the language, write, Publish (4).
+
+### Outdated translations
+
+When the article's own title or text changes (an edit, a version restored, a newer import), its
+translations are marked **Outdated**; changing the article's collection, status or images does not.
+Open the translation, bring it up to date, tick **Mark as up to date with the original** and save,
+or select the same button without changing the text. **Mark as outdated** sets it back. Both are
+versions of the translation, so its history says who did it.
+
+### Collection names
+
+On a collection, **Names in other languages** sets its name and description in each language. A
+language without one shows the primary name. **Remove** takes it away; a name an import brought in
+comes back with the next run of that import.
+
+### History and trash
+
+**Version history** and **Delete translation** are on the translation's page. A deleted translation
+goes to the [trash](#trash) for 30 days with its history; the article stays. While it is there the
+article cannot get a new translation in that language: restore it instead.
+
+### Imported translations
+
+A [Freshdesk import](import-freshdesk.md#knowledge-base) brings every translation with its status,
+search title and description, the categories' and folders' names in each language, and the
+languages: shown when the Freshdesk portal showed them, hidden otherwise. An import never changes a
+language you already set, nor a translation someone edited in Colliedesk.
 
 ## Trash
 
 Select **Trash** at the top of the articles to see deleted articles and collections. Each shows who deleted it and how many days
 are left; after 30 days it is deleted for good, with its history. **Restore** brings it back as it
 was: a published article is published again. Restore a collection before the articles that were in
-it. Articles in the trash count toward the 2,000 articles a workspace can hold.
+it. Deleted translations are listed there too. Articles in the trash count toward the 2,000 articles a workspace can hold.
 
 ## Help center settings
 
-Open **Settings → Help center**. Everyone with `help_center:read` (Agent and Admin hold it) sees whether the help center is on. An admin can turn
+Open **Knowledge base → Settings**. It needs only
+`help_center:read` (Agent and Admin hold it), not the articles' permission: a role without
+`kb_articles:read` still finds the **Settings** tab beside **Media**, and Knowledge base in the sidebar opens it when the
+role reads neither articles nor media. Everyone who opens it sees whether the help center is on. An admin can turn
 it on or off with **Publish the help center** and set its **Title** (empty uses the workspace name).
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
 published.
 
 ### Brand
 
-An admin sets the help center's brand in **Settings → Help center → Brand**, through the API
+An admin sets the help center's brand in **Knowledge base → Settings → Brand**, through the API
 (`PUT /api/v1/help-center/theme`) or an AI agent (`colliedesk_help_center_theme_update`). Every page
 shows it on the next visit (see [what visitors see](#what-visitors-see)). Agents who are not admins
 see the saved brand and its preview, without the controls. A brand has:
@@ -411,11 +500,11 @@ Images and fonts of your own are not possible this way. Use the logo, the favico
 
 The help center is a public website made from your published articles. Customers read it without
 signing in, on Colliedesk Cloud and on your own server alike. It is off until an admin turns it on
-in **Settings → Help center** (see [Help center settings](#help-center-settings)).
+in **Knowledge base → Settings** (see [Help center settings](#help-center-settings)).
 
 ### Its address
 
-**Settings → Help center** shows the address as a link, even while the help center is off; the API
+**Knowledge base → Settings** shows the address as a link, even while the help center is off; the API
 (`GET /api/v1/help-center`) and `colliedesk_help_center_get` give it in `url`.
 
 - **Colliedesk Cloud:** `/help` on your workspace's own address, `https://<workspace address name>.colliedesk.com/help`.
@@ -435,10 +524,36 @@ of address names, `/c/billing/cards`; changing one is not redirected. Addresses 
 see [Old help center links](import-freshdesk.md#old-help-center-links). **Changing the workspace
 address name** (Settings → Email) changes every help center address, and old links stop working.
 
+### In other languages
+
+Each language you show (see [Languages](#languages)) has the same pages below its code:
+`<help center address>/fr/`, `/fr/a/12-<French address name>`, `/fr/c/billing` and `/fr/search`. The
+primary language keeps the addresses it always had; `/<primary code>/...` leads to them. A language's
+pages show only the articles published in it (with their collections' names in that language), and
+its search searches only its translations. An article not published in that language yet leads to
+the article in the primary language.
+
+- **Language menu.** The header of every page lists every language you show, in your order. Each
+  opens this page in that language, or that language's home where the page is not translated yet.
+  A language with nothing published yet has a home that says so and links the primary language;
+  search engines are told only about the pages that exist.
+- **Browser language.** A visitor who opens the help center's home page with a browser set to a
+  language you show (or a close one: `fr-CA` for `fr`) moves to that language's home. Other pages,
+  links and search engines are never moved; choosing the primary language in the menu keeps it.
+- **Words of the help center** (Search, Home, Updated, Previous…) are in the page's language for
+  English, French, German, Spanish, Italian, Portuguese (also of Brazil), Dutch, Japanese, Simplified
+  Chinese, Korean, Vietnamese, Polish, Swedish and Russian, and in English for any other; so is the
+  "Ask AI" link to the help chat. The chat window's own words are still in English. Editing them is
+  not possible yet.
+- **Old Freshdesk links in a language** (`/fr/support/solutions/articles/<id>`) lead to the
+  translation once it is published in that language, and to the article otherwise.
+- The [AI chat](ai-chat.md) on a page of a language answers from that language's published
+  translations and links their pages.
+
 ### Custom domain
 
 The help center can answer on an address of your own domain, such as `help.example.com`. Open
-**Settings → Help center → Custom domain**. Everyone with `help_center:read` sees the domain and its state; an admin sets,
+**Knowledge base → Settings → Custom domain**. Everyone with `help_center:read` sees the domain and its state; an admin sets,
 checks and removes it.
 
 1. Type the host name in **Host name** and press **Set domain**. The card then shows the DNS records
@@ -578,12 +693,14 @@ domain, or `/help/<slug>` on a server without a help center domain). Everything 
 address, never the app's address or another workspace's:
 
 - Every page has a canonical link, `og:url` and an `hreflang` link for the help center's language
-  (and `x-default`). Every other address of a page, such as a trailing slash, `?page=1`, a tracking
+  (and `x-default`); a page that exists in other languages links each of them (`hreflang`), and
+  `x-default` is the primary language's. Every other address of a page, such as a trailing slash, `?page=1`, a tracking
   query (`?utm_source=…`), an old article slug or the slug host after a custom domain is active,
   answers **301** to the canonical address, so search engines never see the same page twice.
 - `robots.txt` (on a host of its own) allows crawlers and names the sitemap.
 - `sitemap.xml` lists the home page, every collection that shows something and every published
-  article with the date it last changed.
+  article with the date it last changed; with other languages shown, also each of their pages, every
+  page with its versions in the other languages.
 - `llms.txt` lists the published articles by collection, for AI assistants, each with a link to its
   Markdown.
 - Every article's address followed by `.md` (`/a/12-reset-your-password.md`) is the article as
@@ -600,7 +717,7 @@ Both tools offer a verification by HTML tag. Copy only the `content` value of th
 - Google: the tag is `<meta name="google-site-verification" content="…">`.
 - Bing: the tag is `<meta name="msvalidate.01" content="…">`.
 
-Open **Settings → Help center → Search Console**, paste each value into its field and press **Save**.
+Open **Knowledge base → Settings → Search Console**, paste each value into its field and press **Save**.
 The help center then puts the tag in the head of every page of this workspace, on its own address
 (its host or its custom domain). The app and every other workspace's help center never carry it.
 Then press **Verify** in Search Console or Bing.
@@ -644,7 +761,7 @@ edit both before you send. `Ctrl+Z` (`Cmd+Z`) takes the link back out.
 
 The list shows only published articles, and only while the help center is on: while it is off no
 article has a public page, so the list says so instead. An admin gets **Open help center
-settings**, which opens Settings in a new tab, so your draft stays; an agent asks an admin. The list
+settings**, which opens Knowledge base → Settings in a new tab, so your draft stays; an agent asks an admin. The list
 asks again each time it opens, so an article published or a help center turned on a moment ago
 shows up.
 
@@ -672,6 +789,15 @@ no article uses and which have no alt text, and can name, describe or keep them
 the `kb_media:*` permissions below. Deleting forever (`colliedesk_kb_media_purge`) needs `kb_media:purge`.
 An agent uploads a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets
 its poster (`colliedesk_kb_video_poster_set`) with `kb_media:create` and `kb_media:update`.
+An agent translates with the same permissions as articles: `colliedesk_help_center_languages_get`
+names the languages and what is missing or outdated in each, `colliedesk_kb_translations_list` lists
+those articles, `colliedesk_kb_translation_get` reads a translation and its original in one call,
+`colliedesk_kb_translation_create` and `colliedesk_kb_translation_update` write one (`outdated`
+false marks it up to date in the same call), and `_delete`, `_undelete`, `_history`,
+`_version_restore` and `colliedesk_kb_collection_translation_set` / `_delete` do the rest.
+`colliedesk_help_center_languages_set` adds, orders, shows and hides languages (`help_center:update`,
+and `kb_articles:publish` to show or hide one). Translating one missing article takes three calls:
+list, read the article, create.
 
 Each action needs its permission, and happens at once; the version names the token. Without it the
 call is refused and names what is missing ([Roles and permissions](roles-and-permissions.md)).
@@ -683,7 +809,8 @@ call is refused and names what is missing ([Roles and permissions](roles-and-per
 | Delete and restore from the trash | `kb_articles:delete` |
 | Anything that changes the public help center (publish, edit or trash a published article, a published collection) | `kb_articles:publish` as well |
 | Upload, name, replace, trash images and videos | `kb_media:create`, `kb_media:update`, `kb_media:delete` |
-| Turn the help center on or off | `help_center:update` |
+| Turn the help center on or off, add or order its languages | `help_center:update` |
+| Show or hide a language | `help_center:update` and `kb_articles:publish` |
 | Set its theme, search console tokens and custom domain | `help_center:update` and `kb_articles:publish` |
 
 ## Limits
@@ -695,4 +822,4 @@ call is refused and names what is missing ([Roles and permissions](roles-and-per
   200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
 - Collections go three levels deep.
 - Search does not find a part in the middle of a word, nor words in text written without spaces.
-- Translations an import brings in are kept and exported, but not shown or edited yet.
+- 40 languages besides the primary one; one translation per article and language.

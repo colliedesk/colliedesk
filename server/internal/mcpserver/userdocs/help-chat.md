@@ -5,7 +5,7 @@ articles**, and lets them hand the chat to your team. It needs two things turned
 
 1. A **Help chat** channel in **Settings → Channels** (admins): what the chat says first, the questions
    it offers, what you add to the AI's instructions, and the sites that may embed it.
-2. The **AI chat** feature in **Settings → Built-in AI** (admins): which provider and model answer. See
+2. The **AI chat** feature in **Settings → AI & agents** (admins): which provider and model answer. See
    [AI chat](ai-chat.md) for what the AI does, its limits and the transcripts.
 
 While either is off, the chat answers `404`, the same as a help center that is off, and no page shows
@@ -33,6 +33,30 @@ says it needs attention because the help center shows no chat.
   link it opens works once, for 2 minutes.
 
 Without JavaScript the chat page says so and links to the article search; the articles never need it.
+
+## Languages
+
+The chat's own words (its buttons, the box's hint, its notices and the **Talk to a person** form) are
+in the language of the page around it, in the languages the help center's own words come in (English,
+French, German, Spanish, Italian, Portuguese, Brazilian Portuguese, Dutch, Japanese, simplified
+Chinese, Korean, Vietnamese, Polish, Swedish and Russian; any other in English):
+
+- **An article's chat box** and the **Ask AI** link: the language of the page. On the pages of a
+  [language you show](knowledge-base.md#in-other-languages) (`/fr/…`), the chat is in that language;
+  on your primary language's pages, in your primary language.
+- **The chat page**: your primary language, or the shown language of its `?lang=` (the **Ask AI**
+  link of a `/fr/` page adds `?lang=fr`).
+- **Your own site**: your primary language. To show the button and the chat in a language you show,
+  add `data-lang` to the code:
+
+  ```html
+  <script src="https://acme.colliedesk.com/chat/widget.js" data-channel="<channel id>" data-lang="fr" async></script>
+  ```
+
+  A `data-lang` that is not a language you show (or one you hid) falls back to your primary language.
+
+Your greeting and suggested questions show as you wrote them. The AI answers in the language of the
+question, whatever the page's language ([AI chat](ai-chat.md)).
 
 ## Set it up
 

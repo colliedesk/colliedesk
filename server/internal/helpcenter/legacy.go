@@ -2,6 +2,8 @@ package helpcenter
 
 import (
 	"context"
+	"errors"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -127,34 +129,51 @@ func (s *Site) legacy(response http.ResponseWriter, request *http.Request, v vie
 func (s *Site) legacyTarget(ctx context.Context, v view, old LegacyAddress, term string) (string, int, error) {
 	switch old.Kind {
 	case LegacyHome:
-		return v.address, http.StatusMovedPermanently, nil
+		return v.rootAddress, http.StatusMovedPermanently, nil
 	case LegacySearch:
 		return v.searchAddress(term), http.StatusFound, nil
 	case LegacyOther:
-		return v.address, http.StatusFound, nil
+		return v.rootAddress, http.StatusFound, nil
 	}
 	found, err := s.config.Store.HelpCenterLegacyTarget(ctx, v.site.WorkspaceID, old.Entity(), old.ID)
 	if err != nil {
 		return "", 0, err
 	}
 	switch {
+	// An old address in a language (/fr/support/...) whose page is published and shown in it goes to
+	// that language's page, else to the primary language's, as it always did.
+	case found.Number > 0 && v.lang != "":
+		translated, err := s.config.Store.HelpCenterArticleIn(ctx, v.site.WorkspaceID, found.Number, v.lang)
+		if err == nil {
+			return v.rootAddress + ArticlePath(found.Number, translated.Slug), http.StatusMovedPermanently, nil
+		}
+		if !errors.Is(err, domain.ErrKBArticleNotFound) {
+			return "", 0, err
+		}
+		return v.address + ArticlePath(found.Number, found.Slug), http.StatusMovedPermanently, nil
 	case found.Number > 0:
 		return v.address + ArticlePath(found.Number, found.Slug), http.StatusMovedPermanently, nil
 	case found.CollectionID != "":
-		t, err := s.loadTree(ctx, v)
-		if err != nil {
-			return "", 0, err
-		}
-		if n := t.byID[found.CollectionID]; n != nil && n.total > 0 {
-			return v.address + n.path(), http.StatusMovedPermanently, nil
+		for _, lang := range []string{v.lang, ""} {
+			in := v.in(lang)
+			t, err := s.loadTree(ctx, in)
+			if err != nil {
+				return "", 0, err
+			}
+			if n := t.byID[found.CollectionID]; n != nil && n.total > 0 {
+				return in.rootAddress + n.path(), http.StatusMovedPermanently, nil
+			}
+			if lang == "" {
+				break
+			}
 		}
 	}
 	return v.searchAddress(old.Words), http.StatusFound, nil
 }
 
-// searchAddress is the help center's search for words, or its home page without any.
+// searchAddress is the help center's search for words, or its home page without any, in the view's language.
 func (v view) searchAddress(words string) string {
-	return v.address + SearchPath(words)
+	return v.rootAddress + SearchPath(words)
 }
 
 // SearchPath is the path, below a help center's address, of its search for words (cleaned and

@@ -14,16 +14,28 @@ const changeFields = {
   agent_request_id: z.string().uuid().nullable(), created_at: z.string().datetime(),
 };
 const changeSchema = z.object(changeFields) satisfies z.ZodType<Generated<'KBArticleChange'>>;
+const collectionNameSchema = z.object({
+  locale: z.string(), name: z.string(), description: z.string(), imported: z.boolean(), updated_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'KBCollectionTranslation'>>;
 const collectionFields = {
   id: z.string().uuid(), parent_id: z.string().uuid().nullable(), name: z.string(), slug: z.string(), description: z.string(),
   position: z.number().int(), article_count: z.number().int(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 };
-export const kbCollectionSchema = z.object(collectionFields) satisfies z.ZodType<Generated<'KBCollection'>>;
+export const kbCollectionSchema = z.object({ ...collectionFields, translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
 const trashedCollectionSchema = z.object({
-  ...collectionFields, deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
+  ...collectionFields, translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBCollection'>>;
+const translationChangeSchema = z.object({
+  ...changeFields, kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'mark_current', 'mark_outdated']),
+}) satisfies z.ZodType<Generated<'KBTranslationChange'>>;
+const translationSummaryFields = {
+  article_id: z.string().uuid(), locale: z.string(), title: z.string(), slug: z.string(), status: statusSchema, published_at: nullableDate,
+  outdated: z.boolean(), outdated_at: nullableDate, created_at: z.string().datetime(), updated_at: z.string().datetime(), in_trash: z.boolean(),
+  last_change: translationChangeSchema.nullable(), url: z.string(),
+};
+const translationSummarySchema = z.object(translationSummaryFields) satisfies z.ZodType<Generated<'KBTranslationSummary'>>;
 const summaryFields = {
-  id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), position: z.number().int(), title: z.string(), slug: z.string(), status: statusSchema,
+  id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), collection_ids: z.array(z.string().uuid()).min(1), position: z.number().int(), title: z.string(), slug: z.string(), status: statusSchema,
   published_at: nullableDate, author_agent_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   last_change: changeSchema.nullable(), url: z.string(),
 };
@@ -33,8 +45,37 @@ export const kbArticleSchema = z.object({
   ai_exclusion: z.object({ at: z.string().datetime(), by: personSchema.nullable() }).nullable(),
   // Only when one article is read: the AI reply drafts this month that used it.
   ai_drafts_this_month: z.number().int().optional(),
-  translations: z.array(z.object({ locale: z.string(), title: z.string(), body_md: z.string(), updated_at: z.string().datetime() })),
+  translations: z.array(translationSummarySchema),
 }) satisfies z.ZodType<Generated<'KBArticle'>>;
+export const kbTranslationSchema = z.object({
+  ...translationSummaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), has_source_html: z.boolean(), deleted_at: nullableDate,
+  language_visible: z.boolean(), missing_media: z.array(z.string().uuid()).optional(),
+  original: z.object({
+    id: z.string().uuid(), number: z.number().int(), locale: z.string(), title: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(),
+    status: statusSchema, collection_id: z.string().uuid(), collection_name: z.string(), version: z.number().int(), updated_at: z.string().datetime(),
+  }),
+}) satisfies z.ZodType<Generated<'KBArticleTranslation'>>;
+const trashedTranslationSchema = z.object({
+  ...translationSummaryFields, article_title: z.string(), article_number: z.number().int(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(),
+  purges_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'TrashedKBTranslation'>>;
+const translationVersionSchema = z.object({
+  ...changeFields, kind: translationChangeSchema.shape.kind, title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), status: statusSchema,
+}) satisfies z.ZodType<Generated<'KBTranslationVersion'>>;
+const languageItemSchema = z.object({
+  article_id: z.string().uuid(), number: z.number().int(), title: z.string(), status: statusSchema, collection_id: z.string().uuid(), collection_name: z.string(),
+  updated_at: z.string().datetime(), translation: translationSummarySchema.nullable(),
+}) satisfies z.ZodType<Generated<'KBLanguageItem'>>;
+export const helpCenterLanguagesSchema = z.object({
+  primary: z.string(),
+  languages: z.array(z.object({
+    locale: z.string(), visible: z.boolean(), position: z.number().int(), published: z.number().int(), drafts: z.number().int(), outdated: z.number().int(), missing: z.number().int(),
+  })),
+  unlisted: z.array(z.string()),
+}) satisfies z.ZodType<Generated<'HelpCenterLanguages'>>;
+const languagePageSchema = z.object({ items: z.array(languageItemSchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<JsonResponse<'listKBLanguage', 200>>;
+const trashedTranslationPageSchema = z.object({ items: z.array(trashedTranslationSchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<JsonResponse<'listTrashedKBTranslations', 200>>;
+const translationVersionPageSchema = z.object({ items: z.array(translationVersionSchema), next_before_version: z.number().int().nullable() }) satisfies z.ZodType<JsonResponse<'listKBTranslationVersions', 200>>;
 const trashedArticleSchema = z.object({
   ...summaryFields, deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBArticle'>>;
@@ -70,9 +111,16 @@ export type KBArticleStatus = z.infer<typeof statusSchema>;
 export type KBCollectionChange = Omit<RequestBody<'updateKBCollection'>, 'updated_at'>;
 export type KBArticleChange = Omit<RequestBody<'updateKBArticle'>, 'updated_at'>;
 export type KBOrder = z.infer<typeof orderSchema>;
+export type KBTranslationSummary = z.infer<typeof translationSummarySchema>;
+export type KBTranslation = z.infer<typeof kbTranslationSchema>;
+export type KBTranslationVersion = z.infer<typeof translationVersionSchema>;
+export type KBLanguageItem = z.infer<typeof languageItemSchema>;
+export type HelpCenterLanguages = z.infer<typeof helpCenterLanguagesSchema>;
+export type KBLanguageState = 'missing' | 'outdated' | 'translated';
 
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
-  | 'restoreKBArticleVersion' | 'putHelpCenter' | 'setKBOrder';
+  | 'restoreKBArticleVersion' | 'putHelpCenter' | 'setKBOrder' | 'putHelpCenterLanguages' | 'createKBTranslation' | 'updateKBTranslation' | 'restoreKBTranslation'
+  | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation';
 const json = <O extends Operation>(value: RequestBody<O>): string => JSON.stringify(value);
 
 // The calls that answer 204 carry no body.
@@ -125,5 +173,31 @@ export const kbApi = {
   // whose detail holds the lists as they are (order_stale).
   setOrder: (value: KBOrder) => request('/api/v1/kb/order', orderSchema, { method: 'PUT', body: json<'setKBOrder'>(value) }),
   helpCenter: () => request('/api/v1/help-center', helpCenterSchema),
+  // The help center's languages besides the primary one, in menu order, each shown or hidden.
+  languages: () => request('/api/v1/help-center/languages', helpCenterLanguagesSchema),
+  saveLanguages: (value: RequestBody<'putHelpCenterLanguages'>) => request('/api/v1/help-center/languages', helpCenterLanguagesSchema,
+    { method: 'PUT', body: json<'putHelpCenterLanguages'>(value) }),
+  // The live articles as one language sees them: missing, outdated or translated in it.
+  languageArticles: (locale: string, state: KBLanguageState, cursor?: string) => {
+    const filter = query({ locale, state, cursor });
+    return request(`/api/v1/kb/translations${filter}`, languagePageSchema);
+  },
+  trashedTranslations: (cursor?: string) => request(`/api/v1/kb/translations/trash${page(cursor)}`, trashedTranslationPageSchema),
+  translation: (id: string, locale: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}`, kbTranslationSchema),
+  createTranslation: (id: string, value: RequestBody<'createKBTranslation'>, key: string) => request(`/api/v1/kb/articles/${id}/translations`, kbTranslationSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createKBTranslation'>(value) }),
+  updateTranslation: (id: string, locale: string, value: RequestBody<'updateKBTranslation'>) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}`, kbTranslationSchema,
+    { method: 'PATCH', body: json<'updateKBTranslation'>(value) }),
+  deleteTranslation: (id: string, locale: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
+  // key names this press (Idempotency-Key): a repeat answers the first restore.
+  restoreTranslation: (id: string, locale: string, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/restore`, kbTranslationSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'restoreKBTranslation'>({ updated_at: updatedAt }) }),
+  translationVersions: (id: string, locale: string, beforeVersion?: number) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/versions${before(beforeVersion)}`,
+    translationVersionPageSchema),
+  restoreTranslationVersion: (id: string, locale: string, version: number, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/versions/${version}/restore`,
+    kbTranslationSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'restoreKBTranslationVersion'>({ updated_at: updatedAt }) }),
+  nameCollection: (id: string, locale: string, value: RequestBody<'putKBCollectionTranslation'>) => request(`/api/v1/kb/collections/${id}/translations/${encodeURIComponent(locale)}`,
+    kbCollectionSchema, { method: 'PUT', body: json<'putKBCollectionTranslation'>(value) }),
+  unnameCollection: (id: string, locale: string) => request(`/api/v1/kb/collections/${id}/translations/${encodeURIComponent(locale)}`, kbCollectionSchema, { method: 'DELETE' }),
   saveHelpCenter: (value: RequestBody<'putHelpCenter'>) => request('/api/v1/help-center', helpCenterSchema, { method: 'PUT', body: json<'putHelpCenter'>(value) }),
 };

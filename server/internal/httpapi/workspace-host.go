@@ -79,7 +79,13 @@ func (a *API) finishBrowserSignIn(response http.ResponseWriter, request *http.Re
 	result.Token = ""
 	result.ContinueURL = &address
 	clearSessionCookie(response)
-	setWorkspaceHint(response, result.Workspace.Slug)
+	// A person with another workspace is asked which one each time APP_ORIGIN opens, so no hint sends them
+	// into this one, and a hint left by an earlier sign-in goes.
+	if result.OtherWorkspaces {
+		clearWorkspaceHint(response)
+	} else {
+		setWorkspaceHint(response, result.Workspace.Slug)
+	}
 	return true
 }
 
@@ -148,12 +154,12 @@ func appPageLoad(request *http.Request) bool {
 		return false
 	}
 	path := request.URL.Path
-	for _, prefix := range []string{"/api/", "/assets/", "/help/"} {
+	for _, prefix := range []string{"/api/", "/assets/", "/help/", "/.well-known/"} {
 		if strings.HasPrefix(path, prefix) {
 			return false
 		}
 	}
-	return path != "/mcp" && path != "/help" && path != "/sign-in" && path != "/r" && !strings.Contains(path[strings.LastIndex(path, "/")+1:], ".")
+	return path != "/mcp" && path != "/oauth/token" && path != "/oauth/register" && path != "/help" && path != "/sign-in" && path != "/r" && !strings.Contains(path[strings.LastIndex(path, "/")+1:], ".")
 }
 
 // localPath is path when it is a path of this site ("/settings?tab=x"), else "": never an address that

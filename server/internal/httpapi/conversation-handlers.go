@@ -127,6 +127,7 @@ func (a *API) listConversations(response http.ResponseWriter, request *http.Requ
 	}
 	identity := principal(request)
 	filter.AgentID, filter.Page, filter.PageSize = identity.Agent.ID, page, pageSize
+	filter.Counts = query.Get("counts") == "true"
 	items, err := a.store.ListConversations(request.Context(), identity.Workspace.ID, filter)
 	if err != nil {
 		writeStoreError(response, err)
@@ -159,7 +160,7 @@ func (a *API) updateConversation(response http.ResponseWriter, request *http.Req
 	}
 	identity := principal(request)
 	quiet := input.Notify != nil && !*input.Notify
-	if a.refuseStatusThatTells(response, request, identity, []string{request.PathValue("id")}, input.Status, quiet) {
+	if invalidStatusChange(response, input.Status) || a.refuseStatusThatTells(response, request, identity, []string{request.PathValue("id")}, input.Status, quiet) {
 		return
 	}
 	item, err := a.store.UpdateConversation(request.Context(), identity.Workspace.ID, request.PathValue("id"), store.ConversationUpdate{

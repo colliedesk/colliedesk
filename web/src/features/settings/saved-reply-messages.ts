@@ -1,6 +1,6 @@
 // Strings of saved replies: their Settings section, history and trash, the reply box picker and the requests that propose a change. They load with those parts, not with the first screen.
 export const savedReplyMessages = {
-  savedRepliesDescription: 'Text your whole team inserts into a reply. Anyone can add, edit or delete them. {{customer.name}} and {{agent.name}} are filled in when a reply is inserted.',
+  savedRepliesDescription: 'Anyone can add, edit or delete them. {{customer.name}} and {{agent.name}} are filled in when a reply is inserted.',
   searchSavedReplies: 'Search saved replies',
   loadingSavedReplies: 'Loading saved replies…',
   savedRepliesFailed: 'Saved replies could not be loaded. Close this and try again.',
@@ -31,7 +31,7 @@ export const savedReplyMessages = {
   restoreSavedReplyName: (title: string) => `Restore ${title}`,
   savedReplyDaysLeft: (days: number) => (days === 1 ? '1 day left' : `${days} days left`),
   savedReplyDeletedBy: (person: string) => `Deleted by ${person}`,
-  savedReplyChangeVerb: { baseline: 'State before history', create: 'Created', edit: 'Edited', delete: 'Deleted', restore: 'Restored', undelete: 'Restored from the trash', import: 'Imported', media_replace: 'Replaced an image or video', ai_exclude: 'Excluded from AI', ai_include: 'Let AI use it again' } as const,
+  savedReplyChangeVerb: { baseline: 'State before history', create: 'Created', edit: 'Edited', delete: 'Deleted', restore: 'Restored', undelete: 'Restored from the trash', import: 'Imported', media_replace: 'Replaced an image or video', ai_exclude: 'Excluded from AI', ai_include: 'Let AI use it again', mark_current: 'Marked up to date', mark_outdated: 'Marked outdated' } as const,
   savedReplyRestoredVersion: (version: number) => `Version ${version} restored`,
   savedReplyChangeBy: (what: string, person: string) => `${what} by ${person}`,
   savedReplyChangeVia: (text: string, token: string) => `${text} via ${token}`,

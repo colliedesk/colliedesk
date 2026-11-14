@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { MessageItem } from './message-item';
 
@@ -89,6 +89,49 @@ test('the stored raw email stays out of the file list as before', () => {
   render(<MessageItem item={item} timezone="UTC" />);
   const names = Array.from(screen.getByRole('list', { name: /attachments/i }).querySelectorAll('a')).map((link) => link.textContent);
   expect(names).toEqual(['invoice.pdf']);
+});
+
+// Pictures, videos and voice clips show in the timeline: the stored media type decides, never the name (a chat
+// app names a photo "image-1"). Other files and types a browser must not draw (SVG) stay a row to download.
+test('an image shows as a lazy thumbnail by its media type, and a row still downloads the original', () => {
+  const onOpenMedia = vi.fn();
+  const item = { ...base, attachments: [file('a1', 'image-1', 'image/jpeg'), file('a2', 'invoice.pdf', 'application/pdf'), file('a3', 'logo.svg', 'image/svg+xml')] };
+  render(<MessageItem item={item} timezone="UTC" onOpenMedia={onOpenMedia} />);
+  const thumb = screen.getByRole('button', { name: 'Open image-1' });
+  const img = thumb.querySelector('img')!;
+  // The timeline shows the server's thumbnail, a few kilobytes, not the original.
+  expect(img).toHaveAttribute('src', '/api/v1/attachments/a1/thumbnail');
+  expect(img).toHaveAttribute('loading', 'lazy');
+  fireEvent.click(thumb);
+  expect(onOpenMedia).toHaveBeenCalledWith('a1');
+  expect(screen.getByRole('link', { name: 'image-1' })).toHaveAttribute('download', 'image-1');
+  expect(screen.queryByRole('button', { name: 'Open invoice.pdf' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Open logo.svg' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'logo.svg' })).toHaveAttribute('href', '/api/v1/attachments/a3');
+});
+
+test('a picture without a thumbnail shows the original, and one that cannot be drawn falls back to its download row', () => {
+  render(<MessageItem item={{ ...base, attachments: [file('a1', 'scan.webp', 'image/webp')] }} timezone="UTC" onOpenMedia={vi.fn()} />);
+  const img = screen.getByRole('button', { name: 'Open scan.webp' }).querySelector('img')!;
+  fireEvent.error(img);
+  expect(screen.getByRole('button', { name: 'Open scan.webp' }).querySelector('img')).toHaveAttribute('src', '/api/v1/attachments/a1');
+  fireEvent.error(screen.getByRole('button', { name: 'Open scan.webp' }).querySelector('img')!);
+  expect(screen.queryByRole('button', { name: 'Open scan.webp' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'scan.webp' })).toBeInTheDocument();
+});
+
+test('a video and a voice clip get a player, not the browser controls, and never load the whole file up front', async () => {
+  const item = { ...base, attachments: [file('v1', 'video-1', 'video/mp4'), file('s1', 'voice', 'audio/mpeg')] };
+  const { container } = render(<MessageItem item={item} timezone="UTC" onOpenMedia={vi.fn()} />);
+  const video = await waitFor(() => { const found = container.querySelector('video'); if (!found) throw new Error('no video yet'); return found; });
+  const audio = container.querySelector('audio')!;
+  for (const media of [video, audio]) {
+    expect(media.controls).toBe(false);
+    expect(['none', 'metadata']).toContain(media.getAttribute('preload'));
+  }
+  expect(video).toHaveAttribute('src', '/api/v1/attachments/v1');
+  expect(screen.getAllByRole('button', { name: 'Play' })).toHaveLength(2);
+  expect(screen.getByRole('link', { name: 'video-1' })).toHaveAttribute('download', 'video-1');
 });
 
 // A messenger or bot acknowledgement flagged by the source is an event, not a conversation turn: one line

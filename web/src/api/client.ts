@@ -10,10 +10,11 @@ import { browserTimeZone } from '../lib/format-date';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
-  cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
-  inviteCreatedSchema, inviteListSchema, meSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  cloudWorkspaceChoicesSchema, cloudWorkspacesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
+  inviteCreatedSchema, inviteListSchema, invitePreviewSchema, markMentionsResultSchema, mentionEmailSchema, mentionListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
+  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
+import { forgetSignOut, rememberSignOut } from '../lib/sign-out-intent';
 import type { Message, WorkspaceChoice } from './schemas';
 
 // UnauthorizedError means the browser has no valid session: never signed in, expired, or revoked.
@@ -246,7 +247,12 @@ export async function request<T>(path: string, schema: z.ZodType<T>, init?: Requ
   // Only a read is skipped: a change goes to the server, which decides it and says why. A known session is
   // checked at once, so a read goes out in the same tick as before.
   const permission = (init?.method ?? 'GET').toUpperCase() === 'GET' ? permissionOf(path) : undefined;
-  if (permission && !(held === undefined && remembered?.has(permission))) refuseUnheld(held === undefined ? await sessionPermissions() : held, permission);
+  if (permission && !(held === undefined && remembered?.has(permission))) {
+    const mine = held === undefined ? await sessionPermissions() : held;
+    // The page that asked may have gone while the read waited for the session: a cancelled read is never sent.
+    init?.signal?.throwIfAborted();
+    refuseUnheld(mine, permission);
+  }
   const parsed = await send(path, schema, init);
   if (path === '/api/v1/auth/me') knowPermissions((parsed as { permissions?: string[] }).permissions ?? null);
   return parsed;
@@ -259,6 +265,7 @@ async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): 
   if (!response.ok) noteFailure(path, init, response);
   // Signed out: there is no session to go by, so nothing waits for one.
   if (response.status === 401 && path === '/api/v1/auth/me') knowPermissions(null);
+  await noteRevoked(response);
   if (response.status === 402) throw await planLimitFailure(response);
   if (response.status === 413) throw await tooLarge(response);
   if (response.status === 507) throw await diskFull(response);
@@ -270,9 +277,24 @@ async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): 
   return schema.parse(response.status === 204 ? undefined : await response.json());
 }
 
+// trialOfferCall is request for the trial offer page, which explains every refusal itself: a 403 or 404
+// keeps its code and message instead of becoming a bare failure.
+async function trialOfferCall<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+  await noteRevoked(response);
+  if (response.status === 401) throw new UnauthorizedError();
+  if (!response.ok) {
+    const refused = await invalidRequest(response);
+    if (response.status === 403 && refused instanceof InvalidRequestError) throw new PermissionError(refused.message, refused.detail);
+    throw refused;
+  }
+  return schema.parse(await response.json());
+}
+
 export async function requestNoContent(path: string, init: RequestInit): Promise<void> {
   const response = await fetch(path, { credentials: 'same-origin', ...init });
   if (!response.ok) noteFailure(path, init, response);
+  await noteRevoked(response);
   if (!response.ok) throw failure(response.status);
 }
 
@@ -288,11 +310,15 @@ type OptionalBody<Operation extends keyof operations> =
   NonNullable<operations[Operation]['requestBody']> extends { content: { 'application/json': infer Body } } ? Body : never;
 const optionalJson = <Operation extends keyof operations>(value: OptionalBody<Operation>): string => JSON.stringify(value);
 
-function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number, aiDraft?: string): FormData {
+function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number, aiDraft?: string, draftFiles?: string[], mentions: string[] = []): FormData {
   const form = new FormData();
   form.append('kind', kind);
   form.append('body', body);
+  // The teammates a note asks, before the files: a mention refused stores none of them.
+  for (const mention of mentions) form.append('mentions', mention);
   if (aiDraft) form.append('ai_draft_id', aiDraft);
+  // The draft's files the reply keeps; one empty field keeps none, no field keeps them all.
+  if (draftFiles) for (const id of draftFiles.length > 0 ? draftFiles : ['']) form.append('ai_draft_file_ids', id);
   // Before the files: a reply refused for a newer one stores none of them.
   if (seen !== undefined) form.append('seen_reply_number', String(seen));
   // The server reads the copied addresses before the files, so a refusal costs no upload.
@@ -326,6 +352,21 @@ async function exchangeCloudSession(token: string, workspaceSlug?: string, next?
   if (response.status === 403 && (await errorCode(response)) === 'forbidden') throw new NotAnAgentError();
   if (!response.ok) throw new Error(`API ${response.status}`);
   return redeemedSchema.parse(await response.json());
+}
+
+// The workspaces of the identity provider's verified email, for the account menu's switch. The token is the
+// only proof sent: the workspace's cookie stays home, since its agent's address is not proven.
+async function listCloudWorkspaces(token: string) {
+  const response = await fetch('/api/v1/auth/cloud/workspaces', { credentials: 'omit', headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error(`API ${response.status}`);
+  return cloudWorkspacesSchema.parse(await response.json()).workspaces;
+}
+
+// noteRevoked remembers a 401 session_revoked as the person's Sign out: someone revoked this browser's session,
+// so the sign-in page ends the identity provider's session too. Whichever call learns it first counts, since the
+// server clears the cookie with that answer and later calls are plain 401s.
+async function noteRevoked(response: Response) {
+  if (response.status === 401 && (await errorCode(response.clone())) === 'session_revoked') rememberSignOut();
 }
 
 async function errorCode(response: Response): Promise<unknown> {
@@ -364,15 +405,31 @@ export const api = {
   foundingSlots: () => request('/api/v1/founding', foundingSlotsSchema),
   requestMigration: (input: RequestBody<'createMigrationRequest'>, key: string) => request('/api/v1/billing/migration-request', migrationRequestSchema,
     { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createMigrationRequest'>(input) }),
+  // A trial offer link: what it offers (reading changes nothing), and accepting it. Every refusal keeps its
+  // code (trial_offer_not_found, trial_offer_other_workspace, permission_missing, trial_offer_expired…).
+  trialOffer: (token: string) => trialOfferCall(`/api/v1/trial-offer?${new URLSearchParams({ token }).toString()}`, trialOfferSchema),
+  // key names one press: a retry of it answers the same acceptance instead of "already accepted".
+  acceptTrialOffer: (token: string, key: string) => trialOfferCall('/api/v1/trial-offer/accept', trialOfferAcceptedSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'acceptTrialOffer'>({ token }) }),
   exchangeCloudSession,
   signUpCloud,
   requestExportLink,
-  logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }),
+  listCloudWorkspaces,
+  logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }).then(rememberSignOut),
   // next is the page a sign-in on APP_ORIGIN opens on the workspace's own host (continue_url).
   redeem: (token: string, label: string, next?: string) => request('/api/v1/auth/redeem', redeemedSchema, {
     method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone(), ...(next ? { next } : {}) }),
   }),
-  me: () => request('/api/v1/auth/me', meSchema),
+  // What an invite link is, without using it; any other token answers 401 like an invalid link.
+  previewInvite: (token: string) => request(`/api/v1/auth/invite-preview?${new URLSearchParams({ token }).toString()}`, invitePreviewSchema),
+  me: () => request('/api/v1/auth/me', meSchema).then((me) => { forgetSignOut(); return me; }),
+  // The AI app a consent page shows, and whether redirect_uri is its own (only then may the page go there).
+  describeOAuthClient: (client_id: string, redirect_uri: string) =>
+    request(`/api/v1/oauth/client?${new URLSearchParams({ client_id, redirect_uri }).toString()}`, oauthClientSchema),
+  // Allow on the consent page: the address that takes the app's one-time code back to it.
+  // key names one press: a retry of it never makes a second grant.
+  allowOAuthClient: (input: RequestBody<'allowOAuthClient'>, key: string) => request('/api/v1/oauth/authorize', oauthAllowedSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'allowOAuthClient'>(input) }),
   setupProgress: () => request('/api/v1/workspace/setup', setupProgressSchema),
   setSetupGuideHidden: (hidden: RequestBody<'setSetupGuideHidden'>['hidden']) => request('/api/v1/agents/me/setup-guide', setupGuideHiddenSchema, { method: 'PUT', body: json<'setSetupGuideHidden'>({ hidden }) }),
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),
@@ -407,6 +464,8 @@ export const api = {
   conversation: (id: string) => request(`/api/v1/conversations/${id}`, conversationSchema).then((read) => ({ ...read, status_notices: read.status_notices ?? [] })),
   updateConversation: (id: string, value: UpdateConversationRequest) => request(`/api/v1/conversations/${id}`, conversationSchema, { method: 'PATCH', body: json<'updateConversation'>(value) }),
   bulkUpdateConversations: (ids: string[], changes: BulkConversationChanges) => request('/api/v1/conversations', bulkUpdateResultSchema, { method: 'PATCH', body: json<'bulkUpdateConversations'>({ ids, changes }) }),
+  // spam true files the conversations in Spam with their senders; false (Not spam) puts them back where they were.
+  markSpam: (ids: string[], spam: boolean) => request('/api/v1/conversations/spam', spamResultSchema, { method: 'PUT', body: json<'markConversationsSpam'>({ ids, spam }) }),
   addConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'PUT' }),
   removeConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'DELETE' }),
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
@@ -418,10 +477,17 @@ export const api = {
   // seen is the newest reply number the sender had seen when they started writing (409 ReplyConflictError when older).
   // aiDraft names the AI draft a reply was written from.
   // key names this submit (Idempotency-Key): a retry with the same key returns the message the first stored.
-  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number, aiDraft?: string, key?: string) =>
+  // draftFiles names the files of the draft (aiDraft) the reply keeps; left out, it keeps them all.
+  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number, aiDraft?: string, key?: string,
+    draftFiles?: string[], mentions: string[] = []) =>
     request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined,
-      body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft)
-        : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }), ...(aiDraft ? { ai_draft_id: aiDraft } : {}) }) }),
+      body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft, draftFiles, mentions)
+        : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }), ...(aiDraft ? { ai_draft_id: aiDraft } : {}),
+          ...(aiDraft && draftFiles ? { ai_draft_file_ids: draftFiles } : {}), ...(mentions.length > 0 ? { mentions } : {}) }) }),
+  // The notes that ask the person signed in: unread or all, newest first, a page after before.
+  mentions: (status: 'unread' | 'all', before?: string) => request(`/api/v1/mentions?${new URLSearchParams({ status, ...(before ? { before } : {}) })}`, mentionListSchema),
+  markMentionsRead: (value: RequestBody<'markMentionsRead'>) => request('/api/v1/mentions/read', markMentionsResultSchema, { method: 'PUT', body: json<'markMentionsRead'>(value) }),
+  setMentionEmail: (email: boolean) => request('/api/v1/agents/me/mention-email', mentionEmailSchema, { method: 'PATCH', body: json<'setMentionEmail'>({ email }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   createContact: (name: string, email: string, key: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),

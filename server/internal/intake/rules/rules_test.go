@@ -63,3 +63,28 @@ func TestEachRuleDecidesWhatTheStoreDid(t *testing.T) {
 		}
 	}
 }
+
+// With intake on, AI decides what a customer wrote, whatever the rules would continue; never a command,
+// a cancel, or a person's choice.
+func TestAIDecidesWhatACustomerWroteButACommandOrAPersonsChoice(t *testing.T) {
+	const c = "conversation-1"
+	cases := []struct {
+		name  string
+		facts rules.Facts
+		want  bool
+	}{
+		{"nothing matches", rules.Facts{}, true},
+		{"a thread key", rules.Facts{Thread: rules.Thread{ConversationID: c}}, true},
+		{"a reply to a message of a conversation", rules.Facts{Thread: rules.Thread{ConversationID: c, ByReference: true}}, true},
+		{"chatter of a commands-only scope", rules.Facts{CommandsOnly: true}, true},
+		{"an open command whose thread key matches", rules.Facts{Commanded: true, CommandAction: "open", Thread: rules.Thread{ConversationID: c}}, false},
+		{"an open command", rules.Facts{Commanded: true, CommandAction: "open"}, false},
+		{"a cancel", rules.Facts{Cancel: true}, false},
+		{"a person's choice", rules.Facts{IntoConversation: c}, false},
+	}
+	for _, c := range cases {
+		if got := rules.AIDecides(c.facts, rules.Decide(c.facts)); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}

@@ -1,0 +1,21 @@
+/* A sheet opens at the right edge over the page, which stays readable behind it (no veil). A confirmation dialog
+   (z-index 40, styles/components.css) opens above it. */
+.sheet-backdrop { position: fixed; z-index: 30; inset: 0; }
+.sheet { position: absolute; top: var(--space-2); right: var(--space-2); bottom: var(--space-2); display: flex; flex-direction: column; width: min(27.5rem, calc(100% - 2 * var(--space-2)));
+  border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); outline: 0; overflow: hidden; }
+.sheet > header { display: flex; flex: none; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--line); padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5); min-height: 56px; }
+.sheet > header h2 { flex: 1; min-width: 0; margin: 0; font: 600 var(--fs-body)/24px var(--font-sans); }
+.sheet-body { display: grid; flex: 1; align-content: start; gap: var(--space-5); min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-5); }
+.sheet > footer { display: flex; flex: none; align-items: center; gap: var(--space-2); border-top: 1px solid var(--line); padding: var(--space-4) var(--space-5); }
+.sheet > footer > :first-child { flex: 1; color: var(--text-3); font-size: var(--fs-small); }
+@media (pointer: coarse), (max-width: 30rem) { .sheet > header .icon-button { width: var(--touch); min-height: var(--touch); } }
+/* A phone gives the sheet the whole screen. */
+@media (max-width: 30rem) {
+  .sheet { inset: 0; width: 100%; border-radius: 0; }
+  .sheet-body { padding: var(--space-4); }
+  .sheet > footer { padding: var(--space-3) var(--space-4); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sheet { animation: sheet-in var(--dur-fast) var(--ease); }
+  @keyframes sheet-in { from { opacity: 0; translate: var(--space-4) 0; } }
+}

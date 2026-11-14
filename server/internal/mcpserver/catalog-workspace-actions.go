@@ -25,16 +25,32 @@ func replyDraftSpec() Spec {
 		Title: "Draft a reply for a person to send",
 		Description: `Leave a reply draft on a conversation. Nothing reaches the customer: the draft shows above the reply box with your token's name, ` +
 			`and a person edits it, sends it or discards it. Use it when a person should check the words before they go out, or when you may not send. ` +
-			`A new draft replaces the one this token left there before. ` +
-			`A draft carries no files: a person attaches them when they send it. Without messages:send, cc may name only people already on the conversation.`,
+			`A new draft shows on top of the one this token left there before, which stays as an earlier draft: colliedesk_ai_drafts_list shows them and colliedesk_reply_draft_restore brings one back. ` +
+			`files leaves up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64), with the draft: only the team sees them, and they reach the customer only when a person sends the draft with them. ` +
+			`Without messages:send, cc may name only people already on the conversation.`,
 		REST: []string{"POST /api/v1/conversations/{id}/reply-drafts"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","body"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `},` +
 			`"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The reply text (Markdown)."},` +
-			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy when it is sent."}}}`,
-		Output: `{"type":"object","required":["draft","next"],"properties":{"draft":{"type":"object","required":["id","conversation_id","status"],"properties":{` +
-			`"id":{"type":"string"},"conversation_id":{"type":"string"},"status":{"type":"string"}}},"next":{"type":"string"}}}`,
+			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy when it is sent."},` + filesProperty + `}}`,
+		Output: `{"type":"object","required":["draft","next"],"properties":{"draft":{"type":"object","required":["id","conversation_id","status","files"],"properties":{` +
+			`"id":{"type":"string"},"conversation_id":{"type":"string"},"status":{"type":"string"},"files":` + draftFilesSchema + `}},"next":{"type":"string"}}}`,
 		run: replyDraft,
+	}
+}
+
+func replyDraftRestoreSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_reply_draft_restore",
+		Title: "Bring an earlier reply draft back",
+		Description: `Bring an earlier written reply draft back above the reply box, with its text, copies and files: one that a newer draft replaced (outcome superseded), ` +
+			`that expired, or that a person discarded (find them with colliedesk_ai_drafts_list). The draft of the same author that waited in its place becomes the earlier one; ` +
+			`nothing reaches the customer. A draft that was sent, a draft the built-in AI wrote, or one whose text was erased (90 days after it ended) cannot come back: write a new one with colliedesk_reply_draft.`,
+		Idempotent: true,
+		REST:       []string{"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/restore"},
+		Input:      `{"type":"object","additionalProperties":false,"required":["conversation_id","draft_id"],"properties":{` + aiDraftConversationProperty + `,` + aiDraftIDProperty + `}}`,
+		Output:     `{"type":"object","required":["draft","next"],"properties":{"draft":` + aiDraftSchema + `,"next":{"type":"string"}}}`,
+		run:        replyDraftRestore,
 	}
 }
 
@@ -70,17 +86,34 @@ func billingActionSpec() Spec {
 	}
 }
 
+func trialOfferAcceptSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_trial_offer_accept",
+		Title: "Accept a trial offer link",
+		Description: `When the person you work for got a trial offer link from Colliedesk (an address with /trial-offer?token=), accept it here: the workspace's trial then ends 14 days from now, ` +
+			`and a locked workspace opens at once. A trial end already later than that is kept. Pass the whole link or only its token. preview true only reads the offer ` +
+			`(workspace, state, the trial end it would give, who can accept) and changes nothing. A spent, expired or withdrawn link, a workspace with a plan, or another workspace's link ` +
+			`is refused with the reason and the trial end; for more time, the person writes to support@colliedesk.com.`,
+		REST: []string{"GET /api/v1/trial-offer", "POST /api/v1/trial-offer/accept"},
+		Input: `{"type":"object","additionalProperties":false,"required":["link"],"properties":{` +
+			`"link":{"type":"string","maxLength":2000,"description":"The trial offer link, or only its token."},` +
+			`"preview":{"type":"boolean","default":false,"description":"true: read the offer without accepting it."}}}`,
+		Output: `{"type":"object","required":["offer","next"],"properties":{"offer":{"type":"object"},"previous_trial_ends_at":{"type":"string"},` +
+			`"trial_ends_at":{"type":"string"},"extended":{"type":"boolean"},"next":{"type":"string"}}}`,
+		run: trialOfferAccept,
+	}
+}
+
 func emailChannelDisconnectSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_email_channel_disconnect",
 		Title: "Disconnect the email channel",
 		Description: `Disconnect the workspace's default email channel (is_default): its mail stops coming in and its replies stop going out until it is connected again; ` +
 			`its conversations and messages stay. Its inbound secret stops working, which cannot be undone: connecting again gives a new one. Mail it held while off must be opened or discarded first. To remove another channel, use colliedesk_channels_delete.`,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/channels/email"},
-		Input:       noArguments,
-		Output:      doneSchema,
-		run:         emailChannelDisconnect,
+		REST:   []string{"DELETE /api/v1/channels/email"},
+		Input:  noArguments,
+		Output: doneSchema,
+		run:    emailChannelDisconnect,
 	}
 }
 
@@ -104,11 +137,10 @@ func gmailDisconnectSpec() Spec {
 		Title: "Disconnect Gmail",
 		Description: `Disconnect the Gmail account of an email channel: Colliedesk's access is revoked at Google (unless another channel uses the same account) and its replies go out the way ` +
 			`they did before Gmail was connected. A reply still waiting to be sent through Gmail fails and can be retried. The revoked access cannot be undone: connect again with colliedesk_gmail_connect. ` + emailChannelChoice,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/channels/email/gmail", "DELETE /api/v1/channels/{id}/email/gmail"},
-		Input:       emailChannelInput,
-		Output:      doneSchema,
-		run:         gmailDisconnect,
+		REST:   []string{"DELETE /api/v1/channels/email/gmail", "DELETE /api/v1/channels/{id}/email/gmail"},
+		Input:  emailChannelInput,
+		Output: doneSchema,
+		run:    gmailDisconnect,
 	}
 }
 
@@ -135,11 +167,10 @@ func microsoftDisconnectSpec() Spec {
 		Description: `Disconnect the Microsoft 365 mailbox of an email channel: Colliedesk deletes its access, and its replies go out the way they did before Microsoft 365 was connected. ` +
 			`Microsoft cannot be asked to revoke it, so Colliedesk stays listed in the account's apps until the person removes it there. A reply still waiting to be sent through ` +
 			`Microsoft 365 fails and can be retried. The deleted access cannot be undone: connect again with colliedesk_microsoft_connect. ` + emailChannelChoice,
-		Destructive: true,
-		REST:        []string{"DELETE /api/v1/channels/email/microsoft", "DELETE /api/v1/channels/{id}/email/microsoft"},
-		Input:       emailChannelInput,
-		Output:      doneSchema,
-		run:         microsoftDisconnect,
+		REST:   []string{"DELETE /api/v1/channels/email/microsoft", "DELETE /api/v1/channels/{id}/email/microsoft"},
+		Input:  emailChannelInput,
+		Output: doneSchema,
+		run:    microsoftDisconnect,
 	}
 }
 
@@ -149,11 +180,10 @@ func emailSecretRotateSpec() Spec {
 		Title: "Rotate the inbound email secret",
 		Description: `Give an email channel a new inbound secret, for example after the old one leaked; the old one stops working at once, and that cannot be undone. Mail forwarded with the new one arrives on that channel. ` +
 			`The new secret is in the answer, shown once: pass it only to the person who updates the mail forwarder, and never write it in a conversation, note or reply. ` + emailChannelChoice,
-		Destructive: true,
-		REST:        []string{"POST /api/v1/channels/email/secret", "POST /api/v1/channels/{id}/email/secret"},
-		Input:       emailChannelInput,
-		Output:      `{"type":"object","required":["inbound_secret","next"],"properties":{"inbound_secret":{"type":"string"},"next":{"type":"string"}}}`,
-		run:         emailSecretRotate,
+		REST:   []string{"POST /api/v1/channels/email/secret", "POST /api/v1/channels/{id}/email/secret"},
+		Input:  emailChannelInput,
+		Output: `{"type":"object","required":["inbound_secret","next"],"properties":{"inbound_secret":{"type":"string"},"next":{"type":"string"}}}`,
+		run:    emailSecretRotate,
 	}
 }
 
@@ -162,11 +192,10 @@ func numberSeriesListSpec() Spec {
 		Name: "colliedesk_number_series_list", Title: "List the conversation number series",
 		Description: `List the series the workspace's conversations are numbered in, the default one (#{n}) first: each with its code format, the number the next ` +
 			`conversation takes, and where this server took it over (start, start_year). A channel numbers what it opens in the series its settings name (number_series).`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/conversation-number-series"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{}}`,
-		Output:   `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","required":["series","format","next","start"],"properties":{"series":{"type":"string"},"format":{"type":"string"},"next":{"type":"integer"},"start":{"type":"integer"},"start_year":{"type":["integer","null"]},"updated_at":{"type":"string"}}}}}}`,
-		run:      numberSeriesList,
+		REST:   []string{"GET /api/v1/conversation-number-series"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{}}`,
+		Output: `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","required":["series","format","next","start"],"properties":{"series":{"type":"string"},"format":{"type":"string"},"next":{"type":"integer"},"start":{"type":"integer"},"start_year":{"type":["integer","null"]},"updated_at":{"type":"string"}}}}}}`,
+		run:    numberSeriesList,
 	}
 }
 
@@ -175,11 +204,10 @@ func responseTargetsGetSpec() Spec {
 		Name: "colliedesk_response_targets_get", Title: "Read the response targets",
 		Description: `Read the workspace's response targets: business hours (timezone, weekdays, holidays), first-response and resolution targets by priority in business ` +
 			`minutes, how long before a target a conversation is due soon, the channels they apply to and whether reminder emails go out.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/response-targets"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{}}`,
-		Output:   responseTargetsSchema,
-		run:      responseTargetsGet,
+		REST:   []string{"GET /api/v1/response-targets"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{}}`,
+		Output: responseTargetsSchema,
+		run:    responseTargetsGet,
 	}
 }
 

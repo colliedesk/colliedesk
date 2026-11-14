@@ -33,7 +33,7 @@ and its state:
   connection broke, the support address domain is not verified yet, or (on your own server) no
   inbound secret is set, so customer email forwarded from your mailbox cannot arrive yet. A test
   message works without it. Web form: it is on but lists no website origin, so no
-  page can post to it. Help chat: the AI chat feature is off in **Settings → Built-in AI**, so the
+  page can post to it. Help chat: the AI chat feature is off in **Settings → AI & agents**, so the
   help center shows no chat. Zalo OA: a secret or the tokens are not set, or an event's signature did
   not match the OA secret key; the Connection tab says which ([Zalo OA](zalo.md)).
 - **Processing paused**: a Zalo OA whose processing an admin paused; it keeps what arrives and shows how
@@ -250,7 +250,7 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   before then opens it, as always.
 - The channel's received notice (`settings.notices.received`) is sent by the channel, not by the team:
   its message is marked (`notice_kind: received`), and the conversation still waits for a first reply in
-  the inbox and in Results; a teammate who opened it before the notice is not told someone replied.
+  the inbox and in Reports; a teammate who opened it before the notice is not told someone replied.
 - A team member writing in a group on the chat app itself is part of the place, never a customer's
   request: it opens and joins nothing, unless they name a command that opens one.
 
@@ -258,32 +258,43 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
 
 On a chat channel's scope that collects messages (its groups, on most chat types), what one customer says
 in one go is a **card**: messages close together are collected, each customer apart from the others even
-when they write in turn. The channel's rules decide each card as they always did: a command opens a
-conversation, a reply to a message continues its conversation (in a group, only a conversation that
-customer wrote in), and what the rules hold for a person waits in the queue. When AI intake runs by itself
-on the scope (**Auto**, [AI per channel](ai.md#what-ai-does-by-itself-per-channel)), a card the rules
-could only decide by default waits up to two minutes for AI, held like any held message; if AI does not
-decide in time, the rules' decision applies (the card says **fallback**), and nothing is ever lost.
-A card behind one of the same customer that waits for a person waits right after it, and goes back to
-be decided once that one is.
+when they write in turn. With intake off, the channel's rules decide each card as they always did: a command
+opens a conversation, a reply to a message continues its conversation (in a group, only a conversation that
+customer wrote in), and what the rules hold for a person waits in the queue. With intake on
+([AI per channel](ai.md#what-ai-does-by-itself-per-channel)), the rules decide only a command (a cancel too);
+everything else a customer wrote is AI's to decide, whatever conversation the rules would have continued:
+
+- **Suggest**: every card waits in the queue with AI's suggestion, and a person decides it.
+- **Auto**: a card waits up to two minutes for AI, held like any held message. AI applies what it is sure
+  enough of (the scope's threshold, through an open gate); what it is not sure of, or does not answer in
+  time, waits in the queue with its suggestion (**AI was not sure**, **AI did not answer**). Nothing is
+  opened or joined on its own then, and nothing is ever lost.
+
+At **Auto**, when a customer writes again while their card waits for a person, the new messages join that
+card and AI reads all of it again: a picture first and the words that say what it is a few minutes later
+are decided as one, and AI applies it alone when it is now sure enough. Otherwise the card waits again, with
+every message in it. At Suggest, a card behind one of the same customer that waits for a person waits right
+after it, and goes back to be decided once that one is.
 
 AI reads one card of a customer at a time, in the order they were said. It sees what the customer wrote
 with the messages just before it in the same place and the conversations the card may join, with people
 named only "Customer A" or "Team 1", phone numbers, email addresses and account or ID numbers masked, and
-passwords and codes hidden (also a login and its password sent as two messages). For now AI never acts on
-its own, even at **Auto**: it says what it would do (open a conversation, add the card to one, or set it
-aside, how sure it is, and why) and the rules decide at once, without waiting the two minutes. Its
-suggestion shows on the card until a person decides. At **Suggest**, the rules decide as they always did and AI's suggestion shows on
-the card. When a person decides as AI suggested, the decision says it followed AI; otherwise that it
+passwords and codes hidden (also a login and its password sent as two messages). It says what it would do
+(open a conversation, add the card to one, or set it aside, how sure it is, and why); its suggestion shows
+on the card until a person decides. When a person decides as AI suggested, the decision says it followed AI; otherwise that it
 corrected it. A person who adds a card to a conversation that was merged into another adds it to the one it
 was merged into.
 
-A card names the chat place it was said in, what the rules decided and whether they had evidence (a
-command, a reply to a message of a conversation: **match**) or decided by default. While it waits, it lists
+A card names the chat place it was said in, what the rules would decide and whether they had evidence (a
+command, a reply to a message of a conversation, or the conversation the customer last wrote in from the
+same place: **match**) or decided by default. While it waits, it lists
 the conversations it may join without the reply going to someone else: in a group, the open or pending
 conversations of that group active in the last 72 hours; in a one-to-one chat, that customer's on the same
 channel; then the ones resolved within the reopen window (7 days unless the channel's intake settings say
-otherwise), which reopen when a card joins them. A closed conversation is never offered.
+otherwise), which reopen when a card joins them. A closed conversation is never offered. On a channel that
+joins only open conversations (Zalo's default), a resolved one is never offered either, and a card added to a
+conversation resolved since opens a new conversation instead: a resolved conversation gets nothing more,
+except through the customer's reopen command.
 
 A person decides a card: **open a conversation** with what it said, as one message (never joining a
 conversation found since; optionally with one of the channel's commands, for its tags and priority, and a

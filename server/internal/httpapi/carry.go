@@ -26,6 +26,7 @@ type Carry struct {
 	channelFileLookups                  *webFormLimiter
 	certificateNotes                    *webFormLimiter
 	operatorSignIns, operatorSignInIPs  *webFormLimiter
+	refusedLinks                        *webFormLimiter
 	mailImageLimits                     *mailImageLimiter
 	liveChecks                          *helpcenter.LiveChecks
 	alerted                             *alertedSubscriptions
@@ -36,6 +37,7 @@ type Carry struct {
 	trial                               *trialEvidence
 	helpChat                            *helpChatLimiters
 	chatGate                            *ai.ChatGate
+	oauth                               *oauthState
 	// Hot holds the settings read at each use; Store applies a change at once.
 	Hot *Hot
 }
@@ -72,10 +74,12 @@ func NewCarry(config Config) *Carry {
 		channelFileLookups: newWebFormLimiter(channelFileLookupsPerAddress, webFormMaxKeys),
 		operatorSignIns:    newWindowLimiter(operatorSignInsPerMinute, webFormMaxKeys, time.Minute),
 		operatorSignInIPs:  newWindowLimiter(operatorSignInsPerAddressPerMinute, webFormMaxKeys, time.Minute),
+		refusedLinks:       newWindowLimiter(refusedLinksPerAddressPerMinute, webFormMaxKeys, time.Minute),
 		mailImageLimits:    newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait),
 		liveChecks:         helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock),
 		alerted:            &alertedSubscriptions{}, kbUploads: &kbUploadGate{}, kbUploadStart: &sync.Mutex{}, dispatches: &sync.WaitGroup{},
 		founding: &foundingState{}, trial: &trialEvidence{}, helpChat: &helpChatLimiters{}, chatGate: ai.NewChatGate(),
+		oauth: newOAuthState(),
 	}
 }
 

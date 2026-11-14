@@ -49,7 +49,6 @@ func kbVideoUploadStatusSpec() Spec {
 		Name:        "colliedesk_kb_video_upload_status",
 		Title:       "See where a knowledge base video upload stands",
 		Description: `Say how many bytes of an upload arrived (offset), so you can go on after an interruption.`,
-		ReadOnly:    true,
 		REST:        []string{"GET /api/v1/kb/media-uploads/{id}"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["upload_id"],"properties":{` + kbUploadIDProperty + `}}`,
 		Output:      kbUploadSchema,
@@ -63,11 +62,10 @@ func kbVideoUploadListSpec() Spec {
 		Title: "List the knowledge base video uploads in progress",
 		Description: `List the workspace's uploads in progress, the oldest first, with who started each, the bytes received and when its parts expire. ` +
 			`At most 3 can be in progress; cancel one you started (with kb_media:purge you cancel any) to make room.`,
-		ReadOnly: true,
-		REST:     []string{"GET /api/v1/kb/media-uploads"},
-		Input:    `{"type":"object","additionalProperties":false,"properties":{}}`,
-		Output:   `{"type":"object","required":["uploads"],"properties":{"uploads":{"type":"array","items":` + kbUploadSchema + `}}}`,
-		run:      kbVideoUploadList,
+		REST:   []string{"GET /api/v1/kb/media-uploads"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{}}`,
+		Output: `{"type":"object","required":["uploads"],"properties":{"uploads":{"type":"array","items":` + kbUploadSchema + `}}}`,
+		run:    kbVideoUploadList,
 	}
 }
 

@@ -15,7 +15,8 @@ import (
 
 // Readiness of a scope's intake (docs/user/ai.md "When AI acts on its own"): AI acts on its own only for
 // an action people's explicit labels show it gets right, counted from people following or correcting its
-// suggestions and from offline evaluations of the same model and prompt.
+// suggestions and from offline evaluations of the same prompt, on whichever model they ran: a model change
+// keeps what intake earned.
 const (
 	// IntakeLabelsNeeded is how many labels an action needs before it may open.
 	IntakeLabelsNeeded = 30
@@ -141,7 +142,7 @@ type IntakeLabelCounts struct {
 	Severe  int `json:"severe"`
 }
 
-// IntakeEvaluationCounts are the labels of the newest run of each dataset of the model and prompt.
+// IntakeEvaluationCounts are the labels of the newest run of each dataset of the prompt, on any model.
 type IntakeEvaluationCounts struct {
 	IntakeLabelCounts
 	RunAt time.Time `json:"run_at"`
@@ -180,7 +181,8 @@ type IntakeEstimate struct {
 	} `json:"cost_per_call"`
 }
 
-// IntakeReadiness is a scope's readiness for AI to act on its own, for the model and prompt it runs.
+// IntakeReadiness is a scope's readiness for AI to act on its own, for the prompt it runs (Model names the
+// model it runs now; labels and evaluations of any model count).
 type IntakeReadiness struct {
 	ChannelID     string                  `json:"channel_id"`
 	Scope         string                  `json:"scope"`
@@ -201,7 +203,8 @@ func (r IntakeReadiness) Open(action string) bool {
 	return false
 }
 
-// IntakeReadinessOf reads a channel scope's readiness for model and promptVersion; overrides are the
+// IntakeReadinessOf reads a channel scope's readiness for promptVersion (none while intake is off: model
+// is ""); overrides are the
 // actions an admin opened by hand. channels.ErrNotFound for another workspace's channel.
 func (s *Store) IntakeReadinessOf(ctx context.Context, workspaceID, channelID, scope, model, promptVersion string, overrides []string, now time.Time) (IntakeReadiness, error) {
 	readiness := IntakeReadiness{ChannelID: channelID, Scope: scope, Model: model, PromptVersion: promptVersion, Actions: []IntakeReadinessAction{}}
@@ -258,8 +261,8 @@ func (s *Store) IntakeReadinessOf(ctx context.Context, workspaceID, channelID, s
 		evaluation := map[string]*IntakeEvaluationCounts{}
 		if model != "" {
 			rows, err := tx.Query(ctx, `SELECT DISTINCT ON (dataset_sha256) counts,created_at FROM intake_eval_runs
-				WHERE workspace_id=$1 AND channel_id=$2::uuid AND scope=$3 AND model=$4 AND prompt_version=$5
-				ORDER BY dataset_sha256,created_at DESC`, workspaceID, channelID, scope, model, promptVersion)
+				WHERE workspace_id=$1 AND channel_id=$2::uuid AND scope=$3 AND prompt_version=$4
+				ORDER BY dataset_sha256,created_at DESC`, workspaceID, channelID, scope, promptVersion)
 			if err != nil {
 				return readiness, fmt.Errorf("read intake evaluations: %w", err)
 			}
@@ -341,7 +344,7 @@ func (s *Store) IntakeReadinessOf(ctx context.Context, workspaceID, channelID, s
 		var micro *float64
 		if err := tx.QueryRow(ctx, `SELECT
 				(SELECT count(*) FROM intake_gatherings WHERE workspace_id=$1 AND channel_id=$2::uuid AND scope=$3 AND closed_at>=$4),
-				(SELECT count(*) FROM intake_gatherings WHERE workspace_id=$1 AND channel_id=$2::uuid AND scope=$3 AND closed_at>=$4 AND rules_basis='default'),
+				(SELECT count(*) FROM intake_gatherings WHERE workspace_id=$1 AND channel_id=$2::uuid AND scope=$3 AND closed_at>=$4 AND rules_rule NOT IN ('command_open','command_reopen','command_cancel','into_conversation')),
 				(SELECT avg(cost_micro_usd)::float8 FROM ai_usage WHERE workspace_id=$1 AND feature='intake' AND status='ok' AND started_at>=$4 AND cost_micro_usd IS NOT NULL),
 				(SELECT avg(provider_cost)::float8 FROM ai_usage WHERE workspace_id=$1 AND feature='intake' AND status='ok' AND started_at>=$4 AND provider_cost IS NOT NULL)`,
 			workspaceID, channelID, scope, since).Scan(&readiness.Estimate.Cards, &readiness.Estimate.AICalls, &micro, &readiness.Estimate.CostPerCall.ProviderCost); err != nil {

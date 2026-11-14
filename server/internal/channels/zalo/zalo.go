@@ -104,7 +104,7 @@ func (a *Adapter) Definition() channels.Definition {
 		Capabilities: []string{"threads", "attachments_in", "attachments_out"}, ReplyTo: IdentityUser, WhenOff: channels.OffHold,
 		Scopes: []string{ScopeDirect, ScopeGroup}, IntakeScopes: []string{ScopeGroup}, SharedScopes: []string{ScopeGroup},
 		FileLimits: channels.FileLimits{PerFile: 25 << 20, PerEvent: 50 << 20},
-		Defaults: channels.Settings{JoinPolicy: channels.JoinPolicy{Kind: channels.JoinWithinDays, Days: 7},
+		Defaults: channels.Settings{JoinPolicy: channels.JoinPolicy{Kind: channels.JoinOpenOnly},
 			RateLimits: channels.RateLimits{WindowSeconds: 600, PerSender: 60, NewConversations: 200, Scope: channels.ScopeChannel},
 			// A group opens a conversation only on a command; what its members say in between is collected
 			// for the rules (or intake) to decide.

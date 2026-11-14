@@ -172,7 +172,7 @@ func (b *bridge) forward(ctx context.Context, line []byte) {
 	case resp.StatusCode == http.StatusAccepted:
 		return // a notification or a response the server took; nothing to answer
 	case resp.StatusCode == http.StatusUnauthorized:
-		b.fail(msg, isCall, "Colliedesk refused the token: it is revoked, expired or mistyped. Create a new agent token in Settings → Sessions.", "HTTP 401")
+		b.fail(msg, isCall, "Colliedesk refused the token: it is revoked, expired or mistyped. Create a new agent token in Settings → AI & agents.", "HTTP 401")
 		return
 	case mediaType == "text/event-stream" && resp.StatusCode == http.StatusOK:
 		b.copyEvents(resp.Body, msg, isCall)

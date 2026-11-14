@@ -46,7 +46,7 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 ## Direction
 
 - Modelled on Plain (primary) and Front (views), studied from public Mobbin screens; mechanisms
-  only, no copied visuals. See the clean-room rule.
+  only, no copied visuals. See "Learning from other projects" in AGENTS.md.
 - White working panels on a cool grey app background (`--surface-0`), separated by an 8 px gap
   and hairline borders, not by heavy outlines. No cream or beige, no decorative gradients, glass,
   blur or emoji. Desktop views use the full width; no narrow centred column.
@@ -104,10 +104,37 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   the customer). Where a status may tell, **Tell the customer** comes first, ticked each time it opens.
   Every Priority value has a mark before its word, on the field and in its menu: red ↑ Urgent, grey ↑ High,
   a quiet dash for Normal, ↓ Low. The mark column has no gap (Linear marks every priority); list rows still hide Normal.
-- Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
-  is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
+- Sign-in: a dark brand side (mascot, wordmark, one line of promise, one line of links: what general
+  availability guarantees and, on Colliedesk Cloud, the status page) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
 - The mascot is the white collie head on the orange tile (see Logo).
+- Settings (Paper "20 Settings", #528) is one page per item of its menu, each at `/settings/<page>`: Account;
+  Workspace: General, Members, Channels, Response targets, AI & agents, Saved replies (Autofix while in
+  preview); Data and billing: Data, Plan and billing. A page is its serif title, one line saying what it
+  holds, then its sections (`SettingsFrame`, `settings-frame.tsx`). The menu lists pages, never a section of
+  another page, and a page shows only when the person can see one of its sections. `/settings` opens Account;
+  on a phone it is the menu itself, and each page shows **‹ Settings** (named "All settings") above its title,
+  as the inbox list and a conversation take turns; a channel page's own "Back to channels" is then its one
+  back link. An old `/settings#…-heading` link opens the page that holds that section (`settings-anchors.ts`).
+  The help center's settings are the knowledge base's Settings tab and keep the app's sidebar.
+  On a wide screen Settings takes the sidebar: **Back to app** (and Esc) at its head, the menu under it, the
+  account row at its foot, and none of the app's places (`app-shell.tsx`, `back-to-app.tsx`). Traps: each
+  page still draws its own menu from what its roles show, into the sidebar's slot (`SettingsMenuSlot` in
+  `settings-nav.tsx`), so a page tested alone keeps its menu inline; the sidebar is the "Signed in as" region
+  (the workspace name sits above the account row at its foot, as the head has no workspace row) and the top
+  bar repeats nothing until the sidebar is folded or a tablet; Back to app goes to the last address outside
+  `/settings` kept in `sessionStorage` with the workspace and person it was kept for (a sign-out clears it, and
+  another person's is ignored), the inbox when none; Esc leaves only with focus on the page body or in the
+  settings menu, looked at in the capture phase with nothing open that owns Esc (dialog, menu, account menu,
+  role picker, confirm panel), because React closes those before a bubbling listener runs; folded, the sidebar
+  keeps only the Back to app arrow. A test or a page that
+  needs the app's places from Settings goes through Back to app first.
+- Setup flow (`/setup`, owner decision 30/10/2026: Linear's onboarding, adapted): one step per screen, full
+  screen on `--surface-1` without the rail, one centred column of 36 rem. It is the one exception to "no narrow
+  centred column", because a single focused task is all the screen holds. A sticky header keeps the mark, the
+  identity ("Signed in as") and **Exit setup**; then segments with "Step N of M", the step's serif title and
+  lead, the step's own Settings form, and **Back**, **I'll do this later** and **Continue** (the only ink
+  action of the flow itself) in a "Setup flow" navigation. The forms it embeds keep their own buttons.
 
 ## Themes
 
@@ -228,6 +255,7 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip
   (`data-tip`, shown on hover and keyboard focus, dismissed with Escape). Other icon-only buttons follow the same pattern.
+  Text that explains a row (more than a name) is a HelpTip instead, which also opens by tap (see Quiet by default).
 - The list groups rows under Today and Earlier by the day in the agent's timezone. The list shows
   only what the API returns. A conversation numbered in a series of its own (a channel's, such as
   `CHD-2026-0142`) shows its code first in the row's meta and in the header with a copy button; the default
@@ -252,6 +280,44 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - Every empty list says which kind of empty it is and gives the next step: a new workspace gets
   **Get started** links, a filtered list with no match gets **Clear filters**, a failed load gets
   **Try again**.
+
+## Quiet by default
+
+A screen reads as controls, not as a manual (#527). Screens explained themselves in
+always-visible paragraphs; people scanned past the controls.
+
+- A row shows its label and at most one short line: 60 characters or less, one line at desktop width.
+- These stay visible, whatever their length: an error, a state the person must act on, the consequence right before
+  an irreversible action, and a value to copy. An error is `.error-copy` or `role="alert"` and a warning
+  `.warning-note`; any other such line says so on its element with `data-quiet="state"`, `data-quiet="consequence"`
+  or `data-quiet="value"`. Never mark a line to get it past the gate: an explanation is not a state.
+- How, why and definitions go into a **HelpTip** (`web/src/ui/help-tip.tsx`): an ⓘ button after the label, named
+  "About {label}". Its text opens on hover, on keyboard focus and on tap or click, stays open on a press on its own
+  text, and closes with Escape, a press outside or when focus leaves. Escape closes the tip only: it is caught in the
+  capture phase, so an editor or dialog around the tip does not cancel, and focus inside the tip goes back to its
+  button. The text is the button's accessible description (`aria-describedby`). A text-only tip is `role="tooltip"`
+  and its button has no `aria-expanded`. It may hold one link, such as **Learn more**; a tooltip may not hold a link,
+  so that tip is a disclosure instead (the button has `aria-expanded` and `aria-controls`), and it stays open while
+  the pointer or focus is inside it. It looks like the icon tooltips (`--surface-inverse`, `--text-inverse`), is
+  positioned by Floating UI 8 px inside the screen at any width and hides while its button is scrolled out of sight
+  (`web/e2e/help-tip.spec.ts` checks both at 390 px), and fades in only without `prefers-reduced-motion`. The 16 px icon has a 32 px target with a mouse and 44 px by touch, from padding with an
+  equal negative margin, so the row keeps its height.
+- A procedure (several steps) becomes a **Learn more** link to its page in the docs, not a paragraph.
+- A locked control says why in the tip of its lock: **LockedReason** (the same component with a lock, named
+  "Why {label} is locked"). Pass the tip's `id` to the control's `aria-describedby`, so the control is described too.
+  The last admin's Admin role in Settings → Team is the first one.
+- Gate: `web/scripts/quiet-copy.test.mjs` reads every always-visible helper line of the web app and fails on one longer
+  than 60 characters. A helper is an element with the class `help`, `field-note`, `lead`, `section-lead`, `kb-hint`,
+  `af-help`, `muted-copy` or any class ending in `-lead`, `-help` or `-hint`; a `p` in `.section-heading` (a section's
+  description); and a component's `hint`, `help`, `lead`, `description`, `note`, `detail` or `summary` prop.
+  `.error-copy`, `role="alert"`, `.warning-note`, `.sr-only` and a `data-quiet` line are left out. Each branch of a
+  conditional `className` or `role` counts on its own, so `failed ? 'error-copy' : 'help'` is a helper. It reads the TSX
+  rather than a rendered page, because many helpers show in one state only (a wizard step, a locked role), and follows
+  each line to its message entry (a parameter hides an outer name; its default counts); a value known only at run time
+  counts as no characters. The lines that were there when the gate came in are listed in
+  `web/scripts/quiet-copy-ceiling.txt` with their length, and the test pins how many lines it holds. That list only
+  shrinks: the gate fails on a new line, on a listed line longer than its recorded length, on one that got shorter
+  until its length is lowered, and on one that got short or went away until it is deleted.
 
 ## Review checklists
 

@@ -151,12 +151,13 @@ function UsedNote() {
   return <div className="ai-auto-draft ai-auto-draft-strip" role="status"><span className="ai-chip" aria-hidden="true">AI</span><span>{text.used}</span></div>;
 }
 
-// A short screen (a laptop at 720 pixels) keeps the conversation in view: the draft starts folded.
-const shortScreen = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-height: 800px)').matches;
+// A short screen (a laptop at 720 pixels) or a phone (44 rem wide, whatever its height) keeps the conversation
+// in view: the draft starts folded.
+const shortScreen = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-height: 800px), (max-width: 44rem)').matches;
 
 function ReadyAutoDraft({ draft, title, hasText, busy, note, onDiscard, onUse }: { draft: AIDraft; title: string; hasText: boolean; busy: boolean;
   note?: ReactNode; onDiscard: () => void; onUse: (how: DraftUse) => void }) {
-  // A draft the model thinks needs no reply starts folded, and so does any draft on a short screen;
+  // A draft the model thinks needs no reply starts folded, and so does any draft on a short screen or a phone;
   // Show draft opens it, Hide folds it again.
   const [shown, setShown] = useState(() => draft.reply_needed !== false && !shortScreen());
   const [used, setUsed] = useState(false);

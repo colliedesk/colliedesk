@@ -1,6 +1,9 @@
 // Strings of Settings → Built-in AI. The page is a lazy part, so they live in its chunk.
 export const aiMessages = {
   heading: 'Built-in AI',
+  lead: 'Drafts, triage and the AI chat. A person sends every reply.',
+  // Settings → AI & agents holds the built-in AI and the AI agents that work through a token.
+  pageLead: 'The AI built into Colliedesk, and the AI agents that work for you with a token.',
   description: 'Triage suggestions, reply drafts and the AI chat, each on a model you choose. A person accepts, edits and sends every draft; a draft never reaches a customer until someone presses Send. Triage suggestions are accepted by a person too, unless an admin turns on Apply suggestions automatically below. The AI chat answers customers on your help center from its public articles, once an admin turns it on.',
   loadFailed: 'The AI settings could not be loaded. Reload the page to try again.',
   tabs: 'Built-in AI settings',
@@ -132,6 +135,22 @@ export const aiMessages = {
     chat: 'Answers customers from published help articles, on the help center and your site. Needs a Help chat channel in Settings → Channels.',
     intake: 'On chat channels, decides whether a message opens a conversation, joins one, or is not a request. Email and web forms keep their rules.',
   } as Record<'triage' | 'draft' | 'chat' | 'intake', string>,
+  // One short line per feature on its row (60 characters or less); slotHelp above is what its sheet says.
+  slotShort: {
+    triage: 'Suggests tags, priority and an assignee for new tickets.',
+    draft: 'Drafts a reply from the ticket and your articles.',
+    chat: 'Answers help center visitors from your articles.',
+    intake: 'Decides if a chat message opens a conversation.',
+  } as Record<'triage' | 'draft' | 'chat' | 'intake', string>,
+  stateOnLevel: (level: string) => `On · ${level}`,
+  openFeature: (name: string) => `${name} settings`,
+  rowsFoot: 'The switch saves at once. A row opens its settings.',
+  sheetSaves: 'Choices save at once',
+  sheetDone: 'Done',
+  pickProviderFirst: 'Open this row and pick a provider first.',
+  noProviderYet: 'No AI provider yet.',
+  noProviderBody: 'Add your own key, or ask whoever runs this server.',
+  noProviderWhy: 'Suggestions and drafts need a model to run on. Your workspace pays a provider directly with its own key, or the server operator sets one provider for every workspace; both keep working if you move to another server.',
   statusOn: 'On',
   statusOff: 'Off',
   statusStopped: 'Stopped',
@@ -147,6 +166,8 @@ export const aiMessages = {
   pickProvider: 'Pick a provider',
   providerFor: (slot: string) => `${slot} provider`,
   modelFor: (slot: string) => `${slot} model`,
+  modelByServer: 'Set by the server',
+  serverOffTip: (label: string) => `${label}, the server's default AI provider, is turned off. Pick another provider, or wait until the server's operator turns it on again.`,
   switchFor: (slot: string) => `${slot} on`,
   addFirst: 'Add a provider first, then turn this on.',
   saving: 'Saving…',
@@ -306,3 +327,6 @@ export const aiMessages = {
   } as Record<string, string>,
   checkWhyOther: 'Did not answer properly',
 };
+
+// slotLabel names a feature the way a person reads it; a name this page does not know stays as it is.
+export const slotLabel = (slot: string) => aiMessages.slotName[slot as keyof typeof aiMessages.slotName] ?? slot;

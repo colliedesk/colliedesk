@@ -1,16 +1,19 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
-import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
+import type { Conversation, ConversationViewer, Message, SettableStatus, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
-import { CheckCircleIcon, ChevronLeftIcon, CircleDotIcon, ClockIcon, CopyIcon, RotateCcwIcon } from '../../ui/icons';
+import { BanIcon, CheckCircleIcon, ChevronLeftIcon, CircleDotIcon, ClockIcon, CopyIcon, PanelRightIcon, RotateCcwIcon } from '../../ui/icons';
 import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { CopyButton } from '../settings/copy-button';
 import { Part } from '../../ui/lazy-part';
 import { ActionMenu } from './action-menu';
 import { MessageItem } from './message-item';
+import { useNewestInView } from './newest-in-view';
+import { mediaKind } from './media-kind';
+import type { GalleryItem } from './media-kind';
+import { mediaViewerPart } from './media-part';
 import { mayTell, noticesOf } from './status-tell';
 import { presenceViewPart } from './presence-part';
-import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { ownRef } from './conversation-ref';
 import { slaMark, slaOf } from '../../lib/sla';
 import { TimeEntriesSection } from './time-entries-section';
@@ -29,6 +32,8 @@ interface TimelinePanelProps {
   // The ticket an address names could not be loaded: say so, and offer to try again.
   loadFailed?: boolean;
   onRetryLoad?: () => void;
+  // With no conversation open, nothing loading and nothing failed: the one line the pane shows instead.
+  emptyText?: string;
   timezone: string;
   onRetryDelivery?: (messageId: string) => void;
   detailsOpen?: boolean;
@@ -43,7 +48,9 @@ interface TimelinePanelProps {
   viewers?: ConversationViewer[];
   // Changes the status from the header: Resolve while it is open or pending, Reopen once resolved or closed.
   // notify false sets it without telling the customer (their chat channel's status notice).
-  onSetStatus?: (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+  onSetStatus?: (status: SettableStatus, options?: { notify?: boolean }) => Promise<unknown>;
+  // Spam beside Resolve; on a conversation in Spam, Not spam in its place.
+  onSpam?: (spam: boolean) => Promise<unknown>;
   // A chat conversation's statuses that would tell could not be read: its quiet way is offered anyway.
   noticesFailed?: boolean;
   // An admin may open the channel's settings from the timeline's line for a channel closing it by itself.
@@ -57,11 +64,13 @@ interface TimelinePanelProps {
   messageLabel?: (item: Message) => ReactNode;
   messageMenu?: (item: Message) => ReactNode;
   messageNote?: (item: Message) => ReactNode;
+  // The person reading, whom a note may have asked.
+  currentAgentId?: string;
 }
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
 // closed one offers the way back. A failure says so beside the button.
-type SetStatus = (status: Conversation['status'], options?: { notify?: boolean }) => Promise<unknown>;
+type SetStatus = (status: SettableStatus, options?: { notify?: boolean }) => Promise<unknown>;
 
 function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversation: Conversation; onSetStatus: SetStatus; noticesFailed: boolean }) {
   const [busy, setBusy] = useState(false);
@@ -96,7 +105,20 @@ function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversati
   </>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote }: TimelinePanelProps) {
+// Spam files the conversation and its sender's later mail in Spam; Not spam puts it back where it was.
+function SpamButton({ spam, onSpam }: { spam: boolean; onSpam: (spam: boolean) => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const press = () => {
+    if (busy) return;
+    setBusy(true);
+    onSpam(spam).finally(() => setBusy(false));
+  };
+  // On a phone Spam is an icon in the title row; Not spam takes Resolve's place.
+  return <button type="button" className={spam ? 'status-button spam-button' : 'status-button'} aria-disabled={busy || undefined} data-tip={spam ? messages.spamTip : messages.notSpamTip} onClick={press}>
+    {spam ? <BanIcon /> : <RotateCcwIcon />}<span className={spam ? 'spam-button-label' : undefined}>{spam ? messages.spam : messages.notSpam}</span></button>;
+}
+
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, emptyText, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
   // A role that reads conversations but not their messages is told so instead of waiting for them.
   const readsMessages = useHolds()('messages:read');
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
@@ -105,16 +127,33 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
   const at = conversation?.last_status_change?.at;
   const next = at ? items.findIndex((item) => Date.parse(item.created_at) >= Date.parse(at)) : -1;
   const eventAt = !at ? -1 : next === -1 ? items.length : next;
+  const media = useMemo(() => galleryOf(items), [items]);
+  const [opened, setOpened] = useState<string | null>(null);
+  const openMedia = useCallback((attachmentId: string) => { mediaViewerPart.preload(); setOpened(attachmentId); }, []);
+  const closeMedia = useCallback(() => setOpened(null), []);
+  const scroller = useRef<HTMLDivElement>(null);
+  useNewestInView(scroller, conversation?.id, items, currentAgentId);
+  const back = onBack && <button type="button" className="thread-back" onClick={onBack}><ChevronLeftIcon /><span className="thread-back-label">{messages.backToInbox}</span></button>;
+  // Nothing open (I5-a): no title and no actions for a conversation that does not exist, only the way back on a
+  // phone and one line in the middle of the pane.
+  if (!conversation && items.length === 0 && !loading && !loadFailed) {
+    return (
+      <section className="timeline-panel" aria-label={messages.timeline}>
+        {back && <header className="timeline-header">{back}</header>}
+        {emptyText && <p className="timeline-empty">{emptyText}</p>}
+      </section>
+    );
+  }
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
-        {onBack && <button type="button" className="thread-back" onClick={onBack}><ChevronLeftIcon />{messages.backToInbox}</button>}
+        {back}
         <div>
-          <h2>{conversation?.subject ?? messages.selectConversation}</h2>
+          {conversation && <h2>{conversation.subject}</h2>}
           {conversation && <div className="timeline-meta">{ownRef(conversation) && <span className="ref-copy"><span className="conv-ref">{ownRef(conversation)}</span>
             <CopyButton value={ownRef(conversation) ?? ''} className="icon-button" label={messages.copyReference(ownRef(conversation) ?? '')}><CopyIcon /></CopyButton></span>}
-            <StatusLabel status={conversation.status} />
-            <PriorityLabel priority={conversation.priority} /><HeaderMark conversation={conversation} timezone={timezone} />
+            {/* Status and priority are in the details; the line says what is pressing and who wrote (I1-a). */}
+            <HeaderMark conversation={conversation} timezone={timezone} />
             {channelLabel && <span className="channel-pill">{channelLabel}</span>}
             {/* Anyone can type any address into the help chat: say so, and link the chat it came from. */}
             {conversation.channel === 'help_chat' && <Part part={presenceViewPart} render={(view) => <view.HelpChatLine conversationId={conversation.id} />} />}
@@ -122,29 +161,34 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
               {conversation.contact_name}</a></div>}
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
-        {conversation && (onSetStatus || onToggleDetails) && <div className="timeline-actions">
-          {onSetStatus && <StatusButton key={conversation.id} conversation={conversation} onSetStatus={onSetStatus} noticesFailed={noticesFailed} />}
+        {conversation && (onSetStatus || onSpam || onToggleDetails) && <div className="timeline-actions">
+          {onSpam && conversation.status === 'spam' ? <SpamButton spam={false} onSpam={onSpam} />
+            : <>
+              {onSetStatus && <StatusButton key={conversation.id} conversation={conversation} onSetStatus={onSetStatus} noticesFailed={noticesFailed} />}
+              {onSpam && <SpamButton spam onSpam={onSpam} />}
+            </>}
           {onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
             aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
             aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>
-            {messages.showDetails}{suggestionWaiting && <span className="details-badge" aria-hidden="true" />}</button>}
+            <PanelRightIcon /><span className="details-toggle-label">{messages.showDetails}</span>{suggestionWaiting && <span className="details-badge" aria-hidden="true" />}</button>}
         </div>}
       </header>
       {autofix && conversation && onToggleDetails && <AutofixStrip conversationId={conversation.id} customerName={conversation.contact_name} timezone={timezone} onOpenDetails={onToggleDetails} />}
-      <div className="timeline-scroll">
+      <div className="timeline-scroll" ref={scroller}>
         <div className="timeline-stack">
           {!conversation && loadFailed && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>
             <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}
           {conversation && !readsMessages && <p className="empty-copy">{messages.messagesClosed}</p>}
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
           {before}
-          {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery} channelName={conversation?.channel_ref?.name}
-            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} note={messageNote?.(item)} />
+          {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} currentAgentId={currentAgentId} onRetryDelivery={onRetryDelivery} channelName={conversation?.channel_ref?.name}
+            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} note={messageNote?.(item)} onOpenMedia={openMedia} />
             {index === firstCustomer && afterFirstCustomerMessage}</Fragment>)}
           {eventAt === items.length && event}
           {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
         </div>
       </div>
+      {opened && <MediaGalleryAt items={items} media={media} attachmentId={opened} timezone={timezone} onClose={closeMedia} />}
     </section>
   );
 }
@@ -156,7 +200,7 @@ function StatusEvent({ conversation, timezone, canManageChannels }: { conversati
   if (!change || change.by === 'agent') return null;
   const channel = conversation.channel_ref;
   const words = change.by === 'token' ? messages.statusEvent.token(change.name || messages.statusEvent.aiAgent, change.to)
-    : change.by === 'customer' ? messages.statusEvent.customer
+    : change.by === 'customer' ? (change.to === 'spam' ? messages.statusEvent.spamSender : messages.statusEvent.customer)
     : change.by === 'command' ? messages.statusEvent.command
     : change.by === 'import' ? messages.statusEvent.imported(messages.statuses[change.to])
     : <>{messages.statusEvent.autoClose}{channel && <> ({canManageChannels ? <a href={`/settings/channels/${channel.id}?tab=messages`}>{channel.name}</a> : channel.name} {messages.statusEvent.setting})</>}</>;
@@ -169,4 +213,36 @@ function StatusEvent({ conversation, timezone, canManageChannels }: { conversati
 function HeaderMark({ conversation, timezone }: { conversation: Conversation; timezone: string }) {
   const mark = slaMark(slaOf(conversation), timezone);
   return mark ? <span className={`sla-mark sla-${mark.tone}`} aria-label={mark.full} data-tip={mark.full}><ClockIcon />{mark.header}</span> : null;
+}
+
+// The pictures, videos and voice clips of a conversation in timeline order, as the timeline shows them: not the
+// stored raw email, and not an image embedded in a formatted email (it is part of that email, often a logo).
+function galleryOf(items: Message[]): GalleryItem[] {
+  return items.flatMap((item) => item.attachments
+    .filter((file) => file.id !== item.email?.original_attachment_id && !file.inline)
+    .flatMap((file) => {
+      const kind = mediaKind(file.content_type);
+      return kind ? [{ file, kind, sender: senderOf(item), at: item.created_at }] : [];
+    }));
+}
+
+function senderOf(item: Message) {
+  return item.author_name ?? item.email?.from ?? item.origin?.from ?? messages.someone;
+}
+
+// The gallery opens at the file pressed. An embedded image shown in the plain-text view is in no list: it opens alone.
+function MediaGalleryAt({ items, media, attachmentId, timezone, onClose }: { items: Message[]; media: GalleryItem[]; attachmentId: string; timezone: string; onClose: () => void }) {
+  let list = media;
+  let start = media.findIndex((entry) => entry.file.id === attachmentId);
+  if (start === -1) {
+    const owner = items.find((item) => item.attachments.some((file) => file.id === attachmentId));
+    const file = owner?.attachments.find((entry) => entry.id === attachmentId);
+    const kind = file && mediaKind(file.content_type);
+    if (!owner || !file || !kind) return null;
+    list = [{ file, kind, sender: senderOf(owner), at: owner.created_at }];
+    start = 0;
+  }
+  // Safari does not focus a button on a press: the gallery gives the focus back to the one that opened it by name.
+  const opener = `[data-media-open="${attachmentId}"]`;
+  return <Part part={mediaViewerPart} render={(viewer) => <viewer.MediaGallery items={list} start={start} timezone={timezone} onClose={onClose} opener={opener} />} />;
 }

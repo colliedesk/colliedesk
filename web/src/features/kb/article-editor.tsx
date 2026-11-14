@@ -8,13 +8,15 @@ import { messages } from '../../messages';
 import { savedReplyMessages } from '../settings/saved-reply-messages';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
+import { ArticleTranslationsBox } from './article-translations';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
 import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
 import type { KBArticle, KBArticleStatus, KBArticleVersion } from './kb-api';
 import { kbMessages } from './kb-messages';
-import { buildTree, flatten, indent, reason } from './kb-tree';
+import { CollectionsField, withHome } from './collections-field';
+import { buildTree, flatten, reason } from './kb-tree';
 import { KBDialog, KBMenu, usePhone } from './kb-ui';
 import type { MenuItem } from './kb-ui';
 import { Icon } from './editor/icons';
@@ -43,12 +45,22 @@ interface Draft {
   slug: string;
   body: string;
   collection_id: string;
+  // extras are the other collections the help center lists it in, besides its home collection_id.
+  extras: string[];
   seo_title: string;
   seo_description: string;
 }
 
 const draftOf = (article: KBArticle): Draft => ({ title: article.title, slug: article.slug, body: article.body_md, collection_id: article.collection_id,
-  seo_title: article.seo_title, seo_description: article.seo_description });
+  extras: article.collection_ids.slice(1), seo_title: article.seo_title, seo_description: article.seo_description });
+const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((id, at) => id === b[at]);
+// listChange is how a save places the article: nothing when it stays, collection_id for a move that leaves the
+// other collections as the server keeps them, else collection_ids with the home first.
+const listChange = (form: Draft, of: KBArticle) => {
+  const kept = withHome({ home: of.collection_id, extras: of.collection_ids.slice(1) }, form.collection_id).extras;
+  if (!sameList(form.extras, kept)) return { collection_ids: [form.collection_id, ...form.extras] };
+  return form.collection_id !== of.collection_id ? { collection_id: form.collection_id } : {};
+};
 // seoMessages are the search fields' strings; they live with the editor's own chunk, not the first bundle.
 const seoMessages = {
   searchEngines: 'Search engines',
@@ -115,7 +127,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const tree = useMemo(() => flatten(buildTree(collections)), [collections]);
   // base is the article as the server last answered; every save and restore sends its updated_at.
   const [base, setBase] = useState(article);
-  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(article) : { title: '', slug: '', body: '', collection_id: defaultCollection, seo_title: '', seo_description: '' }));
+  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(article) : { title: '', slug: '', body: '', collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '' }));
   const wide = useSyncExternalStore(subscribeWide, isWide);
   const [chosen, setMode] = useState<ViewMode>(() => (isWide() && (!article || characters(article.body_md) <= splitLimit) ? 'split' : 'edit'));
   const mode: ViewMode = chosen === 'split' && !wide ? 'edit' : chosen;
@@ -135,7 +147,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const isDirty = (form: Draft) => (base
     // Compared as save() sends them: title and address name trimmed, and an emptied address name is not
     // a change (the server keeps the old one), so a form is never dirty with nothing to send.
-    ? form.title.trim() !== base.title || (form.slug.trim() !== '' && form.slug.trim() !== base.slug) || !sameBody(form.body, base) || form.collection_id !== base.collection_id
+    ? form.title.trim() !== base.title || (form.slug.trim() !== '' && form.slug.trim() !== base.slug) || !sameBody(form.body, base) || Object.keys(listChange(form, base)).length > 0
       || seoValue(form.seo_title) !== base.seo_title || seoValue(form.seo_description) !== base.seo_description
     : form.title.trim() !== '' || form.body.trim() !== '');
   const dirty = isDirty(draft);
@@ -175,7 +187,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     setProblem(undefined);
     try {
       if (!current) {
-        const value = { collection_id: sent.collection_id, title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft',
+        const value = { ...(sent.extras.length > 0 ? { collection_ids: [sent.collection_id, ...sent.extras] } : { collection_id: sent.collection_id }), title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft',
           ...(seoValue(sent.seo_title) ? { seo_title: seoValue(sent.seo_title) } : {}),
           ...(seoValue(sent.seo_description) ? { seo_description: seoValue(sent.seo_description) } : {}) } as const;
         const created = await createArticle.run(value);
@@ -189,7 +201,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         ...(sent.title.trim() !== current.title ? { title: sent.title.trim() } : {}),
         ...(sent.slug.trim() && sent.slug.trim() !== current.slug ? { slug: sent.slug.trim() } : {}),
         ...(!sameBody(sent.body, current) ? { body_md: sent.body } : {}),
-        ...(sent.collection_id !== current.collection_id ? { collection_id: sent.collection_id } : {}),
+        ...listChange(sent, current),
         ...(status && status !== current.status ? { status } : {}),
         ...(seoValue(sent.seo_title) !== current.seo_title ? { seo_title: seoValue(sent.seo_title) } : {}),
         ...(seoValue(sent.seo_description) !== current.seo_description ? { seo_description: seoValue(sent.seo_description) } : {}),
@@ -456,10 +468,11 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
           <span>{status === 'published' ? (isPublic === false ? kbMessages.notPublicHelpCenter : kbMessages.statusPublished) : kbMessages.statusDraft}</span>
         </div>
-        {isPublic === false && <a className="button-link" href="/settings#help-center-heading">
+        {isPublic === false && <a className="button-link" href="/knowledge/settings#help-center-heading">
           <Icon name="globe" />{kbMessages.turnOnHelpCenter}</a>}
       </section>
       {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
+      {base && <ArticleTranslationsBox article={base} headingId={`${id}-translations`} />}
       {missing.length > 0 && <section className="kb-alt-warn" aria-labelledby={`${id}-alt-warn`}>
         <strong id={`${id}-alt-warn`}>{kbMessages.imagesWithoutAlt(missing.length)}</strong>
         <span>{kbMessages.imagesWithoutAltHelp}</span>
@@ -471,13 +484,10 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       </section>}
       <section className="kb-side-box" aria-labelledby={`${id}-placement`}>
         <h3 id={`${id}-placement`}>{kbMessages.placement}</h3>
-        <div className="field"><label htmlFor={`${id}-collection`}>{kbMessages.articleCollection}</label>
-          <select id={`${id}-collection`} value={draft.collection_id} required onChange={(event) => set({ collection_id: event.target.value })}>
-            {!draft.collection_id && <option value="">{kbMessages.chooseCollection}</option>}
-            {tree.map((node) => <option key={node.collection.id} value={node.collection.id}>{indent(node)}</option>)}
-          </select>
-          {collectionsFailed && <small className="error-copy">{kbMessages.collectionsFailed}</small>}
-          {!draft.collection_id && <small id={`${id}-needs-collection`} className="kb-hint">{kbMessages.needsCollection}</small>}</div>
+        <CollectionsField id={id} tree={tree} value={{ home: draft.collection_id, extras: draft.extras }}
+          onChange={(next) => set({ collection_id: next.home, extras: next.extras })} />
+        {collectionsFailed && <small className="error-copy">{kbMessages.collectionsFailed}</small>}
+        {!draft.collection_id && <small id={`${id}-needs-collection`} className="kb-hint">{kbMessages.needsCollection}</small>}
         {base && <div className="field"><label htmlFor={`${id}-slug-input`}>{kbMessages.articleSlug}</label>
           <input id={`${id}-slug-input`} value={draft.slug} aria-describedby={`${id}-slug`} onChange={(event) => set({ slug: event.target.value })} />
           <small id={`${id}-slug`} className="kb-hint">{kbMessages.articleSlugHelp(base.number, draft.slug.trim())}</small></div>}
@@ -534,8 +544,6 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {imageProblems.map((text) => <p key={text} role="alert" className="error-copy">{text}</p>)}
         {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice}</p>}
       </div>}
-      {/* On a phone the box stands at the top of the page, as the note does on a wide screen: the way out and back is never behind Details. */}
-      {base && phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       <form id={`${id}-form`} className="kb-editor" aria-label={heading} onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); submit.current(); }}>
         <div className="kb-editor-main">
           <div className="field kb-title-field"><label htmlFor={`${id}-title`} className="sr-only">{kbMessages.articleTitle}</label>
@@ -572,6 +580,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         </div>
         {!phone && <aside className="kb-editor-side" aria-label={kbMessages.articleSettings}>{details}</aside>}
       </form>
+      {/* On a phone the page opens on the title and the text; the AI box follows them, and visibility and placement open from Details. */}
+      {base && phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {phone && <div className="kb-phone-bar" role="region" aria-label={kbMessages.articleActions}>
         <span className="kb-phone-state">
           <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>

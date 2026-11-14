@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,6 +58,8 @@ type ConversationFilter struct {
 	AgentID          string
 	Page             int
 	PageSize         int
+	// Counts asks for StatusCounts with the page.
+	Counts bool
 }
 
 // Orders of the inbox list. Every order ends with the id, so a page never repeats or skips a row.
@@ -86,6 +89,9 @@ type ConversationPage struct {
 	Items []domain.Conversation `json:"items"`
 	Page  int                   `json:"page"`
 	Size  int                   `json:"page_size"`
+	// StatusCounts is how many conversations each status holds under every filter but the status, when
+	// the filter asked for them (the inbox's status tabs).
+	StatusCounts map[string]int `json:"status_counts,omitempty"`
 }
 
 // CreateConversation opens an empty conversation; channelID, when given, is the channel its replies
@@ -304,6 +310,9 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 	q.and("c.workspace_id=" + q.arg(workspaceID))
 	if len(filter.Statuses) > 0 {
 		q.and("c.status=ANY(" + q.arg(filter.Statuses) + "::text[])")
+	} else {
+		// Every status is every one but spam: Spam is only its own view (status=spam).
+		q.and("c.status<>'spam'")
 	}
 	if len(filter.Priorities) > 0 {
 		q.and("c.priority=ANY(" + q.arg(filter.Priorities) + "::text[])")
@@ -472,8 +481,10 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT enabled FROM response_targets WHERE workspace_id=$1),false)`, workspaceID).Scan(&filter.slaOn); err != nil {
 			return ConversationPage{}, fmt.Errorf("read response targets: %w", err)
 		}
+		// Without reply targets nothing is due: Due first is who has waited longest, as Today orders it.
 		if !filter.slaOn && filter.Sort == ConversationSortDue {
-			filter.Sort = ConversationSortUpdatedDesc
+			filter.Sort = ConversationSortWaitingLongest
+			order = conversationOrders[ConversationSortWaitingLongest]
 		}
 	}
 	if filter.Ref != "" || filter.Search != "" {
@@ -486,6 +497,13 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 			return ConversationPage{}, err
 		}
 		filter.refIDs = ids
+	}
+	var counts map[string]int
+	if filter.Counts {
+		var err error
+		if counts, err = conversationStatusCounts(ctx, tx, workspaceID, filter, now); err != nil {
+			return ConversationPage{}, err
+		}
 	}
 	q := conversationConditions(workspaceID, filter, now)
 	limit, offset := q.arg(filter.PageSize), q.arg((filter.Page-1)*filter.PageSize)
@@ -503,13 +521,14 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		return ConversationPage{}, fmt.Errorf("scan conversation ids: %w", err)
 	}
 	if len(ids) == 0 {
-		return ConversationPage{Items: []domain.Conversation{}, Page: filter.Page, Size: filter.PageSize}, nil
+		return ConversationPage{Items: []domain.Conversation{}, Page: filter.Page, Size: filter.PageSize, StatusCounts: counts}, nil
 	}
 
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,NULLIF(k.organization,''),c.subject,c.status,c.priority,
 		c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb),
-		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`
+		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`,
+		left(regexp_replace(btrim(left(latest.body,`+strconv.Itoa(excerptReadRunes*4)+`)),'\s+',' ','g'),`+strconv.Itoa(excerptReadRunes)+`),latest.created_at
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS listed(id,position)
 		JOIN conversations c ON c.workspace_id=$1 AND c.id=listed.id
 		JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
@@ -518,6 +537,14 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 			FROM conversation_tags ct JOIN tags t ON t.id=ct.tag_id AND t.workspace_id=ct.workspace_id
 			WHERE ct.workspace_id=c.workspace_id AND ct.conversation_id=c.id
 		) tag_data ON true
+		-- The customer's newest message, read backwards through this conversation's own messages: OFFSET 0 keeps
+		-- the planner from walking the workspace's incoming index instead and filtering every conversation out.
+		LEFT JOIN LATERAL (
+			SELECT left(m.body,`+strconv.Itoa(excerptReadRunes*4)+`) AS body,m.created_at FROM (
+				SELECT body,created_at,kind,detached_at FROM messages
+				WHERE workspace_id=c.workspace_id AND conversation_id=c.id ORDER BY created_at DESC OFFSET 0
+			) m WHERE m.kind='incoming' AND m.detached_at IS NULL LIMIT 1
+		) latest ON true
 		ORDER BY listed.position`, workspaceID, ids)
 	if err != nil {
 		return ConversationPage{}, fmt.Errorf("list conversations: %w", err)
@@ -527,21 +554,26 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	for rows.Next() {
 		var item domain.Conversation
 		var tagsJSON []byte
+		var latestText *string
+		var latestAt *time.Time
 		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.ContactOrganization, &item.Subject, &item.Status, &item.Priority,
 			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON,
-			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID); err != nil {
+			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID, &latestText, &latestAt); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)
 		}
 		if err := json.Unmarshal(tagsJSON, &item.Tags); err != nil {
 			return ConversationPage{}, fmt.Errorf("decode conversation tags: %w", err)
 		}
 		item.CreatedAt, item.UpdatedAt = domain.UTC(item.CreatedAt), domain.UTC(item.UpdatedAt)
+		if latestText != nil && latestAt != nil {
+			item.LatestCustomerMessage = &domain.CustomerMessageExcerpt{Excerpt: excerpt(*latestText), CreatedAt: domain.UTC(*latestAt)}
+		}
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
 		return ConversationPage{}, fmt.Errorf("iterate conversations: %w", err)
 	}
-	return ConversationPage{Items: items, Page: filter.Page, Size: filter.PageSize}, nil
+	return ConversationPage{Items: items, Page: filter.Page, Size: filter.PageSize, StatusCounts: counts}, nil
 }
 
 func conversationTags(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) ([]domain.Tag, error) {

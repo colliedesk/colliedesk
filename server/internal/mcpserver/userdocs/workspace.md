@@ -8,6 +8,33 @@ Replies never carry the workspace name. They go out with the
 change it. Customers see the workspace name in one place: it is the title of your
 [help center](knowledge-base.md#help-center-settings) while the help center has no title of its own.
 
+## Settings pages
+
+**Settings** has one page per item of its menu, each at its own address. The menu shows only the pages
+you can use:
+
+- **Account** (`/settings/account`): your profile and timezone, your preferences, where you are signed
+  in, and the AI apps you connected.
+- **General** (`/settings/general`): the workspace name and timezone, and conversation numbers.
+- **Members** (`/settings/members`): the team, invites and roles.
+- **Channels**, **Response targets**, **AI & agents** (the built-in AI, agent tokens and their
+  sessions) and **Saved replies**.
+- **Data** (`/settings/data`): import from Freshdesk and export all data.
+- **Plan and billing**, on Colliedesk Cloud.
+
+While you are in Settings, its menu takes the place of the sidebar, under **Back to app**. The sheet shows
+the page alone. **Back to app** returns to the page you were on before Settings: the conversation you
+had open, or the inbox when there was none. **Esc** does the same when nothing on the page has the focus
+or when the focus is in the Settings menu. When the focus is in a page's own controls, or something is open
+(a dialog, a menu, the account menu, a role picker), Esc only closes that, so nothing you type is lost. You can still drag the sidebar's edge to
+resize it, or fold it: folded, it keeps **Back to app** as an arrow, and the menu comes back when you
+open it again.
+
+The help center's settings are in the knowledge base, under **Knowledge base → Settings**, which is not a
+Settings page and keeps the app's sidebar. An old link to a section of Settings, such as
+`/settings#invites-heading`, opens the page that holds it now. On a phone, **Settings** shows the menu;
+open a page from it, and **‹ Settings** above its title goes back.
+
 ## Rename the workspace
 
 Only people with `workspace:update` (the Admin role) can rename the workspace.

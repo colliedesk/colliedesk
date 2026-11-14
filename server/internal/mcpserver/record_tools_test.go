@@ -203,7 +203,8 @@ func noisyPNG(side int) []byte {
 }
 
 // A PNG, JPEG, GIF or WebP file comes back as an image the model can look at, judged from its bytes,
-// never from its name; an SVG (text that can carry scripts) and an image too large stay metadata.
+// never from its name; an SVG (text that can carry scripts) stays metadata, and an image too large comes back
+// as its preview.
 func TestAttachmentGetShowsAnImage(t *testing.T) {
 	e := newEnv(t)
 	f := seedInbox(t, e)
@@ -262,11 +263,18 @@ func TestAttachmentGetShowsAnImage(t *testing.T) {
 		t.Fatalf("test image is %d bytes, want more than 2 MiB", len(large))
 	}
 	largeID := e.noteWithFile(f.w.admin, f.c1, "huge.png", large)
+	// A larger image comes back as the preview the web app shows (at most 320 pixels), and says so.
 	largeResult := e.call(session, "colliedesk_attachment_get", map[string]any{"attachment_id": largeID})
 	largeOut := structured(t, largeResult)
-	if largeResult.IsError || imageOf(largeResult) != nil || at(t, largeOut, "is_image") != false || at(t, largeOut, "detected_type") != "image/png" ||
-		at(t, largeOut, "size") != float64(len(large)) || !strings.Contains(at(t, largeOut, "hint").(string), "2 MiB") {
-		t.Errorf("an image above 2 MiB must stay metadata with a hint: %v", largeOut)
+	e.requireMatchesOutputSchema(session, "colliedesk_attachment_get", largeOut)
+	preview := imageOf(largeResult)
+	if largeResult.IsError || preview == nil || (preview.MIMEType != "image/jpeg" && preview.MIMEType != "image/png") || len(preview.Data) >= 2<<20 || at(t, largeOut, "is_image") != true ||
+		at(t, largeOut, "detected_type") != "image/png" || at(t, largeOut, "size") != float64(len(large)) ||
+		!strings.Contains(at(t, largeOut, "hint").(string), "2 MiB") || !strings.Contains(at(t, largeOut, "hint").(string), "preview") {
+		t.Errorf("an image above 2 MiB must come back as a preview with a hint: %v", largeOut)
+	}
+	if picture, _, err := image.Decode(bytes.NewReader(preview.Data)); err != nil || picture.Bounds().Dx() > 320 || picture.Bounds().Dy() > 320 {
+		t.Errorf("the preview must be at most 320 pixels: %v", err)
 	}
 
 	otherID := e.noteWithFile(f.other.admin, f.otherConvID, "bravo.png", pngBytes.Bytes())

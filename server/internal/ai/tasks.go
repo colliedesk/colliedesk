@@ -135,7 +135,7 @@ var ErrFeatureOff = errors.New("this AI feature is off")
 func (s *Service) Resolve(ctx context.Context, workspaceID, slot string) (Binding, error) {
 	var binding Binding
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		slots, err := readSlots(ctx, tx, workspaceID, false)
+		slots, err := s.readSlots(ctx, tx, workspaceID, false)
 		if err != nil {
 			return err
 		}

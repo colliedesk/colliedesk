@@ -20,6 +20,9 @@ type Redeemed struct {
 	// ContinueURL is where a browser that signed in on APP_ORIGIN continues: its workspace's own host,
 	// signed in there by a one-time token in the address's fragment. Absent everywhere else.
 	ContinueURL *string `json:"continue_url,omitempty"`
+	// OtherWorkspaces is true when a cloud sign-in's verified email is also an active agent of another
+	// workspace: APP_ORIGIN then asks which workspace to open instead of sending the browser to this one.
+	OtherWorkspaces bool `json:"-"`
 }
 
 // ErrLinkOfAnotherWorkspace refuses a one-time link on the host of a workspace it does not belong to.
@@ -88,15 +91,28 @@ func (s *Service) createLinkFor(ctx context.Context, tx pgx.Tx, workspaceID, age
 	return createdLink{Token: token, URL: s.redeemURL(token, slug), ID: linkID}, nil
 }
 
+// linkOf finds the workspace and kind of the one-time link with token. A link's workspace is unknown
+// until its hash is looked up, so this is the one lookup that crosses workspaces; everything after it
+// runs scoped to that workspace. ErrUnknownLink when no link has the token.
+func (s *Service) linkOf(ctx context.Context, token string) (string, string, error) {
+	var workspaceID, kind string
+	err := s.db.Privileged(ctx, database.PrivilegeLinkToken, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT workspace_id::text, kind FROM pairing_links WHERE token_hash=$1`, tokenHash(token)).Scan(&workspaceID, &kind)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", ErrUnknownLink
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("find link: %w", err)
+	}
+	return workspaceID, kind, nil
+}
+
 // Redeem spends a one-time link for a new session; cookie tells whether the session will be a browser's
 // cookie (true) or a bearer token the client keeps.
 func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string, cookie bool) (Redeemed, error) {
-	// The link's workspace is unknown until the token hash is looked up; the redemption itself,
-	// with its checks and the row lock, runs scoped to that workspace.
-	var linkWorkspace string
-	err := s.db.Privileged(ctx, database.PrivilegeLinkToken, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM pairing_links WHERE token_hash=$1`, tokenHash(token)).Scan(&linkWorkspace)
-	})
+	// The redemption itself, with its checks and the row lock, runs scoped to the link's workspace.
+	linkWorkspace, _, err := s.linkOf(ctx, token)
 	if err != nil {
 		return Redeemed{}, fmt.Errorf("redeem link: %w", err)
 	}
@@ -152,17 +168,32 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 			RETURNING id::text,(xmax=0)`, workspaceID, email, ceiling).Scan(&created, &inserted); err != nil {
 			return Redeemed{}, fmt.Errorf("create invited agent: %w", err)
 		}
-		var roleIDs []string
 		var invitedBy *string
+		if err := tx.QueryRow(ctx, `SELECT created_by_agent_id::text FROM pairing_links WHERE workspace_id=$1 AND id=$2`, workspaceID, linkID).Scan(&invitedBy); err != nil {
+			return Redeemed{}, fmt.Errorf("invite creator: %w", err)
+		}
+		// An invite signs in as an existing member only when it was made for that member, and only while
+		// its creator may still change their roles; a link made for someone new signs in no one who
+		// joined since.
+		if !inserted {
+			if agentRef(agentID) != created {
+				return Redeemed{}, fmt.Errorf("redeem link: %w", domain.ErrAlreadyMember)
+			}
+			inviter, err := store.MemberCallerTx(ctx, tx, workspaceID, invitedBy)
+			if err != nil {
+				return Redeemed{}, err
+			}
+			if err := store.RequireMayReinviteTx(ctx, tx, workspaceID, inviter, created); err != nil {
+				return Redeemed{}, fmt.Errorf("redeem link: %w", err)
+			}
+		}
+		var roleIDs []string
 		rows, err := tx.Query(ctx, `SELECT i.role_id::text FROM invite_roles i WHERE i.workspace_id=$1 AND i.link_id=$2`, workspaceID, linkID)
 		if err != nil {
 			return Redeemed{}, fmt.Errorf("invite roles: %w", err)
 		}
 		if roleIDs, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
 			return Redeemed{}, fmt.Errorf("invite roles: %w", err)
-		}
-		if err := tx.QueryRow(ctx, `SELECT created_by_agent_id::text FROM pairing_links WHERE workspace_id=$1 AND id=$2`, workspaceID, linkID).Scan(&invitedBy); err != nil {
-			return Redeemed{}, fmt.Errorf("invite creator: %w", err)
 		}
 		if err := store.GiveRolesOnJoin(ctx, tx, workspaceID, created, roleIDs, inserted, invitedBy); err != nil {
 			return Redeemed{}, err

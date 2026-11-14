@@ -15,20 +15,27 @@ import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
+import { BookmarkIcon } from '../../ui/icons';
 import { useSettleTargets, useSLARefresh } from './sla-refresh';
 import { markdownPart } from './markdown-body';
 import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
-import { aiDraftApi, waitingWritten } from './ai-draft-api';
+import { aiDraftApi, earlierWritten, waitingWritten } from './ai-draft-api';
 import { can } from '../../lib/can';
+import { stepPath } from '../onboarding/setup-flow-path';
+import { highlightedStep, readSkipped } from '../onboarding/setup-steps';
+import { setupMessages } from '../onboarding/setup-messages';
 import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
-import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
-import { guideHasWork } from '../onboarding/setup-steps';
+import { rememberRecent } from '../shell/recent-items';
 import { mayTell, noticesOf } from './status-tell';
 import { PermissionsContext } from '../../lib/permissions-context';
+import { useInboxIntent } from '../shell/inbox-intents';
 import type { TokenPermission } from '../../api/schemas';
+import { MentionsPane, useMarkMentionsRead } from './mentions-pane';
+import { mentionMessages } from './mention-messages';
+import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -79,7 +86,7 @@ const viewsPart = lazyPart(() => import('./saved-views-menu'));
 function SavedViewsPart(props: { query: InboxQuery; timezone: string; onApply: (query: InboxQuery) => void }) {
   const part = viewsPart.use();
   if (part.status === 'ready') return <part.module.SavedViewsMenu {...props} />;
-  return part.status === 'error' ? <PartUnavailable /> : <span className="filter-menu views-menu"><button type="button" disabled>{messages.savedViewsTitle}</button></span>;
+  return part.status === 'error' ? <PartUnavailable /> : <span className="filter-menu views-menu"><button type="button" className="icon-button" disabled><BookmarkIcon /><span className="sr-only">{messages.savedViewsTitle}</span></button></span>;
 }
 
 // How long a search term stays unchanged before it counts as a finished search, so typing "refund" is one search.
@@ -88,7 +95,9 @@ const searchSettleMs = 800;
 // Typing changes these on every key, so they replace the address instead of adding to the history.
 const typedKeys: InboxQueryKey[] = ['search', 'organization'];
 
-export function InboxRoute() {
+// list 'mentions' puts the Mentions list in the list column (/mentions); the conversation opens beside it.
+export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
+  const mentionsMode = list === 'mentions';
   const client = useQueryClient();
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { conversationId?: string };
@@ -106,9 +115,9 @@ export function InboxRoute() {
   // Once the inbox is idle, so opening a customer or a new conversation waits for no download.
   useEffect(() => { (window.requestIdleCallback ?? ((load: () => void) => setTimeout(load, 1000)))(contactPart.preload); }, []);
   // Always refetch when the inbox opens: mail may have arrived while the agent was in Settings.
-  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: ({ signal }) => api.conversations(query, signal), refetchOnMount: 'always',
+  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: ({ signal }) => api.conversations(filters.search ? query : `${query}&counts=true`, signal), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
-    placeholderData: keepPreviousData });
+    placeholderData: keepPreviousData, enabled: !mentionsMode });
   // A search is reported once its term settled and its answer arrived: whether it found anything, never the term.
   const searchTerm = filters.search ?? '';
   const searchSettled = searchTerm !== '' && conversations.isSuccess && !conversations.isPlaceholderData;
@@ -133,19 +142,9 @@ export function InboxRoute() {
   const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
   // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
   const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
-  // The setup guide: what is left to receive and answer email. The activity poll refreshes it; it has no
-  // poll of its own. A hidden guide is not even asked for.
-  // Until the session answers the guide is assumed to be wanted, so its data and its chunk go out with the
-  // session and the list instead of after the session; a guide the session says is hidden is dropped at once.
-  const guideHidden = me.data?.setup_guide_hidden ?? false;
-  const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: !guideHidden });
-  useEffect(() => { if (!guideHidden) preloadSetupGuide(); }, [guideHidden]);
-  const hideGuide = useMutation({ mutationFn: () => api.setSetupGuideHidden(true),
-    onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
-  const isAdmin = can(me.data, 'channels:update');
   const activeID = selectedId ?? params.conversationId;
   // With no conversation picked, the first row is the one on screen.
-  const shownID = activeID ?? conversations.data?.items[0]?.id;
+  const shownID = activeID ?? (mentionsMode ? undefined : conversations.data?.items[0]?.id);
   const listed = conversations.data?.items.find((item) => item.id === shownID);
   // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
@@ -159,7 +158,13 @@ export function InboxRoute() {
   const detail = opened.data?.id === shownID ? opened.data : undefined;
   // The row is the newer while a change refetches the list; it borrows the detail's notices while their status agrees.
   const withNotices = listed && detail?.status_notices && detail.status === listed.status ? { ...listed, status_notices: detail.status_notices } : listed;
-  const selected = withNotices ?? detail ?? (activeID ? undefined : conversations.data?.items[0]);
+  const selected = withNotices ?? detail ?? (activeID || mentionsMode ? undefined : conversations.data?.items[0]);
+  // A conversation the person opened (a row picked, or its address) heads Recent in the search palette.
+  const workspaceId = me.data?.workspace?.id;
+  const opening = activeID && selected?.id === activeID ? selected : undefined;
+  useEffect(() => {
+    if (workspaceId && opening) rememberRecent(workspaceId, { kind: 'conversation', id: opening.id, title: opening.subject, detail: opening.contact_name });
+  }, [workspaceId, opening?.id, opening?.subject, opening?.contact_name]); // eslint-disable-line react-hooks/exhaustive-deps
   // An inbox left open reads the list (and the opened conversation) again when a target mark may change.
   // The Markdown of replies loads while the list does, before a conversation opens.
   useEffect(() => markdownPart.preload(), []);
@@ -176,12 +181,18 @@ export function InboxRoute() {
   const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID) && reads('messages:read'),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
+  // Opening a note that asked the person marks it read; a Mentions row or a mention email opens at the note.
+  useMarkMentionsRead(openID, timeline.data?.items, me.data?.agent?.id);
+  // Read on each render: opening a row changes the address, which renders the route again.
+  const hash = window.location.hash.slice(1);
+  useScrollToHashWhenReady(Boolean(timeline.data) && hash.startsWith('message-'), hash.startsWith('message-') ? hash : undefined);
   // Who else has which conversation open, from the activity poll the app already runs: no request of its own.
   const viewing = useInboxViewing();
   // Replies an AI agent left for a person to send (written drafts), shown above the composer of the open
   // conversation whether or not AI drafts are on. The inbox filter "has a draft waiting" finds the others.
   const drafts = useQuery({ queryKey: ['ai-drafts', openID], queryFn: () => aiDraftApi.list(openID!), enabled: Boolean(openID) && reads('ai_assist:read') });
   const selectedDrafts = waitingWritten(drafts.data?.items);
+  const earlierDrafts = earlierWritten(drafts.data?.items);
   const [draftNotice, setDraftNotice] = useState<string>();
   const afterDraft = (conversationId: string) => {
     void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
@@ -202,13 +213,15 @@ export function InboxRoute() {
   const senderID = repliesVia?.id;
   const emailChannel = useQuery({ queryKey: senderID ? ['email-channel', senderID] : ['email-channel'],
     queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()), enabled: reads('channels:read') && (!repliesVia || repliesVia.type === 'email') });
+  // The default mailbox says whether customer mail arrives through it yet (the line under the title). With no
+  // conversation open it is the query above; with one open it was read with the list, or goes out beside it.
+  const defaultMailbox = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel, enabled: reads('channels:read') }).data;
   const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') }).data?.types;
+  // An empty list is where the next setup step is offered; Quick start asks for the same steps, so this is one request.
+  const listEmpty = conversations.data?.items.length === 0 && !filtered;
+  const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: Boolean(listEmpty && me.data) });
+  const emptyStep = highlightedStep(setup.data, me.data, me.data?.agent?.id ? readSkipped(me.data.agent.id) : false);
   const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
-  // The setup guide starts open only where it covers nothing: a workspace with no conversation at all, whose
-  // empty inbox has no button of its own yet (a mailbox brings "Send yourself a test message").
-  const guideStartsOpen = checkAny && anyConversation.data?.items.length === 0 && channelTypes !== undefined && mailboxes === 0;
-  const guide = !guideHidden && setup.data && guideHasWork(setup.data, isAdmin)
-    ? <SetupGuide progress={setup.data} admin={isAdmin} goal={me.data?.onboarding_goal} defaultOpen={guideStartsOpen} onHide={() => hideGuide.mutate()} /> : undefined;
   // A type with two channels or more names the channel on each row and thread; with one, nothing changes.
   const several = new Set(channelTypes?.filter((info) => info.count > 1).map((info) => info.type));
   const channelLabel = (conversation: Conversation) => {
@@ -237,6 +250,15 @@ export function InboxRoute() {
     if (failedDeliveries) void client.invalidateQueries({ queryKey: ['email-channel'] });
   }, [client, failedDeliveries]);
   const [starting, setStarting] = useState(false);
+  // Starting one picks a contact and the channel it leaves through, so it needs those reads as well. Until the
+  // session answers it is allowed; the window itself waits for what it needs.
+  const mayStart = !me.data || (['messages:send', 'channels:read', 'contacts:read'] as const).every(reads);
+  // Search and New conversation are in the sidebar, on every page: what it asked for is done here.
+  const [searchSignal, setSearchSignal] = useState(0);
+  useInboxIntent((intent) => {
+    if (intent === 'search') setSearchSignal((count) => count + 1);
+    else if (mayStart) setStarting(true);
+  });
   // An address that names a conversation is the thread view; on a phone it replaces the list (layout.css).
   const threadOpen = Boolean(params.conversationId);
   useLayoutEffect(() => (threadOpen ? showThread() : showList()), [threadOpen]);
@@ -251,6 +273,7 @@ export function InboxRoute() {
   // conversation; a conversation reached by a link has no list behind it, so the list opens with its filters.
   const backToList = () => {
     if (params.conversationId && listIsBehind(params.conversationId)) window.history.back();
+    else if (mentionsMode) void navigate({ to: '/mentions' });
     else void navigate({ to: '/', search: filters });
   };
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
@@ -263,8 +286,9 @@ export function InboxRoute() {
   };
   const agentId = me.data?.agent?.id;
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes),
-    onSuccess: (changed, { changes }) => {
-      if (changes.status) { track('conversation_status_changed', { to: changes.status }); settleTargets(); }
+    onSuccess: (changed, { conversationId, changes }) => {
+      // Resolving or closing discards the drafts that wait (a trigger on the server): read them again.
+      if (changes.status) { track('conversation_status_changed', { to: changes.status }); settleTargets(); void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] }); }
       if (changes.assignee_id) track('conversation_assigned', { to_self: changes.assignee_id === agentId });
       return keepOpened(changed);
     } });
@@ -272,9 +296,13 @@ export function InboxRoute() {
     onSuccess: (_result, { ids, changes }) => {
       const action = bulkActionOf(changes);
       if (action) track('bulk_action_applied', { action, count: ids.length });
+      if (changes.status) for (const id of ids) void client.invalidateQueries({ queryKey: ['ai-drafts', id] });
     },
     // A refusal usually means a row is gone or changed under the agent; reload so the list shows it.
     onSettled: refresh });
+  // Spam moves conversations out of every list but Spam (or back) and stops (or restarts) their clocks.
+  const spam = useMutation({ mutationFn: ({ ids, spam }: { ids: string[]; spam: boolean }) => api.markSpam(ids, spam),
+    onSuccess: () => settleTargets(), onSettled: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const createTag = useCreateMutation({ create: ({ name }: { conversationId: string; name: string }, key: string) => api.createTag(name, key), onSuccess: (tag, variables) => {
@@ -284,9 +312,10 @@ export function InboxRoute() {
   // A message carries the key of its send: the reply box's own (kept with its draft, so a reload can ask
   // whether it arrived), or one per conversation and text; a retry of the same text reuses it, so the server
   // stores the message once however many times it is asked.
-  type Send = { conversationId: string; kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number; aiDraft?: string; key?: string };
-  const message = useCreateAction(({ conversationId, kind, body, files, cc, seen, aiDraft, key }: Send, pressKey: string) =>
-    api.createMessage(conversationId, kind, body, files, cc, seen, aiDraft, key ?? pressKey));
+  type Send = { conversationId: string; kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number; aiDraft?: string; key?: string; mentions?: string[] };
+  const message = useCreateAction(({ conversationId, kind, body, files, cc, seen, aiDraft, key, mentions }: Send, pressKey: string) =>
+    (mentions?.length ? api.createMessage(conversationId, kind, body, files, cc, seen, aiDraft, key ?? pressKey, undefined, mentions)
+      : api.createMessage(conversationId, kind, body, files, cc, seen, aiDraft, key ?? pressKey)));
   const testMessage = useCreateAction((_nothing: void, key: string) => api.sendTestMessage(undefined, key));
   const sent = useMutation({ mutationFn: message.run,
     // The conversation the message went to, which the person may have left while it was sending.
@@ -314,12 +343,13 @@ export function InboxRoute() {
     void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
   };
   return <PermissionsContext.Provider value={me.data?.permissions}><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
-    agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} guide={guide}
+    agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
+    nextStep={emptyStep ? { label: setupMessages.emptyInboxAction[emptyStep] ?? setupMessages.title[emptyStep], href: stepPath(emptyStep) } : undefined}
     onTestMessage={mailboxes > 0 ? () => testMessage.run().then((test) => {
       void client.invalidateQueries({ queryKey: ['conversations'] });
       openConversation(test.conversation_id);
     }) : undefined}
-    page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
+    statusCounts={conversations.data?.status_counts} page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
     onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
     threadOpen={threadOpen} onBack={backToList}
     query={filters}
@@ -330,20 +360,23 @@ export function InboxRoute() {
     onSetStatus={(conversationId, status, options) => update.mutateAsync({ conversationId, changes: options?.notify === false ? { status, notify: false } : { status } })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body, files, cc, seen, aiDraft, key) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key })}
+    onMessage={(kind, body, files, cc, seen, aiDraft, key, mentions) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key, mentions })}
+    otherList={mentionsMode ? { label: mentionMessages.mentions, content: <MentionsPane timezone={me.data?.timezone ?? 'UTC'} selectedConversation={activeID} /> } : undefined}
     onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={reads('ai_assist:read') ? me.data?.ai_features?.draft : undefined}
     autofix={autofixPreviewOn() && config?.autofix?.available} aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.
-    onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
+    onManageSavedReplies={() => { window.open('/settings/saved-replies', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
+    defaultMailbox={defaultMailbox} replyMailbox={selected && (!repliesVia || repliesVia.type === 'email') ? emailChannel.data : undefined}
     outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
-    canManage={can(me.data, 'ai_settings:update')}
+    onSpam={(ids, value) => spam.mutateAsync({ ids, spam: value })}
+    canManage={can(me.data, 'ai_settings:update')} canManageChannels={can(me.data, 'channels:update')}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
     replyDrafts={selectedDrafts} viewers={viewing}
@@ -353,7 +386,9 @@ export function InboxRoute() {
       // the draft waiting, shown in the timeline, to be read before sending again.
       const seen = timeline.data?.items.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0);
       try {
-        await api.createMessage(draft.conversation_id, 'outgoing', edit?.body ?? draft.text ?? '', [], edit?.cc ?? draft.cc ?? [], seen, draft.id);
+        // The draft's files go with it; edit.files names the ones the person kept when they dropped some.
+        await api.createMessage(draft.conversation_id, 'outgoing', edit?.body ?? draft.text ?? '', [], edit?.cc ?? draft.cc ?? [], seen, draft.id, undefined,
+          edit?.files);
       } catch (error) {
         if (!(error instanceof ReplyConflictError)) {
           setDraftNotice(messages.draftRefused(error instanceof Error ? error.message : undefined));
@@ -368,9 +403,15 @@ export function InboxRoute() {
       await afterDraft(draft.conversation_id);
     }}
     onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
+    earlierDrafts={earlierDrafts}
+    earlierDraftsNext={drafts.data?.next_before}
+    onLoadOlderDrafts={openID ? async (before) => {
+      const page = await aiDraftApi.list(openID, before);
+      return { drafts: earlierWritten(page.items), next: page.next_before };
+    } : undefined}
+    onRestoreDraft={reads('ai_assist:create') ? async (draft) => { await aiDraftApi.restore(draft.conversation_id, draft.id); await afterDraft(draft.conversation_id); } : undefined}
     contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
-    // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
-    onNewConversation={me.data && !(['messages:send', 'channels:read', 'contacts:read'] as const).every(reads) ? undefined : () => setStarting(true)} />
+    searchSignal={searchSignal} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
       render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={openConversation} />} />}
   </PermissionsContext.Provider>;

@@ -66,11 +66,15 @@ export function inboxQueryFromSearch(search: Record<string, unknown>): InboxQuer
   return query;
 }
 
+// defaultSort is the list's order when the person picked none; the address leaves it out.
+export const defaultSort = 'due';
+
 // apiQuery is the query string of GET /api/v1/conversations for a page of the list.
 export function apiQuery(query: InboxQuery, page: number, pageSize = 50): string {
   const values = new URLSearchParams();
   for (const key of apiOrder) {
-    const value = query[key];
+    // The list starts on Due first (the earliest reply target; who waited longest when targets are off).
+    const value = key === 'sort' ? query.sort || defaultSort : query[key];
     if (value !== undefined && value !== '') values.set(key, String(value));
   }
   const status = query.status ?? defaultStatus;
@@ -86,5 +90,5 @@ export function sameQuery(left: InboxQuery, right: InboxQuery): boolean {
 }
 
 export function isDefaultQuery(query: InboxQuery): boolean {
-  return sameQuery(query, {}) || sameQuery(query, { sort: 'updated_desc' });
+  return sameQuery(query, {});
 }

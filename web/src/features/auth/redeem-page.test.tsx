@@ -122,10 +122,19 @@ test('the sign-up hint under the form names no sign-in provider', () => {
 	expect(screen.queryByText(/google|microsoft/i)).not.toBeInTheDocument();
 });
 
-test('the brand side says plainly that Colliedesk is alpha', () => {
-	render(<RedeemPage token="" cloudEnabled cloudSignIn={<div>form</div>} />);
-	expect(screen.getByText('Colliedesk is alpha: any release may still change the interface.')).toBeInTheDocument();
-	expect(screen.queryByText(/beta/i)).not.toBeInTheDocument();
+test('on Colliedesk Cloud the brand side links what general availability guarantees and the status page', () => {
+	render(<RedeemPage token="" cloudEnabled hostedCloud cloudSignIn={<div>form</div>} />);
+	expect(screen.getByRole('link', { name: 'What general availability guarantees' }))
+		.toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/general-availability.md');
+	expect(screen.getByRole('link', { name: 'Service status' })).toHaveAttribute('href', 'https://status.colliedesk.com');
+	expect(screen.queryByText(/alpha|beta/i)).not.toBeInTheDocument();
+});
+
+test('a self-hosted server links the guarantees but not the status page of Colliedesk Cloud', () => {
+	render(<RedeemPage token="abc" />);
+	expect(screen.getByRole('link', { name: 'What general availability guarantees' })).toBeInTheDocument();
+	expect(screen.queryByRole('link', { name: 'Service status' })).not.toBeInTheDocument();
+	expect(screen.queryByText(/alpha|beta/i)).not.toBeInTheDocument();
 });
 
 test('where sign-up is on, the page links the terms, the privacy policy and the pricing with a short consent line', () => {

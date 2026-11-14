@@ -49,7 +49,7 @@ export const tokenResources: ResourceInfo[] = [
   { resource: 'help_center', label: 'Help center', permissions: [
     p('help_center:read', 'See the help center settings, theme and domain.'),
     p('help_center:update', 'Turn the help center on or off, change its theme, domain and Search Console.', true)] },
-  { resource: 'results', label: 'Results', permissions: [
+  { resource: 'results', label: 'Reports', permissions: [
     p('results:read', 'See results.'), p('results:share', 'See every number and make share links.', true)] },
   { resource: 'profile', label: 'Your profile', permissions: [p('profile:update', 'Change your own name, time zone and emails.')] },
   { resource: 'team', label: 'Team and sessions', permissions: [

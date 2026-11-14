@@ -72,6 +72,10 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		SeenReplyNumber *int `json:"seen_reply_number"`
 		// AIDraftID is the AI draft the reply was written from: its outcome is recorded with the reply.
 		AIDraftID string `json:"ai_draft_id"`
+		// AIDraftFileIDs are the files of that draft the reply carries; left out, all of them.
+		AIDraftFileIDs *[]string `json:"ai_draft_file_ids"`
+		// Mentions are the teammates a note asks.
+		Mentions []string `json:"mentions"`
 	}
 	if err := decodeJSON(request, &input); err != nil || (input.Kind != "outgoing" && input.Kind != "note") || strings.TrimSpace(input.Body) == "" ||
 		(input.SeenReplyNumber != nil && *input.SeenReplyNumber < 0) {
@@ -101,7 +105,15 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "ai_draft_id goes only with a reply, not with a note.")
 		return
 	}
-	actor.AIDraftID = input.AIDraftID
+	if input.AIDraftFileIDs != nil && input.AIDraftID == "" {
+		writeError(response, http.StatusBadRequest, "invalid_request", "ai_draft_file_ids goes only with ai_draft_id, the draft whose files the reply carries.")
+		return
+	}
+	actor.AIDraftID, actor.AIDraftFileIDs = input.AIDraftID, input.AIDraftFileIDs
+	if !checkMentions(response, input.Kind, input.Mentions) {
+		return
+	}
+	actor.Mentions = input.Mentions
 	// A conversation of another workspace is refused before anything about the Cc list is said.
 	if _, err := a.store.GetConversation(request.Context(), identity.Workspace.ID, request.PathValue("id")); err != nil {
 		writeStoreError(response, err)
@@ -113,7 +125,7 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	item, replayed, err := a.store.CreateReplyOnce(request.Context(), identity.Workspace.ID, request.PathValue("id"), key, actor, input.Kind, input.Body, cc, input.SeenReplyNumber)
-	if a.writeReplyConflict(response, identity, err) || writeKeyReused(response, err) {
+	if a.writeReplyConflict(response, identity, err) || writeKeyReused(response, err) || writeMentionRefused(response, err) {
 		return
 	}
 	if err != nil {

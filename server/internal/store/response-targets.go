@@ -169,7 +169,7 @@ func (s *Store) SetResponseTargets(ctx context.Context, workspaceID, agentID str
 		}
 		for field, value := range map[string]*int{"first_response_minutes": minutes.FirstResponse, "resolution_minutes": minutes.Resolution} {
 			if value != nil && (*value < 1 || *value > maxTargetMinutes) {
-				return ResponseTargets{}, &ResponseTargetsError{Field: "targets." + priority + "." + field, Message: "Use 1 business minute or more, or no target."}
+				return ResponseTargets{}, &ResponseTargetsError{Field: "targets." + priority + "." + field, Message: fmt.Sprintf("Use 1 to %d business minutes (a year), or no target.", maxTargetMinutes)}
 			}
 		}
 		targets[priority] = minutes

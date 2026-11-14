@@ -37,7 +37,47 @@ test('shows no action bar until a row is selected', () => {
   renderInbox();
   expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
   pick(/alpha request/i);
-  expect(within(bar()).getByText('1 selected')).toBeInTheDocument();
+  expect(within(bar()).getByText('1 of 3 selected')).toBeInTheDocument();
+});
+
+test('at rest the list has no select all; the first tick puts it with the actions in the place of the status tabs', () => {
+  renderInbox();
+  expect(screen.queryByRole('checkbox', { name: 'Select all on this page' })).not.toBeInTheDocument();
+  expect(screen.getByRole('radiogroup', { name: 'Status' })).toBeInTheDocument();
+  pick(/alpha request/i);
+  const selectAll = screen.getByRole('checkbox', { name: 'Select all on this page' });
+  expect(selectAll).not.toBeChecked();
+  expect((selectAll as HTMLInputElement).indeterminate).toBe(true);
+  expect(screen.queryByRole('radiogroup', { name: 'Status' })).not.toBeInTheDocument();
+  expect(selectAll.closest('.inbox-filters')).not.toBeNull();
+});
+
+test('x ticks and unticks the row that has the focus; it never opens it', () => {
+  const onSelect = vi.fn();
+  render(<InboxPage conversations={[alpha, beta, gamma]} onSelect={onSelect} onBulkUpdate={vi.fn()} />);
+  const betaRow = screen.getByRole('button', { name: /beta request/i });
+  betaRow.focus();
+  fireEvent.keyDown(betaRow, { key: 'x' });
+  expect(screen.getByRole('checkbox', { name: /beta request/i })).toBeChecked();
+  fireEvent.keyDown(betaRow, { key: 'x' });
+  expect(screen.getByRole('checkbox', { name: /beta request/i })).not.toBeChecked();
+  expect(onSelect).not.toHaveBeenCalled();
+});
+
+test('shift and a click on a box tick every row between the last ticked one and it', () => {
+  renderInbox();
+  pick(/alpha request/i);
+  fireEvent.click(screen.getByRole('checkbox', { name: /gamma request/i }), { shiftKey: true });
+  for (const name of [/alpha request/i, /beta request/i, /gamma request/i]) expect(screen.getByRole('checkbox', { name })).toBeChecked();
+  expect(within(bar()).getByText('3 of 3 selected')).toBeInTheDocument();
+});
+
+test('Escape anywhere in the list ends the selection', () => {
+  renderInbox();
+  pick(/alpha request/i);
+  fireEvent.keyDown(screen.getByRole('button', { name: /beta request/i }), { key: 'Escape' });
+  expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: /alpha request/i })).not.toBeChecked();
 });
 
 test('the action bar offers resolve, status, assign, tags and clear as named icon controls, and no delete', () => {
@@ -45,7 +85,7 @@ test('the action bar offers resolve, status, assign, tags and clear as named ico
   pick(/alpha request/i);
   pick(/beta request/i);
   const toolbar = within(bar());
-  expect(toolbar.getByText('2 selected')).toBeInTheDocument();
+  expect(toolbar.getByText('2 of 3 selected')).toBeInTheDocument();
   for (const label of ['Resolve', 'Clear selection']) expect(toolbar.getByRole('button', { name: label })).toHaveAttribute('data-tip', label);
   for (const label of ['Set status', 'Assign to', 'Tags']) expect(toolbar.getByLabelText(label, { selector: 'summary' })).toHaveAttribute('data-tip', label);
   expect(toolbar.queryByText('Add tag')).not.toBeInTheDocument();
@@ -65,15 +105,16 @@ test('resolve changes the selection in one press', async () => {
 test('the filters stay in view while rows are selected', () => {
   renderInbox();
   pick(/alpha request/i);
-  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeVisible();
+  // Select all and the actions take the tabs' place; Sort and Filter stay beside them.
+  for (const tool of [screen.getByRole('combobox', { name: 'Sort' }), screen.getByText('Filter')]) expect(tool).toBeVisible();
 });
 
-test('Escape in the action bar clears the selection and returns focus to select all', () => {
+test('Escape in the action bar clears the selection and returns focus to the list', () => {
   renderInbox();
   pick(/alpha request/i);
   fireEvent.keyDown(within(bar()).getByRole('button', { name: 'Resolve' }), { key: 'Escape' });
   expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
-  expect(screen.getByRole('checkbox', { name: 'Select all on this page' })).toHaveFocus();
+  expect(screen.getByRole('region', { name: 'Conversation list' })).toHaveFocus();
 });
 
 test('Escape inside an open menu closes only the menu', () => {
@@ -84,13 +125,14 @@ test('Escape inside an open menu closes only the menu', () => {
   menu.open = true;
   fireEvent.keyDown(within(menu).getByRole('button', { name: 'Pending' }), { key: 'Escape' });
   expect(menu.open).toBe(false);
-  expect(within(bar()).getByText('1 selected')).toBeInTheDocument();
+  expect(within(bar()).getByText('1 of 3 selected')).toBeInTheDocument();
 });
 
 test('select all on this page selects every row, and clear selection removes the bar', () => {
   renderInbox();
+  pick(/beta request/i);
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }));
-  expect(within(bar()).getByText('3 selected')).toBeInTheDocument();
+  expect(within(bar()).getByText('3 of 3 selected')).toBeInTheDocument();
   fireEvent.click(within(bar()).getByRole('button', { name: 'Clear selection' }));
   expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
   expect(screen.getByRole('checkbox', { name: /alpha request/i })).not.toBeChecked();
@@ -156,7 +198,7 @@ test('a refused update shows an alert next to the bar and keeps the selection', 
   pick(/beta request/i);
   fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Pending' }));
   expect(await screen.findByRole('alert')).toHaveTextContent(/nothing was changed/i);
-  expect(within(bar()).getByText('2 selected')).toBeInTheDocument();
+  expect(within(bar()).getByText('2 of 3 selected')).toBeInTheDocument();
   expect(screen.getByRole('checkbox', { name: /beta request/i })).toBeChecked();
 });
 
@@ -180,7 +222,7 @@ test('rows that leave the list drop out of the selection', () => {
   pick(/alpha request/i);
   pick(/beta request/i);
   rerender(<InboxPage conversations={[beta]} onBulkUpdate={onBulkUpdate} />);
-  expect(within(bar()).getByText('1 selected')).toBeInTheDocument();
+  expect(within(bar()).getByText('1 of 1 selected')).toBeInTheDocument();
 });
 
 test('the bulk result line is a live region from the start, yet an idle inbox shows no status', () => {
@@ -198,22 +240,22 @@ test('the inbox heading stays in the page while rows are selected', () => {
 test('rows with the same subject still have different checkbox names', () => {
   const later = { ...row('99999999-9999-4999-8999-999999999999', 'Alpha request'), updated_at: '2026-10-14T05:30:00Z' };
   render(<InboxPage conversations={[alpha, later]} />);
-  const names = screen.getAllByRole('checkbox', { name: /^select alpha request/i }).map((box) => box.getAttribute('aria-label'));
+  const names = screen.getAllByRole('checkbox', { name: /^select .*: alpha request/i }).map((box) => box.getAttribute('aria-label'));
   expect(new Set(names).size).toBe(2);
 });
 
-test('after a successful change focus moves to select all on this page', async () => {
+test('after a successful change focus moves to the list', async () => {
   renderInbox();
   pick(/alpha request/i);
   fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Resolved' }));
-  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Select all on this page' })).toHaveFocus());
+  await waitFor(() => expect(screen.getByRole('region', { name: 'Conversation list' })).toHaveFocus());
 });
 
-test('after clear selection focus moves to select all on this page', () => {
+test('after clear selection focus moves to the list', () => {
   renderInbox();
   pick(/alpha request/i);
   fireEvent.click(within(bar()).getByRole('button', { name: 'Clear selection' }));
-  expect(screen.getByRole('checkbox', { name: 'Select all on this page' })).toHaveFocus();
+  expect(screen.getByRole('region', { name: 'Conversation list' })).toHaveFocus();
 });
 
 test('with no rows left after a change, focus moves to the list pane', async () => {
