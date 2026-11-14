@@ -9,6 +9,9 @@ interface TimezoneSelectProps {
   value: string;
   // emptyOption, when given, is the first choice and stands for "no value" (an empty string).
   emptyOption?: string;
+  // suggested, when given, is a zone offered right after emptyOption under a name of its own (the reader's zone),
+  // and leaves the plain list. It is not offered while the chosen zone already is that zone.
+  suggested?: { zone: string; label: string };
   save?: SaveState;
   onChange: (value: string) => void;
 }
@@ -19,6 +22,11 @@ const settleMs = 1500;
 
 function canonical(zone: string): string {
   try { return new Intl.DateTimeFormat('en', { timeZone: zone }).resolvedOptions().timeZone; } catch { return zone; }
+}
+
+// sameZone is true for two names of one zone (Asia/Saigon and Asia/Ho_Chi_Minh).
+export function sameZone(a: string, b: string): boolean {
+  return a === b || canonical(a) === canonical(b);
 }
 
 // Every IANA zone this browser knows, plus UTC. Browsers list some zones under an older name
@@ -33,7 +41,7 @@ function zones(current: string): string[] {
 
 // TimezoneSelect saves without a button and shows the result next to it. It is never disabled while
 // saving: a disabled control would throw keyboard focus out to the page.
-export function TimezoneSelect({ label, value, emptyOption, save, onChange }: TimezoneSelectProps) {
+export function TimezoneSelect({ label, value, emptyOption, suggested, save, onChange }: TimezoneSelectProps) {
   const feedback = useSaveFeedback(save);
   const id = useId();
   const [draft, setDraft] = useState(value);
@@ -46,6 +54,8 @@ export function TimezoneSelect({ label, value, emptyOption, save, onChange }: Ti
   const failed = save?.error;
   useEffect(() => { if (failed) sent.current = value; }, [failed, value]);
   useEffect(() => () => clearTimeout(timer.current), []);
+  // Once the chosen zone is the suggested one, it stands in the list under its own name and the suggestion goes.
+  const offered = suggested && !(draft && sameZone(draft, suggested.zone)) ? suggested : undefined;
   const commit = (next: string) => {
     clearTimeout(timer.current);
     if (next === sent.current) return;
@@ -67,7 +77,8 @@ export function TimezoneSelect({ label, value, emptyOption, save, onChange }: Ti
           onBlur={() => commit(draft)}
           onKeyDown={(event) => { if (event.key === 'Enter') commit(draft); }}>
           {emptyOption && <option value="">{emptyOption}</option>}
-          {zones(draft).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+          {offered && <option value={offered.zone}>{offered.label}</option>}
+          {zones(draft).filter((zone) => !offered || !sameZone(zone, offered.zone)).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
         </select>
         {feedback.pending ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}
       </span>

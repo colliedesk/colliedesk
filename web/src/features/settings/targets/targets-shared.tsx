@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChangedElsewhereError, InvalidRequestError } from '../../../api/client';
 import { responseTargetsApi, responseTargetsSchema } from '../../../api/response-targets';
 import type { ResponseTargets, ResponseTargetsChange } from '../../../api/response-targets';
+import { HelpTip } from '../../../ui/help-tip';
 import { saveState } from '../save-feedback';
 import { targetsMessages as m } from './targets-messages';
 
@@ -44,9 +45,13 @@ export function useSave() {
   });
 }
 
-export function Card({ id, title, lead, children }: { id: string; title: string; lead?: string; children: ReactNode }) {
+// tip is what the card explains beyond its one-line lead: how, why, a definition (design.md, "Quiet by default").
+export function Card({ id, title, lead, tip, children }: { id: string; title: string; lead?: string; tip?: string; children: ReactNode }) {
   return <section className="settings-card" aria-labelledby={id}>
-    <div className="section-heading"><h2 id={id}>{title}</h2>{lead && <p>{lead}</p>}</div>
+    <div className="section-heading">
+      {tip ? <div className="heading-with-tip"><h2 id={id}>{title}</h2><HelpTip label={title} text={tip} /></div> : <h2 id={id}>{title}</h2>}
+      {lead && <p>{lead}</p>}
+    </div>
     <div className="settings-body">{children}</div>
   </section>;
 }
