@@ -4,7 +4,8 @@ import type { ColorField } from './theme-api';
 // and the reply box pickers, which share kbMessages, do not carry them.
 export const themeMessages = {
   heading: 'Brand',
-  intro: 'Logo, colors, fonts and links of the public pages. The preview shows the result before you save.',
+  intro: 'Logo, colors, fonts and links of the public pages.',
+  introTip: 'The preview shows the result before you save.',
   loadFailed: 'The brand settings could not be loaded.',
   adminsOnly: 'Only admins can change the brand.',
   brand: 'Logo and icon',
@@ -37,7 +38,8 @@ export const themeMessages = {
     contact_phone: 'Not in the preview yet: use digits, spaces and + - ( ).',
   },
   colors: 'Colors',
-  colorsHelp: 'Empty uses the default. With any color set, the pages stay light even for readers who use dark mode.',
+  colorsHelp: 'Empty uses the default.',
+  colorsTip: 'With any color set, the pages stay light even for readers who use dark mode.',
   colorNames: {
     primary: 'Primary color', header: 'Header color', header_text: 'Header text color', background: 'Background color',
     text: 'Text color', link: 'Link color', footer: 'Footer color',
@@ -57,8 +59,11 @@ export const themeMessages = {
   fontsHelp: 'Fonts already on the reader\'s device: nothing is downloaded.',
   advanced: 'Advanced',
   customCSS: 'Custom CSS',
-  customCSSHelp: 'Added after the brand on every public page, for details the fields above do not cover. '
+  customCSSHelp: 'For details the fields above do not cover.',
+  customCSSTip: 'It is added after the brand on every public page. '
     + 'Nothing may load from elsewhere: url(), @import and @font-face are refused. The contrast checks above do not cover it, so check the preview.',
+  customCSSGuide: 'https://colliedesk.com/docs/knowledge-base#custom-css',
+  learnMore: 'Learn more',
   customCSSPending: (reason: string) => `Not in the preview yet: ${reason}`,
   customCSSSize: (bytes: number, max: number) => `${bytes.toLocaleString('en-US')} of ${max.toLocaleString('en-US')} bytes`,
   previewCustomCSS: 'The preview keeps the last custom CSS it could show.',

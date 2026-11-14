@@ -11,6 +11,7 @@ import { Icon } from './editor/icons';
 import { kbApi } from './kb-api';
 import { reason } from './kb-tree';
 import { KBDialog, KBHead, KBToast, usePhone } from './kb-ui';
+import { HelpTip } from '../../ui/help-tip';
 import { mediaApi } from './media-api';
 import type { KBMedia, KBMediaUpload, MediaKind, MediaSort, MediaUsage } from './media-api';
 import { MediaDetail } from './media-detail';
@@ -191,7 +192,7 @@ function InProgress({ queue, items, onChanged }: { queue: UploadQueue; items: KB
   return (
     <section className="media-in-progress" aria-labelledby="media-in-progress-heading">
       <h3 id="media-in-progress-heading">{mediaMessages.inProgress}</h3>
-      <p className="kb-hint">{mediaMessages.inProgressHelp}</p>
+      <p className="kb-hint">{mediaMessages.inProgressHelp} <HelpTip label={mediaMessages.inProgress} text={mediaMessages.inProgressTip} /></p>
       {problem && <p role="alert" className="error-copy">{problem}</p>}
       <ul>
         {items.map((upload) => (
@@ -628,7 +629,7 @@ function Trash({ onChanged }: { onChanged: () => void }) {
         <a href={viewPath.library}>{mediaMessages.heading}</a><span aria-hidden="true">/</span>
         <span aria-current="page" className="media-crumb-title">{mediaMessages.trashHeading}</span>
       </nav>
-      <p className="muted-copy media-trash-help">{mediaMessages.trashDescription}</p>
+      <p className="muted-copy media-trash-help">{mediaMessages.trashDescription} <HelpTip label={mediaMessages.trashHeading} text={mediaMessages.trashTip} /></p>
       {problem && <p role="alert" className="error-copy">{problem}</p>}
       {items.length > 0 && <div className="media-unused-tools">
         <SelectBar chosen={selection.chosen} total={items.length} onAll={selection.all} onClear={selection.clear}>

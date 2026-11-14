@@ -233,3 +233,55 @@ test('languages count one draft as one, and move up and down in the order the he
   await waitFor(() => expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ languages: [{ locale: 'es', visible: false }, { locale: 'fr', visible: true }] }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Move Spanish (es) up' })).toBeDisabled());
 });
+
+// Each row keeps one short line; the how and why sit in the tip next to it.
+test('the languages page says what a translation is in one line, and who sees a language in a tip', async () => {
+  serve({ 'GET /api/v1/help-center/languages': () => json(200, languages()) });
+  show(<LanguagesRoute search={{}} />);
+  const section = (await screen.findByRole('heading', { name: 'Languages' })).closest('section') as HTMLElement;
+  expect(section).toHaveTextContent('Translations are other languages of the same article.');
+  expect(within(section).getByRole('button', { name: 'About Languages' })).toHaveAccessibleDescription('Customers see a language only while you show it, and only its published translations.');
+});
+
+test('the primary language says what is written in it in one line, and where to change it in a tip', async () => {
+  serve({ 'GET /api/v1/help-center/languages': () => json(200, languages()) });
+  show(<LanguagesRoute search={{}} />);
+  const primary = (await screen.findByText('Primary language')).closest('div') as HTMLElement;
+  expect(primary).toHaveTextContent('The articles are written in it.');
+  expect(within(primary).getByRole('button', { name: 'About Primary language' })).toHaveAccessibleDescription('Change it in Settings, Help center.');
+});
+
+test('translations in an unlisted language say who sees them in one line, and that they are kept in a tip', async () => {
+  serve({ 'GET /api/v1/help-center/languages': () => json(200, { ...languages(), unlisted: ['de'] }) });
+  show(<LanguagesRoute search={{}} />);
+  const note = (await screen.findByText('Translations in languages the help center does not list')).closest('div') as HTMLElement;
+  expect(note).toHaveTextContent('Customers never see them. Add the language to show them.');
+  expect(within(note).getByRole('button', { name: 'About Translations in languages the help center does not list' })).toHaveAccessibleDescription('They are kept and can be edited or deleted.');
+});
+
+test('a translation of a draft article says it is not public yet in one line', async () => {
+  serve({
+    'GET /api/v1/auth/me': () => json(200, me),
+    'GET /api/v1/help-center/languages': () => json(200, languages(true)),
+    [`GET /api/v1/kb/articles/${ids.article}`]: () => json(200, article({ translations: [translation()] })),
+    [`GET /api/v1/kb/articles/${ids.article}/translations/fr`]: () => json(200, translation({ original: { ...translation().original, status: 'draft' } })),
+  });
+  show(<TranslationRoute articleId={ids.article} locale="fr" />);
+  expect(await screen.findByText('The article is a draft: not public until it is published.')).toBeInTheDocument();
+});
+
+test('deleting a translation says it leaves the help center and the article stays in one line, and that it can be restored in a tip', async () => {
+  serve({
+    'GET /api/v1/auth/me': () => json(200, me),
+    'GET /api/v1/help-center/languages': () => json(200, languages(true)),
+    [`GET /api/v1/kb/articles/${ids.article}`]: () => json(200, article({ translations: [translation()] })),
+    [`GET /api/v1/kb/articles/${ids.article}/translations/fr`]: () => json(200, translation()),
+  });
+  show(<TranslationRoute articleId={ids.article} locale="fr" />);
+  await screen.findByRole('textbox', { name: 'Text' });
+  fireEvent.click(screen.getByRole('button', { name: 'More translation actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete translation' }));
+  const dialog = screen.getByRole('alertdialog');
+  expect(dialog).toHaveTextContent('It leaves the help center; the article stays.');
+  expect(within(dialog).getByRole('button', { name: 'About the trash' })).toHaveAccessibleDescription('It goes to the trash and can be restored for 30 days.');
+});

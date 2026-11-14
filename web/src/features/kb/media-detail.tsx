@@ -5,6 +5,7 @@ import { formatBytes } from '../../lib/format-bytes';
 import { Icon } from './editor/icons';
 import { dialogKeys } from '../../ui/dialog-keys';
 import { KBDialog, usePhone } from './kb-ui';
+import { HelpTip } from '../../ui/help-tip';
 import { mediaApi, updateFields } from './media-api';
 import type { KBMedia, KBMediaDetails } from './media-api';
 import { embedFor, mediaName } from './media-grid';
@@ -127,13 +128,15 @@ function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDet
             <input value={name} maxLength={200} onChange={(event) => { setName(event.target.value); setState({}); }} />
           </label>
           <label className="field">{video ? mediaMessages.titleLabel : mediaMessages.altLabel}
-            <textarea value={alt} maxLength={500} rows={2} aria-describedby={`${id}-alt-help`} onChange={(event) => { setAlt(event.target.value); setState({}); }} />
+            <textarea value={alt} maxLength={500} rows={2} aria-describedby={`${id}-alt-help ${id}-alt-tip`} onChange={(event) => { setAlt(event.target.value); setState({}); }} />
           </label>
-          <p id={`${id}-alt-help`} className="kb-hint">{video ? mediaMessages.titleHelp : mediaMessages.altHelp}</p>
+          <p className="kb-hint"><span id={`${id}-alt-help`}>{video ? mediaMessages.titleHelp : mediaMessages.altHelp}</span>
+            {!video && <>{' '}<HelpTip label={mediaMessages.altLabel} text={mediaMessages.altTip} id={`${id}-alt-tip`} /></>}</p>
           <label className="media-keep">
-            <input type="checkbox" checked={kept} aria-describedby={`${id}-keep-help`} onChange={(event) => { setKept(event.target.checked); setState({}); }} />
+            <input type="checkbox" checked={kept} aria-describedby={`${id}-keep-help ${id}-keep-tip`} onChange={(event) => { setKept(event.target.checked); setState({}); }} />
             <span>{mediaMessages.keep}</span>
-            <span id={`${id}-keep-help`} className="kb-hint">{live > 0 ? mediaMessages.keepHelpInUse : mediaMessages.keepHelp}</span>
+            <span className="kb-hint"><span id={`${id}-keep-help`}>{live > 0 ? mediaMessages.keepHelpInUse : mediaMessages.keepHelp}</span>
+              {live === 0 && <>{' '}<HelpTip label={mediaMessages.keep} text={mediaMessages.keepTip} id={`${id}-keep-tip`} /></>}</span>
           </label>
         </div>
         <div className="media-tabpanel" role="tabpanel" id={`${id}-used`} aria-labelledby={`${id}-used-tab`} hidden={tab !== 'used'}>
@@ -182,7 +185,7 @@ function Poster({ item, player, onSaved }: { item: KBMediaDetails; player: RefOb
   return (
     <section className="media-poster" aria-labelledby="media-poster">
       <h3 id="media-poster">{mediaMessages.poster}</h3>
-      <p className="kb-hint">{item.poster_url ? mediaMessages.posterHelp : mediaMessages.noPoster} {mediaMessages.chooseFrameHelp}</p>
+      <p className="kb-hint">{item.poster_url ? mediaMessages.posterHelp : mediaMessages.noPoster} <HelpTip label={mediaMessages.poster} text={mediaMessages.chooseFrameHelp} /></p>
       <div className="button-row">
         <button type="button" disabled={state.busy} onClick={useFrame}>{mediaMessages.useThisFrame}</button>
         <button type="button" disabled={state.busy} onClick={() => file.current?.click()}>{mediaMessages.uploadPoster}</button>
@@ -273,7 +276,7 @@ function ReplacePicker({ item, onPick, onClose }: { item: KBMedia; onPick: (othe
   const items = (others.data?.items ?? []).filter((other) => other.id !== item.id);
   return (
     <KBDialog title={mediaMessages.replaceHeading(item.kind)} phone="full" closeLabel={mediaMessages.close} className="media-replace" onClose={onClose}>
-      <p className="kb-hint">{mediaMessages.replaceHelp}</p>
+      <p className="kb-hint">{mediaMessages.replaceHelp} <HelpTip label={mediaMessages.replaceLabel} text={mediaMessages.replaceTip} /></p>
       <input type="search" value={text} placeholder={mediaMessages.search} aria-label={mediaMessages.search} onChange={(event) => setText(event.target.value)} />
       {others.isSuccess && items.length === 0 && <p className="muted-copy">{mediaMessages.noMatches}</p>}
       <ul className="media-replace-list">

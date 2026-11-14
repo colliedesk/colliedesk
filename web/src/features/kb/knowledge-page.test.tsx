@@ -247,3 +247,37 @@ test('a role that only reads articles sees them, with nothing to create and no M
   expect(screen.queryByRole('link', { name: 'Media' })).not.toBeInTheDocument();
   expect(calls.map((call) => call.path)).not.toContain('/api/v1/help-center');
 });
+
+// Each row keeps one short line; the how and why sit in the tip next to it.
+test('a workspace without collections is asked for one in one line, with examples in a tip', async () => {
+  serve({ ...base, 'GET /api/v1/kb/collections': () => json(200, { items: [] }) });
+  open();
+  const line = (await screen.findByText(/^Start with a collection\./)).closest('p') as HTMLElement;
+  expect(line).toHaveTextContent('Start with a collection. Every article belongs to one.');
+  expect(within(line).getByRole('button', { name: 'About Collections' })).toHaveAccessibleDescription('For example "Getting started" or "Billing".');
+});
+
+test('a collection\'s address name asks for its shape in one line, and where it comes from in a tip', async () => {
+  serve(base);
+  open({ collection: ids.setup });
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit Setup' }));
+  const field = within(screen.getByRole('form', { name: 'Edit Setup' })).getByRole('textbox', { name: 'Address name' }).closest('.field') as HTMLElement;
+  expect(field).toHaveTextContent('Lowercase letters, digits and hyphens.');
+  expect(within(field).getByRole('button', { name: 'About Address name' })).toHaveAccessibleDescription('Made from the name when left empty.');
+});
+
+test('the trash says when an item goes for good in one line and keeps the rest in a tip; each list says how long it holds its items', async () => {
+  serve({ ...base,
+    'GET /api/v1/kb/articles/trash': () => json(200, { items: [], next_cursor: null }),
+    'GET /api/v1/kb/collections/trash': () => json(200, { items: [] }),
+    'GET /api/v1/kb/translations/trash': () => json(200, { items: [], next_cursor: null }) });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Trash' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Trash' });
+  expect(dialog).toHaveTextContent('After 30 days an item is deleted for good.');
+  expect(within(dialog).getByRole('button', { name: 'About the trash' })).toHaveAccessibleDescription(
+    'It goes with its history. Deleted articles count toward the 2,000 articles of a workspace until then. Restore a collection before the articles that were in it. A translation is restored with its history.');
+  expect(within(dialog).getByRole('region', { name: 'Deleted articles' })).toHaveTextContent('Deleted articles stay here for 30 days.');
+  expect(within(dialog).getByRole('region', { name: 'Deleted collections' })).toHaveTextContent('Deleted collections stay here for 30 days.');
+  expect(within(dialog).getByRole('region', { name: 'Translations' })).toHaveTextContent('Deleted translations stay here for 30 days.');
+});

@@ -18,6 +18,7 @@ import { kbMessages } from './kb-messages';
 import { CollectionNames } from './collection-names';
 import { languageName, translationMessages } from './translation-messages';
 import { KBDialog, KBHead } from './kb-ui';
+import { HelpTip } from '../../ui/help-tip';
 import { Icon } from './editor/icons';
 import { buildTree, flatten, indent, maxDepth, reason } from './kb-tree';
 import type { TreeNode } from './kb-tree';
@@ -185,7 +186,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
           {collections.isError && <p role="alert" className="error-copy">{kbMessages.collectionsFailed}{' '}
             <button type="button" className="link-action" onClick={() => void collections.refetch()}>{kbMessages.retry}</button></p>}
           {creates && (form === 'new' || (noCollections && form === null)) && <CollectionForm tree={tree} onSubmit={save} onCancel={() => setForm(null)} />}
-          {noCollections && <p className="muted-copy">{creates ? kbMessages.noCollections : kbMessages.noCollectionsYet}</p>}
+          {noCollections && <p className="muted-copy">{creates ? <>{kbMessages.noCollections} <HelpTip label={kbMessages.collections} text={kbMessages.noCollectionsTip} /></> : kbMessages.noCollectionsYet}</p>}
           {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} hrefTo={collectionHref} /></div>}
         </nav>
         <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined}>
@@ -335,6 +336,7 @@ function KBTrash({ timezone, onChanged, onClose }: { timezone: string; onChanged
   });
   return (
     <KBDialog title={kbMessages.trash} className="kb-trash" phone="full" closeLabel={kbMessages.closeTrash} onClose={onClose}>
+      <p className="muted-copy">{kbMessages.trashLead} <HelpTip label={kbMessages.trashLabel} text={kbMessages.trashTip} /></p>
       <SavedReplyTrash timezone={timezone} now={now} heading={kbMessages.articleTrash} description={kbMessages.articleTrashDescription}
         empty={kbMessages.articleTrashEmpty} failedMessage={kbMessages.articleActionFailed} text={() => ''}
         load={(cursor) => kbApi.trashedArticles(cursor)}

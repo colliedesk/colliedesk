@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { HelpTip } from '../../ui/help-tip';
+import type { HelpTipProps } from '../../ui/help-tip';
 import { themeMessages } from './help-center-theme-messages';
 import { kbApi } from './kb-api';
 import type { ThemeCheck } from './theme-api';
@@ -17,10 +19,14 @@ const picker = () => (loadPicker ??= import('./kb-chunk').then((module) => modul
 export const controlId = (field: string) => `theme-${field.replace(/[._]/g, '-')}`;
 
 // Hint holds what a control's description says: the server's refusal, else a local warning (a value the
-// preview leaves out until it is complete), else its help.
-export function Hint({ id, help, warning, error }: { id: string; help?: string; warning?: string; error?: string }) {
+// preview leaves out until it is complete), else its help. The tip holds the how or why of the help; it shows only
+// with the help, never in place of a refusal or a warning.
+export function Hint({ id, help, warning, error, tip }: { id: string; help?: string; warning?: string; error?: string; tip?: HelpTipProps }) {
   if (!help && !warning && !error) return null;
-  return <small id={id} className={error ? 'error-copy theme-hint' : warning ? 'theme-hint theme-hint-warn' : 'muted-copy theme-hint'}>{error ?? warning ?? help}</small>;
+  return <small className={error ? 'error-copy theme-hint' : warning ? 'theme-hint theme-hint-warn' : 'muted-copy theme-hint'}>
+    <span id={id}>{error ?? warning ?? help}</span>
+    {tip && !error && !warning && <>{' '}<HelpTip {...tip} /></>}
+  </small>;
 }
 
 // ImageField chooses the logo or the favicon: an upload into the media library, a pick from it, or none.

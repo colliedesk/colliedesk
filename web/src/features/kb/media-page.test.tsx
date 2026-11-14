@@ -449,3 +449,53 @@ test('on a phone, Tab from the last control the person can reach wraps in the sh
   fireEvent.keyDown(keep, { key: 'Tab' });
   expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Close details' }));
 });
+
+// Each row keeps one short line; the how and why sit in the tip next to it.
+test('an image\'s panel says what alt text is for in one line, and who offers it in a tip; keeping says what is deleted and when the days count from', async () => {
+  serve({ ...base, [`GET /api/v1/kb/media/${id(1)}/details`]: () => json(200, { ...item(1), usage: usage(0), articles: [] }) });
+  open('library', { item: id(1) });
+  const panel = await screen.findByRole('complementary', { name: 'Screenshot 1' });
+  expect(panel).toHaveTextContent('Describe what the image shows.');
+  expect(within(panel).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('The editor offers it when it inserts the image.');
+  expect(panel).toHaveTextContent('Unused items nobody kept are deleted after 30 days.');
+  expect(within(panel).getByRole('button', { name: 'About Keep even when no article uses it' })).toHaveAccessibleDescription('The 30 days count from their last upload.');
+});
+
+test('a video\'s poster says what it is in one line, and how to pick a frame in a tip', async () => {
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, poster_url: '/p', articles: [] }) });
+  open('library', { item: id(2) });
+  const panel = await screen.findByRole('complementary', { name: 'Product tour' });
+  fireEvent.click(within(panel).getByRole('tab', { name: 'File' }));
+  const poster = within(panel).getByRole('heading', { name: 'Poster' }).closest('section') as HTMLElement;
+  expect(poster).toHaveTextContent('The still picture shown before the video plays.');
+  expect(within(poster).getByRole('button', { name: 'About Poster' })).toHaveAccessibleDescription('Pause the video on the frame you want, then use it.');
+});
+
+test('replacing an item says which articles change in one line, and that each gets a new version in a tip', async () => {
+  serve({ ...base, [`GET /api/v1/kb/media/${id(1)}/details`]: () => json(200, { ...item(1), articles: [] }) });
+  open('library', { item: id(1) });
+  const panel = await screen.findByRole('complementary', { name: 'Screenshot 1' });
+  fireEvent.click(within(panel).getByRole('button', { name: 'Replace…' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Replace with another image' });
+  expect(dialog).toHaveTextContent('Every article that shows this gets the other one.');
+  expect(within(dialog).getByRole('button', { name: 'About replacing' })).toHaveAccessibleDescription('Each article gets a new version; undo puts it back.');
+});
+
+test('the uploads in progress say what they are in one line, and the limit in a tip', async () => {
+  const open_ = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 8, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null,
+    created_by: { agent_id: '99999999-9999-4999-8999-999999999999', name: 'Grace' }, created_at: '2026-10-21T00:00:00Z' };
+  serve({ ...base, 'GET /api/v1/kb/media-uploads': () => json(200, { items: [open_] }) });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Show the upload' }));
+  const section = await screen.findByRole('region', { name: 'Uploads in progress' });
+  expect(section).toHaveTextContent('Started here or in another tab and not finished.');
+  expect(within(section).getByRole('button', { name: 'About Uploads in progress' })).toHaveAccessibleDescription('A workspace has at most 3; each is thrown away when it expires.');
+});
+
+test('the trash of the library says how long items stay in one line, and what takes one out in a tip', async () => {
+  serve({ ...base, 'GET /api/v1/kb/media/trash': () => json(200, { items: [], next_cursor: null }) });
+  open('trash');
+  const line = (await screen.findByText(/^Items stay here for 30 days/)).closest('p') as HTMLElement;
+  expect(line).toHaveTextContent('Items stay here for 30 days and count toward your storage.');
+  expect(within(line).getByRole('button', { name: 'About Trash' })).toHaveAccessibleDescription('An article that names one again takes it out.');
+});

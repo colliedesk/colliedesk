@@ -7,6 +7,7 @@ import { kbApi } from './kb-api';
 import type { HelpCenterLanguages, KBLanguageItem, KBLanguageState } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { KBHead } from './kb-ui';
+import { HelpTip } from '../../ui/help-tip';
 import { reason } from './kb-tree';
 import { languageName, translationMessages as t } from './translation-messages';
 
@@ -70,14 +71,14 @@ export function LanguagesRoute({ search }: { search: LanguagesSearch }) {
       <div className="kb-languages-scroll">
         <section className="kb-languages" aria-labelledby="kb-languages-heading">
           <h2 id="kb-languages-heading">{t.languagesHeading}</h2>
-          <p className="muted-copy">{t.languagesDescription}</p>
+          <p className="muted-copy">{t.languagesDescription} <HelpTip label={t.languagesHeading} text={t.languagesTip} /></p>
           {languages.isError && <p role="alert" className="error-copy">{t.loadFailed}{' '}
             <button type="button" className="link-action" onClick={() => void languages.refetch()}>{kbMessages.retry}</button></p>}
           {languages.isPending && <p role="status" className="muted-copy">{messages.loading}</p>}
           {languages.data && <>
             <div className="kb-language-primary">
               <strong>{t.primaryLanguage}</strong> <span>{languageName(languages.data.primary)}</span>
-              <small className="kb-hint">{t.primaryHelp}</small>
+              <small className="kb-hint">{t.primaryHelp} <HelpTip label={t.primaryLanguage} text={t.primaryTip} /></small>
             </div>
             <h3>{t.otherLanguages}</h3>
             {problem && <p role="alert" className="error-copy">{problem}</p>}
@@ -121,7 +122,7 @@ export function LanguagesRoute({ search }: { search: LanguagesSearch }) {
             </form>}
             {languages.data.unlisted.length > 0 && <div className="warning-note">
               <strong>{t.unlisted}</strong>: {languages.data.unlisted.map(languageName).join(', ')}
-              <p className="kb-hint">{t.unlistedHelp}</p>
+              <p className="kb-hint">{t.unlistedHelp} <HelpTip label={t.unlisted} text={t.unlistedTip} /></p>
             </div>}
           </>}
         </section>

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { previewPolicy } from './help-center-preview';
-import { HelpCenterThemeForm } from './help-center-theme-form';
+import { HelpCenterThemeForm, HelpCenterThemeSection } from './help-center-theme-form';
 import { ids, json, serve } from './kb.test.fixture';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -294,4 +294,33 @@ test('the custom CSS field counts bytes of UTF-8, as the server limits it, and m
   expect(screen.getByText('12 of 32,768 bytes')).not.toHaveClass('error-copy');
   fireEvent.change(css, { target: { value: 'é'.repeat(16_385) } });
   expect(screen.getByText('32,770 of 32,768 bytes')).toHaveClass('error-copy');
+});
+
+// Each row keeps one short line; the how and why sit in the tip next to it.
+test('the brand says what it holds in one line, and that the preview shows it before saving in a tip', async () => {
+  serve({ 'GET /api/v1/help-center/theme': () => json(200, saved), 'POST /api/v1/help-center/theme/preview': () => json(200, preview) });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><HelpCenterThemeSection canManage /></QueryClientProvider>);
+  const section = (await screen.findByRole('heading', { name: 'Brand' })).closest('section') as HTMLElement;
+  expect(section).toHaveTextContent('Logo, colors, fonts and links of the public pages.');
+  expect(within(section).getByRole('button', { name: 'About Brand' })).toHaveAccessibleDescription('The preview shows the result before you save.');
+});
+
+test('the colors say what empty means in one line, and what any color does to dark mode in a tip', async () => {
+  serve({ 'GET /api/v1/help-center/theme': () => json(200, saved), 'POST /api/v1/help-center/theme/preview': () => json(200, preview) });
+  open(true);
+  const colors = (await screen.findByText('Empty uses the default.')).closest('fieldset') as HTMLElement;
+  expect(within(colors).getByRole('button', { name: 'About Colors' })).toHaveAccessibleDescription(
+    'With any color set, the pages stay light even for readers who use dark mode.');
+});
+
+test('the custom CSS field says what it is for in one line, and what is refused in a tip with a link to the guide', async () => {
+  serve({ 'GET /api/v1/help-center/theme': () => json(200, { ...saved, custom_css: '.masthead{color:red}' }), 'POST /api/v1/help-center/theme/preview': () => json(200, preview) });
+  open(true);
+  const field = (await screen.findByRole('textbox', { name: 'Custom CSS' })).closest('.field') as HTMLElement;
+  expect(field).toHaveTextContent('For details the fields above do not cover.');
+  const tip = within(field).getByRole('button', { name: 'About Custom CSS' });
+  expect(tip).toHaveAccessibleDescription(
+    'It is added after the brand on every public page. Nothing may load from elsewhere: url(), @import and @font-face are refused. The contrast checks above do not cover it, so check the preview.');
+  fireEvent.click(tip);
+  expect(within(field).getByRole('link', { name: 'Learn more' })).toHaveAttribute('href', 'https://colliedesk.com/docs/knowledge-base#custom-css');
 });
