@@ -41,7 +41,7 @@
 
 /* The preview's switches look like every other segmented choice in Settings: a grey track, the choice on white. */
 .theme-preview-bar .segmented { border: 0; background: var(--surface-2); gap: 0; }
-.theme-preview-bar .segmented label { min-height: var(--control, 32px); padding: 0 var(--space-3); }
+.theme-preview-bar .segmented label { min-height: var(--control); padding: 0 var(--space-3); }
 .theme-preview-bar .segmented label:has(input:checked) { box-shadow: var(--shadow-1); }
 
 @media (max-width: 44rem) {

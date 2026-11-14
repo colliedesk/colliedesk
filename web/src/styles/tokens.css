@@ -26,11 +26,11 @@
   --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: 'IBM Plex Serif', Georgia, serif;   /* page titles and the sign-in promise only */
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  --fs-ui: 14px;                     /* app body */
+  --fs-ui: 13px;                     /* app body, as dense as the inputs */
   --fs-label: 12px;                  /* meta, labels, kbd */
-  --fs-small: 13px;                  /* secondary rows */
+  --fs-small: 12px;                  /* secondary rows */
   --fs-body: 16px;                   /* site body */
-  --fs-heading: 24px;                /* app page titles (design token, serif) */
+  --fs-heading: 26px;                /* app page titles (design token, serif) */
   --fs-display-sm: 40px;             /* design token: the smaller display size */
   --fs-h2: 40px;
   --fs-display: 60px;
@@ -73,13 +73,13 @@
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23636363' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");   /* stroke = --text-3 */
   --text-inverse: #ffffff;
 
-  /* Brand: ink. The primary action, links and selection are ink and neutral grey; colour is kept for status, focus and notes. */
-  --accent: #171717;
-  --accent-hover: #3d3d3d;
+  /* Brand: the Collie orange of the logo for the primary action, links and the active mark; surfaces stay grey. */
+  --accent: #c2410c;
+  --accent-hover: #9a3412;
   --on-accent: #ffffff;
-  --accent-text: #171717;
+  --accent-text: #9a3412;
   --accent-soft: #efefef;
-  --accent-strong: #171717;          /* graphics only */
+  --accent-strong: #c2410c;          /* graphics only */
   --logo-tile: #c2410c;              /* the mark is a white collie head on this orange tile, both themes */
   --line-control: #adadad;           /* secondary button outline, 2.3:1 on white so a button reads as a button */
   --brand-panel: #0a0a0a;            /* sign-in brand side */
@@ -135,12 +135,12 @@
   --text-inverse: #0a0a0a;           /* on --surface-inverse */
 
   /* Brand: ink, inverted */
-  --accent: #fafafa;                 /* primary button fill, active indicators */
-  --accent-hover: #e0e0e0;
+  --accent: #fb8a4a;                 /* primary button fill, active indicators */
+  --accent-hover: #fdba8c;
   --on-accent: #0a0a0a;              /* text/icon on --accent */
-  --accent-text: #fafafa;            /* links and brand-coloured text on any surface */
+  --accent-text: #fb8a4a;            /* links and brand-coloured text on any surface */
   --accent-soft: #222222;            /* selected row, AI hint background */
-  --accent-strong: #e5e5e5;          /* graphics only (mark, bars); never text on dark */
+  --accent-strong: #fb8a4a;          /* graphics only (mark, bars) */
   --logo-tile: #c2410c;
   --line-control: #4d4d4d;           /* 2.3:1 on the dark panel */
   --brand-panel: #141414;

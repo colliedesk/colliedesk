@@ -8,7 +8,7 @@
 .af-help { margin: 0; color: var(--text-3); font-size: var(--fs-label); line-height: 1.5; }
 .af-push { margin-left: auto; }
 .af-acts { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
-.af-btn { min-height: var(--control, 32px); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+.af-btn { min-height: var(--control); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
   border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-1);
   padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 500; color: var(--text-1); text-decoration: none; white-space: nowrap; }
 .af-btn:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--text-1); }
@@ -174,7 +174,7 @@
 /* ---------- The Fixes page ---------- */
 .af-fixes, .af-settings { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
 .af-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
-.af-page-head h1 { margin: 0; font: 500 28px/1.1 var(--font-display); letter-spacing: -0.02em; }
+.af-page-head h1 { margin: 0; font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.02em; }
 .af-page-head p { margin: var(--space-1) 0 0; color: var(--text-2); max-width: 46rem; }
 .af-bar-row { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; }
 .af-bar-row select { min-width: 11rem; }

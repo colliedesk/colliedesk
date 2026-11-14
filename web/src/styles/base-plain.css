@@ -41,7 +41,7 @@ p { text-wrap: pretty; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 input:where(:not([type="checkbox"]):not([type="radio"])), select, textarea {
-  min-height: var(--control, 32px); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  min-height: var(--control); border: 1px solid var(--line-strong); border-radius: var(--radius);
   background: var(--surface-1); padding: 0 var(--space-3); transition: border-color var(--dur-fast) var(--ease);
 }
 input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
@@ -68,7 +68,7 @@ input:where([type="checkbox"], [type="radio"]):disabled { cursor: not-allowed; }
 /* Buttons: Plex Sans, sentence case. Three shapes: primary, secondary (the default), danger.
    Mono is kept for code, IDs, timestamps and keycaps only. */
 button {
-  min-height: var(--control, 32px); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: var(--control); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
   border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-1);
   padding: 0 var(--space-3); font-family: var(--font-sans); font-size: var(--fs-small); font-weight: 500; color: var(--text-1);
   white-space: nowrap;
@@ -81,7 +81,7 @@ button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--
 .primary-action:hover:not(:disabled) { border-color: var(--accent-hover); background: var(--accent-hover); }
 .danger-action { color: var(--danger); }
 .danger-action:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); }
-.icon-button { width: var(--control, 32px); padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
+.icon-button { width: var(--control); padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
 .icon-button:hover:not(:disabled) { color: var(--text-1); }
 .link-button, .link-action {
   min-height: auto; border: 0; background: none; box-shadow: none; padding: 0; color: var(--accent-text); text-decoration: underline;
@@ -93,6 +93,7 @@ button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--
 
 /* Touch screens and windows 480 px wide or less keep 44 px targets; a mouse on a wider window gets the
    denser 32 px controls. Every rule that sizes for a finger uses the same media query. */
+:root { --control: 28px; }
 @media (pointer: coarse), (max-width: 30rem) { :root { --control: var(--touch); } }
 
 /* Tooltip for icon-only controls: the control keeps its aria-label, data-tip is the sighted copy. */
@@ -109,9 +110,9 @@ html[data-tips-off] [data-tip]::after { opacity: 0; }
 .pagination [data-tip]::after { top: auto; bottom: calc(100% + var(--space-2)); }
 
 .field { display: grid; align-content: start; gap: var(--space-1); }
-.field-inline { display: flex; align-items: center; gap: var(--space-2); width: fit-content; min-height: var(--control, 32px); cursor: pointer; }   /* the whole row is the target: 32 px, 44 on touch */
+.field-inline { display: flex; align-items: center; gap: var(--space-2); width: fit-content; min-height: var(--control); cursor: pointer; }   /* the whole row is the target: 32 px, 44 on touch */
 /* A text disclosure's summary is a target too: 32 px tall with a mouse, 44 by touch (menus size their own). */
-details:not(.action-menu, .filter-menu, .view-actions, .status-pick, .email-home-fold, .setup-fold, [class*="menu"], .af-stepcard details) > summary:not([class]) { padding-block: calc((var(--control, 32px) - 1lh) / 2); }
+details:not(.action-menu, .filter-menu, .view-actions, .status-pick, .email-home-fold, .setup-fold, [class*="menu"], .af-stepcard details) > summary:not([class]) { padding-block: calc((var(--control) - 1lh) / 2); }
 /* Text links and link buttons keep their line; padding with an equal negative margin gives a finger 44 px. */
 @media (pointer: coarse), (max-width: 30rem) {
   :is(.link-button, .link-action) { display: inline-block; padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); }

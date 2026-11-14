@@ -11,13 +11,13 @@
   display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--line); background: var(--surface-0);
   padding: var(--space-1) var(--space-2);
 }
-.md-block { --control: 32px; flex: none; width: 8.5rem; font-size: var(--fs-small); }
+.md-block { --control: 28px; flex: none; width: 8.5rem; font-size: var(--fs-small); }
 .md-sep { flex: none; width: 1px; height: 18px; margin: 0 var(--space-1); background: var(--line); }
-.md-tool { --control: 32px; flex: none; width: 32px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); }
+.md-tool { --control: 28px; flex: none; width: 28px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); }
 .md-tool:hover:not(:disabled) { border-color: transparent; color: var(--text-1); }
 .md-tool[aria-pressed="true"] { background: var(--surface-3); color: var(--text-1); }
 .md-grow { flex: 1; }
-.md-insert-button { --control: 32px; gap: var(--space-1); padding: 0 var(--space-2); font-weight: 600; }
+.md-insert-button { --control: 28px; gap: var(--space-1); padding: 0 var(--space-2); font-weight: 600; }
 .md-insert-button svg { width: 16px; height: 16px; }
 .md-tool:focus-visible { outline-offset: -2px; }
 /* Tooltips open below the toolbar; on a phone the row scrolls sideways and would clip them, so they wait for a hover. */

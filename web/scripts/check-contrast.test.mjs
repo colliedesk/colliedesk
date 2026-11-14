@@ -19,9 +19,9 @@ test('light is the default block and dark is opt-in', () => {
 // Brand "ink and paper" (docs/internals/design.md): surfaces, lines, text and the primary action are
 // neutral grey or ink, with no hue. Colour is kept for status, focus, private notes and the logo tile.
 const NEUTRAL = ['--surface-0', '--surface-1', '--surface-2', '--surface-3', '--surface-inverse', '--line', '--line-strong',
-  '--line-control', '--text-1', '--text-2', '--text-3', '--text-inverse', '--accent', '--accent-hover', '--accent-text',
-  '--accent-soft', '--on-accent', '--brand-panel', '--on-brand-panel', '--on-brand-panel-2'];
-test('greys, text and the primary action carry no hue in either theme', () => {
+  '--line-control', '--text-1', '--text-2', '--text-3', '--text-inverse',
+  '--accent-soft', '--brand-panel', '--on-brand-panel', '--on-brand-panel-2'];
+test('greys and text carry no hue in either theme', () => {
   for (const theme of ['light', 'dark']) {
     const tokens = themeTokens(css, theme);
     const tinted = NEUTRAL.filter((name) => {
@@ -30,6 +30,19 @@ test('greys, text and the primary action carry no hue in either theme', () => {
     });
     expect(tinted.map((name) => `${theme} ${name} ${tokens[name]}`)).toEqual([]);
   }
+});
+
+// The brand colour is the Collie orange (owner 15/11/2026: the ink-only app read as washed out): the primary
+// action, links and active marks are the logo's orange in light and its lighter cut in dark.
+test('the primary action, links and active marks are the Collie orange', () => {
+  expect(themeTokens(css, 'light')).toMatchObject({ '--accent': '#c2410c', '--accent-strong': '#c2410c', '--on-accent': '#ffffff' });
+  expect(themeTokens(css, 'dark')).toMatchObject({ '--accent': '#fb8a4a', '--accent-strong': '#fb8a4a', '--on-accent': '#0a0a0a' });
+});
+
+// The app's text is as dense as its inputs (owner 15/11/2026): 13 px body, 12 px secondary lines.
+test('the app body is 13 px and secondary lines 12 px', () => {
+  expect(css).toMatch(/--fs-ui:\s*13px;/);
+  expect(css).toMatch(/--fs-small:\s*12px;/);
 });
 
 // The logo is a white collie head on an orange tile, the same in both themes, the favicon and the site.

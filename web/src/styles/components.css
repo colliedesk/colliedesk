@@ -11,10 +11,10 @@
 .list-pane > header > .mail-switch + .list-head { margin-top: 0; }
 .status-tabs { display: flex; gap: var(--space-2); margin: 0 calc(-1 * var(--space-1)); overflow-x: auto; scrollbar-width: none; }
 .status-tabs::-webkit-scrollbar { display: none; }
-.status-tabs label { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: var(--control, 32px); min-height: 36px; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; cursor: pointer; white-space: nowrap; }
+.status-tabs label { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: var(--control); min-height: var(--control); padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; cursor: pointer; white-space: nowrap; }
 .status-tabs input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
 .status-tabs label:hover { color: var(--text-1); }
-.status-tabs label:has(input:checked) { color: var(--text-1); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
+.status-tabs label:has(input:checked) { color: var(--accent-text); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
 .status-tabs label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
 /* With a search or a filter on, the search box, Filter, Sort and Views share the first row. The menus open under the whole bar. */
 .filter-bar { position: relative; display: flex; align-items: center; gap: var(--space-1); }
@@ -26,14 +26,14 @@
 .search-field input:placeholder-shown::-webkit-search-cancel-button { display: none; }
 .filter-menu { position: static; }
 .filter-menu summary {
-  min-height: var(--control, 32px); display: inline-flex; align-items: center; gap: var(--space-2); list-style: none; cursor: pointer;
+  min-height: var(--control); display: inline-flex; align-items: center; gap: var(--space-2); list-style: none; cursor: pointer;
   border: 1px solid transparent; border-radius: var(--radius); background: transparent; box-shadow: none;
   padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-small); font-weight: 500;
 }
 /* Ghost toolbar beside the search box: Filter, Sort and Views are icons with their name in a tip (I4-a). */
-.filter-bar .filter-menu summary { min-width: var(--control, 32px); justify-content: center; gap: var(--space-1); padding: 0 var(--space-1); }
+.filter-bar .filter-menu summary { min-width: var(--control); justify-content: center; gap: var(--space-1); padding: 0 var(--space-1); }
 .filter-bar > .views-menu summary { margin-right: calc(-1 * var(--space-2)); }
-.sort-pick { position: relative; flex: none; width: var(--control, 32px); height: var(--control, 32px); display: inline-grid; place-items: center; border-radius: var(--radius); color: var(--text-3); cursor: pointer; }
+.sort-pick { position: relative; flex: none; width: var(--control); height: var(--control); display: inline-grid; place-items: center; border-radius: var(--radius); color: var(--text-3); cursor: pointer; }
 .sort-pick:hover { background: var(--surface-2); color: var(--text-1); }
 .sort-pick:has(select:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .filter-bar .sort-pick select.sort-field { position: absolute; inset: 0; width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; padding: 0; opacity: 0; cursor: pointer; appearance: auto; }
@@ -55,7 +55,7 @@
 .filter-popover fieldset { display: grid; gap: 0; margin: 0; border: 0; padding: 0; min-width: 0; }
 /* A floated legend is laid out like any other child, so it never sits in the fieldset's top border. */
 .filter-popover legend { float: left; width: 100%; margin: 0; padding: var(--space-2) var(--space-2) var(--space-1); color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
-.check-row { position: relative; display: flex; align-items: center; gap: var(--space-2); min-height: 32px; font-size: var(--fs-small); color: var(--text-1); cursor: pointer; }
+.check-row { position: relative; display: flex; align-items: center; gap: var(--space-2); min-height: 28px; font-size: var(--fs-small); color: var(--text-1); cursor: pointer; }
 .check-row span { min-width: 0; overflow-wrap: anywhere; }
 .check-row:has(input:disabled) { color: var(--text-3); cursor: not-allowed; }
 /* One menu recipe (Filter, Views, bulk menus, select pickers): 30 px rows, a trailing check, groups split by space.
@@ -124,7 +124,7 @@
   display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; min-height: 24px; border: 0; border-radius: var(--radius-full);
   background: var(--surface-2); padding: 0 2px 0 var(--space-2); color: var(--text-1); font-size: var(--fs-label); font-weight: 500;
 }
-.chip-remove { width: 32px; min-height: 32px; margin-block: -5px; padding: 0; border: 0; border-radius: var(--radius-full); background: transparent; box-shadow: none; color: var(--text-3); }
+.chip-remove { width: 28px; min-height: 28px; margin-block: -5px; padding: 0; border: 0; border-radius: var(--radius-full); background: transparent; box-shadow: none; color: var(--text-3); }
 .chip-remove:hover:not(:disabled) { background: var(--surface-3); color: var(--text-1); }
 .chip-remove svg { width: 14px; height: 14px; }
 .filter-chips .link-button { font-size: var(--fs-label); }
@@ -138,7 +138,7 @@
 .view-open { flex: 1; min-width: 0; justify-content: flex-start; border-color: transparent; background: transparent; box-shadow: none; overflow: hidden; text-overflow: ellipsis; }
 .view-open[aria-current="true"] { background: var(--accent-soft); font-weight: 600; }
 .view-actions { position: static; }
-.view-actions summary { width: var(--control, 32px); min-height: var(--control, 32px); display: grid; place-items: center; list-style: none; cursor: pointer; border-radius: var(--radius); color: var(--text-3); }
+.view-actions summary { width: var(--control); min-height: var(--control); display: grid; place-items: center; list-style: none; cursor: pointer; border-radius: var(--radius); color: var(--text-3); }
 .view-actions summary::-webkit-details-marker { display: none; }
 .view-actions summary:hover { background: var(--surface-2); color: var(--text-1); }
 .view-actions-popover { display: grid; gap: 2px; margin-top: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-1); }
@@ -178,7 +178,7 @@
   text-align: left; font-size: var(--fs-ui); font-weight: 400; line-height: 20px; white-space: normal;
 }
 .conversation-row:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line); }
-.conversation-row[aria-current="true"] { background: var(--surface-3); }
+.conversation-row[aria-current="true"] { background: var(--surface-3); box-shadow: inset 2px 0 var(--accent); }
 .conversation-row:focus-visible { outline-offset: -2px; }
 .conversation-subject { overflow: hidden; color: var(--text-1); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-row time { color: var(--text-3); font-size: var(--fs-label); line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -203,7 +203,7 @@
 .get-started ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .get-started .recommended-step { color: var(--text-1); font-weight: 600; }
 /* The next steps are buttons, the first one filled: the main way on from an empty workspace. */
-.get-started a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+.get-started a.button { min-height: var(--control); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 500; text-decoration: none; }
 .get-started a.button.primary-action { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .get-started li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
@@ -282,7 +282,7 @@
 .ai-chip { display: inline-flex; align-items: center; gap: 2px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); padding: 0 6px; font-weight: 600; }
 .ai-off-label { margin-left: var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
 /* The drafts-off state is a link that looks and sizes like the tools beside it, on one line. */
-a.saved-reply-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control, 32px); border-radius: var(--radius); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; text-decoration: none; }
+a.saved-reply-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control); border-radius: var(--radius); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; text-decoration: none; }
 .message-meta time { color: var(--text-3); font-size: var(--fs-label); white-space: nowrap; }
 .markdown-body { line-height: 1.6; overflow-wrap: anywhere; }
 .markdown-body p + p { margin-top: var(--space-3); }
@@ -357,7 +357,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-card:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .composer-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-2) 0; }
 .composer-tabs { display: flex; gap: var(--space-1); }
-.composer-tabs button { --control: 32px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
+.composer-tabs button { --control: 28px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
 .composer-tabs button svg { width: 14px; height: 14px; }
 .composer-tabs button[aria-pressed="true"] { background: var(--surface-2); color: var(--text-1); }
 .composer-card[data-kind="note"] .composer-tabs button[aria-pressed="true"] { background: var(--surface-1); color: var(--warn); box-shadow: inset 0 0 0 1px var(--note-line); }
@@ -372,26 +372,26 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-card[data-writing="true"] textarea, .composer textarea:not(:placeholder-shown) { min-height: 7rem; }
 .composer textarea:focus-visible { outline: none; }
 .composer-attachments { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); }
-.attach-button { --control: 32px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
+.attach-button { --control: 28px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
 .attach-button:hover:not(:disabled) { color: var(--text-1); }
 .attach-button svg { width: 16px; height: 16px; }
 .composer-cc { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2) var(--space-1); }
 .cc-label { color: var(--text-3); font-size: var(--fs-label); padding-inline: var(--space-2); }
 .cc-chips { display: contents; margin: 0; padding: 0; list-style: none; }
-.cc-chips li { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-1) 0 var(--space-3); font-size: var(--fs-label); min-height: 32px; }
+.cc-chips li { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-1) 0 var(--space-3); font-size: var(--fs-label); min-height: 28px; }
 .cc-chips li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.cc-chips li button { --control: 32px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
+.cc-chips li button { --control: 28px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
 .cc-chips li button svg { width: 12px; height: 12px; }
-.composer-cc input { flex: 1 1 12rem; min-width: 10rem; border: 0; background: transparent; box-shadow: none; padding: 0 var(--space-2); min-height: 32px; }
+.composer-cc input { flex: 1 1 12rem; min-width: 10rem; border: 0; background: transparent; box-shadow: none; padding: 0 var(--space-2); min-height: 28px; }
 .composer-cc input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.cc-button { --control: 32px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
+.cc-button { --control: 28px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
 .cc-button:hover:not(:disabled) { color: var(--text-1); }
 .composer-files { display: contents; margin: 0; padding: 0; list-style: none; }
-.composer-files li { display: inline-flex; align-items: center; gap: var(--space-2); max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-1) 0 var(--space-3); font-size: var(--fs-label); min-height: 32px; }
+.composer-files li { display: inline-flex; align-items: center; gap: var(--space-2); max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-1) 0 var(--space-3); font-size: var(--fs-label); min-height: 28px; }
 .composer-files li > svg { width: 14px; height: 14px; color: var(--text-3); flex: none; }
 .composer-files li .attachment-size { flex: none; white-space: nowrap; }
 .composer-files li > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.composer-files li button { --control: 32px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
+.composer-files li button { --control: 28px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
 .composer-files li button svg { width: 12px; height: 12px; }
 .composer-attachments-problem, .composer-attachments-warning { flex-basis: 100%; margin: 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-label); }
 .composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: var(--space-2); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
@@ -427,7 +427,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-warning strong { font-weight: 600; }
 /* While the AI draft panel is open, the reply box stays short so the panel's buttons and Send fit. */
 .composer-card:has(.ai-draft) textarea { min-height: 3.5rem; }
-.saved-reply-button { --control: 32px; margin-right: auto; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
+.saved-reply-button { --control: 28px; margin-right: auto; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
 .saved-reply-button:hover:not(:disabled) { color: var(--text-1); }
 .saved-reply-button svg { width: 14px; height: 14px; }
 .saved-reply-button kbd { margin-left: var(--space-1); }
@@ -497,7 +497,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 /* A link doing a button's job (Sign in, New role, Manage…) gets the button's shape wherever it sits; a page's own rules
    may still restyle it. The setup guide's steps are rows, not buttons. Zero-weight classes: any class rule wins. */
 a:where(.button, .primary-action, .secondary-action, .danger-action):where(:not(.checklist-step > a)) {
-  min-height: var(--control, 32px); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: var(--control); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
   border: 1px solid var(--line-control); border-radius: var(--radius); background: transparent;
   padding: 0 var(--space-3); font-family: var(--font-sans); font-size: var(--fs-small); font-weight: 600; color: var(--text-1);
   white-space: nowrap; text-decoration: none;
@@ -512,12 +512,12 @@ a:where(.primary-action):where(:not(.checklist-step > a)):hover { border-color: 
 .details-section legend { float: left; width: 100%; }
 .details-section h2, .details-section legend { margin-bottom: var(--space-2); padding: 0; }
 .details-section h2, .details-section legend { color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
-.property-row { --label: 80px; position: relative; display: grid; grid-template-columns: var(--label) minmax(0, 1fr); align-items: center; gap: var(--space-3); min-height: 32px; }
+.property-row { --label: 80px; position: relative; display: grid; grid-template-columns: var(--label) minmax(0, 1fr); align-items: center; gap: var(--space-3); min-height: 28px; }
 /* Details · Status as a menu on a chat that tells its customer: it keeps the select's look (dot, word, an arrow
    on hover), and its menu is as wide as the row, inside the panel. */
 .status-pick-row { position: relative; }
 .status-pick-row .status-pick { position: static; min-width: 0; }
-.status-pick-row .status-pick summary { justify-content: flex-start; width: 100%; min-height: 32px; padding: 0 var(--space-2); gap: var(--space-2); color: var(--text-1); }
+.status-pick-row .status-pick summary { justify-content: flex-start; width: 100%; min-height: 28px; padding: 0 var(--space-2); gap: var(--space-2); color: var(--text-1); }
 .status-pick-row .status-pick summary > svg:last-child { opacity: 0; margin-left: auto; }
 .status-pick-row .status-pick summary:is(:hover, :focus-visible) { background: var(--surface-2); }
 .status-pick-row .status-pick summary:is(:hover, :focus-visible) > svg:last-child, .status-pick[open] summary > svg:last-child { opacity: 1; }
@@ -545,9 +545,9 @@ a:where(.primary-action):where(:not(.checklist-step > a)):hover { border-color: 
 /* Normal is a quiet dash, as Linear marks every priority: the mark column never has a gap. Rows in the list still hide it. */
 .property-row:has(option[value="normal"]:checked)::after { content: "–" / ""; color: var(--text-3); font-weight: 400; }
 .tag-choices { clear: both; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
-.tag-check { position: relative; display: inline-flex; align-items: center; min-height: 32px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); cursor: pointer; }
+.tag-check { position: relative; display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); cursor: pointer; }
 .tag-check input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
-.tag-check { min-height: var(--control, 32px); border-color: transparent; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
+.tag-check { min-height: var(--control); border-color: transparent; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
 .tag-check::before { content: "#" / ""; margin-right: 1px; color: var(--text-3); }
 .tag-check:hover { background: var(--surface-2); color: var(--text-1); }
 .tag-check:has(input:checked) { color: var(--text-1); font-weight: 500; }
@@ -573,8 +573,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .tag-check:has(input:checked) { border-color: transparent; background: var(--accent-soft); color: var(--text-1); }
 .tag-check:has(input:checked)::before { content: "#" / ""; margin-right: 1px; color: var(--text-3); }
 .tag-create { margin-top: var(--space-2); }
-.tag-create :is(input, button) { --control: 32px; min-height: 32px; font-size: var(--fs-small); }
-.details-link { display: flex; align-items: center; gap: var(--space-2); width: calc(100% + 2 * var(--space-2)); min-height: 32px; margin: 2px calc(-1 * var(--space-2)) 0;
+.tag-create :is(input, button) { --control: 28px; min-height: 28px; font-size: var(--fs-small); }
+.details-link { display: flex; align-items: center; gap: var(--space-2); width: calc(100% + 2 * var(--space-2)); min-height: 28px; margin: 2px calc(-1 * var(--space-2)) 0;
   border-color: transparent; background: transparent; box-shadow: none; padding: 0 var(--space-2); color: var(--text-1); font-size: var(--fs-small); font-weight: 400; text-align: left; }
 .details-link:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
 .details-link > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -608,7 +608,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 
 /* Appearance: a two-option segmented control. */
 .segmented { display: inline-flex; width: fit-content; margin: 0; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-0); padding: 2px; gap: 2px; }
-.segmented label { position: relative; display: inline-flex; align-items: center; min-height: var(--control, 32px); border-radius: var(--radius-sm); padding: 0 var(--space-4); color: var(--text-2); font-size: var(--fs-small); font-weight: 500; cursor: pointer; }
+.segmented label { position: relative; display: inline-flex; align-items: center; min-height: var(--control); border-radius: var(--radius-sm); padding: 0 var(--space-4); color: var(--text-2); font-size: var(--fs-small); font-weight: 500; cursor: pointer; }
 .segmented input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
 .segmented label:has(input:checked) { background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
 .segmented label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -750,7 +750,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .conversation-item { position: relative; }
 .conversation-item .conversation-row { padding-left: 2.75rem; }
 .row-check { position: absolute; z-index: 1; inset: 0 auto 0 0; width: 2.75rem; display: grid; place-items: start center; padding-top: var(--space-3); cursor: pointer; }
-.select-all { position: sticky; top: 0; z-index: 2; background: var(--surface-1); display: flex; align-items: center; gap: var(--space-2); min-height: calc(var(--control, 32px) + var(--space-2) * 2); border-bottom: 1px solid var(--line); padding: var(--space-1) var(--space-2) var(--space-1) 0; color: var(--text-3); font-size: var(--fs-label); }
+.select-all { position: sticky; top: 0; z-index: 2; background: var(--surface-1); display: flex; align-items: center; gap: var(--space-2); min-height: calc(var(--control) + var(--space-2) * 2); border-bottom: 1px solid var(--line); padding: var(--space-1) var(--space-2) var(--space-1) 0; color: var(--text-3); font-size: var(--fs-label); }
 .select-all > label { display: flex; align-items: center; align-self: stretch; gap: var(--space-3); cursor: pointer; }
 .select-all input { margin-inline: calc((2.75rem - 16px) / 2); margin-right: 0; }
 /* Row selection (Spec — Row selection): at rest no box shows, only its slot in the row's left padding; hovering
@@ -787,7 +787,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .bulk-bar .bulk-tell + .bulk-actions { flex-basis: 100%; justify-content: flex-end; }
 .action-menu { position: relative; }
 .action-menu summary {
-  min-height: var(--control, 32px); min-width: var(--control, 32px); display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+  min-height: var(--control); min-width: var(--control); display: inline-flex; align-items: center; justify-content: center; gap: 2px;
   list-style: none; cursor: pointer; border-radius: var(--radius); padding: 0 var(--space-1); color: var(--text-2);
 }
 .action-menu summary::-webkit-details-marker { display: none; }
@@ -806,7 +806,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .bulk-actions > [data-tip]:last-child::after, .status-split .action-menu > summary[data-tip]::after { left: auto; right: 0; translate: 0 0; }
 /* Nor does a hidden tip in the bulk bar or the header's actions: it shows (at once) on hover or focus only. */
 .bulk-bar [data-tip]:not(:hover, :focus-visible)::after, .timeline-actions [data-tip]:not(:hover, :focus-visible)::after { display: none; }
-.action-popover button { justify-content: flex-start; gap: var(--space-2); min-height: 32px; border-color: transparent; border-radius: var(--radius); background: transparent; box-shadow: none; padding: 0 var(--space-2); font-weight: 400; }
+.action-popover button { justify-content: flex-start; gap: var(--space-2); min-height: 28px; border-color: transparent; border-radius: var(--radius); background: transparent; box-shadow: none; padding: 0 var(--space-2); font-weight: 400; }
 .action-popover button:hover { background: var(--surface-2); }
 .action-popover .muted-copy { margin: 0; padding: var(--space-2); }
 .tag-mark { width: 16px; display: inline-grid; place-items: center; color: var(--text-1); }
@@ -1056,7 +1056,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .contact-matches a:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .timeline-contact { display: inline-block; margin-block: -7px; padding-block: 7px; color: var(--text-2); font-size: var(--fs-small); text-underline-offset: 2px; }   /* a 33 px target in a 20 px line */
 .timeline-contact:hover { color: var(--text-1); }
-.new-conversation-button { margin-left: auto; min-height: 32px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; }
+.new-conversation-button { margin-left: auto; min-height: 28px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; }
 .new-conversation-button:hover { background: var(--surface-2); }
 .new-conversation-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 .new-conversation-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; margin: 0; border: 0; padding: 0; }
@@ -1076,12 +1076,12 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   background: var(--surface-1); padding: var(--space-1); transition: border-color var(--dur-fast) var(--ease); }
 .new-conversation .composer-cc:hover { border-color: var(--text-3); }
 .new-conversation .composer-cc:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
-.new-conversation .composer-cc input { min-height: 32px; }
+.new-conversation .composer-cc input { min-height: 28px; }
 .new-conversation .composer-cc input:focus-visible { outline: 0; }
 .new-conversation .composer-cc .composer-attachments-problem, .new-conversation .composer-cc .composer-attachments-warning { margin-inline: var(--space-1); }
 .new-conversation .cc-label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
 .new-conversation .composer-attachments { padding: 0; }
-.attach-button-labelled { --control: 32px; border-color: var(--line-control); background: var(--surface-1); box-shadow: var(--shadow-1); color: var(--text-1); padding: 0 var(--space-3); }
+.attach-button-labelled { --control: 28px; border-color: var(--line-control); background: var(--surface-1); box-shadow: var(--shadow-1); color: var(--text-1); padding: 0 var(--space-3); }
 .attach-button-labelled svg { width: 14px; height: 14px; color: var(--text-3); }
 .new-conversation-form textarea { border-color: var(--line-strong); }
 .contact-picker-box input { width: 100%; }
@@ -1156,7 +1156,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Help under the import's fields and counts stays readable: at least the label size. */
 .import-page small { font-size: var(--fs-label); }
 /* A link that leads on (Open the inbox) looks like the button next to it. */
-.import-page a.button, .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button, .ai-settings a.button, .roles-page a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+.import-page a.button, .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button, .ai-settings a.button, .roles-page a.button { min-height: var(--control); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
 @media (pointer: coarse), (max-width: 30rem) { .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button, .ai-settings a.button, .roles-page a.button { min-height: var(--touch); } }
 .empty-copy .button-row { justify-content: center; margin-top: var(--space-3); }
@@ -1227,7 +1227,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .conv-ref { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-label); font-variant-numeric: tabular-nums; letter-spacing: 0; white-space: nowrap; }
 .timeline-meta .conv-ref { color: var(--text-2); }
 .ref-copy { display: inline-flex; align-items: center; gap: 2px; }
-.ref-copy .icon-button { --control: 32px; min-height: 32px; width: 32px; margin-block: -4px; }   /* a 32 px target in a 24 px line */
+.ref-copy .icon-button { --control: 28px; min-height: 28px; width: 28px; margin-block: -4px; }   /* a 32 px target in a 24 px line */
 .ref-copy .icon-button svg { width: 13px; height: 13px; }
 @media (pointer: coarse) { .ref-copy .icon-button { --control: var(--touch); min-height: var(--touch); width: var(--touch); } }
 
@@ -1238,7 +1238,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .sla-late { color: var(--danger); font-weight: 500; }
 .tag-pill.tag-count::before { content: none; }
 /* Details · Targets: read-only rows with the 84 px label column of Properties. */
-.target-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: var(--space-2); align-items: baseline; min-height: 32px; padding: 6px 0; }
+.target-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: var(--space-2); align-items: baseline; min-height: 28px; padding: 6px 0; }
 .target-row > span:first-child { color: var(--text-3); font-size: var(--fs-small); }
 .target-value { display: grid; gap: 2px; font-size: var(--fs-small); }
 .target-value > span { display: inline-flex; align-items: center; gap: 4px; }
@@ -1250,7 +1250,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .target-quiet { color: var(--text-3); }
 .targets-foot { margin: var(--space-2) 0 0; color: var(--text-3); font-size: var(--fs-label); }
 /* A page the session's roles may not open: why, and the areas it can open instead. */
-.closed-screen .button-row a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+.closed-screen .button-row a.button { min-height: var(--control); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
 @media (pointer: coarse), (max-width: 30rem) { .closed-screen .button-row a.button { min-height: var(--touch); } }
 
@@ -1363,7 +1363,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Properties (I1-a, I7-b): Tags and Due read as values on one row each and open their menu in place. */
 .property-row:has(.property-menu) { position: relative; }
 .property-menu { position: static; min-width: 0; }
-.property-menu summary { justify-content: flex-start; width: 100%; min-height: var(--control, 32px); gap: var(--space-2); padding: 0 var(--space-2) 0 var(--space-8); color: var(--text-1); text-align: left; }
+.property-menu summary { justify-content: flex-start; width: 100%; min-height: var(--control); gap: var(--space-2); padding: 0 var(--space-2) 0 var(--space-8); color: var(--text-1); text-align: left; }
 .property-menu summary > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .property-menu summary { position: relative; padding-right: var(--space-2); }
 .property-menu summary:is(:hover, :focus-visible), .property-menu[open] summary { padding-right: var(--space-6); }
@@ -1372,7 +1372,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .property-menu summary:is(:hover, :focus-visible) > svg:last-child, .property-menu[open] summary > svg:last-child { opacity: 1; }
 .property-menu .action-popover { left: 0; right: 0; width: auto; min-width: 0; max-width: none; padding: var(--space-2); }
 .property-menu .tag-create { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--space-2); margin-top: var(--space-2); border-top: 1px solid var(--line); padding-top: var(--space-2); }
-.property-menu .tag-check { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control, 32px); padding: 0 var(--space-1); border-radius: var(--radius); }
+.property-menu .tag-check { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control); padding: 0 var(--space-1); border-radius: var(--radius); }
 .property-menu .tag-check:hover { background: var(--surface-2); }
 .due-pick .details-section { border: 0; padding: 0; }
 .conversation-source .customer-name { color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; }

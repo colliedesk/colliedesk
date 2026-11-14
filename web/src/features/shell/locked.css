@@ -9,7 +9,7 @@ main.settings-page.locked-screen {
 }
 main.locked-screen > * { margin: 0; }
 main.locked-screen > header { display: flex; flex-direction: column; gap: var(--space-1); max-width: none; margin: 0; }
-main.locked-screen > header h1 { margin: 0; font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
+main.locked-screen > header h1 { margin: 0; font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
 main.locked-screen > header p { margin: 0; color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
 main.locked-screen > .purchase-stack { max-width: none; gap: var(--space-6); }
 main.locked-screen .button-row { margin: 0; }
@@ -21,7 +21,7 @@ main.locked-screen .locked-paths > * { display: flex; flex-wrap: wrap; align-ite
   padding: var(--space-3) var(--space-4); color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
 main.locked-screen .locked-paths > * + * { border-top: 1px solid var(--line); }
 main.locked-screen .locked-export > p { flex: 1 1 20rem; min-width: 0; margin: 0; color: var(--text-2); font-size: var(--fs-ui); }
-main.locked-screen .locked-paths a { display: inline-flex; align-items: center; min-height: 32px; color: var(--text-1); text-decoration: underline; text-underline-offset: 2px; }
+main.locked-screen .locked-paths a { display: inline-flex; align-items: center; min-height: 28px; color: var(--text-1); text-decoration: underline; text-underline-offset: 2px; }
 main.locked-screen .locked-export .export-action { flex: none; }
 /* The paused screen keeps its own Sign out card. */
 main.locked-screen > .settings-card { border-top: 0; border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: var(--space-5); }

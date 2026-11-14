@@ -11,7 +11,7 @@
 .permission-resource { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); padding-top: 5px; color: var(--text-1); font-size: var(--fs-small); font-weight: 500; }
 .permission-tally { color: var(--text-3); font-size: var(--fs-label); font-weight: 400; }
 .permission-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); min-width: 0; }
-.permission-chip { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--control, 32px); border: 1px solid var(--line-control); border-radius: var(--radius-full);
+.permission-chip { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--control); border: 1px solid var(--line-control); border-radius: var(--radius-full);
   background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-label); cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
 /* The box is the whole chip and never shows: rules for disabled controls of a page (.agent-tokens dims
@@ -25,7 +25,7 @@
 .permission-chip[data-changed] { box-shadow: 0 0 0 2px var(--warn); }
 .permission-lock, .permission-lock svg, .permission-check, .permission-check svg { display: inline-flex; width: 12px; height: 12px; flex: none; }
 .permission-check { color: var(--accent); }
-.permission-all { --control: 32px; font-size: var(--fs-label); }
+.permission-all { --control: 28px; font-size: var(--fs-label); }
 @media (pointer: coarse), (max-width: 30rem) { .permission-all { --control: var(--touch); } }
 .permission-describe { margin: 0; min-height: 1.5em; border-top: 1px solid var(--line); padding-top: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
 @media (max-width: 44rem) {
