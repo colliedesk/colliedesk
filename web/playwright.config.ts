@@ -58,7 +58,7 @@ export default defineConfig({
   // Firefox, once a day in the cross-browser workflow, so a break in another browser shows without
   // making each PR wait for three browsers.
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'], launchOptions: { executablePath: localChrome } } },
+    { name: 'chromium', use: { launchOptions: { executablePath: localChrome } } },
     { name: 'webkit', use: devices['Desktop Safari'], testMatch: webkitJourneys },
     { name: 'firefox', use: devices['Desktop Firefox'], testMatch: crossBrowserJourneys },
   ],

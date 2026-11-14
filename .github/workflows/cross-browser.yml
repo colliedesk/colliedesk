@@ -15,6 +15,10 @@ permissions:
 
 jobs:
   journeys:
+    # issues: write only to open or update the issue that says a scheduled run failed.
+    permissions:
+      contents: read
+      issues: write
     # Pinned like the e2e job: Playwright cannot install its browsers on ubuntu-latest (Ubuntu 26.04).
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -55,6 +59,8 @@ jobs:
       - name: Install WebKit and Firefox
         working-directory: web
         run: corepack pnpm exec playwright install --with-deps webkit firefox
+      - name: Point the test servers at the restored Go cache
+        run: for name in GOPATH GOMODCACHE GOCACHE; do echo "$name=$(go env "$name")"; done >> "$GITHUB_ENV"
       - name: Wait for test services
         run: sh .github/scripts/ci-services.sh wait postgres mailpit
       - name: Run the core journeys on WebKit and Firefox
@@ -70,3 +76,17 @@ jobs:
           # scratchDir in web/e2e/support/checkout.ts
           path: /tmp/colliedesk-e2e-*/results
           retention-days: 7
+      # A scheduled run that fails tells the team in one open issue instead of an email nobody reads.
+      - name: Open or update the issue for a failed run
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Cross-browser run failed'
+          number=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" -R "$GITHUB_REPOSITORY" --body "Failed again: $RUN_URL"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "The daily WebKit and Firefox run failed: $RUN_URL. Close this issue when the run passes again."
+          fi
