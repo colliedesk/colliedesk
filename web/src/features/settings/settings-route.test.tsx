@@ -1,8 +1,10 @@
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { expect, test, vi } from 'vitest';
 import { agentRoleRef, builtInRoles, permissionsOf, rolesOf } from '../../test-roles';
 import { AccountRoute, GeneralRoute, MembersRoute, SavedRepliesRoute } from './settings-route';
+import type { MembersTab } from './settings-route';
 import { AIAgentsSections } from './ai-agents-sections';
 import { DataRoute } from './data-route';
 
@@ -85,6 +87,25 @@ test('signing out this device from Sessions reloads who is signed in, so the sig
 
 // A person whose roles hold none of the read permissions of a section is not shown it, and the page asks
 // the server for none of it: no refused call.
+// Account lists the browsers that are signed in now: a session that ended (revoked or expired) is not a place the person is signed in.
+test('Account lists active browsers only, and an ended session is not listed', async () => {
+  const session = (id: string, label: string, extra: Record<string, unknown>) => ({ id, agent_id: SAM, agent_email: 'sam@example.com', label, current: false,
+    created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null, ...extra });
+  show('agent', [
+    session('44444444-4444-4444-8444-444444444441', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/130.0 Safari/537.36', { current: true }),
+    session('44444444-4444-4444-8444-444444444442', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile Safari/604.1', {}),
+    session('44444444-4444-4444-8444-444444444443', 'Old laptop', { revoked_at: '2026-10-20T00:00:00Z' }),
+    session('44444444-4444-4444-8444-444444444444', 'Expired phone', { expires_at: '2026-10-01T00:00:00Z' }),
+  ]);
+  const sessions = await screen.findByRole('region', { name: 'Sessions' });
+  await waitFor(() => expect(within(sessions).getAllByRole('article')).toHaveLength(2));
+  expect(within(sessions).queryByText('Old laptop')).not.toBeInTheDocument();
+  expect(within(sessions).queryByText('Expired phone')).not.toBeInTheDocument();
+  expect(within(sessions).queryByText('Revoked')).not.toBeInTheDocument();
+  expect(within(sessions).queryByText('Expired')).not.toBeInTheDocument();
+  expect(within(sessions).getByText('This device')).toBeInTheDocument();
+});
+
 test('a narrow role sees only what it may read, and Settings asks for nothing else', async () => {
   show('agent');
   cleanup();
@@ -159,17 +180,79 @@ test('a failed timezone save shows the failure next to its control', async () =>
   expect(alert.closest('.settings-card')).toHaveTextContent('Workspace timezone');
 });
 
-// Members: the team, the invites that add to it and its roles.
-test('Members holds the team, the invites and the roles', async () => {
-  show('admin', [], MembersRoute);
+// Members: the team, the invites that add to it and its roles, one tab each; the tab is in the address.
+const members = (tab?: MembersTab, onTab?: (tab: MembersTab) => void) => () => <MembersRoute tab={tab} onTab={onTab} />;
+const tabNames = () => within(screen.getByRole('tablist', { name: 'Members' })).getAllByRole('tab').map((tab) => tab.textContent);
+
+test('Members opens on People, with four tabs: People, Invites, Groups (reserved) and Advanced', async () => {
+  show('admin', [], members());
   expect(await screen.findByRole('heading', { level: 1, name: 'Members' })).toBeInTheDocument();
-  for (const name of ['Team', 'Invites', 'Roles']) expect(await screen.findByRole('region', { name }), name).toBeInTheDocument();
-  // Invites sit right after the team they add to.
-  expect(screen.getByRole('region', { name: 'Team' }).nextElementSibling).toBe(screen.getByRole('region', { name: 'Invites' }));
+  expect(await screen.findByRole('region', { name: 'Team' })).toBeInTheDocument();
+  expect(tabNames()).toEqual(['People 2', 'Invites 0', 'Groups Coming', 'Advanced']);
+  // Each tab's name reads as words: the count and the tag are not run into the label.
+  expect(screen.getByRole('tab', { name: 'Groups Coming' })).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: /^People/ })).toHaveAttribute('aria-selected', 'true');
+  // Each other tab's section is on its own tab, not below the team.
+  for (const name of ['Invites', 'Roles']) expect(screen.queryByRole('region', { name }), name).not.toBeInTheDocument();
+});
+
+test('People says which roles everyone holds, and where the other roles are', async () => {
+  show('admin', [], members());
+  expect(await screen.findByText('Everyone is an Admin or an Agent. Custom roles: Advanced.')).toBeInTheDocument();
+});
+
+test('each tab of Members opens its own section: invites, the reserved groups, and the roles under Advanced', async () => {
+  show('admin', [], members('invites'));
+  expect(await screen.findByRole('region', { name: 'Invites' })).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Team' })).not.toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: /^Invites/ })).toHaveAttribute('aria-selected', 'true');
+  cleanup();
+  show('admin', [], members('advanced'));
+  expect(await screen.findByRole('region', { name: 'Roles' })).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Team' })).not.toBeInTheDocument();
+  cleanup();
+  show('admin', [], members('groups'));
+  const reserved = await screen.findByRole('tabpanel');
+  expect(within(reserved).getByText(/^Coming/)).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Team' })).not.toBeInTheDocument();
+});
+
+// The invite being typed belongs to the page, not to the tab: People and back, and the email and the picked roles are still there.
+test('a typed invite email and the picked roles stay while another tab of Members is open', async () => {
+  const Tabbed = () => { const [tab, setTab] = useState<MembersTab>('invites'); return <MembersRoute tab={tab} onTab={setTab} />; };
+  show('admin', [], () => <Tabbed />);
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Invite email' }), { target: { value: 'half-typed@example.com' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Roles: Agent' }));
+  fireEvent.click(within(document.getElementById('invite-roles')!).getByRole('checkbox', { name: /Admin/ }));
+  expect(screen.getByRole('button', { name: /^Roles: .*Admin/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: /^People/ }));
+  expect(screen.queryByRole('textbox', { name: 'Invite email' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: /^Invites/ }));
+  expect(await screen.findByRole('textbox', { name: 'Invite email' })).toHaveValue('half-typed@example.com');
+  expect(screen.getByRole('button', { name: /^Roles: .*Admin/ })).toBeInTheDocument();
+});
+
+// The note says which roles exist, so it waits for the roles instead of saying one thing and then another.
+test('the note under People is not drawn until the roles are known', async () => {
+  show('admin', [], members());
+  api.roles.mockReturnValue(new Promise(() => {}));
+  cleanup();
+  draw(members());
+  expect(await screen.findByRole('region', { name: 'Team' })).toBeInTheDocument();
+  expect(screen.queryByText(/Custom roles/)).not.toBeInTheDocument();
+});
+
+test('choosing a tab of Members tells the address, and the Invites tab counts the pending invites', async () => {
+  api.invites.mockResolvedValue({ items: [] });
+  const choose = vi.fn();
+  show('admin', [], members('people', choose));
+  api.invites.mockResolvedValue({ items: [{ id: 'i1', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com', created_at: '2026-10-28T07:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null }] });
+  fireEvent.click(await screen.findByRole('tab', { name: /^Advanced/ }));
+  expect(choose).toHaveBeenCalledWith('advanced', 'click');
 });
 
 test('an admin deactivates a teammate and the lists reload', async () => {
-  show('admin', [], MembersRoute);
+  show('admin', [], members());
   fireEvent.click(await screen.findByRole('button', { name: 'Deactivate ann@example.com' }));
   fireEvent.click(within(screen.getByRole('group', { name: 'Deactivate ann@example.com?' })).getByRole('button', { name: 'Yes, deactivate' }));
   await waitFor(() => expect(api.updateAgent).toHaveBeenCalledWith(ANN, { active: false }));
@@ -177,14 +260,14 @@ test('an admin deactivates a teammate and the lists reload', async () => {
 });
 
 test('an agent sees the team but no controls', async () => {
-  show('agent', [], MembersRoute);
+  show('agent', [], members());
   const team = await screen.findByRole('region', { name: 'Team' });
   expect(await within(team).findByText('ann@example.com')).toBeInTheDocument();
   expect(within(team).queryByRole('button')).not.toBeInTheDocument();
 });
 
 test('a burst of Create invite presses sends one invite under one key, and the button waits for it', async () => {
-  show('admin', [], MembersRoute);
+  show('admin', [], members('invites'));
   let answer!: (value: unknown) => void;
   api.createInvite.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
   fireEvent.change(await screen.findByRole('textbox', { name: 'Invite email' }), { target: { value: 'new@example.com' } });
@@ -200,20 +283,46 @@ test('a burst of Create invite presses sends one invite under one key, and the b
   await waitFor(() => expect(create).toBeEnabled());
 });
 
+// Esc closes the role picker wherever the focus is in the invite form: on the Roles button that opened it as well as inside it.
+test('Esc with focus on the Roles button closes the picker and keeps the typed email', async () => {
+  show('admin', [], members('invites'));
+  const email = await screen.findByRole('textbox', { name: 'Invite email' });
+  fireEvent.change(email, { target: { value: 'half-typed@example.com' } });
+  const roles = await screen.findByRole('button', { name: 'Roles: Agent' });
+  fireEvent.click(roles);
+  expect(roles).toHaveAttribute('aria-expanded', 'true');
+  roles.focus();
+  fireEvent.keyDown(roles, { key: 'Escape' });
+  expect(roles).toHaveAttribute('aria-expanded', 'false');
+  expect(document.getElementById('invite-roles')).toBeNull();
+  expect(email).toHaveValue('half-typed@example.com');
+});
+
+test('Esc inside the open role picker closes it and puts the focus back on the Roles button', async () => {
+  show('admin', [], members('invites'));
+  const roles = await screen.findByRole('button', { name: 'Roles: Agent' });
+  fireEvent.click(roles);
+  const box = within(document.getElementById('invite-roles')!).getAllByRole('checkbox')[0];
+  box.focus();
+  fireEvent.keyDown(box, { key: 'Escape' });
+  expect(document.getElementById('invite-roles')).toBeNull();
+  expect(roles).toHaveFocus();
+});
+
 // Revoking an invite is its own permission (team:revoke), apart from creating one.
 test('Members offers Revoke on a pending invite only to a person who may revoke invites', async () => {
   const pending = { id: '44444444-4444-4444-8444-444444444444', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com',
     created_at: '2026-10-28T07:00:00Z', expires_at: '2099-01-01T00:00:00Z', used_at: null, revoked_at: null };
-  show('admin', [], MembersRoute);
+  show('admin', [], members('invites'));
   api.invites.mockResolvedValue({ items: [pending] });
   cleanup();
-  draw(MembersRoute);
+  draw(members('invites'));
   const invites = await screen.findByRole('region', { name: 'Invites' });
   await within(invites).findByText('kim@example.com');
   expect(within(invites).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
   cleanup();
   api.me.mockResolvedValue({ ...me('admin'), permissions: permissionsOf('admin').filter((name) => name !== 'team:revoke') });
-  draw(MembersRoute);
+  draw(members('invites'));
   const without = await screen.findByRole('region', { name: 'Invites' });
   await within(without).findByText('kim@example.com');
   expect(within(without).getByRole('button', { name: 'Create invite' })).toBeInTheDocument();

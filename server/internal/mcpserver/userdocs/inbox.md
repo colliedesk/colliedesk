@@ -24,7 +24,7 @@ On a computer the sidebar on the left starts open. From the top it has:
 - **Views**: your saved views, each opening the inbox on its filters;
 - **Channels**: each channel of the workspace, opening the inbox on its open conversations. A channel that needs
   attention has an orange dot; its page in **Settings → Channels** says why;
-- at the foot, **Invite teammates** (for someone who may invite; it opens **Settings → Members**), **Settings**, and
+- at the foot, **Invite teammates** (for someone who may invite; it opens **Settings → Members → Invites**), **Settings**, and
   you: your name and address, which open the account menu.
 
 The top bar over each page names the page. In its middle is the search field, "Search *your workspace*" with

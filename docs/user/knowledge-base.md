@@ -522,7 +522,7 @@ the number finds it, and the page moves to the current address. A collection's a
 of address names, `/c/billing/cards`; changing one is not redirected. Addresses of a Freshdesk help center you imported
 (`/support/solutions/articles/<id>-...`) lead to the imported pages on every one of these addresses;
 see [Old help center links](import-freshdesk.md#old-help-center-links). **Changing the workspace
-address name** (Settings → Email) changes every help center address, and old links stop working.
+address name** (Settings → Channels → Email) changes every help center address, and old links stop working.
 
 ### In other languages
 

@@ -286,3 +286,9 @@
 /* Text links (Change, Setup guide links): a 32px tall target, the line keeps its height. */
 .ai-settings :is(.link-action, .link-button) { display: inline-block; margin-block: -7px; padding-block: 7px; }
 @media (pointer: coarse), (max-width: 30rem) { .ai-settings :is(.link-action, .link-button) { padding-block: calc((var(--touch) - 1lh) / 2); margin-block: calc((1lh - var(--touch)) / 2); } }
+
+/* A view's panel (Built-in AI, External AI agents) lays its parts out as the page does without tabs. */
+.ai-page .ai-view-panel { display: grid; gap: var(--space-3); min-width: 0; }
+/* Under the External AI agents tab the section's name is not said again: it stays for the screen reader and for the anchor
+   that links to it (#agents-heading), and the card starts at Agent tokens. */
+.ai-view-panel .agent-tokens > .section-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

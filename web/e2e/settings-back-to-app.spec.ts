@@ -109,7 +109,7 @@ test.describe('Esc that closes a panel only closes it', () => {
 
   test('the invite role picker closes, the typed email stays, and Settings stays', async ({ page }) => {
     await newDeskWithConversation(page, 'E2E esc picker');
-    await page.goto(`${baseURL}/settings/members`);
+    await page.goto(`${baseURL}/settings/members?tab=invites`);
     const email = page.getByLabel('Invite email');
     await email.fill('half-typed@example.com');
     await page.getByRole('button', { name: /^Roles: / }).click();
@@ -119,7 +119,7 @@ test.describe('Esc that closes a panel only closes it', () => {
     await expect(picker.getByRole('checkbox').first()).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(picker).toHaveCount(0);
-    await expect(page).toHaveURL(`${baseURL}/settings/members`);
+    await expect(page).toHaveURL(`${baseURL}/settings/members?tab=invites`);
     await expect(email).toHaveValue('half-typed@example.com');
   });
 
@@ -183,10 +183,10 @@ test.describe('Esc that closes a panel only closes it', () => {
 
   test('with focus on a button of the page, Esc stays', async ({ page }) => {
     await newDeskWithConversation(page, 'E2E esc button');
-    await page.goto(`${baseURL}/settings/members`);
+    await page.goto(`${baseURL}/settings/members?tab=invites`);
     await page.getByRole('button', { name: /^Roles: / }).focus();
     await page.keyboard.press('Escape');
-    await expect(page).toHaveURL(`${baseURL}/settings/members`);
+    await expect(page).toHaveURL(`${baseURL}/settings/members?tab=invites`);
   });
 });
 

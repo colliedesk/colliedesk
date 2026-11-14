@@ -499,6 +499,10 @@ const settingsServer = () => serve({
   '/api/v1/config': () => json(200, selfHostedConfig),
   '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
   '/api/v1/auth/sessions': () => json(200, { items: [] }),
+  '/api/v1/agents': () => json(200, { items: [] }),
+  '/api/v1/auth/invites': () => json(200, { items: [] }),
+  '/api/v1/roles': () => json(200, { items: [] }),
+  '/api/v1/channels': () => json(200, { types: [], items: [] }),
 });
 const where = (router: ReturnType<typeof open>) => `${router.state.location.pathname}${router.state.location.hash ? `#${router.state.location.hash}` : ''}`;
 
@@ -510,16 +514,106 @@ test('Settings opens Account, at its own address', async () => {
   expect(await screen.findByRole('heading', { level: 1, name: 'Account' })).toBeInTheDocument();
 });
 
-// The sections of the old one-page Settings are linked from bookmarks, emails, MCP answers and guides.
-test('an old link to a section of the one Settings page opens the page that holds it now', async () => {
+const whereFull = (router: ReturnType<typeof open>) => `${router.state.location.pathname}${router.state.location.searchStr}${router.state.location.hash ? `#${router.state.location.hash}` : ''}`;
+
+// Every address a Settings page had before the menu was merged still works: bookmarks, emails and MCP answers hold them.
+// The expected addresses are the new places, with the section or the tab that holds the old content.
+const movedAddresses: [from: string, to: string][] = [
+  ['/settings/profile', '/settings/account#profile-heading'], ['/settings/preferences', '/settings/account#preferences-heading'], ['/settings/sessions', '/settings/account#sessions-heading'],
+  ['/settings/numbers', '/settings/general#numbers-heading'],
+  ['/settings/members?tab=roles', '/settings/members?tab=advanced'], ['/settings/roles', '/settings/members?tab=advanced'],
+  ['/settings/agents', '/settings/ai?tab=external'],
+  ['/settings/import', '/settings/data'], ['/settings/export', '/settings/data#export-heading'], ['/settings/import-freshdesk', '/settings/data'],
+  ['/settings/help-center', '/knowledge/settings'],
+  // The sections of the old one-page Settings.
+  ['/settings#invites-heading', '/settings/members?tab=invites#invites-heading'], ['/settings#team-heading', '/settings/members#team-heading'],
+  ['/settings#agents-heading', '/settings/ai?tab=external#agents-heading'], ['/settings#export-heading', '/settings/data#export-heading'],
+  ['/settings#sessions-heading', '/settings/account#sessions-heading'], ['/settings#help-center-heading', '/knowledge/settings#help-center-heading'],
+  // An old address keeps its query and its own anchor: what a link carried is not dropped on the way to the new page.
+  ['/settings/sessions?from=email', '/settings/account?from=email#sessions-heading'], ['/settings/import?step=2', '/settings/data?step=2'],
+  ['/settings/export?export_error=link_expired', '/settings/data?export_error=link_expired#export-heading'], ['/settings/profile#email', '/settings/account#email'],
+  ['/settings/roles#roles-heading', '/settings/members?tab=advanced#roles-heading'],
+  // Anchors of a page that now has tabs open the tab that holds the section.
+  ['/settings/members#invites-heading', '/settings/members?tab=invites#invites-heading'], ['/settings/members#roles-heading', '/settings/members?tab=advanced#roles-heading'],
+  ['/settings/ai#agents-heading', '/settings/ai?tab=external#agents-heading'], ['/settings/ai#agent-tokens-heading', '/settings/ai?tab=external#agent-tokens-heading'],
+];
+test.each(movedAddresses)('the old address %s opens %s', async (from, to) => {
   settingsServer();
-  for (const [from, to] of [['/settings#invites-heading', '/settings/members#invites-heading'], ['/settings#agents-heading', '/settings/ai#agents-heading'],
-    ['/settings#export-heading', '/settings/data#export-heading'], ['/settings#sessions-heading', '/settings/account#sessions-heading'],
-    ['/settings/roles', '/settings/members#roles-heading'], ['/settings/numbers', '/settings/general#numbers-heading'], ['/settings/import-freshdesk', '/settings/data']]) {
-    const router = open(from);
-    await waitFor(() => expect(where(router), from).toBe(to));
-    cleanup();
-  }
+  const router = open(from);
+  await waitFor(() => expect(whereFull(router)).toBe(to));
+});
+
+// The addresses that stay, with the tab they name.
+test.each([['/settings/members?tab=people'], ['/settings/members?tab=invites'], ['/settings/members?tab=groups'], ['/settings/members?tab=advanced'],
+  ['/settings/ai?tab=built-in'], ['/settings/ai?tab=external'], ['/settings/fields'], ['/settings/channels'], ['/settings/targets'], ['/settings/saved-replies']])('%s stays where it is', async (address) => {
+  settingsServer();
+  const router = open(address);
+  await screen.findByRole('heading', { level: 1 });
+  await new Promise((resolve) => { setTimeout(resolve, 50); });
+  expect(whereFull(router)).toBe(address);
+});
+
+test('Members and AI & agents open the tab the address names', async () => {
+  settingsServer();
+  open('/settings/members?tab=advanced');
+  expect(await screen.findByRole('tab', { name: /^Advanced/ })).toHaveAttribute('aria-selected', 'true');
+  cleanup();
+  open('/settings/ai?tab=external');
+  expect(await screen.findByRole('tab', { name: 'External AI agents' })).toHaveAttribute('aria-selected', 'true');
+});
+
+// One rule for the tabs of Members and of AI & agents: a click is a step (Back returns to the tab before), and the arrow
+// keys, which move through the tabs as they go, replace the step instead of piling one on each press.
+async function openWithHistory(page: string) {
+  const router = open('/settings/account');
+  await screen.findByRole('heading', { level: 1, name: 'Account' });
+  await act(() => router.navigate({ href: page }));
+  return router;
+}
+test.each([['Members', '/settings/members', /^People/, /^Invites/, '?tab=invites'], ['AI & agents', '/settings/ai', 'Built-in AI', 'External AI agents', '?tab=external']] as const)(
+  'a click on a tab of %s is a step in the history, and Back returns to the tab before', async (title, path, first, second, search) => {
+    settingsServer();
+    const router = await openWithHistory(path);
+    await screen.findByRole('tab', { name: first });
+    fireEvent.click(screen.getByRole('tab', { name: second }));
+    await waitFor(() => expect(whereFull(router)).toBe(`${path}${search}`));
+    await act(() => { router.history.back(); });
+    await waitFor(() => expect(router.state.location.pathname).toBe(path));
+    expect(router.state.location.searchStr, title).not.toBe(search);
+  });
+test.each([['/settings/members', 'Members', /^People/], ['/settings/ai', 'AI & agents', 'Built-in AI']] as const)(
+  'arrow keys between the tabs at %s replace the step, so Back leaves the page', async (path, title, first) => {
+    settingsServer();
+    const router = await openWithHistory(path);
+    const tab = await screen.findByRole('tab', { name: first });
+    tab.focus();
+    fireEvent.keyDown(tab, { key: 'ArrowRight' });
+    await waitFor(() => expect(router.state.location.searchStr).not.toBe(''));
+    const moved = router.state.location.searchStr;
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowRight' });
+    await waitFor(() => expect(router.state.location.searchStr, title).not.toBe(moved));
+    await act(() => { router.history.back(); });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/settings/account'));
+  });
+
+// A role that reads the built-in AI but makes and revokes no agent token has nothing to show for External AI agents.
+test('a role with only ai_settings:read has no External AI agents tab, and its link opens the built-in AI', async () => {
+  forgetPermissions();
+  serve({
+    '/api/v1/auth/me': () => json(200, narrow(['ai_settings:read', 'profile:update'])),
+    '/api/v1/config': () => json(200, selfHostedConfig),
+    '/api/v1/auth/sessions': () => json(200, { items: [] }),
+  });
+  open('/settings/ai?tab=external');
+  expect(await screen.findByRole('heading', { level: 2, name: 'Built-in AI' })).toBeInTheDocument();
+  expect(screen.queryByRole('tab', { name: 'External AI agents' })).not.toBeInTheDocument();
+});
+
+test('Conversation fields is a reserved page with its own address', async () => {
+  settingsServer();
+  open('/settings/fields');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Conversation fields' })).toBeInTheDocument();
+  expect(await screen.findByText(/^Coming — imported from Freshdesk ticket fields/)).toBeInTheDocument();
 });
 
 test('an old anchor followed while a settings page is open opens its page too, and Back returns', async () => {
@@ -765,7 +859,7 @@ test('a role that reads only media lands in the media library, and the rail take
 
 // The help center's settings moved from Settings to Knowledge base → Settings (#528); they still need only
 // help_center:read to open, as the section of Settings did, not the articles' permission.
-test('a role that runs the help center without reading articles opens its settings from Knowledge, and still has General', async () => {
+test('a role that runs the help center without reading articles opens its settings from Knowledge, and Settings does not list it', async () => {
   forgetPermissions();
   serve({
     '/api/v1/auth/me': () => json(200, narrow(['help_center:read', 'help_center:update', 'kb_media:read', 'profile:update'])),
@@ -784,11 +878,10 @@ test('a role that runs the help center without reading articles opens its settin
   expect(await within(card).findByRole('checkbox', { name: 'Publish the help center' })).toBeEnabled();
   expect(screen.queryByText(/Your roles do not let you open/)).not.toBeInTheDocument();
 
-  // Settings → General is in the menu for this role; it no longer repeats the way to the help center settings.
+  // The help center's settings are in Knowledge base → Settings only: the Settings menu has no General for this role, and no way in.
   await act(async () => { await router.navigate({ to: '/settings/account' }); });
-  fireEvent.click(within(await screen.findByRole('navigation', { name: 'Settings sections' })).getByRole('link', { name: 'General' }));
-  await waitFor(() => expect(router.state.location.pathname).toBe('/settings/general'));
-  expect(await screen.findByRole('heading', { level: 1, name: 'General' })).toBeInTheDocument();
+  const menu = await screen.findByRole('navigation', { name: 'Settings sections' });
+  expect(within(menu).queryByRole('link', { name: 'General' })).not.toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Open Help center settings' })).not.toBeInTheDocument();
 });
 
@@ -896,7 +989,7 @@ test('on every page the sidebar counts the open conversations and lists the save
   const rail = await screen.findByRole('navigation', { name: 'Main' });
   expect(await within(rail).findByRole('link', { name: 'Inbox, 23 open' })).toHaveAttribute('href', '/');
   expect(within(rail).getByRole('link', { name: 'Reports' })).toHaveAttribute('href', '/results');
-  expect(within(rail).getByRole('link', { name: 'Invite teammates' })).toHaveAttribute('href', '/settings/members');
+  expect(within(rail).getByRole('link', { name: 'Invite teammates' })).toHaveAttribute('href', '/settings/members?tab=invites');
   // The open view is in the address, so Back and a shared link open the same list.
   fireEvent.click(await within(rail).findByRole('link', { name: 'Mine, open' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/'));
