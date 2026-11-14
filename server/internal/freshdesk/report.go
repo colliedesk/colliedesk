@@ -290,7 +290,7 @@ var notImported = []string{
 	"Message structured_body, notified_to and edit history (last_edited_*)",
 	"Satisfaction ratings, SLA policies, automations",
 	"Files attached to canned responses (saved replies hold text only; the report lists the canned responses that had files)",
-	"Knowledge base: article translations are stored and exported but not shown in Colliedesk yet; translated category and folder names are not imported; tags, SEO data, views and votes are kept only in the article's source_meta",
+	"Knowledge base: tags, views and votes of articles and translations, and an article's search title and description (seo_data), are kept only in source_meta",
 	"Files attached to knowledge base articles (the Freshdesk docs list none; if the API sends them, the report lists the articles)",
 	"Knowledge base markup Markdown cannot hold (iframes and video other than YouTube and Vimeo players, forms, scripts): left out of the article and listed; the original HTML is kept with the article and in the export",
 	"Images in message HTML that are not hosted by Freshdesk (other sites, tracking pixels) stay links; the original HTML is kept",
