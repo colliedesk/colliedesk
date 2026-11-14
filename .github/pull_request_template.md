@@ -1,6 +1,6 @@
 ## What and why
 
-<!-- One or two sentences. Write "Closes #N" for the issue this ships. -->
+<!-- One or two sentences. Write "Closes #N" for the issue this ships. Say who reviewed it in one line ("Reviewed by <model>, in <harness>; no open findings."), not its rounds or finding counts; CI checks. -->
 
 <!-- If the issue has a comment starting "Design spec", add this section (CI checks it):
 ## Design spec
