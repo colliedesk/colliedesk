@@ -232,6 +232,49 @@ func digits(text string) string {
 	}, text)
 }
 
+// draftNumber is a number (numberPattern) in a draft read as foldPhones writes it: as the draft writes
+// it, so the person finds it, and as its ASCII digits, to look for in the conversation.
+type draftNumber struct{ written, digits string }
+
+// draftNumbers are the numbers of text however their digits and separators are written, leaving out
+// a range or a date written with dashes (isDashedRangeOrDate). The text is
+// folded rune by rune and each folded byte remembers where its rune was, so a match is reported as the
+// draft wrote it ("０９８７６５４３２１", an invisible character inside it included).
+func draftNumbers(text string) []draftNumber {
+	var folded []byte
+	var from, to []int
+	last := 0 // bytes the last kept rune folded to
+	for at, r := range text {
+		f := foldPhoneRune(r)
+		_, size := utf8.DecodeRuneInString(text[at:])
+		if f < 0 {
+			// A combining mark belongs to the digit before it (the keycap of "1️⃣"), so it is reported with it.
+			if unicode.In(r, unicode.Mn, unicode.Me) {
+				for i := len(to) - last; i < len(to); i++ {
+					to[i] = at + size
+				}
+			}
+			continue
+		}
+		last = utf8.RuneLen(f)
+		for range last {
+			from, to = append(from, at), append(to, at+size)
+		}
+		folded = utf8.AppendRune(folded, f)
+	}
+	var numbers []draftNumber
+	for _, match := range numberPattern.FindAllIndex(folded, -1) {
+		if isDashedRangeOrDate(string(folded[match[0]:match[1]])) {
+			continue
+		}
+		numbers = append(numbers, draftNumber{
+			written: strings.TrimSpace(text[from[match[0]]:to[match[1]-1]]),
+			digits:  digits(string(folded[match[0]:match[1]])),
+		})
+	}
+	return numbers
+}
+
 // scripts are the alphabets a draft's words are checked against: a word in one the conversation never
 // used is a model slipping into another language. Latin is left out: links, product names and codes
 // are written in it whatever the language.
@@ -295,19 +338,19 @@ func fillPlaceholders(reply, contactName string) string {
 }
 
 // draftWarnings lists what the draft says that the conversation does not: an email address, a number
-// of six digits or more, the name of a past conversation's customer, a word in another alphabet, or a link.
+// of six digits or more (in any script's digits and with any separators, foldPhones), the name of a past conversation's customer, a word in another alphabet, or a link.
 func draftWarnings(reply string, c draftContext) []DraftWarning {
 	warnings := []DraftWarning{}
 	known := strings.ToLower(c.subject + "\n" + c.threadText + "\n" + c.prompt)
-	knownDigits := digits(known)
+	knownDigits := digits(foldPhones(known))
 	for _, email := range emailPattern.FindAllString(reply, -1) {
 		if !strings.Contains(known, strings.ToLower(email)) {
 			warnings = append(warnings, DraftWarning{Kind: "email", Value: email})
 		}
 	}
-	for _, number := range numberPattern.FindAllString(reply, -1) {
-		if d := digits(number); len(d) >= 6 && !strings.Contains(knownDigits, d) {
-			warnings = append(warnings, DraftWarning{Kind: "number", Value: strings.TrimSpace(number)})
+	for _, number := range draftNumbers(reply) {
+		if len(number.digits) >= 6 && !strings.Contains(knownDigits, number.digits) {
+			warnings = append(warnings, DraftWarning{Kind: "number", Value: number.written})
 		}
 	}
 	lower := strings.ToLower(reply)
