@@ -23,7 +23,11 @@ On a computer the sidebar on the left starts open. From the top it has:
   **Reports** (the [results](results.md));
 - **Views**: your saved views, each opening the inbox on its filters;
 - **Channels**: each channel of the workspace, opening the inbox on its open conversations. A channel that needs
-  attention has an orange dot; its page in **Settings → Channels** says why;
+  attention has an orange dot; its page in **Settings → Channels** says why.
+
+The sidebar marks one place: the channel or saved view the list shows, or else **Inbox**. A channel stays marked
+while you change the status, the order or the search inside it; another filter makes the list Inbox again. A view
+stays marked while you change its order or search, and its status too when the view saved none;
 - at the foot, **Invite teammates** (for someone who may invite; it opens **Settings → Members → Invites**), **Settings**, and
   you: your name and address, which open the account menu.
 
@@ -103,7 +107,7 @@ page. Close it with **Esc**: the focus goes back to where it was.
   Only the places and actions your roles allow are listed, as in the sidebar.
 - Type a name, an email address or words from a subject: **Conversations** (with their status) and **Customers**
   that match are listed, the matching words in bold, the first row chosen. They are the same searches as the inbox
-  search box and its **Customers** list. A place or action whose name matches is listed too.
+  search field and its **Customers** list. A place or action whose name matches is listed too.
 - The last row, **See all results for "*words*" in the inbox**, opens the inbox list searched for those words in
   every status (`/?search=words&status=all`), with the number of conversations that match.
 - **↑** and **↓** move the chosen row, **Enter** opens it, a click opens any row.
@@ -113,27 +117,27 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 (customers); see [MCP](mcp.md).
 
 **Find conversations**
-- The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every
+- The inbox opens on **Open** conversations, the ones that still need an answer. **All statuses** shows every
   status but Spam. When nothing is open but the workspace has conversations, the list says so instead of
   showing the new-workspace steps.
-- The top of the list is one row: the **Status** tabs, then **Sort** and **Filter** on the right. While you
-  search or a filter is on, the search box takes a row of its own above the tabs, with **Filter**, **Sort** and
-  **Views** beside it, and the chips of the filters show below the tabs. When the tabs do not fit beside the icons,
-  they scroll sideways.
-- Pick a **Status** tab, and narrow further with **Filter** and **Sort**; see [Filter and sort](#filter-and-sort)
-  below. **Open**, **Pending** and **Resolved** are always there. **All** and **Closed** join them while you search
-  or a filter is on, and **Spam** once it holds a conversation.
-- **Open** and **Pending** say how many conversations they hold (**Open 23**), and so does the tab you are
-  on; the numbers follow the filters on screen. While you search, the tab counts the results when they fit
-  on one page. The API gives the same numbers with `counts=true` on `GET /api/v1/conversations`
-  (`status_counts`).
-- Start a search from the top bar's search field (from any page, **Ctrl K**, or **⌘K** on a Mac): type your words and
-  choose **See all results** (see **Search from any page** above). The list then shows its search
-  box, **Search conversations**, above the status tabs, with your words in it, for as long as the search is on;
-  refine the words there, or select its **×** to clear the search. An empty box closes again when you press
-  **Esc** or move on.
+- The top of the list has two rows. The first names where you are: the saved view on screen, else the channel
+  you opened from the sidebar, else **All channels**; then **Search** (the magnifier) and **Filter**. The second
+  row is the status on the left and the order on the right. Chips of the filters that are on show under it.
+- The status button shows the status you are on and how many conversations it holds (**Open 6**). Select it
+  for the menu: **Open**, **Pending**, **Resolved** and **Closed**, each with its count (a zero shows as 0),
+  **Spam** once it holds a conversation, then **All statuses**. One click picks a status and closes the menu.
+  From the keyboard, the arrow keys move, **Enter** picks and **Esc** closes it. The counts follow the filters
+  on screen; while you search they count the results when they fit on one page. The API gives the same numbers
+  with `counts=true` on `GET /api/v1/conversations` (`status_counts`).
+- Narrow further with **Filter**, and change the order with the order on the right; see
+  [Filter and sort](#filter-and-sort) below.
+- **Search** turns the title into a search field, **Search conversations**, that says where it looks
+  (**in Zalo OA**, **in all channels**). The top bar's search field (from any page, **Ctrl K**, or **⌘K** on a
+  Mac) leads there too: type your words and choose **See all results** (see **Search from any page** above).
+  The field stays while the search is on; refine the words there, or select its **×** to clear the search and
+  bring the title back. An empty field closes again when you press **Esc** or move on.
 - A search matches the subject, message text and the customer's name and email, in every status but Spam unless you picked a
-  status tab first, so imported closed tickets are found; the view stays on **All** after you clear
+  status first, so imported closed tickets are found; the list stays on **All statuses** after you clear
   the search. Characters such as `%` and `_` are matched
   literally.
 - A search for a name or an email address also lists the matching customers under **Customers**,
@@ -200,8 +204,7 @@ another year does not. Search words that are a code find that conversation, ahea
 
 ## Filter and sort
 
-**Filter** (the funnel icon at the right of the status tabs; next to the search box while you search or a filter
-is on) holds every filter. Ticking several values of one filter shows
+**Filter** (the three lines at the right of the list's title) holds every filter. Ticking several values of one filter shows
 conversations with any of them; each filter you add narrows the list further.
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me**, each other teammate, or **Unassigned**.
@@ -225,9 +228,11 @@ conversations with any of them; each filter you add narrows the list further.
   details name it under **Organization**; selecting it lists that organization's conversations in every
   status (`organization=`).
 
-Each active filter shows as a chip under the status tabs; select its **x** to remove it, or **Clear all**
-to go back to **Open**. While a filter is on, the search box shows above the tabs, and the Filter button is
-filled and counts the filters that are on.
+Each active filter shows as a chip under the status and the order, the filter's name then its value
+(**Priority Urgent**); select its **×** to remove it, or **Clear** to go back to **Open**. While a filter is on,
+the Filter icon turns orange and says how many filters are on beside it. The channel the title names has no chip
+and is not counted: the title says it. The status, the order and the search have their own places and never show
+as chips.
 
 A link can set filters that the menu does not list. They work and show as chips:
 `awaiting=customer` (**Waiting on the customer**: the newest message is your team's reply),
@@ -236,7 +241,8 @@ A link can set filters that the menu does not list. They work and show as chips:
 `created_before`, `updated_after` and `updated_before` (UTC instants; the chip shows the days in your
 timezone, see [Timezones](timezones.md)).
 
-**Sort** (the arrows icon next to Filter; its tooltip names the order in use) orders the list by **Due first** (the default:
+The order (at the right of the status, the arrows icon and the order in use in words, such as **Due first**) opens
+the **Sort** menu. It orders the list by **Due first** (the default:
 the earliest [reply target](response-targets.md) first; while reply targets are off nothing is due, so the list is ordered
 Waiting longest and the menu says **Waiting longest**), **Latest activity**,
 **Waiting longest** (open conversations waiting on you, the customer who wrote longest ago first, then everything else by
@@ -254,9 +260,9 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 
 ## Saved views
 
-**Views** (the bookmark icon next to Sort, beside the search box) keeps sets of filters under a name. It shows
-while you search or a filter is on; with neither, search from the top bar or turn a filter on to reach it. The
-sidebar lists your views at all times.
+**Views** (the bookmark icon after Filter) keeps sets of filters under a name. It shows while you search or a
+filter is on; with neither, search or turn a filter on to reach it. The sidebar lists your views at all times, and
+the list's title names the view on screen.
 - Set the filters, sort and search you want, then under **Save these filters** type a name, choose **Only
   me** or **Everyone in the workspace**, and select **Save view**.
 - Select a view to open its filters. The view that matches the list on screen is marked.
@@ -326,12 +332,12 @@ sidebar lists your views at all times.
   tick every row between it and the row you ticked last. Ticking a box does not open the conversation; a
   click anywhere else on the row opens it, also while selecting. With the keyboard, press Tab to reach a
   box and Space to tick it.
-- While at least one row is selected, the status tabs give their place to the selection: a box that
+- While at least one row is selected, the status and the order give their place to the selection: a box that
   ticks every row of this page (**Select all on this page**; a dash means some are ticked), how many are
   selected of the rows on the page (**3 of 23 selected**) and a row of icon buttons; hover or focus one to see its name:
   **Resolve** (one press), **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
-  **Tags**, **Spam** and **Clear selection**. Sort, Filter and, while it shows, the search box stay in view. There is no bulk delete.
-  In the **Spam** tab the bar offers **Not spam** in place of **Resolve** and **Set status**; see [Spam](#spam).
+  **Tags**, **Spam** and **Clear selection**. The title (or the search field), Search and Filter stay in view. There is no bulk delete.
+  In **Spam** the bar offers **Not spam** in place of **Resolve** and **Set status**; see [Spam](#spam).
 - With a conversation in the selection whose status may tell its customer (one of a Zalo OA, or one a
   Zalo message was moved into), **Tell customers** sits before the icons, ticked for each new selection: **Resolve** and **Set status** then tell each
   customer whose channel has words for the new status (see [Telling the customer](#telling-the-customer)).
@@ -339,7 +345,7 @@ sidebar lists your views at all times.
 - In **Tags**, a check mark means every selected row has the tag and a dash means some do. Choosing a
   checked tag removes it from all of them; choosing any other tag adds it to the rows that lack it.
 - Press Escape to close an open menu; press it again, anywhere in the list, to clear the selection. The
-  tabs come back.
+  status and the order come back.
 - A choice applies to every selected row at once, up to 50 rows. It is all or nothing: if one change
   cannot be made, no conversation changes, the selection stays and a message says so. Try again.
 - After a successful change the selection clears, the list reloads and a line says
@@ -475,14 +481,14 @@ In the details pane (**Show details** on a narrower screen):
 Junk that reached the support address (adverts, phishing) does not belong in the queue. **Spam** sits
 beside **Resolve** above the thread, and in the action bar when rows are selected.
 
-- **Spam** moves the conversation out of the inbox and every view, the **All** tab and search
-  included, into the **Spam** tab. Its [response clocks](response-targets.md) stop and
+- **Spam** moves the conversation out of the inbox and every view, **All statuses** and search
+  included, into **Spam** (in the status menu). Its [response clocks](response-targets.md) stop and
   [Results](results.md) stop counting it. Nobody is told, the customer included.
 - The sender is marked too: their later mail opens (or joins) a conversation straight in **Spam**, with
   no notification, no clock and no received notice. Mail from the same address to another workspace is
   not touched.
 - A message at the foot of the list names the sender, with **Undo**. Undo is the same as **Not spam**.
-- The **Spam** tab lists these conversations under one line that says what Spam does. Open one and
+- **Spam** in the status menu lists these conversations under one line that says what Spam does. Open one and
   press **Not spam** above the thread, or select several and press **Not spam** in the action bar: each
   goes back to the status it had (a conversation that arrived in Spam goes to **Open**), and mail from its
   sender reaches the inbox again.
