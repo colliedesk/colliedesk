@@ -377,6 +377,15 @@ test('the channel the title names has no chip and is not counted on Filter; the 
   expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Priority: Urgent']);
 });
 
+test('Clear inside a channel removes the filters and keeps the channel the title names', async () => {
+  const onChange = vi.fn();
+  render(<Harness initial={{ channel_id: zalo.id, priority: 'urgent', status: 'pending' }} onChange={onChange} />);
+  await screen.findByRole('list', { name: 'Active filters' });
+  fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+  expect(onChange).toHaveBeenLastCalledWith({ channel_id: zalo.id });
+  expect(title()).toHaveTextContent(/^Zalo OA$/);
+});
+
 test('a channel alone shows no chip and no Filter count: the title says it', async () => {
   render(<Harness initial={{ channel_id: zalo.id, status: 'all' }} />);
   await loadedSort();
@@ -418,6 +427,12 @@ test('a search inside a channel says it searches that channel', () => {
   expect(screen.getByText('in Zalo OA')).toBeInTheDocument();
 });
 
+test('while the channel names load, a channel search names no place yet rather than a wrong one', () => {
+  render(<InboxFilters tags={tags} query={{ channel_id: zalo.id, search: 'refund', status: 'all' }} />);
+  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveValue('refund');
+  expect(screen.getByRole('search', { name: 'Inbox' }).querySelector('.list-search-scope')?.textContent ?? '').toBe('');
+});
+
 test('the app\'s Search opens the search field with the focus in it, and the words typed search every status', async () => {
   const onChange = vi.fn();
   render(<SearchHarness onChange={onChange} />);
@@ -454,6 +469,17 @@ test('the clear button empties the search and brings the title back', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
   expect(onChange).toHaveBeenLastCalledWith({ status: 'all' });
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Search' })).toHaveFocus();
+});
+
+test('clearing a search the address drops a moment later still leaves the focus on the search icon', async () => {
+  function Lagging() {
+    const [query, setQuery] = useState<InboxQuery>({ search: 'refund', status: 'all' });
+    return <InboxFilters tags={tags} query={query} onChange={(next) => { setTimeout(() => setQuery(next), 0); }} />;
+  }
+  render(<Lagging />);
+  fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+  await waitFor(() => expect(screen.queryByRole('searchbox')).not.toBeInTheDocument());
   expect(screen.getByRole('button', { name: 'Search' })).toHaveFocus();
 });
 

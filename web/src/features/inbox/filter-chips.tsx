@@ -117,7 +117,8 @@ export function FilterChips(props: FilterPartProps) {
             <button type="button" className="chip-remove" aria-label={text.remove(label)} onClick={() => removeChip(chip)}><XIcon /></button></li>;
         })}
       </ul>
-      <button type="button" className="link-button chips-clear" onClick={() => onChange?.({})}>{text.clearAll}</button>
+      {/* Clear goes back to Open in the same place: the channel the title names is where the list is, not a filter. */}
+      <button type="button" className="link-button chips-clear" onClick={() => onChange?.(scopeChannel ? { channel_id: scopeChannel } : {})}>{text.clearAll}</button>
       {query.result && <a href={query.result.includes(':7d.') ? '/results?window=7d' : '/results'} className="link-button">{text.backToResults}</a>}
       {query.result && <p className="filter-chips-note">{text.anyStatus}</p>}
     </div>

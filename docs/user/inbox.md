@@ -135,7 +135,8 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
   (**in Zalo OA**, **in all channels**). The top bar's search field (from any page, **Ctrl K**, or **⌘K** on a
   Mac) leads there too: type your words and choose **See all results** (see **Search from any page** above).
   The field stays while the search is on; refine the words there, or select its **×** to clear the search and
-  bring the title back. An empty field closes again when you press **Esc** or move on.
+  bring the title back. An empty field closes again when you move on, or when you press **Esc** while no filter
+  is on.
 - A search matches the subject, message text and the customer's name and email, in every status but Spam unless you picked a
   status first, so imported closed tickets are found; the list stays on **All statuses** after you clear
   the search. Characters such as `%` and `_` are matched
@@ -229,7 +230,8 @@ conversations with any of them; each filter you add narrows the list further.
   status (`organization=`).
 
 Each active filter shows as a chip under the status and the order, the filter's name then its value
-(**Priority Urgent**); select its **×** to remove it, or **Clear** to go back to **Open**. While a filter is on,
+(**Priority Urgent**); select its **×** to remove it, or **Clear** to go back to **Open** in the same place (the
+channel the title names stays). While a filter is on,
 the Filter icon turns orange and says how many filters are on beside it. The channel the title names has no chip
 and is not counted: the title says it. The status, the order and the search have their own places and never show
 as chips.

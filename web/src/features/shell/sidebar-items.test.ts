@@ -82,6 +82,18 @@ test('a view that stores only an order is current only on that order, not on eve
   expect(viewItems([newest], hrefOf, { sort: 'updated_desc', status: 'all' })[0].current).toBe(true);
 });
 
+test('a view that stores a status with an order or a search is not the plain inbox', () => {
+  expect(viewItems([view('Open by priority', { status: ['open'], sort: 'priority' })], hrefOf, {})[0].current).toBe(false);
+  expect(viewItems([view('Open refunds', { status: ['open'], search: 'refund' })], hrefOf, {})[0].current).toBe(false);
+  expect(viewItems([view('Open by priority', { status: ['open'], sort: 'priority' })], hrefOf, { sort: 'priority' })[0].current).toBe(true);
+});
+
+test('a search the view saved is part of it; a search typed inside a view that saved none is not', () => {
+  expect(viewItems([view('Urgent refunds', { priority: ['urgent'], search: 'refund' })], hrefOf, { priority: 'urgent' })[0].current).toBe(false);
+  expect(viewItems([view('Urgent refunds', { priority: ['urgent'], search: 'refund' })], hrefOf, { priority: 'urgent', search: 'refund', sort: 'priority' })[0].current).toBe(true);
+  expect(viewItems([view('Urgent', { priority: ['urgent'] })], hrefOf, { priority: 'urgent', search: 'refund' })[0].current).toBe(true);
+});
+
 test('Inbox is the current place only while no channel or view in the sidebar is', () => {
   const channels = channelItems([zalo], hrefOf, { channel_id: zalo.id, status: 'all' });
   const views = viewItems([view('Urgent', { priority: ['urgent'] })], hrefOf, { channel_id: zalo.id, status: 'all' });

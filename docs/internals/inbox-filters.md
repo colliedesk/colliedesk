@@ -102,7 +102,9 @@ list the sidebar reads (`['saved-views']`), which the inbox only watches.
 
 Where the list is (`lib/inbox-scope.ts`): one channel when `channel_id` holds one id, a saved view when the
 filters on screen are its filters. Status, sort and search are changed inside that place, so they never take
-the list out of it; a view's own status still counts when it saved one. The sidebar marks the same place
+the list out of it; a status or a search the view saved still counts. A view that saved only a status, an order or
+a search matches exactly, or it would take over the plain inbox. Two views can match one list; the title names the
+first in the sidebar's order. The sidebar marks the same place
 (`sidebar-items.ts`), and marks Inbox only while no channel or view is marked.
 
 ## Spam is a status, not a flag

@@ -2,8 +2,8 @@ import type { ConversationFilters } from '../api/schemas';
 import { allStatuses, defaultStatus, flagKeys, listKeys, textKeys } from './inbox-query';
 import type { InboxQuery, InboxQueryKey } from './inbox-query';
 
-// Changing inbox filters and turning them into a saved view and back. Only the lazy Filter and Views
-// menus need these, so they are kept apart from inbox-query.ts, which the first screen loads.
+// Changing inbox filters and turning them into a saved view and back. The lazy Filter and Views menus change
+// filters with them; the sidebar and the list's title read a view's filters through queryOf (lib/inbox-scope.ts).
 
 type ListKey = (typeof listKeys)[number];
 const isList = (key: string): key is ListKey => (listKeys as readonly string[]).includes(key);

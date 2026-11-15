@@ -79,7 +79,7 @@ function placeOf(query: InboxQuery, channels: InboxFiltersProps['channels'], vie
   const id = scopedChannel(query);
   if (!id) return { title: messages.allChannels, scope: messages.searchInAllChannels };
   const name = channels ? channels.find((item) => item.id === id)?.name ?? messages.unknownChannel : '';
-  return { title: name, scope: messages.searchIn(name), channel: id };
+  return { title: name, scope: name && messages.searchIn(name), channel: id };
 }
 
 // The list header: the place the list is in as its title, with Search and Filter (and the saved views while the list is
@@ -98,9 +98,9 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
     setOpen(true);
     setFocusField((count) => count + 1);
   }
-  // Closing the field from the keyboard leaves the focus on the search icon that takes its place.
-  const [closedByKey, setClosedByKey] = useState(0);
-  useEffect(() => { if (closedByKey > 0) searchButton.current?.focus(); }, [closedByKey]);
+  // Closing the field from the keyboard leaves the focus on the search icon that takes its place, once it is there: a
+  // cleared search leaves the address a moment later.
+  const [refocus, setRefocus] = useState(false);
   useEffect(() => { if (focusField > 0) search.current?.focus(); }, [focusField]);
   const setStatus = (value: string) => {
     const next: InboxQuery = { ...query, status: value };
@@ -121,7 +121,12 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
   // A filter other than the channel the title names: it shows a chip and the saved views.
   const filtered = Object.keys(query).some((key) => !ownControls.includes(key) && !(key === 'channel_id' && place.channel));
   const searching = open || Boolean(query.search);
-  const closeField = () => { setOpen(false); setClosedByKey((count) => count + 1); };
+  useEffect(() => {
+    if (!refocus || searching) return;
+    searchButton.current?.focus();
+    setRefocus(false);
+  }, [refocus, searching]);
+  const closeField = () => { setOpen(false); setRefocus(true); };
   const clearSearch = () => {
     const next: InboxQuery = { ...query };
     delete next.search;
