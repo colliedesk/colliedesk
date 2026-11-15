@@ -26,8 +26,9 @@ On a computer the sidebar on the left starts open. From the top it has:
   attention has an orange dot; its page in **Settings → Channels** says why.
 
 The sidebar marks one place: the channel or saved view the list shows, or else **Inbox**. A channel stays marked
-while you change the status, the order or the search inside it; another filter makes the list Inbox again. A view
-stays marked while you change its order or search, and its status too when the view saved none;
+while you change the status, the order or the search inside it, and while **Filter** picks narrow it; a second
+channel makes the list Inbox again. A view stays marked while you change its order or search, and its status too
+when the view saved none. A view that saved only a status is never marked on the plain inbox: that list is **Inbox**;
 - at the foot, **Invite teammates** (for someone who may invite; it opens **Settings → Members → Invites**), **Settings**, and
   you: your name and address, which open the account menu.
 
@@ -126,6 +127,7 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 - The status button shows the status you are on and how many conversations it holds (**Open 6**). Select it
   for the menu: **Open**, **Pending**, **Resolved** and **Closed**, each with its count (a zero shows as 0),
   **Spam** once it holds a conversation, then **All statuses**. One click picks a status and closes the menu.
+  A link or a view with several statuses shows their names on the button (**Open, Pending**), and no item is ticked.
   From the keyboard, the arrow keys move, **Enter** picks and **Esc** closes it. The counts follow the filters
   on screen; while you search they count the results when they fit on one page. The API gives the same numbers
   with `counts=true` on `GET /api/v1/conversations` (`status_counts`).
@@ -135,11 +137,10 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
   (**in Zalo OA**, **in all channels**). The top bar's search field (from any page, **Ctrl K**, or **⌘K** on a
   Mac) leads there too: type your words and choose **See all results** (see **Search from any page** above).
   The field stays while the search is on; refine the words there, or select its **×** to clear the search and
-  bring the title back. An empty field closes again when you move on, or when you press **Esc** while no filter
-  is on.
+  bring the title back. An empty field closes again when you move on, or when you press **Esc**.
 - A search matches the subject, message text and the customer's name and email, in every status but Spam unless you picked a
   status first, so imported closed tickets are found; the list stays on **All statuses** after you clear
-  the search. Characters such as `%` and `_` are matched
+  the search. Inside a saved view that saved a status, the search keeps that status and the view stays the place. Characters such as `%` and `_` are matched
   literally.
 - A search for a name or an email address also lists the matching customers under **Customers**,
   above the conversations. Select one to open the customer's page with every conversation they had;
@@ -147,8 +148,8 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 - The customer's name under the subject of an open conversation opens the same page.
 - A conversation you opened stays on screen after you resolve or close it, although it leaves the
   Open list.
-- When nothing matches, **Clear filters** below the message resets the search and every filter, and
-  returns to **Open**, in one step.
+- When nothing matches while a search or a filter is on, **Clear filters** below the message resets the search
+  and every filter, and returns to **Open**, in one step. In a channel it keeps the channel.
 - By default the list is ordered by **Due first** (**Waiting longest** while reply targets are off; see [Filter and sort](#filter-and-sort)); ordered by latest activity it is grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
 - Each row shows, from the top: a status dot and the customer's name, with the time on the right; the
   subject; and the start of what the customer wrote last, on one line. The dot is the status colour (blue
