@@ -20,7 +20,7 @@
 
 .media-controls { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: var(--space-1) 0; }
 .media-control {
-  --control: 32px; flex: none; width: var(--control); padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2);
+  --control: 28px; flex: none; width: var(--control); padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2);
 }
 .media-control:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); color: var(--text-1); }
 .media-control svg { width: 16px; height: 16px; }

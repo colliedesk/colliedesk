@@ -49,7 +49,7 @@
 .settings-v2 .settings-rows > .field > :is(label, .field-label):first-child { color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
 .settings-v2 .settings-rows > .field > .input-with-actions select { width: 100%; }
 .settings-v2 .settings-rows > .field > .segmented { border: 0; background: var(--surface-2); }
-.settings-v2 .settings-rows > .field > .segmented label { min-height: var(--control, 32px); padding: 0 var(--space-3); }
+.settings-v2 .settings-rows > .field > .segmented label { min-height: var(--control); padding: 0 var(--space-3); }
 .settings-v2 .settings-rows > .field-inline, .settings-v2 .settings-rows > .field > .field-inline { font-size: var(--fs-ui); }
 
 /* Lists in a card: the rows carry the padding, the list none. */

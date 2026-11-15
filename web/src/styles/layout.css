@@ -26,7 +26,7 @@
    like a field (a ring of the text colour at 10 %, a light fill) and opens the search palette. It is 28 px tall and
    its key cap's text 10 px, built from the spacing and type tokens: tokens.css is also the operator console's, whose
    bundle budget has no room for new ones. */
-.topbar-search { --control: calc(var(--space-6) + var(--space-1)); flex: 0 1 540px; min-width: 0; justify-content: flex-start; gap: var(--space-2); height: var(--control);
+.topbar-search { flex: 0 1 540px; min-width: 0; justify-content: flex-start; gap: var(--space-2); height: var(--control);
   padding: 0 var(--space-1) 0 var(--space-2); border: 0; background: color-mix(in srgb, var(--surface-2) 30%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-1) 10%, transparent);
   color: var(--text-3); font-size: var(--fs-small); font-weight: 400; cursor: text; }
 .topbar-search:hover:not(:disabled) { border: 0; background: var(--surface-2); }
@@ -35,7 +35,7 @@
 .topbar-search kbd { flex: none; display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 var(--space-1); border-radius: var(--radius-sm);
   box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3); font: 500 calc(var(--fs-label) - var(--space-1) / 2)/20px var(--font-sans); }
 .topbar-end { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
-.topbar-help { flex: none; display: inline-flex; align-items: center; min-height: var(--control, 32px); padding: 0 var(--space-1); border-radius: var(--radius);
+.topbar-help { flex: none; display: inline-flex; align-items: center; min-height: var(--control); padding: 0 var(--space-1); border-radius: var(--radius);
   color: var(--text-3); font-size: var(--fs-small); font-weight: 500; text-decoration: none; }
 .topbar-help:hover { color: var(--text-1); }
 /* Where the sidebar does not name them, the top bar does: always visible, never a tooltip, it is what tells a person
@@ -53,7 +53,7 @@
 /* The tooltip starts at the name and stays inside the sidebar, wrapping a long name instead of widening it. */
 .workspace-name[data-tip]::after { left: 0; translate: 0 0; width: max-content; max-width: calc(var(--sidebar-user-width, 248px) - 56px); white-space: normal; }
 .quick-start { position: relative; flex: none; display: flex; }
-:is(.quick-start-button, .sidebar-new) { position: relative; flex: none; width: var(--control, 32px); height: var(--control, 32px); padding: 0; border-color: transparent;
+:is(.quick-start-button, .sidebar-new) { position: relative; flex: none; width: var(--control); height: var(--control); padding: 0; border-color: transparent;
   background: transparent; box-shadow: none; color: var(--text-1); }
 :is(.quick-start-button, .sidebar-new):hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
 .quick-start-button[aria-pressed="true"], .quick-start-button[aria-pressed="true"]:hover:not(:disabled) { background: var(--surface-3); }
@@ -80,12 +80,13 @@
 .channel-warn { flex: none; width: 8px; height: 8px; margin: 0 var(--space-1); border-radius: var(--radius-full); background: var(--warn); }
 .sidebar-foot { flex: none; display: flex; flex-direction: column; padding-top: var(--space-2); box-shadow: inset 0 1px 0 var(--line); }
 .rail-link {
-  height: var(--control, 32px); display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius);
+  height: var(--control); display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius);
   color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .rail-link:hover { background: var(--surface-2); color: var(--text-1); }
 .rail-link[aria-current="page"] { background: var(--surface-3); color: var(--text-1); }
+.rail-link[aria-current="page"] svg { color: var(--accent); }
 .rail-link svg { flex: none; width: 16px; height: 16px; color: var(--text-3); stroke-width: 1.75; }
 .rail-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The label is on screen, so the rail's tooltips would only repeat it. */
@@ -94,7 +95,7 @@
 /* Desktop: the sidebar's width is the person's (sidebar-layout.ts): dragged at its edge, or folded into the icon rail. */
 .rail-head { flex: none; display: flex; align-items: center; gap: var(--space-1); min-width: 0; height: 48px; margin-bottom: var(--space-2); padding: 0 var(--space-1); }
 .rail-head .workspace-name { margin-left: var(--space-1); }
-.sidebar-toggle { --control: 28px; flex: none; width: 28px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
+.sidebar-toggle { flex: none; width: var(--control); padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
 .sidebar-toggle:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); color: var(--text-1); }
 .sidebar-toggle svg { width: 16px; height: 16px; transform: scaleX(-1); }   /* the panel on the left */
 .sidebar-toggle[data-tip]::after { left: auto; right: 0; translate: 0 0; }   /* under the button, inside the sidebar: it never scrolls sideways */
@@ -146,7 +147,7 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 @media (max-width: 44rem) { .rail-head { display: contents; } }
 /* The person at the foot of the sidebar (name, and the address under it) opens the account menu. */
 .account-menu { position: relative; }
-.rail-avatar { width: 100%; height: 40px; justify-content: flex-start; gap: var(--space-2); padding: 0 var(--space-2); border-color: transparent; background: transparent; box-shadow: none; }
+.rail-avatar { width: 100%; height: var(--control); justify-content: flex-start; gap: var(--space-2); padding: 0 var(--space-2); border-color: transparent; background: transparent; box-shadow: none; }
 .rail-avatar:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
 .rail-avatar .avatar { width: 20px; height: 20px; font-size: 9px; }
 .current-user { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
@@ -197,7 +198,7 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .settings-layout { max-width: 84rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 /* Settings in the sidebar: Back to app at the head (48px, as the workspace row it replaces), the menu under it. */
 .settings-rail-head { flex-direction: row; }
-.settings-exit { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); height: var(--control, 32px); padding: 0 var(--space-2); border-radius: var(--radius);
+.settings-exit { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); height: var(--control); padding: 0 var(--space-2); border-radius: var(--radius);
   color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-decoration: none; }
 .settings-exit:hover { background: var(--surface-2); }
 .settings-exit svg { flex: none; width: 16px; height: 16px; }
@@ -210,10 +211,10 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .settings-sections { container-type: inline-size; }
 .settings-nav { position: sticky; top: 0; display: grid; gap: var(--space-4); }
 .settings-nav ul { display: grid; gap: 0; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
-.settings-nav a { display: flex; align-items: center; min-height: var(--control, 32px); border-radius: var(--radius); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
+.settings-nav a { display: flex; align-items: center; min-height: var(--control); border-radius: var(--radius); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
 @media (pointer: coarse), (max-width: 30rem) { .settings-nav a { display: flex; align-items: center; min-height: var(--touch); } }
 .settings-nav a:hover { background: var(--surface-2); color: var(--text-1); }
-.settings-nav a[aria-current="page"] { background: var(--surface-3); color: var(--text-1); font-weight: 500; }
+.settings-nav a[aria-current="page"] { background: var(--surface-3); color: var(--text-1); font-weight: 500; box-shadow: inset 2px 0 var(--accent); }
 .settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
 .settings-nav .settings-group-label { padding: 0 var(--space-2); }
 /* A tag or a dot after the label sits at the row's far end; on the phone's sideways row it follows the label. */
@@ -222,7 +223,7 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .settings-sections > .settings-group-label { padding: var(--space-6) 0 var(--space-2); }
 .settings-sections > .settings-group-label:first-child, .settings-sections > .error-copy + .settings-group-label { padding-top: 0; }
 .settings-card h2 { scroll-margin-top: var(--space-6); }
-.settings-page > header h1 { font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
+.settings-page > header h1 { font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
 .settings-page > header p { margin-top: var(--space-1); color: var(--text-2); font-size: var(--fs-ui); }
 .settings-page > .error-copy { margin-bottom: var(--space-4); }
 .settings-card { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: var(--space-4) var(--space-10); border-top: 1px solid var(--line); padding: var(--space-6) 0; }
@@ -441,7 +442,7 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 }
 
 /* A page's way back is a text link with a full-height hit area (32 px; --touch on a phone through --control). */
-.page-back { display: inline-flex; align-items: center; min-height: var(--control, 32px); }
+.page-back { display: inline-flex; align-items: center; min-height: var(--control); }
 
 /* Serif is for page titles; an h2 in a settings header (AI empty state) is sans. */
 .settings-page header > h2 { font-family: var(--font-sans); letter-spacing: 0; }
