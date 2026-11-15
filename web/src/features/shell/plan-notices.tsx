@@ -14,6 +14,6 @@ export function PlanNotices({ me, onBillingPage = false }: { me: Me; onBillingPa
   const isAdmin = can(me, 'billing:manage');
   const billing = useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: isAdmin && me.plan?.plan === 'trial' });
   if (onBillingPage && me.plan?.plan === 'trial') return null;
-  return <PlanBanner plan={me.plan} isAdmin={isAdmin} billing={billing.data} timezone={me.timezone} planIntent={readPlanIntent()}
+  return <PlanBanner plan={me.plan} isAdmin={isAdmin} workspaceId={me.workspace.id} billing={billing.data} timezone={me.timezone} planIntent={readPlanIntent()}
     onChoosePlan={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />;
 }
