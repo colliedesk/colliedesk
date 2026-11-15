@@ -477,13 +477,16 @@ test('with reply targets off the server answers Due first in Waiting longest ord
   expect(new URLSearchParams(api.conversations.mock.calls[0][0]).get('sort')).toBe('due');
   await waitFor(() => expect(sortMenu()).toHaveValue('waiting_longest'));
   fireEvent.change(sortMenu(), { target: { value: 'priority' } });
-  fireEvent.click(screen.getByRole('radio', { name: /pending/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^Status: / }));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Pending' }));
   await waitFor(() => expect(lastQuery().get('status')).toBe('pending'));
   expect(lastQuery().get('sort')).toBe('priority');
   // Back to the default order: its page is still loading and the Priority page holds the screen meanwhile.
   fireEvent.change(sortMenu(), { target: { value: 'waiting_longest' } });
   await waitFor(() => expect(lastQuery().get('sort')).toBe('due'));
   expect(sortMenu()).toHaveValue('waiting_longest');
+  // The order in use reads in words beside the sort icon.
+  expect(screen.getByText('Waiting longest', { selector: 'span.sort-label' })).toBeInTheDocument();
 });
 
 test('a workspace whose conversations are all closed says nothing is open, not "Get started"', async () => {
@@ -1426,4 +1429,32 @@ test('with a conversation open on another mailbox, the default mailbox is asked 
     api.emailChannel.mockReset();
     api.emailChannelOf.mockReset();
   }
+});
+
+// The list's title names the place it is in, from what the inbox and the sidebar already read: no request of its own.
+test('a channel in the address titles the list with its name, from the channel list the inbox already reads', async () => {
+  quietApis();
+  const zalo = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  api.channelCounts.mockClear();
+  api.channelCounts.mockResolvedValueOnce({ types: [{ type: 'zalo_oa', count: 1 }], items: [{ id: zalo, name: 'Zalo OA', type: 'zalo_oa', status: { state: 'working' } }] } as never);
+  testRouter.search = { channel_id: zalo, status: 'all' };
+  renderRoute();
+  expect(await screen.findByRole('heading', { level: 2, name: 'Zalo OA' })).toBeInTheDocument();
+  expect(api.channelCounts).toHaveBeenCalledTimes(1);
+});
+
+test('a saved view the sidebar has read titles the list with its name, without asking for the views again', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  views.list.mockClear();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['saved-views'], { items: [{ id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', name: 'Urgent', scope: 'shared', filters: { priority: ['urgent'] },
+    owner_agent_id: null, created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', deleted_at: null, purges_at: null }] });
+  testRouter.search = { priority: 'urgent', status: 'all' };
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByRole('heading', { level: 2, name: 'Urgent' })).toBeInTheDocument();
+  expect(views.list).not.toHaveBeenCalled();
 });

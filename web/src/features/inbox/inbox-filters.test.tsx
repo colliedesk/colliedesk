@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { InboxQuery } from '../../lib/inbox-query';
 import { permissionsOf, rolesOf } from '../../test-roles';
@@ -17,10 +18,16 @@ const tags = [billing, vip];
 const ann = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: 'Ann', roles: rolesOf('agent'), manageable: true, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
 const bo = { ...ann, id: '99999999-9999-4999-8999-999999999999', email: 'bo@example.com', display_name: 'Bo' };
 
+// The workspace's channels and saved views, as the sidebar lists them: they name the place the list is in.
+const zalo = { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', name: 'Zalo OA' };
+const mailbox = { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', name: 'support@northwind.help' };
+const urgentView = { id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', name: 'Urgent', filters: { priority: ['urgent' as const] } };
+
 // Filters follows the query it is given, like the inbox does with the address.
-function Harness({ initial = {}, onChange, dueSort }: { initial?: InboxQuery; onChange?: (query: InboxQuery) => void; dueSort?: string }) {
+function Harness({ initial = {}, onChange, dueSort, counts, views }: { initial?: InboxQuery; onChange?: (query: InboxQuery) => void; dueSort?: string; counts?: Partial<Record<string, number>>; views?: ReactNode }) {
   const [query, setQuery] = useState<InboxQuery>(initial);
-  return <InboxFilters tags={tags} agents={[ann, bo]} currentAgentId={ann.id} timezone="Asia/Ho_Chi_Minh" query={query} dueSort={dueSort} onChange={(next) => { setQuery(next); onChange?.(next); }} />;
+  return <InboxFilters tags={tags} agents={[ann, bo]} currentAgentId={ann.id} timezone="Asia/Ho_Chi_Minh" query={query} dueSort={dueSort} counts={counts} views={views}
+    channels={[zalo, mailbox]} savedViews={[urgentView]} onChange={(next) => { setQuery(next); onChange?.(next); }} />;
 }
 
 const labelOf = (box: HTMLElement) => (box as HTMLInputElement).labels?.[0]?.textContent;
@@ -33,45 +40,120 @@ const openMenu = async () => {
 };
 
 // The Sort menu once its chunk has replaced the inert control that holds its place.
+// The words beside the sort icon (the options of the menu are not spans).
+const sortLabel = () => screen.getByText(/./, { selector: '.list-controls span.sort-label' });
+
 const loadedSort = () => waitFor(() => {
   const sort = screen.getByRole('combobox', { name: 'Sort' });
   expect(within(sort).getByRole('option', { name: 'Priority' })).toBeInTheDocument();
   return sort;
 });
 
-const tabValues = () => within(screen.getByRole('radiogroup', { name: 'Status' })).getAllByRole('radio').map((item) => item.getAttribute('value'));
+const title = () => screen.getByRole('heading', { level: 2 });
+const picker = () => screen.getByRole('button', { name: /^Status: / });
+const openStatusMenu = () => {
+  fireEvent.click(picker());
+  return screen.getByRole('menu', { name: 'Status' });
+};
+// Each item of the status menu as it reads: its name, then the count beside it.
+const menuRows = (menu: HTMLElement) => within(menu).getAllByRole('menuitemradio').map((item) => item.textContent);
 
-test('the status tabs start as Open, Pending and Resolved, Open selected so the inbox starts on what needs an answer', () => {
-  render(<InboxFilters tags={tags} query={{}} counts={{ open: 23, pending: 4, resolved: 7, closed: 120, spam: 0 }} />);
-  expect(tabValues()).toEqual(['open', 'pending', 'resolved']);
-  expect(screen.getByRole('radio', { name: 'Open' })).toBeChecked();
+test('the title says where the list is: every channel at rest', () => {
+  render(<Harness />);
+  expect(title()).toHaveTextContent(/^All channels$/);
 });
 
-test('a search or a filter adds All first and Closed after Resolved, as results span every status', () => {
-  const { unmount } = render(<InboxFilters tags={tags} query={{ search: 'hana', status: 'all' }} />);
-  expect(tabValues()).toEqual(['all', 'open', 'pending', 'resolved', 'closed']);
+test('a channel opened from the sidebar titles the list with its name, under any status', () => {
+  render(<Harness initial={{ channel_id: zalo.id, status: 'all' }} />);
+  expect(title()).toHaveTextContent(/^Zalo OA$/);
+});
+
+test('a saved view on screen titles the list with its name', () => {
+  render(<Harness initial={{ priority: 'urgent', status: 'all' }} />);
+  expect(title()).toHaveTextContent(/^Urgent$/);
+});
+
+test('two channels at once are not one place: the title says every channel and each channel keeps its chip', async () => {
+  render(<Harness initial={{ channel_id: `${zalo.id},${mailbox.id}` }} />);
+  expect(title()).toHaveTextContent(/^All channels$/);
+  const chips = await screen.findByRole('list', { name: 'Active filters' });
+  expect(within(chips).getAllByRole('listitem')).toHaveLength(2);
+});
+
+test('the status picker shows the status on screen, its dot and its count', () => {
+  render(<Harness counts={{ open: 6, pending: 0, resolved: 3, closed: 7, spam: 0, all: 16 }} />);
+  expect(picker()).toHaveAccessibleName('Status: Open');
+  expect(picker()).toHaveTextContent(/^Open6$/);
+  expect(picker().querySelector('.status-dot')).toHaveAttribute('data-status', 'open');
+});
+
+test('the status menu lists every status with its count, zero included, then All statuses after a line', () => {
+  render(<Harness initial={{ status: 'pending' }} counts={{ open: 6, pending: 0, resolved: 3, closed: 7, spam: 0, all: 16 }} />);
+  const menu = openStatusMenu();
+  expect(menuRows(menu)).toEqual(['Open6', 'Pending0', 'Resolved3', 'Closed7', 'All statuses16']);
+  expect(within(menu).getByRole('separator')).toBeInTheDocument();
+  expect(within(menu).getByRole('menuitemradio', { name: 'Pending' })).toHaveAttribute('aria-checked', 'true');
+  expect(within(menu).getByRole('menuitemradio', { name: 'Open' })).toHaveAttribute('aria-checked', 'false');
+});
+
+test('Spam is listed after Closed once it holds a conversation, or while it is the status on screen', () => {
+  const { unmount } = render(<Harness counts={{ open: 6, pending: 0, resolved: 3, closed: 7, spam: 2, all: 16 }} />);
+  expect(menuRows(openStatusMenu())).toEqual(['Open6', 'Pending0', 'Resolved3', 'Closed7', 'Spam2', 'All statuses16']);
   unmount();
-  render(<InboxFilters tags={tags} query={{ priority: 'urgent' }} />);
-  expect(tabValues()).toEqual(['all', 'open', 'pending', 'resolved', 'closed']);
+  render(<Harness initial={{ status: 'spam' }} counts={{ open: 6, pending: 0, resolved: 3, closed: 7, spam: 0, all: 16 }} />);
+  expect(picker()).toHaveAccessibleName('Status: Spam');
+  expect(menuRows(openStatusMenu())).toEqual(['Open6', 'Pending0', 'Resolved3', 'Closed7', 'Spam0', 'All statuses16']);
+  // The count is not part of an item's name.
+  expect(screen.getByRole('menuitemradio', { name: 'Spam' })).toHaveAttribute('aria-checked', 'true');
 });
 
-test('Spam shows last once it holds a conversation, and any status a link opens keeps its tab', () => {
-  const { unmount } = render(<InboxFilters tags={tags} query={{}} counts={{ open: 22, pending: 4, resolved: 0, closed: 0, spam: 2 }} />);
-  expect(tabValues()).toEqual(['open', 'pending', 'resolved', 'spam']);
-  unmount();
-  const { unmount: again } = render(<InboxFilters tags={tags} query={{ status: 'spam' }} counts={{ open: 22, pending: 4, resolved: 0, closed: 0, spam: 0 }} />);
-  expect(tabValues()).toEqual(['open', 'pending', 'resolved', 'spam']);
-  again();
-  render(<InboxFilters tags={tags} query={{ status: 'closed' }} />);
-  expect(tabValues()).toEqual(['open', 'pending', 'resolved', 'closed']);
-  expect(screen.getByRole('radio', { name: 'Closed' })).toBeChecked();
-});
-
-test('choosing a status tab filters the list', () => {
+test('one click on a status filters the list and closes the menu, back on the picker', () => {
   const onChange = vi.fn();
   render(<Harness onChange={onChange} />);
-  fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
+  fireEvent.click(within(openStatusMenu()).getByRole('menuitemradio', { name: 'Pending' }));
   expect(onChange).toHaveBeenLastCalledWith({ status: 'pending' });
+  expect(screen.queryByRole('menu', { name: 'Status' })).not.toBeInTheDocument();
+  expect(picker()).toHaveFocus();
+  expect(picker()).toHaveAccessibleName('Status: Pending');
+  fireEvent.click(within(openStatusMenu()).getByRole('menuitemradio', { name: 'All statuses' }));
+  expect(onChange).toHaveBeenLastCalledWith({ status: 'all' });
+});
+
+test('Open picked while no status was chosen keeps the default address', () => {
+  const onChange = vi.fn();
+  render(<Harness onChange={onChange} />);
+  fireEvent.click(within(openStatusMenu()).getByRole('menuitemradio', { name: 'Open' }));
+  expect(onChange).toHaveBeenLastCalledWith({});
+});
+
+test('the status menu works from the keyboard: the arrows move, Enter picks, Escape closes it on the picker', () => {
+  const onChange = vi.fn();
+  render(<Harness onChange={onChange} />);
+  fireEvent.keyDown(picker(), { key: 'ArrowDown' });
+  const menu = screen.getByRole('menu', { name: 'Status' });
+  // The menu opens on the status on screen.
+  expect(within(menu).getByRole('menuitemradio', { name: 'Open' })).toHaveFocus();
+  fireEvent.keyDown(menu, { key: 'ArrowDown' });
+  expect(within(menu).getByRole('menuitemradio', { name: 'Pending' })).toHaveFocus();
+  fireEvent.keyDown(menu, { key: 'ArrowUp' });
+  fireEvent.keyDown(menu, { key: 'ArrowUp' });
+  expect(within(menu).getByRole('menuitemradio', { name: 'All statuses' })).toHaveFocus();
+  fireEvent.keyDown(menu, { key: 'Escape' });
+  expect(screen.queryByRole('menu', { name: 'Status' })).not.toBeInTheDocument();
+  expect(picker()).toHaveFocus();
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.keyDown(picker(), { key: 'Enter' });
+  fireEvent.keyDown(screen.getByRole('menu', { name: 'Status' }), { key: 'ArrowDown' });
+  fireEvent.keyDown(screen.getByRole('menuitemradio', { name: 'Pending' }), { key: 'Enter' });
+  expect(onChange).toHaveBeenLastCalledWith({ status: 'pending' });
+  expect(picker()).toHaveFocus();
+});
+
+test('a status menu left open closes on a press outside it', () => {
+  render(<><Harness /><button type="button">Elsewhere</button></>);
+  openStatusMenu();
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Elsewhere' }));
+  expect(screen.queryByRole('menu', { name: 'Status' })).not.toBeInTheDocument();
 });
 
 test('the Filter menu picks several priorities, assignees and tags, and counts the filters that are on', async () => {
@@ -148,28 +230,29 @@ test('Source, Organization, who replies next and the date ranges are not in the 
   expect(onChange).toHaveBeenLastCalledWith({ source: 'imported', organization: 'Acme' });
 });
 
-test('every active filter shows as a chip that removes it, and Clear all goes back to the Open view', async () => {
+test('every active filter shows as a chip that removes it, and Clear goes back to the Open view', async () => {
   const onChange = vi.fn();
   render(<Harness initial={{ status: 'pending', priority: 'high,urgent', assignee: 'me,anyone', tag: billing.id, awaiting: 'customer', has_pending_draft: true, organization: 'Acme', search: 'refund' }} onChange={onChange} />);
   const chips = await screen.findByRole('list', { name: 'Active filters' });
   expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
     // In the order of the Filter menu; a value the menu no longer offers keeps its chip.
-    'Priority: High', 'Priority: Urgent', 'Assignee: Me', 'Assignee: Assigned to anyone', 'Tags: Billing', 'Waiting on the customer', 'Reply draft waiting to be sent', 'Organization: Acme',
+    'Priority: High', 'Priority: Urgent', 'Assignee: Me', 'Assignee: Assigned to anyone', 'Tag: Billing', 'Waiting on the customer', 'Reply draft waiting to be sent', 'Organization: Acme',
   ]);
   fireEvent.click(within(chips).getByRole('button', { name: 'Remove filter Priority: High' }));
   expect(onChange).toHaveBeenLastCalledWith({ status: 'pending', priority: 'urgent', assignee: 'me,anyone', tag: billing.id, awaiting: 'customer', has_pending_draft: true, organization: 'Acme', search: 'refund' });
-  fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
   expect(onChange).toHaveBeenLastCalledWith({});
   expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
-  expect(screen.getByRole('radio', { name: 'Open' })).toBeChecked();
-  // Nothing is filtered any more, so the list is back on its one row, without the search box.
+  expect(picker()).toHaveAccessibleName('Status: Open');
+  // Nothing is filtered or searched any more: the list is back to its title.
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  expect(title()).toHaveTextContent(/^All channels$/);
 });
 
 // The address updates after a navigation, a moment after each key. Typed text must not jump back meanwhile.
 function LaggingHarness() {
   const [query, setQuery] = useState<InboxQuery>({ priority: 'urgent' });
-  return <InboxFilters tags={tags} timezone="UTC" query={query} onChange={(next) => { setTimeout(() => setQuery(next), 0); }} />;
+  return <InboxFilters tags={tags} timezone="UTC" query={query} focusSearch onChange={(next) => { setTimeout(() => setQuery(next), 0); }} />;
 }
 
 test('text typed faster than the address updates is kept, and a change from elsewhere still shows', async () => {
@@ -185,7 +268,7 @@ test('text typed faster than the address updates is kept, and a change from else
     expect(search).toHaveValue('inv');
     await act(async () => { vi.runAllTimers(); });
     expect(search).toHaveValue('inv');
-    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
     await act(async () => { vi.runAllTimers(); });
     expect(search).toHaveValue('');
   } finally {
@@ -202,11 +285,11 @@ test('the filters are not a form, so the forms of the views menu submit on their
   expect(screen.getByRole('form', { name: 'Save view form' }).parentElement?.closest('form')).toBeNull();
 });
 
-// On a phone the chips scroll sideways; Clear all sits beside the scrolling list, never inside it.
-test('Clear all is outside the list of chips, so scrolling the chips never hides it', async () => {
+// Clear sits after the chips, never inside their list, so it stays one press away however many chips wrap.
+test('Clear is outside the list of chips', async () => {
   render(<Harness initial={{ priority: 'urgent,high,normal,low', channel: 'email,web_form,imported', awaiting: 'team' }} />);
   const chips = await screen.findByRole('list', { name: 'Active filters' });
-  expect(chips.contains(screen.getByRole('button', { name: 'Clear all' }))).toBe(false);
+  expect(chips.contains(screen.getByRole('button', { name: 'Clear' }))).toBe(false);
 });
 
 test('the list starts on Due first; the sort menu also offers latest activity, waiting longest and priority', async () => {
@@ -231,7 +314,8 @@ test('while reply targets are off the list on Due first is ordered Waiting longe
     expect(sort).toHaveValue('waiting_longest');
     // Nothing is due, so Due first is not offered beside the order it gives.
     expect(within(sort).getAllByRole('option').map((option) => option.textContent)).toEqual(['Latest activity', 'Waiting longest', 'Priority']);
-    expect(sort.closest('label')).toHaveAttribute('data-tip', 'Sort: Waiting longest');
+    // The order in use reads in words beside the sort icon.
+    expect(sortLabel()).toHaveTextContent(/^Waiting longest$/);
     unmount();
   }
   render(<Harness dueSort="waiting_longest" onChange={onChange} />);
@@ -253,50 +337,88 @@ test('a sort set by a link that the menu does not offer still shows as chosen', 
   expect(sort).toHaveValue('created_asc');
 });
 
-// The list starts on one row: the status tabs, then Sort and Filter on the right. The search box and the chips show
-// only while a search or a filter is on, so what a person reads first are the tabs.
+// The header reads in two rows: the title with Search and Filter, then the status and the order. Chips and the
+// saved views show only while something narrows the list.
 const follows = (first: Node, next: Node) => Boolean(first.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-test('at rest the list shows no search box: the status tabs come first, then Sort and Filter, on screen and for Tab', async () => {
-  render(<InboxFilters tags={tags} query={{}} views={<details aria-label="Saved views" />} />);
-  await screen.findByRole('option', { name: 'Due first' });
+test('at rest the header is the title with Search and Filter, then the status and the order, on screen and for Tab', async () => {
+  render(<Harness views={<details aria-label="Saved views" />} counts={{ open: 6, pending: 0, resolved: 3, closed: 7, spam: 0, all: 16 }} />);
+  await loadedSort();
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
-  // The saved views sit beside the search box (the sidebar lists them at rest).
+  // The saved views are listed in the sidebar; the header offers them only while the list is narrowed.
   expect(screen.queryByRole('group', { name: 'Saved views' })).not.toBeInTheDocument();
-  const order = [screen.getAllByRole('radio')[0], screen.getByRole('combobox', { name: 'Sort' }), screen.getByText('Filter')];
+  expect(sortLabel()).toHaveTextContent(/^Due first$/);
+  const order = [title(), screen.getByRole('button', { name: 'Search' }), screen.getByText('Filter'), picker(), screen.getByRole('combobox', { name: 'Sort' })];
   for (let index = 1; index < order.length; index++) expect(follows(order[index - 1], order[index])).toBe(true);
 });
 
-test('a search in the address shows the search box with its words above the status tabs, with Filter, Sort and the views beside it', () => {
-  render(<InboxFilters tags={tags} query={{ search: 'hana', status: 'all' }} views={<details aria-label="Saved views" />} />);
-  const search = screen.getByRole('searchbox', { name: 'Search conversations' });
-  expect(search).toHaveValue('hana');
-  const order = [search, screen.getByText('Filter'), screen.getByRole('combobox', { name: 'Sort' }), screen.getByRole('group', { name: 'Saved views' }), screen.getAllByRole('radio')[0]];
-  for (let index = 1; index < order.length; index++) expect(follows(order[index - 1], order[index])).toBe(true);
-  expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
+test('before the menus have loaded, the order in use already reads beside the sort icon', () => {
+  render(<Harness dueSort="waiting_longest" />);
+  expect(sortLabel()).toHaveTextContent(/^Waiting longest$/);
 });
 
-test('a filter shows the search box and the Filter count above the tabs, and the chips below them', async () => {
-  render(<Harness initial={{ priority: 'urgent', assignee: 'me' }} />);
-  const search = screen.getByRole('searchbox', { name: 'Search conversations' });
-  expect(search).toHaveValue('');
-  expect(screen.getByLabelText('2 filters active')).toBeInTheDocument();
+test('a filter shows its count beside Filter, the saved views after Filter, and the chips under the status row', async () => {
+  render(<Harness initial={{ priority: 'urgent', assignee: 'me' }} views={<details aria-label="Saved views" />} />);
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  const count = await screen.findByLabelText('2 filters active');
+  expect(count).toHaveTextContent(/^2$/);
   const chips = await screen.findByRole('list', { name: 'Active filters' });
-  expect(follows(search, screen.getAllByRole('radio')[0])).toBe(true);
-  expect(follows(screen.getAllByRole('radio')[0], chips)).toBe(true);
+  expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Priority: Urgent', 'Assignee: Me']);
+  const order = [screen.getByText('Filter'), screen.getByRole('group', { name: 'Saved views' }), picker(), chips];
+  for (let index = 1; index < order.length; index++) expect(follows(order[index - 1], order[index])).toBe(true);
 });
 
-// The app's Search (the sidebar today, the top bar's search later) asks the list for its search box.
-function SearchHarness({ onChange }: { onChange?: (query: InboxQuery) => void }) {
-  const [query, setQuery] = useState<InboxQuery>({});
+test('the channel the title names has no chip and is not counted on Filter; the other filters still are', async () => {
+  render(<Harness initial={{ channel_id: zalo.id, priority: 'urgent' }} />);
+  expect(title()).toHaveTextContent(/^Zalo OA$/);
+  expect(await screen.findByLabelText('1 filter active')).toBeInTheDocument();
+  const chips = await screen.findByRole('list', { name: 'Active filters' });
+  expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Priority: Urgent']);
+});
+
+test('a channel alone shows no chip and no Filter count: the title says it', async () => {
+  render(<Harness initial={{ channel_id: zalo.id, status: 'all' }} />);
+  await loadedSort();
+  expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/filters? active/)).not.toBeInTheDocument();
+});
+
+test('status, order and search have their own places and never show as chips', async () => {
+  render(<Harness initial={{ status: 'pending', sort: 'priority', search: 'refund' }} />);
+  await loadedSort();
+  expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/filters? active/)).not.toBeInTheDocument();
+});
+
+// The app's Search (the top bar, or Clear filters in the list) asks the list for its search field.
+function SearchHarness({ onChange, initial = {} }: { onChange?: (query: InboxQuery) => void; initial?: InboxQuery }) {
+  const [query, setQuery] = useState<InboxQuery>(initial);
   const [signal, setSignal] = useState(0);
   return <><button type="button" onClick={() => setSignal((count) => count + 1)}>App search</button>
-    <InboxFilters tags={tags} query={query} focusSignal={signal} onChange={(next) => { setQuery(next); onChange?.(next); }} /></>;
+    <InboxFilters tags={tags} query={query} focusSignal={signal} channels={[zalo]} onChange={(next) => { setQuery(next); onChange?.(next); }} /></>;
 }
 const openSearch = () => fireEvent.click(screen.getByRole('button', { name: 'App search' }));
 
-test('the app\'s Search opens the search box with the focus in it, and the words typed search every status', async () => {
+test('the search icon turns the title into a search field that says where it searches', () => {
+  render(<SearchHarness />);
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+  const search = screen.getByRole('searchbox', { name: 'Search conversations' });
+  expect(search).toHaveFocus();
+  expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+  expect(screen.getByText('in all channels')).toBeInTheDocument();
+  // The search icon is the field now; Filter stays beside it.
+  expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
+  expect(follows(search, screen.getByText('Filter'))).toBe(true);
+});
+
+test('a search inside a channel says it searches that channel', () => {
+  render(<SearchHarness initial={{ channel_id: zalo.id, search: 'refund', status: 'all' }} />);
+  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveValue('refund');
+  expect(screen.getByText('in Zalo OA')).toBeInTheDocument();
+});
+
+test('the app\'s Search opens the search field with the focus in it, and the words typed search every status', async () => {
   const onChange = vi.fn();
   render(<SearchHarness onChange={onChange} />);
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
@@ -307,24 +429,49 @@ test('the app\'s Search opens the search box with the focus in it, and the words
   await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ search: 'invoice', status: 'all' }));
 });
 
-test('an empty search box closes again on Escape, leaving the focus on the chosen tab, or when the focus leaves the filters', () => {
+test('Escape on an empty search field brings the title back and the focus to the search icon; so does the focus leaving the header', () => {
   render(<><SearchHarness /><button type="button">Elsewhere</button></>);
   openSearch();
   fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Search conversations' }), { key: 'Escape' });
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
-  expect(screen.getByRole('radio', { name: 'Open' })).toHaveFocus();
+  expect(title()).toHaveTextContent(/^All channels$/);
+  expect(screen.getByRole('button', { name: 'Search' })).toHaveFocus();
   openSearch();
   fireEvent.blur(screen.getByRole('searchbox', { name: 'Search conversations' }), { relatedTarget: screen.getByRole('button', { name: 'Elsewhere' }) });
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
 });
 
-test('a search box with words in it stays open when the focus leaves it', () => {
+test('Escape keeps an empty search field open while a filter is on', () => {
+  render(<SearchHarness initial={{ priority: 'urgent' }} />);
+  openSearch();
+  fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Search conversations' }), { key: 'Escape' });
+  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeInTheDocument();
+});
+
+test('the clear button empties the search and brings the title back', () => {
+  const onChange = vi.fn();
+  render(<SearchHarness initial={{ search: 'refund', status: 'all' }} onChange={onChange} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+  expect(onChange).toHaveBeenLastCalledWith({ status: 'all' });
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Search' })).toHaveFocus();
+});
+
+test('a search field with words in it stays open when the focus leaves it', () => {
   render(<><SearchHarness /><button type="button">Elsewhere</button></>);
   openSearch();
   const search = screen.getByRole('searchbox', { name: 'Search conversations' });
   fireEvent.change(search, { target: { value: 'refund' } });
   fireEvent.blur(search, { relatedTarget: screen.getByRole('button', { name: 'Elsewhere' }) });
   expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveValue('refund');
+});
+
+test('while rows are ticked, select all and the bulk actions take the status row; the title stays', () => {
+  render(<InboxFilters tags={tags} query={{}} selection={<div role="toolbar" aria-label="Bulk actions" />} />);
+  expect(screen.getByRole('toolbar', { name: 'Bulk actions' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Status: / })).not.toBeInTheDocument();
+  expect(screen.queryByRole('combobox', { name: 'Sort' })).not.toBeInTheDocument();
+  expect(title()).toHaveTextContent(/^All channels$/);
 });
 
 test('the Filter menu closes when keyboard focus leaves it and on Escape', async () => {
@@ -347,13 +494,13 @@ test('searching from the default Open view searches every status, like Freshdesk
   openSearch();
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search conversations' }), { target: { value: 'invoice' } });
   await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ search: 'invoice', status: 'all' }));
-  expect(screen.getByRole('radio', { name: 'All' })).toBeChecked();
+  expect(picker()).toHaveAccessibleName('Status: All statuses');
 });
 
 test('a status the agent picked stays when they search', async () => {
   const onChange = vi.fn();
   render(<SearchHarness onChange={onChange} />);
-  fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
+  fireEvent.click(within(openStatusMenu()).getByRole('menuitemradio', { name: 'Pending' }));
   openSearch();
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search conversations' }), { target: { value: 'invoice' } });
   await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ status: 'pending', search: 'invoice' }));
@@ -423,18 +570,4 @@ test('Targets filters what is late or due soon, shows as chips, and is offered o
   const targets = within(menu).getByRole('group', { name: 'Targets' });
   fireEvent.click(within(targets).getByRole('checkbox', { name: 'Due soon' }));
   expect(onChange).toHaveBeenLastCalledWith({ sla: 'overdue,due_soon' });
-});
-
-test('the status tabs count Open and Pending, and the tab on screen, under the other filters; the count is not part of the name', () => {
-  render(<InboxFilters tags={tags} query={{ status: 'resolved' }} counts={{ open: 23, pending: 4, resolved: 7, closed: 0, spam: 2 }} />);
-  const tab = (name: string) => screen.getByRole('radio', { name }).closest('label')!;
-  expect(tab('Open')).toHaveTextContent('Open23');
-  expect(tab('Pending')).toHaveTextContent('Pending4');
-  expect(tab('Resolved')).toHaveTextContent('Resolved7');
-  expect(tab('Spam')).toHaveTextContent(/^Spam$/);
-});
-
-test('a zero count shows nothing', () => {
-  render(<InboxFilters tags={tags} query={{}} counts={{ open: 0, pending: 0, resolved: 0, closed: 0, spam: 0 }} />);
-  expect(screen.getByRole('radio', { name: 'Open' }).closest('label')).toHaveTextContent(/^Open$/);
 });

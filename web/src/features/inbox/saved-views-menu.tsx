@@ -5,9 +5,9 @@ import { trackFilterChanges } from './filter-analytics';
 import { InvalidRequestError } from '../../api/client';
 import type { ConversationFilters, SavedView } from '../../api/schemas';
 import { formatDay } from '../../lib/format-date';
-import { sameQuery } from '../../lib/inbox-query';
 import { filtersOf, queryOf } from '../../lib/inbox-query-edit';
 import type { InboxQuery } from '../../lib/inbox-query';
+import { onView } from '../../lib/inbox-scope';
 import { messages } from '../../messages';
 import { savedViewMessages } from './filter-messages';
 import { BookmarkIcon } from '../../ui/icons';
@@ -174,7 +174,8 @@ export function SavedViewsMenuView({ views, loading = false, trash, query, timez
     setUndoError('');
     void onRestore?.(view).catch((failure) => setUndoError(refusal(failure)));
   };
-  const isCurrent = (view: SavedView) => sameQuery(queryOf(view.filters), query);
+  // The same view the sidebar marks and the list's title names (onView).
+  const isCurrent = (view: SavedView) => onView(query, view.filters);
   const groups = [['shared', text.shared], ['personal', text.personal]] as const;
   return (
     <>

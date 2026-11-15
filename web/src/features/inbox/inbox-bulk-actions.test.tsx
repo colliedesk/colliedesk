@@ -40,15 +40,15 @@ test('shows no action bar until a row is selected', () => {
   expect(within(bar()).getByText('1 of 3 selected')).toBeInTheDocument();
 });
 
-test('at rest the list has no select all; the first tick puts it with the actions in the place of the status tabs', () => {
+test('at rest the list has no select all; the first tick puts it with the actions in the place of the status and the order', () => {
   renderInbox();
   expect(screen.queryByRole('checkbox', { name: 'Select all on this page' })).not.toBeInTheDocument();
-  expect(screen.getByRole('radiogroup', { name: 'Status' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Status: Open' })).toBeInTheDocument();
   pick(/alpha request/i);
   const selectAll = screen.getByRole('checkbox', { name: 'Select all on this page' });
   expect(selectAll).not.toBeChecked();
   expect((selectAll as HTMLInputElement).indeterminate).toBe(true);
-  expect(screen.queryByRole('radiogroup', { name: 'Status' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Status: Open' })).not.toBeInTheDocument();
   expect(selectAll.closest('.inbox-filters')).not.toBeNull();
 });
 
@@ -105,8 +105,8 @@ test('resolve changes the selection in one press', async () => {
 test('the filters stay in view while rows are selected', () => {
   renderInbox();
   pick(/alpha request/i);
-  // Select all and the actions take the tabs' place; Sort and Filter stay beside them.
-  for (const tool of [screen.getByRole('combobox', { name: 'Sort' }), screen.getByText('Filter')]) expect(tool).toBeVisible();
+  // Select all and the actions take the row of the status and the order; the title, Search and Filter stay above them.
+  for (const tool of [screen.getByRole('heading', { level: 2, name: 'All channels' }), screen.getByRole('button', { name: 'Search' }), screen.getByText('Filter')]) expect(tool).toBeVisible();
 });
 
 test('Escape in the action bar clears the selection and returns focus to the list', () => {

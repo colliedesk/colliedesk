@@ -36,9 +36,11 @@ beforeAll(async () => {
 test('shows the dense inbox filters and three-pane conversation workspace', async () => {
   render(<InboxPage />);
   const filters = screen.getByRole('search', { name: /inbox/i });
-  // At rest the list is one row: the status tabs, then Sort and Filter; the search box opens from the app's Search.
+  // At rest the list header is the place (every channel) with Search and Filter, then the status and the order; the
+  // search field opens from Search.
   expect(within(filters).queryByRole('searchbox')).not.toBeInTheDocument();
-  expect(within(filters).getByRole('radiogroup', { name: 'Status' })).toBeInTheDocument();
+  expect(within(filters).getByRole('heading', { level: 2, name: 'All channels' })).toBeInTheDocument();
+  expect(within(filters).getByRole('button', { name: 'Status: Open' })).toBeInTheDocument();
   expect(within(filters).getByRole('combobox', { name: 'Sort' })).toBeInTheDocument();
   fireEvent.click(within(filters).getByText('Filter'));
   await screen.findByRole('checkbox', { name: 'Urgent' });
@@ -260,11 +262,12 @@ test('an empty filtered list offers a way out that clears every filter back to t
   }
   render(<Routed />);
   fireEvent.change(screen.getByRole('searchbox', { name: /search conversations/i }), { target: { value: 'refund' } });
-  fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Status: Open' }));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Pending' }));
   fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
   expect(onQuery).toHaveBeenLastCalledWith({});
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveValue('');
-  expect(screen.getByRole('radio', { name: 'Open' })).toBeChecked();
+  expect(screen.getByRole('button', { name: 'Status: Open' })).toBeInTheDocument();
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveFocus();
 });
 
@@ -349,7 +352,8 @@ test('Latest activity groups the list under Today and Earlier headings, only for
     const latest = { sort: 'updated_desc' };
     const { rerender } = render(<InboxPage conversations={[conversation, older]} query={latest} />);
     const list = screen.getByRole('region', { name: /conversation list/i });
-    const headings = within(list).getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+    // The day groups sit under the list's title (level 2).
+    const headings = within(list).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent);
     expect(headings).toEqual(['Today', 'Earlier']);
     rerender(<InboxPage conversations={[conversation]} query={latest} />);
     expect(screen.queryByRole('heading', { name: 'Earlier' })).not.toBeInTheDocument();

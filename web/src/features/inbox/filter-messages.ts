@@ -5,13 +5,12 @@ import { channelUI } from '../../channels/registry';
 export const filterMessages = {
   // How a conversation started without a channel; a channel type's label is its registry entry's (channelLabel).
   origins: { imported: 'Imported', agent: 'Started by the team', problem_report: 'Problem report' } as Record<string, string>,
-  // The Sort menu offers the first three and Due first (not while reply targets are off: it orders as Waiting
-  // longest then); the others are named only while a link sets them.
-  sorts: { updated_desc: 'Latest activity', waiting_longest: 'Waiting longest', priority: 'Priority', updated_asc: 'Oldest activity', created_desc: 'Newest first', created_asc: 'Oldest first', due: 'Due first' },
   priority: 'Priority',
   assignee: 'Assignee',
   anyoneAssigned: 'Assigned to anyone',
   tags: 'Tags',
+  // A tag chip names one tag.
+  tag: 'Tag',
   matchAllTags: 'Has every chosen tag',
   noTags: 'No tags yet.',
   awaitingOptions: { team: 'Waiting on us', customer: 'Waiting on the customer' },
@@ -19,7 +18,6 @@ export const filterMessages = {
   // A type with two or more channels lists them, so one mailbox or form can be chosen.
   channelsOf: (type: string) => `${type} channels`,
   removedChannel: (name: string) => `${name} (removed)`,
-  unknownChannel: 'A channel',
   source: 'Source',
   sources: { imported: 'Imported', native: 'Created in Colliedesk' },
   attention: 'Needs attention',
@@ -37,7 +35,7 @@ export const filterMessages = {
   dateRange: (from?: string, to?: string) => (from && to ? `${from} to ${to}` : from ? `from ${from}` : `until ${to}`),
   active: 'Active filters',
   remove: (label: string) => `Remove filter ${label}`,
-  clearAll: 'Clear all',
+  clearAll: 'Clear',
   countedIn: (metric: string, window: string) => `Counted in: ${metric}, ${window}`,
   countedInSide: (metric: string, side: string, range: string) => `Counted in: ${metric}, ${side}, ${range}`,
   anyStatus: 'The conversations behind this number, in any status.',

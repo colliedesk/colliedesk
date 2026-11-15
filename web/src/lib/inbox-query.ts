@@ -69,6 +69,13 @@ export function inboxQueryFromSearch(search: Record<string, unknown>): InboxQuer
 // defaultSort is the list's order when the person picked none; the address leaves it out.
 export const defaultSort = 'due';
 
+// shownSort is the order the list is in: the one asked for, where Due first stands for the order the server gives it
+// (dueSort, waiting_longest while reply targets are off).
+export function shownSort(query: InboxQuery, dueSort?: string): string {
+  const asked = query.sort ?? defaultSort;
+  return asked === defaultSort ? dueSort ?? defaultSort : asked;
+}
+
 // apiQuery is the query string of GET /api/v1/conversations for a page of the list.
 export function apiQuery(query: InboxQuery, page: number, pageSize = 50): string {
   const values = new URLSearchParams();

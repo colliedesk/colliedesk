@@ -4,6 +4,7 @@ import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } f
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useCreateAction, useCreateMutation } from '../../api/use-create';
 import { api, ReplyConflictError } from '../../api/client';
+import { savedViewsApi } from '../../api/saved-views';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
@@ -224,7 +225,12 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   // The default mailbox says whether customer mail arrives through it yet (the line under the title). With no
   // conversation open it is the query above; with one open it was read with the list, or goes out beside it.
   const defaultMailbox = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel, enabled: reads('channels:read') }).data;
-  const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') }).data?.types;
+  const channelList = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') }).data;
+  const channelTypes = channelList?.types;
+  // The list's title names a channel from this list, and a saved view from the sidebar's (read after the page's own
+  // requests): the title asks for nothing of its own. A role that may not read channels gets no names.
+  const channelNames = me.data && !reads('channels:read') ? [] : channelList?.items;
+  const savedViews = useQuery({ queryKey: ['saved-views'], queryFn: savedViewsApi.list, enabled: false }).data?.items;
   // An empty list is where the next setup step is offered; Quick start asks for the same steps, so this is one request.
   const listEmpty = conversations.data?.items.length === 0 && !filtered;
   const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: Boolean(listEmpty && me.data) });
@@ -361,6 +367,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
     threadOpen={threadOpen} onBack={backToList}
     query={filters}
+    channels={channelNames} savedViews={savedViews}
     viewsMenu={(!me.data || reads('saved_views:read')) && <SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}

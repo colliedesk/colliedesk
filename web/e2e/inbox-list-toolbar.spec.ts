@@ -24,67 +24,112 @@ const boxOf = async (locator: Locator): Promise<Box> => {
   return found!;
 };
 const middle = (box: Box) => box.y + box.height / 2;
+// The box of an element's words, not of its padding.
+const wordsOf = (locator: Locator) => locator.evaluate((element) => {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const box = range.getBoundingClientRect();
+  return { left: box.left, right: box.right };
+});
 
-// The tools on the right of the list's first row, in the order a person reads and tabs through them.
-const toolsOf = (page: Page) => [page.locator('.list-pane .sort-pick'), page.locator('.list-pane .filter-menu > summary')];
-
-// At rest the list starts on one row: the status tabs on the left, the tools on the
-// right, inside the list column. A search or a filter brings the search row above the tabs.
-// A phone (390 px) shows the list alone, with the same one row.
-for (const width of [1440, 1280, 390]) {
-  test(`at ${width} px the status tabs and the tools share one row, and a search brings its own row above the tabs`, async ({ page }) => {
+// The list header (Paper "15 Inbox", I12-a..d): the place the list is in with Search and Filter, then the status and
+// the order on one row. The title, the status dot and the rows' dots share one lane; the order's words end over the
+// rows' times. A phone (390 px) and the narrowest screen (320 px) show the same header, nothing cut or overflowing.
+for (const width of [1440, 1280, 390, 320]) {
+  test(`at ${width} px the list header names the place, then the status and the order, in the rows' lanes`, async ({ page }) => {
     await page.setViewportSize({ width, height: width < 600 ? 844 : 900 });
     await inboxWithConversations(page, 3);
     await page.goto(`${servers.main}/`);
-    const status = page.getByRole('radiogroup', { name: 'Status' });
-    await expect(status.getByRole('radio')).toHaveCount(3);
-    await expect(page.locator('.conversation-scroll > .conversation-item')).toHaveCount(3);
+    const filters = page.getByRole('search', { name: 'Inbox' });
+    const title = filters.getByRole('heading', { level: 2 });
+    await expect(title).toHaveText('All channels');
+    const rows = page.locator('.conversation-scroll > .conversation-item');
+    await expect(rows).toHaveCount(3);
     await expect(page.getByRole('searchbox')).toHaveCount(0);
+    const picker = filters.getByRole('button', { name: 'Status: Open' });
+    await expect(picker).toContainText('3');
+    const sort = filters.locator('.sort-pick');
+    // A new workspace has no reply targets, so Due first orders as Waiting longest and says so.
+    await expect(sort.locator('.sort-label')).toHaveText('Waiting longest');
+    await expect(filters.getByRole('combobox', { name: 'Sort' })).toBeEnabled();
 
+    // Two rows: the title with Search and Filter, then the status and the order.
     const list = await boxOf(page.locator('.list-pane'));
-    const tabs = await boxOf(status);
-    const tools = await Promise.all(toolsOf(page).map(boxOf));
-    for (const [index, tool] of tools.entries()) {
-      expect.soft(Math.abs(middle(tool) - middle(tabs)), `tool ${index} sits on the row of the tabs`).toBeLessThanOrEqual(4);
-      expect.soft(tool.x, `tool ${index} starts inside the list`).toBeGreaterThanOrEqual(list.x);
+    const titleBox = await boxOf(title);
+    const tools = [filters.getByRole('button', { name: 'Search' }), filters.locator('.filter-menu > summary')];
+    for (const [index, tool] of (await Promise.all(tools.map(boxOf))).entries()) {
+      expect.soft(Math.abs(middle(tool) - middle(titleBox)), `tool ${index} sits on the title's row`).toBeLessThanOrEqual(2);
       expect.soft(tool.x + tool.width, `tool ${index} ends inside the list`).toBeLessThanOrEqual(list.x + list.width);
     }
-    for (let index = 1; index < tools.length; index++) {
-      expect.soft(tools[index].x, `tool ${index} comes after tool ${index - 1} without overlap`).toBeGreaterThanOrEqual(tools[index - 1].x + tools[index - 1].width);
-    }
-    const lastWord = await status.evaluate((row) => {
-      const labels = Array.from(row.querySelectorAll('label'));
-      const last = labels[labels.length - 1].querySelectorAll('span');
-      const range = document.createRange();
-      range.setStartBefore(last[0]);
-      range.setEndAfter(last[last.length - 1]);
-      return range.getBoundingClientRect().right;
+    const pickerBox = await boxOf(picker);
+    const sortBox = await boxOf(sort);
+    expect.soft(Math.abs(middle(pickerBox) - middle(sortBox)), 'the order sits on the status row').toBeLessThanOrEqual(2);
+    expect.soft(pickerBox.y, 'the status row is under the title').toBeGreaterThanOrEqual(titleBox.y + titleBox.height);
+
+    // The lanes: title, status dot and the rows' dots start together; the order's words end where the rows' times end.
+    const rowDot = await boxOf(rows.first().locator('.row-dot'));
+    const pickerDot = await boxOf(picker.locator('.status-dot'));
+    expect.soft(Math.abs(pickerDot.x - rowDot.x), 'the status dot is in the lane of the rows\' dots').toBeLessThanOrEqual(1);
+    expect.soft(Math.abs((await wordsOf(title)).left - rowDot.x), 'the title starts in the lane of the rows\' dots').toBeLessThanOrEqual(1);
+    const rowTime = await boxOf(rows.first().locator('.row-top > :is(time, .row-due)').last());
+    expect.soft(Math.abs((await wordsOf(sort.locator('.sort-label'))).right - (rowTime.x + rowTime.width)), 'the order ends over the rows\' times').toBeLessThanOrEqual(1);
+
+    // Nothing in the header overflows or is cut, however narrow the list.
+    // Every box drawn in the header stays inside it (screen-reader text and closed menus draw none).
+    const overflow = await filters.evaluate((root) => {
+      const edge = root.getBoundingClientRect();
+      const drawn = (element: Element) => !element.closest('.sr-only') && !(element.closest('details:not([open])') && !element.closest('summary'));
+      return Array.from(root.querySelectorAll<HTMLElement>('*')).filter(drawn).flatMap((element) => {
+        const box = element.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) return [];
+        return box.left < edge.left - 0.5 || box.right > edge.right + 0.5 ? [`${element.tagName}.${element.getAttribute('class')}`] : [];
+      });
     });
-    // The words never run under the icons, and the three tabs of an ordinary day fit without scrolling.
-    expect.soft(lastWord, 'the last tab word ends before the tools').toBeLessThanOrEqual(tools[0].x);
-    expect.soft(await status.evaluate((row) => row.scrollWidth <= row.clientWidth), 'the three tabs fit beside the tools').toBe(true);
-    // The row is one line: the header holds the tabs (36 px, 44 on a phone) and 4 px above them, no second row.
-    const header = await boxOf(page.locator('.list-pane > header'));
-    expect.soft(header.height, 'the list header is one row').toBeLessThanOrEqual(tabs.height + 5);
+    expect.soft(overflow, 'nothing in the header overflows').toEqual([]);
+    expect.soft((await boxOf(filters)).x + (await boxOf(filters)).width, 'the header ends inside the list').toBeLessThanOrEqual(list.x + list.width);
     await page.locator('.list-pane').screenshot({ path: test.info().outputPath(`list-rest-${width}.png`) });
 
-    // A search in the address (the top bar's "See all results") shows the search row with its words.
+    // The status menu opens under the picker, inside the screen, every status with its count and All statuses last.
+    await picker.click();
+    const menu = page.getByRole('menu', { name: 'Status' });
+    await expect(menu.getByRole('menuitemradio')).toHaveText(['Open3', 'Pending0', 'Resolved0', 'Closed0', 'All statuses3']);
+    const menuBox = await boxOf(menu);
+    expect.soft(Math.abs(menuBox.x - pickerBox.x), 'the menu lines up with the picker').toBeLessThanOrEqual(1);
+    expect.soft(menuBox.x + menuBox.width, 'the menu stays on screen').toBeLessThanOrEqual(width);
+    await page.locator('.list-pane').screenshot({ path: test.info().outputPath(`list-status-menu-${width}.png`) });
+    await menu.getByRole('menuitemradio', { name: 'Pending' }).click();
+    await expect(page).toHaveURL(/status=pending/);
+    await expect(filters.getByRole('button', { name: 'Status: Pending' })).toBeFocused();
+
+    // A search in the address (the top bar's "See all results") shows the field in the title's place, scoped.
     await page.goto(`${servers.main}/?search=Question&status=all`);
     const search = page.getByRole('searchbox', { name: 'Search conversations' });
     await expect(search).toHaveValue('Question');
-    await expect(status.getByRole('radio')).toHaveCount(5);
-    const field = await boxOf(search);
-    const tabsBelow = await boxOf(status);
-    expect.soft(field.y + field.height, 'the search box sits above the tabs').toBeLessThanOrEqual(tabsBelow.y);
-    expect.soft(field.x + field.width, 'the search box ends inside the list').toBeLessThanOrEqual(list.x + list.width);
+    await expect(filters.getByText('in all channels')).toBeVisible();
+    await expect(filters.getByRole('button', { name: 'Status: All statuses' })).toBeVisible();
+    const field = await boxOf(filters.locator('.list-search'));
+    expect.soft(field.x + field.width, 'the search field ends inside the list').toBeLessThanOrEqual(list.x + list.width);
     await page.locator('.list-pane').screenshot({ path: test.info().outputPath(`list-search-${width}.png`) });
 
-    // A filter shows the search row with the Filter count, and its chip below the tabs.
+    // A filter shows its count beside Filter and its chip under the status row; the title stays.
     await page.goto(`${servers.main}/?priority=urgent`);
-    await expect(page.getByRole('searchbox', { name: 'Search conversations' })).toHaveValue('');
+    await expect(title).toHaveText('All channels');
+    await expect(page.getByRole('searchbox')).toHaveCount(0);
     await expect(page.getByLabel('1 filter active')).toBeVisible();
-    const chips = await boxOf(page.getByRole('list', { name: 'Active filters' }).getByRole('listitem').first());
-    expect.soft(chips.y, 'the chips sit below the tabs').toBeGreaterThanOrEqual((await boxOf(status)).y);
+    const chip = await boxOf(page.getByRole('list', { name: 'Active filters' }).getByRole('listitem').first());
+    expect.soft(chip.y, 'the chips sit under the status row').toBeGreaterThanOrEqual((await boxOf(filters.getByRole('button', { name: /^Status: / }))).y);
     await page.locator('.list-pane').screenshot({ path: test.info().outputPath(`list-filter-${width}.png`) });
   });
 }
+
+// Beside an open conversation (I12-a) the list header's bottom line and the conversation header's are one line.
+test('at 1440 px the list header and the conversation header end on the same line', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await inboxWithConversations(page, 2);
+  await page.goto(`${servers.main}/`);
+  await page.locator('.conversation-scroll > .conversation-item').first().locator('.conversation-row').click();
+  const thread = await boxOf(page.locator('.timeline-header'));
+  const list = await boxOf(page.locator('.list-pane > header'));
+  expect.soft(Math.abs((list.y + list.height) - (thread.y + thread.height)), 'the two headers end on one line').toBeLessThanOrEqual(1);
+  await page.screenshot({ path: test.info().outputPath('headers-1440.png'), clip: { x: 0, y: 0, width: 1000, height: 220 } });
+});

@@ -113,7 +113,15 @@ export const messages = {
   allAssignees: 'Any assignee',
   unassigned: 'Unassigned',
   allTags: 'All tags',
-  allConversations: 'All',
+  // The list header: the place the list is in, its status picker and its search field.
+  allChannels: 'All channels',
+  allStatuses: 'All statuses',
+  statusPicked: (status: string) => `Status: ${status}`,
+  // Where the search field looks: the place the title named.
+  searchIn: (place: string) => `in ${place}`,
+  searchInAllChannels: 'in all channels',
+  clearSearch: 'Clear search',
+  unknownChannel: 'A channel',
   filter: 'Filter',
   filtersActive: (count: number) => `${count} filter${count === 1 ? '' : 's'} active`,
   noConversations: 'No conversations match these filters.',
@@ -198,6 +206,10 @@ export const messages = {
   // The Filter, Sort and Views buttons load with the first screen; the rest of the filter and saved view
   // wording loads with their menus (src/features/inbox/filter-messages.ts).
   inboxSort: 'Sort',
+  // The orders of the list, named beside the sort icon. The Sort menu offers Due first (not while reply targets are off:
+  // it orders as Waiting longest then), Latest activity, Waiting longest and Priority; the others are named only while a
+  // link sets them.
+  sorts: { updated_desc: 'Latest activity', waiting_longest: 'Waiting longest', priority: 'Priority', updated_asc: 'Oldest activity', created_desc: 'Newest first', created_asc: 'Oldest first', due: 'Due first' } as Record<string, string>,
   savedViewsTitle: 'Views',
   previousPage: 'Previous page',
   nextPage: 'Next page',
