@@ -114,11 +114,11 @@ var (
 )
 
 // isDashedRangeOrDate reports whether a number chatPhone found (after foldPhones) is a range or a date
-// written with dashes, not a phone number. Only three forms are: a range of years from 1900 to 2099
-// that does not go backwards ("2024–2026"), a range whose sides have three digits or fewer ("100–500"),
-// and a real year, month and day ("2026–11–15"). Every other dashed form is read as a phone number,
-// since the common short ones are dashed groups of four or three and four digits: "1900-1234",
-// "2123-4567", "555-1234".
+// written with dashes, not a phone number. Only two forms are: a range whose sides have three digits
+// or fewer ("100–500", "9–5"), and a real year, month and day ("2026–11–15"). Every other dashed form
+// is read as a phone number, since the common short ones are dashed groups of four or three and four
+// digits: "1900-1234", "2123-4567", "555-1234". A range of years ("2024–2026") is one of them too: a
+// made-up hotline ("1900-2000") reads the same, and hiding a sentence costs less than showing one.
 func isDashedRangeOrDate(phone string) bool {
 	groups := chatDashed.FindStringSubmatch(phone)
 	if groups == nil {
@@ -132,11 +132,7 @@ func isDashedRangeOrDate(phone string) bool {
 		_, err := time.Parse(time.DateOnly, from+"-"+to+"-"+day)
 		return err == nil
 	}
-	if len(from) <= 3 && len(to) <= 3 {
-		return true
-	}
-	// Strings of four digits compare as their numbers do.
-	return len(from) == 4 && len(to) == 4 && from >= "1900" && to >= from && to <= "2099"
+	return len(from) <= 3 && len(to) <= 3
 }
 
 // chatFilter checks sentences against the text of the articles the AI read. One stream uses it, one
