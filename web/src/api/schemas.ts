@@ -354,6 +354,8 @@ export const inviteListSchema = z.object({ items: z.array(inviteSchema) }) satis
 // A repeat of the same press (200) answers the invite without its one-time link.
 export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url().optional() }) satisfies z.ZodType<JsonResponse<'createInvite', 201> | JsonResponse<'createInvite', 200>>;
 export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number(),
+  // The order the rows are in: due comes back as waiting_longest while the workspace's reply targets are off.
+  sort: conversationSortSchema.optional(),
   // How many each status holds under the other filters (counts=true): the status tabs' numbers.
   status_counts: z.object({ open: z.number(), pending: z.number(), resolved: z.number(), closed: z.number(), spam: z.number() }).optional() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
 export const conversationViewerSchema = z.object({

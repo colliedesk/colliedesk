@@ -16,6 +16,16 @@ and sorts on 5,000 conversations at 100 ms p95 (measured 2 to 16 ms locally).
 
 ## Who replies next
 
+The filter and the sort read the same columns but answer different questions. `awaiting=team` is who
+wrote last, whatever the status: it is combined with the status filter (a view "Pending, our turn" is
+`status=pending&awaiting=team`), and the inbox starts on Open. `sort=waiting_longest` has no status of its
+own to lean on, so only an `open` conversation counts as waiting there. A team that resolves a chat
+without answering in it (common on Zalo) leaves the customer's message last; ranked as waiting, those
+resolved conversations came above the open ones. Pending waits on the customer and is not waiting either.
+`sort=due` falls back to `waiting_longest` while the workspace's reply targets are off, and the page says
+so in `sort`; the web app keeps the last answer for `due`, so the Sort menu names Waiting longest without
+flipping back while the next page loads.
+
 `awaiting=team` means the newest message that is not a note is `incoming`. It is kept in two columns,
 `conversations.last_public_kind` and `last_public_at`, by statement-level triggers on `messages`
 (insert, delete, update of kind, time or conversation). The triggers recompute the newest message,

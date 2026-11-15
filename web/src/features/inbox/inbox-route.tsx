@@ -10,7 +10,7 @@ import { InboxPage } from './inbox-page';
 import { leaveList, listIsBehind, showList, showThread } from './list-return';
 import { contactPart, ContactsPart } from '../contacts/contact-part';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
-import { apiQuery, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
+import { apiQuery, defaultSort, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
@@ -122,6 +122,14 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const searchTerm = filters.search ?? '';
   const searchSettled = searchTerm !== '' && conversations.isSuccess && !conversations.isPlaceholderData;
   const hasResults = (conversations.data?.items.length ?? 0) > 0;
+  // The order Due first gives this workspace's list, as the server last answered a request for it (waiting_longest
+  // while reply targets are off). It is kept across filter changes, so the Sort menu does not flip while a page loads.
+  const [dueSort, setDueSort] = useState<string>();
+  const answeredSort = conversations.isPlaceholderData ? undefined : conversations.data?.sort;
+  const askedSort = filters.sort ?? defaultSort;
+  useEffect(() => { if (askedSort === 'due' && answeredSort) setDueSort(answeredSort); }, [askedSort, answeredSort]);
+  // A cached answer counts at once, so the menu does not say Due first for a moment when the inbox opens again.
+  const shownDueSort = askedSort === 'due' && answeredSort ? answeredSort : dueSort;
   const reportedSearch = useRef('');
   useEffect(() => {
     if (!searchSettled || reportedSearch.current === searchTerm) return;
@@ -349,7 +357,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
       void client.invalidateQueries({ queryKey: ['conversations'] });
       openConversation(test.conversation_id);
     }) : undefined}
-    statusCounts={conversations.data?.status_counts} page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
+    statusCounts={conversations.data?.status_counts} dueSort={shownDueSort} page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
     onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
     threadOpen={threadOpen} onBack={backToList}
     query={filters}
