@@ -1,6 +1,7 @@
 # Colliedesk
 
 [![mcptry](https://mcptry.com/badge/io.github.colliedesk/colliedesk)](https://mcptry.com/servers/io.github.colliedesk/colliedesk)
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/colliedesk/colliedesk)
 
 **The open-source alternative to Freshdesk, Zendesk and Help Scout** for small support teams
 ([compare](https://colliedesk.com/compare)).
