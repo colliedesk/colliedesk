@@ -124,19 +124,28 @@ func TestALongSentenceIsNotCutInsideAUnicodeNumber(t *testing.T) {
 	}
 }
 
-// A range or a date written with a dash is not a phone number: two groups of up to four digits
-// ("2024–2026", "100-500") or a year, month and day ("2026–11–15"). A number of phone length written
-// with dashes is still hidden, and so is a dashed run that is no range or date.
+// A range or a date written with a dash is not a phone number: two groups of up to three digits
+// ("100-500", "9–5") or a year, month and day ("2026–11–15"). A number of phone length written with
+// dashes is still hidden, and so is a dashed run that is no such range or date. A range of years
+// ("2024–2026") is hidden too: a made-up hotline ("1900-2000") reads the same.
 func TestNumberRangesAndDatesWithDashesAreShown(t *testing.T) {
 	f := newChatFilter(unicodeArticles(t))
 	for _, c := range []struct {
 		answer string
 		hidden bool
 	}{
-		{"We supported 2024–2026 releases.", false},
-		{"We supported 2024-2026 releases.", false},
-		{"We supported 2024—2026 releases.", false},
-		{"We supported releases (2024–2026).", false},
+		{"Call our hotline 1900-2000 for a refund.", true},
+		{"Call our hotline 1900–2000 for a refund.", true},
+		{"Call our hotline 1900–2050 for a refund.", true},
+		{"Call our hotline 1900-2050 for a refund.", true},
+		{"Call (1900-2000) for a refund.", true},
+		{"Call (1900–2000) for a refund.", true},
+		{"Call 2012-2045 for a refund.", true},
+		{"Call 2012–2045 for a refund.", true},
+		{"We supported 2024–2026 releases.", true},
+		{"We supported 2024-2026 releases.", true},
+		{"We supported 2024—2026 releases.", true},
+		{"We supported releases (2024–2026).", true},
 		{"Teams with 100–500 tickets a month pick Growth.", false},
 		{"Teams with 100-500 tickets a month pick Growth.", false},
 		{"Teams with １００–５００ tickets a month pick Growth.", false},
