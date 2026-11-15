@@ -50,7 +50,7 @@
 /* The menu hangs 4 px under the picker, its left edge on the picker's; above the setup guide (15), below the account menu (20). */
 .status-menu { position: absolute; z-index: 16; top: calc(100% + var(--space-1)); left: 0; width: 232px; max-width: calc(100vw - var(--space-8)); display: grid;
   padding: var(--space-1); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); }
-.status-option { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: 32px; min-height: 32px; padding: 0 var(--space-2); border: 0;
+.status-option { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: var(--control); min-height: var(--control); padding: 0 var(--space-2); border: 0;
   border-radius: var(--radius); background: transparent; box-shadow: none; color: var(--text-1); font-size: var(--fs-ui); font-weight: 400; text-align: left; }
 .status-option:hover:not(:disabled), .status-option[aria-checked="true"] { border: 0; background: var(--surface-2); }
 .status-option:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
@@ -60,6 +60,14 @@
 .status-dot-slot, .status-check { flex: none; width: 16px; height: 16px; display: grid; place-items: center; }
 .status-check svg { width: 14px; height: 14px; color: var(--accent); }
 .status-menu-line { height: 1px; margin: var(--space-1) 0; background: var(--line); }
+/* Tabs that pick one view of a page (Settings → Connect an AI agent). */
+.status-tabs { display: flex; gap: var(--space-2); margin: 0 calc(-1 * var(--space-1)); overflow-x: auto; scrollbar-width: none; }
+.status-tabs::-webkit-scrollbar { display: none; }
+.status-tabs label { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; min-width: var(--control); min-height: var(--control); padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; cursor: pointer; white-space: nowrap; }
+.status-tabs input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
+.status-tabs label:hover { color: var(--text-1); }
+.status-tabs label:has(input:checked) { color: var(--accent-text); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
+.status-tabs label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
 .filter-menu { position: static; }
 .filter-menu summary {
   min-height: var(--control); display: inline-flex; align-items: center; gap: var(--space-2); list-style: none; cursor: pointer;
@@ -642,7 +650,6 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .saved-reply-picker li { align-content: center; min-height: var(--touch); }
   .picker-search input { min-height: var(--touch); }
   .status-tabs label { min-height: var(--touch); }
-  .status-option { height: var(--touch); min-height: var(--touch); }
   .list-search-clear { width: var(--touch); height: var(--touch); min-height: var(--touch); margin-right: calc(-1 * var(--space-1)); }
   .conversation-row { min-height: var(--touch); }
 }
