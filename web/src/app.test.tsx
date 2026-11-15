@@ -1008,6 +1008,23 @@ test('on every page the sidebar counts the open conversations and lists the save
   expect(within(rail).getByRole('link', { name: 'Inbox, 23 open' })).toHaveAttribute('aria-current', 'page');
 });
 
+test('on the bare inbox address Inbox is the place, even with a saved view that holds only the Open status', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', null)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/conversations': () => json(200, { items: [], page: 1, page_size: 50, status_counts: { open: 23, pending: 4, resolved: 9, closed: 0, spam: 0 } }),
+    '/api/v1/saved-views': () => json(200, { items: [{ ...savedView, name: 'Open', filters: { status: ['open'] } }] }),
+    '/api/v1/channels': () => json(200, { items: [], types: [] }),
+  });
+  open('/');
+  const rail = await screen.findByRole('navigation', { name: 'Main' });
+  const view = await within(rail).findByRole('link', { name: 'Open' });
+  expect(await screen.findByRole('heading', { level: 2, name: 'All channels' })).toBeInTheDocument();
+  expect(view).not.toHaveAttribute('aria-current');
+  expect(within(rail).getByRole('link', { name: 'Inbox, 23 open' })).toHaveAttribute('aria-current', 'page');
+  expect(rail.querySelectorAll('.rail-link[aria-current="page"]')).toHaveLength(1);
+});
+
 test('the top bar names the customer page like every other page', async () => {
   const contactId = '33333333-3333-4333-8333-333333333333';
   serve({

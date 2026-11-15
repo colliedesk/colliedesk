@@ -257,7 +257,7 @@ test('an empty filtered list offers a way out that clears every filter back to t
   const onQuery = vi.fn();
   // The inbox follows the filters in the address; this stands in for it.
   function Routed() {
-    const [query, setQuery] = useState<InboxQuery>({});
+    const [query, setQuery] = useState<InboxQuery>({ priority: 'urgent' });
     return <InboxPage conversations={[]} filtered query={query} searchSignal={1} onQuery={(next) => { setQuery(next); onQuery(next); }} />;
   }
   render(<Routed />);
@@ -269,6 +269,24 @@ test('an empty filtered list offers a way out that clears every filter back to t
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveValue('');
   expect(screen.getByRole('button', { name: 'Status: Open' })).toBeInTheDocument();
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveFocus();
+});
+
+const zaloChannel = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+
+test('Clear filters on an empty channel list keeps the channel: it is the place, not a filter', () => {
+  const onQuery = vi.fn();
+  render(<InboxPage conversations={[]} filtered query={{ channel_id: zaloChannel, priority: 'urgent', status: 'pending' }} onQuery={onQuery} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  expect(onQuery).toHaveBeenLastCalledWith({ channel_id: zaloChannel });
+});
+
+test('an empty list narrowed only by its place and its status offers no Clear filters', () => {
+  for (const query of [{ channel_id: zaloChannel }, { channel_id: zaloChannel, status: 'pending' }, { status: 'pending' }, { status: 'all', sort: 'priority' }]) {
+    const { unmount } = render(<InboxPage conversations={[]} filtered query={query} onQuery={vi.fn()} />);
+    expect(screen.getByText('No conversations match these filters.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+    unmount();
+  }
 });
 
 test('a list that failed to load says so and offers a retry, never "Get started"', () => {

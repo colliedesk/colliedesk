@@ -42,7 +42,7 @@ export function viewItems(views: SavedView[], hrefOf: HrefOf, current: InboxQuer
 
 // channelItems lists the workspace's channels, each opening the inbox on its conversations. A removed channel takes
 // no new mail, so it is not offered; one that needs attention carries a warning. A channel stays current under any
-// status, order or search, and stops being current once another filter narrows the list (onChannel).
+// status, order, search or Filter menu pick, and stops being current once a second channel joins it (onChannel).
 export function channelItems(channels: ChannelRow[], hrefOf: HrefOf, current: InboxQuery | undefined): SidebarChannel[] {
   return channels.filter((channel) => channel.status.state !== 'removed').map((channel) => {
     const query: InboxQuery = { channel_id: channel.id };

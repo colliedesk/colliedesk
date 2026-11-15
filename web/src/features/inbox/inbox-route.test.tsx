@@ -1458,3 +1458,15 @@ test('a saved view the sidebar has read titles the list with its name, without a
   expect(await screen.findByRole('heading', { level: 2, name: 'Urgent' })).toBeInTheDocument();
   expect(views.list).not.toHaveBeenCalled();
 });
+
+test('a channel list whose channel names could not be read still has a title: never a blank heading', async () => {
+  quietApis();
+  const zalo = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  api.channelCounts.mockClear();
+  api.channelCounts.mockRejectedValueOnce(new Error('channels unavailable'));
+  testRouter.search = { channel_id: zalo, status: 'all' };
+  renderRoute();
+  expect(await screen.findByRole('heading', { level: 2, name: 'A channel' })).toBeInTheDocument();
+});

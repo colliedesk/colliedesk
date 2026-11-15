@@ -225,11 +225,13 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   // The default mailbox says whether customer mail arrives through it yet (the line under the title). With no
   // conversation open it is the query above; with one open it was read with the list, or goes out beside it.
   const defaultMailbox = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel, enabled: reads('channels:read') }).data;
-  const channelList = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') }).data;
+  const channelQuery = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') });
+  const channelList = channelQuery.data;
   const channelTypes = channelList?.types;
   // The list's title names a channel from this list, and a saved view from the sidebar's (read after the page's own
-  // requests): the title asks for nothing of its own. A role that may not read channels gets no names.
-  const channelNames = me.data && !reads('channels:read') ? [] : channelList?.items;
+  // requests): the title asks for nothing of its own. A role that may not read channels, or a list that could not be
+  // read, gets no names, so the title says "A channel" instead of staying blank.
+  const channelNames = channelList?.items ?? ((me.data && !reads('channels:read')) || channelQuery.isError ? [] : undefined);
   const savedViews = useQuery({ queryKey: ['saved-views'], queryFn: savedViewsApi.list, enabled: false }).data?.items;
   // An empty list is where the next setup step is offered; Quick start asks for the same steps, so this is one request.
   const listEmpty = conversations.data?.items.length === 0 && !filtered;

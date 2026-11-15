@@ -120,6 +120,8 @@ export const messages = {
   // Where the search field looks: the place the title named.
   searchIn: (place: string) => `in ${place}`,
   searchInAllChannels: 'in all channels',
+  // A channel the loaded channel list does not name (it could not be read): the title says unknownChannel.
+  searchInThisChannel: 'in this channel',
   clearSearch: 'Clear search',
   unknownChannel: 'A channel',
   filter: 'Filter',

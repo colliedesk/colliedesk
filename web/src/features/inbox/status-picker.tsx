@@ -12,11 +12,15 @@ interface StatusPickerProps {
   onPick: (status: string) => void;
 }
 
-const nameOf = (value: string) => (value === allStatuses ? messages.allStatuses : messages.statuses[value as keyof typeof messages.statuses] ?? value);
+// A link or a view may hold several statuses (open,pending): each reads as its word.
+const nameOf = (value: string) => (value === allStatuses ? messages.allStatuses
+  : value.split(',').map((one) => messages.statuses[one as keyof typeof messages.statuses] ?? one).join(', '));
+// A count reads with its status ("Open, 6"); the visible number beside the word is hidden from a screen reader.
+const spoken = (value: string, count?: number) => (count === undefined ? nameOf(value) : `${nameOf(value)}, ${count}`);
 
-// The dot a row of the list shows for its status; Spam and All statuses have none.
+// The dot a row of the list shows for its status; Spam, All statuses and several statuses have none.
 function StatusDot({ status }: { status: string }) {
-  return status === allStatuses || status === 'spam' ? null : <span className="status-dot" data-status={status} aria-hidden="true" />;
+  return status === allStatuses || status === 'spam' || status.includes(',') ? null : <span className="status-dot" data-status={status} aria-hidden="true" />;
 }
 
 // StatusPicker is the status the list shows, with its count, and the menu of the others. Status is the view an agent
@@ -58,17 +62,16 @@ export function StatusPicker({ status, counts, onPick }: StatusPickerProps) {
   const count = counts?.[status];
   const item = (value: string) => {
     const checked = value === status;
-    return <button key={value} type="button" role="menuitemradio" aria-checked={checked} tabIndex={-1} className="status-option"
+    return <button key={value} type="button" role="menuitemradio" aria-checked={checked} aria-label={spoken(value, counts?.[value])} tabIndex={-1} className="status-option"
       onClick={() => pick(value)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(value); } }}>
       <span className="status-dot-slot"><StatusDot status={value} /></span>
       <span className="status-label">{nameOf(value)}</span>
-      {/* A count reads with its word, never as part of the item's name. */}
       <span className="status-count" aria-hidden="true">{counts?.[value] ?? ''}</span>
       <span className="status-check" aria-hidden="true">{checked && <CheckIcon />}</span>
     </button>;
   };
   return <div className="status-picker">
-    <button ref={button} type="button" className="status-pick" aria-label={messages.statusPicked(nameOf(status))} aria-haspopup="menu" aria-expanded={open}
+    <button ref={button} type="button" className="status-pick" aria-label={messages.statusPicked(spoken(status, count))} aria-haspopup="menu" aria-expanded={open}
       aria-controls={open ? id : undefined} data-open={open || undefined} onClick={() => setOpen(!open)} onKeyDown={openFromKeys}>
       <StatusDot status={status} /><span>{nameOf(status)}</span>
       {count !== undefined && <span className="status-count" aria-hidden="true">{count}</span>}

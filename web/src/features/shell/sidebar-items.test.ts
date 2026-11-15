@@ -56,8 +56,14 @@ test('a channel stays current while the agent switches status, sort or search in
   }
 });
 
-test('a channel is not current once another filter narrows the list, or a second channel joins it', () => {
-  for (const current of [{ channel_id: zalo.id, priority: 'urgent' }, { channel_id: `${zalo.id},aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa` }, { status: 'all' }]) {
+test('a channel stays current while Filter menu picks narrow it: the channel is still the place', () => {
+  for (const current of [{ channel_id: zalo.id, priority: 'urgent' }, { channel_id: zalo.id, assignee: 'me', status: 'pending', tag: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }]) {
+    expect(channelItems([zalo], hrefOf, current)[0].current).toBe(true);
+  }
+});
+
+test('a channel is not current once a second channel joins it, or on a list of every channel', () => {
+  for (const current of [{ channel_id: `${zalo.id},aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa` }, { status: 'all' }, { priority: 'urgent' }]) {
     expect(channelItems([zalo], hrefOf, current)[0].current).toBe(false);
   }
 });
@@ -92,6 +98,15 @@ test('a search the view saved is part of it; a search typed inside a view that s
   expect(viewItems([view('Urgent refunds', { priority: ['urgent'], search: 'refund' })], hrefOf, { priority: 'urgent' })[0].current).toBe(false);
   expect(viewItems([view('Urgent refunds', { priority: ['urgent'], search: 'refund' })], hrefOf, { priority: 'urgent', search: 'refund', sort: 'priority' })[0].current).toBe(true);
   expect(viewItems([view('Urgent', { priority: ['urgent'] })], hrefOf, { priority: 'urgent', search: 'refund' })[0].current).toBe(true);
+});
+
+test('a view that saved only a status is never the plain inbox: the bare address belongs to Inbox', () => {
+  const open = view('Open', { status: ['open'] });
+  for (const current of [{}, { status: 'open' }, { sort: 'due' }]) expect(viewItems([open], hrefOf, current)[0].current).toBe(false);
+  expect(inboxIsCurrent(viewItems([open], hrefOf, {}), channelItems([zalo], hrefOf, {}))).toBe(true);
+  // Away from the default list it still marks its own status.
+  expect(viewItems([view('Pending', { status: ['pending'] })], hrefOf, { status: 'pending' })[0].current).toBe(true);
+  expect(viewItems([view('Open, newest', { status: ['open'], sort: 'updated_desc' })], hrefOf, { sort: 'updated_desc' })[0].current).toBe(true);
 });
 
 test('Inbox is the current place only while no channel or view in the sidebar is', () => {

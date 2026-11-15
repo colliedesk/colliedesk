@@ -3,8 +3,8 @@ import { knownChannels } from '../../api/schemas';
 import { messages } from '../../messages';
 import { FilterIcon, SortIcon } from '../../ui/icons';
 import { listOf } from '../../lib/inbox-query-edit';
-import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { defaultSort, shownSort } from '../../lib/inbox-query';
+import { activeFilterCount } from '../../lib/inbox-scope';
 import { channelLabel, filterMessages as text } from './filter-messages';
 import { slaOf } from '../../lib/sla';
 import { useHolds } from '../../lib/permissions-context';
@@ -24,18 +24,6 @@ const channels = knownChannels;
 // How a conversation started without a channel, offered in every workspace.
 const origins: readonly string[] = ['imported', 'agent'];
 const offeredSorts: readonly string[] = ['due', 'updated_desc', 'waiting_longest', 'priority'];
-
-// Filters counted on the Filter button; status, sort and search have their own controls, and a date range
-// counts once. Source, organization and the date ranges are set only by a link and show as chips.
-const menuKeys: InboxQueryKey[] = ['priority', 'assignee', 'tag', 'sla', 'contact', 'organization', 'awaiting', 'has_pending_draft', 'delivery_failed',
-  'source', 'channel', 'channel_id', 'created_after', 'updated_after'];
-const has = (query: InboxQuery, key: InboxQueryKey) => query[key] !== undefined && query[key] !== '';
-
-// activeFilters counts the filters that are on, the channel the title names left out.
-function activeFilters(query: InboxQuery, scopeChannel?: string): number {
-  return menuKeys.filter((key) => has(query, key) && !(key === 'channel_id' && scopeChannel)).length
-    + (!has(query, 'created_after') && has(query, 'created_before') ? 1 : 0) + (!has(query, 'updated_after') && has(query, 'updated_before') ? 1 : 0);
-}
 
 // SortPick names the order the list is in beside its icon; the native list of orders opens over both.
 export function SortPick(props: FilterPartProps) {
@@ -71,7 +59,7 @@ export function FilterMenu(props: FilterPartProps) {
     menu.current.open = false;
     menu.current.querySelector('summary')?.focus();
   };
-  const active = activeFilters(props.query, props.scopeChannel);
+  const active = activeFilterCount(props.query, props.scopeChannel);
   return (
     <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut} onToggle={(event) => { if (event.currentTarget.open) setOpened(true); }}>
       <summary data-tip={messages.filter} data-active={active > 0 || undefined}><FilterIcon /><span className="sr-only">{messages.filter}</span>

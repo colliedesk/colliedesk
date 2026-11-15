@@ -5,7 +5,7 @@ import type { Conversation, SavedView, Tag, TeamMember } from '../../api/schemas
 import { FilterIcon, SearchIcon, SortIcon } from '../../ui/icons';
 import { allStatuses, defaultStatus, shownSort } from '../../lib/inbox-query';
 import type { InboxQuery } from '../../lib/inbox-query';
-import { onView, scopedChannel } from '../../lib/inbox-scope';
+import { activeFilterCount, onView, scopedChannel } from '../../lib/inbox-scope';
 import type { FilterPartProps } from './filter-panel';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 import { ListSearchField } from './list-search-field';
@@ -50,7 +50,10 @@ function FilterMenuPart(props: FilterPartProps) {
   const part = filterPart.use();
   if (part.status === 'ready') return <part.module.FilterMenu {...props} />;
   if (part.status === 'error') return <PartUnavailable />;
-  return <button type="button" className="filter-menu-pending icon-button" disabled><FilterIcon /><span className="sr-only">{messages.filter}</span></button>;
+  // The count and the accent show already, from the address, so nothing moves when the menu arrives.
+  const active = activeFilterCount(props.query, props.scopeChannel);
+  return <button type="button" className="filter-menu-pending icon-button" disabled data-active={active > 0 || undefined}><FilterIcon /><span className="sr-only">{messages.filter}</span>
+    {active > 0 && <span className="filter-count" aria-label={messages.filtersActive(active)}>{active}</span>}</button>;
 }
 
 function SortPickPart(props: FilterPartProps) {
@@ -75,11 +78,13 @@ const ownControls = ['status', 'sort', 'search'];
 // placeOf names where the list is: the saved view on screen, else the one channel it is narrowed to, else every channel.
 function placeOf(query: InboxQuery, channels: InboxFiltersProps['channels'], views: InboxFiltersProps['savedViews']) {
   const view = views?.find((item) => onView(query, item.filters));
-  if (view) return { title: view.name, scope: messages.searchIn(view.name) };
+  if (view) return { title: view.name, scope: messages.searchIn(view.name), view };
   const id = scopedChannel(query);
   if (!id) return { title: messages.allChannels, scope: messages.searchInAllChannels };
-  const name = channels ? channels.find((item) => item.id === id)?.name ?? messages.unknownChannel : '';
-  return { title: name, scope: name && messages.searchIn(name), channel: id };
+  // Blank only while the channel names load; a list that failed or lacks the channel still says it is one channel.
+  if (!channels) return { title: '', scope: '', channel: id };
+  const name = channels.find((item) => item.id === id)?.name;
+  return { title: name ?? messages.unknownChannel, scope: name ? messages.searchIn(name) : messages.searchInThisChannel, channel: id };
 }
 
 // The list header: the place the list is in as its title, with Search and Filter (and the saved views while the list is
@@ -108,15 +113,16 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
     if (value === defaultStatus && query.status === undefined) delete next.status;
     onChange?.(next);
   };
+  const place = placeOf(query, channels, savedViews);
   const onSearch = (value: string) => {
     setOpen(true);
     const next: InboxQuery = { ...query, search: value };
     if (!value) delete next.search;
-    // Search looks through every status unless the agent chose one: an imported ticket is usually closed.
-    if (value && query.status === undefined) next.status = allStatuses;
+    // Search looks through every status unless the agent chose one: an imported ticket is usually closed. A saved
+    // view's own status counts as chosen, so the search stays inside the view.
+    if (value && query.status === undefined && !place.view?.filters.status?.length) next.status = allStatuses;
     onChange?.(next);
   };
-  const place = placeOf(query, channels, savedViews);
   const part = { query, onChange, tags, agents, timezone, conversations, currentAgentId, dueSort, scopeChannel: place.channel };
   // A filter other than the channel the title names: it shows a chip and the saved views.
   const filtered = Object.keys(query).some((key) => !ownControls.includes(key) && !(key === 'channel_id' && place.channel));
@@ -146,7 +152,7 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
           ? <ListSearchField key={focusSignal} inputRef={search} value={query.search ?? ''} delay={typingDelayMs} onCommit={onSearch} onFocus={() => setOpen(true)}
               autoFocus={focusSearch} scope={place.scope} onClear={clearSearch}
               onKeyDown={(event) => {
-                if (event.key !== 'Escape' || event.currentTarget.value || query.search || filtered) return;
+                if (event.key !== 'Escape' || event.currentTarget.value || query.search) return;
                 event.preventDefault();
                 closeField();
               }} />

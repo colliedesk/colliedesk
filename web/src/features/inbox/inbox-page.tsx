@@ -12,6 +12,7 @@ import { DetailsPanel } from './details-panel';
 import { InboxFilters } from './inbox-filters';
 
 import type { InboxQuery } from '../../lib/inbox-query';
+import { narrowedInPlace, placeOnly } from '../../lib/inbox-scope';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
 import { EarlierDrafts, ReplyDraftCard } from './reply-draft-card';
@@ -180,7 +181,8 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   const [triageWaiting, setTriageWaiting] = useState(false);
   // Clearing from the empty list returns to the Open view and puts focus back on the search box.
   const [cleared, setCleared] = useState(0);
-  const clearFilters = () => { setCleared((current) => current + 1); onQuery?.({}); };
+  // Clear filters keeps the place: a channel list stays on its channel.
+  const clearFilters = () => { setCleared((current) => current + 1); onQuery?.(placeOnly(query)); };
   const focusSignal = cleared + searchSignal;
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
@@ -328,7 +330,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
         </header>
         <ConversationList items={conversations} channelLabel={channelLabel} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
-          failed={failed} onRetry={onRetry} onClearFilters={clearFilters}
+          failed={failed} onRetry={onRetry} onClearFilters={narrowedInPlace(query) ? clearFilters : undefined}
           checkedIds={checked} onToggle={toggle} draftIds={draftConversationIds} viewers={viewers}
           grouped={query.sort === 'updated_desc'} onTestMessage={onTestMessage} nextStep={nextStep} />
         {spamToast && <div role="status" aria-label={messages.spam} className="spam-toast"><span>{spamToast.text}</span>

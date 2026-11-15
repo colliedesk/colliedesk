@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { InboxQuery } from '../../lib/inbox-query';
 import { permissionsOf, rolesOf } from '../../test-roles';
@@ -82,7 +82,7 @@ test('two channels at once are not one place: the title says every channel and e
 
 test('the status picker shows the status on screen, its dot and its count', () => {
   render(<Harness counts={{ open: 6, pending: 0, resolved: 3, closed: 7, spam: 0, all: 16 }} />);
-  expect(picker()).toHaveAccessibleName('Status: Open');
+  expect(picker()).toHaveAccessibleName('Status: Open, 6');
   expect(picker()).toHaveTextContent(/^Open6$/);
   expect(picker().querySelector('.status-dot')).toHaveAttribute('data-status', 'open');
 });
@@ -92,8 +92,30 @@ test('the status menu lists every status with its count, zero included, then All
   const menu = openStatusMenu();
   expect(menuRows(menu)).toEqual(['Open6', 'Pending0', 'Resolved3', 'Closed7', 'All statuses16']);
   expect(within(menu).getByRole('separator')).toBeInTheDocument();
-  expect(within(menu).getByRole('menuitemradio', { name: 'Pending' })).toHaveAttribute('aria-checked', 'true');
-  expect(within(menu).getByRole('menuitemradio', { name: 'Open' })).toHaveAttribute('aria-checked', 'false');
+  expect(within(menu).getByRole('menuitemradio', { name: 'Pending, 0' })).toHaveAttribute('aria-checked', 'true');
+  expect(within(menu).getByRole('menuitemradio', { name: 'Open, 6' })).toHaveAttribute('aria-checked', 'false');
+});
+
+test('a screen reader hears each count with its status, on the picker and on every item of the menu', () => {
+  render(<Harness initial={{ status: 'pending' }} counts={{ open: 6, pending: 0, resolved: 3, closed: 7, spam: 0, all: 16 }} />);
+  expect(picker()).toHaveAccessibleName('Status: Pending, 0');
+  expect(within(openStatusMenu()).getAllByRole('menuitemradio').map((item) => item.getAttribute('aria-label') ?? item.textContent))
+    .toEqual(['Open, 6', 'Pending, 0', 'Resolved, 3', 'Closed, 7', 'All statuses, 16']);
+});
+
+test('without counts (a search asks for none) a status reads as its name alone', () => {
+  render(<Harness initial={{ status: 'pending' }} />);
+  expect(picker()).toHaveAccessibleName('Status: Pending');
+  expect(within(openStatusMenu()).getByRole('menuitemradio', { name: 'Pending' })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('two statuses from a link or a view read as words in the picker, and no item of the menu is checked', () => {
+  render(<Harness initial={{ status: 'open,pending' }} counts={{ open: 6, pending: 0, resolved: 3, closed: 7, spam: 0, all: 16 }} />);
+  expect(picker()).toHaveAccessibleName('Status: Open, Pending');
+  expect(picker()).toHaveTextContent(/^Open, Pending$/);
+  expect(picker().querySelector('.status-dot')).toBeNull();
+  const menu = openStatusMenu();
+  expect(within(menu).getAllByRole('menuitemradio').filter((item) => item.getAttribute('aria-checked') === 'true')).toEqual([]);
 });
 
 test('Spam is listed after Closed once it holds a conversation, or while it is the status on screen', () => {
@@ -101,10 +123,9 @@ test('Spam is listed after Closed once it holds a conversation, or while it is t
   expect(menuRows(openStatusMenu())).toEqual(['Open6', 'Pending0', 'Resolved3', 'Closed7', 'Spam2', 'All statuses16']);
   unmount();
   render(<Harness initial={{ status: 'spam' }} counts={{ open: 6, pending: 0, resolved: 3, closed: 7, spam: 0, all: 16 }} />);
-  expect(picker()).toHaveAccessibleName('Status: Spam');
+  expect(picker()).toHaveAccessibleName('Status: Spam, 0');
   expect(menuRows(openStatusMenu())).toEqual(['Open6', 'Pending0', 'Resolved3', 'Closed7', 'Spam0', 'All statuses16']);
-  // The count is not part of an item's name.
-  expect(screen.getByRole('menuitemradio', { name: 'Spam' })).toHaveAttribute('aria-checked', 'true');
+  expect(screen.getByRole('menuitemradio', { name: 'Spam, 0' })).toHaveAttribute('aria-checked', 'true');
 });
 
 test('one click on a status filters the list and closes the menu, back on the picker', () => {
@@ -401,11 +422,12 @@ test('status, order and search have their own places and never show as chips', a
 });
 
 // The app's Search (the top bar, or Clear filters in the list) asks the list for its search field.
-function SearchHarness({ onChange, initial = {} }: { onChange?: (query: InboxQuery) => void; initial?: InboxQuery }) {
+function SearchHarness({ onChange, initial = {}, channels = [zalo], savedViews }: { onChange?: (query: InboxQuery) => void; initial?: InboxQuery;
+  channels?: Array<{ id: string; name: string }>; savedViews?: ComponentProps<typeof InboxFilters>['savedViews'] }) {
   const [query, setQuery] = useState<InboxQuery>(initial);
   const [signal, setSignal] = useState(0);
   return <><button type="button" onClick={() => setSignal((count) => count + 1)}>App search</button>
-    <InboxFilters tags={tags} query={query} focusSignal={signal} channels={[zalo]} onChange={(next) => { setQuery(next); onChange?.(next); }} /></>;
+    <InboxFilters tags={tags} query={query} focusSignal={signal} channels={channels} savedViews={savedViews} onChange={(next) => { setQuery(next); onChange?.(next); }} /></>;
 }
 const openSearch = () => fireEvent.click(screen.getByRole('button', { name: 'App search' }));
 
@@ -433,6 +455,26 @@ test('while the channel names load, a channel search names no place yet rather t
   expect(screen.getByRole('search', { name: 'Inbox' }).querySelector('.list-search-scope')?.textContent ?? '').toBe('');
 });
 
+test('a channel missing from the loaded channel list still titles the list, and its search says where it looks', () => {
+  render(<SearchHarness initial={{ channel_id: zalo.id, status: 'all' }} channels={[]} />);
+  expect(title()).toHaveTextContent(/^A channel$/);
+  openSearch();
+  expect(screen.getByText('in this channel')).toBeInTheDocument();
+});
+
+test('a search inside a saved view that stores a status keeps that status, so the view stays the place', async () => {
+  const onChange = vi.fn();
+  const mineOpen = { id: 'abababab-abab-4bab-8bab-abababababab', name: 'Mine, open', filters: { status: ['open' as const], assignee: ['me'] } };
+  render(<SearchHarness initial={{ assignee: 'me' }} savedViews={[mineOpen]} onChange={onChange} />);
+  expect(title()).toHaveTextContent(/^Mine, open$/);
+  openSearch();
+  expect(screen.getByText('in Mine, open')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search conversations' }), { target: { value: 'invoice' } });
+  await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ assignee: 'me', search: 'invoice' }));
+  expect(screen.getByText('in Mine, open')).toBeInTheDocument();
+  expect(picker()).toHaveAccessibleName('Status: Open');
+});
+
 test('the app\'s Search opens the search field with the focus in it, and the words typed search every status', async () => {
   const onChange = vi.fn();
   render(<SearchHarness onChange={onChange} />);
@@ -456,11 +498,13 @@ test('Escape on an empty search field brings the title back and the focus to the
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
 });
 
-test('Escape keeps an empty search field open while a filter is on', () => {
+test('Escape on an empty search field brings the title back while a filter is on too', () => {
   render(<SearchHarness initial={{ priority: 'urgent' }} />);
   openSearch();
   fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Search conversations' }), { key: 'Escape' });
-  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeInTheDocument();
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  expect(title()).toHaveTextContent(/^All channels$/);
+  expect(screen.getByRole('button', { name: 'Search' })).toHaveFocus();
 });
 
 test('the clear button empties the search and brings the title back', () => {
