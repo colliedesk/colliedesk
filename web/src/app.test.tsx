@@ -995,9 +995,17 @@ test('on every page the sidebar counts the open conversations and lists the save
   await waitFor(() => expect(router.state.location.pathname).toBe('/'));
   expect(router.state.location.search).toEqual({ status: 'open', assignee: 'me' });
   expect(within(rail).getByRole('link', { name: 'Mine, open' })).toHaveAttribute('aria-current', 'page');
+  // One place is marked at a time: the view, not the Inbox around it.
+  expect(within(rail).getByRole('link', { name: 'Inbox, 23 open' })).not.toHaveAttribute('aria-current');
   fireEvent.click(within(rail).getByRole('link', { name: 'Chat widget, needs attention' }));
   await waitFor(() => expect(router.state.location.search).toEqual({ channel_id: '55555555-5555-4555-8555-555555555555' }));
   expect(within(rail).getByRole('link', { name: 'support@northwind.help' })).not.toHaveAttribute('aria-current');
+  // Every status of the channel is still the channel.
+  await act(async () => { await router.navigate({ to: '/', search: { channel_id: '55555555-5555-4555-8555-555555555555', status: 'all' } }); });
+  expect(within(rail).getByRole('link', { name: 'Chat widget, needs attention' })).toHaveAttribute('aria-current', 'page');
+  expect(within(rail).getByRole('link', { name: 'Inbox, 23 open' })).not.toHaveAttribute('aria-current');
+  await act(async () => { await router.navigate({ to: '/', search: {} }); });
+  expect(within(rail).getByRole('link', { name: 'Inbox, 23 open' })).toHaveAttribute('aria-current', 'page');
 });
 
 test('the top bar names the customer page like every other page', async () => {

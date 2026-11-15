@@ -31,6 +31,7 @@ import { AppShell } from './features/shell/app-shell';
 import { askInbox } from './features/shell/inbox-intents';
 import type { InboxIntent } from './features/shell/inbox-intents';
 import { useSidebarData } from './features/shell/use-sidebar-data';
+import { inboxIsCurrent } from './features/shell/sidebar-items';
 import { paletteEntries } from './features/shell/palette-entries';
 import { preloadQuickStart, QuickStart } from './features/onboarding/quick-start';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
@@ -175,6 +176,8 @@ function AppLayout() {
   // Knowledge opens on what the session reads of it: the articles, the media or the help center's settings.
   const knowledge = me.data ? knowledgeHome(me.data) : '/knowledge';
   const inboxOpen = sidebar.inboxOpen ?? 0;
+  // One place is marked at a time: a channel or saved view on screen, or else the Inbox around them.
+  const inboxCurrent = inboxIsCurrent(sidebar.views, sidebar.channels);
   const mentionsUnread = sidebar.mentionsUnread ?? 0;
   // The page the top bar names: the area the sidebar marks current.
   const page = inSettings ? { title: messages.settings, icon: <SettingsIcon /> } : inReview ? { title: messages.review, icon: <ChatIcon /> }
@@ -205,7 +208,10 @@ function AppLayout() {
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
       {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={inboxOpen > 0 ? messages.inboxOpenCount(inboxOpen) : messages.inbox}
-        aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || inMentions || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span>
+        aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || inMentions || notFound || !inboxCurrent ? undefined : 'page'}
+        // The router marks a link current on any address under it; while a channel or view is the place on screen, only
+        // the bare inbox address marks Inbox.
+        activeOptions={inboxCurrent ? undefined : { exact: true }}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span>
         {inboxOpen > 0 && <span className="rail-badge" aria-hidden="true">{inboxOpen > 999 ? '999+' : inboxOpen}</span>}</Link>}
       {shows('messages:read') && <Link to="/mentions" className="rail-link" data-tip={mentionMessages.mentions}
         aria-label={mentionsUnread > 0 ? mentionMessages.mentionsUnread(mentionsUnread) : mentionMessages.mentions} aria-current={inMentions ? 'page' : undefined}>
