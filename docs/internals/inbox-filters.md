@@ -91,16 +91,29 @@ signed-in agent is the `me` value, labelled Me, and is not listed again under th
 included, since their conversations remain. A date chip shows the days of a `*_after` / `*_before` pair in
 the agent's timezone; the end day is the day before the exclusive `*_before`.
 
-Bundle: the first bundle carries only the search box, the status tabs, reading the address and building
-the API query. The Filter and Sort menus and the chips (`filter-panel.tsx`) and the Views menu with its
-data (`saved-views-menu.tsx`) load as their own chunks through `ui/lazy-part.tsx`, which shows inert
-controls of the same size meanwhile and a reload link if a chunk fails; views are fetched only when the
-menu opens and the trash when its section opens.
+Bundle: the first bundle carries only the list's title, the search field, the status picker with its menu
+(`status-picker.tsx`), reading the address and building the API query, and the names of the orders, so the
+inert Sort control already says the order in use, and the inert Filter control its count. The Filter and Sort menus and the chips (`filter-panel.tsx`)
+and the Views menu with its data (`saved-views-menu.tsx`) load as their own chunks through `ui/lazy-part.tsx`,
+which shows inert controls of the same size meanwhile and a reload link if a chunk fails; views are fetched only
+when the menu opens and the trash when its section opens. The title asks for nothing of its own: a channel's
+name comes from the channel list the inbox already reads (`['channels', 'counts']`), a saved view's from the
+list the sidebar reads (`['saved-views']`), which the inbox only watches. The title is blank only while the
+channel list loads; a list that failed or does not hold the channel titles it "A channel".
+
+Where the list is (`lib/inbox-scope.ts`): one channel when `channel_id` holds one id, a saved view when the
+filters on screen are its filters. Status, sort and search are changed inside that place, so they never take
+the list out of it; a status or a search the view saved still counts, and a search typed in a view keeps the status
+it saved. A channel also stays the place while Filter menu picks narrow it: they show as chips, and the list's
+Clear filters returns to the channel. A view that saved only a status, an order or a search matches exactly, and
+never the default list, or it would take over the plain inbox (Inbox owns `/`). Two views can match one list; the
+title names the first in the sidebar's order. The sidebar marks the same place
+(`sidebar-items.ts`), and marks Inbox only while no channel or view is marked.
 
 ## Spam is a status, not a flag
 
 A conversation marked as spam takes the status `spam` (`PUT /api/v1/conversations/spam`). Every view,
-clock and count that reads a status already leaves it out: the status tabs filter by status,
+clock and count that reads a status already leaves it out: the status picker filters by status,
 `conversations_sla_change` and `domain.SLAPolicy` stop every clock for a status other than open and
 pending, auto-close and the open counts read open or pending, and a customer reply reopens only
 resolved or closed. Only the readers of every status name it: the list without a status filter (`All`,

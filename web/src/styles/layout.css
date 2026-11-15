@@ -178,7 +178,13 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .inbox-shell > .panel + .panel { border-left: 1px solid var(--line); }
 .list-pane:focus { outline: none; }
 .list-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
-.list-pane > header { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3) var(--space-4) 0 var(--space-8); border-bottom: 1px solid var(--line); }
+.list-pane > header { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3) var(--space-2) 0 var(--space-6); border-bottom: 1px solid var(--line); }
+/* The list header (.inbox-filters) uses the header's edges; the lines around it keep the rows' 32 px and 16 px. */
+.list-pane > header > :not(.list-head, .list-title) { margin-inline: var(--space-2); }
+/* At rest the list header and the open conversation's header end on one line (I12-a): the conversation header is at
+   least as tall as the list header's two rows. */
+.inbox-shell { --list-head-height: calc(var(--space-3) + 2 * var(--control) + var(--space-1) + var(--space-2) + 1px); }
+.inbox-shell .timeline-header { min-height: var(--list-head-height); }
 .list-title { display: flex; align-items: baseline; gap: var(--space-2); }
 .list-title h1 { font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
 .list-title > span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
@@ -284,11 +290,6 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .inbox-shell { grid-template-columns: 288px minmax(0, 1fr) 240px; }
   .details-section { padding-inline: var(--space-4); }
   .details-panel .property-row { --label: 64px; }
-}
-/* The narrower list keeps the tabs' words apart (12 px between them) with smaller type; a search's five tabs scroll. */
-@media (min-width: 64.01rem) and (max-width: 89.99rem) {
-  .list-pane .status-tabs { gap: var(--space-1); }
-  .list-pane .status-tabs label { font-size: var(--fs-small); }
 }
 /* With the sidebar or rail beside it the thread of a 705–1439 px screen is narrow: the reply box keeps its tools and both send
    buttons on one row by giving up some padding and spacing. */
@@ -423,7 +424,8 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
   .topbar-search kbd { display: none; }
   .topbar-end { order: 1; justify-content: space-between; }
   .app-content > .inbox-shell { height: auto; }
-  .list-pane > header { padding-inline: var(--space-4); }
+  /* Rows start after a fingertip-wide checkbox here: the list header's lane moves with them. */
+  .list-pane > header { padding-inline: calc(var(--touch) - var(--space-2)) var(--space-2); }
   .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; overflow: visible; }
   .panel { border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; }
   .inbox-shell > .panel + .panel { border-left: 0; }

@@ -51,7 +51,7 @@ test('the Spam view says what Spam does, and its bulk bar offers Not spam and no
   const onSpam = vi.fn().mockResolvedValue({ updated: 2, senders: [sender] });
   const spam = [{ ...pills, status: 'spam' as const }, { ...wallet, status: 'spam' as const }];
   render(<InboxPage conversations={spam} query={{ status: 'spam' }} onQuery={vi.fn()} onSpam={onSpam} onBulkUpdate={vi.fn()} />);
-  expect(screen.getByRole('radio', { name: 'Spam' })).toBeChecked();
+  expect(screen.getByRole('button', { name: 'Status: Spam' })).toBeInTheDocument();
   expect(screen.getByText(/no notification, no clock, not in Reports/)).toBeInTheDocument();
   pick(/rank #1/i);
   expect(bar().queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();

@@ -123,7 +123,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
         const dot = dotOf(item, due?.late ?? false);
         return (
           <Fragment key={item.id}>
-          {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
+          {startsGroup && <h3 className="group-label">{messages.dayGroups[group]}</h3>}
           <div className="conversation-item" data-conversation-id={item.id}>
           <label className="row-check">
             <input type="checkbox" aria-label={messages.selectRow(item.contact_name, item.subject, full)} checked={checkedIds?.has(item.id) ?? false}

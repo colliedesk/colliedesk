@@ -17,7 +17,7 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
    grey or a text token carries a hue, or when the primary action is not the orange.
 2. **One orange, and colour means something.** The orange is Colliedesk's own: the logo tile, the primary
    button, links, and the mark of the active place (the rail and settings icon, the open conversation's edge,
-   the chosen status tab); on colliedesk.com the price (the promise). It is never a chip, badge or warning.
+   the chosen status's check, an active Filter); on colliedesk.com the price (the promise). It is never a chip, badge or warning.
    Stylesheets reach it only through `--accent*`: `web/scripts/brand-rules.test.mjs` fails when any app file other
    than the tokens and the mark names the hex.
    Status (open blue, pending amber, resolved green, urgent red), Urgent priority (red arrow and word), focus
@@ -57,8 +57,10 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   blur or emoji. Desktop views use the full width; no narrow centred column.
 - Sentence case everywhere. Plex Sans for every control and label; Plex Mono only for code, IDs,
   URLs and keycaps.
-- List header: status tabs (All, Open, Pending, Resolved, Closed), then search beside one
-  **Filter** menu for assignee and tag with a count of active filters.
+- List header (Paper "15 Inbox", I12-a..d): the place the list is in as its title (a saved view, a channel, or
+  All channels) with Search and **Filter**; under it the status picker (dot, word, count; a menu of every
+  status with its count) and the order in use in words; then a chip per filter. Search turns the title into
+  a field that says where it searches. Filter with picks on is an accent icon with the count beside it.
 - Bulk actions: a checkbox at the left of each row and a **Select all on this page** row. Once a row
   is ticked, that row becomes the action bar (`role="group"`, named "Bulk actions"), as in Gmail and
   Gorgias: count on the left, then icon controls with a tooltip and an accessible name: **Resolve**
@@ -76,7 +78,7 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   writes `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes
   to **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
 - Rows: subject (500) and time, then one meta line (status dot and word, priority arrow, `#tags`); the status
-  (dot and word) is left out under a status tab that already names it, and Normal priority is not shown. With a mouse,
+  (dot and word) is left out under a chosen status that already names it, and Normal priority is not shown. With a mouse,
   rows start on the column edge and the checkbox appears over the row's padding on hover or focus; its column
   opens once a row is ticked. **Select all on this page** stays, since focus returns to it after a bulk change.
   Touch keeps the column. The time is

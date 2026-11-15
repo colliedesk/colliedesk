@@ -269,7 +269,8 @@ test('zalo channel: words for Resolved make the header say it tells, the quiet w
   const fits = async (selector: string) => (page.evaluate((sel) => [document.documentElement, ...Array.from(document.querySelectorAll(sel))]
     .filter((node) => node.scrollWidth > node.clientWidth).map((node) => node.className || node.tagName), selector));
   await page.goto(`${baseURL}/`);
-  await page.getByRole('radio', { name: 'Resolved' }).check();
+  await page.getByRole('button', { name: /^Status: / }).click();
+  await page.getByRole('menuitemradio', { name: 'Resolved' }).click();
   await page.locator('.row-check input').first().check();
   await expect(page.getByRole('checkbox', { name: 'Tell customers' })).toBeChecked();
   expect(await fits('.bulk-bar')).toEqual([]);
