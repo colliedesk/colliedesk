@@ -136,12 +136,17 @@ func TestAConversationCarriesItsResponseClocks(t *testing.T) {
 		t.Helper()
 		var page struct {
 			Items []slaConversation `json:"items"`
+			Sort  string            `json:"sort"`
 		}
 		response := request(t, api, http.MethodGet, "/api/v1/conversations?"+query, nil, token, nil)
 		if response.Code != http.StatusOK {
 			t.Fatalf("?%s: %d %s", query, response.Code, response.Body.String())
 		}
 		decode(t, response, &page)
+		// With reply targets on, Due first is what the list does, and the answer says so.
+		if strings.Contains(query, "sort=due") && page.Sort != "due" {
+			t.Fatalf("?%s answered sort %q, want due", query, page.Sort)
+		}
 		var ids []string
 		for _, item := range page.Items {
 			ids = append(ids, item.ID)

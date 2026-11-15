@@ -18,9 +18,9 @@ const ann = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.co
 const bo = { ...ann, id: '99999999-9999-4999-8999-999999999999', email: 'bo@example.com', display_name: 'Bo' };
 
 // Filters follows the query it is given, like the inbox does with the address.
-function Harness({ initial = {}, onChange }: { initial?: InboxQuery; onChange?: (query: InboxQuery) => void }) {
+function Harness({ initial = {}, onChange, dueSort }: { initial?: InboxQuery; onChange?: (query: InboxQuery) => void; dueSort?: string }) {
   const [query, setQuery] = useState<InboxQuery>(initial);
-  return <InboxFilters tags={tags} agents={[ann, bo]} currentAgentId={ann.id} timezone="Asia/Ho_Chi_Minh" query={query} onChange={(next) => { setQuery(next); onChange?.(next); }} />;
+  return <InboxFilters tags={tags} agents={[ann, bo]} currentAgentId={ann.id} timezone="Asia/Ho_Chi_Minh" query={query} dueSort={dueSort} onChange={(next) => { setQuery(next); onChange?.(next); }} />;
 }
 
 const labelOf = (box: HTMLElement) => (box as HTMLInputElement).labels?.[0]?.textContent;
@@ -31,6 +31,13 @@ const openMenu = async () => {
   await screen.findByRole('checkbox', { name: 'Urgent' });
   return screen.getByRole('group', { name: 'Filter' });
 };
+
+// The Sort menu once its chunk has replaced the inert control that holds its place.
+const loadedSort = () => waitFor(() => {
+  const sort = screen.getByRole('combobox', { name: 'Sort' });
+  expect(within(sort).getByRole('option', { name: 'Priority' })).toBeInTheDocument();
+  return sort;
+});
 
 const tabValues = () => within(screen.getByRole('radiogroup', { name: 'Status' })).getAllByRole('radio').map((item) => item.getAttribute('value'));
 
@@ -213,6 +220,29 @@ test('the list starts on Due first; the sort menu also offers latest activity, w
   expect(onChange).toHaveBeenLastCalledWith({ sort: 'updated_desc' });
   fireEvent.change(sort, { target: { value: 'due' } });
   expect(onChange).toHaveBeenLastCalledWith({});
+});
+
+test('while reply targets are off the list on Due first is ordered Waiting longest, and the Sort menu says Waiting longest', async () => {
+  const onChange = vi.fn();
+  // The default order and a saved view or link that asks for due read the same.
+  for (const initial of [{}, { sort: 'due' }]) {
+    const { unmount } = render(<Harness initial={initial} dueSort="waiting_longest" onChange={onChange} />);
+    const sort = await loadedSort();
+    expect(sort).toHaveValue('waiting_longest');
+    // Nothing is due, so Due first is not offered beside the order it gives.
+    expect(within(sort).getAllByRole('option').map((option) => option.textContent)).toEqual(['Latest activity', 'Waiting longest', 'Priority']);
+    expect(sort.closest('label')).toHaveAttribute('data-tip', 'Sort: Waiting longest');
+    unmount();
+  }
+  render(<Harness dueSort="waiting_longest" onChange={onChange} />);
+  const sort = await loadedSort();
+  fireEvent.change(sort, { target: { value: 'priority' } });
+  expect(onChange).toHaveBeenLastCalledWith({ sort: 'priority' });
+  expect(sort).toHaveValue('priority');
+  // Waiting longest is then the way back to the list's default order, which follows the targets once they are on.
+  fireEvent.change(sort, { target: { value: 'waiting_longest' } });
+  expect(onChange).toHaveBeenLastCalledWith({});
+  expect(sort).toHaveValue('waiting_longest');
 });
 
 test('a sort set by a link that the menu does not offer still shows as chosen', async () => {

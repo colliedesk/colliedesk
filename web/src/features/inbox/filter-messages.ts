@@ -5,7 +5,8 @@ import { channelUI } from '../../channels/registry';
 export const filterMessages = {
   // How a conversation started without a channel; a channel type's label is its registry entry's (channelLabel).
   origins: { imported: 'Imported', agent: 'Started by the team', problem_report: 'Problem report' } as Record<string, string>,
-  // The Sort menu offers the first three; the others are named only while a link sets them.
+  // The Sort menu offers the first three and Due first (not while reply targets are off: it orders as Waiting
+  // longest then); the others are named only while a link sets them.
   sorts: { updated_desc: 'Latest activity', waiting_longest: 'Waiting longest', priority: 'Priority', updated_asc: 'Oldest activity', created_desc: 'Newest first', created_asc: 'Oldest first', due: 'Due first' },
   priority: 'Priority',
   assignee: 'Assignee',

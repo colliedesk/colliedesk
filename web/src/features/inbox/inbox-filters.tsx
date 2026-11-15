@@ -29,6 +29,8 @@ interface InboxFiltersProps {
   selection?: ReactNode;
   // How many conversations each status holds under the other filters (status_counts).
   counts?: Partial<Record<string, number>>;
+  // The order Due first gives the list (FilterPartProps.dueSort).
+  dueSort?: string;
 }
 
 // The Filter menu, the Sort menu and the chips load on their own chunk (filter-panel.tsx), asked for as
@@ -72,7 +74,7 @@ function showsTab(value: string, status: string, narrowed: boolean, counts?: Par
 // the saved views beside it, and each active filter shows as a chip below the tabs that removes it. Search starts from
 // the app's search (it opens this box through focusSignal, or links here with ?search=). The order on screen is the
 // order for Tab. Status is the view an agent switches most, so it is a row of tabs; everything else shares one Filter menu.
-export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', conversations, currentAgentId, focusSearch = false, focusSignal = 0, views, selection, counts }: InboxFiltersProps) {
+export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', conversations, currentAgentId, focusSearch = false, focusSignal = 0, views, selection, counts, dueSort }: InboxFiltersProps) {
   const search = useRef<HTMLInputElement>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   // The search box also shows while the person uses it: opened by the app's Search or by Clear filters, typed in,
@@ -105,7 +107,7 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
     if (value && query.status === undefined) next.status = allStatuses;
     onChange?.(next);
   };
-  const part = { query, onChange, tags, agents, timezone, conversations, currentAgentId };
+  const part = { query, onChange, tags, agents, timezone, conversations, currentAgentId, dueSort };
   const status = query.status ?? defaultStatus;
   const narrowed = Object.keys(query).some((key) => key !== 'status' && key !== 'sort');
   const filtered = Object.keys(query).some((key) => !ownControls.includes(key));

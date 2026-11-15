@@ -69,6 +69,7 @@ type inboxArgs struct {
 type inboxOut struct {
 	Conversations []conversationOut `json:"conversations"`
 	Count         int               `json:"count"`
+	Sort          string            `json:"sort"`
 	NextCursor    *string           `json:"next_cursor"`
 	Timezone      string            `json:"timezone"`
 	Detail        string            `json:"detail"`
@@ -102,6 +103,7 @@ func inboxSearch(c *call, arguments map[string]any) (any, error) {
 	query.Set("page_size", strconv.Itoa(args.Limit))
 	var found struct {
 		Items []restConversation `json:"items"`
+		Sort  string             `json:"sort"`
 	}
 	if err := c.get("/api/v1/conversations", query, &found); err != nil {
 		return nil, err
@@ -114,7 +116,7 @@ func inboxSearch(c *call, arguments map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := inboxOut{Conversations: make([]conversationOut, 0, len(found.Items)), Count: len(found.Items), Timezone: me.Workspace.Timezone, Detail: args.Detail}
+	out := inboxOut{Conversations: make([]conversationOut, 0, len(found.Items)), Count: len(found.Items), Sort: found.Sort, Timezone: me.Workspace.Timezone, Detail: args.Detail}
 	for _, conversation := range found.Items {
 		var contact *restContact
 		if known, ok := contacts[conversation.ContactID]; ok {

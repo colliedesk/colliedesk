@@ -31,6 +31,9 @@ export interface FilterPartProps {
   currentAgentId?: string;
   // Sort before Filter, as the one-row list toolbar draws them; beside the search box Filter comes first.
   sortFirst?: boolean;
+  // The order Due first gives this workspace's list, as the server last answered it: waiting_longest while
+  // reply targets are off. The menu then names that order and does not offer Due first beside it.
+  dueSort?: string;
 }
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
@@ -108,13 +111,18 @@ export function FilterBar(props: FilterPartProps) {
     menu.current.open = false;
     menu.current.querySelector('summary')?.focus();
   };
-  const sort = query.sort ?? defaultSort;
+  const asked = query.sort ?? defaultSort;
+  // The order the default gives (Waiting longest while reply targets are off) stands in for Due first, and
+  // picking it returns to the default, which follows the targets once they are on.
+  const shownDefault = props.dueSort ?? defaultSort;
+  const sort = asked === defaultSort ? shownDefault : asked;
+  const offered = shownDefault === defaultSort ? offeredSorts : offeredSorts.filter((value) => value !== defaultSort);
   const active = menuKeys.filter((key) => has(query, key)).length
     + (!has(query, 'created_after') && has(query, 'created_before') ? 1 : 0) + (!has(query, 'updated_after') && has(query, 'updated_before') ? 1 : 0);
   // An icon with the order in its tip; the native list of orders opens over it.
   const sortPick = <label className="sort-pick" data-tip={`${messages.inboxSort}: ${text.sorts[sort as keyof typeof text.sorts] ?? sort}`}><ArrowUpDownIcon />
-    <select className="sort-field" aria-label={messages.inboxSort} value={sort} onChange={(event) => set('sort', event.currentTarget.value === defaultSort ? undefined : event.currentTarget.value)}>
-      {offeredSorts.concat(offeredSorts.includes(sort) ? [] : [sort]).map((value) => <option key={value} value={value}>{text.sorts[value as keyof typeof text.sorts] ?? value}</option>)}
+    <select className="sort-field" aria-label={messages.inboxSort} value={sort} onChange={(event) => set('sort', [defaultSort, shownDefault].includes(event.currentTarget.value) ? undefined : event.currentTarget.value)}>
+      {offered.concat(offered.includes(sort) ? [] : [sort]).map((value) => <option key={value} value={value}>{text.sorts[value as keyof typeof text.sorts] ?? value}</option>)}
     </select></label>;
   // The menu keeps its place among the children either way, so it stays open when the layout changes under it.
   return (

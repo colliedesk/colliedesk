@@ -460,6 +460,32 @@ test('the inbox opens on open conversations', async () => {
   expect(new URLSearchParams(api.conversations.mock.calls[0][0]).get('status')).toBe('open');
 });
 
+test('with reply targets off the server answers Due first in Waiting longest order; the Sort menu says so, also while the next filters load', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  // The server orders due as waiting_longest and says so; Pending in the default order never answers in this test.
+  api.conversations.mockImplementation((query: string) => {
+    const params = new URLSearchParams(query);
+    const sort = params.get('sort') === 'due' ? 'waiting_longest' : params.get('sort');
+    if (params.get('status') === 'pending' && sort === 'waiting_longest') return new Promise(() => {});
+    return Promise.resolve({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50, sort });
+  });
+  const lastQuery = () => new URLSearchParams(api.conversations.mock.lastCall?.[0]);
+  const sortMenu = () => screen.getByRole('combobox', { name: 'Sort' });
+  renderRoute();
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  expect(new URLSearchParams(api.conversations.mock.calls[0][0]).get('sort')).toBe('due');
+  await waitFor(() => expect(sortMenu()).toHaveValue('waiting_longest'));
+  fireEvent.change(sortMenu(), { target: { value: 'priority' } });
+  fireEvent.click(screen.getByRole('radio', { name: /pending/i }));
+  await waitFor(() => expect(lastQuery().get('status')).toBe('pending'));
+  expect(lastQuery().get('sort')).toBe('priority');
+  // Back to the default order: its page is still loading and the Priority page holds the screen meanwhile.
+  fireEvent.change(sortMenu(), { target: { value: 'waiting_longest' } });
+  await waitFor(() => expect(lastQuery().get('sort')).toBe('due'));
+  expect(sortMenu()).toHaveValue('waiting_longest');
+});
+
 test('a workspace whose conversations are all closed says nothing is open, not "Get started"', async () => {
   quietApis();
   api.conversations.mockReset();

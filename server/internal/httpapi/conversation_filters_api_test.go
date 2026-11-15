@@ -202,8 +202,9 @@ func TestConversationFiltersNarrowTheInbox(t *testing.T) {
 	inOrder("sort=created_asc", "mail", "form", "imported", "started", "report")
 	// Urgent first; the two normal ones by last update.
 	inOrder("sort=priority", "mail", "form", "started", "report", "imported")
-	// The customer who waits longest first, then everything else by last update.
-	inOrder("sort=waiting_longest", "form", "mail", "imported", "started", "report")
+	// The open conversation whose customer waits longest first, then everything else by last update: form
+	// waits since day 1, longer than mail, but it is pending, waiting on the customer.
+	inOrder("sort=waiting_longest", "mail", "form", "imported", "started", "report")
 }
 
 func TestAConversationATeamMemberStartsHasTheAgentChannel(t *testing.T) {

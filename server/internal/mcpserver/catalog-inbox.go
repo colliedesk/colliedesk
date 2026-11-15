@@ -32,7 +32,7 @@ func inboxSearchSpec() Spec {
 			`"contact_id":{"type":"string",` + uuid + `,"description":"Only conversations of this contact (colliedesk_contacts_find)."},` +
 			`"ref":{"type":"string","maxLength":60,"description":"The conversation with this code (display_ref), as a customer typed it: another case or leading zeros match, another year does not. q finds a code too, first."},` +
 			`"organization":{"type":"string","maxLength":200,"description":"Only conversations of contacts of this organization, ignoring case."},` +
-			`"awaiting":{"type":"string","enum":["team","customer"],"description":"team: the customer wrote last (notes do not count), the team owes an answer. customer: the team answered last."},` +
+			`"awaiting":{"type":"string","enum":["team","customer"],"description":"team: the customer wrote last (notes do not count); with status open, the team owes an answer. customer: the team answered last."},` +
 			`"has_pending_draft":{"type":"boolean","description":"true: a reply draft an agent token wrote waits for a person to send it. false: none waits."},` +
 			`"delivery_failed":{"type":"boolean","description":"true: a reply could not be delivered by email and was not retried since."},` +
 			`"source":{"type":"string","enum":["imported","native"],"description":"imported from another helpdesk, or created in Colliedesk."},` +
@@ -43,14 +43,14 @@ func inboxSearchSpec() Spec {
 			`"updated_after":{"type":"string","format":"date-time","maxLength":40},"updated_before":{"type":"string","format":"date-time","maxLength":40},` +
 			`"sla":` + oneOrMany(`{"type":"string","enum":["overdue","due_soon"]}`, 2, `"overdue: a running response target is past. due_soon: one is near (colliedesk_response_targets_get)."`) + `,` +
 			`"sort":{"type":"string","enum":["updated_desc","updated_asc","created_desc","created_asc","priority","waiting_longest","due"],"default":"updated_desc",` +
-			`"description":"priority: urgent first. waiting_longest: conversations awaiting the team, the oldest customer message first, then the rest. due: the earliest running response target first."},` +
+			`"description":"priority: urgent first. waiting_longest: open conversations whose customer wrote last, the oldest customer message first, then the rest. due: the earliest running response target first; waiting_longest while reply targets are off."},` +
 			`"q":{"type":"string","maxLength":200,"description":"Words to find in the subject, in any message text, or in the customer's name or email."},` +
 			`"result":{"type":"string","maxLength":120,"pattern":"^[0-9a-f-]{36}:(30d|7d)\\.[a-z_]+$","description":"Only the conversations one number of colliedesk_results_get counts: <snapshot id>:<window>.<metric>, for example <current id>:30d.first_response. Leave status out: a number counts any status."},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":20,"description":"Rows per page."},` +
 			`"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page. Keep every other argument the same."},` +
 			detailProperty + `}}`,
 		Output: `{"type":"object","required":["conversations","count","next_cursor","timezone","detail"],"properties":{` +
-			`"conversations":{"type":"array","items":` + conversationRowSchema + `},"count":{"type":"integer"},` +
+			`"conversations":{"type":"array","items":` + conversationRowSchema + `},"count":{"type":"integer"},"sort":{"type":"string","description":"The order of the rows."},` +
 			`"next_cursor":{"type":["string","null"],"description":"Pass it back to get the next page; null when there is no more."},` +
 			`"timezone":{"type":"string","description":"The workspace timezone (IANA). Timestamps are UTC."},"detail":{"type":"string"}}}`,
 		run: inboxSearch,
