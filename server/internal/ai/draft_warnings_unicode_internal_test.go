@@ -51,10 +51,28 @@ func TestADraftWarnsOfAMadeUpNumberInUnicodeForms(t *testing.T) {
 		"2123-4567",
 		"555–1234", // seven digits in three and four
 		"555-1234",
+		"1900–2000", // a made-up hotline that reads like a range of years
+		"1900-2000",
+		"1900–2050",
+		"1900-2050",
+		"2012–2045",
+		"2012-2045",
+		"2024–2026", // a range of years reads the same, so it is listed too
+		"2024-2026",
 	} {
 		got := numberWarnings("Call "+number+" for a refund. Thanks!", c)
 		if len(got) != 1 || got[0] != number {
 			t.Errorf("%q: number warnings = %q, want [%q]", number, got, number)
+		}
+	}
+}
+
+// A made-up hotline in brackets is listed like one without them.
+func TestADraftWarnsOfAMadeUpHotlineInBrackets(t *testing.T) {
+	c := draftContext{subject: "Refund", threadText: "Customer: where is my refund?"}
+	for _, reply := range []string{"Call (1900-2000) for a refund.", "Call (1900–2000) for a refund."} {
+		if got := numberWarnings(reply, c); len(got) != 1 {
+			t.Errorf("%q: number warnings = %q, want one", reply, got)
 		}
 	}
 }
@@ -92,8 +110,6 @@ func TestADraftDoesNotWarnOfOrdinaryFiguresInUnicodeForms(t *testing.T) {
 		"Version 2.14.3 fixed it, and v١.٢٤.١٠ too.",
 		"Order #4821 shipped on 15/11/2026.",
 		"Order #４８２１ shipped on ２０２６/１１/１５, in 3–5 days.",
-		"We supported 2024–2026 releases.",
-		"We supported 2024-2026 releases.",
 		"Teams with 100–500 tickets a month pick Growth.",
 		"Teams with 100-500 tickets a month pick Growth.",
 		"It was released on 2026–11–15.",

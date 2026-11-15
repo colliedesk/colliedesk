@@ -144,9 +144,10 @@ The draft arrives as plain text with:
    name that is in the draft but not in this conversation. A number counts however its digits and
    separators are written (fullwidth or Arabic-Indic digits, superscript, circled or keycap digits,
    no-break spaces, dashes), and one the conversation holds in another form is not listed. A range of
-   years, a range of numbers up to three digits long, or a date written with dashes, such as
-   `2024–2026`, `100-500` or `2026-11-15`, is not a number here; dashed numbers such as `1900-1234` or
-   `555-1234` still are. A model can copy one from a past ticket or
+   numbers up to three digits long or a date written with dashes, such as `100-500` or `2026-11-15`,
+   is not a number here; dashed numbers such as `1900-1234` or `555-1234` still are, and so is a
+   range of years such as `2024–2026`, because a made-up hotline such as `1900-2000` looks the same.
+   A model can copy one from a past ticket or
    be told to add one by a message; read them before you send. A word in an alphabet the conversation
    does not use (a model slipping into another language) is listed too, and so is a masked detail
    (`[email]`, `[number]`, `[company]`) copied from a past ticket for you to fill in. Where the model
