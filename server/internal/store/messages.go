@@ -13,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/milestones"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -442,6 +443,15 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		}
 	} else if kind == "outgoing" {
 		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID, cc); err != nil {
+			return domain.Message{}, err
+		}
+	}
+	// Recorded after the delivery is queued, which decides whether the reply left: one saved with a failed
+	// delivery is recorded when its retry queues it (retryDelivery). Taking the milestone's unique key before
+	// enqueueReply would make two concurrent first replies wait on that key instead of the outbound cap lock
+	// that checkTrialCap takes, and the cap test would no longer see them wait together.
+	if kind == "outgoing" {
+		if err := milestones.RecordReply(ctx, tx, workspaceID, messageID); err != nil {
 			return domain.Message{}, err
 		}
 	}

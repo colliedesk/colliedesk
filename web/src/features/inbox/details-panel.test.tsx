@@ -187,6 +187,26 @@ test('Tags is one row that names the tags; its menu ticks, unticks and creates o
   expect(menu.open).toBe(true);
 });
 
+// Firefox blurs a focused button the moment it becomes disabled (cross-browser run 43626779907): Create tag
+// clears the name, its button turns disabled, and the menu closed under the person creating tags.
+test('Tags stays open when Create tag turns disabled under focus, as Firefox blurs it; leaving still closes it', () => {
+  const tagged = { ...conversation(null), tags: [billing] } as Conversation;
+  render(<><DetailsPanel conversation={tagged} agents={[]} tags={[billing]} onCreateTag={vi.fn()} /><button type="button">Outside</button></>);
+  const menu = screen.getByText('billing', { selector: '.tags-pick summary *' }).closest('details')!;
+  menu.open = true;
+  const group = within(menu).getByRole('group', { name: 'Tags' });
+  fireEvent.change(within(group).getByRole('textbox', { name: 'New tag name' }), { target: { value: 'bank-delay' } });
+  const create = within(group).getByRole('button', { name: 'Create tag' });
+  create.focus();
+  fireEvent.click(create);
+  expect(create).toBeDisabled();
+  fireEvent.blur(create, { relatedTarget: null });
+  expect(menu.open).toBe(true);
+  expect(menu.querySelector('summary')).toHaveFocus();
+  fireEvent.blur(menu.querySelector('summary')!, { relatedTarget: screen.getByRole('button', { name: 'Outside' }) });
+  expect(menu.open).toBe(false);
+});
+
 test('a conversation without tags says None on the Tags row', () => {
   render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[billing]} />);
   expect(screen.getByText('None', { selector: '.tags-pick summary *' })).toBeInTheDocument();

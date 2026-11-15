@@ -177,7 +177,7 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
       # The arguments of every shard's run, and of the check that the shards cover them.
-      E2E_ARGS: --grep-invert @onboarding --fully-parallel --workers=3
+      E2E_ARGS: --project=chromium --grep-invert @onboarding --fully-parallel --workers=3
       # The channels journeys read the From line of a reply in Mailpit.
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
@@ -361,7 +361,7 @@ jobs:
         working-directory: web
         env:
           JOURNEY_PATTERN: ${{ matrix.pattern }}
-        run: corepack pnpm exec vite build && corepack pnpm exec vite build -c vite.operator.config.ts && corepack pnpm e2e --grep "$JOURNEY_PATTERN"
+        run: corepack pnpm exec vite build && corepack pnpm exec vite build -c vite.operator.config.ts && corepack pnpm e2e --project=chromium --grep "$JOURNEY_PATTERN"
   # Builds the server image once, boots it, then runs install.sh exactly as a self-hoster does.
   # On main the image is pushed as sha-<commit>; publish-edge.yml retags that digest after CI.
   image:

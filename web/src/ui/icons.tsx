@@ -17,6 +17,7 @@ export const SearchIcon = () => <Icon><circle cx="11" cy="11" r="7" /><path d="m
 export const ChevronLeftIcon = () => <Icon><path d="m15 18-6-6 6-6" /></Icon>;
 export const ArrowLeftIcon = () => <Icon><path d="M19 12H5M12 19l-7-7 7-7" /></Icon>;
 export const PanelRightIcon = () => <Icon><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M15 3v18" /></Icon>;
+export const ArrowRightIcon = () => <Icon><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></Icon>;
 export const ChevronRightIcon = () => <Icon><path d="m9 18 6-6-6-6" /></Icon>;
 export const PaperclipIcon = () => <Icon><path d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></Icon>;
 export const InfoIcon = () => <Icon><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></Icon>;

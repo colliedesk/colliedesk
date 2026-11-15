@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ports, scratchDir } from './e2e/support/checkout';
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 import { attachmentsDir, bootstrapEnv, databaseFor, databaseNameFor, goEnv, postgresURL, servers, settingsFile } from './e2e/support/cli';
 import { ensureIdentityKey, identity, identityKeyFile, jwksURL } from './e2e/support/identity-provider';
 import { inAppFreshdesk } from './e2e/support/fake-freshdesk';
@@ -12,6 +12,14 @@ import { mailpit } from './e2e/support/mailpit';
 ensureIdentityKey();
 
 const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
+
+// Sign-in, the inbox from pairing to a sent reply, and the composer: the pages a browser engine is most
+// likely to break (layout, contenteditable, the @ list).
+const crossBrowserJourneys = ['sign-in-page.spec.ts', 'inbox-workflow.spec.ts', 'reply-composer.spec.ts'];
+// WebKit drops the session cookie here: it is Secure (server/internal/httpapi/auth-handlers.go) and the test
+// servers are plain http on localhost, which Chromium and Firefox treat as secure and WebKit does not. Over
+// https, as on Cloud, Safari keeps it. So WebKit runs the journeys that need no session.
+const webkitJourneys = ['sign-in-page.spec.ts'];
 
 // Each server is the real `collie serve` on a database of its own, configured the way an operator
 // configures one: the environment opens the database, and `collie config import` writes the settings
@@ -45,7 +53,15 @@ export default defineConfig({
   // A stray test.only would silently narrow both CI jobs to one test.
   forbidOnly: !!process.env.CI,
   workers: 1,
-  use: { trace: 'retain-on-failure', launchOptions: { executablePath: localChrome } },
+  use: { trace: 'retain-on-failure' },
+  // Every test runs on Chromium, in every PR. The core journeys also run on WebKit (Safari's engine) and
+  // Firefox, once a day in the cross-browser workflow, so a break in another browser shows without
+  // making each PR wait for three browsers.
+  projects: [
+    { name: 'chromium', use: { launchOptions: { executablePath: localChrome } } },
+    { name: 'webkit', use: devices['Desktop Safari'], testMatch: webkitJourneys },
+    { name: 'firefox', use: devices['Desktop Firefox'], testMatch: crossBrowserJourneys },
+  ],
   webServer: [
     // The JWKS the cloud server verifies sign-in tokens against. A process of its own, so it answers
     // while a test worker sits in a synchronous CLI call (the verifier gives a fetch five seconds).

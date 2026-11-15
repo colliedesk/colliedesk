@@ -32,8 +32,9 @@ const (
 	// they still need, so a new upload's disk check counts what the other workspaces reserved. Only a
 	// count and a byte total leave the transaction.
 	PrivilegeKBUploadDisk Privilege = "kb-upload-disk"
-	// PrivilegeRetention finds locked workspaces, records and sends their deletion notice, and deletes
-	// the ones locked for a year with their attachment files.
+	// PrivilegeRetention finds locked workspaces, records the trial_ended milestone of the ones whose
+	// trial ran out unpaid, records and sends their deletion notice, and deletes the ones locked for a
+	// year with their attachment files.
 	PrivilegeRetention Privilege = "retention"
 	// PrivilegeWorkspaceBySlug resolves the workspace a CLI command names (pair, import, undo).
 	PrivilegeWorkspaceBySlug Privilege = "workspace-by-slug"

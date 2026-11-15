@@ -381,7 +381,8 @@ class E2EShards(unittest.TestCase):
         e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
         self.assertRegex(e2e, r'(?m)^        shard: \[1, 2\]$')
         self.assertRegex(e2e, r'(?m)^    timeout-minutes: 10$')
-        self.assertRegex(e2e, r"(?m)^      E2E_ARGS: --grep-invert @onboarding --fully-parallel --workers=3$")
+        # Pull requests run Chromium only; WebKit and Firefox run once a day (cross-browser.yml).
+        self.assertRegex(e2e, r"(?m)^      E2E_ARGS: --project=chromium --grep-invert @onboarding --fully-parallel --workers=3$")
         self.assertIn('corepack pnpm e2e $E2E_ARGS --shard="$SHARD/$SHARDS"', e2e)
         self.assertIn('python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS', e2e)
         self.assertEqual(e2e.count('SHARDS: ${{ strategy.job-total }}'), 2, 'the run and the check use the matrix size')

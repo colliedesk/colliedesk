@@ -1,4 +1,4 @@
-.PHONY: test build e2e eval-chat dev clean sync-user-docs docs-mcp
+.PHONY: test build e2e e2e-cross-browser eval-chat dev clean sync-user-docs docs-mcp
 
 TEST_DATABASE_URL ?= postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable
 
@@ -23,7 +23,13 @@ build:
 # E2E_ARGS selects tests, for example E2E_ARGS='--grep @onboarding'.
 e2e:
 	cd web && corepack pnpm build
-	cd web && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' corepack pnpm e2e $(E2E_ARGS)
+	cd web && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' corepack pnpm e2e --project=chromium $(E2E_ARGS)
+
+# The core journeys on WebKit (Safari's engine) and Firefox, as the daily cross-browser workflow runs them.
+# First time: cd web && corepack pnpm exec playwright install --with-deps webkit firefox
+e2e-cross-browser:
+	cd web && corepack pnpm build
+	cd web && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' corepack pnpm e2e --project=webkit --project=firefox $(E2E_ARGS)
 
 # The AI chat eval asks Claude the questions of server/internal/ai/testdata/chat-eval.json with the real
 # prompt (a few cents; never in CI). It needs PostgreSQL and ANTHROPIC_API_KEY; AI_CHAT_EVAL_MODEL picks

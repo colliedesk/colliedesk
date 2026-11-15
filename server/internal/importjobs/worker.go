@@ -14,6 +14,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
+	"github.com/colliedesk/colliedesk/server/internal/results"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -219,7 +220,8 @@ func (w *Worker) importOptions(job runRow, key string, onProgress func(freshdesk
 	options := freshdesk.Options{WorkspaceSlug: job.slug, BaseURL: w.options.BaseURL(job.Domain), APIKey: key, Storage: w.options.Storage,
 		Cloud: w.options.Cloud, PlansOnSale: w.options.PlansOnSale, PaidStorageBytes: w.options.PaidStorageBytes, ReserveRateLimit: true,
 		IncludePersonalCannedResponses: job.Options.IncludePersonalCannedResponses, HelpCenterPortal: job.Options.HelpCenterPortal, OnProgress: onProgress,
-		Origin: w.options.Origin, HelpCenterDomain: w.options.HelpCenterDomain, OldHelpCenterDomain: job.Options.OldHelpCenterDomain}
+		Origin: w.options.Origin, HelpCenterDomain: w.options.HelpCenterDomain, OldHelpCenterDomain: job.Options.OldHelpCenterDomain,
+		MilestoneByCaller: true}
 	if w.options.Configure != nil {
 		w.options.Configure(&options)
 	}
@@ -447,9 +449,19 @@ func (r *jobRun) full(ctx context.Context, options freshdesk.Options) error {
 			claim_token=NULL, lease_until=NULL, updated_at=$9`, encoded, report.Markdown(), CodeRetryingFailures,
 			fmt.Sprintf("%d item(s) failed; the import tries them again.", len(report.Failures)), r.now().Add(time.Minute), r.now())
 	}
-	// Replies and tickets of people no agent matched while importing get their link, with the end.
+	// Replies and tickets of people no agent matched while importing get their link, with the end, and an OK run
+	// is the workspace's import_finished milestone in the same transaction: both commit with the end of the job
+	// or neither does. A refused write rolls the end back, so the job is never failed by it, its report is not
+	// discarded, and the next run ends it again (the ledger skips what is done; the trial extension and the
+	// links are written by every run).
 	return r.endAnd(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		return relinkAll(ctx, tx, r.item.workspaceID, *r.job.AccountSource)
+		if err := relinkAll(ctx, tx, r.item.workspaceID, *r.job.AccountSource); err != nil {
+			return err
+		}
+		if report.Status == freshdesk.StatusOK {
+			return results.RecordImportFinished(ctx, tx, r.item.workspaceID, *r.job.AccountSource, r.now())
+		}
+		return nil
 	},
 		StateFinished, report.Status, "", "", encoded, ptr(report.Markdown()))
 }
