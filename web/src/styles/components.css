@@ -566,7 +566,7 @@ a:where(.primary-action):where(:not(.checklist-step > a)):hover { border-color: 
 .property-row { --label: 80px; position: relative; display: grid; grid-template-columns: var(--label) minmax(0, 1fr); align-items: center; gap: var(--space-3); min-height: 28px; }
 /* Details · Status as a menu on a chat that tells its customer: it keeps the select's look (dot, word, an arrow
    on hover), and its menu is as wide as the row, inside the panel. */
-.property-error { margin: 0 0 var(--space-1) calc(80px + var(--space-3)); font-size: var(--fs-small); }
+.property-error { margin: 0 0 var(--space-1) calc(64px + var(--space-3)); font-size: var(--fs-small); }
 .status-pick-row { position: relative; }
 .status-pick-row .status-pick { position: static; min-width: 0; }
 .status-pick-row .status-pick summary { justify-content: flex-start; width: 100%; min-height: 28px; padding: 0 var(--space-2); gap: var(--space-2); color: var(--text-1); }
@@ -580,8 +580,9 @@ a:where(.primary-action):where(:not(.checklist-step > a)):hover { border-color: 
 @media (pointer: coarse), (max-width: 30rem) { .status-pick .action-popover button, .status-pick-tell, .status-pick-row .status-pick summary { min-height: var(--touch); } }
 .property-row + .property-row { margin-top: 2px; }
 .property-row > span { color: var(--text-3); font-size: var(--fs-small); }
-.property-row select { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-color: transparent; background-color: transparent; background-image: none; font-weight: 400; padding-left: var(--space-8); }
-.property-row select:hover:not(:disabled) { border-color: transparent; background-color: var(--surface-2); background-image: var(--select-chevron); }
+/* A select cannot wrap: at rest it keeps no room for the arrow that shows only on hover, so a name gets the whole row. */
+.property-row select { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-color: transparent; background-color: transparent; background-image: none; font-weight: 400; padding-left: var(--space-8); padding-right: var(--space-2); }
+.property-row select:hover:not(:disabled) { border-color: transparent; background-color: var(--surface-2); background-image: var(--select-chevron); padding-right: var(--space-6); }
 /* Values share one left edge after a 16 px mark: the status dot and the priority arrow, as in the list rows. */
 .property-row::after { position: absolute; left: calc(var(--label) + var(--space-3) + var(--space-2)); top: 50%; translate: 0 -50%; pointer-events: none;
   display: grid; place-items: center; width: 16px; font-size: 13px; font-weight: 700; line-height: 1; }
@@ -611,6 +612,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Details, refined: never scrolls sideways; section titles are bolder; every value starts on one edge after a
    16 px mark (status dot, priority arrow, assignee ring); tags are pills, the conversation's own filled. */
 .details-panel { overflow-x: hidden; }
+/* The labels are short words; a narrower label column leaves the values room for a full name. */
+.details-panel .property-row { --label: 64px; }
 .details-section h2, .details-section legend { color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
 .details-section h2 { margin-top: 0; }
 .status-pick-row .status-pick summary { gap: 0; padding-left: var(--space-2); }
@@ -1430,7 +1433,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .property-row:has(.property-menu) { position: relative; }
 .property-menu { position: static; min-width: 0; }
 .property-menu summary { justify-content: flex-start; width: 100%; min-height: var(--control); gap: var(--space-2); padding: 0 var(--space-2) 0 var(--space-8); color: var(--text-1); text-align: left; }
-.property-menu summary > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Tags and Due wrap onto a second line rather than lose their end. */
+.property-menu summary > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .property-menu summary { position: relative; padding-right: var(--space-2); }
 .property-menu summary:is(:hover, :focus-visible), .property-menu[open] summary { padding-right: var(--space-6); }
 .property-menu summary > svg:last-child { position: absolute; right: var(--space-2); opacity: 0; }

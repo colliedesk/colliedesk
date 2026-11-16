@@ -212,6 +212,18 @@ test('a conversation without tags says None on the Tags row', () => {
   expect(screen.getByText('None', { selector: '.tags-pick summary *' })).toBeInTheDocument();
 });
 
+// A value too long for the column is cut on screen; its full text is one hover away.
+test('each details value carries its full text in a tooltip, so a long name or tag list cut short can still be read', () => {
+  const long = { ...active, display_name: 'Nguyễn Thị Ngọc Anh Phạm' };
+  const tags = [billing, { ...billing, id: '99999999-9999-4999-8999-999999999998', name: 'refund-request' }];
+  render(<DetailsPanel conversation={{ ...conversation(long.id), priority: 'urgent', tags }} agents={[long]} tags={tags} onUpdate={vi.fn()}
+    onShowContactConversations={vi.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'Assignee' })).toHaveAttribute('title', 'Nguyễn Thị Ngọc Anh Phạm');
+  expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveAttribute('title', 'Urgent');
+  expect(screen.getByText('billing · refund-request', { selector: '.tags-pick summary *' })).toHaveAttribute('title', 'billing · refund-request');
+  expect(screen.getByRole('button', { name: 'All conversations of Mai Linh' })).toHaveAttribute('title', 'All conversations of Mai Linh');
+});
+
 test('the Due row keeps counting how late the reply is while the conversation stays open', () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));

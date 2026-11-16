@@ -114,6 +114,12 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
   const readsTags = holds('tags:read');
   const [tagName, setTagName] = useState('');
   const edits = useEdits(conversation?.id);
+  // A select cannot wrap, so a long value is cut on screen; its title holds the full text.
+  const priority = edits.shown('priority', conversation?.priority ?? 'normal');
+  const assignee = edits.shown('assignee', conversation?.assignee_id ?? '');
+  const holder = agents.find((agent) => agent.id === assignee);
+  const assigneeName = !assignee ? messages.unassigned : assignee === currentAgentId ? messages.assignToMe
+    : holder ? holder.display_name || holder.email : messages.anotherTeammate;
   const update = (field: Field, key: string, value: unknown, changes: UpdateConversationRequest) =>
     conversation && onUpdate && edits.save(field, key, value, () => onUpdate(conversation.id, changes));
   const createTag = () => {
@@ -133,12 +139,12 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
         <StatusPick key={conversation?.id} conversation={conversation} status={edits.shown('status', conversation?.status ?? 'open')}
           onUpdate={onUpdate && ((_id, changes) => update('status', 'status', changes.status, changes))} />
         {edits.error('status')}
-        <label className="property-row"><span>{messages.priority}</span><select value={edits.shown('priority', conversation?.priority ?? 'normal')} disabled={!conversation}
+        <label className="property-row"><span>{messages.priority}</span><select value={priority} title={messages.priorities[priority]} disabled={!conversation}
           onChange={(event) => { const priority = event.target.value as UpdateConversationRequest['priority']; update('priority', 'priority', priority, { priority }); }}>
           {Object.entries(messages.priorities).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
         {edits.error('priority')}
-        <label className="property-row"><span>{messages.assignee}</span><select value={edits.shown('assignee', conversation?.assignee_id ?? '')} disabled={!conversation}
+        <label className="property-row"><span>{messages.assignee}</span><select value={assignee} title={assigneeName} disabled={!conversation}
           onChange={(event) => update('assignee', 'assignee', event.target.value, { assignee_id: event.target.value || null })}>
           {/* The signed-in agent is Me, first; teammates follow and Unassigned comes last, as in the Filter menu. */}
           {currentAgentId && <option value={currentAgentId}>{messages.assignToMe}</option>}
@@ -151,7 +157,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
         {edits.error('assignee')}
         <div className="property-row tags-row"><span>{messages.tags}</span>
           {/* Without the tag list (tags:read) the conversation's own tags are named, and nothing else is offered. */}
-          {!readsTags ? <span className="tag-names">{tagNames(conversation)}</span> : <PropertyMenu className="tags-pick" label={messages.tags} disabled={!conversation} summary={tagNames(conversation)}>
+          {!readsTags ? <span className="tag-names">{tagNames(conversation)}</span> : <PropertyMenu className="tags-pick" label={messages.tags} disabled={!conversation} summary={<span title={tagNames(conversation)}>{tagNames(conversation)}</span>}>
             {tags.length === 0 && <p className="muted-copy">{messages.noTagsYet}</p>}
             {tags.map((tag) => {
               const checked = edits.shown(`tag:${tag.id}`, conversation?.tags.some((item) => item.id === tag.id) ?? false);
@@ -177,7 +183,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
               ? <button type="button" className="link-button" title={messages.showOrganizationConversations(conversation.contact_organization)}
                 onClick={() => onShowOrganizationConversations(conversation.contact_organization ?? '')}>{conversation.contact_organization}</button>
               : <span>{conversation.contact_organization}</span>}</div>}
-          {onShowContactConversations && <button type="button" className="details-link" onClick={() => onShowContactConversations(conversation.contact_id)}>
+          {onShowContactConversations && <button type="button" className="details-link" title={messages.showContactConversations(conversation.contact_name)} onClick={() => onShowContactConversations(conversation.contact_id)}>
             <UserIcon /><span>{messages.showContactConversations(conversation.contact_name)}</span><ChevronRightIcon /></button>}
         </section>
       )}
@@ -215,7 +221,7 @@ function DueRow({ sla, timezone, canManage }: { sla: NonNullable<ReturnType<type
   const text = due?.text ?? first.text;
   const tone = due ? (due.late ? 'late' : undefined) : first.tone;
   return <div className="property-row due-row"><span>{messages.dueAt}</span>
-    <PropertyMenu className="due-pick" label={messages.targets} summary={<span className={tone ? `target-${tone}` : undefined} title={due?.full}>{text}</span>}>
+    <PropertyMenu className="due-pick" label={messages.targets} summary={<span className={tone ? `target-${tone}` : undefined} title={due?.full ?? text}>{text}</span>}>
       <Targets sla={sla} timezone={timezone} canManage={canManage} />
     </PropertyMenu></div>;
 }

@@ -23,4 +23,17 @@ describe('inbox menus and details', () => {
     expect(ticked).toContain('background-color: var(--accent)');
     expect(ticked).toContain('url(');
   });
+
+  it('lets a details value wrap instead of cutting it with "…" while the column has room for it', () => {
+    // Tags and Due: their words wrap onto a second line.
+    const value = rule('.property-menu summary > span');
+    expect(value).toContain('white-space: normal');
+    expect(value).not.toContain('text-overflow');
+    // Priority and Assignee are selects, which cannot wrap: no room is kept for an arrow that shows only on hover.
+    const select = rule('.property-row select');
+    expect(select).toContain('padding-right: var(--space-2)');
+    expect(rule('.property-row select:hover:not(:disabled)')).toContain('padding-right: var(--space-6)');
+    // The labels are short words: their column leaves the values the rest of the row.
+    expect(rule('.details-panel .property-row')).toContain('--label: 64px');
+  });
 });
