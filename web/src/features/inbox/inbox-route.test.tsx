@@ -583,6 +583,32 @@ test('resolving the open conversation never swaps the screen to another one, so 
   expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer');
 });
 
+// With nothing picked the first row is on screen; a live refresh that puts a new conversation on top must not
+// swap the thread and the reply box under the agent who started reading and writing there.
+test('with nothing picked, the conversation shown first stays on screen when a live refresh puts another on top', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  let arrived = false;
+  api.conversations.mockImplementation(async () => ({ items: arrived ? [beta, alpha] : [alpha], page: 1, page_size: 50 }));
+  api.conversation.mockReturnValue(new Promise(() => {}));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('heading', { name: 'Alpha conversation' });
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Half-written answer to Alpha' } });
+  arrived = true;
+  await act(async () => { await client.invalidateQueries({ queryKey: ['conversations'] }); });
+  await screen.findByRole('button', { name: /beta conversation/i });
+  expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer to Alpha');
+  // A pick still changes it.
+  fireEvent.click(screen.getByRole('button', { name: /beta conversation/i }));
+  expect(await screen.findByRole('heading', { name: 'Beta conversation' })).toBeInTheDocument();
+});
+
 test('resolving quietly from the header sends notify false; a plain press sends none', async () => {
   quietApis();
   api.conversations.mockReset();

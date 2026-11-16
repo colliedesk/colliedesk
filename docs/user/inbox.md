@@ -148,6 +148,9 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 - The customer's name under the subject of an open conversation opens the same page.
 - A conversation you opened stays on screen after you resolve or close it, although it leaves the
   Open list.
+- When you open the inbox without picking a conversation, the first one in the list shows beside it. It stays
+  there until you pick another, so mail that arrives on top of the list never swaps it, or your half-written
+  reply, for another conversation.
 - When nothing matches while a search or a filter is on, **Clear filters** below the message resets the search
   and every filter, and returns to **Open**, in one step. In a channel it keeps the channel.
 - By default the list is ordered by **Due first** (**Waiting longest** while reply targets are off; see [Filter and sort](#filter-and-sort)); ordered by latest activity it is grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.

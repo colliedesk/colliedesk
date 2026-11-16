@@ -153,8 +153,15 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
   const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
   const activeID = selectedId ?? params.conversationId;
-  // With no conversation picked, the first row is the one on screen.
-  const shownID = activeID ?? (mentionsMode ? undefined : conversations.data?.items[0]?.id);
+  // With no conversation picked, the first row is the one on screen. It stays the one on screen for this list until
+  // the person picks another, so a live refresh that puts a new row on top never swaps the thread and its reply box.
+  const firstRow = mentionsMode ? undefined : conversations.data?.items[0]?.id;
+  const [pinned, setPinned] = useState<{ query: string; id: string }>();
+  const pinnedID = pinned?.query === query ? pinned.id : undefined;
+  // Rows kept from the previous filters are not this list's first row.
+  const firstOfList = conversations.isPlaceholderData ? undefined : firstRow;
+  useEffect(() => { if (!pinnedID && firstOfList) setPinned({ query, id: firstOfList }); }, [pinnedID, firstOfList, query]);
+  const shownID = activeID ?? pinnedID ?? firstRow;
   const listed = conversations.data?.items.find((item) => item.id === shownID);
   // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
@@ -168,7 +175,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const detail = opened.data?.id === shownID ? opened.data : undefined;
   // The row is the newer while a change refetches the list; it borrows the detail's notices while their status agrees.
   const withNotices = listed && detail?.status_notices && detail.status === listed.status ? { ...listed, status_notices: detail.status_notices } : listed;
-  const selected = withNotices ?? detail ?? (activeID || mentionsMode ? undefined : conversations.data?.items[0]);
+  const selected = withNotices ?? detail;
   // A conversation the person opened (a row picked, or its address) heads Recent in the search palette.
   const workspaceId = me.data?.workspace?.id;
   const opening = activeID && selected?.id === activeID ? selected : undefined;
