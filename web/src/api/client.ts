@@ -12,7 +12,7 @@ import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, cloudWorkspacesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, invitePreviewSchema, markMentionsResultSchema, mentionEmailSchema, mentionListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, noContentSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import { forgetSignOut, rememberSignOut } from '../lib/sign-out-intent';
 import type { Message, WorkspaceChoice } from './schemas';
@@ -493,6 +493,10 @@ export const api = {
   agents: () => request('/api/v1/agents', agentListSchema),
   tags: () => request('/api/v1/tags', tagListSchema),
   createTag: (name: string, key: string) => request('/api/v1/tags', tagSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createTag'>({ name }) }),
+  // Settings → Tags: every tag with how many conversations carry it.
+  tagsWithCounts: () => request('/api/v1/tags?counts=true', tagListSchema),
+  renameTag: (id: string, name: string) => request(`/api/v1/tags/${encodeURIComponent(id)}`, tagSchema, { method: 'PATCH', body: json<'updateTag'>({ name }) }),
+  deleteTag: (id: string) => request(`/api/v1/tags/${encodeURIComponent(id)}`, noContentSchema, { method: 'DELETE' }),
   savedReplies: () => request('/api/v1/saved-replies', savedReplyListSchema),
   createSavedReply: (title: string, body: string, key: string) => request('/api/v1/saved-replies', savedReplySchema,
     { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createSavedReply'>({ title, body }) }),

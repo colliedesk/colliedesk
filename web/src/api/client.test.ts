@@ -247,3 +247,36 @@ test('an agent token is created with its label and permissions; a refusal says w
   expect(error).toBeInstanceOf(InvalidRequestError);
   expect((error as Error).message).toMatch(/permissions you hold/);
 });
+
+test('the tag list with counts asks for them and keeps each count', async () => {
+  fetchMock.mockResolvedValue(reply(200, { items: [{ id: '11111111-1111-4111-8111-111111111111', name: 'billing', color: '#64748b', conversation_count: 12 }] }));
+  const page = await api.tagsWithCounts();
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/tags?counts=true');
+  expect(page.items[0].conversation_count).toBe(12);
+});
+
+test('renaming a tag sends the new name, and a name another tag has is a conflict with the server words', async () => {
+  fetchMock.mockResolvedValueOnce(reply(200, { id: '11111111-1111-4111-8111-111111111111', name: 'invoices', color: '#64748b' }));
+  await expect(api.renameTag('11111111-1111-4111-8111-111111111111', 'invoices')).resolves.toMatchObject({ name: 'invoices' });
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/tags/11111111-1111-4111-8111-111111111111');
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PATCH', body: '{"name":"invoices"}' });
+  fetchMock.mockResolvedValueOnce(reply(409, apiError('tag_name_taken', 'Another tag is already named "billing". Pick another name.')));
+  const error = await api.renameTag('11111111-1111-4111-8111-111111111111', 'billing').catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(ConflictError);
+  expect((error as Error).message).toBe('Another tag is already named "billing". Pick another name.');
+});
+
+test('deleting a tag sends DELETE and resolves on 204', async () => {
+  fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+  await expect(api.deleteTag('11111111-1111-4111-8111-111111111111')).resolves.toBeUndefined();
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/tags/11111111-1111-4111-8111-111111111111');
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'DELETE' });
+});
+
+test('a refused tag delete keeps the server reason, so the app can react to it', async () => {
+  fetchMock.mockResolvedValueOnce(reply(402, apiError('workspace_locked', 'This workspace is locked.')));
+  await expect(api.deleteTag('11111111-1111-4111-8111-111111111111')).rejects.toBeInstanceOf(WorkspaceLockedError);
+  fetchMock.mockResolvedValueOnce(reply(409, apiError('conflict', 'Another change was in progress at the same time. Nothing was changed; try again.')));
+  const error = await api.deleteTag('11111111-1111-4111-8111-111111111111').catch((caught: unknown) => caught);
+  expect((error as Error).message).toBe('Another change was in progress at the same time. Nothing was changed; try again.');
+});

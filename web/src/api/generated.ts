@@ -7448,6 +7448,8 @@ export interface components {
             id: string;
             name: string;
             color: string;
+            /** @description Only in GET /api/v1/tags with counts=true. How many conversations of the workspace carry the tag, in any status. */
+            conversation_count?: number;
         };
         SavedReplyInput: {
             title: string;
@@ -15586,7 +15588,10 @@ export interface operations {
     };
     listTags: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description true adds conversation_count to each tag: how many conversations of the workspace carry it, in any status (Settings → Tags shows it before a rename or delete). Leave it out when only the names are needed. */
+                counts?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -15705,6 +15710,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description tag_name_taken, another tag of the workspace has the name; nothing was changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listSavedViews: {

@@ -2,8 +2,11 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 func (a *API) createTag(response http.ResponseWriter, request *http.Request) {
@@ -36,7 +39,12 @@ func (a *API) updateTag(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Tag name is required.")
 		return
 	}
-	tag, err := a.store.UpdateTag(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), strings.TrimSpace(input.Name))
+	name := strings.TrimSpace(input.Name)
+	tag, err := a.store.UpdateTag(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), name)
+	if errors.Is(err, domain.ErrTagNameTaken) {
+		writeError(response, http.StatusConflict, "tag_name_taken", `Another tag is already named "`+name+`". Pick another name.`)
+		return
+	}
 	if err != nil {
 		writeStoreError(response, err)
 		return

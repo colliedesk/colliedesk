@@ -137,11 +137,20 @@ func contactsFind(c *call, arguments map[string]any) (any, error) {
 	return out, nil
 }
 
+type tagRow struct {
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	ConversationCount int    `json:"conversation_count"`
+}
+
 func tagsList(c *call, _ map[string]any) (any, error) {
-	tags, err := c.tagList()
-	if err != nil {
+	var page struct {
+		Items []tagRow `json:"items"`
+	}
+	if err := c.get("/api/v1/tags", url.Values{"counts": {"true"}}, &page); err != nil {
 		return nil, err
 	}
+	tags := append([]tagRow{}, page.Items...)
 	return map[string]any{"tags": tags, "count": len(tags)}, nil
 }
 

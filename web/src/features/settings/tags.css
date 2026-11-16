@@ -1,0 +1,31 @@
+/* Settings → Tags (S18-a/b/c, M-S5): one row per tag, the name, its count in a fixed lane, then the actions. */
+.tag-list { margin: 0; padding: 0; list-style: none; }
+.tag-list > li { display: flex; align-items: center; gap: var(--space-4); min-height: var(--touch); border-bottom: 1px solid var(--line); padding-block: var(--space-2); }
+.tag-list > li:last-child { border-bottom: 0; }
+.tag-list strong { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+.tag-count { flex-shrink: 0; width: 160px; color: var(--text-2); font-size: var(--fs-small); line-height: 20px; text-align: right; font-variant-numeric: tabular-nums; }
+.tag-actions { display: flex; flex-shrink: 0; justify-content: flex-end; gap: var(--space-1); width: 136px; }
+/* Row actions are quiet words, as in the saved replies list; the confirm that follows is the loud part. */
+.tag-actions button { border-color: transparent; background: none; box-shadow: none; padding-inline: var(--space-2); }
+.tag-actions button:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+@media (pointer: coarse), (max-width: 30rem) { .tag-actions button, .tag-confirm button, .tag-rename button { min-height: var(--touch); } }
+.tag-rename { display: flex; flex: 1 1 0; align-items: center; gap: var(--space-4); }
+.tag-rename input { flex: 1 1 0; min-width: 0; }
+/* Cancel sits in the actions lane, so the count stays in line with the other rows. */
+.tag-rename-actions { display: flex; flex-shrink: 0; justify-content: flex-end; width: 136px; }
+.tag-confirm { display: flex; flex: 1 1 0; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-inline: calc(-1 * var(--space-2)); border-radius: var(--radius); background: var(--danger-soft); padding: var(--space-2); }
+.tag-confirm > span:first-child { flex: 1 1 240px; color: var(--text-1); font-size: var(--fs-ui); line-height: 20px; }
+.tag-confirm-actions { display: flex; gap: var(--space-2); }
+.tag-confirm .danger-action { border-color: var(--danger); background: var(--danger); color: var(--on-accent); }
+.tag-confirm .danger-action:hover:not(:disabled) { background: var(--danger); color: var(--on-accent); filter: brightness(0.92); }
+
+/* A phone: the count goes under the name, the actions stay in the row. */
+@media (max-width: 640px) {
+  .tag-list > li { flex-wrap: wrap; column-gap: var(--space-2); row-gap: 0; }
+  .tag-list > li > strong { flex: 1 1 100%; order: 0; }
+  .tag-list > li > .tag-count { order: 1; flex: 1 1 0; width: auto; text-align: left; }
+  .tag-list > li > .tag-actions { order: 2; width: auto; }
+  .tag-rename { flex-wrap: wrap; gap: var(--space-2); }
+  .tag-rename .tag-count { display: none; }
+  .tag-rename-actions { width: auto; }
+}

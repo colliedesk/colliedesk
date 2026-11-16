@@ -79,7 +79,11 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 }
 
 func (a *API) listTags(response http.ResponseWriter, request *http.Request) {
-	items, err := a.store.ListTags(request.Context(), principal(request).Workspace.ID)
+	list := a.store.ListTags
+	if request.URL.Query().Get("counts") == "true" {
+		list = a.store.ListTagsWithCounts
+	}
+	items, err := list(request.Context(), principal(request).Workspace.ID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
