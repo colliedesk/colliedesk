@@ -46,7 +46,7 @@ jobs:
           go-version: ${{ steps.go-release.outputs.version || '1.27.x' }}
           # The extractor reads source, not compiler output: a cached build extracted the same 563
           # files as a cold one, in 9 seconds instead of 38.
-          cache-dependency-path: server/go.sum
+          cache-dependency-path: go.sum
       - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           languages: ${{ matrix.language }}
