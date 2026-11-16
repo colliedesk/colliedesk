@@ -173,7 +173,8 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 - Dates from an earlier year show the year, for example imported history.
 - **Move with the keyboard:** press **J** to open the next conversation in the list and **K** for the
   previous one. While a row (or its box) has the focus, **Down arrow** and **Up arrow** do the same. The
-  focus moves to the row you opened. With no conversation open, **J** opens the first one. The keys do
+  focus moves to the row you opened. With no conversation open, **J** opens the first one. Once the open
+  conversation leaves the list (you resolved it, for example), **J** opens the one that was below it. The keys do
   nothing while you type in a box, while you hold Ctrl, Cmd, Alt or Shift, or at the first and last row of the
   page; use **Next page** to go on.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.

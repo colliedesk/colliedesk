@@ -205,6 +205,23 @@ test('with nothing open j opens the first row, and the ends of the list stay put
   expect(onSelect).toHaveBeenCalledTimes(3);
 });
 
+// Resolving the open conversation takes it out of the Open list while it stays on screen: J goes on down the queue
+// from where it was, not back to the top.
+test('after the open conversation leaves the list, j opens the row that was below it and k the one above', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  const [alpha, bravo, charlie] = rows;
+  const { rerender } = render(<ConversationList items={rows} selectedId={bravo.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  rerender(<ConversationList items={[alpha, charlie]} selectedId={bravo.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(onSelect).toHaveBeenLastCalledWith(charlie.id);
+  onSelect.mockClear();
+  rerender(<ConversationList items={rows} selectedId={bravo.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  rerender(<ConversationList items={[alpha, charlie]} selectedId={bravo.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  fireEvent.keyDown(document.body, { key: 'k' });
+  expect(onSelect).toHaveBeenLastCalledWith(alpha.id);
+});
+
 test('ArrowDown and ArrowUp move while focus is in the list, and nowhere else', () => {
   vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
   const onSelect = vi.fn();
