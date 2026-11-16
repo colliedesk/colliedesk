@@ -7,7 +7,7 @@ import './settings-v2.css';
 
 // Every page the menu can show; SettingsNav narrows it to what the signed-in person may see.
 export const everyPage: Shown = { general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: false, importData: true, ai: true,
-  agents: true, conversations: true, invites: true, roles: true };
+  agents: true, conversations: true, invites: true, roles: true, tags: true };
 
 interface SettingsFrameProps {
   page: SettingsPath;

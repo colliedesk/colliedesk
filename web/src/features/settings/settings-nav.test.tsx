@@ -7,7 +7,7 @@ import type { Shown } from './settings-nav';
 
 afterEach(() => { delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView; });
 
-const everything: Shown = { general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: true, importData: true, ai: true, agents: true, conversations: true, invites: true, roles: true };
+const everything: Shown = { general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: true, importData: true, ai: true, agents: true, conversations: true, invites: true, roles: true, tags: true };
 const links = (nav: HTMLElement) => within(nav).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]);
 
 // On a narrow screen the nav is one sideways row; the page's own link is brought into it, also when the
@@ -23,17 +23,17 @@ test('the current page is brought into the row again when links appear before it
   expect(scrolled.mock.contexts.at(-1)).toHaveTextContent('Channels');
 });
 
-// What each row of the menu says and opens, as the design lists it: nine items and one reserved, no sub-items.
+// What each row of the menu says and opens, as the design lists it: ten items and one reserved, no sub-items.
 const rowsOf = (nav: HTMLElement) => [...nav.querySelectorAll(':scope > div > ul > li > a')].map((link) =>
   [link.querySelector('.settings-nav-label')?.textContent, link.getAttribute('href'), link.querySelector('.settings-nav-tag')?.textContent ?? null]);
 
-test('the menu is the nine items and the reserved one of the design, grouped, with no sub-items', () => {
+test('the menu is the ten items and the reserved one of the design, grouped, with no sub-items', () => {
   render(<SettingsNav page="/settings/account" shown={everything} />);
   const nav = screen.getByRole('navigation', { name: 'Settings sections' });
   expect(rowsOf(nav)).toEqual([
     ['Account', '/settings/account', null],
     ['General', '/settings/general', null], ['Members', '/settings/members', null], ['Channels', '/settings/channels', null], ['Response targets', '/settings/targets', null],
-    ['AI & agents', '/settings/ai', null], ['Saved replies', '/settings/saved-replies', null], ['Conversation fields', '/settings/fields', 'Coming'],
+    ['AI & agents', '/settings/ai', null], ['Saved replies', '/settings/saved-replies', null], ['Tags', '/settings/tags', null], ['Conversation fields', '/settings/fields', 'Coming'],
     ['Data', '/settings/data', null], ['Plan and billing', '/settings/billing', null],
   ]);
   expect(within(nav).getByText('Workspace')).toBeInTheDocument();
@@ -86,13 +86,13 @@ test('an admin sees every item and an agent everything but Data and Plan and bil
   const admin = menuFor('admin');
   expect(rowsOf(screen.getByRole('navigation', { name: 'Settings sections' })).map(([label, href]) => [label, href])).toEqual([
     ['Account', '/settings/account'], ['General', '/settings/general'], ['Members', '/settings/members'], ['Channels', '/settings/channels'], ['Response targets', '/settings/targets'],
-    ['AI & agents', '/settings/ai'], ['Saved replies', '/settings/saved-replies'], ['Conversation fields', '/settings/fields'], ['Data', '/settings/data'], ['Plan and billing', '/settings/billing'],
+    ['AI & agents', '/settings/ai'], ['Saved replies', '/settings/saved-replies'], ['Tags', '/settings/tags'], ['Conversation fields', '/settings/fields'], ['Data', '/settings/data'], ['Plan and billing', '/settings/billing'],
   ]);
   admin.unmount();
   menuFor('agent');
   expect(rowsOf(screen.getByRole('navigation', { name: 'Settings sections' })).map(([label, href]) => [label, href])).toEqual([
     ['Account', '/settings/account'], ['General', '/settings/general'], ['Members', '/settings/members'], ['Channels', '/settings/channels'], ['Response targets', '/settings/targets'],
-    ['AI & agents', '/settings/ai'], ['Saved replies', '/settings/saved-replies'], ['Conversation fields', '/settings/fields'],
+    ['AI & agents', '/settings/ai'], ['Saved replies', '/settings/saved-replies'], ['Tags', '/settings/tags'], ['Conversation fields', '/settings/fields'],
   ]);
 });
 
@@ -138,4 +138,16 @@ test('every settings page carries a way back to the list of pages, and the list 
   render(<SettingsNav page="/settings" shown={everything} />);
   expect(screen.queryByRole('link', { name: 'All settings' })).not.toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: 'Settings sections' })).toHaveClass('settings-nav-index');
+});
+
+// Tags shows to whoever may read tags: an Agent sees the list, and Rename and Delete only with the permissions for them.
+test('Tags shows for a role that reads tags and not for one that does not', () => {
+  const client = new QueryClient();
+  client.setQueryData(['me'], { permissions: ['tags:read'] });
+  const { unmount } = render(<QueryClientProvider client={client}><SettingsNav page="/settings/tags" shown={everything} /></QueryClientProvider>);
+  expect(screen.getByRole('link', { name: 'Tags' })).toHaveAttribute('aria-current', 'page');
+  unmount();
+  client.setQueryData(['me'], { permissions: ['conversations:read'] });
+  render(<QueryClientProvider client={client}><SettingsNav page="/settings/account" shown={everything} /></QueryClientProvider>);
+  expect(screen.queryByRole('link', { name: 'Tags' })).not.toBeInTheDocument();
 });

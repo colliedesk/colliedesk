@@ -3928,6 +3928,13 @@ paths:
     get:
       operationId: listTags
       x-permission: tags:read
+      parameters:
+        - name: counts
+          in: query
+          description: >-
+            true adds conversation_count to each tag: how many conversations of the workspace carry it, in any
+            status (Settings → Tags shows it before a rename or delete). Leave it out when only the names are needed.
+          schema: {type: boolean}
       responses:
         '200':
           description: Workspace tags
@@ -3988,6 +3995,9 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: tag_name_taken, another tag of the workspace has the name; nothing was changed
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     delete:
       operationId: deleteTag
       x-permission: tags:delete
@@ -11279,6 +11289,7 @@ components:
         id: {type: string, format: uuid}
         name: {type: string}
         color: {type: string}
+        conversation_count: {type: integer, minimum: 0, description: 'Only in GET /api/v1/tags with counts=true. How many conversations of the workspace carry the tag, in any status.'}
     SavedReplyInput:
       type: object
       required: [title, body]

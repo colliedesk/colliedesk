@@ -155,3 +155,78 @@ func bodyHasTag(t *testing.T, response *httptest.ResponseRecorder, tagID string)
 	}
 	return false
 }
+
+func TestTagListCountsConversationsOnlyWhenAskedAndOnlyInItsWorkspace(t *testing.T) {
+	api, service := testAPI(t)
+	tokenA := createSession(t, api, service, "Tag Count Alpha", "admin@tag-count-a.example.com")
+	tokenB := createSession(t, api, service, "Tag Count Beta", "admin@tag-count-b.example.com")
+	contactA := create(t, api, tokenA, "/api/v1/contacts", map[string]any{"name": "Alpha", "email": "alpha@tag-count.example.com"})
+	contactB := create(t, api, tokenB, "/api/v1/contacts", map[string]any{"name": "Beta", "email": "beta@tag-count.example.com"})
+	billing := create(t, api, tokenA, "/api/v1/tags", map[string]any{"name": "billing"})
+	create(t, api, tokenA, "/api/v1/tags", map[string]any{"name": "unused"})
+	foreign := create(t, api, tokenB, "/api/v1/tags", map[string]any{"name": "billing"})
+	for _, subject := range []string{"One", "Two"} {
+		conversation := create(t, api, tokenA, "/api/v1/conversations", map[string]any{"contact_id": contactA, "subject": subject})
+		tagged := request(t, api, http.MethodPut, "/api/v1/conversations/"+conversation+"/tags/"+billing, nil, tokenA, nil)
+		if tagged.Code != http.StatusOK {
+			t.Fatalf("tag %s status=%d body=%s", subject, tagged.Code, tagged.Body.String())
+		}
+	}
+	other := create(t, api, tokenB, "/api/v1/conversations", map[string]any{"contact_id": contactB, "subject": "Other workspace"})
+	if tagged := request(t, api, http.MethodPut, "/api/v1/conversations/"+other+"/tags/"+foreign, nil, tokenB, nil); tagged.Code != http.StatusOK {
+		t.Fatalf("tag in other workspace status=%d body=%s", tagged.Code, tagged.Body.String())
+	}
+
+	counted := request(t, api, http.MethodGet, "/api/v1/tags?counts=true", nil, tokenA, nil)
+	if counted.Code != http.StatusOK {
+		t.Fatalf("counted list status=%d body=%s", counted.Code, counted.Body.String())
+	}
+	var page struct {
+		Items []struct {
+			Name              string `json:"name"`
+			ConversationCount *int   `json:"conversation_count"`
+		} `json:"items"`
+	}
+	decode(t, counted, &page)
+	got := map[string]int{}
+	for _, item := range page.Items {
+		if item.ConversationCount == nil {
+			t.Fatalf("tag %q has no conversation_count: %s", item.Name, counted.Body.String())
+		}
+		got[item.Name] = *item.ConversationCount
+	}
+	if len(got) != 2 || got["billing"] != 2 || got["unused"] != 0 {
+		t.Fatalf("counts=%v, want billing 2 and unused 0", got)
+	}
+
+	plain := request(t, api, http.MethodGet, "/api/v1/tags", nil, tokenA, nil)
+	if plain.Code != http.StatusOK || strings.Contains(plain.Body.String(), "conversation_count") {
+		t.Fatalf("plain list status=%d body=%s, want no conversation_count", plain.Code, plain.Body.String())
+	}
+}
+
+func TestRenamingATagToAnotherTagsNameIsRefusedWithTheReason(t *testing.T) {
+	api, service := testAPI(t)
+	token := createSession(t, api, service, "Tag Rename Clash", "admin@tag-rename.example.com")
+	create(t, api, token, "/api/v1/tags", map[string]any{"name": "billing"})
+	refund := create(t, api, token, "/api/v1/tags", map[string]any{"name": "Refund"})
+
+	clash := request(t, api, http.MethodPatch, "/api/v1/tags/"+refund, map[string]any{"name": "billing"}, token, nil)
+	if clash.Code != http.StatusConflict {
+		t.Fatalf("rename onto an existing name status=%d body=%s, want 409", clash.Code, clash.Body.String())
+	}
+	var refused struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	decode(t, clash, &refused)
+	if refused.Error.Code != "tag_name_taken" || refused.Error.Message != `Another tag is already named "billing". Pick another name.` {
+		t.Fatalf("refusal=%+v", refused.Error)
+	}
+	list := request(t, api, http.MethodGet, "/api/v1/tags", nil, token, nil)
+	if !strings.Contains(list.Body.String(), `"name":"Refund"`) {
+		t.Fatalf("refused rename changed the tag: %s", list.Body.String())
+	}
+}

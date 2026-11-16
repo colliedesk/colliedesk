@@ -15,7 +15,7 @@ import { settingsMessages } from './settings-messages';
 
 // Settings is one page per item of this menu, with no sub-items. '/settings' is the menu itself, a page of its own
 // on a phone; '/settings/roles' is a role's page, under Members, and a channel type's home is under Channels.
-export type SettingsPath = '/settings' | '/settings/account' | '/settings/general' | '/settings/members' | '/settings/saved-replies' | '/settings/data'
+export type SettingsPath = '/settings' | '/settings/account' | '/settings/general' | '/settings/members' | '/settings/saved-replies' | '/settings/tags' | '/settings/data'
   | '/settings/billing' | '/settings/ai' | '/settings/autofix' | '/settings/channels' | '/settings/fields'
   | '/settings/channels/type/email' | '/settings/channels/type/web_form' | '/settings/channels/type/help_chat'
   | '/settings/channels/type/zalo' | '/settings/targets' | '/settings/roles';
@@ -56,7 +56,7 @@ export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
 // sidebar to hold it (a phone, where the list is the /settings page, or a page tested alone) the menu stays in the page.
 export const SettingsMenuSlot = createContext<HTMLElement | null | undefined>(undefined);
 
-export interface Shown { general: boolean; team: boolean; channels: boolean; savedReplies: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean; agents?: boolean; autofix?: boolean; roles?: boolean; invites?: boolean; conversations?: boolean }
+export interface Shown { general: boolean; team: boolean; channels: boolean; savedReplies: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean; agents?: boolean; autofix?: boolean; roles?: boolean; invites?: boolean; conversations?: boolean; tags?: boolean }
 
 // byPermission shows the workspace pages the session may use, whatever a page passed: a person sees a
 // page when their roles hold what it needs.
@@ -67,7 +67,7 @@ export function byPermission(shown: Shown, me: Permissions): Shown {
     // Someone who may revoke teammates' sessions finds their agent tokens on AI & agents, without making tokens.
     agents: shown.agents !== false && (can(me, 'team:create_tokens') || can(me, 'team:revoke')),
     channels: shown.channels && can(me, 'channels:read'), conversations: can(me, 'conversations:read'), ai: shown.ai !== false && can(me, 'ai_settings:read'),
-    savedReplies: shown.savedReplies && can(me, 'saved_replies:read') };
+    savedReplies: shown.savedReplies && can(me, 'saved_replies:read'), tags: can(me, 'tags:read') };
 }
 
 // Dots are the one thing in the menu that comes from data: whether a channel has a problem and whether the last
@@ -90,6 +90,7 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath, dots: Dots =
       ...item(messages.responseTargets, '/settings/targets', shown.conversations ?? shown.channels),
       ...item(messages.aiAndAgents, '/settings/ai', Boolean(shown.ai) || Boolean(shown.agents)),
       ...item(messages.savedReplies, '/settings/saved-replies', shown.savedReplies),
+      ...item(messages.tags, '/settings/tags', Boolean(shown.tags)),
       // Reserved: the page says what is coming, so the place is in the menu before the feature is.
       ...item(settingsMessages.conversationFields, '/settings/fields', shown.conversations ?? shown.channels, page === '/settings/fields', { tag: settingsMessages.coming }),
       // Autofix shows even on a server without its GitHub App: the page names the settings the operator still needs.

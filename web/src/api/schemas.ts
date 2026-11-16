@@ -104,7 +104,7 @@ export const trashedSavedReplySchema = z.object({
   ...savedReplyFields, deleted_at: z.string().datetime(), deleted_by: savedReplyPersonSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedSavedReply'>>;
 export const savedReplyVersionSchema = z.object({ ...savedReplyChangeFields, title: z.string(), body: z.string() }) satisfies z.ZodType<Generated<'SavedReplyVersion'>>;
-export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string() }) satisfies z.ZodType<Generated<'Tag'>>;
+export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string(), conversation_count: z.number().int().nonnegative().optional() }) satisfies z.ZodType<Generated<'Tag'>>;
 export const contactIdentitySchema = z.object({
   channel_id: z.string().uuid(), kind: z.string(), value: z.string(), display_name: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'ContactIdentity'>>;
