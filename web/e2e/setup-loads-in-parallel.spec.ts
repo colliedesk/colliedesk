@@ -5,21 +5,25 @@ import { openQuickStart, redeemLink } from './support/browser';
 
 // The setup guide and the setup flow's email step each need data and chunks. They must be asked for together:
 // a request that leaves only after another one came back costs a round trip on every visit from far away.
-// A round trip of 150 ms is added to every request, so a chain shows as steps of at least that size.
+// A round trip of 150 ms is added to every request, so requests asked for together all leave before the first
+// answer comes back, and a request that waited for an answer leaves after it. The test compares the order of
+// those events, not their times: a busy machine delays both, but cannot swap them.
 const baseURL = servers.mail;
 const roundTrip = 150;
 
+// started and finished are positions in the order the browser reported its network events.
 interface Seen { url: string; started: number; finished?: number }
 
 function record(page: Page): Seen[] {
   const seen: Seen[] = [];
   const bySeenRequest = new Map<unknown, Seen>();
+  let event = 0;
   page.on('request', (request) => {
-    const entry = { url: new URL(request.url()).pathname, started: Date.now() };
+    const entry = { url: new URL(request.url()).pathname, started: event++ };
     seen.push(entry);
     bySeenRequest.set(request, entry);
   });
-  page.on('requestfinished', (request) => { const entry = bySeenRequest.get(request); if (entry) entry.finished = Date.now(); });
+  page.on('requestfinished', (request) => { const entry = bySeenRequest.get(request); if (entry) entry.finished = event++; });
   return seen;
 }
 
@@ -49,10 +53,10 @@ test('Quick start asks for its data and its checklist chunk together, and the em
   expect(setup!.started, 'setup data left before the session came back').toBeLessThan(me!.finished!);
   expect(checklist!.started, 'the chunk left before the data came back').toBeLessThan(setup!.finished!);
 
-  // The email step of the setup flow: opened from Quick start, everything it needs leaves at the click.
+  // The email step of the setup flow: opened from Quick start, everything it needs leaves when the pointer reaches
+  // the link (the guide preloads the step on hover) or at the click.
   const guide = await openQuickStart(page);
   const email = record(page);
-  const clicked = Date.now();
   await guide.getByRole('link', { name: /Receive customer email/ }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Receive customer email' })).toBeVisible();
   const route = first(email, /\/setup-flow-.*\.js$/);
@@ -61,9 +65,13 @@ test('Quick start asks for its data and its checklist chunk together, and the em
   expect(route, 'the flow chunk request').toBeDefined();
   expect(channels, 'the channel list request').toBeDefined();
   expect(panels, 'the panels chunk request').toBeDefined();
-  expect(channels!.started, 'the list left before the flow chunk came back').toBeLessThan(route!.finished!);
-  expect(panels!.started, 'the panels left before the flow chunk came back').toBeLessThan(route!.finished!);
-  for (const [name, entry] of [['flow chunk', route], ['channel list', channels], ['panels chunk', panels]] as const) {
-    expect(entry!.started - clicked, `${name} left within one round trip of the click`).toBeLessThan(roundTrip);
+  // None of the three waits for an answer: each leaves before the first answer to anything asked for since the
+  // first of them left. Requests that left earlier are the inbox's background polls, not this step's.
+  const needed = [['flow chunk', route!], ['channel list', channels!], ['panels chunk', panels!]] as const;
+  const firstLeft = Math.min(...needed.map(([, entry]) => entry.started));
+  const firstAnswer = Math.min(...email.flatMap((entry) => (entry.started >= firstLeft && entry.finished !== undefined ? [entry.finished] : [])));
+  expect(firstAnswer, 'an answer came back since the first of them left').toBeLessThan(Infinity);
+  for (const [name, entry] of needed) {
+    expect(entry.started, `${name} left before the first answer to the step's requests came back`).toBeLessThan(firstAnswer);
   }
 });
