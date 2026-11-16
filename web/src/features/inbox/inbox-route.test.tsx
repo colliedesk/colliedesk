@@ -1421,7 +1421,7 @@ test('the notice that someone replied while a draft was reviewed stays with its 
   api.conversations.mockResolvedValue({ items: [alpha, beta], page: 1, page_size: 50 });
   drafts.list.mockImplementation(async (id: string) => ({ items: id === alpha.id ? [writtenDraft(alpha.id, null)] : [], next_before: null }));
   api.createMessage.mockReset();
-  api.createMessage.mockRejectedValue(Object.assign(new ReplyConflictError(), { newer: [{ reply_number: 1, origin: null }] }));
+  api.createMessage.mockRejectedValue(Object.assign(new (ReplyConflictError as unknown as new () => Error)(), { newer: [{ reply_number: 1, origin: null }] }));
   renderRoute();
   fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
   const card = await screen.findByRole('region', { name: /draft from claude/i });
