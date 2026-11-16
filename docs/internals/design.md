@@ -18,6 +18,8 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 2. **One orange, and colour means something.** The orange is Colliedesk's own: the logo tile, the primary
    button, links, and the mark of the active place (the rail and settings icon, the open conversation's edge,
    the chosen status's check, an active Filter); on colliedesk.com the price (the promise). It is never a chip, badge or warning.
+   On colliedesk.com the orange is on the primary key, the price, the logo and the current docs page. The docs note
+   and the theme toggle's on state are neutral; focus stays amber (owner 17/11/2026).
    Stylesheets reach it only through `--accent*`: `web/scripts/brand-rules.test.mjs` fails when any app file other
    than the tokens and the mark names the hex.
    Status (open blue, pending amber, resolved green, urgent red), Urgent priority (red arrow and word), focus
@@ -43,10 +45,17 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
    `--shadow-2`), so the eye reads layers by surface and ring, not by outlines. Never a border on top of a ring
    (`brand-rules.test.mjs` checks `.panel`). In dark the ring is the hairline token, so cards keep their edge.
    The inbox is one work surface: list, thread and details share one white sheet split by hairlines, on the grey
-   chrome of the rail and the 40 px identity band.
+   chrome of the rail and the 40 px identity band. On colliedesk.com a pressable is a key: a face with a 1.5 px rim
+   on a solid base. Static cards there keep their rings.
 5. **Links are ink and underlined** inside running text (`a:not([class])`); colour alone never marks a link.
 6. **One product, one look.** Product pictures on colliedesk.com are screenshots of this app; when the app
    changes, the site's screenshots are retaken.
+
+colliedesk.com is pressable as a whole, not only its buttons (owner 17/11/2026, learned from posthog.com). It sorts
+every element into a key, a row, an inline link or paper. A key is a face on a solid base that lifts on hover and
+sinks on press. A key whose state is on stays at press depth (a held key). Fields are slots. Depth is a solid offset;
+blur is only for floating layers. Hover is instant and the press takes 100 ms. The values are in the site's README
+(Design), in colliedesk/colliedesk.com. The app does not use this system yet.
 
 ## Direction
 
