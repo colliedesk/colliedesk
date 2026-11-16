@@ -1,10 +1,20 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { beforeAll, expect, test, vi } from 'vitest';
 import type { Mention, Message, TeamMember } from '../../api/schemas';
 import { MessageItem } from './message-item';
-import { ReplyComposer } from './reply-composer';
+import { ReplyComposer, replyPickersPart } from './reply-composer';
 import { MentionsList } from './mentions-list';
-import { askableTeammates } from './mention-picker';
+import { askableTeammates } from './mention-match';
+
+// The @ list comes with the reply pickers' chunk, which loads once the composer is on screen. These tests start with
+// it there, as a person finds it a moment after opening a conversation; the first @ before it is in
+// mention-picker-chunk.test.tsx.
+beforeAll(async () => {
+  replyPickersPart.preload();
+  await import('./reply-pickers');
+  // The part takes the module on the next turn of the event loop.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
 
 const member = (id: string, display_name: string, email: string, extra: Partial<TeamMember> = {}): TeamMember => ({
   id, email, display_name, roles: [{ id: '00000000-0000-4000-8000-000000000001', name: 'Agent', system: 'agent' }], manageable: false,

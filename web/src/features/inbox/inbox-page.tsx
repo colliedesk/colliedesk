@@ -21,7 +21,7 @@ import type { AIDraft } from './ai-draft-api';
 import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
-import { askableTeammates } from './mention-picker';
+import { askableTeammates } from './mention-match';
 import { messageMovesPart } from './message-moves-part';
 import { Part } from '../../ui/lazy-part';
 import { messages } from '../../messages';

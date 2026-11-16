@@ -1,52 +1,12 @@
 import './mentions.css';
 import { useId } from 'react';
-import type { CSSProperties, Ref } from 'react';
-import type { TeamMember } from '../../api/schemas';
+import type { CSSProperties, Ref, RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { initials } from '../../ui/avatar';
+import { useCaretAnchor } from './caret-anchor';
 import { mentionMessages } from './mention-messages';
-
-// A teammate a private note can ask: the name the note shows after @, and what the list says beside it.
-export interface Teammate { id: string; name: string; email: string; role: string }
-
-// askableTeammates are the people a note can ask: active members of the workspace other than the writer. Customers
-// are never members, so they are never listed.
-export function askableTeammates(members: TeamMember[], me?: string): Teammate[] {
-  return members.filter((member) => !member.deactivated_at && member.id !== me)
-    .map((member) => ({ id: member.id, name: member.display_name.trim() || member.email, email: member.email, role: member.roles[0]?.name ?? '' }));
-}
-
-// mentionAt finds the @ the caret is typing after: where it starts and what follows it, or undefined when the caret
-// is not in one (an @ starts a word; the query stops at a space or a new line).
-export function mentionAt(text: string, caret: number): { start: number; query: string } | undefined {
-  const match = /(^|\s)@([^\s@]{0,40})$/.exec(text.slice(0, caret));
-  return match ? { start: caret - match[2].length - 1, query: match[2] } : undefined;
-}
-
-// matchingTeammates are the teammates whose name, or a word of it, or whose email starts with the query.
-export function matchingTeammates(teammates: Teammate[], query: string): Teammate[] {
-  const wanted = query.toLocaleLowerCase();
-  return teammates.filter((person) => [person.name, ...person.name.split(/\s+/), person.email]
-    .some((part) => part.toLocaleLowerCase().startsWith(wanted))).slice(0, 8);
-}
-
-// A name ends where no letter, mark or digit follows it, so "@Long" is not read inside "@Longer".
-const nameEnds = (text: string, at: number) => at >= text.length || !/[\p{L}\p{M}\p{N}]/u.test(text[at]);
-
-// mentionedIn lists the teammates whose whole @Name the text holds, each once, in the order they are asked. At each @
-// the longest name that fits wins: "@Long Bui" asks Long Bui, never a teammate named Long as well. Teammates who share
-// that name are all asked, since the text cannot tell them apart. Text and names are compared in one Unicode form
-// (NFC), so an accent typed as a separate mark ("u" + U+0300) still reads as "ù".
-export function mentionedIn(text: string, teammates: Teammate[]): string[] {
-  const written = text.normalize('NFC');
-  const byLength = teammates.map((person) => ({ id: person.id, name: person.name.normalize('NFC') }))
-    .sort((a, b) => b.name.length - a.name.length);
-  const asked: string[] = [];
-  for (let at = written.indexOf('@'); at !== -1; at = written.indexOf('@', at + 1)) {
-    const fits = byLength.filter((each) => written.startsWith(each.name, at + 1) && nameEnds(written, at + 1 + each.name.length));
-    asked.push(...fits.filter((each) => each.name.length === fits[0].name.length).map((each) => each.id));
-  }
-  return [...new Set(asked)];
-}
+import { optionIdOf } from './mention-match';
+import type { Teammate } from './mention-match';
 
 interface MentionPickerProps {
   options: Teammate[];
@@ -60,8 +20,6 @@ interface MentionPickerProps {
   ref?: Ref<HTMLDivElement>;
   style?: CSSProperties;
 }
-
-export const optionIdOf = (list: string, index: number) => `${list}-option-${index}`;
 
 // MentionPicker is the list at the @ of a note while it is typed: the box keeps the focus and its keys (arrows,
 // Enter, Esc) move in the list, so writing never stops.
@@ -85,4 +43,12 @@ export function MentionPicker({ options, query, active, onPick, onActive, id, re
         </ul>}
     </div>
   );
+}
+
+// MentionPopup floats the list at the @ of the box, like a chat app's: under its line from the @ on, above the line when
+// the screen has no room under it, and never past an edge of the screen. It lives on the page's body, so a reply box that
+// scrolls never cuts it.
+export function MentionPopup({ box, at, ...picker }: Omit<MentionPickerProps, 'ref' | 'style' | 'query'> & { box: RefObject<HTMLTextAreaElement | null>; at: { start: number; query: string } }) {
+  const anchor = useCaretAnchor(box, at);
+  return createPortal(<MentionPicker {...picker} query={at.query} ref={anchor.ref} style={anchor.style} />, document.body);
 }

@@ -39,6 +39,7 @@ import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
 import { AtIcon, BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon, UserIcon } from './ui/icons';
 import { mentionMessages } from './features/inbox/mention-messages';
+import { mentionsListPart } from './features/inbox/mentions-list-part';
 import { customersPageName } from './features/contacts/contact-page-name';
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
@@ -258,8 +259,8 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({ component: AppLa
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 // Mentions: the notes that asked the person, in the inbox's list column; a row opens its conversation beside it.
-const mentionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions', component: () => <InboxRoute list="mentions" /> });
-const mentionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions/$conversationId', component: () => <InboxRoute list="mentions" /> });
+const mentionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions', loader: pageChunk(mentionsListPart), component: () => <InboxRoute list="mentions" /> });
+const mentionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions/$conversationId', loader: pageChunk(mentionsListPart), component: () => <InboxRoute list="mentions" /> });
 // The customer page is its own chunk (contact-part.tsx), so the inbox bundle does not carry it.
 const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId', loader: pageChunk(contactPart),
   component: () => <ContactsPart render={(chunk) => <chunk.ContactRoute />} failed={<main className="settings-page"><PartUnavailable /></main>} /> });

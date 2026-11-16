@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { newSubmitKey } from '../../api/submit-key';
@@ -18,10 +17,9 @@ import { composing, isTyping } from '../../lib/typing-target';
 import { messages } from '../../messages';
 import { ArrowUpIcon, BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
 import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
-import { matchingTeammates, mentionAt, mentionedIn, MentionPicker, optionIdOf } from './mention-picker';
-import type { Teammate } from './mention-picker';
+import { matchingTeammates, mentionAt, mentionedIn, optionIdOf } from './mention-match';
+import type { Teammate } from './mention-match';
 import { mentionMessages } from './mention-messages';
-import { useCaretAnchor } from './caret-anchor';
 
 interface ReplyComposerProps {
   disabled?: boolean;
@@ -112,7 +110,11 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   // note, the one thing that can be sent.
   const [stored] = useState(() => readDraft(draftKey));
   const [kind, setKindAsked] = useState<Kind>(noReplies || !mayReply ? 'note' : stored?.kind ?? 'outgoing');
-  const setKind = useCallback((next: Kind) => setKindAsked(next === 'outgoing' && !mayReply ? 'note' : next), [mayReply]);
+  const setKind = useCallback((next: Kind) => {
+    // A note may ask teammates with @: its list comes with the reply pickers' chunk.
+    if (next === 'note') replyPickersPart.preload();
+    setKindAsked(next === 'outgoing' && !mayReply ? 'note' : next);
+  }, [mayReply]);
   const [body, setBody] = useState(stored?.body ?? '');
   // undefined until the agent edits the list, so suggestions that load later still show up. Kept with the text, so
   // an address the agent removed is not copied after a reload or a trip to another conversation.
@@ -220,17 +222,18 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const aiOffHintId = useId();
   const asksTeammates = kind === 'note' && teammates.length > 0;
   const mentionOptions = mention && asksTeammates ? matchingTeammates(teammates, mention.query) : [];
-  const mentionOpen = Boolean(mention && asksTeammates) && !disabled;
+  // The list comes with the reply pickers' chunk, loaded once the composer is on screen and asked for again on Private
+  // note and on an @, so it is there by the first @. Until then (or when it cannot load) the note is written as text.
+  const pickers = replyPickersPart.use();
+  const mentionOpen = Boolean(mention && asksTeammates) && !disabled && pickers.status === 'ready';
   // Fewer matches as the name is typed keep the mark on the last one.
   const mentionActive = Math.max(0, Math.min(mentionIndex, mentionOptions.length - 1));
   const followCaret = (text: string, caretAt: number | null) => {
+    if (asksTeammates && text.includes('@')) replyPickersPart.preload();
     const found = asksTeammates && caretAt !== null ? mentionAt(text, caretAt) : undefined;
     setMention((current) => (found && current && found.start === current.start && found.query === current.query ? current : found));
     if (!found || found.start !== mention?.start) setMentionActive(0);
   };
-  // The list opens at the @, like a chat app's: under its line from the @ on, above the line when the screen has no room
-  // under it, and never past an edge of the screen. It lives on the page's body, so a reply box that scrolls never cuts it.
-  const mentionAnchor = useCaretAnchor(field, mentionOpen ? mention : undefined);
   const pickMention = (person: Teammate) => {
     if (!mention) return;
     const end = mention.start + 1 + mention.query.length;
@@ -240,7 +243,6 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     setMention(undefined);
   };
   const [picking, setPicking] = useState<Picker | null>(null);
-  const pickers = replyPickersPart.use();
   const [assist, setAssist] = useState(false);
   // A draft is being written in the open panel: the button says so and keeps the panel (and its Stop) open.
   const [drafting, setDrafting] = useState(false);
@@ -318,11 +320,11 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     // The @ list floats outside the card: a press on it is still in the box.
     const onPress = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!card.current?.contains(target) && !mentionAnchor.ref.current?.contains(target)) setActive(false);
+      if (!card.current?.contains(target) && !(target instanceof Element && target.closest('.mention-picker'))) setActive(false);
     };
     document.addEventListener('pointerdown', onPress);
     return () => document.removeEventListener('pointerdown', onPress);
-  }, [active, mentionAnchor.ref]);
+  }, [active]);
   const reply = kind === 'outgoing' ? body.trim() : '';
   const writing = reply !== '';
   useEffect(() => { onReplyDraft?.(writing); }, [writing, onReplyDraft]);
@@ -462,8 +464,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           onBlur={() => setMention(undefined)}
           placeholder={kind === 'note' ? (asksTeammates ? mentionMessages.notePlaceholder : messages.notePlaceholder) : noReplies ? messages.replyNotSendable : messages.replyPlaceholder}
           onChange={(event) => { setBody(event.target.value); setOtherTab(false); editedHere.current = true; followCaret(event.target.value, event.target.selectionStart); }} />
-        {mentionOpen && mention && createPortal(<MentionPicker id={mentionList} options={mentionOptions} query={mention.query} active={mentionActive}
-          onActive={setMentionActive} onPick={pickMention} ref={mentionAnchor.ref} style={mentionAnchor.style} />, document.body)}
+        {mentionOpen && mention && pickers.status === 'ready' && <pickers.module.MentionPopup box={field} at={mention} id={mentionList} options={mentionOptions}
+          active={mentionActive} onActive={setMentionActive} onPick={pickMention} />}
         {otherTab && <p role="status" className="composer-hint">{messages.draftFromOtherTab}</p>}
         {otherDraft && <p role="status" className="composer-hint">{messages.otherTabDraftDiffers}{' '}
           <button type="button" className="link-action" onClick={() => adopt(otherDraft)}>{messages.useOtherTabDraft}</button>{' '}
