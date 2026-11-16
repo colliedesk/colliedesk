@@ -5,10 +5,10 @@ name: Docs site
 # fails here, before merge, instead of breaking the site's next deploy.
 on:
   pull_request:
-    paths: [docs/user/**, docs/self-host/**, ROADMAP.md, .github/scripts/user-docs-check.sh, .github/workflows/docs-site.yml]
+    paths: [docs/user/**, docs/self-host/**, ROADMAP.md, .github/scripts/user-docs-check.sh, tests/user-docs-check-test.sh, .github/workflows/docs-site.yml]
   push:
     branches: [main]
-    paths: [docs/user/**, docs/self-host/**, ROADMAP.md, .github/scripts/user-docs-check.sh, .github/workflows/docs-site.yml]
+    paths: [docs/user/**, docs/self-host/**, ROADMAP.md, .github/scripts/user-docs-check.sh, tests/user-docs-check-test.sh, .github/workflows/docs-site.yml]
 
 permissions:
   contents: read
@@ -25,8 +25,12 @@ jobs:
             docs/self-host
             ROADMAP.md
             .github/scripts
+            tests/user-docs-check-test.sh
           sparse-checkout-cone-mode: false
-      - name: User guides hold no server operation
+      - name: User guides check rules (fixture guides)
+        working-directory: product
+        run: sh tests/user-docs-check-test.sh
+      - name: User guides hold no server operation and keep API detail in their closing section
         working-directory: product
         run: sh .github/scripts/user-docs-check.sh
       # A pull request whose branch also exists in colliedesk/colliedesk.com builds that branch of
