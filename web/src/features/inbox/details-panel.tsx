@@ -57,6 +57,7 @@ const serverValue = (conversation: Conversation, key: string) => key === 'status
 // is about the latest pick of that field only, and goes once the field changes from elsewhere (the header, a teammate).
 function useEdits(conversation?: Conversation) {
   const conversationId = conversation?.id;
+  const id = useId();
   const [saving, setSaving] = useState<Record<string, { value: unknown; token: object }>>({});
   const [failed, setFailed] = useState<{ conversationId: string; field: Field; key: string; was: string }>();
   // The latest pick of each value: an earlier pick's answer, refused or not, no longer speaks for it.
@@ -86,15 +87,18 @@ function useEdits(conversation?: Conversation) {
       if (latest.current[at] === token) setFailed({ conversationId, field, key, was });
     });
   };
-  const error = (field: Field) => conversation && failed && failed.conversationId === conversationId && failed.field === field && failed.was === serverValue(conversation, failed.key)
-    ? <p role="alert" className="error-copy property-error">{messages.notSaved(fieldNames[field])}</p> : null;
-  return { shown, save, error };
+  const failing = conversation && failed && failed.conversationId === conversationId && failed.was === serverValue(conversation, failed.key) ? failed.field : undefined;
+  // The message under a row is also its control's description, so focus coming back to the control says why.
+  const describedBy = (field: Field) => failing === field ? `${id}-${field}-error` : undefined;
+  const error = (field: Field) => failing === field
+    ? <p role="alert" id={describedBy(field)} className="error-copy property-error">{messages.notSaved(fieldNames[field])}</p> : null;
+  return { shown, save, error, describedBy };
 }
 
 // Status is a menu, not a select: a closed select fires change on every arrow key in some browsers, and each
 // step would change the conversation (and on a chat tell the customer). Where a status may tell, Tell the
 // customer comes first, ticked each time the menu opens.
-function StatusPick({ conversation, status = conversation?.status ?? 'open', onUpdate }: { conversation?: Conversation; status?: Conversation['status']; onUpdate?: DetailsPanelProps['onUpdate'] }) {
+function StatusPick({ conversation, status = conversation?.status ?? 'open', onUpdate, describedBy }: { conversation?: Conversation; status?: Conversation['status']; onUpdate?: DetailsPanelProps['onUpdate']; describedBy?: string }) {
   const [tell, setTell] = useState(true);
   const id = useId();
   // Asked only where a status may tell: a chat whose channel is on and has words (the server's word).
@@ -106,7 +110,7 @@ function StatusPick({ conversation, status = conversation?.status ?? 'open', onU
   const quiet = others.filter((value) => !told.includes(value));
   return <div className="property-row status-pick-row"><span id={`${id}-label`}>{messages.status}</span>
     {/* A conversation in Spam keeps its status until Not spam (the header) takes it out. */}
-    <ActionMenu<SettableStatus> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} disabled={!conversation || !onUpdate || status === 'spam'}
+    <ActionMenu<SettableStatus> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} describedBy={describedBy} disabled={!conversation || !onUpdate || status === 'spam'}
       summary={<span id={`${id}-value`}><StatusLabel status={status} /></span>}
       onToggle={(open) => { if (open) setTell(true); }}
       onApply={(value) => conversation && onUpdate?.(conversation.id, !asks || tell ? { status: value } : { status: value, notify: false })}>
@@ -151,14 +155,14 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
       <section className="details-section">
         <h2 className="sr-only">{messages.properties}</h2>
         <StatusPick key={conversation?.id} conversation={conversation} status={edits.shown('status', conversation?.status ?? 'open')}
-          onUpdate={onUpdate && ((_id, changes) => update('status', 'status', changes.status, changes))} />
+          describedBy={edits.describedBy('status')} onUpdate={onUpdate && ((_id, changes) => update('status', 'status', changes.status, changes))} />
         {edits.error('status')}
-        <label className="property-row"><span>{messages.priority}</span><select value={priority} title={messages.priorities[priority]} disabled={!conversation}
+        <label className="property-row"><span>{messages.priority}</span><select value={priority} title={messages.priorities[priority]} aria-describedby={edits.describedBy('priority')} disabled={!conversation}
           onChange={(event) => { const priority = event.target.value as UpdateConversationRequest['priority']; update('priority', 'priority', priority, { priority }); }}>
           {Object.entries(messages.priorities).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
         {edits.error('priority')}
-        <label className="property-row"><span>{messages.assignee}</span><select value={assignee} title={assigneeName} disabled={!conversation}
+        <label className="property-row"><span>{messages.assignee}</span><select value={assignee} title={assigneeName} aria-describedby={edits.describedBy('assignee')} disabled={!conversation}
           onChange={(event) => update('assignee', 'assignee', event.target.value, { assignee_id: event.target.value || null })}>
           {/* The signed-in agent is Me, first; teammates follow and Unassigned comes last, as in the Filter menu. */}
           {currentAgentId && <option value={currentAgentId}>{messages.assignToMe}</option>}
@@ -171,7 +175,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
         {edits.error('assignee')}
         <div className="property-row tags-row"><span>{messages.tags}</span>
           {/* Without the tag list (tags:read) the conversation's own tags are named, and nothing else is offered. */}
-          {!readsTags ? <span className="tag-names">{tagNames(conversation)}</span> : <PropertyMenu className="tags-pick" label={messages.tags} disabled={!conversation} summary={<span title={tagNames(conversation)}>{tagNames(conversation)}</span>}>
+          {!readsTags ? <span className="tag-names">{tagNames(conversation)}</span> : <PropertyMenu className="tags-pick" label={messages.tags} describedBy={edits.describedBy('tags')} disabled={!conversation} summary={<span title={tagNames(conversation)}>{tagNames(conversation)}</span>}>
             {tags.length === 0 && <p className="muted-copy">{messages.noTagsYet}</p>}
             {tags.map((tag) => {
               const checked = edits.shown(`tag:${tag.id}`, conversation?.tags.some((item) => item.id === tag.id) ?? false);
@@ -211,7 +215,7 @@ const tagNames = (conversation?: Conversation) => conversation?.tags.map((tag) =
 
 // PropertyMenu is a property's value that opens a popover in place: ticking in it keeps it open, so several
 // tags change in one visit. Escape or focus leaving closes it.
-function PropertyMenu({ className, label, summary, disabled, children }: { className: string; label: string; summary: ReactNode; disabled?: boolean; children: ReactNode }) {
+function PropertyMenu({ className, label, summary, describedBy, disabled, children }: { className: string; label: string; summary: ReactNode; describedBy?: string; disabled?: boolean; children: ReactNode }) {
   const menu = useRef<HTMLDetailsElement>(null);
   const close = () => { if (menu.current) menu.current.open = false; };
   return <details ref={menu} className={`action-menu property-menu ${className}`} data-disabled={disabled || undefined}
@@ -223,7 +227,7 @@ function PropertyMenu({ className, label, summary, disabled, children }: { class
       if (event.relatedTarget === null && (event.target as HTMLElement).matches(':disabled')) { menu.current?.querySelector('summary')?.focus(); return; }
       close();
     }}>
-    <summary aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}><span>{summary}</span><ChevronDownIcon /></summary>
+    <summary aria-disabled={disabled} aria-describedby={describedBy} onClick={(event) => { if (disabled) event.preventDefault(); }}><span>{summary}</span><ChevronDownIcon /></summary>
     <div className="action-popover" role="group" aria-label={label}>{children}</div>
   </details>;
 }

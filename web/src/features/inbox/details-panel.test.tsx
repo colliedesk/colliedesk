@@ -288,3 +288,27 @@ test('a "not saved" message goes once the field changes from elsewhere', async (
   rerender(<DetailsPanel conversation={{ ...open, priority: 'high', status: 'resolved' }} agents={[]} tags={[]} onUpdate={onUpdate} />);
   expect(screen.queryByRole('alert')).toBeNull();
 });
+
+// The alert is read once when it appears; a person who tabs back to the control later hears why from the control.
+test('a "not saved" message is the description of its control', async () => {
+  const tag = { id: '99999999-9999-4999-8999-999999999999', name: 'billing', color: '#64748b' };
+  const refuse = vi.fn(() => Promise.reject(new Error('refused')));
+  render(<DetailsPanel conversation={{ ...conversation(null), status: 'open' }} agents={[active]} tags={[tag]} onUpdate={refuse} onAddTag={refuse} />);
+  const priority = screen.getByRole('combobox', { name: 'Priority' });
+  expect(priority).not.toHaveAccessibleDescription(/not saved/);
+  fireEvent.change(priority, { target: { value: 'urgent' } });
+  await screen.findByRole('alert');
+  expect(priority).toHaveAccessibleDescription('Priority not saved. Try again.');
+  const assignee = screen.getByRole('combobox', { name: 'Assignee' });
+  fireEvent.change(assignee, { target: { value: active.id } });
+  await screen.findByText('Assignee not saved. Try again.');
+  expect(assignee).toHaveAccessibleDescription('Assignee not saved. Try again.');
+  expect(priority).not.toHaveAccessibleDescription(/not saved/);
+  const status = screen.getByText('Open', { selector: '.status-pick summary *' }).closest('summary') as HTMLElement;
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Pending' }));
+  await screen.findByText('Status not saved. Try again.');
+  expect(status).toHaveAccessibleDescription('Status not saved. Try again.');
+  fireEvent.click(within(screen.getByRole('group', { name: 'Tags' })).getByRole('checkbox', { name: 'billing' }));
+  await screen.findByText('Tags not saved. Try again.');
+  expect(screen.getByText('None', { selector: '.tags-pick summary *' }).closest('summary')).toHaveAccessibleDescription('Tags not saved. Try again.');
+});
