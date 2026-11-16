@@ -13,9 +13,9 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Email channel](email-channel.md)
 - [Invite your team](invites.md)
 
-## Answer customers
+## Inbox
 
-- [Work the inbox](inbox.md)
+- [Inbox overview](inbox.md)
 - [Mentions: ask a teammate in a private note](mentions.md)
 - [Saved replies](saved-replies.md)
 - [Tags](tags.md)

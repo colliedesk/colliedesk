@@ -39,7 +39,7 @@ Colliedesk.
 
 ## Reference
 
-1. [Work the inbox](https://colliedesk.com/docs/inbox.md)
+1. [Inbox overview](https://colliedesk.com/docs/inbox.md)
 2. [Saved replies](https://colliedesk.com/docs/saved-replies.md)
 3. [Knowledge base](https://colliedesk.com/docs/knowledge-base.md)
 4. [AI providers and features](https://colliedesk.com/docs/ai.md)
