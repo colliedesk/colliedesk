@@ -5,16 +5,30 @@ import { clerkAppearance, clerkFrontendHost, narrowViewport } from './clerk-appe
 import { CloudSignIn } from './cloud-sign-in';
 import { answerSignupQuestions } from './test-signup-answers';
 
-const clerk = vi.hoisted(() => ({ getToken: vi.fn(), signOut: vi.fn(), signedIn: true, signInProps: vi.fn() }));
+const clerk = vi.hoisted(() => ({ getToken: vi.fn(), signOut: vi.fn(), signedIn: true, signInProps: vi.fn(), status: 'ready' }));
 
 vi.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
   SignIn: (props: Record<string, unknown>) => { clerk.signInProps(props); return <div>Clerk widget</div>; },
   useAuth: () => ({ getToken: clerk.getToken, isLoaded: true, isSignedIn: clerk.signedIn }),
-  useClerk: () => ({ signOut: clerk.signOut }),
+  useClerk: () => ({ signOut: clerk.signOut, status: clerk.status }),
 }));
 
-beforeEach(() => { vi.clearAllMocks(); clerk.signedIn = true; });
+beforeEach(() => { vi.clearAllMocks(); clerk.signedIn = true; clerk.status = 'ready'; });
+
+test('Clerk that failed to start says sign-in could not load, and Retry shows the form once Clerk loads', async () => {
+  clerk.signedIn = false;
+  clerk.status = 'error';
+  render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} />);
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Sign-in could not load.');
+  expect(screen.queryByText('Clerk widget')).not.toBeInTheDocument();
+
+  clerk.status = 'ready';
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
 
 test('offers a retry when Clerk cannot provide a session token', async () => {
   clerk.getToken.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce('session-token');

@@ -2,13 +2,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { SignIn } from './sign-in';
 
-const clerk = vi.hoisted(() => ({ getToken: vi.fn(), signOut: vi.fn(), signedIn: true, provider: vi.fn() }));
+const clerk = vi.hoisted(() => ({ getToken: vi.fn(), signOut: vi.fn(), signedIn: true, provider: vi.fn(), status: 'ready' }));
 
 vi.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children, publishableKey }: { children: React.ReactNode; publishableKey: string }) => { clerk.provider(publishableKey); return children; },
   SignIn: () => <div>Clerk widget</div>,
   useAuth: () => ({ getToken: clerk.getToken, isLoaded: true, isSignedIn: clerk.signedIn }),
-  useClerk: () => ({ signOut: clerk.signOut }),
+  useClerk: () => ({ signOut: clerk.signOut, status: clerk.status }),
 }));
 
 const key = 'pk_test_Y2xlcmsuZXhhbXBsZS5jb20k';
@@ -30,6 +30,7 @@ function answer(status: number, body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   clerk.signedIn = true;
+  clerk.status = 'ready';
   clerk.getToken.mockResolvedValue('identity-token');
   setKey(key);
   window.history.replaceState(null, '', '/operator/sign-in');
@@ -61,6 +62,17 @@ test('an email that is no operator is refused without saying more, and can switc
   expect(screen.getByText(/collie operator add --email/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Use another account' }));
   await waitFor(() => expect(clerk.signOut).toHaveBeenCalled());
+});
+
+test('when the identity provider cannot load, the sign-in form says so and Retry shows the form once it loads', async () => {
+  clerk.signedIn = false;
+  clerk.status = 'error';
+  render(<SignIn onSignedIn={() => {}} />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('Sign-in could not load.');
+
+  clerk.status = 'ready';
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
 });
 
 test('a visitor signed out of the console is signed out of the identity provider before anything is exchanged', async () => {

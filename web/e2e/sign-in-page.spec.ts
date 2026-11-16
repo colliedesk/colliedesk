@@ -30,3 +30,24 @@ test('after a Founding link, "Log in" in the same tab opens a sign-in, not Join 
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeVisible();
   expect(await page.evaluate(() => window.sessionStorage.getItem('colliedesk.checkout-intent'))).toBeNull();
 });
+
+// #602: an ad blocker, a network that cannot reach Clerk or a wrong key on a server stops Clerk from
+// starting. Only the sign-in form says so, with a retry; the page around it stays.
+test('when Clerk cannot load, the sign-in page stays and the form says sign-in could not load, with a retry', async ({ page }) => {
+  // Clerk waits up to 15 seconds for its script before it gives up, and this test lets it give up twice.
+  test.setTimeout(60_000);
+  let scriptRequests = 0;
+  await page.route(/\/clerk\.browser\.js/, (route) => { scriptRequests += 1; return route.abort('blockedbyclient'); });
+  await page.goto(`${baseURL}/sign-in?intent=trial`);
+
+  const notLoaded = page.getByRole('alert').filter({ hasText: 'Sign-in could not load.' });
+  await expect(notLoaded).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByRole('heading', { level: 1, name: 'Start your free trial' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Service status' })).toBeVisible();
+  await expect(page.getByText('Something went wrong')).toHaveCount(0);
+
+  const before = scriptRequests;
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect.poll(() => scriptRequests).toBeGreaterThan(before);
+  await expect(notLoaded).toBeVisible({ timeout: 25_000 });
+});

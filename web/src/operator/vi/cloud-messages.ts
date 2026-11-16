@@ -6,6 +6,8 @@ export const cloudMessages: Translation<typeof en> = {
   signingOut: 'Đang đăng xuất…',
   signOutFailed: 'Đăng xuất không thành công. Hãy thử lại.',
   retry: 'Thử đăng nhập lại',
+  notLoaded: 'Không tải được phần đăng nhập. Hãy kiểm tra kết nối hoặc trình chặn quảng cáo, rồi thử lại.',
+  notSetUp: 'Đăng nhập chưa được thiết lập đúng trên máy chủ này. Hãy hỏi người vận hành máy chủ.',
   refused: 'Tài khoản này không đăng nhập được vào bảng điều khiển vận hành.',
   refusedHelp: 'Nếu bạn vận hành máy chủ này, một người vận hành thêm bạn trên máy chủ bằng:',
   useAnotherAccount: 'Dùng tài khoản khác',

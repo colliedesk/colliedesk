@@ -10,7 +10,9 @@ export const identity = {
   jwksPort: ports.jwks,
   issuer: 'https://identity.e2e.colliedesk.test',
   authorizedParty: `http://localhost:${ports.cloud}`,
-  publishableKey: 'pk_test_e2e_colliedesk',
+  // A key of Clerk's shape (pk_test_ and base64 of "clerk.e2e.colliedesk.test$"), so the browser asks for
+  // Clerk's script from a host that never answers, as it would with a real key, and a test can block it.
+  publishableKey: 'pk_test_Y2xlcmsuZTJlLmNvbGxpZWRlc2sudGVzdCQ=',
 } as const;
 
 export const jwksURL = `http://127.0.0.1:${identity.jwksPort}/.well-known/jwks.json`;
