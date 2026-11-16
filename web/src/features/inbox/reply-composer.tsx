@@ -156,14 +156,15 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     return () => { current = false; };
   }, []);
   // Another tab of this browser wrote (or sent) this draft: a box not edited here shows its text, as a reply
-  // or a note the way that tab had it (a note must never turn into a reply), and says so. Text typed here is
-  // never replaced unasked: the person picks theirs or the other tab's.
+  // or a note the way that tab had it (a note must never turn into a reply), with its Cc, and says so. Text typed
+  // here is never replaced unasked: the person picks theirs or the other tab's.
   const [otherTab, setOtherTab] = useState(false);
   const editedHere = useRef(false);
   const [otherDraft, setOtherDraft] = useState<StoredDraft>();
   const adopt = (draft: StoredDraft) => {
     setKind(draft.kind);
     setBody(draft.body);
+    setCcEdited(draft.cc);
     editedHere.current = false;
     setOtherDraft(undefined);
   };
@@ -173,7 +174,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       const kept = readDraft(draftKey);
       const text = kept?.body ?? '';
       const nextKind = noReplies ? 'note' : kept?.kind ?? latestKind.current;
-      if (text === latestBody.current && nextKind === latestKind.current) { setOtherDraft(undefined); return; }
+      const sameCc = JSON.stringify(kept?.cc) === JSON.stringify(latestCc.current);
+      if (text === latestBody.current && nextKind === latestKind.current && sameCc) { setOtherDraft(undefined); return; }
       // The other tab sent or cleared the very text this box holds: it goes here too.
       const sameTextGone = !text.trim() && parseDraft(event.oldValue)?.body === latestBody.current;
       const mine = editedHere.current && latestBody.current.trim() !== '';
@@ -184,10 +186,10 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       }
       if (mine && !sameTextGone) {
         setOtherTab(false);
-        setOtherDraft({ kind: nextKind, body: text });
+        setOtherDraft({ kind: nextKind, body: text, cc: kept?.cc });
         return;
       }
-      adopt({ kind: nextKind, body: text });
+      adopt({ kind: nextKind, body: text, cc: kept?.cc });
       setOtherTab(true);
     };
     window.addEventListener('storage', onStorage);
