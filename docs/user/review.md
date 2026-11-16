@@ -28,8 +28,7 @@ A picture, a video or a file a customer sent shows on the card itself, as in a c
 look at, a video or a voice clip to play, any other file to download, and the gallery opens at the one you
 press. A file the channel could not fetch says why, for example when it is larger than the channel accepts
 (25 MB a file on Zalo). The card shows its first 8 files; **Decide** shows every file under the message that
-carried it. An AI agent reads them with `colliedesk_attachment_get` (`gathering_id`, `item_id`, `file_index`)
-or `GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}`, with the `messages:read` permission.
+carried it.
 
 ## Decide a card
 
@@ -83,4 +82,10 @@ The line at the top counts the last 7 days: the cards, how many became conversat
 AI's decisions (what it did and what it suggested) a person decided otherwise. Pick a channel and scope above the list to see only its
 cards.
 
-For AI agents and the API, the same cards and decisions are in [Intake queue](channels.md#intake-queue).
+## For developers and AI agents
+
+- Cards and decisions: the same cards and decisions are in [Intake queue](channels.md#intake-queue).
+- Files on a card: an AI agent reads a file a customer sent with the MCP tool `colliedesk_attachment_get`
+  (`gathering_id`, `item_id`, `file_index`) or with
+  `GET /api/v1/intake/gatherings/{id}/items/{itemId}/files/{index}`. Both need the `messages:read`
+  permission.

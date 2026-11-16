@@ -132,7 +132,10 @@ Quick start refreshes when the inbox changes; it does not poll on its own.
 An empty inbox says so and, once a mailbox exists, offers **Send yourself a test message**: it puts a first
 conversation in the inbox so you can answer it. Quick start's amber dot points at what to set up first.
 
-## API and AI agents
+The web app reports two [usage events](telemetry.md) about the setup guide: `onboarding_step_started` and
+`onboarding_step_completed`, each with the step name only.
+
+## For developers and AI agents
 
 - `GET /api/v1/workspace/setup` returns the steps with their names and states (`email`: `none`,
   `waiting`, `working`, `needs_attention`; `import`: `none`, `running`, `done`; `ai_drafts`: `none`,
@@ -143,7 +146,7 @@ conversation in the inbox so you can answer it. Quick start's amber dot points a
   one that fits (`reply_target_suggestion`). The suggestion is `null` when reply targets are on or the
   caller may not change them (`workspace:update`): the median is read only when someone can use it.
   The MCP tool is `colliedesk_setup_progress_get`.
-- An AI agent does the two new steps with tools that already exist: `colliedesk_ai_slot_set` (slot
+- An AI agent does the AI drafts and reply targets steps with these tools: `colliedesk_ai_slot_set` (slot
   `draft`, enabled, `default_level` `suggest`, with source `server` when the server's built-in AI offers
   drafts, else source `provider` with the `provider_id` of one of the workspace's providers; a slot that
   already has a source keeps it) and `colliedesk_response_targets_set` with a preset's targets, enabled,
@@ -151,6 +154,3 @@ conversation in the inbox so you can answer it. Quick start's amber dot points a
 - `PUT /api/v1/agents/me/setup-guide` with `{"hidden": true}` or `{"hidden": false}` hides or shows
   the guide for the caller. The MCP tool is `colliedesk_setup_guide_set`. `GET /api/v1/auth/me`
   returns `setup_guide_hidden`.
-
-The web app reports two [usage events](telemetry.md) about it: `onboarding_step_started` and
-`onboarding_step_completed`, each with the step name only.

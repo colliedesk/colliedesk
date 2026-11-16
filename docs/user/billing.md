@@ -62,8 +62,6 @@ link to continue it.
 - The link works once, for at most 30 days. An expired, withdrawn or already used link says so, with
   your trial's end and support@colliedesk.com. A workspace that already has a plan needs no trial:
   the page says so and nothing changes.
-- An AI agent with `billing:manage` can accept the link for you with the MCP tool
-  `colliedesk_trial_offer_accept`.
 
 ### Limits during the trial
 
@@ -80,11 +78,9 @@ link to continue it.
   verify your sending domain in **Settings**, or choose a plan. When the customer did write but their
   mail does not count, the refusal says why:
   - The mail was posted to your **inbound URL** (on your own forwarder) instead of arriving at your
-    Colliedesk **forwarding address**, so nothing proves who sent it (API reason
-    `mail_not_via_hosted_address`). Forward your mailbox to the forwarding address shown in
+    Colliedesk **forwarding address**, so nothing proves who sent it. Forward your mailbox to the forwarding address shown in
     **Settings → Channels → Email**; mail that arrives there counts.
-  - The mail failed sender verification (SPF, DKIM or DMARC), so it may not come from that address
-    (API reason `sender_authentication_failed`).
+  - The mail failed sender verification (SPF, DKIM or DMARC), so it may not come from that address.
 
   In both cases verifying your sending domain or choosing a plan lets you reply.
 
@@ -236,8 +232,7 @@ that suit you for a call, with a time zone.
   reply by email within one working day.
 - **Plan and billing** shows when the request was sent in the **Freshdesk migration** row. You can send it again, for example to correct the
   address; a workspace can send 5 requests an hour.
-- Asking needs `billing:manage` (the Admin role has it). An AI agent whose token holds it can send the
-  request too (`colliedesk_billing_action`).
+- Asking needs `billing:manage` (the Admin role has it).
 - If this server cannot send email, nothing is sent and Colliedesk says so.
 
 ## What the page shows once you pay
@@ -296,3 +291,13 @@ pages carries the trial's end date; **Plan and billing** does not repeat it.
 
 - Billing is per workspace. Moving a subscription to another workspace is not supported yet.
 - Prices are in US dollars.
+
+## For developers and AI agents
+
+- An AI agent whose token holds `billing:manage` can accept a trial offer link for you with the MCP
+  tool `colliedesk_trial_offer_accept`.
+- With `billing:manage`, an agent can also ask Colliedesk to move your Freshdesk data
+  (`colliedesk_billing_action`).
+- A trial reply refused because the customer's mail does not count carries an API reason:
+  `mail_not_via_hosted_address` when the mail was posted to the inbound URL instead of the
+  forwarding address, and `sender_authentication_failed` when it failed SPF, DKIM or DMARC.

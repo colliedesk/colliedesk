@@ -67,8 +67,7 @@ which step [Quick start](setup-guide.md) (the setup guide) lists and recommends 
 off a helpdesk), and the answers help us send you emails that fit. On the trial page the web form needs
 an answer to each. A visitor who came to buy (`/sign-in?buy=founding`) or for a plan
 (`plan=team25`) is asked for the workspace name only: the three questions sit under "Tell us about your
-team (optional)", closed, and any answer given is kept. For API clients `goal`, `role` and `source` are
-always optional, each on its own.
+team (optional)", closed, and any answer given is kept.
 
 The Founding link (`/sign-in?buy=founding`) is titled **Join Founding**. Under the title it repeats the offer,
 "$99 every 3 months · up to 10 agents · 30-day money-back guarantee", and says what happens: you enter
@@ -88,3 +87,8 @@ an invite link.
 
 Self-hosted instances without cloud configuration behave exactly as before and do not load the cloud
 sign-in code. One-time pairing and invite links remain available when cloud sign-in is enabled.
+
+## For developers and AI agents
+
+- A client that creates a workspace with `POST /api/v1/auth/cloud/signup` may leave out the three
+  sign-up answers: `goal`, `role` and `source` are each optional.

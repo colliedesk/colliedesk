@@ -95,10 +95,6 @@ your own, not only the default one: "support@acme.com and billing@acme.com" when
   come back here", and the reply box of an email conversation whose mailbox does not forward yet says:
   "The customer's answer goes to your mailbox until it forwards here."
 
-Agents read the same in one call: `mail_switch` (the mailboxes, each with `old_help_desk`, and whether
-the workspace finished an import), `mail_through_mailbox` and `answers_before_forwarding` of `GET /api/v1/channels/email`, or of the
-MCP tool `colliedesk_email_channel_get`.
-
 **Search from any page**
 
 The search field in the top bar (or **Ctrl K**, **⌘K** on a Mac, from any page) opens the search palette over the
@@ -116,9 +112,6 @@ page. Close it with **Esc**: the focus goes back to where it was.
 - **↑** and **↓** move the chosen row, **Enter** opens it, a click opens any row.
 - Recent is kept by this browser only, for each workspace; clearing the browser's site data empties it.
 
-AI agents search the same way with `colliedesk_inbox_search` (conversations) and `colliedesk_contacts_find`
-(customers); see [MCP](mcp.md).
-
 **Find conversations**
 - The inbox opens on **Open** conversations, the ones that still need an answer. **All statuses** shows every
   status but Spam. When nothing is open but the workspace has conversations, the list says so instead of
@@ -134,8 +127,7 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
   **Spam** once it holds a conversation, then **All statuses**. One click picks a status and closes the menu.
   A link or a view with several statuses shows their names on the button (**Open, Pending**), and no item is ticked.
   From the keyboard, the arrow keys move, **Enter** picks and **Esc** closes it. The counts follow the filters
-  on screen; while you search they count the results when they fit on one page. The API gives the same numbers
-  with `counts=true` on `GET /api/v1/conversations` (`status_counts`).
+  on screen; while you search they count the results when they fit on one page.
 - Narrow further with **Filter**, and change the order with the order on the right; see
   [Filter and sort](#filter-and-sort) below.
 - **Search** turns the title into a search field, **Search conversations**, that says where it looks
@@ -210,13 +202,9 @@ In the web app:
 4. A link with `?ref=` opens the list on that conversation, in every status, with a **Reference** chip
    that removes it.
 
-`GET /api/v1/conversation-number-series` lists the series; `PUT /api/v1/conversation-number-series/{series}`
-adds or changes one (`workspace:update`, which the Admin role holds; an agent token with it does it at once). MCP: `colliedesk_number_series_list`,
-`colliedesk_number_series_set`.
-
-Find a conversation by its code with `?ref=` on `GET /api/v1/conversations` (MCP `ref` of
-`colliedesk_inbox_search`): another case, spaces around it or more or fewer leading zeros match, a code of
-another year does not. Search words that are a code find that conversation, ahead of the rest.
+A code finds its conversation in another case, with spaces around it, or with more or fewer leading
+zeros; a code of another year does not. Search words that are a code find that conversation, ahead of the
+rest.
 
 ## Filter and sort
 
@@ -273,9 +261,6 @@ The filters, the sort and the search are part of the page address, so you can bo
 link to a teammate. Back returns to the list you came from. A value the inbox does not know (an old or
 mistyped link) is left out, and the rest of the link still applies. The search runs once you pause typing.
 
-The same filters work in the API (`GET /api/v1/conversations`, see `contracts/openapi.yaml`) and for AI
-agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
-
 ## Saved views
 
 **Views** (the bookmark icon after Filter) keeps sets of filters under a name. It shows while you search or a
@@ -293,8 +278,7 @@ the list's title names the view on screen.
   never changes a conversation.
 - Names are unique, ignoring case, among your personal views and among the shared ones. Each person keeps
   at most 50 personal views and a workspace at most 50 shared ones.
-- Views are in the [export](export.md) (`saved-views.ndjson`), and AI agents use them through the
-  `colliedesk_saved_view_*` tools.
+- Views are in the [export](export.md) (`saved-views.ndjson`).
 
 **Know when something new arrives**
 - Any page of Colliedesk you have open (including Settings) checks every 20 seconds. The inbox reloads the list by itself when a conversation is created, when a teammate assigns one
@@ -339,8 +323,6 @@ the list's title names the view on screen.
   leaving the inbox takes you off at once; a tab that stops answering (a laptop that sleeps) drops
   off within 15 seconds, or 150 seconds with a reply typed.
 - Only the fact that a reply is being written is shared, never its text. Private notes do not count.
-- The same list is in the API: the `viewing` field of `GET /api/v1/inbox/activity`, and
-  `PUT /api/v1/conversations/{id}/presence` for one conversation.
 
 **Change many conversations at once**
 - At rest the list shows no boxes. Point at a row, or move the focus to it, and its box shows at its left;
@@ -371,8 +353,6 @@ the list's title names the view on screen.
   use the other tag action.
 - Only rows on the current page stay selected. Changing the page, the filters or the search drops the
   rows that left the list from the selection.
-- The same change is available through the API: `PATCH /api/v1/conversations` with
-  `{"ids": [...], "changes": {...}}`. See `contracts/openapi.yaml`.
 
 **Who wrote each message**
 - A reply or private note shows the name of the teammate who wrote it (their email when they have no
@@ -411,13 +391,13 @@ the list's title names the view on screen.
   and **Keep mine**.
 - **One press sends once.** The button is disabled while a message is being sent, and every send carries
   its own key, so pressing twice, or retrying after a lost connection, never posts the same note or reply
-  twice. Through the API, send the same `Idempotency-Key` header on every retry of one message.
+  twice.
 - **Someone replied while you were writing.** When a teammate's reply (or one you sent from another
   tab, or an AI agent's) reached the customer after you started your reply, Colliedesk does not send
   yours. Your text stays in the box, their reply shows above it with its time (an imported reply keeps
   its own time and says where it came from), and you choose **Send anyway** or **Edit reply**. Either
   way you are asked about those replies once. Private notes never trigger it.
-- A reply draft an AI agent left (`colliedesk_reply_draft`) shows above the reply box with the
+- A reply draft an AI agent left shows above the reply box with the
   token's name; you edit it, send it or discard it. Sending it is a reply like any other, so the same
   check applies.
 - A draft can carry files (up to 10, like a message). They are listed on the draft, each a download,
@@ -475,8 +455,6 @@ the list's title names the view on screen.
 - On the hosted cloud trial, email goes only to customers who wrote to you first, so a new conversation
   cannot be sent until you verify your sending domain or choose a plan. The window says so before you
   type, links to Settings and the plans, and takes no input. See [Plan and billing](billing.md).
-- AI agents start one with the MCP tool `colliedesk_conversation_start`, or the API
-  `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
 
 **Change the conversation**
 - **Resolve** above the thread sets an open or pending conversation to Resolved in one press, at any
@@ -516,8 +494,6 @@ beside **Resolve** above the thread, and in the action bar when rows are selecte
 - A conversation in Spam keeps its status until it is taken out: **Resolve**, **Set status** and the
   details' **Status** do not apply to it.
 - Spam is a status in the [export](export.md) (`spam`); a marked sender's contact carries `spam_since`.
-- AI agents use `colliedesk_conversations_spam` (permission `conversations:update`); the API is
-  `PUT /api/v1/conversations/spam` with `{"ids": [...], "spam": true}` (or `false` for Not spam).
 
 **Move messages to another conversation**
 A customer's message that landed in the wrong conversation can be moved, with its files: to another
@@ -545,23 +521,16 @@ line. A message taken back waits in Review as a card that says who took it back.
 - A resolved or closed conversation that gets a moved message reopens, as it does when the customer
   writes again.
 - When every customer message of a conversation goes to another and nobody replied in it, wrote a note
-  or assigned it yet, the move can also close it as no new request (`close_source`); it then points to
+  or assigned it yet, the move can also close it as no new request; it then points to
   where its messages went. Once someone worked on it, closing is refused and only the messages move.
 - A message moved into a conversation of another customer stays theirs: replies go to the conversation's
-  customer only, never suggest copying the writer and never thread on their mail. The move says so
-  (`other_contact`), and says when the message came through another channel (`other_channel`).
+  customer only, never suggest copying the writer and never thread on their mail. The move says so, and
+  says when the message came through another channel.
 - A customer's later answer to a moved message follows it to where it went.
 - Every move can be undone: the messages go back, a conversation the move closed reopens, a status it
   changed comes back while nobody changed the conversation or wrote in it since, and a conversation a
   split opened closes and points back. Only the newest move of a message can be undone, and a message
   taken back to the queue only while its card waits.
-
-AI agents move messages with the MCP tools `colliedesk_messages_move`, `colliedesk_message_moves_list`
-and `colliedesk_message_move_undo`, or the API `POST /api/v1/conversations/{id}/messages/move`
-(`message_ids`, `to: {conversation_id}`, `{new: {subject}}` or `{queue: true}`, `close_source`), `GET
-/api/v1/conversations/{id}/message-moves` (the moves out of and into a conversation) and `POST
-/api/v1/message-moves/{id}/undo`; moving and undoing need `conversations:update`. Through the API, send the same
-`Idempotency-Key` header on every retry of one move or undo: a repeat answers what the first one got.
 
 **Trial and locked workspaces** (hosted cloud only)
 During the trial a banner under the workspace name shows the days left. When the trial or the
@@ -577,11 +546,49 @@ See [Plan and billing](billing.md).
   channel, as its own message, shown in the timeline as **Sent by the channel · not a reply**. Email and
   web form conversations are never told.
 - Every way to set a status has a quiet one: the arrow next to **Resolve** / **Reopen**, unticking **Tell
-  the customer** in Status, or **Tell customers** in the bulk bar. The API takes `notify: false` on
-  `PATCH /api/v1/conversations/{id}` and on the bulk change.
+  the customer** in Status, or **Tell customers** in the bulk bar.
 - When a status was set by something other than a person on your team (an AI agent, the customer
   writing or typing Reopen, the import, or the channel closing it by itself), a quiet line in the
   timeline says who, at the time it happened.
-- A status change that would tell a customer needs `messages:send`. An AI agent whose token lacks it
-  is refused with the channel that would tell them, and can set the status quietly with
-  `notify: false` instead.
+- A status change that would tell a customer needs `messages:send`.
+
+## For developers and AI agents
+
+The routes are in `contracts/openapi.yaml`; the MCP tools are in [MCP](mcp.md).
+
+- Moving your email: `GET /api/v1/channels/email`, or the MCP tool `colliedesk_email_channel_get`, gives
+  the same facts in one call: `mail_switch` (the mailboxes, each with `old_help_desk`, and whether the
+  workspace finished an import), `mail_through_mailbox` and `answers_before_forwarding`.
+- Search: AI agents search the same way as the inbox with `colliedesk_inbox_search` (conversations) and
+  `colliedesk_contacts_find` (customers).
+- Filters and counts: the inbox filters are the filters of `GET /api/v1/conversations` and of
+  `colliedesk_inbox_search`. `counts=true` on `GET /api/v1/conversations` returns the status counts
+  (`status_counts`).
+- Reply drafts: an AI agent leaves a reply draft with `colliedesk_reply_draft`.
+- Conversation numbers: `GET /api/v1/conversation-number-series` lists the series.
+  `PUT /api/v1/conversation-number-series/{series}` adds or changes one. It needs `workspace:update`, which
+  the Admin role holds; an agent token with it does it at once. The MCP tools are
+  `colliedesk_number_series_list` and `colliedesk_number_series_set`.
+- Find by code: `?ref=` on `GET /api/v1/conversations`, or `ref` of `colliedesk_inbox_search`, finds a
+  conversation by its code, with the same matching as the inbox.
+- Saved views: AI agents use them through the `colliedesk_saved_view_*` tools.
+- Who else is on a conversation: the `viewing` field of `GET /api/v1/inbox/activity` gives the same list.
+  `PUT /api/v1/conversations/{id}/presence` reports presence on one conversation.
+- Change many conversations: `PATCH /api/v1/conversations` with `{"ids": [...], "changes": {...}}` makes
+  the same change as the bulk bar.
+- Send once: send the same `Idempotency-Key` header on every retry of one message, so it is posted once.
+- Start a conversation: AI agents use the MCP tool `colliedesk_conversation_start`, or
+  `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
+- Spam: AI agents use `colliedesk_conversations_spam` (permission `conversations:update`). The route is
+  `PUT /api/v1/conversations/spam` with `{"ids": [...], "spam": true}` (or `false` for Not spam).
+- Move messages: AI agents use the MCP tools `colliedesk_messages_move`, `colliedesk_message_moves_list`
+  and `colliedesk_message_move_undo`. The routes are `POST /api/v1/conversations/{id}/messages/move`
+  (`message_ids`, `to: {conversation_id}`, `{new: {subject}}` or `{queue: true}`, `close_source` to close
+  the emptied conversation), `GET /api/v1/conversations/{id}/message-moves` (the moves out of and into a
+  conversation) and `POST /api/v1/message-moves/{id}/undo`. Moving and undoing need
+  `conversations:update`. The answer flags a message moved to another customer (`other_contact`) or from
+  another channel (`other_channel`). Send the same `Idempotency-Key` header on every retry of one move or
+  undo: a repeat answers what the first one got.
+- Telling the customer: `notify: false` on `PATCH /api/v1/conversations/{id}` and on the bulk change sets
+  a status quietly. An AI agent whose token lacks `messages:send` is refused with the channel that would
+  tell the customer, and can set the status quietly with `notify: false` instead.

@@ -12,8 +12,9 @@ a client that sends no browser name shows **Browser session** or **Cloud sign-in
   your address are always on screen, in the sidebar or the top bar.
 - You see your own sessions. Someone with `team:revoke` (the Admin role has it) sees every session in
   the workspace and can revoke those of anyone who does not hold more than they do.
-- A session signed in through the API with `requested_role: agent` shows **Limited to Agent**: it
-  acts with the Agent role only, even if you hold more. Any other sign-in acts with all your roles.
+- A session that a program opened for the Agent role only shows **Limited to Agent**: it acts with
+  the Agent role only, even if you hold more. The app does not offer this kind of sign-in. Any other
+  sign-in acts with all your roles.
 
 A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session
 shows **You are signed out** instead of the inbox. To sign in again on a revoked device, ask an admin for
@@ -39,7 +40,7 @@ without connecting again. **Settings → Account → Connected AI apps** lists e
 - when you connected it and when it was last used;
 - **Active**, or **Needs reconnecting** when it was disconnected, ran out after 30 days without use, or
   your account was deactivated, with how to connect again in each app;
-- **Disconnect**, which stops it at once: its next call gets HTTP 401.
+- **Disconnect**, which stops it at once: its next call is refused.
 
 Each sign-in is its own row, so the same app on two computers shows twice. Claude and ChatGPT call from
 their own servers, so their row is one per account, not per computer. Someone with `team:revoke` sees
@@ -47,7 +48,7 @@ and disconnects the apps of every person they do not rank below. Deactivating a 
 their apps; after they are reactivated they connect again.
 
 Allowing an app is something only a person does in a browser: an app or an agent token cannot allow
-another app (HTTP 403 `person_only`). A note or a reply an app writes shows "by <your name> via <app
+another app. A note or a reply an app writes shows "by <your name> via <app
 name>" in the conversation.
 
 ## Agent tokens
@@ -105,28 +106,39 @@ In the list a token shows one of:
   had, except those that used to wait for a person's approval; create a new token for those
   ([which ones](roles-and-permissions.md#tokens-created-before-roles)).
 
-Creating a token is something only a person does: an AI agent's token cannot create another one
-(HTTP 403 `person_only`), because a token that made tokens would leave them behind after it was
-revoked. A program signed in as a person can create one with `POST /api/v1/auth/tokens` and a body
-such as `{"label": "Claude Code", "role_id": "<id of a role whose permissions you hold>"}`, or `{"label": "KB writer",
-"permissions": ["kb_articles:read", "kb_articles:create", "kb_articles:update"]}` for a fixed list.
-Each permission is `resource:action`. The old `scope` field is refused. On your own server you can
-also use the [command line](../self-host/troubleshooting.md#create-an-agent-token-from-the-command-line).
-The agent sends the token as `Authorization: Bearer <token>`.
+Creating a token is something only a person does: an AI agent's token cannot create another one,
+because a token that made tokens would leave them behind after it was revoked. On your own server you
+can also create one from the
+[command line](../self-host/troubleshooting.md#create-an-agent-token-from-the-command-line).
 
 An AI agent does what its token's permissions allow, at once; nothing waits for a person to approve
-it. A call without the permission it needs is refused with HTTP 403 `permission_missing`, naming the
-permission and whether the token or you lack it
+it. A call without the permission it needs is refused, naming the permission and whether the token
+or you lack it
 ([details](roles-and-permissions.md#when-a-permission-is-missing)). A reply the token may not send
 can be left as a draft above the reply box (`ai_assist:create`) for a person to send. When an agent
-token revokes a session, the session leaves the list (the API lists it as revoked) and the server log names the
-token that did it.
+token revokes a session, the session leaves the list and the server log names the token that did it.
 
 A token starts with `cdk_agent_` so that secret scanners recognise it if it ends up in a file by
-mistake. It works only in the `Authorization` header. A browser cookie that holds a token is
-refused. A token stops working 30 days after its last use, and in any case one year after you
+mistake. A token stops working 30 days after its last use, and in any case one year after you
 created it, however often it is used. Create a new token before that and revoke the old one.
 
 A note or a reply that an agent writes shows "by <your name> via <token label>" in the
 conversation, also after you revoked the token. Status, priority, assignee and tag changes do not
 show it yet.
+
+## For developers and AI agents
+
+- A program signs in for the Agent role only by sending `requested_role: agent` to
+  `POST /api/v1/auth/redeem`. That session shows **Limited to Agent**.
+- A person's session creates an agent token with `POST /api/v1/auth/tokens`. To follow a role, send
+  a body such as `{"label": "Claude Code", "role_id": "<id of a role whose permissions you hold>"}`.
+  For a fixed list, send `{"label": "KB writer", "permissions": ["kb_articles:read",
+  "kb_articles:create", "kb_articles:update"]}`. Each permission is `resource:action`. The old
+  `scope` field is refused.
+- An agent token or a connected app that tries to create a token or allow another app is refused
+  with HTTP 403 `person_only`.
+- The agent sends its token as `Authorization: Bearer <token>`. A token works only in the
+  `Authorization` header; a browser cookie that holds a token is refused.
+- A call without the permission it needs is refused with HTTP 403 `permission_missing`.
+- A session that an agent token revoked is listed by the API as revoked.
+- A connected app that was disconnected gets HTTP 401 on its next call.
