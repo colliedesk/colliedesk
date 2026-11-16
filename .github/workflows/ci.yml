@@ -99,7 +99,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
         run: |
-          if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
+          if [ -n "$(gofmt -l . ../docs)" ]; then gofmt -l . ../docs; echo 'gofmt: format the files above' >&2; exit 1; fi
           go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
           # Five regular shards of three go test processes each, and three latency shards that run their
@@ -242,7 +242,7 @@ jobs:
         if: matrix.shard == strategy.job-total
         run: |
           (cd web && sh ../.github/scripts/ci-background.sh start typecheck nice -n 10 corepack pnpm typecheck)
-          (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... && go run ./cmd/migration-check --repo=..')
+          (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... ../docs/... && go run ./cmd/migration-check --repo=..')
       # In the foreground it took 10 seconds before Chromium could install (run 39904636025).
       - name: Start the check that the shards run every end-to-end test exactly once
         if: matrix.shard == strategy.job-total
