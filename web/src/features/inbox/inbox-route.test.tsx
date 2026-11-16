@@ -584,6 +584,29 @@ test('resolving the open conversation never swaps the screen to another one, so 
   expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer');
 });
 
+// A reply answers with a message, not the conversation, so nothing seeds it. On a full page of Waiting longest
+// the reply moves it off the page, and it stays on screen all the same while its by-id read is on the way.
+test('a reply that moves the open conversation off the page keeps it and its reply box on screen', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  api.createMessage.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  let answered = false;
+  api.conversations.mockImplementation(async () => ({ items: answered ? [beta] : [alpha, beta], page: 1, page_size: 50 }));
+  api.conversation.mockReturnValue(new Promise(() => {})); // the by-id read never answers
+  api.createMessage.mockImplementation(async () => { answered = true; return { id: '77777777-7777-4777-8777-777777777777' }; });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Answered' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: /alpha conversation/i })).not.toBeInTheDocument());
+  expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Message body')).toBeInTheDocument();
+});
+
 // With nothing picked the first row is on screen; a live refresh that puts a new conversation on top must not
 // swap the thread and the reply box under the agent who started reading and writing there.
 test('with nothing picked, the conversation shown first stays on screen when a live refresh puts another on top', async () => {

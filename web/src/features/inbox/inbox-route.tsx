@@ -184,7 +184,15 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const detail = opened.data?.id === shownID ? opened.data : undefined;
   // The row is the newer while a change refetches the list; it borrows the detail's notices while their status agrees.
   const withNotices = listed && detail?.status_notices && detail.status === listed.status ? { ...listed, status_notices: detail.status_notices } : listed;
-  const selected = withNotices ?? detail;
+  const fresh = withNotices ?? detail;
+  // Whatever moves the conversation on screen out of the list (a reply puts it behind the waiting ones, off
+  // the page; Resolve, an assignee or a tag takes it out of a filter; a teammate's change arrives), its row is
+  // gone before its by-id read answers. Until then the panes keep the last of it shown, so the header, the
+  // timeline and the reply box with its draft never leave the screen. A read that fails (deleted) lets it go.
+  const lastShown = useRef<Conversation>(undefined);
+  if (fresh) lastShown.current = fresh;
+  const kept = !fresh && !opened.isError && lastShown.current?.id === shownID ? lastShown.current : undefined;
+  const selected = fresh ?? kept;
   // A conversation the person opened (a row picked, or its address) heads Recent in the search palette.
   const workspaceId = me.data?.workspace?.id;
   const opening = activeID && selected?.id === activeID ? selected : undefined;

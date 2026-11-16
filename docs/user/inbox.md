@@ -151,8 +151,9 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
   above the conversations. Select one to open the customer's page with every conversation they had;
   see [Customers](contacts.md).
 - The customer's name under the subject of an open conversation opens the same page.
-- A conversation you opened stays on screen after you resolve or close it, although it leaves the
-  Open list.
+- A conversation you opened stays on screen, with your half-written reply, whenever it leaves the list
+  you are looking at: you resolve or close it, assign it out of **Unassigned**, remove the tag you
+  filtered on, or reply and it moves behind the conversations still waiting, onto the next page.
 - When you open the inbox without picking a conversation, the first one in the list shows beside it. It stays
   there until you pick another, so mail that arrives on top of the list never swaps it, or your half-written
   reply, for another conversation.
