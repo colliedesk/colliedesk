@@ -98,6 +98,8 @@ interface InboxPageProps {
   sendsFrom?: string;
   // channelLabel names the channel of a conversation where the workspace has two of its type.
   channelLabel?: (conversation: Conversation) => string | undefined;
+  // rowChannelLabel names it on the list's rows; the route leaves it out where the list is one channel.
+  rowChannelLabel?: (conversation: Conversation) => string | undefined;
   // outboundLink is where Open Settings in that notice leads: the channel that cannot send.
   outboundLink?: SettingsTarget;
   // noReplies: the conversation's channel was removed, so the composer sends notes only.
@@ -168,7 +170,7 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, channels, savedViews, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, dueSort, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, searchSignal = 0, onTestMessage, nextStep, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false, otherList }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, channels, savedViews, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, dueSort, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, rowChannelLabel = channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, searchSignal = 0, onTestMessage, nextStep, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false, otherList }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
@@ -328,7 +330,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           <p aria-live="polite" className="bulk-message">{bulkNotice}</p>
           {contactMatches}
         </header>
-        <ConversationList items={conversations} channelLabel={channelLabel} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
+        <ConversationList items={conversations} channelLabel={rowChannelLabel} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
           failed={failed} onRetry={onRetry} onClearFilters={narrowedInPlace(query) ? clearFilters : undefined}
           checkedIds={checked} onToggle={toggle} draftIds={draftConversationIds} viewers={viewers}
