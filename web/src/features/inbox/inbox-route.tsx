@@ -214,7 +214,8 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const drafts = useQuery({ queryKey: ['ai-drafts', openID], queryFn: () => aiDraftApi.list(openID!), enabled: Boolean(openID) && reads('ai_assist:read') });
   const selectedDrafts = waitingWritten(drafts.data?.items);
   const earlierDrafts = earlierWritten(drafts.data?.items);
-  const [draftNotice, setDraftNotice] = useState<string>();
+  // What happened to a draft sent from the card belongs to its conversation: opening another one hides it.
+  const [draftNotice, setDraftNotice] = useState<{ conversationId: string; text: string }>();
   const afterDraft = (conversationId: string) => {
     void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
     void client.invalidateQueries({ queryKey: ['messages', conversationId] });
@@ -401,7 +402,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     onManageSavedReplies={() => { window.open('/settings/saved-replies', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
     defaultMailbox={defaultMailbox} replyMailbox={selected && (!repliesVia || repliesVia.type === 'email') ? emailChannel.data : undefined}
-    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} rowChannelLabel={rowChannelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} rowChannelLabel={rowChannelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice?.conversationId === selected?.id ? draftNotice?.text : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
@@ -422,25 +423,25 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
           edit?.files);
       } catch (error) {
         if (!(error instanceof ReplyConflictError)) {
-          setDraftNotice(messages.draftRefused(error instanceof Error ? error.message : undefined));
+          setDraftNotice({ conversationId: draft.conversation_id, text: messages.draftRefused(error instanceof Error ? error.message : undefined) });
           throw error;
         }
         await afterDraft(draft.conversation_id);
-        setDraftNotice(error.newer.length > 0 && error.newer.every((reply) => reply.origin) ? messages.draftAfterImport : messages.draftAfterReply);
+        setDraftNotice({ conversationId: draft.conversation_id, text: error.newer.length > 0 && error.newer.every((reply) => reply.origin) ? messages.draftAfterImport : messages.draftAfterReply });
         return;
       }
       track('reply_draft_decided', { decision: 'sent' });
       setDraftNotice(undefined);
       await afterDraft(draft.conversation_id);
     }}
-    onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
+    onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); setDraftNotice(undefined); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
     earlierDrafts={earlierDrafts}
     earlierDraftsNext={drafts.data?.next_before}
     onLoadOlderDrafts={openID ? async (before) => {
       const page = await aiDraftApi.list(openID, before);
       return { drafts: earlierWritten(page.items), next: page.next_before };
     } : undefined}
-    onRestoreDraft={reads('ai_assist:create') ? async (draft) => { await aiDraftApi.restore(draft.conversation_id, draft.id); await afterDraft(draft.conversation_id); } : undefined}
+    onRestoreDraft={reads('ai_assist:create') ? async (draft) => { await aiDraftApi.restore(draft.conversation_id, draft.id); setDraftNotice(undefined); await afterDraft(draft.conversation_id); } : undefined}
     contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
     searchSignal={searchSignal} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
+import { ReplyConflictError } from '../../api/client';
 import { InboxRoute } from './inbox-route';
 import { askInbox } from '../shell/inbox-intents';
 import { readRecent } from '../shell/recent-items';
@@ -1409,6 +1410,33 @@ const writtenDraft = (conversationId: string, outcome: 'discarded' | null) => ({
   text: 'Your refund is on its way.', missing_info: null, sources: [], warnings: [], model: null, outcome, similarity: null, sent_message_id: null,
   requested_by_agent_id: null, automatic: false, answers_message_id: null, reply_needed: null, created_at: '2026-10-14T00:00:00Z', ready_at: '2026-10-14T00:00:00Z',
   decided_at: outcome ? '2026-10-14T01:00:00Z' : null, decided_by_name: null, restored_at: null });
+
+// The notice that a reply came while the draft was reviewed is about that conversation; another one opened next
+// must not say someone replied to it.
+test('the notice that someone replied while a draft was reviewed stays with its conversation', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  api.conversations.mockResolvedValue({ items: [alpha, beta], page: 1, page_size: 50 });
+  drafts.list.mockImplementation(async (id: string) => ({ items: id === alpha.id ? [writtenDraft(alpha.id, null)] : [], next_before: null }));
+  api.createMessage.mockReset();
+  api.createMessage.mockRejectedValue(Object.assign(new ReplyConflictError(), { newer: [{ reply_number: 1, origin: null }] }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  const card = await screen.findByRole('region', { name: /draft from claude/i });
+  fireEvent.click(within(card).getByRole('button', { name: 'Send' }));
+  const notice = /Someone replied to this conversation while you were reviewing the draft/;
+  expect(await screen.findByText(notice)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /beta conversation/i }));
+  expect(await screen.findByRole('heading', { name: 'Beta conversation' })).toBeInTheDocument();
+  expect(screen.queryByText(notice)).toBeNull();
+  // Back on the conversation it happened in, it still says so.
+  fireEvent.click(screen.getByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByText(notice)).toBeInTheDocument();
+  drafts.list.mockReset();
+  drafts.list.mockImplementation(async () => ({ items: [], next_before: null }));
+});
 
 test('resolving a conversation takes its waiting draft away at once: it moves to Earlier drafts', async () => {
   quietApis();
