@@ -386,11 +386,11 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     channels={channelNames} savedViews={savedViews}
     viewsMenu={(!me.data || reads('saved_views:read')) && <SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
-    onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
+    onUpdate={(conversationId, changes) => update.mutateAsync({ conversationId, changes })}
     noticesFailed={Boolean(selected && opened.isError && mayTell(selected) && noticesOf(selected) === undefined)}
     onSetStatus={(conversationId, status, options) => update.mutateAsync({ conversationId, changes: options?.notify === false ? { status, notify: false } : { status } })}
-    onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
-    onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
+    onAddTag={(conversationId, tagId) => addTag.mutateAsync({ conversationId, tagId })}
+    onRemoveTag={(conversationId, tagId) => removeTag.mutateAsync({ conversationId, tagId })}
     onMessage={(kind, body, files, cc, seen, aiDraft, key, mentions) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key, mentions })}
     otherList={mentionsMode ? { label: mentionMessages.mentions, content: <MentionsPane timezone={me.data?.timezone ?? 'UTC'} selectedConversation={activeID} /> } : undefined}
     onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={reads('ai_assist:read') ? me.data?.ai_features?.draft : undefined}

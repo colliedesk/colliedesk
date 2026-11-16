@@ -562,6 +562,7 @@ a:where(.primary-action):where(:not(.checklist-step > a)):hover { border-color: 
 .property-row { --label: 80px; position: relative; display: grid; grid-template-columns: var(--label) minmax(0, 1fr); align-items: center; gap: var(--space-3); min-height: 28px; }
 /* Details · Status as a menu on a chat that tells its customer: it keeps the select's look (dot, word, an arrow
    on hover), and its menu is as wide as the row, inside the panel. */
+.property-error { margin: 0 0 var(--space-1) calc(80px + var(--space-3)); font-size: var(--fs-small); }
 .status-pick-row { position: relative; }
 .status-pick-row .status-pick { position: static; min-width: 0; }
 .status-pick-row .status-pick summary { justify-content: flex-start; width: 100%; min-height: 28px; padding: 0 var(--space-2); gap: var(--space-2); color: var(--text-1); }

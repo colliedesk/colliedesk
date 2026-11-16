@@ -646,6 +646,45 @@ test('on a phone the list opens no conversation until a tap: no presence, no thr
   }
 });
 
+// A change in the details that the server refuses must not look saved: the details say so and show the value the
+// conversation still has. While it saves, the details show the value picked, not the old one.
+test('a details edit that fails says it was not saved and shows the value back; while it saves, the pick shows', async () => {
+  quietApis();
+  const tag = { id: '44444444-4444-4444-8444-444444444444', name: 'billing', color: '#64748b' };
+  api.tags.mockResolvedValue({ items: [tag] });
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  let refuse!: (error: Error) => void;
+  api.updateConversation.mockReset();
+  api.updateConversation.mockImplementation(() => new Promise((_resolve, reject) => { refuse = reject; }));
+  api.addConversationTag.mockReset();
+  api.addConversationTag.mockRejectedValue(new Error('API 500'));
+  renderRoute();
+  await screen.findByRole('heading', { name: 'Alpha conversation' });
+  const priority = screen.getByRole('combobox', { name: 'Priority' });
+  fireEvent.change(priority, { target: { value: 'urgent' } });
+  expect(priority).toHaveValue('urgent');
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledTimes(1));
+  await act(async () => { refuse(new Error('API 500')); });
+  expect(await screen.findByRole('alert')).toHaveTextContent('Priority not saved. Try again.');
+  expect(priority).toHaveValue('normal');
+  // The status menu: the picked status shows while it saves, then comes back with the message.
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Pending' }));
+  const statusShown = () => document.querySelector('.status-pick-row summary');
+  await waitFor(() => expect(statusShown()).toHaveTextContent('Pending'));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledTimes(2));
+  await act(async () => { refuse(new Error('API 500')); });
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Status not saved. Try again.'));
+  expect(statusShown()).toHaveTextContent('Open');
+  // A tag ticked and refused is unticked again.
+  const billing = await within(document.getElementById('conversation-details')!).findByRole('checkbox', { name: 'billing' });
+  fireEvent.click(billing);
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Tags not saved. Try again.'));
+  expect(billing).not.toBeChecked();
+});
+
 test('resolving quietly from the header sends notify false; a plain press sends none', async () => {
   quietApis();
   api.conversations.mockReset();

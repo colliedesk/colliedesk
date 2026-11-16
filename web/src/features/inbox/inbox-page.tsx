@@ -72,7 +72,8 @@ interface InboxPageProps {
   agentName?: string;
   onManageSavedReplies?: () => void;
   savedRepliesState?: 'loading' | 'failed' | 'ready';
-  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
+  // A details change settles when the server answered and rejects when it refused (the details say so).
+  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void | Promise<unknown>;
   // Changes one conversation's status and settles when the server answered: the thread header and Send and resolve.
   // notify false sets it without telling the customer in their chat.
   // The open chat conversation's statuses that would tell could not be read.
@@ -80,8 +81,8 @@ interface InboxPageProps {
   onSetStatus?: (conversationId: string, status: SettableStatus, options?: { notify?: boolean }) => Promise<unknown>;
   // Files conversations in Spam (true) or takes them out where they were (false), with their senders.
   onSpam?: (ids: string[], spam: boolean) => Promise<SpamResult>;
-  onAddTag?: (conversationId: string, tagId: string) => void;
-  onRemoveTag?: (conversationId: string, tagId: string) => void;
+  onAddTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
+  onRemoveTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
   onCreateTag?: (conversationId: string, name: string) => void;
   // How many conversations each status holds under the other filters: the status picker's numbers.
   statusCounts?: { open: number; pending: number; resolved: number; closed: number; spam: number };

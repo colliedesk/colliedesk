@@ -18,9 +18,10 @@ interface DetailsPanelProps {
   conversation?: Conversation;
   agents: TeamMember[];
   tags: Tag[];
-  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
-  onAddTag?: (conversationId: string, tagId: string) => void;
-  onRemoveTag?: (conversationId: string, tagId: string) => void;
+  // Each change settles when the server answered; a refusal rejects, and the details say it was not saved.
+  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void | Promise<unknown>;
+  onAddTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
+  onRemoveTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
   onCreateTag?: (conversationId: string, name: string) => void;
   timezone?: string;
   onClose?: () => void;
@@ -42,13 +43,46 @@ interface DetailsPanelProps {
 
 const statusOrder = ['pending', 'resolved', 'closed', 'open'] as const;
 
+type Field = 'status' | 'priority' | 'assignee' | 'tags';
+const fieldNames: Record<Field, string> = { status: messages.status, priority: messages.priority, assignee: messages.assignee, tags: messages.tags };
+
+// useEdits keeps the details honest about a change on its way: while it saves, the value picked shows (not the old
+// one), and one the server refuses goes back to the conversation's value with a message under its row.
+function useEdits(conversationId?: string) {
+  const [saving, setSaving] = useState<Record<string, { value: unknown; token: object }>>({});
+  const [failed, setFailed] = useState<{ conversationId: string; field: Field }>();
+  const shown = <T,>(key: string, value: T): T => {
+    const edit = conversationId ? saving[`${conversationId}:${key}`] : undefined;
+    return edit ? edit.value as T : value;
+  };
+  const save = (field: Field, key: string, value: unknown, change: () => void | Promise<unknown>) => {
+    if (!conversationId) return;
+    const at = `${conversationId}:${key}`;
+    const token = {};
+    setFailed(undefined);
+    setSaving((now) => ({ ...now, [at]: { value, token } }));
+    // A later pick of the same value owns it; an earlier answer does not clear it.
+    const settle = () => setSaving((now) => {
+      if (now[at]?.token !== token) return now;
+      const rest = { ...now };
+      delete rest[at];
+      return rest;
+    });
+    let result: void | Promise<unknown>;
+    try { result = change(); } catch (error) { result = Promise.reject(error); }
+    Promise.resolve(result).then(settle, () => { settle(); setFailed({ conversationId, field }); });
+  };
+  const error = (field: Field) => failed?.conversationId === conversationId && failed?.field === field
+    ? <p role="alert" className="error-copy property-error">{messages.notSaved(fieldNames[field])}</p> : null;
+  return { shown, save, error };
+}
+
 // Status is a menu, not a select: a closed select fires change on every arrow key in some browsers, and each
 // step would change the conversation (and on a chat tell the customer). Where a status may tell, Tell the
 // customer comes first, ticked each time the menu opens.
-function StatusPick({ conversation, onUpdate }: { conversation?: Conversation; onUpdate?: DetailsPanelProps['onUpdate'] }) {
+function StatusPick({ conversation, status = conversation?.status ?? 'open', onUpdate }: { conversation?: Conversation; status?: Conversation['status']; onUpdate?: DetailsPanelProps['onUpdate'] }) {
   const [tell, setTell] = useState(true);
   const id = useId();
-  const status = conversation?.status ?? 'open';
   // Asked only where a status may tell: a chat whose channel is on and has words (the server's word).
   const asks = conversation ? mayTell(conversation) : false;
   const channel = conversation?.channel_ref?.name ?? messages.theChannel;
@@ -79,6 +113,9 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
   const readsTeam = holds('team:read');
   const readsTags = holds('tags:read');
   const [tagName, setTagName] = useState('');
+  const edits = useEdits(conversation?.id);
+  const update = (field: Field, key: string, value: unknown, changes: UpdateConversationRequest) =>
+    conversation && onUpdate && edits.save(field, key, value, () => onUpdate(conversation.id, changes));
   const createTag = () => {
     if (!conversation || !tagName.trim()) return;
     onCreateTag?.(conversation.id, tagName.trim());
@@ -93,13 +130,16 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
         currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} onWaiting={onTriageWaiting} />}
       <section className="details-section">
         <h2 className="sr-only">{messages.properties}</h2>
-        <StatusPick key={conversation?.id} conversation={conversation} onUpdate={onUpdate} />
-        <label className="property-row"><span>{messages.priority}</span><select value={conversation?.priority ?? 'normal'} disabled={!conversation}
-          onChange={(event) => conversation && onUpdate?.(conversation.id, { priority: event.target.value as UpdateConversationRequest['priority'] })}>
+        <StatusPick key={conversation?.id} conversation={conversation} status={edits.shown('status', conversation?.status ?? 'open')}
+          onUpdate={onUpdate && ((_id, changes) => update('status', 'status', changes.status, changes))} />
+        {edits.error('status')}
+        <label className="property-row"><span>{messages.priority}</span><select value={edits.shown('priority', conversation?.priority ?? 'normal')} disabled={!conversation}
+          onChange={(event) => { const priority = event.target.value as UpdateConversationRequest['priority']; update('priority', 'priority', priority, { priority }); }}>
           {Object.entries(messages.priorities).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
-        <label className="property-row"><span>{messages.assignee}</span><select value={conversation?.assignee_id ?? ''} disabled={!conversation}
-          onChange={(event) => conversation && onUpdate?.(conversation.id, { assignee_id: event.target.value || null })}>
+        {edits.error('priority')}
+        <label className="property-row"><span>{messages.assignee}</span><select value={edits.shown('assignee', conversation?.assignee_id ?? '')} disabled={!conversation}
+          onChange={(event) => update('assignee', 'assignee', event.target.value, { assignee_id: event.target.value || null })}>
           {/* The signed-in agent is Me, first; teammates follow and Unassigned comes last, as in the Filter menu. */}
           {currentAgentId && <option value={currentAgentId}>{messages.assignToMe}</option>}
           {agents.filter((agent) => agent.id !== currentAgentId && (!agent.deactivated_at || agent.id === conversation?.assignee_id)).map((agent) =>
@@ -108,14 +148,16 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
           {!readsTeam && conversation?.assignee_id && conversation.assignee_id !== currentAgentId && <option value={conversation.assignee_id}>{messages.anotherTeammate}</option>}
           <option value="">{messages.unassigned}</option>
         </select></label>
+        {edits.error('assignee')}
         <div className="property-row tags-row"><span>{messages.tags}</span>
           {/* Without the tag list (tags:read) the conversation's own tags are named, and nothing else is offered. */}
           {!readsTags ? <span className="tag-names">{tagNames(conversation)}</span> : <PropertyMenu className="tags-pick" label={messages.tags} disabled={!conversation} summary={tagNames(conversation)}>
             {tags.length === 0 && <p className="muted-copy">{messages.noTagsYet}</p>}
             {tags.map((tag) => {
-              const checked = conversation?.tags.some((item) => item.id === tag.id) ?? false;
+              const checked = edits.shown(`tag:${tag.id}`, conversation?.tags.some((item) => item.id === tag.id) ?? false);
+              const change = checked ? onRemoveTag : onAddTag;
               return <label className="tag-check" key={tag.id}><input type="checkbox" checked={checked}
-                onChange={() => conversation && (checked ? onRemoveTag?.(conversation.id, tag.id) : onAddTag?.(conversation.id, tag.id))} />{tag.name}</label>;
+                onChange={() => conversation && change && edits.save('tags', `tag:${tag.id}`, !checked, () => change(conversation.id, tag.id))} />{tag.name}</label>;
             })}
             {holds('tags:create') && <form className="tag-create" onSubmit={(event) => { event.preventDefault(); createTag(); }}>
               <input aria-label={messages.newTagName} placeholder={messages.newTagName} value={tagName} onChange={(event) => setTagName(event.target.value)} />
@@ -123,6 +165,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
             </form>}
           </PropertyMenu>}
         </div>
+        {edits.error('tags')}
         {conversation && slaOf(conversation) && <DueRow sla={slaOf(conversation)!} timezone={timezone} canManage={canManage} />}
       </section>
       {conversation && (

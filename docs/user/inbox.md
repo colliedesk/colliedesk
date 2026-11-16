@@ -487,6 +487,8 @@ In the details pane (**Show details** on a narrower screen):
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me** first, then each teammate, then **Unassigned**.
 - **Tags**: see [Tags](tags.md).
+- A change shows the value you picked at once, while it saves. If it cannot be saved, a message under the
+  row says so (**Priority not saved. Try again.**) and the row shows the value the conversation still has.
 
 ## Spam
 

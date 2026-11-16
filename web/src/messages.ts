@@ -306,6 +306,8 @@ export const messages = {
   dayGroups: { today: 'Today', earlier: 'Earlier' },
   showDetails: 'Show details',
   hideDetails: 'Hide details',
+  // A change in the details the server refused: the details show the value the conversation still has.
+  notSaved: (what: string) => `${what} not saved. Try again.`,
   aiSuggestionWaiting: 'AI suggestion',
   noTagsYet: 'No tags yet.',
   settingsSections: 'Settings sections',
