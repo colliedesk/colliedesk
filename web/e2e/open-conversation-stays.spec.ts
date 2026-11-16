@@ -76,8 +76,11 @@ test('the open conversation stays on screen with its reply box while an action m
   // Send reply: the customer no longer wrote last, so Waiting longest moves it behind 51 waiting ones, off page 1.
   await open(page, '', subjectOf(desk, '00'));
   await composer(page).fill(`Answered (${desk.suffix})`);
+  // Nothing seeds a replied conversation: its by-id read answers after the list, and the pane is watched until then.
+  const read = page.waitForResponse((response) => response.request().method() === 'GET' && new URL(response.url()).pathname === `/api/v1/conversations/${desk.ids['00']}`);
   await page.getByRole('button', { name: 'Send reply' }).click();
   await expect(page.getByRole('region', { name: 'Timeline' }).getByText(`Answered (${desk.suffix})`)).toBeVisible();
+  await read;
   await expectStayed(page, subjectOf(desk, '00'));
 
   // Send and resolve: it leaves Open.
