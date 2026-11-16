@@ -1648,7 +1648,7 @@ test('an empty status inside a channel says so for that channel, not that filter
   api.channelCounts.mockResolvedValue({ types: [{ type: 'zalo_oa', count: 1 }], items: [{ id: zalo, name: 'Zalo OA', type: 'zalo_oa', status: { state: 'working' } }] } as never);
   testRouter.search = { channel_id: zalo };
   renderRoute();
-  expect(await screen.findByText('No open conversations in Zalo OA. Every customer has an answer.')).toBeInTheDocument();
+  expect(await screen.findByText('No open conversations in Zalo OA.')).toBeInTheDocument();
   expect(screen.queryByText('No conversations match these filters.')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
   act(() => testRouter.navigate({ search: { channel_id: zalo, status: 'pending' } }));

@@ -283,7 +283,7 @@ test('Clear filters on an empty channel list keeps the channel: it is the place,
 // Nothing was filtered there, so the list says what is empty in its place, never that filters match nothing.
 test('an empty list narrowed only by its place and its status says so for that place and status, and offers no Clear filters', () => {
   const said: Array<[Record<string, string>, string]> = [
-    [{ channel_id: zaloChannel }, 'No open conversations in Zalo OA. Every customer has an answer.'],
+    [{ channel_id: zaloChannel }, 'No open conversations in Zalo OA.'],
     [{ channel_id: zaloChannel, status: 'pending' }, 'No pending conversations in Zalo OA.'],
     [{ status: 'pending' }, 'No pending conversations.'],
     [{ status: 'all', sort: 'priority' }, 'No conversations.'],
@@ -293,6 +293,22 @@ test('an empty list narrowed only by its place and its status says so for that p
     expect(screen.getByText(text)).toBeInTheDocument();
     expect(screen.queryByText('No conversations match these filters.')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+    unmount();
+  }
+});
+
+// A saved view or a channel is only part of the Open queue: open conversations may wait outside it, so an empty one
+// says it is empty there and never that every customer has an answer.
+test('an empty Open list in a saved view or a channel never says every customer has an answer', () => {
+  const mineOpen = { id: 'abababab-abab-4bab-8bab-abababababab', name: 'Mine, open', filters: { status: ['open' as const], assignee: ['me'] } };
+  const said: Array<[Record<string, string>, string]> = [
+    [{ assignee: 'me' }, 'No open conversations in Mine, open.'],
+    [{ channel_id: zaloChannel }, 'No open conversations in Zalo OA.'],
+  ];
+  for (const [query, text] of said) {
+    const { unmount } = render(<InboxPage conversations={[]} filtered query={query} onQuery={vi.fn()} channels={[{ id: zaloChannel, name: 'Zalo OA' }]} savedViews={[mineOpen]} />);
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.queryByText(/Every customer has an answer/)).not.toBeInTheDocument();
     unmount();
   }
 });
