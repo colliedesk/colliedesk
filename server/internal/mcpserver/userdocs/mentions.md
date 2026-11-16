@@ -30,7 +30,8 @@ The person you asked sees **Hoàng Tú asked you · marked read when you opened 
 
 ## Your Mentions list
 
-**Mentions** in the sidebar counts the notes that asked you and that you have not read.
+**Mentions** in the sidebar counts the notes that asked you and that you have not read. A new one counts
+within about 20 seconds, with the inbox's regular refresh; you do not need to reload or switch windows.
 
 - **Unread N** lists the ones you have not read, **All** every one, newest first. **Mark all read** clears
   the count.
