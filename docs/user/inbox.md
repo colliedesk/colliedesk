@@ -155,6 +155,8 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
   subject; and the start of what the customer wrote last, on one line. The dot is the status colour (blue
   Open, amber Pending, green Resolved, a ring for Closed and Spam) and red for an urgent conversation or one
   whose reply target passed; a screen reader reads the status in words.
+- When the workspace has two or more channels of one type, each row also names its channel. Inside one channel the
+  title already names it, so the rows leave it out; the open conversation still shows it above the thread.
 - The time on the right is when the customer last wrote: your own replies and private notes never change
   it. A conversation the customer never wrote in shows when it last changed. While a
   [reply target](response-targets.md) runs, the row shows **Due** and the time instead, and once it passed,
