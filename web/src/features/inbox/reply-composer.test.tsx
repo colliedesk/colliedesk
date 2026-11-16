@@ -857,6 +857,26 @@ test('an unsent reply survives the composer going away (a reload, Back) and come
   expect(screen.getByLabelText('Message body')).toHaveValue('');
 });
 
+// A colleague of the customer removed from Cc must not come back after a reload or a trip to another conversation:
+// Send would copy them after all.
+test('a Cc the agent removed stays removed when the unsent reply comes back', () => {
+  window.localStorage.clear();
+  const suggested = ['anna@acme.example', 'ben@acme.example'];
+  const first = render(<ReplyComposer draftKey="ws-1:agent-1:conv-cc" suggestedCc={suggested} onSubmit={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'About your refund' } });
+  fireEvent.click(screen.getByRole('button', { name: /ben@acme\.example/ }));
+  expect(within(screen.getByRole('list', { name: 'Cc' })).queryByText('ben@acme.example')).toBeNull();
+  first.unmount();
+  const onSubmit = vi.fn();
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-cc" suggestedCc={suggested} onSubmit={onSubmit} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('About your refund');
+  const chips = screen.getByRole('list', { name: 'Cc' });
+  expect(within(chips).getByText('anna@acme.example')).toBeInTheDocument();
+  expect(within(chips).queryByText('ben@acme.example')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(onSubmit.mock.lastCall?.[3]).toEqual(['anna@acme.example']);
+});
+
 test('a draft is cleared once its reply is sent, and kept when the send is refused', async () => {
   window.localStorage.clear();
   const refused = vi.fn().mockRejectedValue(new Error('network'));

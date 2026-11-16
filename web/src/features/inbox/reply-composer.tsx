@@ -114,6 +114,10 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const [kind, setKindAsked] = useState<Kind>(noReplies || !mayReply ? 'note' : stored?.kind ?? 'outgoing');
   const setKind = useCallback((next: Kind) => setKindAsked(next === 'outgoing' && !mayReply ? 'note' : next), [mayReply]);
   const [body, setBody] = useState(stored?.body ?? '');
+  // undefined until the agent edits the list, so suggestions that load later still show up. Kept with the text, so
+  // an address the agent removed is not copied after a reload or a trip to another conversation.
+  const [ccEdited, setCcEdited] = useState<string[] | undefined>(stored?.cc);
+  const keptCc = (list = ccEdited) => (list ? { cc: list } : {});
   // The text is kept as it is typed, and forgotten once the box is empty again (after a send). The key is
   // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
   // remounts the box with it, so the draft kept there is read before anything is written over it.
@@ -129,12 +133,14 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   };
   useEffect(() => {
     const send = sendOf(kind, body);
-    writeDraft(draftKey, { kind, body, ...(send ? { sendKey: send.key, sendInput: send.input } : {}) });
-  }, [draftKey, kind, body]);
+    writeDraft(draftKey, { kind, body, ...keptCc(), ...(send ? { sendKey: send.key, sendInput: send.input } : {}) });
+  }, [draftKey, kind, body, ccEdited]);
   const latestBody = useRef(body);
   latestBody.current = body;
   const latestKind = useRef(kind);
   latestKind.current = kind;
+  const latestCc = useRef(ccEdited);
+  latestCc.current = ccEdited;
   // A draft kept with a send's key asks the server once whether that send stored its message: then the text
   // leaves the box instead of inviting a second send. It is never sent by itself.
   useEffect(() => {
@@ -145,7 +151,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       if (!current || !found || pendingSend.current !== send) return;
       pendingSend.current = undefined;
       if (latestBody.current === send.body) setBody('');
-      else writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current });
+      else writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current, ...keptCc(latestCc.current) });
     }, () => undefined);
     return () => { current = false; };
   }, []);
@@ -173,7 +179,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       const mine = editedHere.current && latestBody.current.trim() !== '';
       // It sent or cleared text of its own: the text typed here stays, and is kept again.
       if (mine && !text.trim() && !sameTextGone) {
-        writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current });
+        writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current, ...keptCc(latestCc.current) });
         return;
       }
       if (mine && !sameTextGone) {
@@ -193,8 +199,6 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const inFlight = useRef(false);
   const [files, setFiles] = useState<File[]>([]);
   const fileProblem = attachmentProblem(files, attachmentLimits);
-  // undefined until the agent edits the list, so suggestions that load later still show up.
-  const [ccEdited, setCcEdited] = useState<string[]>();
   const [ccOpen, setCcOpen] = useState(false);
   const [ccBlocking, setCcBlocking] = useState(false);
   const cc = ccEdited ?? suggestedCc;
@@ -365,7 +369,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     const key = draftKey ? sendOf(kind, body, input)?.key ?? newSubmitKey() : undefined;
     if (key) {
       pendingSend.current = { kind, body, key, input };
-      writeDraft(draftKey, { kind, body, sendKey: key, sendInput: input });
+      writeDraft(draftKey, { kind, body, ...keptCc(), sendKey: key, sendInput: input });
     }
     const send = (draftId?: string) => mentions.length > 0 ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, undefined, undefined, undefined, key, mentions)
       : key ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, sentCc.length > 0 ? sentCc : undefined, seen, draftId, key)
@@ -461,7 +465,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
         {otherTab && <p role="status" className="composer-hint">{messages.draftFromOtherTab}</p>}
         {otherDraft && <p role="status" className="composer-hint">{messages.otherTabDraftDiffers}{' '}
           <button type="button" className="link-action" onClick={() => adopt(otherDraft)}>{messages.useOtherTabDraft}</button>{' '}
-          <button type="button" className="link-action" onClick={() => { writeDraft(draftKey, { kind, body }); setOtherDraft(undefined); }}>{messages.keepMyDraft}</button></p>}
+          <button type="button" className="link-action" onClick={() => { writeDraft(draftKey, { kind, body, ...keptCc() }); setOtherDraft(undefined); }}>{messages.keepMyDraft}</button></p>}
         {picking && !disabled && (pickers.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
           // Until the chunk is there, the list's own box says it is loading, where the list will be.
           : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>

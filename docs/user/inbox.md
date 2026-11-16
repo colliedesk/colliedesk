@@ -397,7 +397,8 @@ the list's title names the view on screen.
   send the reply or note. If the send fails, or a reload cuts it off, the text is written back, and the
   next time the conversation opens it is dropped if the reply or note did arrive, so it is never offered
   twice. It also goes seven days after you last opened or edited it, and for every conversation when you sign out, so a
-  teammate who signs in on the same browser never sees it. Attached files are not kept. Another browser or
+  teammate who signs in on the same browser never sees it. The **Cc** is kept with the text as you left it, so an
+  address you removed is not copied when you come back. Attached files are not kept. Another browser or
   device does not see it. Two tabs of the same browser share it: when you type in one, the other tab's
   box takes the newer text and says **Updated from another tab**, unless you typed different text in that
   tab too. Then your text stays, and the tab says **Another tab has a different draft** with **Use it**
