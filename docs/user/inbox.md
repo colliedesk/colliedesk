@@ -49,7 +49,9 @@ messages take most of it. The top row has **Back to Inbox** (the arrow), the sub
 and **Show details** (the panel icon), which opens the properties, tags and the customer's other
 conversations. Under it the status, priority and customer slide sideways beside **Resolve**. **Back to
 Inbox**, or the browser's Back, returns to the list with the same filters and scrolled to where you left
-it. The workspace name and your address stay at the top while the page scrolls.
+it. The workspace name and your address stay at the top while the page scrolls. While only the list is on
+screen, no conversation counts as open: teammates do not see you viewing one, and a note that asks you stays
+unread in Mentions until you tap its conversation.
 
 The composer at the bottom is one line with **Send reply** until you tap it; the lock beside it starts a
 **Private note** in one tap. Tapped, it opens with the cursor in it, with

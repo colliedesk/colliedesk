@@ -38,6 +38,7 @@ import type { TokenPermission } from '../../api/schemas';
 import { MentionsPane, useMarkMentionsRead } from './mentions-pane';
 import { mentionMessages } from './mention-messages';
 import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
+import { usePhone } from '../../lib/use-phone';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -152,10 +153,13 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
   // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
   const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
-  const activeID = selectedId ?? params.conversationId;
+  // On a phone the list and a conversation take turns on the screen (layout.css): only the one the address names is
+  // in front of the person. Another is not open there: no presence, no mention marked read, no thread requests.
+  const phone = usePhone();
+  const activeID = phone ? params.conversationId : selectedId ?? params.conversationId;
   // With no conversation picked, the first row is the one on screen. It stays the one on screen for this list until
   // the person picks another, so a live refresh that puts a new row on top never swaps the thread and its reply box.
-  const firstRow = mentionsMode ? undefined : conversations.data?.items[0]?.id;
+  const firstRow = mentionsMode || phone ? undefined : conversations.data?.items[0]?.id;
   const [pinned, setPinned] = useState<{ query: string; id: string }>();
   const pinnedID = pinned?.query === query ? pinned.id : undefined;
   // Rows kept from the previous filters are not this list's first row.

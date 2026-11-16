@@ -609,6 +609,43 @@ test('with nothing picked, the conversation shown first stays on screen when a l
   expect(await screen.findByRole('heading', { name: 'Beta conversation' })).toBeInTheDocument();
 });
 
+// On a phone the list and a conversation take turns on the screen: a conversation the person has not tapped is not
+// in front of them, so teammates must not see them viewing it, and the notes asking them stay unread.
+test('on a phone the list opens no conversation until a tap: no presence, no thread requests, no row marked open', async () => {
+  const phone = { matches: true, media: '(max-width: 44rem)', addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  vi.stubGlobal('matchMedia', (query: string) => (query.includes('44rem') ? phone : { ...phone, matches: false, media: query }));
+  try {
+    quietApis();
+    const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.messages.mockClear();
+    api.timeEntries.mockClear();
+    drafts.list.mockClear();
+    api.announcePresence.mockClear();
+    renderRoute();
+    const row = await screen.findByRole('button', { name: /alpha conversation/i });
+    await waitFor(() => expect(api.agents).toHaveBeenCalled());
+    await act(async () => { await new Promise((done) => setTimeout(done, 200)); });
+    expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
+    expect(row).not.toHaveAttribute('aria-current');
+    expect(api.messages).not.toHaveBeenCalled();
+    expect(api.timeEntries).not.toHaveBeenCalled();
+    expect(drafts.list).not.toHaveBeenCalled();
+    expect(api.announcePresence).not.toHaveBeenCalled();
+    // A tap opens it (the address names it), and only then is it read and announced.
+    testRouter.params = { conversationId: alpha.id };
+    fireEvent.click(row);
+    expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+    await waitFor(() => expect(api.messages).toHaveBeenCalledWith(alpha.id));
+    await waitFor(() => expect(api.announcePresence).toHaveBeenCalledWith(alpha.id, expect.anything()), { timeout: 3_000 });
+  } finally {
+    vi.unstubAllGlobals();
+    testRouter.params = {};
+  }
+});
+
 test('resolving quietly from the header sends notify false; a plain press sends none', async () => {
   quietApis();
   api.conversations.mockReset();
