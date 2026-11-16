@@ -192,6 +192,9 @@ func TestHelpCenterUnknownOffAndLockedAreOneNotFound(t *testing.T) {
 	if unknown.Header().Get("ETag") != "" || unknown.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("404 headers=%v, want no ETag and no-store", unknown.Header())
 	}
+	// The one 404 names both causes, so a visitor of an off help center is not told they mistyped and
+	// the page still says nothing a stranger could not tell from the address alone.
+	wantPage(t, off, http.StatusNotFound, []string{"This help center is not published, or the page does not exist."}, []string{"typing mistakes"})
 }
 
 func TestHelpCenterPagesRevalidateByContentVersion(t *testing.T) {
