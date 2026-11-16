@@ -65,6 +65,38 @@ test('a note asks only the teammate whose whole name follows the @, never one wh
   expect(ask('@Longer wait, @Anhs too')).toBeUndefined();
 });
 
+// Vietnamese text can arrive with its accents as separate marks (NFD: pasted from macOS, some input methods). "@Bùi"
+// typed that way is still Bùi, never a teammate named "Bu" whose name ends where the mark starts.
+test('a note asks the teammate whose accented name follows the @, however the accents were typed', () => {
+  const bu = member('10000000-0000-4000-8000-000000000008', 'Bu', 'bu@northwind.example');
+  const bui = member('10000000-0000-4000-8000-000000000009', 'B\u00f9i', 'bui@northwind.example');
+  const thao = member('10000000-0000-4000-8000-000000000010', 'Tha\u0309o', 'thao@northwind.example');
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} teammates={askableTeammates([me, bu, bui, thao], me.id)} />);
+  fireEvent.click(screen.getByRole('button', { name: /Private note/ }));
+  const box = screen.getByRole('textbox', { name: 'Message body' });
+  const ask = (text: string) => {
+    fireEvent.change(box, { target: { value: text } });
+    fireEvent.click(screen.getByRole('button', { name: /Add private note/ }));
+    return onSubmit.mock.lastCall?.[7];
+  };
+  expect(ask('@Bu\u0300i can you check?')).toEqual([bui.id]);
+  // A name saved with separate marks is asked by its name typed as one letter each.
+  expect(ask('@Th\u1ea3o please look.')).toEqual([thao.id]);
+});
+
+// Two teammates can share a display name. The text cannot tell them apart, so both are asked, as before.
+test('a note asks every teammate with the name that follows the @', () => {
+  const minh = member('10000000-0000-4000-8000-000000000011', 'Minh', 'minh.tran@northwind.example');
+  const otherMinh = member('10000000-0000-4000-8000-000000000012', 'Minh', 'minh.le@northwind.example');
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} teammates={askableTeammates([me, minh, otherMinh], me.id)} />);
+  fireEvent.click(screen.getByRole('button', { name: /Private note/ }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message body' }), { target: { value: '@Minh can you check?' } });
+  fireEvent.click(screen.getByRole('button', { name: /Add private note/ }));
+  expect(onSubmit.mock.lastCall?.[7]).toEqual([minh.id, otherMinh.id]);
+});
+
 test('@ in a customer reply does nothing', () => {
   render(<ReplyComposer onSubmit={vi.fn()} teammates={askableTeammates([me, long], me.id)} />);
   const box = screen.getByRole('textbox', { name: 'Message body' });

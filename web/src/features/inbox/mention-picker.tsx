@@ -29,17 +29,21 @@ export function matchingTeammates(teammates: Teammate[], query: string): Teammat
     .some((part) => part.toLocaleLowerCase().startsWith(wanted))).slice(0, 8);
 }
 
-// A name ends where no letter or digit follows it, so "@Long" is not read inside "@Longer".
-const nameEnds = (text: string, at: number) => at >= text.length || !/[\p{L}\p{N}]/u.test(text[at]);
+// A name ends where no letter, mark or digit follows it, so "@Long" is not read inside "@Longer".
+const nameEnds = (text: string, at: number) => at >= text.length || !/[\p{L}\p{M}\p{N}]/u.test(text[at]);
 
 // mentionedIn lists the teammates whose whole @Name the text holds, each once, in the order they are asked. At each @
-// the longest name that fits wins: "@Long Bui" asks Long Bui, never a teammate named Long as well.
+// the longest name that fits wins: "@Long Bui" asks Long Bui, never a teammate named Long as well. Teammates who share
+// that name are all asked, since the text cannot tell them apart. Text and names are compared in one Unicode form
+// (NFC), so an accent typed as a separate mark ("u" + U+0300) still reads as "ù".
 export function mentionedIn(text: string, teammates: Teammate[]): string[] {
-  const byLength = [...teammates].sort((a, b) => b.name.length - a.name.length);
+  const written = text.normalize('NFC');
+  const byLength = teammates.map((person) => ({ id: person.id, name: person.name.normalize('NFC') }))
+    .sort((a, b) => b.name.length - a.name.length);
   const asked: string[] = [];
-  for (let at = text.indexOf('@'); at !== -1; at = text.indexOf('@', at + 1)) {
-    const person = byLength.find((each) => text.startsWith(each.name, at + 1) && nameEnds(text, at + 1 + each.name.length));
-    if (person) asked.push(person.id);
+  for (let at = written.indexOf('@'); at !== -1; at = written.indexOf('@', at + 1)) {
+    const fits = byLength.filter((each) => written.startsWith(each.name, at + 1) && nameEnds(written, at + 1 + each.name.length));
+    asked.push(...fits.filter((each) => each.name.length === fits[0].name.length).map((each) => each.id));
   }
   return [...new Set(asked)];
 }
