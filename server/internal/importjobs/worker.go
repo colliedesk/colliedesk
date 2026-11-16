@@ -32,6 +32,8 @@ const (
 	maxCrashes = 5
 	// maxFullRetries is how often a FAILED full pass runs again while its failures go down.
 	maxFullRetries = 2
+	// maxEndFailures is how often the transaction that ends a job may fail before the job fails without it.
+	maxEndFailures = 3
 	// relinkBatch is how many changed links one tick applies.
 	relinkBatch = 20
 	// etaWindow is the span the remaining-time estimate is computed over.
@@ -195,6 +197,10 @@ func (w *Worker) process(parent context.Context, item claimed) error {
 	defer stop()
 	if job.Kind == KindUndo {
 		return run.undo(ctx)
+	}
+	if job.CancelRequested {
+		// A stop whose end did not commit: it ends now, without asking Freshdesk again.
+		return run.end(ctx, StateCancelled, "", "", "", nil, nil)
 	}
 	key, err := w.options.Keys.open(item.workspaceID, item.id, job.sealedKey, job.sealedKeyID)
 	if err != nil {
@@ -483,6 +489,15 @@ func (r *jobRun) undo(ctx context.Context) error {
 	if r.job.AccountSource == nil {
 		return r.end(ctx, StateFailed, "", CodeImportError, "The import to undo has no Freshdesk account.", nil, nil)
 	}
+	// The Freshdesk agents of an undone import go with it, in the transaction that ends it.
+	forget := func(ctx context.Context, tx pgx.Tx) error {
+		return forgetPeople(ctx, tx, r.item.workspaceID, *r.job.AccountSource)
+	}
+	if r.job.endFailures > 0 {
+		// The undo committed what it removed, and its ledger with it, before its end was refused: running it
+		// again would find no import. Only the end runs again, keeping the report endFailed saved.
+		return r.endAnd(ctx, forget, StateFinished, "", "", "", nil, nil)
+	}
 	result, err := r.worker.undo(ctx, r.worker.options.Pool, r.worker.options.Storage, freshdesk.UndoOptions{WorkspaceSlug: r.job.slug, Source: *r.job.AccountSource})
 	if err != nil {
 		return r.fail(ctx, err)
@@ -491,11 +506,7 @@ func (r *jobRun) undo(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// The Freshdesk agents of an undone import go with it, in the transaction that ends it.
-	return r.endAnd(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		return forgetPeople(ctx, tx, r.item.workspaceID, *r.job.AccountSource)
-	},
-		StateFinished, "", "", "", encoded, ptr(result.Markdown()))
+	return r.endAnd(ctx, forget, StateFinished, "", "", "", encoded, ptr(result.Markdown()))
 }
 
 // fail turns a run error into the job's next state: retry what may pass later, end the rest.
@@ -579,17 +590,73 @@ func (r *jobRun) end(ctx context.Context, state, status, code, message string, r
 }
 
 // endAnd is end with more writes in its transaction. The end releases the claim, so the run's context
-// may be cancelled right after; nothing that belongs to the end is written after it.
+// may be cancelled right after; nothing that belongs to the end is written after it. The key is erased
+// only once the end commits: an end that rolled back has not ended the job.
 func (r *jobRun) endAnd(ctx context.Context, also func(context.Context, pgx.Tx) error, state, status, code, message string, report []byte, markdown *string) error {
 	r.ended = true
 	r.flush(ctx)
 	err := r.updateAnd(ctx, also, endSQL+`, report=COALESCE($9, report), report_markdown=COALESCE($10, report_markdown)`,
 		state, nullable(status), nullable(code), nullable(message), r.now(), report, markdown)
-	r.worker.options.Keys.forget(r.item.id)
+	switch {
+	case err == nil:
+		r.ends(ctx, state, status, code, report)
+		return nil
+	case errors.Is(err, errLeaseLost):
+		return err
+	}
+	err = fmt.Errorf("end import job: %w", err)
+	if also == nil {
+		// The end of a preview, a stop or a failure with its own code writes only the job: it keeps its state
+		// and code, and never waits to retry (a preview would take the slot of the one active import).
+		return errors.Join(err, r.settle(ctx, state, status, code, message, report, markdown, r.job.endFailures))
+	}
+	return r.endFailed(ctx, err, report, markdown)
+}
+
+// endFailed counts an end whose other writes rolled it back, apart from the crash count: a rerun walks the
+// account again and its progress clears that one. The job waits and runs again (the ledger skips what is
+// done) until the end failed maxEndFailures times; then it fails without those writes, keeping the run's
+// report. An undo keeps its report while it waits: its rerun only ends it.
+func (r *jobRun) endFailed(ctx context.Context, cause error, report []byte, markdown *string) error {
+	failures := r.job.endFailures + 1
+	now := r.now()
+	if failures < maxEndFailures {
+		kept, keptMarkdown := []byte(nil), (*string)(nil)
+		if r.job.Kind == KindUndo {
+			kept, keptMarkdown = report, markdown
+		}
+		message := fmt.Sprintf("The server could not record the end of the %s (%d of %d tries); it tries again: %v", r.job.Kind, failures, maxEndFailures, cause)
+		return errors.Join(cause, r.update(ctx, `state='retry_wait', end_failures=$4, error_code=$5, error_message=$6, next_run_at=$7,
+			claim_token=NULL, lease_until=NULL, updated_at=$8, report=COALESCE($9, report), report_markdown=COALESCE($10, report_markdown)`,
+			failures, CodeEndFailed, message, now.Add(time.Duration(failures)*time.Minute), now, kept, keptMarkdown))
+	}
+	message := fmt.Sprintf("The server could not record the end of the %s %d times, so it was given up: %v", r.job.Kind, failures, cause)
+	err := r.updateAnd(ctx, nil, endSQL+`, report=COALESCE($9, report), report_markdown=COALESCE($10, report_markdown), end_failures=$11`,
+		StateFailed, nil, CodeEndFailed, message, now, report, markdown, failures)
+	switch {
+	case err == nil:
+		r.ends(ctx, StateFailed, "", CodeEndFailed, report)
+	case !errors.Is(err, errLeaseLost):
+		err = r.settle(ctx, StateFailed, "", CodeEndFailed, message, report, markdown, failures)
+	}
+	return errors.Join(cause, err)
+}
+
+// settle writes a refused end again with only the columns that end a job (no imported-conversation count,
+// no other write), so a fault in the rest cannot keep the job running.
+func (r *jobRun) settle(ctx context.Context, state, status, code, message string, report []byte, markdown *string, failures int) error {
+	err := r.update(ctx, endColumns+`, end_failures=$9, report=COALESCE($10, report), report_markdown=COALESCE($11, report_markdown)`,
+		state, nullable(status), nullable(code), nullable(message), r.now(), failures, report, markdown)
 	if err == nil {
-		r.notifyAdmins(ctx, state, status, code, report)
+		r.ends(ctx, state, status, code, report)
 	}
 	return err
+}
+
+// ends follows an end that committed: the key is erased and the admins hear of it.
+func (r *jobRun) ends(ctx context.Context, state, status, code string, report []byte) {
+	r.worker.options.Keys.forget(r.item.id)
+	r.notifyAdmins(ctx, state, status, code, report)
 }
 
 // end ends a job that never started running (the crash guard), outside a jobRun.

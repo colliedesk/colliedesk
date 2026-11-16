@@ -135,6 +135,21 @@ test('a wait for Freshdesk says when the import tries again', () => {
   expect(screen.getByText(/Freshdesk did not answer. The import tries again at/)).toBeInTheDocument();
 });
 
+test('an end the server could not record waits to try again and does not blame Freshdesk', () => {
+  page({ job: job({ state: 'retry_wait', phase: 'full', error_code: 'end_failed', next_run_at: '2026-10-22T09:30:00Z' }) });
+  expect(screen.getByText(/The server could not record the end of the import. It tries again at/)).toBeInTheDocument();
+  expect(screen.queryByText(/Freshdesk did not answer/)).not.toBeInTheDocument();
+});
+
+test('an import whose end kept failing says so once, shows its report and offers a new import', () => {
+  const report: ImportReport = { status: 'OK', tickets: { source: 10, imported: 10, failed: 0 }, messages: { source: 30, imported: 30, failed: 0 } };
+  page({ job: job({ state: 'failed', phase: 'full', has_report: true, imported_conversations: 10, error_code: 'end_failed', error_message: 'end import job: refused' }), report });
+  expect(screen.getByRole('alert')).toHaveTextContent('The server could not record the end of the import.');
+  expect(screen.getAllByText(/nothing is copied twice/)).toHaveLength(1);
+  expect(within(screen.getByRole('row', { name: /Tickets/ })).getAllByRole('cell').map((cell) => cell.textContent)).toEqual(['10', '10', '—']);
+  expect(screen.getByRole('button', { name: 'New import' })).toBeInTheDocument();
+});
+
 test('an import that lost its key asks for it again and goes on', () => {
   const { onSetKey } = page({ job: job({ state: 'waiting_key', phase: 'full', has_key: false }) });
   fireEvent.change(screen.getByLabelText('API key of a Freshdesk admin'), { target: { value: 'again' } });

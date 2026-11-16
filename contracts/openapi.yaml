@@ -9132,7 +9132,9 @@ components:
             Why a job failed or waits: freshdesk_key_rejected, freshdesk_needs_admin_key,
             freshdesk_plan_no_api (the Freshdesk Free plan, or an ended trial of a higher plan, has no
             API calls), freshdesk_unavailable, import_running_elsewhere, retrying_failed_items,
-            storage_cap, knowledge_base_limit, key_unavailable, no_progress or import_error.
+            storage_cap, knowledge_base_limit, key_unavailable, no_progress, end_failed (the server could
+            not record the end of the import; it waits and tries again, then fails with what was imported
+            kept) or import_error.
         error_message: {type: [string, 'null']}
         imported_conversations:
           type: [integer, 'null']

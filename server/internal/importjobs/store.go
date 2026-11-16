@@ -118,6 +118,7 @@ type runRow struct {
 	ownerInstance                   *string
 	report                          []byte
 	attemptsNoProgress, fullRetries int
+	endFailures                     int
 	retryingSince                   *time.Time
 }
 
@@ -130,9 +131,9 @@ func loadRun(ctx context.Context, db *database.DB, item claimed) (runRow, error)
 			return err
 		}
 		row.Job = job
-		return tx.QueryRow(ctx, `SELECT w.slug, j.sealed_key, j.sealed_key_id, j.owner_instance, j.report, j.attempts_without_progress, j.full_retries, j.retrying_since
+		return tx.QueryRow(ctx, `SELECT w.slug, j.sealed_key, j.sealed_key_id, j.owner_instance, j.report, j.attempts_without_progress, j.full_retries, j.end_failures, j.retrying_since
 			FROM import_jobs j JOIN workspaces w ON w.id=j.workspace_id WHERE j.workspace_id=$1 AND j.id=$2`, item.workspaceID, item.id).
-			Scan(&row.slug, &row.sealedKey, &row.sealedKeyID, &row.ownerInstance, &row.report, &row.attemptsNoProgress, &row.fullRetries, &row.retryingSince)
+			Scan(&row.slug, &row.sealedKey, &row.sealedKeyID, &row.ownerInstance, &row.report, &row.attemptsNoProgress, &row.fullRetries, &row.endFailures, &row.retryingSince)
 	})
 	row.workspaceID = item.workspaceID
 	return row, err
@@ -165,10 +166,13 @@ func updateAnd(ctx context.Context, db *database.DB, item claimed, also func(con
 	})
 }
 
-// endSQL ends a claimed job: terminal state, key erased, lease released. Arguments from $4: state,
+// endColumns ends a claimed job: terminal state, key erased, lease released. Arguments from $4: state,
 // status, error code, error message, now.
-const endSQL = `state=$4, status=$5, error_code=$6, error_message=$7, sealed_key=NULL, sealed_key_id=NULL,
-	claim_token=NULL, lease_until=NULL, cancel_requested_at=NULL, finished_at=$8, updated_at=$8,
+const endColumns = `state=$4, status=$5, error_code=$6, error_message=$7, sealed_key=NULL, sealed_key_id=NULL,
+	claim_token=NULL, lease_until=NULL, cancel_requested_at=NULL, finished_at=$8, updated_at=$8`
+
+// endSQL is endColumns with the count of the conversations an import brought in.
+const endSQL = endColumns + `,
 	imported_conversations=CASE WHEN kind='import' AND account_source IS NOT NULL THEN (SELECT count(*) FROM import_items i
 		WHERE i.workspace_id=import_jobs.workspace_id AND i.source=import_jobs.account_source AND i.entity='ticket' AND i.status='done') END`
 

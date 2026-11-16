@@ -73,10 +73,11 @@ list is server configuration that the database does not hold, so an absent key m
   inbound message was spam can therefore differ between the backfill and the live rule.
 - **A refused milestone never changes an import.** For an in-app import the milestone is written in the
   same transaction as the end of the job. If that write is refused, the whole end rolls back: the job is
-  not failed, its report is not lost, and it stays claimed until its lease runs out; the next run runs the
-  full pass again (the ledger skips what is done, so it is quick; the trial extension and the links are
-  written by every run) and ends the job, writing the milestone with it. A refusal that never goes away
-  keeps the job from ending until the crash guard gives it up, which says so in the job's error. The
+  not failed, its report is not lost, and it waits a minute (`retry_wait`, code `end_failed`); the next run
+  runs the full pass again (the ledger skips what is done, so it is quick; the trial extension and the
+  links are written by every run) and ends the job, writing the milestone with it. A refusal that never
+  goes away is counted in `end_failures`, not by the crash guard (the rerun's progress clears that one):
+  the third refused end fails the job with `end_failed`, keeps its report and writes no milestone. The
   command line is operator-facing: it returns the error after the run and the operator runs it again.
 - **Import time in the backfill.** An in-app import job keeps its own finish time: the backfill uses the
   first job that finished `OK`. An import run from the command line keeps no run record; only the results
