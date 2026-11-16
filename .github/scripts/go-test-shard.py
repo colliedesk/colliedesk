@@ -40,8 +40,18 @@ if args.timings:
             isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds >= 0
             for seconds in timings.values()):
         parser.error('timings must map test names to non-negative seconds')
-names = sorted({line.strip() for line in sys.stdin
-                if re.fullmatch(r'(Test|Example|Fuzz)\w*', line.strip())})
+# go test -list prints a package's names, then 'ok <package> <time>': remember each name's packages.
+names, packages, pending = set(), {}, []
+for line in sys.stdin:
+    line = line.strip()
+    if re.fullmatch(r'(Test|Example|Fuzz)\w*', line):
+        names.add(line)
+        pending.append(line)
+    elif line.startswith('ok '):
+        for name in pending:
+            packages.setdefault(name, set()).add(line.split()[1])
+        pending = []
+names = sorted(names)
 if not names:
     parser.error('no tests discovered; refusing an empty suite')
 # A test added since the timings were measured weighs a typical test, not nothing.
@@ -93,11 +103,16 @@ mine = [sorted(chosen) for chosen in parts[args.shard - 1]]
 # httpapi takes most of the shard: the job runs one go test per part at once. A latency shard runs
 # its gates as one process with no other test binary of the shard beside them; only after they
 # finished ('--' tells the job to wait) does its share of regular tests run in parts. The gates sit in
-# several packages, and go test runs package binaries at once: their line starts 'gates ', which tells
-# the job to run it with go test -p 1, so no gate measures beside another package's gates.
+# several packages, and go test runs package binaries at once: their line, 'gates <pattern> <package>...',
+# tells the job to run them with go test -p 1, so no gate measures beside another package's gates. It
+# names only the packages with gates, since with -p 1 every package named starts its binary in turn
+# (about 0.3 s each for some 40 packages without gates); ./... when the listing names no package.
 lines = []
 if mine_gates:
-    lines.append('gates ^(' + '|'.join(mine_gates) + ')$')
+    gate_packages = sorted(set().union(*(packages.get(name, set()) for name in mine_gates)))
+    if not all(name in packages for name in mine_gates):
+        gate_packages = ['./...']
+    lines.append(' '.join(['gates', '^(' + '|'.join(mine_gates) + ')$', *gate_packages]))
 if any(mine) or not mine_gates:
     if mine_gates:
         lines.append('--')
