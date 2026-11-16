@@ -19,5 +19,7 @@ export const tagMessages = {
     `Delete “${name}”? ${count === 0 ? 'No conversation has it.' : `It comes off ${conversations(count)}.`} This cannot be undone.`,
   deleteButton: 'Delete tag',
   deleted: (name: string) => `Deleted “${name}”.`,
+  alreadyDeleted: (name: string) => `“${name}” was already deleted.`,
+  deletedElsewhere: (name: string) => `“${name}” was deleted by someone else.`,
   actionFailed: 'That did not work. Check your connection and try again.',
 };

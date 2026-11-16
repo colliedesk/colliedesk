@@ -272,3 +272,11 @@ test('deleting a tag sends DELETE and resolves on 204', async () => {
   expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/tags/11111111-1111-4111-8111-111111111111');
   expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'DELETE' });
 });
+
+test('a refused tag delete keeps the server reason, so the app can react to it', async () => {
+  fetchMock.mockResolvedValueOnce(reply(402, apiError('workspace_locked', 'This workspace is locked.')));
+  await expect(api.deleteTag('11111111-1111-4111-8111-111111111111')).rejects.toBeInstanceOf(WorkspaceLockedError);
+  fetchMock.mockResolvedValueOnce(reply(409, apiError('conflict', 'Another change was in progress at the same time. Nothing was changed; try again.')));
+  const error = await api.deleteTag('11111111-1111-4111-8111-111111111111').catch((caught: unknown) => caught);
+  expect((error as Error).message).toBe('Another change was in progress at the same time. Nothing was changed; try again.');
+});

@@ -50,3 +50,15 @@ test('a list that could not load says so and loads again on Try again', async ()
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
   expect(await screen.findByText('vip', { selector: 'strong' })).toBeInTheDocument();
 });
+
+test('a failed rename reads the list again, and a failed refresh keeps the list on screen', async () => {
+  mocks.api.tagsWithCounts.mockResolvedValueOnce({ items: [billing, vip] }).mockRejectedValue(new Error('offline'));
+  mocks.api.renameTag.mockRejectedValue(new Error('API 404'));
+  setUp(permissionsOf('admin'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Rename vip' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'New name for vip' }), { target: { value: 'VIP' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await vi.waitFor(() => expect(mocks.api.tagsWithCounts).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('“vip” was deleted by someone else.'));
+  expect(screen.getByText('billing', { selector: 'strong' })).toBeInTheDocument();
+});

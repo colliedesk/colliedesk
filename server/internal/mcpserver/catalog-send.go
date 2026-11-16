@@ -110,7 +110,8 @@ func tagDeleteSpec() Spec {
 		Name:  "colliedesk_tag_delete",
 		Title: "Delete a tag",
 		Description: `Delete a tag from the workspace and take it off every conversation that has it. ` +
-			`It cannot be undone: a tag made again with the same name is a new, empty tag, and the conversations are not tagged again. ` + confirmFirst +
+			`It cannot be undone: a tag made again with the same name is a new, empty tag, and the conversations are not tagged again. ` +
+			`colliedesk_tags_list says how many conversations lose it. ` + confirmFirst +
 			`To take a tag off one conversation only, use colliedesk_conversation_update (remove_tags).`,
 		REST: []string{"DELETE /api/v1/tags/{id}", "GET /api/v1/tags"},
 		Input: `{"type":"object","additionalProperties":false,"required":["tag"],"properties":{` +

@@ -378,6 +378,8 @@ export const trashedSavedReplyListSchema = z.object({ items: z.array(trashedSave
 export const savedReplyVersionListSchema = z.object({ items: z.array(savedReplyVersionSchema), next_before_version: z.number().int().nullable() }) satisfies z.ZodType<JsonResponse<'listSavedReplyVersions', 200>>;
 export const bulkUpdateResultSchema = z.object({ updated: z.number().int(), told: z.number().int().optional() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
+// 204: no body; parsed like a body, so a refusal keeps its reason (requestNoContent drops it).
+export const noContentSchema = z.undefined();
 export const spamResultSchema = z.object({ updated: z.number().int(), senders: z.array(z.object({ id: z.string().uuid(), name: z.string(), email: z.string() })) }) satisfies z.ZodType<JsonResponse<'markConversationsSpam', 200>>;
 export type SpamResult = z.infer<typeof spamResultSchema>;
 

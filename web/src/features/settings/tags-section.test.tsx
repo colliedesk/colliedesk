@@ -117,3 +117,50 @@ test('deleting a tag no conversation carries says so, and Cancel keeps it', () =
   expect(screen.getByRole('button', { name: 'Delete old-promo' })).toHaveFocus();
   expect(actions.onDelete).not.toHaveBeenCalled();
 });
+
+test('a rename of a tag someone deleted meanwhile closes the field and says so', async () => {
+  const actions = handlers();
+  actions.onRename.mockRejectedValue(new Error('API 404'));
+  render(<TagsSection tags={tags} canRename canDelete {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Rename vip' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'New name for vip' }), { target: { value: 'VIP' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('“vip” was deleted by someone else.');
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+});
+
+test('deleting a tag someone deleted meanwhile counts as done', async () => {
+  const actions = handlers();
+  actions.onDelete.mockRejectedValue(new Error('API 404'));
+  render(<TagsSection tags={tags} canRename canDelete {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Delete vip' }));
+  fireEvent.click(within(screen.getByRole('group', { name: 'Delete vip' })).getByRole('button', { name: 'Delete tag' }));
+  expect(await screen.findByText('“vip” was already deleted.')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.queryByRole('group', { name: 'Delete vip' })).not.toBeInTheDocument();
+});
+
+test('after a delete the focus goes to the line that says what happened', async () => {
+  render(<TagsSection tags={tags} canRename canDelete {...handlers()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Delete vip' }));
+  fireEvent.click(within(screen.getByRole('group', { name: 'Delete vip' })).getByRole('button', { name: 'Delete tag' }));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveFocus());
+});
+
+test('spaces around the same name are no change to save', () => {
+  render(<TagsSection tags={tags} canRename canDelete {...handlers()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Rename vip' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'New name for vip' }), { target: { value: 'vip ' } });
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+});
+
+test('a tag that leaves the list while it is being renamed takes its field and its unsaved change with it', () => {
+  const view = render(<TagsSection tags={tags} canRename canDelete {...handlers()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Rename vip' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'New name for vip' }), { target: { value: 'VIP' } });
+  expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  view.rerender(<TagsSection tags={tags.filter((item) => item.name !== 'vip')} canRename canDelete {...handlers()} />);
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+});
