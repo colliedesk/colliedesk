@@ -122,7 +122,9 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 **Find conversations**
 - The inbox opens on **Open** conversations, the ones that still need an answer. **All statuses** shows every
   status but Spam. When nothing is open but the workspace has conversations, the list says so instead of
-  showing the new-workspace steps.
+  showing the new-workspace steps. Inside a channel or a saved view, or on another status, an empty list says
+  what is empty there (**No open conversations in Zalo OA. Every customer has an answer.**, **No pending
+  conversations.**); **No conversations match these filters.** is kept for a search or a filter you added.
 - The top of the list has two rows. The first names where you are: the saved view on screen, else the channel
   you opened from the sidebar, else **All channels**; then **Search** (the magnifier) and **Filter**. The second
   row is the status on the left and the order on the right. Chips of the filters that are on show under it.

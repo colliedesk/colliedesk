@@ -148,11 +148,15 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     track('conversation_opened', { source: 'link' });
   }, [params.conversationId, selectedId]);
   const filtered = !isDefaultQuery(filters);
-  // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
-  const checkAny = !filtered && page === 1 && conversations.data?.items.length === 0;
+  // An empty Open view is either a new workspace or one that is caught up. The answer's status counts tell which; an
+  // answer without them asks for one row of All.
+  const emptyOpen = !filtered && page === 1 && conversations.data?.items.length === 0;
+  const counts = conversations.isPlaceholderData ? undefined : conversations.data?.status_counts;
+  const checkAny = emptyOpen && !counts;
   const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
   // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
-  const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
+  const nothingOpen = emptyOpen && (counts ? counts.open + counts.pending + counts.resolved + counts.closed > 0
+    : anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
   // On a phone the list and a conversation take turns on the screen (layout.css): only the one the address names is
   // in front of the person. Another is not open there: no presence, no mention marked read, no thread requests.
   const phone = usePhone();

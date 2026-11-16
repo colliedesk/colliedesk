@@ -76,7 +76,7 @@ function FilterChipsPart(props: FilterPartProps) {
 const ownControls = ['status', 'sort', 'search'];
 
 // placeOf names where the list is: the saved view on screen, else the one channel it is narrowed to, else every channel.
-function placeOf(query: InboxQuery, channels: InboxFiltersProps['channels'], views: InboxFiltersProps['savedViews']) {
+export function placeOf(query: InboxQuery, channels: InboxFiltersProps['channels'], views: InboxFiltersProps['savedViews']) {
   const view = views?.find((item) => onView(query, item.filters));
   if (view) return { title: view.name, scope: messages.searchIn(view.name), view };
   const id = scopedChannel(query);

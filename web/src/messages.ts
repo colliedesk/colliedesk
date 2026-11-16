@@ -128,6 +128,13 @@ export const messages = {
   filtersActive: (count: number) => `${count} filter${count === 1 ? '' : 's'} active`,
   noConversations: 'No conversations match these filters.',
   noOpenConversations: 'No open conversations. Every customer has an answer.',
+  // An empty list inside a place (a channel or a saved view) or a status where nothing else narrows it: it is caught up
+  // there, not filtered.
+  noConversationsIn: (status: string, place?: string) => {
+    const where = place ? ` in ${place}` : '';
+    if (status === 'open') return `No open conversations${where}. Every customer has an answer.`;
+    return ['pending', 'resolved', 'closed', 'spam'].includes(status) ? `No ${status} conversations${where}.` : `No conversations${where}.`;
+  },
   bulkActions: 'Bulk actions',
   // SelectAll ticks this page only, so the count says of how many.
   selectedCount: (count: number, of: number) => `${count} of ${of} selected`,

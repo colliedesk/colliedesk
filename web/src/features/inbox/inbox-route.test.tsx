@@ -1609,6 +1609,36 @@ test('a saved view the sidebar has read titles the list with its name, without a
   expect(views.list).not.toHaveBeenCalled();
 });
 
+// Inside a channel nothing was filtered: an empty status there is caught up, and says so for that place.
+test('an empty status inside a channel says so for that channel, not that filters match nothing', async () => {
+  quietApis();
+  const zalo = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const counts = { open: 0, pending: 0, resolved: 2, closed: 0, spam: 0 };
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50, status_counts: counts });
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'zalo_oa', count: 1 }], items: [{ id: zalo, name: 'Zalo OA', type: 'zalo_oa', status: { state: 'working' } }] } as never);
+  testRouter.search = { channel_id: zalo };
+  renderRoute();
+  expect(await screen.findByText('No open conversations in Zalo OA. Every customer has an answer.')).toBeInTheDocument();
+  expect(screen.queryByText('No conversations match these filters.')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+  act(() => testRouter.navigate({ search: { channel_id: zalo, status: 'pending' } }));
+  expect(await screen.findByText('No pending conversations in Zalo OA.')).toBeInTheDocument();
+  api.channelCounts.mockReset();
+  api.channelCounts.mockImplementation(async () => ({ types: [{ type: 'email', count: 1 }] }));
+});
+
+// The first answer already counts every status: a workspace with conversations but none open is caught up, known
+// without asking for the list a second time.
+test('an empty Open inbox tells caught up from new from the status counts of its own answer, with no second request', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50, status_counts: { open: 0, pending: 0, resolved: 0, closed: 4, spam: 0 } });
+  renderRoute();
+  expect(await screen.findByText('No open conversations. Every customer has an answer.')).toBeInTheDocument();
+  expect(api.conversations).toHaveBeenCalledTimes(1);
+});
+
 test('a channel list whose channel names could not be read still has a title: never a blank heading', async () => {
   quietApis();
   const zalo = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';

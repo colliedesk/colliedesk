@@ -280,10 +280,18 @@ test('Clear filters on an empty channel list keeps the channel: it is the place,
   expect(onQuery).toHaveBeenLastCalledWith({ channel_id: zaloChannel });
 });
 
-test('an empty list narrowed only by its place and its status offers no Clear filters', () => {
-  for (const query of [{ channel_id: zaloChannel }, { channel_id: zaloChannel, status: 'pending' }, { status: 'pending' }, { status: 'all', sort: 'priority' }]) {
-    const { unmount } = render(<InboxPage conversations={[]} filtered query={query} onQuery={vi.fn()} />);
-    expect(screen.getByText('No conversations match these filters.')).toBeInTheDocument();
+// Nothing was filtered there, so the list says what is empty in its place, never that filters match nothing.
+test('an empty list narrowed only by its place and its status says so for that place and status, and offers no Clear filters', () => {
+  const said: Array<[Record<string, string>, string]> = [
+    [{ channel_id: zaloChannel }, 'No open conversations in Zalo OA. Every customer has an answer.'],
+    [{ channel_id: zaloChannel, status: 'pending' }, 'No pending conversations in Zalo OA.'],
+    [{ status: 'pending' }, 'No pending conversations.'],
+    [{ status: 'all', sort: 'priority' }, 'No conversations.'],
+  ];
+  for (const [query, text] of said) {
+    const { unmount } = render(<InboxPage conversations={[]} filtered query={query} onQuery={vi.fn()} channels={[{ id: zaloChannel, name: 'Zalo OA' }]} />);
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.queryByText('No conversations match these filters.')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
     unmount();
   }
