@@ -29,9 +29,19 @@ export function matchingTeammates(teammates: Teammate[], query: string): Teammat
     .some((part) => part.toLocaleLowerCase().startsWith(wanted))).slice(0, 8);
 }
 
-// mentionedIn lists the teammates whose @Name the text holds, each once.
+// A name ends where no letter or digit follows it, so "@Long" is not read inside "@Longer".
+const nameEnds = (text: string, at: number) => at >= text.length || !/[\p{L}\p{N}]/u.test(text[at]);
+
+// mentionedIn lists the teammates whose whole @Name the text holds, each once, in the order they are asked. At each @
+// the longest name that fits wins: "@Long Bui" asks Long Bui, never a teammate named Long as well.
 export function mentionedIn(text: string, teammates: Teammate[]): string[] {
-  return [...new Set(teammates.filter((person) => text.includes(`@${person.name}`)).map((person) => person.id))];
+  const byLength = [...teammates].sort((a, b) => b.name.length - a.name.length);
+  const asked: string[] = [];
+  for (let at = text.indexOf('@'); at !== -1; at = text.indexOf('@', at + 1)) {
+    const person = byLength.find((each) => text.startsWith(each.name, at + 1) && nameEnds(text, at + 1 + each.name.length));
+    if (person) asked.push(person.id);
+  }
+  return [...new Set(asked)];
 }
 
 interface MentionPickerProps {

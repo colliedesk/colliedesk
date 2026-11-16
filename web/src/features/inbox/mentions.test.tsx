@@ -43,6 +43,28 @@ test('@ in a private note lists teammates at the @: arrows, Enter and Esc work, 
   expect(onSubmit).toHaveBeenCalledWith('note', 'Bank confirmed RF-2291-08. @Loan Pham @L', undefined, undefined, undefined, undefined, undefined, [loan.id]);
 });
 
+// Teammates whose names start alike ("Long" and "Long Bui", "An" and "Anh") are common: a note asks only the
+// person whose whole name follows the @, so nobody else is told or emailed.
+test('a note asks only the teammate whose whole name follows the @, never one whose name is only its start', () => {
+  const shortLong = member('10000000-0000-4000-8000-000000000005', 'Long', 'long.short@northwind.example');
+  const an = member('10000000-0000-4000-8000-000000000006', 'An', 'an@northwind.example');
+  const anh = member('10000000-0000-4000-8000-000000000007', 'Anh', 'anh@northwind.example');
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} teammates={askableTeammates([me, long, shortLong, an, anh], me.id)} />);
+  fireEvent.click(screen.getByRole('button', { name: /Private note/ }));
+  const box = screen.getByRole('textbox', { name: 'Message body' });
+  const ask = (text: string) => {
+    fireEvent.change(box, { target: { value: text } });
+    fireEvent.click(screen.getByRole('button', { name: /Add private note/ }));
+    return onSubmit.mock.lastCall?.[7];
+  };
+  expect(ask('@Long Bui can you check the refund?')).toEqual([long.id]);
+  expect(ask('@Anh please look.')).toEqual([anh.id]);
+  expect(ask('@Long, and @Long Bui: both of you.')).toEqual([shortLong.id, long.id]);
+  // A name that only starts another word asks nobody.
+  expect(ask('@Longer wait, @Anhs too')).toBeUndefined();
+});
+
 test('@ in a customer reply does nothing', () => {
   render(<ReplyComposer onSubmit={vi.fn()} teammates={askableTeammates([me, long], me.id)} />);
   const box = screen.getByRole('textbox', { name: 'Message body' });
