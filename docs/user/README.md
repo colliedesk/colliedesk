@@ -6,45 +6,61 @@ are the same on Colliedesk Cloud and on your own server.
 Running Colliedesk on your own server? Install, email delivery, configuration and backups are in
 [self-host](../self-host/README.md).
 
+## Get started
+
 - [Sign in without passwords](sign-in.md)
-- [Invite your team](invites.md)
-- [Manage your team](team.md)
-- [Roles and permissions](roles-and-permissions.md)
-- [Workspace name](workspace.md)
 - [Setup guide](setup-guide.md)
+- [Email channel](email-channel.md)
+- [Invite your team](invites.md)
+
+## Answer customers
+
 - [Work the inbox](inbox.md)
 - [Mentions: ask a teammate in a private note](mentions.md)
-- [Response targets](response-targets.md)
+- [Saved replies](saved-replies.md)
+- [Tags](tags.md)
 - [Customers (contacts)](contacts.md)
+- [Response targets](response-targets.md)
+- [Review: chat messages that wait for a person](review.md)
+
+## Channels and help center
+
 - [Channels](channels.md)
-- [Email channel](email-channel.md)
 - [Web form](web-form.md)
 - [Help chat](help-chat.md)
 - [Zalo OA](zalo.md)
-- [Review: chat messages that wait for a person](review.md)
-- [Plan and billing](billing.md) (hosted cloud only)
-- [Tags](tags.md)
-- [Saved replies](saved-replies.md)
 - [Knowledge base and help center](knowledge-base.md)
-- [Timezones](timezones.md)
-- [Sessions and devices](sessions.md)
-- [Connect an AI agent (MCP)](mcp.md)
-- [Agent requests (removed)](agent-requests.md)
+
+## AI
+
 - [AI providers and features](ai.md)
 - [AI chat on the help center](ai-chat.md)
 - [Autofix: send a conversation to a coding agent](autofix.md)
-- [Results: before and after the move](results.md)
-- [Import from Freshdesk](import-freshdesk.md)
-- [Import from Help Scout](import-helpscout.md)
-- [Export all your data](export.md)
-- [Report a problem](problem-reports.md)
-- [Usage report (telemetry)](telemetry.md)
 
 ## Connect an AI agent
 
+- [Connect an AI agent (MCP)](mcp.md)
 - [Claude Code](connect-claude-code.md)
 - [Codex](connect-codex.md)
 - [Cursor](connect-cursor.md)
 - [VS Code](connect-vscode.md)
 - [Claude Desktop](connect-claude-desktop.md)
 - [Agent skills](agent-skills.md)
+
+## Team and account
+
+- [Manage your team](team.md)
+- [Roles and permissions](roles-and-permissions.md)
+- [Workspace name](workspace.md)
+- [Timezones](timezones.md)
+- [Sessions and devices](sessions.md)
+- [Plan and billing](billing.md) (hosted cloud only)
+- [Report a problem](problem-reports.md)
+- [Usage report (telemetry)](telemetry.md)
+
+## Move to Colliedesk
+
+- [Import from Freshdesk](import-freshdesk.md)
+- [Import from Help Scout](import-helpscout.md)
+- [Results: before and after the move](results.md)
+- [Export all your data](export.md)
