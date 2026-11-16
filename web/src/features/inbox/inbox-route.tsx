@@ -13,6 +13,7 @@ import { contactPart, ContactsPart } from '../contacts/contact-part';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 import { apiQuery, defaultSort, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
+import { scopedChannel } from '../../lib/inbox-scope';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
@@ -244,6 +245,8 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     const ref = conversation.channel_ref;
     return ref && several.has(ref.type) ? (ref.deleted ? messages.removedChannel(ref.name) : ref.name) : undefined;
   };
+  // Inside one channel the list's title already names it, so the rows leave it out; the open thread still says it.
+  const rowChannelLabel = scopedChannel(filters) ? () => undefined : channelLabel;
   // Shared with the app shell, so the limits cost no extra request.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
   const limits = config?.limits;
@@ -387,7 +390,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     onManageSavedReplies={() => { window.open('/settings/saved-replies', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
     defaultMailbox={defaultMailbox} replyMailbox={selected && (!repliesVia || repliesVia.type === 'email') ? emailChannel.data : undefined}
-    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} rowChannelLabel={rowChannelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}

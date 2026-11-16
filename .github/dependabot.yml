@@ -3,7 +3,7 @@ version: 2
 # and would rewrite pnpm-lock.yaml with it. Web dependencies are bumped by hand with corepack.
 updates:
   - package-ecosystem: gomod
-    directory: /server
+    directory: /
     schedule:
       interval: weekly
     groups:

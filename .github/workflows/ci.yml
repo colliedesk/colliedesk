@@ -85,9 +85,9 @@ jobs:
           path: |
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
-          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
             go-${{ runner.os }}-
       # Compiling, linking and listing every test binary need no database, so they run while
@@ -99,7 +99,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
         run: |
-          if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
+          if [ -n "$(gofmt -l . ../docs)" ]; then gofmt -l . ../docs; echo 'gofmt: format the files above' >&2; exit 1; fi
           go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
           # Five regular shards of three go test processes each, and three latency shards that run their
@@ -139,14 +139,14 @@ jobs:
       # (the Anthropic SDK: about 23 seconds per job). Only shard 7 uploads, so one job pays for it.
       - if: >-
           github.event_name == 'pull_request' && matrix.shard == 7 &&
-          !startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))
+          !startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', runner.os, steps.go.outputs.go-version, hashFiles('go.sum')))
         name: Save the Go build cache of a new go.sum
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
-          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
   web:
     needs: pr-verified
     if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
@@ -222,9 +222,9 @@ jobs:
           path: |
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
-          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
             go-${{ runner.os }}-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -249,7 +249,7 @@ jobs:
         if: matrix.shard == strategy.job-total
         run: |
           (cd web && sh ../.github/scripts/ci-background.sh start typecheck nice -n 10 corepack pnpm typecheck)
-          (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... && go run ./cmd/migration-check --repo=..')
+          (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... ../docs/... && go run ./cmd/migration-check --repo=..')
       # In the foreground it took 10 seconds before Chromium could install (run 39904636025).
       - name: Start the check that the shards run every end-to-end test exactly once
         if: matrix.shard == strategy.job-total
@@ -345,9 +345,9 @@ jobs:
           path: |
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
-          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
             go-${{ runner.os }}-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

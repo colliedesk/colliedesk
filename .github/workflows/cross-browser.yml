@@ -41,9 +41,9 @@ jobs:
           path: |
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
-          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
             go-${{ runner.os }}-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

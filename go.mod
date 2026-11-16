@@ -1,4 +1,4 @@
-module github.com/colliedesk/colliedesk/server
+module github.com/colliedesk/colliedesk
 
 go 1.26.0
 

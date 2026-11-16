@@ -1445,6 +1445,26 @@ test('a channel in the address titles the list with its name, from the channel l
   expect(api.channelCounts).toHaveBeenCalledTimes(1);
 });
 
+test('inside one channel the rows leave out the channel name the title already says; every channel names it on each row', async () => {
+  quietApis();
+  const zalo = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const ref = { id: zalo, type: 'zalo_oa', name: 'Tea House', enabled: true, deleted: false, replies_via: null };
+  const channels = { types: [{ type: 'zalo_oa', count: 2 }], items: [{ id: zalo, name: 'Tea House', type: 'zalo_oa', status: { state: 'working' } },
+    { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', name: 'Zalo Shop', type: 'zalo_oa', status: { state: 'working' } }] };
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [{ ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel_ref: ref }], page: 1, page_size: 50 });
+  api.channelCounts.mockResolvedValue(channels as never);
+  testRouter.search = { channel_id: zalo, status: 'all' };
+  const { unmount } = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByRole('heading', { level: 2, name: 'Tea House' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Alpha conversation/ })).not.toHaveTextContent('Tea House');
+  unmount();
+  testRouter.search = { status: 'all' };
+  renderRoute();
+  await waitFor(() => expect(screen.getByRole('button', { name: /Alpha conversation/ })).toHaveTextContent('Tea House'));
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
+});
+
 test('a saved view the sidebar has read titles the list with its name, without asking for the views again', async () => {
   quietApis();
   api.conversations.mockReset();
