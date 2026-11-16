@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 const previewPath = "/api/v1/help-center/theme/preview"
@@ -278,4 +280,30 @@ func TestHelpCenterThemePreviewShowsVideosAsAPlaceholder(t *testing.T) {
 	if got := strings.Count(article.HTML, "Video shown on the live help center"); got != 2 {
 		t.Errorf("placeholders = %d, want 2", got)
 	}
+}
+
+// On a workspace's own host (Colliedesk Cloud: <slug>.colliedesk.com) the app, and so the frame of the
+// preview, runs on that host: the preview's policy names that origin, which the web app requires before
+// it shows the document, and its images load from there with that host's session. A policy naming
+// APP_ORIGIN instead left the Brand page with "The preview could not be shown." on first load.
+func TestHelpCenterThemePreviewOnTheWorkspaceHostNamesThatHostInItsPolicy(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.HelpCenterDomain = "example.net" })
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Preview Host", "admin@preview-host.example.com")
+	origin := "https://" + workspaceSlug(t, api, admin) + ".example.net"
+	req := newRequest(t, http.MethodPost, previewPath, map[string]any{"page": "home", "theme": map[string]any{}}, "", sessionCookieOf(admin))
+	req.Host = strings.TrimPrefix(origin, "https://")
+	req.Header.Set("Origin", origin)
+	response := serve(site, req)
+	if response.Code != http.StatusOK {
+		t.Fatalf("preview on the workspace host status=%d body=%s", response.Code, response.Body.String())
+	}
+	var shown previewView
+	if err := json.Unmarshal(response.Body.Bytes(), &shown); err != nil {
+		t.Fatalf("preview body: %v", err)
+	}
+	onHost := strings.ReplaceAll(previewCSP, testOrigin, origin)
+	wantHTML(t, "preview on the workspace host", shown.HTML, []string{onHost}, []string{testOrigin})
+	// APP_ORIGIN keeps its own origin in the policy.
+	wantHTML(t, "preview on the app host", preview(t, api, admin, "home", map[string]any{}, http.StatusOK).HTML, []string{previewCSP}, nil)
 }

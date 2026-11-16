@@ -2,6 +2,8 @@ import type { ColorField } from './theme-api';
 
 // The strings of the help center's brand settings. They live apart from kbMessages so the article pages
 // and the reply box pickers, which share kbMessages, do not carry them.
+const notInPreview = (reason: string) => `Not in the preview yet: ${reason}`;
+
 export const themeMessages = {
   heading: 'Brand',
   intro: 'Logo, colors, fonts and links of the public pages.',
@@ -64,7 +66,8 @@ export const themeMessages = {
     + 'Nothing may load from elsewhere: url(), @import and @font-face are refused. The contrast checks above do not cover it, so check the preview.',
   customCSSGuide: 'https://colliedesk.com/docs/knowledge-base#custom-css',
   learnMore: 'Learn more',
-  customCSSPending: (reason: string) => `Not in the preview yet: ${reason}`,
+  customCSSPending: notInPreview,
+  notInPreview,
   customCSSSize: (bytes: number, max: number) => `${bytes.toLocaleString('en-US')} of ${max.toLocaleString('en-US')} bytes`,
   previewCustomCSS: 'The preview keeps the last custom CSS it could show.',
   save: 'Save brand',
@@ -83,5 +86,8 @@ export const themeMessages = {
   phoneWidth: 'Phone',
   previewLoading: 'Loading the preview…',
   previewUpdating: 'Updating…',
-  previewFailed: 'The preview could not be shown.',
+  previewServerFailed: 'The preview could not be shown: the server could not make it.',
+  previewRefused: 'The preview could not be shown: a setting is not accepted. The field marked in the form says why.',
+  previewOtherAddress: 'The preview could not be shown: it was made for another web address than this page.',
+  retry: 'Retry',
 };

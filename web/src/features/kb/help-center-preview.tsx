@@ -22,9 +22,11 @@ export const previewDelay = 300;
 
 // useThemePreview renders page with theme on the server: 300 ms after the last change, one request at a
 // time, and an answer for a theme that is no longer the latest is dropped (the latest goes out next).
-// A failure keeps the last page shown; a refusal also gives its messages by field (refused), so a field
-// can say why it is not in the preview yet. Nothing is asked while enabled is false (the saved theme is
-// still loading) or after the caller goes away.
+// A failure keeps the last page shown and says its cause: a refusal gives its messages by field (refused),
+// so a field can say why it is not in the preview yet. retry asks again for the latest theme; it is there
+// except for a refusal, which only an edit changes (a document the frame refuses is an answer, not an
+// error, so it keeps retry too). Nothing is asked while enabled is false (the saved theme is still loading)
+// or after the caller goes away.
 export function useThemePreview(page: PreviewPage, theme: PreviewTheme, enabled = true) {
   const key = JSON.stringify({ page, theme });
   const [shown, setShown] = useState<{ key?: string; preview?: ThemePreview; error?: string; refused?: Record<string, string> }>({});
@@ -40,8 +42,10 @@ export function useThemePreview(page: PreviewPage, theme: PreviewTheme, enabled 
       (preview) => { if (state.alive && body === state.latest) setShown({ key: body, preview }); },
       (error: unknown) => {
         if (!state.alive || body !== state.latest) return;
-        const refused = error instanceof ThemeInvalidError ? error.fields : undefined;
-        setShown((current) => ({ ...current, key: body, error: themeMessages.previewFailed, refused }));
+        // A refusal that names no field has nothing to show at a field: it is a failure like any other.
+        const refused = error instanceof ThemeInvalidError && Object.keys(error.fields).length > 0 ? error.fields : undefined;
+        const cause = refused ? themeMessages.previewRefused : themeMessages.previewServerFailed;
+        setShown((current) => ({ ...current, key: body, error: cause, refused }));
       },
     ).finally(() => {
       state.busy = false;
@@ -66,8 +70,15 @@ export function useThemePreview(page: PreviewPage, theme: PreviewTheme, enabled 
       window.clearTimeout(state.timer);
     };
   }, []);
+  // retry forgets the failure, so the panel shows the request on its way, and asks for the latest theme.
+  const retry = () => {
+    queue.current.due = queue.current.latest;
+    setShown(({ preview }) => ({ preview }));
+    run();
+  };
   const current = shown.key === key;
-  return { preview: shown.preview, error: current ? shown.error : undefined, refused: current ? shown.refused : undefined, pending: !current };
+  const refused = current ? shown.refused : undefined;
+  return { preview: shown.preview, error: current ? shown.error : undefined, refused, pending: !current, retry: refused ? undefined : retry };
 }
 
 // A click on a link inside the preview would load that address into the frame; the preview is a picture
@@ -84,9 +95,10 @@ function holdLinks(event: { currentTarget: HTMLIFrameElement }) {
 type Width = 'desktop' | 'phone';
 
 // HelpCenterPreview shows a preview document in a sandboxed frame, at desktop or phone width, with the
-// choice of the page it shows.
-export function HelpCenterPreview({ html, pending, error, page, onPage }: {
-  html?: string; pending: boolean; error?: string; page: PreviewPage; onPage: (page: PreviewPage) => void;
+// choice of the page it shows. An error says its cause, with Retry when onRetry is given; a document
+// without the policy for this page's address (made for another origin) is never shown, and says so.
+export function HelpCenterPreview({ html, pending, error, onRetry, page, onPage }: {
+  html?: string; pending: boolean; error?: string; onRetry?: () => void; page: PreviewPage; onPage: (page: PreviewPage) => void;
 }) {
   const id = useId();
   const [width, setWidth] = useState<Width>('desktop');
@@ -101,6 +113,10 @@ export function HelpCenterPreview({ html, pending, error, page, onPage }: {
       ))}
     </fieldset>
   );
+  const failed = (message: string) => (
+    <p role="alert" className="error-copy">{message}
+      {onRetry && <>{' '}<button type="button" className="link-action" onClick={onRetry}>{themeMessages.retry}</button></>}</p>
+  );
   return (
     <section className="theme-preview" aria-labelledby={`${id}-heading`}>
       <div className="theme-preview-bar">
@@ -109,7 +125,7 @@ export function HelpCenterPreview({ html, pending, error, page, onPage }: {
         {radios('width', themeMessages.previewWidth, width, [['desktop', themeMessages.desktop], ['phone', themeMessages.phoneWidth]] as const, setWidth)}
         <span role="status" className="muted-copy theme-preview-state">{pending && html !== undefined ? themeMessages.previewUpdating : ''}</span>
       </div>
-      {error && <p role="alert" className="error-copy">{error}</p>}
+      {error && failed(error)}
       {html === undefined
         ? !error && <p className="muted-copy">{themeMessages.previewLoading}</p>
         : safe
@@ -117,7 +133,7 @@ export function HelpCenterPreview({ html, pending, error, page, onPage }: {
               <iframe title={themeMessages.previewTitle} sandbox={sandbox} srcDoc={html} inert={loaded !== html}
                 onLoad={(event) => { holdLinks(event); setLoaded(html); }} />
             </div>
-          : <p role="alert" className="error-copy">{themeMessages.previewFailed}</p>}
+          : !error && failed(themeMessages.previewOtherAddress)}
     </section>
   );
 }
