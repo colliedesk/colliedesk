@@ -49,10 +49,16 @@ function onEveryMinute(listener: () => void): () => void {
   };
 }
 
+const minuteOf = (value: Date) => Math.floor(value.getTime() / checkEveryMs);
+
 // useMinuteNow returns the current time, refreshed every minute from the page's one shared timer: for text that
 // counts minutes, such as "1 h 20 min late", and grows while the page stays open. A new day is a new minute too.
+// A tick in the same minute (each focus or visibility change fires one) keeps the old value, so nothing draws again.
 export function useMinuteNow(): Date {
   const [now, setNow] = useState(() => new Date());
-  useEffect(() => onEveryMinute(() => setNow(new Date())), []);
+  useEffect(() => onEveryMinute(() => setNow((current) => {
+    const next = new Date();
+    return minuteOf(next) === minuteOf(current) ? current : next;
+  })), []);
   return now;
 }
