@@ -222,6 +222,37 @@ test('after the open conversation leaves the list, j opens the row that was belo
   expect(onSelect).toHaveBeenLastCalledWith(alpha.id);
 });
 
+const more = (subject: string, digit: number): Conversation => ({ ...row('2026-10-15T05:00:00Z'), id: `${digit}${digit}${digit}${digit}1111-1111-4111-8111-111111111111`, subject });
+
+// A different list (a saved view, a channel, the next page) without the open conversation starts again at its top:
+// the open conversation's old row number means nothing there.
+test('in another list without the open conversation, j opens its first row', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  const [, , charlie] = rows;
+  const other = [more('Delta', 4), more('Echo', 5), more('Foxtrot', 6)];
+  const { rerender } = render(<ConversationList items={rows} selectedId={charlie.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  rerender(<ConversationList items={other} selectedId={charlie.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(onSelect).toHaveBeenLastCalledWith(other[0].id);
+});
+
+// A live refresh can drop the open conversation and add a new one on top in the same answer: J still opens the
+// row that was below it and K the one above, not whatever now sits at its old row number.
+test('when a refresh drops the open conversation and adds one on top, j and k open its old neighbours', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  const [alpha, bravo, charlie] = rows;
+  const delta = more('Delta', 4);
+  const fresh = more('November', 7);
+  const { rerender } = render(<ConversationList items={[alpha, bravo, charlie, delta]} selectedId={charlie.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  rerender(<ConversationList items={[fresh, alpha, bravo, delta]} selectedId={charlie.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(onSelect).toHaveBeenLastCalledWith(delta.id);
+  fireEvent.keyDown(document.body, { key: 'k' });
+  expect(onSelect).toHaveBeenLastCalledWith(bravo.id);
+});
+
 test('ArrowDown and ArrowUp move while focus is in the list, and nowhere else', () => {
   vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
   const onSelect = vi.fn();
