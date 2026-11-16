@@ -217,8 +217,9 @@ another year does not. Search words that are a code find that conversation, ahea
 
 ## Filter and sort
 
-**Filter** (the three lines at the right of the list's title) holds every filter. Ticking several values of one filter shows
-conversations with any of them; each filter you add narrows the list further.
+**Filter** (the three lines at the right of the list's title) holds every filter. Each value has a box, ticked once you
+pick it. Ticking several values of one filter shows conversations with any of them; each filter you add narrows the
+list further. The menu stays inside the screen and scrolls by itself when its filters do not fit.
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me**, each other teammate, or **Unassigned**.
 - **Tags**: conversations with any of the ticked tags. Once you tick two or more, **Has every chosen tag**
