@@ -92,10 +92,12 @@ mine = [sorted(chosen) for chosen in parts[args.shard - 1]]
 # A regular shard's tests mostly wait on PostgreSQL, one test at a time in each package binary, and
 # httpapi takes most of the shard: the job runs one go test per part at once. A latency shard runs
 # its gates as one process with no other test binary of the shard beside them; only after they
-# finished ('--' tells the job to wait) does its share of regular tests run in parts.
+# finished ('--' tells the job to wait) does its share of regular tests run in parts. The gates sit in
+# several packages, and go test runs package binaries at once: their line starts 'gates ', which tells
+# the job to run it with go test -p 1, so no gate measures beside another package's gates.
 lines = []
 if mine_gates:
-    lines.append('^(' + '|'.join(mine_gates) + ')$')
+    lines.append('gates ^(' + '|'.join(mine_gates) + ')$')
 if any(mine) or not mine_gates:
     if mine_gates:
         lines.append('--')

@@ -111,8 +111,9 @@ jobs:
         run: sh .github/scripts/ci-services.sh wait postgres
       - name: Test
         working-directory: server
-        # Patterns run at once; a '--' line waits for the ones before it. -v prints each test's time
-        # for go-test-timings.py.
+        # Patterns run at once; a '--' line waits for the ones before it. A 'gates ' line runs one
+        # package binary at a time (-p 1), so a gate never measures beside another package's gates.
+        # -v prints each test's time for go-test-timings.py.
         run: |
           pids=()
           status=0
@@ -122,7 +123,9 @@ jobs:
               pids=()
               continue
             fi
-            go test -count=1 -run "$pattern" -v ./... &
+            packages=()
+            case "$pattern" in 'gates '*) pattern=${pattern#gates }; packages=(-p 1);; esac
+            go test -count=1 -run "$pattern" "${packages[@]}" -v ./... &
             pids+=($!)
           done < "$RUNNER_TEMP/go-test-patterns.txt"
           for pid in "${pids[@]}"; do wait "$pid" || status=1; done
