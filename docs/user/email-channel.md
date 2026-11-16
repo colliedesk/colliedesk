@@ -177,8 +177,8 @@ A workspace can send itself five test messages an hour. Agent tokens do the same
 A server without a hosted mail domain has no forwarding address. Mail enters at the **Inbound URL**, a
 web address, not an email address; step 2 opens on **Other / own server** with it.
 
-1. In step 2, select **Create inbound secret**. Copy the secret now: it is shown once. The secret is a
-   password for this only, not your email password.
+1. In step 2, select **Create inbound secret**. The secret opens below the button, with the focus on it.
+   Select **Copy inbound secret** now: it is shown once. The secret is a password for this only, not your email password.
 2. Give the inbound URL and the secret to the person who runs the server. Your mailbox cannot send to
    the URL by itself: they connect a forwarder (a Cloudflare Email Worker, Postmark, Amazon SES or a
    pipe on your mail server) as described in

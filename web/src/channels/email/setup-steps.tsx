@@ -98,7 +98,7 @@ export function ForwardStep({ channel, settings, canManage, timezone, provider, 
           </li>)}</ol>}
       {tab === 'other' && !hosted && <>
         {secret.feedback}
-        <EmailChannelSection part="arrival" settings={settings} timezone={timezone} canManage={canManage} createdSecret={secret.created} onRotate={secret.onRotate} />
+        <EmailChannelSection part="arrival" settings={settings} timezone={timezone} canManage={canManage} createdSecret={secret.created} onRotate={secret.onRotate} rotatePending={secret.pending} />
       </>}
     </div>
     {(tab === 'gmail' || tab === 'workspace') && <GmailConfirmation channelID={channel.id} timezone={timezone} waiting={!received} />}

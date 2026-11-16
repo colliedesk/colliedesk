@@ -36,7 +36,11 @@ test('email setup: a new workspace saves its address, the first forwarded mail f
   await expect(address).toContainText(support);
   await expect(forward.getByRole('tab', { name: 'Other / own server' })).toHaveAttribute('aria-selected', 'true');
   await forward.getByRole('button', { name: 'Create inbound secret' }).click();
-  const secret = await forward.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
+  // The secret is shown once: it opens below its button with the focus and a Copy button of its own.
+  const secretField = forward.getByRole('textbox', { name: /Inbound secret/ });
+  await expect(secretField).toBeFocused();
+  await expect(forward.getByRole('button', { name: 'Copy inbound secret' })).toBeVisible();
+  const secret = await secretField.inputValue();
   const inboundURL = await forward.getByRole('textbox', { name: 'Inbound URL' }).inputValue();
   await expect(forward.getByText('Waiting for first email')).toBeVisible();
   await expect(forward.getByRole('button', { name: 'Continue' })).toBeDisabled();

@@ -387,3 +387,35 @@ test('replies say in plain words that this server sends them; the SMTP details a
   expect(screen.queryByText('Server details')).not.toBeInTheDocument();
   expect(screen.queryByText(/smtp\.example\.net/)).not.toBeInTheDocument();
 });
+
+test('the new inbound secret, shown once, has its own Copy button with the copied feedback', async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage createdSecret="key.secret" part="connection" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy inbound secret' }));
+  expect(writeText).toHaveBeenCalledWith('key.secret');
+  expect(await screen.findByText('Secret copied')).toHaveAttribute('role', 'status');
+  expect(screen.getByRole('textbox', { name: /inbound secret/i })).toHaveAccessibleDescription('Copy this secret now. It is not shown again; rotating it stops the old one.');
+});
+
+test('the new secret opens below the button that made it, so the button stays under the pointer, and takes the focus', () => {
+  const creating = { ...connected, channel: { ...connected.channel!, secret_set: false, secret_rotated_at: null } };
+  const { rerender } = render(<EmailChannelSection settings={creating} timezone="UTC" canManage part="connection" />);
+  const button = screen.getByRole('button', { name: 'Create inbound secret' });
+  rerender(<EmailChannelSection settings={connected} timezone="UTC" canManage createdSecret="key.secret" part="connection" />);
+  const field = screen.getByRole('textbox', { name: /inbound secret/i });
+  expect(field).toHaveFocus();
+  expect(button.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('while the secret is being made the button says so and takes no second press', () => {
+  const creating = { ...connected, channel: { ...connected.channel!, secret_set: false, secret_rotated_at: null } };
+  const onRotate = vi.fn();
+  const { rerender } = render(<EmailChannelSection settings={creating} timezone="UTC" canManage rotatePending onRotate={onRotate} part="connection" />);
+  const button = screen.getByRole('button', { name: 'Creating inbound secret…' });
+  expect(button).toBeDisabled();
+  fireEvent.click(button);
+  expect(onRotate).not.toHaveBeenCalled();
+  rerender(<EmailChannelSection settings={connected} timezone="UTC" canManage rotatePending onRotate={onRotate} part="connection" />);
+  expect(screen.getByRole('button', { name: 'Rotating inbound secret…' })).toBeDisabled();
+});

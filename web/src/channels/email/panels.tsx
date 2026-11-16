@@ -23,7 +23,7 @@ function Connection({ channel, canManage, timezone, navigate }: ChannelPanelProp
     {secret.feedback}
     <EmailChannelSection part="connection" settings={settings.data} timezone={timezone} canManage={canManage}
       addressSave={saveState(saveEmail)} onSave={(address) => saveEmail.mutate(address)} addressConflictLink={conflictLink}
-      createdSecret={secret.created} onRotate={secret.onRotate} />
+      createdSecret={secret.created} onRotate={secret.onRotate} rotatePending={secret.pending} />
   </>;
 }
 

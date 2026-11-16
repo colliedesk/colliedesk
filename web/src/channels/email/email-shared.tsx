@@ -47,6 +47,7 @@ export function useInboundSecret(channelID: string, secretSet: boolean, refresh:
   const [asking, setAsking] = useState(false);
   return {
     created: rotate.data?.inbound_secret,
+    pending: rotate.isPending,
     onRotate: () => (secretSet ? setAsking(true) : rotate.mutate()),
     feedback: <>
       {rotate.isError && <p role="alert" className="error-copy">{rotate.error instanceof InvalidRequestError ? rotate.error.message : messages.settingsActionFailed}</p>}

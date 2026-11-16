@@ -36,6 +36,8 @@ interface EmailChannelSectionProps {
   onSaveSenderName?: (name: string) => Promise<unknown> | void;
   onSaveSlug?: (slug: string) => void;
   onRotate?: () => void;
+  // rotatePending: the new inbound secret is being made; the button says so and takes no second press.
+  rotatePending?: boolean;
   onDisconnect?: () => void;
   onVerifyDomain?: () => void;
   // Why the last domain check did not verify; the server's own wording.
@@ -55,7 +57,7 @@ interface EmailChannelSectionProps {
   part?: 'all' | 'connection' | 'replies' | 'arrival' | 'sending' | 'sender' | 'domain' | 'mailbox';
 }
 
-export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, senderNameSave, slugSave, onSave, onSaveSenderName, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending,
+export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, senderNameSave, slugSave, onSave, onSaveSenderName, onSaveSlug, onRotate, rotatePending, onDisconnect, onVerifyDomain, verifyError, verifyPending,
   onConnectMailbox, onDisconnectMailbox, mailboxPending, mailboxError, mailboxReturned, part = 'all', addressConflictLink }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
   // A connected mailbox sends by itself; a broken one says so in its own block.
@@ -82,6 +84,10 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
     returnFocus.current = false;
     disconnectButton.current?.focus();
   }, [confirmingDisconnect]);
+  // A new secret is shown once: it takes the focus, so the next key press or Copy is about it.
+  const secretField = useRef<HTMLInputElement>(null);
+  const secretNotice = useId();
+  useEffect(() => { if (createdSecret) secretField.current?.focus(); }, [createdSecret]);
   const smtp = settings?.smtp;
   const hostedAddress = settings?.hosted_address ?? null;
   const mailboxSending = mailboxConnection?.status === 'connected' &&
@@ -133,13 +139,19 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
         {channel && !hostedAddress && <p className="muted-copy">{channel.secret_set && channel.secret_rotated_at
           ? settingsMessages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : channelSetupMessages.inboundSecretMissing}
           {' '}<HelpTip label={settingsMessages.inboundSecret} text={channelSetupMessages.inboundSecretWhy} /></p>}
-        {canManage && !hostedAddress && createdSecret && <label className="invite-link"><span className="field-label">{settingsMessages.inboundSecret}</span>
-          <input readOnly value={createdSecret} /><small>{settingsMessages.inboundSecretNotice}</small></label>}
         {canManage && channel && settings && !hostedAddress && <InboundURLGuide inboundURL={settings.inbound_url} supportAddress={channel.support_address} secret={createdSecret} />}
         {canManage && channel && <span className="button-row">
-          {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? settingsMessages.rotateInboundSecret : settingsMessages.createInboundSecret}</button>}
+          {!hostedAddress && <button type="button" disabled={rotatePending} onClick={() => onRotate?.()}>{channel.secret_set
+            ? (rotatePending ? settingsMessages.rotatingInboundSecret : settingsMessages.rotateInboundSecret)
+            : (rotatePending ? settingsMessages.creatingInboundSecret : settingsMessages.createInboundSecret)}</button>}
           {!confirmingDisconnect && onDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{settingsMessages.disconnectEmail}</button>}
         </span>}
+        {/* Below the button that made it, so nothing moves under the pointer when it appears. */}
+        {canManage && !hostedAddress && createdSecret && <div className="copy-field">
+          <label className="invite-link"><span className="field-label">{settingsMessages.inboundSecret}</span>
+            <input ref={secretField} readOnly value={createdSecret} aria-describedby={secretNotice} /><small id={secretNotice}>{settingsMessages.inboundSecretNotice}</small></label>
+          <span className="button-row"><CopyButton value={createdSecret} copiedText={settingsMessages.secretCopied}>{settingsMessages.copyInboundSecret}</CopyButton></span>
+        </div>}
         {canManage && channel && confirmingDisconnect && <div className="confirm-panel" role="group" aria-labelledby="disconnect-email-question"
           onKeyDown={(event) => { if (event.key === 'Escape') cancelDisconnect(); }}>
           <p><strong id="disconnect-email-question">{settingsMessages.disconnectEmailQuestion}</strong> {settingsMessages.disconnectEmailConsequence(channel.support_address)}</p>
