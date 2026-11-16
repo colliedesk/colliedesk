@@ -140,7 +140,12 @@ type Tag struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Color string `json:"color"`
+	// ConversationCount is set only when the list was asked for counts (GET /api/v1/tags?counts=true).
+	ConversationCount *int `json:"conversation_count,omitempty"`
 }
+
+// ErrTagNameTaken means another tag of the workspace already has the name a rename asked for.
+var ErrTagNameTaken = errors.New("another tag has this name")
 
 type Conversation struct {
 	ID        string `json:"id"`

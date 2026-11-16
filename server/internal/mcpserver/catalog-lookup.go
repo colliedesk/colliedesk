@@ -45,10 +45,11 @@ func tagsListSpec() Spec {
 		Name:  "colliedesk_tags_list",
 		Title: "List tags",
 		Description: `List the tags of this workspace. Use these exact names in colliedesk_inbox_search (tag) and colliedesk_conversation_update (add_tags, remove_tags). ` +
-			`Look here before you add a tag: colliedesk_conversation_update creates a tag only when no tag has the name, so reuse an existing one.`,
+			`Look here before you add a tag: colliedesk_conversation_update creates a tag only when no tag has the name, so reuse an existing one. ` +
+			`conversation_count is how many conversations carry each tag, in any status: what a rename changes and a delete takes the tag off.`,
 		REST:   []string{"GET /api/v1/tags"},
 		Input:  noArguments,
-		Output: `{"type":"object","required":["tags","count"],"properties":{"tags":{"type":"array","items":{"type":"object","required":["id","name"],"properties":{"id":{"type":"string"},"name":{"type":"string"}}}},"count":{"type":"integer"}}}`,
+		Output: `{"type":"object","required":["tags","count"],"properties":{"tags":{"type":"array","items":{"type":"object","required":["id","name","conversation_count"],"properties":{"id":{"type":"string"},"name":{"type":"string"},"conversation_count":{"type":"integer"}}}},"count":{"type":"integer"}}}`,
 		run:    tagsList,
 	}
 }

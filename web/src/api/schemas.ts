@@ -104,7 +104,7 @@ export const trashedSavedReplySchema = z.object({
   ...savedReplyFields, deleted_at: z.string().datetime(), deleted_by: savedReplyPersonSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedSavedReply'>>;
 export const savedReplyVersionSchema = z.object({ ...savedReplyChangeFields, title: z.string(), body: z.string() }) satisfies z.ZodType<Generated<'SavedReplyVersion'>>;
-export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string() }) satisfies z.ZodType<Generated<'Tag'>>;
+export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string(), conversation_count: z.number().int().nonnegative().optional() }) satisfies z.ZodType<Generated<'Tag'>>;
 export const contactIdentitySchema = z.object({
   channel_id: z.string().uuid(), kind: z.string(), value: z.string(), display_name: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'ContactIdentity'>>;
@@ -378,6 +378,8 @@ export const trashedSavedReplyListSchema = z.object({ items: z.array(trashedSave
 export const savedReplyVersionListSchema = z.object({ items: z.array(savedReplyVersionSchema), next_before_version: z.number().int().nullable() }) satisfies z.ZodType<JsonResponse<'listSavedReplyVersions', 200>>;
 export const bulkUpdateResultSchema = z.object({ updated: z.number().int(), told: z.number().int().optional() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
+// 204: no body; parsed like a body, so a refusal keeps its reason (requestNoContent drops it).
+export const noContentSchema = z.undefined();
 export const spamResultSchema = z.object({ updated: z.number().int(), senders: z.array(z.object({ id: z.string().uuid(), name: z.string(), email: z.string() })) }) satisfies z.ZodType<JsonResponse<'markConversationsSpam', 200>>;
 export type SpamResult = z.infer<typeof spamResultSchema>;
 

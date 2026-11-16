@@ -8,8 +8,15 @@ Tags group conversations, for example `billing` or `bug`.
   changes the other tags on the conversation.
 - **Filter** the inbox by tag with the **Tag** filter.
 
-Renaming and deleting tags is available through the API:
+## Rename or delete a tag
 
-- **Rename** a tag with `PATCH /api/v1/tags/{id}`; every conversation that carries it shows the new name.
-- **Delete** a tag with `DELETE /api/v1/tags/{id}`. Deleting a tag removes it from every conversation
-  in the workspace.
+Open **Settings → Tags**. The page lists every tag with the number of conversations that have it.
+
+- **Rename** a tag: select **Rename** in its row, type the new name and select **Save** (or press
+  Enter). Every conversation that has the tag shows the new name. Two tags cannot have the same name.
+- **Delete** a tag: select **Delete** in its row. The row says how many conversations lose the tag;
+  select **Delete tag** to confirm. Deleting a tag removes it from every conversation in the
+  workspace and cannot be undone.
+
+Rename and Delete show only to people whose role allows them: **Edit** and **Delete** in the
+role's **Tags** row. The built-in Admin and Agent roles have both.
