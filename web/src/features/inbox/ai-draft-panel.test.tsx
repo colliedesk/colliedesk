@@ -48,6 +48,15 @@ test('a ready draft shows what to check, what is missing and its sources, and go
   expect(onUse).toHaveBeenLastCalledWith('Hi Ada, open tray two.', 'replace', draft().id, ['grace@other.example']);
 });
 
+test('a draft that warns about a link it made up still shows, with the link to check', async () => {
+  // The server warns about a link no article or message in the conversation has (kind "link").
+  const linked = draft({ text: 'See https://help.example/reset for the steps.', warnings: [{ kind: 'link', value: 'https://help.example/reset' }] });
+  serve((url) => (url.endsWith('/ai-drafts') ? { next_before: null, items: [linked] } : linked));
+  render(wrap(<AIDraftPanel conversationId={conversation} agentId={agent} hasText onUse={vi.fn()} onClose={vi.fn()} />));
+  expect(await screen.findByText('See https://help.example/reset for the steps.')).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('https://help.example/reset (a link no article or message here has)');
+});
+
 test('asking for a draft sends the prompt and shows it being written until it is ready', async () => {
   let polls = 0;
   const fetch = serve((url, init) => {
