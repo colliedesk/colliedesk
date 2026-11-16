@@ -177,7 +177,8 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 - **Move with the keyboard:** press **J** to open the next conversation in the list and **K** for the
   previous one. While a row (or its box) has the focus, **Down arrow** and **Up arrow** do the same. The
   focus moves to the row you opened. With no conversation open, **J** opens the first one. Once the open
-  conversation leaves the list (you resolved it, for example), **J** opens the one that was below it. The keys do
+  conversation leaves the list (you resolved it, for example), **J** opens the one that was below it and **K**
+  the one above. In another list without it (a saved view, a channel, the next page), **J** opens the first row. The keys do
   nothing while you type in a box, while you hold Ctrl, Cmd, Alt or Shift, or at the first and last row of the
   page; use **Next page** to go on.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
@@ -403,7 +404,7 @@ the list's title names the view on screen.
   twice. It also goes seven days after you last opened or edited it, and for every conversation when you sign out, so a
   teammate who signs in on the same browser never sees it. The **Cc** is kept with the text as you left it, so an
   address you removed is not copied when you come back. Attached files are not kept. Another browser or
-  device does not see it. Two tabs of the same browser share it: when you type in one, the other tab's
+  device does not see it. Two tabs of the same browser share it, **Cc** included: when you type in one, the other tab's
   box takes the newer text and says **Updated from another tab**, unless you typed different text in that
   tab too. Then your text stays, and the tab says **Another tab has a different draft** with **Use it**
   and **Keep mine**.

@@ -17,6 +17,7 @@ read it.
   never are, and you are never asked by your own note.
 - **@** in a reply to the customer does nothing: only a private note asks teammates.
 - Deleting **@Name** from the text before you send it takes the ask back.
+- When two active teammates have the same name, **@Name** asks both: the note cannot tell them apart.
 
 ## See that they were told
 
