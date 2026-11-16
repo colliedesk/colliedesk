@@ -599,7 +599,7 @@ class GoBuildCache(unittest.TestCase):
         # One shard uploads, a latency shard (6, 7 and 8 of 8).
         self.assertIn('matrix.shard == 7', condition)
         self.assertIn("!startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', "
-                      "runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))", condition)
+                      "runner.os, steps.go.outputs.go-version, hashFiles('go.sum')))", condition)
         go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
         self.assertIn('id: go-cache', go)
         self.assertRegex(go, r"latency-shards 3\b")
