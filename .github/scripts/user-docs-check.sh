@@ -28,8 +28,6 @@ api_page() {
     connect-*.md) ;;    # set up one AI agent host (Claude Code, Codex, Cursor, VS Code, Claude Desktop)
     agent-skills.md) ;; # skills an AI agent loads to work the inbox
     export.md) ;;       # the export file is an open format read by scripts; the page documents it
-    # Rewritten in its own pull request; remove this entry when that pull request lands.
-    tags.md) ;;
     *) return 1 ;;
   esac
 }
