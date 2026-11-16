@@ -2,7 +2,7 @@ import { Fragment, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { Conversation, ConversationViewer } from '../../api/schemas';
 import { dayGroup, formatDate, formatListTime, formatShortDate, zoneSuffix } from '../../lib/format-date';
-import { useNow } from '../../lib/use-now';
+import { useMinuteNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
@@ -73,7 +73,8 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
       .finally(() => { testInFlight.current = false; setTesting(false); });
   };
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
-  const now = useNow(timezone);
+  // Minutes, so how late a row is grows while the list stays open; the day groups follow at midnight too.
+  const now = useMinuteNow();
   const settled = !loading && !failed;
   const brandNew = items.length === 0 && !filtered && !nothingOpen && settled && page === 1;
   const selecting = items.some((item) => checkedIds?.has(item.id));

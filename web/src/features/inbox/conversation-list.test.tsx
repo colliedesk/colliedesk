@@ -297,6 +297,19 @@ test('a row names the customer, says what they wrote last and when the reply is 
   expect(screen.queryByText('printer')).toBeNull();
 });
 
+// A list left open keeps counting: "1 h 20 min late" grows to "2 h 30 min late" without a reload.
+test('how late a row is grows while the list stays open', () => {
+  vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
+  const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
+  const late = { ...row('2026-11-02T05:00:00Z'), subject: 'Refund still not on my card',
+    sla: { state: 'overdue', first_response: { ...clock, due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true }, resolution: null } };
+  render(<ConversationList items={[late] as unknown as Conversation[]} timezone="UTC" page={1} hasNextPage={false} />);
+  const lateRow = screen.getByRole('button', { name: /Refund still not on my card/ });
+  expect(within(lateRow).getByText('1 h 20 min late')).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(70 * 60_000); });
+  expect(within(lateRow).getByText('2 h 30 min late')).toBeInTheDocument();
+});
+
 test('without a running target a row shows when the customer last wrote, never when the team last touched it', () => {
   vi.setSystemTime(new Date('2026-11-02T12:00:00Z'));
   const item = { ...row('2026-11-02T10:00:00Z'), latest_customer_message: { excerpt: 'Hello', created_at: '2026-11-02T08:00:00Z' } };

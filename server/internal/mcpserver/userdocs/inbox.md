@@ -165,7 +165,8 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 - The time on the right is when the customer last wrote: your own replies and private notes never change
   it. A conversation the customer never wrote in shows when it last changed. While a
   [reply target](response-targets.md) runs, the row shows **Due** and the time instead, and once it passed,
-  how late it is in red (**12 min late**); the tooltip names the clock and says it counts business hours.
+  how late it is in red (**12 min late**), counted again each minute while the inbox stays open; the tooltip
+  names the clock and says it counts business hours.
 - A row under **Today** shows only its time; an earlier row shows its date. Days follow your timezone
   (see [Timezones](timezones.md)). The full date and time are in the tooltip of the row and are read out
   by a screen reader. Tags are in the conversation's details, not on the row.

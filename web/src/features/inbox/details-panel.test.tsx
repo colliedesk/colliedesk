@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { Conversation } from '../../api/schemas';
 import { permissionsOf, rolesOf } from '../../test-roles';
@@ -210,6 +210,21 @@ test('Tags stays open when Create tag turns disabled under focus, as Firefox blu
 test('a conversation without tags says None on the Tags row', () => {
   render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[billing]} />);
   expect(screen.getByText('None', { selector: '.tags-pick summary *' })).toBeInTheDocument();
+});
+
+test('the Due row keeps counting how late the reply is while the conversation stays open', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
+  try {
+    const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
+    const sla = { state: 'overdue', first_response: { ...clock, due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true, business_minutes_left: -80 }, resolution: null };
+    render(<DetailsPanel conversation={{ ...conversation(null), sla } as unknown as Conversation} agents={[]} tags={[]} timezone="UTC" />);
+    expect(screen.getByText('1 h 20 min late', { selector: '.due-pick summary *' })).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(10 * 60_000); });
+    expect(screen.getByText('1 h 30 min late', { selector: '.due-pick summary *' })).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('Due is one row that says how late the reply is, in red; its menu holds every clock in full', () => {

@@ -4,6 +4,7 @@ import type { UpdateConversationRequest } from '../../api/client';
 import type { TeamMember, Conversation, ConversationOrigin, SettableStatus, Tag } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { clockLine, rowDue, slaOf } from '../../lib/sla';
+import { useMinuteNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, UserIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
@@ -166,7 +167,7 @@ function PropertyMenu({ className, label, summary, disabled, children }: { class
 
 // The Due row: when the reply is due, or how late, as the list row says it; its menu holds each clock in full.
 function DueRow({ sla, timezone, canManage }: { sla: NonNullable<ReturnType<typeof slaOf>>; timezone: string; canManage: boolean }) {
-  const due = rowDue(sla, timezone);
+  const due = rowDue(sla, timezone, useMinuteNow());
   const first = clockLine(sla.first_response, timezone);
   const text = due?.text ?? first.text;
   const tone = due ? (due.late ? 'late' : undefined) : first.tone;
