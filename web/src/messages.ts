@@ -128,6 +128,13 @@ export const messages = {
   filtersActive: (count: number) => `${count} filter${count === 1 ? '' : 's'} active`,
   noConversations: 'No conversations match these filters.',
   noOpenConversations: 'No open conversations. Every customer has an answer.',
+  // An empty list inside a place (a channel or a saved view) or a status where nothing else narrows it: it is caught up
+  // there, not filtered. Only the whole Open queue (noOpenConversations) may say every customer has an answer; a place
+  // is part of it, and open conversations may wait outside.
+  noConversationsIn: (status: string, place?: string) => {
+    const where = place ? ` in ${place}` : '';
+    return ['open', 'pending', 'resolved', 'closed', 'spam'].includes(status) ? `No ${status} conversations${where}.` : `No conversations${where}.`;
+  },
   bulkActions: 'Bulk actions',
   // SelectAll ticks this page only, so the count says of how many.
   selectedCount: (count: number, of: number) => `${count} of ${of} selected`,
@@ -306,6 +313,8 @@ export const messages = {
   dayGroups: { today: 'Today', earlier: 'Earlier' },
   showDetails: 'Show details',
   hideDetails: 'Hide details',
+  // A change in the details the server refused: the details show the value the conversation still has.
+  notSaved: (what: string) => `${what} not saved. Try again.`,
   aiSuggestionWaiting: 'AI suggestion',
   noTagsYet: 'No tags yet.',
   settingsSections: 'Settings sections',

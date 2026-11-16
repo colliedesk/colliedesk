@@ -4,8 +4,9 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import type { Mention, Message } from '../../api/schemas';
-import { MentionsList } from './mentions-list';
 import type { MentionShow } from './mentions-list';
+import { mentionsListPart } from './mentions-list-part';
+import { Part, PartUnavailable } from '../../ui/lazy-part';
 
 type MentionPage = Awaited<ReturnType<typeof api.mentions>>;
 
@@ -42,7 +43,7 @@ export function MentionsPane({ timezone, selectedConversation }: { timezone: str
   const list = useQuery({ queryKey: ['mentions', show], queryFn: () => api.mentions(show) });
   const markAll = useMutation({ mutationFn: () => api.markMentionsRead({ all: true }), onSuccess: (result) => markedRead(client, () => true, result.unread) });
   const open = (item: Mention) => void navigate({ to: '/mentions/$conversationId', params: { conversationId: item.conversation_id }, hash: `message-${item.message_id}` });
-  return <MentionsList items={list.data?.items ?? []} unread={list.data?.unread ?? 0} show={show} onShow={setShow} onOpen={open}
-    onMarkAllRead={() => markAll.mutate()} marking={markAll.isPending} timezone={timezone} selectedConversation={selectedConversation}
-    loading={list.isPending} failed={list.isError} onRetry={() => void list.refetch()} />;
+  return <Part part={mentionsListPart} failed={<PartUnavailable />} render={({ MentionsList }) => <MentionsList items={list.data?.items ?? []}
+    unread={list.data?.unread ?? 0} show={show} onShow={setShow} onOpen={open} onMarkAllRead={() => markAll.mutate()} marking={markAll.isPending}
+    timezone={timezone} selectedConversation={selectedConversation} loading={list.isPending} failed={list.isError} onRetry={() => void list.refetch()} />} />;
 }

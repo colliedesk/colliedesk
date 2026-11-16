@@ -49,7 +49,9 @@ messages take most of it. The top row has **Back to Inbox** (the arrow), the sub
 and **Show details** (the panel icon), which opens the properties, tags and the customer's other
 conversations. Under it the status, priority and customer slide sideways beside **Resolve**. **Back to
 Inbox**, or the browser's Back, returns to the list with the same filters and scrolled to where you left
-it. The workspace name and your address stay at the top while the page scrolls.
+it. The workspace name and your address stay at the top while the page scrolls. While only the list is on
+screen, no conversation counts as open: teammates do not see you viewing one, and a note that asks you stays
+unread in Mentions until you tap its conversation.
 
 The composer at the bottom is one line with **Send reply** until you tap it; the lock beside it starts a
 **Private note** in one tap. Tapped, it opens with the cursor in it, with
@@ -120,7 +122,10 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 **Find conversations**
 - The inbox opens on **Open** conversations, the ones that still need an answer. **All statuses** shows every
   status but Spam. When nothing is open but the workspace has conversations, the list says so instead of
-  showing the new-workspace steps.
+  showing the new-workspace steps. Inside a channel or a saved view, or on another status, an empty list says
+  what is empty there (**No open conversations in Zalo OA.**, **No pending conversations.**). Only the whole
+  Open queue says **Every customer has an answer.**: open conversations may still wait outside a channel or a
+  view. **No conversations match these filters.** is kept for a search or a filter you added.
 - The top of the list has two rows. The first names where you are: the saved view on screen, else the channel
   you opened from the sidebar, else **All channels**; then **Search** (the magnifier) and **Filter**. The second
   row is the status on the left and the order on the right. Chips of the filters that are on show under it.
@@ -148,6 +153,9 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 - The customer's name under the subject of an open conversation opens the same page.
 - A conversation you opened stays on screen after you resolve or close it, although it leaves the
   Open list.
+- When you open the inbox without picking a conversation, the first one in the list shows beside it. It stays
+  there until you pick another, so mail that arrives on top of the list never swaps it, or your half-written
+  reply, for another conversation.
 - When nothing matches while a search or a filter is on, **Clear filters** below the message resets the search
   and every filter, and returns to **Open**, in one step. In a channel it keeps the channel.
 - By default the list is ordered by **Due first** (**Waiting longest** while reply targets are off; see [Filter and sort](#filter-and-sort)); ordered by latest activity it is grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
@@ -160,14 +168,17 @@ AI agents search the same way with `colliedesk_inbox_search` (conversations) and
 - The time on the right is when the customer last wrote: your own replies and private notes never change
   it. A conversation the customer never wrote in shows when it last changed. While a
   [reply target](response-targets.md) runs, the row shows **Due** and the time instead, and once it passed,
-  how late it is in red (**12 min late**); the tooltip names the clock and says it counts business hours.
+  how late it is in red (**12 min late**), counted again each minute while the inbox stays open; the tooltip
+  names the clock and says it counts business hours.
 - A row under **Today** shows only its time; an earlier row shows its date. Days follow your timezone
   (see [Timezones](timezones.md)). The full date and time are in the tooltip of the row and are read out
   by a screen reader. Tags are in the conversation's details, not on the row.
 - Dates from an earlier year show the year, for example imported history.
 - **Move with the keyboard:** press **J** to open the next conversation in the list and **K** for the
   previous one. While a row (or its box) has the focus, **Down arrow** and **Up arrow** do the same. The
-  focus moves to the row you opened. With no conversation open, **J** opens the first one. The keys do
+  focus moves to the row you opened. With no conversation open, **J** opens the first one. Once the open
+  conversation leaves the list (you resolved it, for example), **J** opens the one that was below it and **K**
+  the one above. In another list without it (a saved view, a channel, the next page), **J** opens the first row. The keys do
   nothing while you type in a box, while you hold Ctrl, Cmd, Alt or Shift, or at the first and last row of the
   page; use **Next page** to go on.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
@@ -208,8 +219,9 @@ another year does not. Search words that are a code find that conversation, ahea
 
 ## Filter and sort
 
-**Filter** (the three lines at the right of the list's title) holds every filter. Ticking several values of one filter shows
-conversations with any of them; each filter you add narrows the list further.
+**Filter** (the three lines at the right of the list's title) holds every filter. Each value has a box, ticked once you
+pick it. Ticking several values of one filter shows conversations with any of them; each filter you add narrows the
+list further. The menu stays inside the screen and scrolls by itself when its filters do not fit.
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me**, each other teammate, or **Unassigned**.
 - **Tags**: conversations with any of the ticked tags. Once you tick two or more, **Has every chosen tag**
@@ -390,8 +402,9 @@ the list's title names the view on screen.
   send the reply or note. If the send fails, or a reload cuts it off, the text is written back, and the
   next time the conversation opens it is dropped if the reply or note did arrive, so it is never offered
   twice. It also goes seven days after you last opened or edited it, and for every conversation when you sign out, so a
-  teammate who signs in on the same browser never sees it. Attached files are not kept. Another browser or
-  device does not see it. Two tabs of the same browser share it: when you type in one, the other tab's
+  teammate who signs in on the same browser never sees it. The **Cc** is kept with the text as you left it, so an
+  address you removed is not copied when you come back. Attached files are not kept. Another browser or
+  device does not see it. Two tabs of the same browser share it, **Cc** included: when you type in one, the other tab's
   box takes the newer text and says **Updated from another tab**, unless you typed different text in that
   tab too. Then your text stays, and the tab says **Another tab has a different draft** with **Use it**
   and **Keep mine**.
@@ -480,6 +493,8 @@ In the details pane (**Show details** on a narrower screen):
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me** first, then each teammate, then **Unassigned**.
 - **Tags**: see [Tags](tags.md).
+- A change shows the value you picked at once, while it saves. If it cannot be saved, a message under the
+  row says so (**Priority not saved. Try again.**) and the row shows the value the conversation still has.
 
 ## Spam
 

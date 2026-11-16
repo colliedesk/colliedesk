@@ -1,6 +1,6 @@
 // An unsent reply is kept in this browser per workspace, agent and conversation, so a reload, Back or a
-// trip to Settings does not lose it. Only the text, whether it is a reply or a note, and when it was last
-// written are kept; never files. A draft older than a week is dropped when read, and signing out forgets
+// trip to Settings does not lose it. Only the text, whether it is a reply or a note, the Cc as the agent left it
+// and when it was last written are kept; never files. A draft older than a week is dropped when read, and signing out forgets
 // every draft, so a shared browser does not hand one agent's private notes to the next.
 // This module is in the first bundle, which has a size budget: keep it small.
 export const draftPrefix = 'colliedesk.reply-draft:';
@@ -10,7 +10,8 @@ const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
 // sendKey is the Idempotency-Key of a send of this text that is in flight, failed or was cut off (a reload):
 // the page that reads it asks the server whether that send stored its message before offering the text again.
 // sendInput names the files and copies that send carried; the key goes with them too.
-export interface StoredDraft { kind: 'outgoing' | 'note'; body: string; sendKey?: string; sendInput?: string }
+// cc is the Cc list once the agent changed it (an address removed stays removed); without it the suggestion shows.
+export interface StoredDraft { kind: 'outgoing' | 'note'; body: string; sendKey?: string; sendInput?: string; cc?: string[] }
 
 // parseDraft reads one stored value (a storage event's old or new value, or the item itself).
 export function parseDraft(raw: string | null | undefined): StoredDraft | undefined {
@@ -21,7 +22,8 @@ export function parseDraft(raw: string | null | undefined): StoredDraft | undefi
     // the composer that reads it then writes its empty box, which removes it.
     if (value && Date.now() - (value.saved_at as number) <= maxAgeMs && typeof value.body === 'string') {
       return { kind: value.kind === 'note' ? 'note' : 'outgoing', body: value.body, ...(typeof value.sendKey === 'string' ? { sendKey: value.sendKey } : {}),
-        ...(typeof value.sendInput === 'string' ? { sendInput: value.sendInput } : {}) };
+        ...(typeof value.sendInput === 'string' ? { sendInput: value.sendInput } : {}),
+        ...(Array.isArray(value.cc) && value.cc.every((address) => typeof address === 'string') ? { cc: value.cc } : {}) };
     }
   } catch {
     // A value written by something else: start empty.

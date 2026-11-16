@@ -17,6 +17,7 @@ read it.
   never are, and you are never asked by your own note.
 - **@** in a reply to the customer does nothing: only a private note asks teammates.
 - Deleting **@Name** from the text before you send it takes the ask back.
+- When two active teammates have the same name, **@Name** asks both: the note cannot tell them apart.
 
 ## See that they were told
 
@@ -30,7 +31,8 @@ The person you asked sees **Hoàng Tú asked you · marked read when you opened 
 
 ## Your Mentions list
 
-**Mentions** in the sidebar counts the notes that asked you and that you have not read.
+**Mentions** in the sidebar counts the notes that asked you and that you have not read. A new one counts
+within about 20 seconds, with the inbox's regular refresh; you do not need to reload or switch windows.
 
 - **Unread N** lists the ones you have not read, **All** every one, newest first. **Mark all read** clears
   the count.

@@ -16,6 +16,7 @@ import { mayTell, noticesOf } from './status-tell';
 import { presenceViewPart } from './presence-part';
 import { ownRef } from './conversation-ref';
 import { slaMark, slaOf } from '../../lib/sla';
+import { useMinuteNow } from '../../lib/use-now';
 import { TimeEntriesSection } from './time-entries-section';
 import { AutofixStrip } from '../autofix/autofix-slot';
 import { useHolds } from '../../lib/permissions-context';
@@ -211,7 +212,7 @@ function StatusEvent({ conversation, timezone, canManageChannels }: { conversati
 
 // The header says which clock and when in full words, since the details (with Targets) hide below 75 rem.
 function HeaderMark({ conversation, timezone }: { conversation: Conversation; timezone: string }) {
-  const mark = slaMark(slaOf(conversation), timezone);
+  const mark = slaMark(slaOf(conversation), timezone, useMinuteNow());
   return mark ? <span className={`sla-mark sla-${mark.tone}`} aria-label={mark.full} data-tip={mark.full}><ClockIcon />{mark.header}</span> : null;
 }
 

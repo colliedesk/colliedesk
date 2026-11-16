@@ -289,7 +289,6 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 @media (min-width: 80rem) and (max-width: 89.99rem) {
   .inbox-shell { grid-template-columns: 288px minmax(0, 1fr) 240px; }
   .details-section { padding-inline: var(--space-4); }
-  .details-panel .property-row { --label: 64px; }
 }
 /* With the sidebar or rail beside it the thread of a 705–1439 px screen is narrow: the reply box keeps its tools and both send
    buttons on one row by giving up some padding and spacing. */

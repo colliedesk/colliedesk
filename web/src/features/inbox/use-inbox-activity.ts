@@ -112,6 +112,8 @@ export function useInboxActivity(enabled = true, agentId?: string) {
       void client.invalidateQueries({ queryKey: ['setup'] });
     }
     for (const item of changes) void client.invalidateQueries({ queryKey: ['messages', item.id] });
+    // A note that asks someone changes its conversation: the Mentions count (the sidebar) and list follow.
+    if (changes.length > 0) void client.invalidateQueries({ queryKey: ['mentions'] });
     if (items.length === 0) return;
     if (document.hasFocus()) return;
     if (pending.current === 0) baseTitle.current = document.title;

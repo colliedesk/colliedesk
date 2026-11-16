@@ -9,8 +9,9 @@ import { ConversationList } from './conversation-list';
 import type { SettingsTarget } from './conversation-list';
 import { AITriageSlot } from './ai-triage-slot';
 import { DetailsPanel } from './details-panel';
-import { InboxFilters } from './inbox-filters';
+import { InboxFilters, placeOf } from './inbox-filters';
 
+import { defaultStatus } from '../../lib/inbox-query';
 import type { InboxQuery } from '../../lib/inbox-query';
 import { narrowedInPlace, placeOnly } from '../../lib/inbox-scope';
 import type { AttachmentLimits } from './attachment-picker';
@@ -20,7 +21,7 @@ import type { AIDraft } from './ai-draft-api';
 import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
-import { askableTeammates } from './mention-picker';
+import { askableTeammates } from './mention-match';
 import { messageMovesPart } from './message-moves-part';
 import { Part } from '../../ui/lazy-part';
 import { messages } from '../../messages';
@@ -72,7 +73,8 @@ interface InboxPageProps {
   agentName?: string;
   onManageSavedReplies?: () => void;
   savedRepliesState?: 'loading' | 'failed' | 'ready';
-  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
+  // A details change settles when the server answered and rejects when it refused (the details say so).
+  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void | Promise<unknown>;
   // Changes one conversation's status and settles when the server answered: the thread header and Send and resolve.
   // notify false sets it without telling the customer in their chat.
   // The open chat conversation's statuses that would tell could not be read.
@@ -80,8 +82,8 @@ interface InboxPageProps {
   onSetStatus?: (conversationId: string, status: SettableStatus, options?: { notify?: boolean }) => Promise<unknown>;
   // Files conversations in Spam (true) or takes them out where they were (false), with their senders.
   onSpam?: (ids: string[], spam: boolean) => Promise<SpamResult>;
-  onAddTag?: (conversationId: string, tagId: string) => void;
-  onRemoveTag?: (conversationId: string, tagId: string) => void;
+  onAddTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
+  onRemoveTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
   onCreateTag?: (conversationId: string, name: string) => void;
   // How many conversations each status holds under the other filters: the status picker's numbers.
   statusCounts?: { open: number; pending: number; resolved: number; closed: number; spam: number };
@@ -302,6 +304,12 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   // With nothing open the thread pane says why in one line; a reply box and details would belong to no one. A
   // conversation named by the address is on its way (or failed) and says nothing yet; a mention opens its
   // conversation beside the Mentions list.
+  // An empty list where nothing but the place (a channel, a saved view) and the status narrow it is caught up there: it
+  // says so for that place and status, never that filters match nothing.
+  const place = placeOf(query, channels, savedViews);
+  const placeName = place.view || place.channel ? place.title || undefined : undefined;
+  const emptyListText = page === 1 && (place.view || !narrowedInPlace(query)) && (place.view || place.channel || (query.status ?? defaultStatus) !== defaultStatus)
+    ? messages.noConversationsIn(query.status ?? defaultStatus, placeName) : undefined;
   const emptyText = selected || threadOpen || conversationFailed ? undefined
     : otherList ? messages.selectConversation : loading || failed ? undefined : messages.nothingToOpen;
   return (
@@ -332,7 +340,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
         </header>
         <ConversationList items={conversations} channelLabel={rowChannelLabel} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
-          failed={failed} onRetry={onRetry} onClearFilters={narrowedInPlace(query) ? clearFilters : undefined}
+          failed={failed} onRetry={onRetry} onClearFilters={narrowedInPlace(query) ? clearFilters : undefined} emptyText={emptyListText}
           checkedIds={checked} onToggle={toggle} draftIds={draftConversationIds} viewers={viewers}
           grouped={query.sort === 'updated_desc'} onTestMessage={onTestMessage} nextStep={nextStep} />
         {spamToast && <div role="status" aria-label={messages.spam} className="spam-toast"><span>{spamToast.text}</span>

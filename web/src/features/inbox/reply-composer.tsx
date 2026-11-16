@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import type { FocusEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { newSubmitKey } from '../../api/submit-key';
@@ -18,10 +17,9 @@ import { composing, isTyping } from '../../lib/typing-target';
 import { messages } from '../../messages';
 import { ArrowUpIcon, BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
 import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
-import { matchingTeammates, mentionAt, mentionedIn, MentionPicker, optionIdOf } from './mention-picker';
-import type { Teammate } from './mention-picker';
+import { matchingTeammates, mentionAt, mentionedIn, optionIdOf } from './mention-match';
+import type { Teammate } from './mention-match';
 import { mentionMessages } from './mention-messages';
-import { useCaretAnchor } from './caret-anchor';
 
 interface ReplyComposerProps {
   disabled?: boolean;
@@ -112,8 +110,16 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   // note, the one thing that can be sent.
   const [stored] = useState(() => readDraft(draftKey));
   const [kind, setKindAsked] = useState<Kind>(noReplies || !mayReply ? 'note' : stored?.kind ?? 'outgoing');
-  const setKind = useCallback((next: Kind) => setKindAsked(next === 'outgoing' && !mayReply ? 'note' : next), [mayReply]);
+  const setKind = useCallback((next: Kind) => {
+    // A note may ask teammates with @: its list comes with the reply pickers' chunk.
+    if (next === 'note') replyPickersPart.preload();
+    setKindAsked(next === 'outgoing' && !mayReply ? 'note' : next);
+  }, [mayReply]);
   const [body, setBody] = useState(stored?.body ?? '');
+  // undefined until the agent edits the list, so suggestions that load later still show up. Kept with the text, so
+  // an address the agent removed is not copied after a reload or a trip to another conversation.
+  const [ccEdited, setCcEdited] = useState<string[] | undefined>(stored?.cc);
+  const keptCc = (list = ccEdited) => (list ? { cc: list } : {});
   // The text is kept as it is typed, and forgotten once the box is empty again (after a send). The key is
   // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
   // remounts the box with it, so the draft kept there is read before anything is written over it.
@@ -129,12 +135,14 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   };
   useEffect(() => {
     const send = sendOf(kind, body);
-    writeDraft(draftKey, { kind, body, ...(send ? { sendKey: send.key, sendInput: send.input } : {}) });
-  }, [draftKey, kind, body]);
+    writeDraft(draftKey, { kind, body, ...keptCc(), ...(send ? { sendKey: send.key, sendInput: send.input } : {}) });
+  }, [draftKey, kind, body, ccEdited]);
   const latestBody = useRef(body);
   latestBody.current = body;
   const latestKind = useRef(kind);
   latestKind.current = kind;
+  const latestCc = useRef(ccEdited);
+  latestCc.current = ccEdited;
   // A draft kept with a send's key asks the server once whether that send stored its message: then the text
   // leaves the box instead of inviting a second send. It is never sent by itself.
   useEffect(() => {
@@ -145,19 +153,20 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       if (!current || !found || pendingSend.current !== send) return;
       pendingSend.current = undefined;
       if (latestBody.current === send.body) setBody('');
-      else writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current });
+      else writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current, ...keptCc(latestCc.current) });
     }, () => undefined);
     return () => { current = false; };
   }, []);
   // Another tab of this browser wrote (or sent) this draft: a box not edited here shows its text, as a reply
-  // or a note the way that tab had it (a note must never turn into a reply), and says so. Text typed here is
-  // never replaced unasked: the person picks theirs or the other tab's.
+  // or a note the way that tab had it (a note must never turn into a reply), with its Cc, and says so. Text typed
+  // here is never replaced unasked: the person picks theirs or the other tab's.
   const [otherTab, setOtherTab] = useState(false);
   const editedHere = useRef(false);
   const [otherDraft, setOtherDraft] = useState<StoredDraft>();
   const adopt = (draft: StoredDraft) => {
     setKind(draft.kind);
     setBody(draft.body);
+    setCcEdited(draft.cc);
     editedHere.current = false;
     setOtherDraft(undefined);
   };
@@ -167,21 +176,22 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       const kept = readDraft(draftKey);
       const text = kept?.body ?? '';
       const nextKind = noReplies ? 'note' : kept?.kind ?? latestKind.current;
-      if (text === latestBody.current && nextKind === latestKind.current) { setOtherDraft(undefined); return; }
+      const sameCc = JSON.stringify(kept?.cc) === JSON.stringify(latestCc.current);
+      if (text === latestBody.current && nextKind === latestKind.current && sameCc) { setOtherDraft(undefined); return; }
       // The other tab sent or cleared the very text this box holds: it goes here too.
       const sameTextGone = !text.trim() && parseDraft(event.oldValue)?.body === latestBody.current;
       const mine = editedHere.current && latestBody.current.trim() !== '';
       // It sent or cleared text of its own: the text typed here stays, and is kept again.
       if (mine && !text.trim() && !sameTextGone) {
-        writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current });
+        writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current, ...keptCc(latestCc.current) });
         return;
       }
       if (mine && !sameTextGone) {
         setOtherTab(false);
-        setOtherDraft({ kind: nextKind, body: text });
+        setOtherDraft({ kind: nextKind, body: text, cc: kept?.cc });
         return;
       }
-      adopt({ kind: nextKind, body: text });
+      adopt({ kind: nextKind, body: text, cc: kept?.cc });
       setOtherTab(true);
     };
     window.addEventListener('storage', onStorage);
@@ -193,8 +203,6 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const inFlight = useRef(false);
   const [files, setFiles] = useState<File[]>([]);
   const fileProblem = attachmentProblem(files, attachmentLimits);
-  // undefined until the agent edits the list, so suggestions that load later still show up.
-  const [ccEdited, setCcEdited] = useState<string[]>();
   const [ccOpen, setCcOpen] = useState(false);
   const [ccBlocking, setCcBlocking] = useState(false);
   const cc = ccEdited ?? suggestedCc;
@@ -214,17 +222,18 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const aiOffHintId = useId();
   const asksTeammates = kind === 'note' && teammates.length > 0;
   const mentionOptions = mention && asksTeammates ? matchingTeammates(teammates, mention.query) : [];
-  const mentionOpen = Boolean(mention && asksTeammates) && !disabled;
+  // The list comes with the reply pickers' chunk, loaded once the composer is on screen and asked for again on Private
+  // note and on an @, so it is there by the first @. Until then (or when it cannot load) the note is written as text.
+  const pickers = replyPickersPart.use();
+  const mentionOpen = Boolean(mention && asksTeammates) && !disabled && pickers.status === 'ready';
   // Fewer matches as the name is typed keep the mark on the last one.
   const mentionActive = Math.max(0, Math.min(mentionIndex, mentionOptions.length - 1));
   const followCaret = (text: string, caretAt: number | null) => {
+    if (asksTeammates && text.includes('@')) replyPickersPart.preload();
     const found = asksTeammates && caretAt !== null ? mentionAt(text, caretAt) : undefined;
     setMention((current) => (found && current && found.start === current.start && found.query === current.query ? current : found));
     if (!found || found.start !== mention?.start) setMentionActive(0);
   };
-  // The list opens at the @, like a chat app's: under its line from the @ on, above the line when the screen has no room
-  // under it, and never past an edge of the screen. It lives on the page's body, so a reply box that scrolls never cuts it.
-  const mentionAnchor = useCaretAnchor(field, mentionOpen ? mention : undefined);
   const pickMention = (person: Teammate) => {
     if (!mention) return;
     const end = mention.start + 1 + mention.query.length;
@@ -234,7 +243,6 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     setMention(undefined);
   };
   const [picking, setPicking] = useState<Picker | null>(null);
-  const pickers = replyPickersPart.use();
   const [assist, setAssist] = useState(false);
   // A draft is being written in the open panel: the button says so and keeps the panel (and its Stop) open.
   const [drafting, setDrafting] = useState(false);
@@ -312,11 +320,11 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     // The @ list floats outside the card: a press on it is still in the box.
     const onPress = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!card.current?.contains(target) && !mentionAnchor.ref.current?.contains(target)) setActive(false);
+      if (!card.current?.contains(target) && !(target instanceof Element && target.closest('.mention-picker'))) setActive(false);
     };
     document.addEventListener('pointerdown', onPress);
     return () => document.removeEventListener('pointerdown', onPress);
-  }, [active, mentionAnchor.ref]);
+  }, [active]);
   const reply = kind === 'outgoing' ? body.trim() : '';
   const writing = reply !== '';
   useEffect(() => { onReplyDraft?.(writing); }, [writing, onReplyDraft]);
@@ -365,7 +373,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     const key = draftKey ? sendOf(kind, body, input)?.key ?? newSubmitKey() : undefined;
     if (key) {
       pendingSend.current = { kind, body, key, input };
-      writeDraft(draftKey, { kind, body, sendKey: key, sendInput: input });
+      writeDraft(draftKey, { kind, body, ...keptCc(), sendKey: key, sendInput: input });
     }
     const send = (draftId?: string) => mentions.length > 0 ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, undefined, undefined, undefined, key, mentions)
       : key ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, sentCc.length > 0 ? sentCc : undefined, seen, draftId, key)
@@ -456,12 +464,12 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           onBlur={() => setMention(undefined)}
           placeholder={kind === 'note' ? (asksTeammates ? mentionMessages.notePlaceholder : messages.notePlaceholder) : noReplies ? messages.replyNotSendable : messages.replyPlaceholder}
           onChange={(event) => { setBody(event.target.value); setOtherTab(false); editedHere.current = true; followCaret(event.target.value, event.target.selectionStart); }} />
-        {mentionOpen && mention && createPortal(<MentionPicker id={mentionList} options={mentionOptions} query={mention.query} active={mentionActive}
-          onActive={setMentionActive} onPick={pickMention} ref={mentionAnchor.ref} style={mentionAnchor.style} />, document.body)}
+        {mentionOpen && mention && pickers.status === 'ready' && <pickers.module.MentionPopup box={field} at={mention} id={mentionList} options={mentionOptions}
+          active={mentionActive} onActive={setMentionActive} onPick={pickMention} />}
         {otherTab && <p role="status" className="composer-hint">{messages.draftFromOtherTab}</p>}
         {otherDraft && <p role="status" className="composer-hint">{messages.otherTabDraftDiffers}{' '}
           <button type="button" className="link-action" onClick={() => adopt(otherDraft)}>{messages.useOtherTabDraft}</button>{' '}
-          <button type="button" className="link-action" onClick={() => { writeDraft(draftKey, { kind, body }); setOtherDraft(undefined); }}>{messages.keepMyDraft}</button></p>}
+          <button type="button" className="link-action" onClick={() => { writeDraft(draftKey, { kind, body, ...keptCc() }); setOtherDraft(undefined); }}>{messages.keepMyDraft}</button></p>}
         {picking && !disabled && (pickers.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
           // Until the chunk is there, the list's own box says it is loading, where the list will be.
           : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>
