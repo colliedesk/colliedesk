@@ -647,6 +647,35 @@ test('on a phone the list opens no conversation until a tap: no presence, no thr
   }
 });
 
+// A phone turned from landscape (the wide layout shows the first row) to portrait puts the list in front of the
+// person: the first row they never tapped is no longer open there, so it is not marked open and its thread goes.
+test('when the screen narrows to the phone layout, the first row shown on the wide layout is no longer open', async () => {
+  const listeners = new Set<(event: { matches: boolean }) => void>();
+  const phone = { matches: false, media: '(max-width: 44rem)',
+    addEventListener: (_: string, change: (event: { matches: boolean }) => void) => { listeners.add(change); },
+    removeEventListener: (_: string, change: (event: { matches: boolean }) => void) => { listeners.delete(change); } };
+  const other = (query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  vi.stubGlobal('matchMedia', (query: string) => (query.includes('44rem') ? phone : other(query)));
+  try {
+    quietApis();
+    const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    renderRoute();
+    expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+    const row = screen.getByRole('button', { name: /alpha conversation/i });
+    expect(row).toHaveAttribute('aria-current', 'true');
+    act(() => {
+      phone.matches = true;
+      for (const change of listeners) change({ matches: true });
+    });
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull());
+    expect(screen.getByRole('button', { name: /alpha conversation/i })).not.toHaveAttribute('aria-current');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 // A change in the details that the server refuses must not look saved: the details say so and show the value the
 // conversation still has. While it saves, the details show the value picked, not the old one.
 test('a details edit that fails says it was not saved and shows the value back; while it saves, the pick shows', async () => {

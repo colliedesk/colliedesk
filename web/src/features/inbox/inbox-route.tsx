@@ -165,7 +165,8 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   // the person picks another, so a live refresh that puts a new row on top never swaps the thread and its reply box.
   const firstRow = mentionsMode || phone ? undefined : conversations.data?.items[0]?.id;
   const [pinned, setPinned] = useState<{ query: string; id: string }>();
-  const pinnedID = pinned?.query === query ? pinned.id : undefined;
+  // A pin made on the wide layout ends when the screen narrows to the phone one (a phone turned upright).
+  const pinnedID = !phone && !mentionsMode && pinned?.query === query ? pinned.id : undefined;
   // Rows kept from the previous filters are not this list's first row.
   const firstOfList = conversations.isPlaceholderData ? undefined : firstRow;
   useEffect(() => { if (!pinnedID && firstOfList) setPinned({ query, id: firstOfList }); }, [pinnedID, firstOfList, query]);
