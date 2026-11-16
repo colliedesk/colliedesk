@@ -261,3 +261,30 @@ test('the customer section names the customer above the link to all their conver
   expect(within(section).getByText('Mai Linh', { selector: 'strong' })).toBeInTheDocument();
   expect(within(section).getByRole('button', { name: 'All conversations of Mai Linh' })).toBeInTheDocument();
 });
+
+// Two quick picks of one field: the earlier one failing must not say "not saved" once the later one saved.
+test('an earlier pick that fails says nothing once a later pick of the same field saved', async () => {
+  const answers: { resolve: () => void; reject: (error: Error) => void }[] = [];
+  const onUpdate = vi.fn(() => new Promise<void>((resolve, reject) => { answers.push({ resolve, reject }); }));
+  render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  const priority = screen.getByRole('combobox', { name: 'Priority' });
+  fireEvent.change(priority, { target: { value: 'urgent' } });
+  fireEvent.change(priority, { target: { value: 'high' } });
+  await act(async () => { answers[0].reject(new Error('refused')); });
+  await act(async () => { answers[1].resolve(); });
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+// "Status not saved" is about the value the conversation still has. Once that value changes from elsewhere (Resolve
+// in the header, a teammate), the message no longer describes the row and goes.
+test('a "not saved" message goes once the field changes from elsewhere', async () => {
+  const onUpdate = vi.fn(() => Promise.reject(new Error('refused')));
+  const open = { ...conversation(null), status: 'open' } as Conversation;
+  const { rerender } = render(<DetailsPanel conversation={open} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Pending' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Status not saved. Try again.');
+  rerender(<DetailsPanel conversation={{ ...open, priority: 'high' }} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Status not saved. Try again.');
+  rerender(<DetailsPanel conversation={{ ...open, priority: 'high', status: 'resolved' }} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  expect(screen.queryByRole('alert')).toBeNull();
+});

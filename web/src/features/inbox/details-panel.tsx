@@ -46,22 +46,33 @@ const statusOrder = ['pending', 'resolved', 'closed', 'open'] as const;
 type Field = 'status' | 'priority' | 'assignee' | 'tags';
 const fieldNames: Record<Field, string> = { status: messages.status, priority: messages.priority, assignee: messages.assignee, tags: messages.tags };
 
+// The value an edit key ('status', 'priority', 'assignee', 'tag:<id>') has on the server, to tell whether a refused
+// change still describes the row.
+const serverValue = (conversation: Conversation, key: string) => key === 'status' ? conversation.status
+  : key === 'priority' ? conversation.priority : key === 'assignee' ? conversation.assignee_id ?? ''
+    : String(conversation.tags.some((tag) => `tag:${tag.id}` === key));
+
 // useEdits keeps the details honest about a change on its way: while it saves, the value picked shows (not the old
-// one), and one the server refuses goes back to the conversation's value with a message under its row.
-function useEdits(conversationId?: string) {
+// one), and one the server refuses goes back to the conversation's value with a message under its row. The message
+// is about the latest pick of that field only, and goes once the field changes from elsewhere (the header, a teammate).
+function useEdits(conversation?: Conversation) {
+  const conversationId = conversation?.id;
   const [saving, setSaving] = useState<Record<string, { value: unknown; token: object }>>({});
-  const [failed, setFailed] = useState<{ conversationId: string; field: Field }>();
+  const [failed, setFailed] = useState<{ conversationId: string; field: Field; key: string; was: string }>();
+  // The latest pick of each value: an earlier pick's answer, refused or not, no longer speaks for it.
+  const latest = useRef<Record<string, object>>({});
   const shown = <T,>(key: string, value: T): T => {
     const edit = conversationId ? saving[`${conversationId}:${key}`] : undefined;
     return edit ? edit.value as T : value;
   };
   const save = (field: Field, key: string, value: unknown, change: () => void | Promise<unknown>) => {
-    if (!conversationId) return;
+    if (!conversation || !conversationId) return;
     const at = `${conversationId}:${key}`;
     const token = {};
+    const was = serverValue(conversation, key);
+    latest.current[at] = token;
     setFailed(undefined);
     setSaving((now) => ({ ...now, [at]: { value, token } }));
-    // A later pick of the same value owns it; an earlier answer does not clear it.
     const settle = () => setSaving((now) => {
       if (now[at]?.token !== token) return now;
       const rest = { ...now };
@@ -70,9 +81,12 @@ function useEdits(conversationId?: string) {
     });
     let result: void | Promise<unknown>;
     try { result = change(); } catch (error) { result = Promise.reject(error); }
-    Promise.resolve(result).then(settle, () => { settle(); setFailed({ conversationId, field }); });
+    Promise.resolve(result).then(settle, () => {
+      settle();
+      if (latest.current[at] === token) setFailed({ conversationId, field, key, was });
+    });
   };
-  const error = (field: Field) => failed?.conversationId === conversationId && failed?.field === field
+  const error = (field: Field) => conversation && failed && failed.conversationId === conversationId && failed.field === field && failed.was === serverValue(conversation, failed.key)
     ? <p role="alert" className="error-copy property-error">{messages.notSaved(fieldNames[field])}</p> : null;
   return { shown, save, error };
 }
@@ -113,7 +127,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
   const readsTeam = holds('team:read');
   const readsTags = holds('tags:read');
   const [tagName, setTagName] = useState('');
-  const edits = useEdits(conversation?.id);
+  const edits = useEdits(conversation);
   // A select cannot wrap, so a long value is cut on screen; its title holds the full text.
   const priority = edits.shown('priority', conversation?.priority ?? 'normal');
   const assignee = edits.shown('assignee', conversation?.assignee_id ?? '');
