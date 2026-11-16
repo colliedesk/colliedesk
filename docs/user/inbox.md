@@ -1,4 +1,4 @@
-# Work the inbox
+# Inbox overview
 
 The inbox has three panes: the **conversation list** on the left, the **timeline** in the middle
 with the composer below it, and **conversation details** on the right. On a narrower screen the

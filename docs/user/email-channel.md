@@ -109,7 +109,7 @@ receive mail ([self-host email](../self-host/email.md)); otherwise replies alway
 address.
 
 Until then the inbox shows one line under its title that names this mailbox and every other one that
-does not forward yet ([Work the inbox](inbox.md)). Its action opens this step, also after a test message
+does not forward yet ([Inbox overview](inbox.md)). Its action opens this step, also after a test message
 or other mail that is not customer mail marked it done; the step then says "Mail arrived, but no customer
 mail through your mailbox yet." and changes to **First email received** by itself when customer mail
 arrives. On a server whose sending domain
