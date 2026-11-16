@@ -25,6 +25,13 @@ test('other failures are retried once and leave the session alone', async () => 
   expect(client.getQueryState(['me'])).toBeUndefined();
 });
 
+test('a 404 is asked for once: what is not there will not be there on a second try', async () => {
+  const client = createQueryClient();
+  const missing = vi.fn().mockRejectedValue(new Error('API 404'));
+  await client.fetchQuery({ queryKey: ['conversations', 'one', 'gone'], queryFn: missing, retryDelay: 0 }).catch(() => {});
+  expect(missing).toHaveBeenCalledTimes(1);
+});
+
 test('a 402 workspace_locked on any request locks the cached session at once and is not retried', async () => {
   const client = createQueryClient();
   const me = { agent: {}, workspace: {}, timezone: 'UTC', plan: { plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, trial_extended: true, agents_over: 0, seat_paused: false } };

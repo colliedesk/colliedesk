@@ -344,6 +344,8 @@ export const messages = {
   deliverySavedNotSent: 'Saved, not sent',
   deliveryNotSent: 'Not sent',
   conversationNotLoaded: 'This conversation could not be loaded.',
+  conversationNotFound: 'Conversation not found',
+  conversationNotFoundExplanation: 'The link may be wrong, or the conversation was deleted or merged, or you cannot see it.',
   retryLoad: 'Retry',
   downloadOriginalEmail: 'Download original email',
   senderFailedVerification: 'Failed sender verification',

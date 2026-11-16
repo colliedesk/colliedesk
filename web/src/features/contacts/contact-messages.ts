@@ -15,6 +15,8 @@ export const contactMessages = {
   contactMatches: 'Customers',
   contactOf: (name: string) => `Customer: ${name}`,
   contactNotLoaded: 'This customer could not be loaded.',
+  contactNotFound: 'Customer not found',
+  contactNotFoundExplanation: 'The link may be wrong, or the customer is in another workspace.',
   contactEmail: 'Email',
   contactOnChannel: 'On a channel',
   contactOrganization: 'Company',

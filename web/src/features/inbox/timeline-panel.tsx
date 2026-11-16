@@ -29,8 +29,9 @@ interface TimelinePanelProps {
   afterFirstCustomerMessage?: ReactNode;
   timeEntries?: TimeEntry[];
   loading?: boolean;
-  // The ticket an address names could not be loaded: say so, and offer to try again.
-  loadFailed?: boolean;
+  // The ticket an address names could not be loaded: say so, and offer to try again. 'not_found' (a 404) says
+  // it is not there and leads back to the inbox; asking again would get the same answer.
+  loadFailed?: boolean | 'not_found';
   onRetryLoad?: () => void;
   // With no conversation open, nothing loading and nothing failed: the one line the pane shows instead.
   emptyText?: string;
@@ -150,6 +151,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
         {back}
         <div>
           {conversation && <h2>{conversation.subject}</h2>}
+          {!conversation && loadFailed === 'not_found' && <h2>{messages.conversationNotFound}</h2>}
           {conversation && <div className="timeline-meta">{ownRef(conversation) && <span className="ref-copy"><span className="conv-ref">{ownRef(conversation)}</span>
             <CopyButton value={ownRef(conversation) ?? ''} className="icon-button" label={messages.copyReference(ownRef(conversation) ?? '')}><CopyIcon /></CopyButton></span>}
             {/* Status and priority are in the details; the line says what is pressing and who wrote (I1-a). */}
@@ -176,7 +178,9 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
       {autofix && conversation && onToggleDetails && <AutofixStrip conversationId={conversation.id} customerName={conversation.contact_name} timezone={timezone} onOpenDetails={onToggleDetails} />}
       <div className="timeline-scroll" ref={scroller}>
         <div className="timeline-stack">
-          {!conversation && loadFailed && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>
+          {!conversation && loadFailed === 'not_found' && <div className="empty-copy"><p>{messages.conversationNotFoundExplanation}</p>
+            <a href="/" className="link-action page-back">{messages.backToInbox}</a></div>}
+          {!conversation && loadFailed === true && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>
             <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}
           {conversation && !readsMessages && <p className="empty-copy">{messages.messagesClosed}</p>}
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}

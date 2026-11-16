@@ -130,3 +130,14 @@ test('the merge dialog asks for the other contact in one line, and says nothing 
   expect(dialog).toHaveTextContent('Find the other contact of the same person.');
   expect(within(dialog).getByRole('button', { name: 'About merging' })).toHaveAccessibleDescription('Nothing is deleted, and you can undo the merge here.');
 });
+
+test('a link to a customer that is not there says it was not found and leads back to the inbox; another failure says it could not be loaded', () => {
+  const { rerender } = render(<ContactPage page={1} pageSize={25} onPage={() => {}} failed="not_found" />);
+  expect(screen.getByRole('heading', { name: 'Customer not found' })).toBeInTheDocument();
+  expect(screen.getByText('The link may be wrong, or the customer is in another workspace.')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Back to Inbox' })).toHaveAttribute('href', '/');
+  expect(screen.queryByText('This customer could not be loaded.')).not.toBeInTheDocument();
+  rerender(<ContactPage page={1} pageSize={25} onPage={() => {}} failed />);
+  expect(screen.getByRole('alert')).toHaveTextContent('This customer could not be loaded.');
+  expect(screen.queryByRole('heading', { name: 'Customer not found' })).not.toBeInTheDocument();
+});
