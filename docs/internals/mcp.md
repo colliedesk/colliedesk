@@ -190,10 +190,11 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
   address can have thousands). The `ids` handler parses uuids (at most 100) and the store runs a
   statement of its own over a `uuid[]`: comparing `id::text` could not use the `(workspace_id, id)`
   index and scanned every contact of every workspace (see Performance).
-- **Embedded guides.** `go:embed` cannot read outside the module, so `docs_search` reads a copy of
-  `docs/user` in `server/internal/mcpserver/userdocs`. Run `make sync-user-docs` after editing a
-  guide; `TestEmbeddedUserGuidesMatchTheDocsDirectory` fails on a stale copy. `README.md` is not
-  indexed.
+- **Embedded guides.** `docs_search` reads `docs/user/*.md` through the package `docs`
+  (`docs/user-guides.go`), so an edited guide is what the next build serves; there is no copy to
+  sync. This is why the Go module sits at the repository root: `go:embed` cannot read outside its
+  module, and when the module was `server/` the server carried a hand-synced copy that CI often
+  found stale. `README.md` is not indexed.
 - **Generated tool table.** The table under "Tools" in `docs/user/mcp.md` sits between
   `<!-- generated:tools -->` and `<!-- /generated -->` and comes from the catalog (package
   `mcpserver/docgen`): the sentence from `toolDocs` (`Spec.Doc`, written for people; `Description`

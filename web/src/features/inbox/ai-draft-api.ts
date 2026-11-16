@@ -15,7 +15,7 @@ export const aiDraftSchema = z.object({
   files: z.array(z.object({ id: z.string().uuid(), filename: z.string(), content_type: z.string(), size: z.number().int().nonnegative(), created_at: z.string().datetime() })),
   error_code: z.string().nullable(), prompt: z.string(), text: z.string().nullable(), missing_info: z.string().nullable(),
   sources: z.array(aiSourceSchema),
-  warnings: z.array(z.object({ kind: z.enum(['email', 'number', 'name', 'script', 'placeholder']), value: z.string() })),
+  warnings: z.array(z.object({ kind: z.enum(['email', 'number', 'name', 'script', 'placeholder', 'link']), value: z.string() })),
   model: z.string().nullable(), outcome: z.enum(['sent_unchanged', 'sent_edited', 'discarded', 'superseded', 'expired']).nullable(),
   similarity: z.number().nullable(), sent_message_id: z.string().uuid().nullable(), requested_by_agent_id: z.string().uuid().nullable(),
   automatic: z.boolean(), answers_message_id: z.string().uuid().nullable(), reply_needed: z.boolean().nullable(),
