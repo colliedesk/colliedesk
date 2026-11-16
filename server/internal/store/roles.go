@@ -494,7 +494,7 @@ func (s *Store) CreateRole(ctx context.Context, workspaceID string, caller Calle
 		if err != nil {
 			return domain.Role{}, fmt.Errorf("create role: %w", err)
 		}
-		return loadRole(ctx, tx, workspaceID, caller, id, false)
+		return s.loadRole(ctx, tx, workspaceID, caller, id, false)
 	})
 }
 
@@ -546,7 +546,7 @@ func (s *Store) updateRole(ctx context.Context, tx pgx.Tx, workspaceID string, c
 	if err != nil {
 		return domain.Role{}, fmt.Errorf("update role: %w", err)
 	}
-	return loadRole(ctx, tx, workspaceID, caller, role.ID, false)
+	return s.loadRole(ctx, tx, workspaceID, caller, role.ID, false)
 }
 
 // ResetRole puts the built-in Agent role back to permissions (what it starts with).
@@ -621,7 +621,7 @@ func (s *Store) RestoreRole(ctx context.Context, workspaceID string, caller Call
 				return domain.Role{}, fmt.Errorf("restore role: %w", err)
 			}
 		}
-		return loadRole(ctx, tx, workspaceID, caller, role.ID, false)
+		return s.loadRole(ctx, tx, workspaceID, caller, role.ID, false)
 	})
 }
 
@@ -676,7 +676,7 @@ func (s *Store) ListRoles(ctx context.Context, workspaceID string, caller Caller
 		}
 		roles := make([]domain.Role, 0, len(ids))
 		for _, id := range ids {
-			role, err := loadRole(ctx, tx, workspaceID, caller, id, deleted)
+			role, err := s.loadRole(ctx, tx, workspaceID, caller, id, deleted)
 			if err != nil {
 				return nil, err
 			}
@@ -693,12 +693,13 @@ func (s *Store) GetRole(ctx context.Context, workspaceID string, caller Caller, 
 		if err != nil {
 			return domain.Role{}, err
 		}
-		return loadRole(ctx, tx, workspaceID, caller, role.ID, false)
+		return s.loadRole(ctx, tx, workspaceID, caller, role.ID, false)
 	})
 }
 
-// loadRole reads a role with what uses it and what the caller may do with it.
-func loadRole(ctx context.Context, tx pgx.Tx, workspaceID string, caller Caller, id string, deleted bool) (domain.Role, error) {
+// loadRole reads a role with what uses it and what the caller may do with it. Live invites and tokens are
+// counted against the store's clock, as everything that issued them was.
+func (s *Store) loadRole(ctx context.Context, tx pgx.Tx, workspaceID string, caller Caller, id string, deleted bool) (domain.Role, error) {
 	record, err := findRole(ctx, tx, workspaceID, id, deleted, false)
 	if err != nil {
 		return domain.Role{}, err
@@ -723,11 +724,11 @@ func loadRole(ctx context.Context, tx pgx.Tx, workspaceID string, caller Caller,
 		role.Members = members
 	}
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM invite_roles i JOIN pairing_links p ON p.workspace_id=i.workspace_id AND p.id=i.link_id
-		WHERE i.workspace_id=$1 AND i.role_id=$2 AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at>now()`, workspaceID, record.ID).Scan(&role.Invites); err != nil {
+		WHERE i.workspace_id=$1 AND i.role_id=$2 AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at>$3`, workspaceID, record.ID, s.now()).Scan(&role.Invites); err != nil {
 		return domain.Role{}, fmt.Errorf("role invites: %w", err)
 	}
 	rows, err = tx.Query(ctx, `SELECT s.id::text,s.label,`+memberName+`,a.id::text FROM sessions s JOIN agents a ON a.workspace_id=s.workspace_id AND a.id=s.agent_id
-		WHERE s.workspace_id=$1 AND s.role_id=$2 AND s.scope='role' AND s.revoked_at IS NULL AND s.expires_at>now() ORDER BY lower(s.label)`, workspaceID, record.ID)
+		WHERE s.workspace_id=$1 AND s.role_id=$2 AND s.scope='role' AND s.revoked_at IS NULL AND s.expires_at>$3 ORDER BY lower(s.label)`, workspaceID, record.ID, s.now())
 	if err != nil {
 		return domain.Role{}, fmt.Errorf("role tokens: %w", err)
 	}
