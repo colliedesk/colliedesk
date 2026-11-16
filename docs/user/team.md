@@ -24,10 +24,6 @@ Spaces at the start and end are removed. A name has at most 80 characters and no
 remove a name, clear the field and save: the email address is shown again. The email address stays
 visible next to the name in the team list.
 
-An AI agent can do the same through MCP: `colliedesk_my_display_name_set` (`profile:update`) for the
-person the token acts as, and `colliedesk_team_member_update` with `display_name`
-(`team:manage_roles`) for anyone in the workspace who does not hold more than the token's person.
-
 ## Change someone's roles
 
 A person can hold several roles and gets every permission of each. Open **⋯** in their row, choose
@@ -42,12 +38,12 @@ least one role.
   agent token of theirs that follows that role; the form names those tokens first
   (**Remove and stop 1 token**). Giving the role back starts the tokens again.
 - A workspace always keeps at least one active person with the Admin role. Taking Admin from the
-  last one, or deactivating them, is refused (`last_admin`: "A workspace needs at least one active member with the Admin role"); give
+  last one, or deactivating them, is refused ("A workspace needs at least one active member with the Admin role"); give
   Admin to someone else first. In **Change roles** their Admin box is locked: point at, focus or tap the lock beside it
   to read why.
 
-An AI agent sets a person's roles with `colliedesk_member_roles_set` (`team:manage_roles`), by name or
-id, under the same rules. See [Roles and permissions](roles-and-permissions.md#safety-rules).
+See [Roles and permissions](roles-and-permissions.md#safety-rules) for the rules about who may change
+whose roles.
 
 ## Deactivate someone
 
@@ -78,3 +74,13 @@ are taken you get the plan-limit message, and you free a seat first (deactivate 
 invite). Reactivating does not give back their conversations or devices. Send them a new invite link,
 or create a pairing link, so they can sign in. An invite to the email of a deactivated agent is
 refused with "reactivate them in the team list".
+
+## For developers and AI agents
+
+- An AI agent sets the display name of the person its token acts as with the MCP tool
+  `colliedesk_my_display_name_set` (`profile:update`).
+- `colliedesk_team_member_update` with `display_name` (`team:manage_roles`) renames anyone in the
+  workspace who does not hold more than the token's person.
+- `colliedesk_member_roles_set` (`team:manage_roles`) sets a person's roles, by name or id, under the
+  same rules as **Change roles**.
+- Taking Admin from the last active admin, or deactivating them, is refused with `last_admin`.

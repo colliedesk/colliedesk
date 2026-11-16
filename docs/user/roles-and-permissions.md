@@ -95,19 +95,21 @@ they join, added to any roles they already hold. See [Invite your team](invites.
 Taking a role away from someone also stops every token of theirs that follows that role (the form
 names them before you apply). Giving the role back starts those tokens again.
 
+Roles and who holds them are part of [the export](export.md) (`roles.ndjson`, `agent-roles.ndjson`).
+
 ## Safety rules
 
 These hold for people and tokens alike:
 
 1. **A workspace always keeps one active Admin.** Taking Admin from the last active person who holds
-   it, or deactivating them, is refused (`last_admin`).
+   it, or deactivating them, is refused.
 2. **You cannot give more than you hold.** Assigning a role, inviting with a role, or making or
-   changing a role needs every permission it holds (`role_exceeds_yours`). Changing roles needs
+   changing a role needs every permission it holds. Changing roles needs
    `team:manage_roles`; inviting needs `team:invite`.
 3. **You cannot change someone who holds more than you.** Changing their roles or display name,
    deactivating or reactivating them, or signing out their sessions is refused when they hold a
-   permission you do not (`member_outranks_you`). An Admin can always do it.
-4. **A role in use cannot be deleted** (`role_in_use` names the people, invites and tokens).
+   permission you do not. An Admin can always do it.
+4. **A role in use cannot be deleted.** The refusal names the people, invites and tokens that use it.
 
 ## AI agent tokens
 
@@ -133,8 +135,8 @@ the address to open, and only you can finish it, signed in to Colliedesk. A repl
 send can be left as a draft above the reply box (`ai_assist:create`); a person sends, edits or
 discards it.
 
-An agent finds out what it may do with `colliedesk_whoami`: your name and roles, how the token was
-made, and its permissions.
+To see what a connected agent may do, ask it "Who am I in Colliedesk?". It answers with your name
+and roles, how the token was made, and its permissions.
 
 ### Tokens created before roles
 
@@ -147,8 +149,23 @@ token for it. The token list on **AI & agents** shows such a token as "Created b
 
 ## When a permission is missing
 
+When an AI agent tries something its token may not do, the call is refused. The answer names the
+missing permission and what to do:
+
+- You hold the permission, but the token was not given it: create a token that includes it in
+  **Settings → AI & agents → External AI agents**, and use that token.
+- You do not hold it: the answer names people who can change roles. Ask one of them for a role that
+  includes it.
+- Only a person may do it, such as creating a token: the answer says where in the app to do it.
+
+The exact answer is described under [For developers and AI agents](#for-developers-and-ai-agents).
+
+## For developers and AI agents
+
+### The answer when a permission is missing
+
 A call without the permission it needs is refused with HTTP 403 and the code
-`permission_missing`. The answer names what is missing and what to do:
+`permission_missing`:
 
 ```json
 {"error": {"code": "permission_missing",
@@ -166,7 +183,14 @@ An action only a person may do, such as creating a token, is refused for tokens 
 and says where in the app to do it. Through MCP the same message, `missing_permissions` and
 `missing_from` come back in the tool's error.
 
-## AI agents and the API
+The safety rules have their own codes: `last_admin` (the last active Admin), `role_exceeds_yours`
+(more than you hold), `member_outranks_you` (someone who holds more than you) and `role_in_use` (a
+role still held, given by an invite or followed by a token; it names them).
+
+An agent finds out what it may do with `colliedesk_whoami`: your name and roles, how the token was
+made, and its permissions.
+
+### Roles through the API and MCP
 
 | What | API | MCP tool |
 |---|---|---|
@@ -179,5 +203,4 @@ and says where in the app to do it. Through MCP the same message, `missing_permi
 | Set a person's roles | `PUT /api/v1/agents/{id}/roles` | `colliedesk_member_roles_set` |
 
 Reading roles needs `team:read`; the rest needs `team:manage_roles`, and the safety rules above. The
-MCP tools take a role or a person by name as well as by id. Roles are part of
-[the export](export.md) (`roles.ndjson`, `agent-roles.ndjson`).
+MCP tools take a role or a person by name as well as by id.

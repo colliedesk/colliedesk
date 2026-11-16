@@ -2,7 +2,8 @@
 
 A saved reply is text your whole team inserts into the reply box, for example a greeting or the steps
 of a refund. Every saved reply is shared by the workspace. Every agent can add, edit and delete them;
-there is no admin-only setting. AI agents can work on them too (see [AI agents](#ai-agents)). Every
+there is no admin-only setting. AI agents can work on them too (see
+[For developers and AI agents](#for-developers-and-ai-agents)). Every
 change is kept as a version you can restore, and a deleted reply waits in a trash for 30 days.
 
 ## Insert a saved reply
@@ -91,11 +92,18 @@ Rules:
   growing the trash without bound.
 - The text is plain text. Saved replies hold no files and no formatting.
 
-## AI agents
+## Import and export
 
-An AI agent connected through [MCP](mcp.md) or the API with an agent token can read, write and
-restore saved replies with the permissions its token holds. Each change happens at once and the
-version names the token; without the permission the call is refused and names it.
+- [Import from Freshdesk](import-freshdesk.md) brings your canned responses over as saved replies.
+- [Export all your data](export.md) includes them in `saved-replies.ndjson`, the ones in the trash
+  too, and every version in `saved-reply-versions.ndjson`.
+
+## For developers and AI agents
+
+- Saved replies and AI agents: an AI agent connected through [MCP](mcp.md) or the API with an agent
+  token can read, write and restore saved replies with the permissions its token holds. Each change
+  happens at once and the version names the token. Without the permission the call is refused and
+  names it.
 
 | To | Needs |
 |---|---|
@@ -104,19 +112,12 @@ version names the token; without the permission the call is refused and names it
 | Edit, restore a version | `saved_replies:update` |
 | Delete, restore from the trash | `saved_replies:delete` |
 
-## API
-
-`GET`, `POST`, `PATCH` and `DELETE` on `/api/v1/saved-replies`, `GET /api/v1/saved-replies/trash`,
-`POST /api/v1/saved-replies/{id}/restore` (out of the trash), `GET /api/v1/saved-replies/{id}/versions`
-and `POST /api/v1/saved-replies/{id}/versions/{version}/restore` (see `contracts/openapi.yaml`). Every
-write sends back the `updated_at` the caller read (`DELETE` as `?updated_at=`); a reply saved since
-answers 409 `changed_elsewhere`. The trash and the versions come in pages (`limit`, at most 200;
-`cursor` / `before_version`). Reading
-needs `conversations:read`; writing needs `conversations:write`, which every agent has. The API
-returns the text as stored, with the variables unfilled.
-
-## Import and export
-
-- [Import from Freshdesk](import-freshdesk.md) brings your canned responses over as saved replies.
-- [Export all your data](export.md) includes them in `saved-replies.ndjson`, the ones in the trash
-  too, and every version in `saved-reply-versions.ndjson`.
+- Routes: `GET`, `POST`, `PATCH` and `DELETE` on `/api/v1/saved-replies`, `GET /api/v1/saved-replies/trash`,
+  `POST /api/v1/saved-replies/{id}/restore` (out of the trash), `GET /api/v1/saved-replies/{id}/versions`
+  and `POST /api/v1/saved-replies/{id}/versions/{version}/restore` (see `contracts/openapi.yaml`).
+- Conflicts: every write sends back the `updated_at` the caller read (`DELETE` as `?updated_at=`). A reply
+  saved since answers 409 `changed_elsewhere`.
+- Pages: the trash and the versions come in pages (`limit`, at most 200; `cursor` / `before_version`).
+- Permissions of a session: reading needs `conversations:read`; writing needs `conversations:write`, which
+  every agent has.
+- The API returns the text as stored, with the variables unfilled.

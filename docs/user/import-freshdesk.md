@@ -226,9 +226,6 @@ When the knowledge base is too large to list every address in the snippet, the a
 then sends each old address by its id to the help center, which finds the new page, so the redirect still
 works.
 
-An AI agent reads the same through `colliedesk_help_center_freshdesk_redirect_get` (`GET
-/api/v1/help-center/freshdesk-redirect?plan=pro`).
-
 ## Before you start
 
 1. Create the Colliedesk workspace (on your own server, see
@@ -245,6 +242,10 @@ An AI agent reads the same through `colliedesk_help_center_freshdesk_redirect_ge
 The key gives read access to the whole account. Keep it in an environment variable. Colliedesk
 never accepts it as a command-line argument and never prints it.
 
+The Freshdesk Free plan has no API calls, so Colliedesk cannot import it: start a 14-day trial of a
+higher Freshdesk plan, then import. If the trial ends during an import from the app, the import stops
+and keeps what it imported.
+
 ## Import in the app
 
 1. Open **Settings > Data > Import from Freshdesk** (it needs the `imports:` permissions, which admins hold; an empty inbox links to it).
@@ -257,11 +258,13 @@ never accepts it as a command-line argument and never prints it.
    gets a calm note, not a warning: those archived tickets are listed in the report to check. The page
    also gives a time range for the import, from the ticket count and the API limit of your plan. The ⓘ beside the API key
    says how the server keeps it, and the one beside the old help center address says what it changes.
+   The key is encrypted on the server and erased when the import ends.
 3. Select **Start import** within the hour. The tickets updated in the last 90 days come first, newest
    first: once they are in, the page says so and your team can work on them while older and archived
    tickets, contacts, saved replies and the knowledge base follow. The page lists the steps (done, in
    progress, waiting) with the counts, an estimate of the time left, and a quiet line when it waits for
-   the Freshdesk API limit, which is normal and automatic. **Open the inbox** is there from the first
+   the Freshdesk API limit, which is normal and automatic. The import leaves a fifth of that limit to
+   your other Freshdesk apps. **Open the inbox** is there from the first
    minute. You can close the page or sign out: the import runs on the server and survives a restart.
 4. At the end the page shows the result, **In Freshdesk** next to **In Colliedesk** for each kind of
    data, with **Download report** for the Markdown report. When the only open point is an archive that
@@ -287,32 +290,10 @@ an import you stop yourself send none.
 **Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or
 undo it. Only one import or undo runs in a workspace at a time.
 
-## Import through the API or an AI agent
-
-Everything the page does, a person's API session or an AI agent's token can do with the same
-permissions: `imports:read` to see imports and reports, `imports:manage_credentials` to send the API
-key, `imports:run` to start or cancel, `imports:undo` to undo (the Admin role holds them all). The server reads the account, imports the tickets updated in the last 90 days first
-(newest first, so your team can work on them), then the whole account, and ends with the same
-reconcile report. It leaves a fifth of your Freshdesk API limit to your other Freshdesk apps.
-
-1. `POST /api/v1/imports` with `{"source": "freshdesk", "domain": "<account>.freshdesk.com",
-   "api_key": "..."}` (MCP: `colliedesk_import_preview`) reads the account and writes nothing. Poll
-   `GET /api/v1/imports/{id}` until `state` is `previewed`: `preview` has the counts and says whether
-   the key can read the archive (if not, the report can be UNVERIFIED at best).
-2. `POST /api/v1/imports/{id}/start` (`colliedesk_import_start`) within an hour imports it.
-   `progress` shows the step, the counts and an estimate; `cancel` stops it.
-3. `GET /api/v1/imports/{id}/report` (`colliedesk_import_report`) is the report; add
-   `?format=markdown` to download it. `POST /api/v1/imports/{id}/undo` removes what the import
-   brought in (`colliedesk_import_undo`), at once.
-
-The key is encrypted on the server and erased when the import ends. A token without
-`imports:manage_credentials` cannot send it, and a token created before roles cannot undo. If the server restarted without `MAILBOX_TOKEN_KEYS` (see
-[environment variables](../self-host/environment-variables.md)), the import waits in `waiting_key`
-until you give it the key again (`PUT /api/v1/imports/{id}/key`).
-
-The Freshdesk Free plan has no API calls, so it cannot be imported this way: start a 14-day trial of a
-higher Freshdesk plan, then import. If the trial ends during the import, it stops with
-`freshdesk_plan_no_api` and keeps what it imported.
+If the server restarted without `MAILBOX_TOKEN_KEYS` (see
+[environment variables](../self-host/environment-variables.md)), it no longer holds the key. The page
+says **Enter the API key again**; enter it and select **Continue import**. The import goes on where it
+stopped.
 
 ## Run the import
 
@@ -514,3 +495,35 @@ Do not close the Freshdesk account until the last report says `OK`.
   volume.
 
 If a ticket's Freshdesk responder matches a deactivated Colliedesk agent, the conversation is imported unassigned and the report lists it under the warning `assignee_deactivated`. Reactivate the agent and re-run to assign it.
+
+## For developers and AI agents
+
+Everything **Import in the app** does, a person's API session or an AI agent's token can do with the
+same permissions. The Admin role holds them all:
+
+- `imports:read` to see imports and reports.
+- `imports:manage_credentials` to send the Freshdesk API key.
+- `imports:run` to start or cancel.
+- `imports:undo` to undo.
+
+The server import works as in the app: the tickets updated in the last 90 days first, newest first,
+then the whole account, and the same reconcile report at the end.
+
+1. `POST /api/v1/imports` with `{"source": "freshdesk", "domain": "<account>.freshdesk.com",
+   "api_key": "..."}` (MCP: `colliedesk_import_preview`) reads the account and writes nothing. Poll
+   `GET /api/v1/imports/{id}` until `state` is `previewed`: `preview` has the counts and says whether
+   the key can read the archive (if not, the report can be UNVERIFIED at best).
+2. `POST /api/v1/imports/{id}/start` (`colliedesk_import_start`) within an hour imports it.
+   `progress` shows the step, the counts and an estimate; `cancel` stops it.
+3. `GET /api/v1/imports/{id}/report` (`colliedesk_import_report`) is the report; add
+   `?format=markdown` to download it. `POST /api/v1/imports/{id}/undo` removes what the import
+   brought in (`colliedesk_import_undo`), at once.
+
+- A token without `imports:manage_credentials` cannot send the key. A token created before roles
+  cannot undo.
+- After a restart without `MAILBOX_TOKEN_KEYS`, the import waits in `waiting_key` until the key is
+  sent again with `PUT /api/v1/imports/{id}/key`.
+- An import that stops because the Freshdesk trial ended reports `freshdesk_plan_no_api`.
+- The snippet for old help center links is also returned by
+  `GET /api/v1/help-center/freshdesk-redirect?plan=pro`, or the MCP tool
+  `colliedesk_help_center_freshdesk_redirect_get`.

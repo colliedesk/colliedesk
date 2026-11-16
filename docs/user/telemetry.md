@@ -120,8 +120,7 @@ A self-hosted server never sends anything to Meta and has no setting to turn it 
 The web app also reports which screens agents open and which buttons they click, so the team can
 see what is used and what is confusing. It is on by default, on Colliedesk Cloud and self-hosted
 alike, and the same switch as the usage report turns it off: set `DISABLE_TELEMETRY=true` (or
-`DO_NOT_TRACK=1`) and `GET /api/v1/config` answers `product_analytics.enabled: false`, so the web app
-never loads the analytics library. Every event carries `realm` (`cloud` or `self-hosted`).
+`DO_NOT_TRACK=1`) and the web app never loads the analytics library. Every event carries `realm` (`cloud` or `self-hosted`).
 
 - On Colliedesk Cloud the agent is named by their agent id, email address and display name, with
   their role (`admin` when they hold the Admin role, `agent` when they hold the Agent role, `other`
@@ -193,3 +192,8 @@ where to find the id.
 
 The code is in `server/internal/telemetry/`. The counts come from SQL in `usage.go` and, for the workspace snapshots, `snapshot.go`;
 read it to check this page.
+
+## For developers and AI agents
+
+- When usage reporting is off, `GET /api/v1/config` answers `product_analytics.enabled: false`. The
+  web app reads it and does not load the analytics library.

@@ -4,7 +4,7 @@ The knowledge base holds your team's help articles, written in Markdown and grou
 Every agent can write, edit, publish and delete articles. A published article appears on the public
 help center while an admin has it turned on; a draft is seen only by agents. Every change is kept as
 a version you can restore, and a deleted article or collection waits in a trash for 30 days. AI
-agents can do the same (see [AI agents](#ai-agents)).
+agents can do the same (see [For developers and AI agents](#for-developers-and-ai-agents)).
 
 Open it from **Knowledge base** in the sidebar (on a phone, in the bar at the top). Moving from
 Freshdesk? `collie import freshdesk` brings your Freshdesk knowledge base over with its collections,
@@ -77,8 +77,6 @@ address, `/a/<number>-<address name>`. Adding or removing a collection never cha
   leaves that list. Restore the collection from the trash and the article is listed there again.
   A collection that is still the home of an article cannot be deleted, as before.
 - **Import**: the Freshdesk import brings each article into one collection, as Freshdesk has it.
-- **AI agents** do the same with `collection_ids` (the home first) on `colliedesk_kb_article_create`
-  and `colliedesk_kb_article_update`; every article answer carries `collection_ids`.
 
 ## Find an article
 
@@ -136,11 +134,11 @@ two articles.
 ### Images
 
 Paste an image into the text, drag it in, or select **Insert image or video → Upload from this
-device**. Colliedesk uploads it and writes
-`![name](/api/v1/kb/images/…)` on a line of its own after the paragraph, list or table you are in;
+device**. Colliedesk uploads it and writes an image line, `![name](…)`, on a line of its own after the
+paragraph, list or table you are in;
 while it uploads, a box says so and nothing is added to the text. A video pasted, dropped or chosen
-the same way goes up in parts, the box shows how much has gone, and it goes in as
-`<video controls preload="metadata" src="/api/v1/kb/media/…"></video>`; leaving the page cancels a
+the same way goes up in parts, the box shows how much has gone, and it goes in as a
+`<video controls preload="metadata" src="…"></video>` line; leaving the page cancels a
 video still uploading. **Insert image or video → From the media library** opens the library in a
 dialog: search it, pick one or more images and videos (they go in in the order you picked them, each a
 block of its own), and check each one's alt text (a video's title). An image without alt text in the
@@ -251,7 +249,8 @@ after it, for example the code from YouTube's **Share → Embed**:
 - `title`, `width`, `height`, `allow` and `allowfullscreen` are kept; a player without `allow` gets
   `encrypted-media; picture-in-picture`. The video fills the width of the
   page at 16:9 whatever size you give, and loads only when a reader scrolls to it.
-- A video of your media library shows as `<video src="/api/v1/kb/media/<id>"></video>` (below).
+- A video of your media library shows with the `<video>` line the editor writes for it (see
+  [Images](#images)).
   `muted`, `loop`, `playsinline`, `title`, `width`, `height` and `preload` (`metadata` or `none`) are
   kept; it always has controls and never starts by itself (`autoplay` is left out). Its poster and
   size come from the library, so a `poster` you write is left out.
@@ -295,9 +294,7 @@ Under **Search engines** on the article page, **Search title** (up to 120 charac
 Google and other search engines show, and **Meta description** (up to 320) the text under it. Left
 empty, the article's title (followed by the help center's title) and the first 160 characters of its
 text are used. Line breaks and repeated spaces become one space. Both are part of the article's
-history and of the [export](export.md), and are set through the API (`seo_title`,
-`seo_description` on `POST` and `PATCH /api/v1/kb/articles`) and by AI agents
-(`colliedesk_kb_article_create`, `colliedesk_kb_article_update`). Changing them on a published
+history and of the [export](export.md). Changing them on a published
 article changes the help center, so it needs `kb_articles:publish` as well as `kb_articles:update`;
 without it the save is refused and names the permission.
 
@@ -326,9 +323,7 @@ are never read.
 To keep one published article away from AI, open it and select **Exclude from AI** under **Used by
 AI** (on the right; on a phone, under the text). From then on drafts and suggestions skip it in every language; people and the help center
 still see it. The article says since when and by whom, and its history has the change. **Let AI use
-it again** undoes it. Neither changes the text, so an edit someone has open still saves. An agent
-token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`,
-`kb_articles:update`).
+it again** undoes it. Neither changes the text, so an edit someone has open still saves.
 
 ## Translations
 
@@ -405,8 +400,7 @@ published.
 
 ### Brand
 
-An admin sets the help center's brand in **Knowledge base → Settings → Brand**, through the API
-(`PUT /api/v1/help-center/theme`) or an AI agent (`colliedesk_help_center_theme_update`). Every page
+An admin sets the help center's brand in **Knowledge base → Settings → Brand**. Every page
 shows it on the next visit (see [what visitors see](#what-visitors-see)). Agents who are not admins
 see the saved brand and its preview, without the controls. A brand has:
 
@@ -425,8 +419,9 @@ see the saved brand and its preview, without the controls. A brand has:
   color set makes the help center light only.
 - **Fonts** for text and headings, from fonts already on the reader's device, so nothing is
   downloaded: **Sans** (`system-sans`, the default text font) or **Serif** (`classic-serif`, the default
-  heading font). The API also takes `humanist-sans`, `geometric-sans`, `transitional-serif`,
-  `rounded-sans` and `mono`; a font saved that way stays and shows in the form until you choose another.
+  heading font). Five other fonts cannot be chosen in the app yet (see
+  [For developers and AI agents](#for-developers-and-ai-agents)). A brand saved with one of them keeps
+  it, and the form shows it until you choose another.
 - **Custom CSS** (`custom_css`), for details the fields above do not cover, such as
   `.masthead{border-bottom:2px solid #0b5cad}`. See [custom CSS](#custom-css).
 
@@ -434,9 +429,7 @@ Every color pair must be readable (WCAG AA): 4.5:1 for text, links, header text,
 the button text on the primary color (white or black, whichever reads better), and 3:1 for the
 primary color against the background. A brand that fails is not saved; the answer names each color
 with its ratio and the nearest color that passes, for example "Text on the background is 2.85:1; it
-needs 4.5:1. #767676 passes." `POST /api/v1/help-center/theme/check` (`colliedesk_help_center_theme_check`)
-runs the same checks without saving. A field left out of a save goes back to its default, so send
-the whole brand. Every save changes `content_version`.
+needs 4.5:1. #767676 passes."
 
 In Settings:
 
@@ -457,9 +450,7 @@ width, about 300 ms after you stop typing, before anything is saved. It is the r
 your collections and published articles (never drafts), also while the help center is off; with
 nothing published, the article page shows a sample text, and a video in the article shows as a box
 that says it plays on the live help center. Links in the preview do not open, and the preview runs
-no script; custom CSS cannot change that. `POST /api/v1/help-center/theme/preview` gives the same page as one HTML
-document, and `colliedesk_help_center_theme_check` with `preview` (`home` or `article`) gives it to an
-AI agent. Each person may ask for 600 previews a minute.
+no script; custom CSS cannot change that. Each person may ask for 600 previews a minute.
 
 #### Custom CSS
 
@@ -469,9 +460,7 @@ refused (so are image functions such as `image-set()`), and a refused save names
 color contrast checks of the brand do not cover custom CSS, so look at the preview before you save. It is
 saved and served exactly as written, at most 32,768 bytes of UTF-8 (a
 letter outside ASCII takes 2 to 4 bytes; the field counts them as you type). An empty field (or only
-spaces) removes it. A save through the API must send `custom_css` (null or `""` for none): a save
-without it is refused with 422 and changes nothing, so a page or an agent that does not know the field
-cannot remove your CSS by accident. Pages keep the same security policy: the CSS comes from the help
+spaces) removes it. Pages keep the same security policy: the CSS comes from the help
 center's own address, in the brand's style sheet, never inline in a page. Saving the theme needs
 both `help_center:update` and `kb_articles:publish`, for a person and an agent token alike; without
 either it is refused and the public pages stay unchanged.
@@ -507,8 +496,7 @@ in **Knowledge base → Settings** (see [Help center settings](#help-center-sett
 
 ### Its address
 
-**Knowledge base → Settings** shows the address as a link, even while the help center is off; the API
-(`GET /api/v1/help-center`) and `colliedesk_help_center_get` give it in `url`.
+**Knowledge base → Settings** shows the address as a link, even while the help center is off.
 
 - **Colliedesk Cloud:** `/help` on your workspace's own address, `https://<workspace address name>.colliedesk.com/help`.
   The rest of that address is your team's desk ([your workspace's address](workspace.md#the-workspace-address)).
@@ -734,9 +722,7 @@ Then press **Verify** in Search Console or Bing.
   is refused and nothing is saved.
 - To remove a token, clear its field and save. A token you do not touch stays as it is.
 - Saving changes the public help center, so it needs `help_center:update` and
-  `kb_articles:publish`, for a person and an AI agent token alike; without either it is refused. The API is `GET` and `PUT
-  /api/v1/help-center/search-console`; AI agents use `colliedesk_help_center_search_console_get` and
-  `colliedesk_help_center_search_console_update`.
+  `kb_articles:publish`, for a person and an AI agent token alike; without either it is refused.
 - The tokens are in the [export](export.md) (`help-center.ndjson`), so a move away keeps them.
 
 ### Limits
@@ -777,38 +763,23 @@ An address you sent keeps working when the article's address name changes, but n
 **workspace address name** changes (see [Its address](#its-address)), when the article is
 unpublished or deleted, or while the help center is off.
 
-## AI agents
+## Limits
 
-An AI agent connected through [MCP](mcp.md), or the API with an agent token, can search and read
-articles (`colliedesk_kb_articles_search`, `colliedesk_kb_article_get`), write, publish, delete and
-restore them, manage collections, put collections and articles in [order](#order)
-(`colliedesk_kb_order_set`, `PUT /api/v1/kb/order`), upload and read images, and read the help center settings and
-brand (`colliedesk_help_center_theme_get`, and `colliedesk_help_center_theme_check` to try one) and
-its custom domain (`colliedesk_help_center_domain_get`). A token with `help_center:update` and
-`kb_articles:publish` also sets, checks and removes the custom domain
-(`colliedesk_help_center_domain_set`, `_check`, `_remove`); without either it is refused.
-Every article an agent reads or finds carries its public address in `url` (also in the API), so an
-agent links an article in a reply the same way a person does: the title and the address on two
-lines, from a search with `status` published while the help center is on. In
-the media library (`colliedesk_kb_media_list`, `colliedesk_kb_media_get`) an agent sees which images
-no article uses and which have no alt text, and can name, describe or keep them
-(`colliedesk_kb_media_update`), move them to the trash or back (`colliedesk_kb_media_trash`,
-`colliedesk_kb_media_undelete`) and replace one in every article (`colliedesk_kb_media_replace`), with
-the `kb_media:*` permissions below. Deleting forever (`colliedesk_kb_media_purge`) needs `kb_media:purge`.
-An agent uploads a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets
-its poster (`colliedesk_kb_video_poster_set`) with `kb_media:create` and `kb_media:update`.
-An agent translates with the same permissions as articles: `colliedesk_help_center_languages_get`
-names the languages and what is missing or outdated in each, `colliedesk_kb_translations_list` lists
-those articles, `colliedesk_kb_translation_get` reads a translation and its original in one call,
-`colliedesk_kb_translation_create` and `colliedesk_kb_translation_update` write one (`outdated`
-false marks it up to date in the same call), and `_delete`, `_undelete`, `_history`,
-`_version_restore` and `colliedesk_kb_collection_translation_set` / `_delete` do the rest.
-`colliedesk_help_center_languages_set` adds, orders, shows and hides languages (`help_center:update`,
-and `kb_articles:publish` to show or hide one). Translating one missing article takes three calls:
-list, read the article, create.
+- 2,000 articles per workspace, counting the trash, and 1,000 collections.
+- 100,000 characters per article text, 300 per title; never cut.
+- Images: PNG, JPEG, GIF and WebP, 5 MB each, at most 8,192 pixels on a side and 40 megapixels.
+- 10,000 images and videos in the media library per workspace, counting its trash; videos up to
+  200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
+- Collections go three levels deep.
+- Search does not find a part in the middle of a word, nor words in text written without spaces.
+- 40 languages besides the primary one; one translation per article and language.
 
-Each action needs its permission, and happens at once; the version names the token. Without it the
-call is refused and names what is missing ([Roles and permissions](roles-and-permissions.md)).
+## For developers and AI agents
+
+An AI agent connected through [MCP](mcp.md), or the API with an agent token, can do what a person does
+in the knowledge base. Each action needs its permission and happens at once; the version names the
+token. Without the permission the call is refused and names what is missing
+([Roles and permissions](roles-and-permissions.md)).
 
 | To | Needs |
 |---|---|
@@ -821,13 +792,64 @@ call is refused and names what is missing ([Roles and permissions](roles-and-per
 | Show or hide a language | `help_center:update` and `kb_articles:publish` |
 | Set its theme, search console tokens and custom domain | `help_center:update` and `kb_articles:publish` |
 
-## Limits
+Articles and collections:
 
-- 2,000 articles per workspace, counting the trash, and 1,000 collections.
-- 100,000 characters per article text, 300 per title; never cut.
-- Images: PNG, JPEG, GIF and WebP, 5 MB each, at most 8,192 pixels on a side and 40 megapixels.
-- 10,000 images and videos in the media library per workspace, counting its trash; videos up to
-  200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
-- Collections go three levels deep.
-- Search does not find a part in the middle of a word, nor words in text written without spaces.
-- 40 languages besides the primary one; one translation per article and language.
+- Search and read articles with `colliedesk_kb_articles_search` and `colliedesk_kb_article_get`. Agents
+  also write, publish, delete and restore articles, manage collections, and upload and read images.
+- Order: `colliedesk_kb_order_set` or `PUT /api/v1/kb/order` puts collections and articles in
+  [order](#order).
+- Several collections: `collection_ids` (the home first) on `colliedesk_kb_article_create` and
+  `colliedesk_kb_article_update` lists an article in several collections. Every article answer carries
+  `collection_ids`.
+- Search title and meta description: `seo_title` and `seo_description` on `POST` and
+  `PATCH /api/v1/kb/articles`, and on `colliedesk_kb_article_create` and `colliedesk_kb_article_update`.
+- Keep an article away from AI: `colliedesk_kb_article_ai_exclude` and `colliedesk_kb_article_ai_include`,
+  with `kb_articles:update`.
+- Link an article in a reply: every article an agent reads or finds carries its public address in `url`
+  (also in the API). An agent links an article the same way a person does: the title and the address on
+  two lines, from a search with `status` published while the help center is on.
+
+Images and videos:
+
+- An image in the text is `![name](/api/v1/kb/images/…)`. A video of the media library is
+  `<video controls preload="metadata" src="/api/v1/kb/media/<id>"></video>`.
+- Media library: `colliedesk_kb_media_list` and `colliedesk_kb_media_get` show which images no article
+  uses and which have no alt text. `colliedesk_kb_media_update` names, describes or keeps them.
+  `colliedesk_kb_media_trash` and `colliedesk_kb_media_undelete` move them to the trash or back, and
+  `colliedesk_kb_media_replace` replaces one in every article, with the `kb_media:*` permissions above.
+  Deleting forever (`colliedesk_kb_media_purge`) needs `kb_media:purge`.
+- Videos: an agent uploads a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`)
+  and sets its poster (`colliedesk_kb_video_poster_set`) with `kb_media:create` and `kb_media:update`.
+
+Translations:
+
+- An agent translates with the same permissions as articles. `colliedesk_help_center_languages_get`
+  names the languages and what is missing or outdated in each. `colliedesk_kb_translations_list` lists
+  those articles. `colliedesk_kb_translation_get` reads a translation and its original in one call.
+- `colliedesk_kb_translation_create` and `colliedesk_kb_translation_update` write one (`outdated` false
+  marks it up to date in the same call). `_delete`, `_undelete`, `_history`, `_version_restore` and
+  `colliedesk_kb_collection_translation_set` / `_delete` do the rest.
+- `colliedesk_help_center_languages_set` adds, orders, shows and hides languages (`help_center:update`,
+  and `kb_articles:publish` to show or hide one).
+- Translating one missing article takes three calls: list, read the article, create.
+
+Help center:
+
+- Its address: `GET /api/v1/help-center` and `colliedesk_help_center_get` give it in `url`.
+- Brand: `PUT /api/v1/help-center/theme` or `colliedesk_help_center_theme_update` saves it;
+  `colliedesk_help_center_theme_get` reads it. A field left out of a save goes back to its default, so
+  send the whole brand. Every save changes `content_version`.
+- Fonts: besides `system-sans` and `classic-serif`, the API takes `humanist-sans`, `geometric-sans`,
+  `transitional-serif`, `rounded-sans` and `mono`.
+- Contrast check: `POST /api/v1/help-center/theme/check` (`colliedesk_help_center_theme_check`) runs the
+  brand's checks without saving.
+- Preview: `POST /api/v1/help-center/theme/preview` gives the preview page as one HTML document.
+  `colliedesk_help_center_theme_check` with `preview` (`home` or `article`) gives it to an AI agent.
+- Custom CSS: a brand save must send `custom_css` (null or `""` for none). A save without it is refused
+  with 422 and changes nothing, so a client that does not know the field cannot remove your CSS by
+  accident.
+- Search Console: `GET` and `PUT /api/v1/help-center/search-console`; AI agents use
+  `colliedesk_help_center_search_console_get` and `colliedesk_help_center_search_console_update`.
+- Custom domain: `colliedesk_help_center_domain_get` reads it. A token with `help_center:update` and
+  `kb_articles:publish` also sets, checks and removes it (`colliedesk_help_center_domain_set`, `_check`,
+  `_remove`); without either it is refused.

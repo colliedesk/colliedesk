@@ -16,7 +16,7 @@ sent, and your repositories and fixes are kept until it is on again.
 Autofix is in preview. Its screens (Fixes, Settings → Autofix and the block on a conversation) show
 only in a browser that turned it on: open the browser console on Colliedesk and run
 `localStorage.setItem('colliedesk.autofix', 'on')`, then reload. `localStorage.removeItem('colliedesk.autofix')`
-hides them again. The API and the MCP tools are not affected.
+hides them again. This changes only what that browser shows: AI agents reach Autofix either way.
 
 ## Set up: Settings → Autofix
 
@@ -163,28 +163,6 @@ Why a fix ended:
 Filter by repository once two are connected, and by agent once two are turned on; a filter set in the address
 stays shown so you can clear it. The badge counts the fixes that need a person.
 
-## AI agents
-
-An AI agent does what its token's [permissions](roles-and-permissions.md) allow, at once:
-
-1. `autofix_settings:read` reads the settings; `autofix_settings:update` connects and disconnects
-   repositories, sets their coding agent, lets notes go with fixes or stops them, turns a coding agent
-   on or off (`colliedesk_coding_agent_enable` carries the consent to what it receives), and starts
-   installing or uninstalling the GitHub App. Installing happens on GitHub: the agent gets the address,
-   and the person behind the token opens it and installs the App as themselves.
-2. `autofix:read` previews a fix; `autofix:update` cancels a fix, marks or takes back its release and
-   links or unlinks its pull request.
-3. `autofix:send` sends and retries a fix (`colliedesk_fix_send`, `colliedesk_fix_retry`) with
-   exactly the title, body and messages the preview built: an AI agent cannot edit them (a ticket can
-   talk a model into writing anything), so a changed text is refused with `fix_text_edited`; preview
-   again, or have a person edit it in the app. A fix that
-   goes through GitHub still needs a GitHub confirmation: the agent gets an address that only the
-   person behind the token can finish, signed in to Colliedesk, and the issue is created with their
-   GitHub account.
-
-A token created before roles cannot send fixes, let notes go with them or change these settings;
-create a new token for it. See the tools in [Connect an AI agent (MCP)](mcp.md).
-
 ## Cursor
 
 Cursor takes a fix through its API with the workspace's own Cursor key. It needs the Colliedesk GitHub
@@ -204,9 +182,6 @@ each fix leaves, and follows the pull request Cursor opens to its merge.
    (Cursor lists repositories once a minute, and never for a service account key: then the first fix
    shows it).
 
-An agent token sets the key only with `autofix_settings:manage_credentials`; turning Cursor on needs
-`autofix_settings:update`.
-
 **What happens when you send a fix to Cursor:** it shows **Sending** until Colliedesk created the Cursor
 agent (seconds), then **Sent** with a link to the agent on Cursor, **Agent running** while it works and
 **PR open** once it opened its pull request. Colliedesk never sends the same fix twice, even when the
@@ -225,3 +200,35 @@ server restarts while sending.
 
 **Cancel** stops the Cursor run. Removing the key while a run goes on does not stop it: Colliedesk
 follows it again once a key is set.
+
+## For developers and AI agents
+
+An AI agent does what its token's [permissions](roles-and-permissions.md) allow, at once. The tools are
+listed in [Connect an AI agent (MCP)](mcp.md).
+
+Settings:
+
+- `autofix_settings:read` reads the settings.
+- `autofix_settings:update` connects and disconnects repositories, sets their coding agent, lets notes go
+  with fixes or stops them, and turns a coding agent on or off. `colliedesk_coding_agent_enable` carries
+  the consent to what the coding agent receives.
+- `autofix_settings:update` also starts installing or uninstalling the GitHub App. Installing happens on
+  GitHub: the agent gets the address, and the person behind the token opens it and installs the App as
+  themselves.
+- Setting the Cursor key needs `autofix_settings:manage_credentials`. Turning Cursor on needs
+  `autofix_settings:update`.
+
+Fixes:
+
+- `autofix:read` previews a fix.
+- `autofix:update` cancels a fix, marks or takes back its release, and links or unlinks its pull request.
+- `autofix:send` sends and retries a fix (`colliedesk_fix_send`, `colliedesk_fix_retry`) with exactly the
+  title, body and messages the preview built. An AI agent cannot edit them, because a ticket can talk a
+  model into writing anything. A changed text is refused with `fix_text_edited`: preview again, or have a
+  person edit it in the app.
+- A fix that goes through GitHub still needs a GitHub confirmation. The agent gets an address that only
+  the person behind the token can finish, signed in to Colliedesk. The issue is created with their GitHub
+  account.
+
+A token created before roles cannot send fixes, let notes go with them or change these settings. Create
+a new token for it.

@@ -55,11 +55,14 @@ works.
 
 ## Ask more people on a note you wrote
 
-An AI agent, or a script with an agent token, can add teammates to a note its person wrote
-(`PUT /api/v1/conversations/{id}/messages/{messageId}/mentions`, the MCP tool `colliedesk_note_mention`).
-Only the people the note did not ask yet are told. A mention cannot be taken back once the person was told.
+The app cannot add people to a note after it is posted yet. Write a new private note that asks them.
 
-## For AI agents (MCP)
+## For developers and AI agents
+
+- Ask more people on a note: an AI agent, or a script with an agent token, can add teammates to a note
+  its person wrote with `PUT /api/v1/conversations/{id}/messages/{messageId}/mentions` or the MCP tool
+  `colliedesk_note_mention`. Only the people the note did not ask yet are told. A mention cannot be
+  taken back once the person was told.
 
 | Tool | What it does |
 | --- | --- |
@@ -69,6 +72,6 @@ Only the people the note did not ask yet are told. A mention cannot be taken bac
 | `colliedesk_mentions_mark_read` | Marks those mentions read, or unread again: some, those on one conversation, or all |
 | `colliedesk_my_mention_email_set` | Turns the mention email on or off for the person your token acts as |
 
-Each works within the token's permissions: asking needs `messages:note`, reading and marking your mentions
-`messages:read`, the email setting `profile:update`. The API is in `contracts/openapi.yaml`
+Each tool works within the token's permissions: asking needs `messages:note`, reading and marking your
+mentions `messages:read`, the email setting `profile:update`. The API is in `contracts/openapi.yaml`
 (`/api/v1/mentions`, `/api/v1/mentions/read`, `/api/v1/agents/me/mention-email`).

@@ -120,7 +120,7 @@ A server you run yourself works the same way when it sets
 [`HELP_CENTER_DOMAIN`](../self-host/running-behind-proxy.md#workspace-host-names); without it everything
 stays on the server's one address.
 
-## API and AI agents
+## For developers and AI agents
 
 - `PATCH /api/v1/workspace/name` with `{"name": "Acme Support Team"}` renames the workspace. It needs
   `workspace:update` (the Admin role has it), from a person or an agent token; without it the answer is

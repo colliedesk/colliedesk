@@ -86,8 +86,6 @@ The confirm link is offered only when the email passed the sender check of the r
 and the link is on Google's own address (`mail.google.com` or `mail-settings.google.com`): anyone can
 send mail that claims to come from Google. Otherwise only the code shows; type it in Gmail instead. On
 your own server the sender check needs `EMAIL_TRUSTED_AUTHSERV_ID` ([configuring email](../self-host/email.md)).
-Agents read the same with `GET /api/v1/channels/{id}/email/forwarding-confirmation` or the MCP tool
-`colliedesk_email_forwarding_confirmation_get`; it answers for the last 24 hours.
 
 The step then reads **Waiting for first email**. Send a message to your support address from another
 address. When it arrives the step reads **First email received** with its time, without reloading the
@@ -114,11 +112,7 @@ or other mail that is not customer mail marked it done; the step then says "Mail
 mail through your mailbox yet." and changes to **First email received** by itself when customer mail
 arrives. On a server whose sending domain
 does not receive mail, the reply box of an email conversation also says that the customer's answer goes
-to your mailbox until it forwards here. `GET /api/v1/channels/email` (and `GET /api/v1/channels/{id}/email`)
-answer the same: `mail_through_mailbox` is `false` until customer mail arrives through the mailbox,
-`answers_before_forwarding` is `colliedesk` or `support_mailbox`, and `mail_switch` lists every mailbox of
-the workspace still to move, each with `old_help_desk` (added before a finished import, so its mail still
-arrives in the old help desk). The MCP tool `colliedesk_email_channel_get` shows all three.
+to your mailbox until it forwards here.
 
 **Change the forwarding address** (folded under the step, Colliedesk Cloud only) holds the
 **Workspace address name**: the part before `.colliedesk.com`. The old address stops receiving mail
@@ -169,8 +163,7 @@ anyone else is still refused, and the reply counts toward the trial's daily limi
 only with an invite link has no verified address yet, so a reply to their test message waits until
 they sign in that way.
 
-A workspace can send itself five test messages an hour. Agent tokens do the same with the MCP tool
-`colliedesk_email_test_message_send`.
+A workspace can send itself five test messages an hour.
 
 ## On your own server: the inbound URL
 
@@ -218,10 +211,6 @@ us: the operator sets the name for you with `collie email sender-name`
 Saving the sender name changes only the name. The support address, its domain verification and the
 sending domain stay as they are.
 
-Through the API, send `PUT /api/v1/channels/email` with `{"sender_name": "Acme Support"}` alone. The
-address stays. Send `support_address` too only to change the address. An AI agent uses
-`colliedesk_email_channel_update` the same way.
-
 ## Send replies from Gmail
 
 If your support address is a Gmail or Google Workspace mailbox, an admin can connect it. Replies are
@@ -266,11 +255,6 @@ admin reads that it is not turned on).
 they did before Gmail was connected (the server's SMTP relay). A reply that was still waiting for Gmail
 fails with a note and can be retried. **Use another Gmail account** replaces the connected account.
 Disconnecting the whole email channel also disconnects Gmail.
-
-An AI agent whose token holds `channels:manage_credentials` disconnects Gmail at once
-(`colliedesk_gmail_disconnect`). Connecting needs Google's consent, so `colliedesk_gmail_connect`
-answers Google's address: only the person the token acts as can finish it, by opening it within 10
-minutes in a browser signed in to Colliedesk and agreeing on Google's page.
 
 ### Self-hosted
 
@@ -333,10 +317,6 @@ retried.
 larger than 3 MB and it goes through Microsoft 365, the reply box warns you. If Microsoft refuses the
 reply, it is marked **Delivery failed** with the reason and keeps its files: remove a file and retry.
 
-An AI agent whose token holds `channels:manage_credentials` disconnects Microsoft 365 at once
-(`colliedesk_microsoft_disconnect`). `colliedesk_microsoft_connect` answers Microsoft's sign-in
-address: only the person the token acts as can finish it, signed in to Colliedesk.
-
 On a server you run, Microsoft 365 sending needs your own app registration in Microsoft Entra. See
 [send replies through Microsoft 365](../self-host/email.md#send-replies-through-microsoft-365).
 
@@ -368,11 +348,6 @@ Replies leave from the mailbox the conversation came through; see
 a chosen mailbox and filtering by one. A conversation imported from Freshdesk or Help Scout keeps the
 mailbox it was sent to (`origin.mailboxes`), and its replies leave from the channel with that support
 address when there is one.
-
-Through the API each mailbox's settings and actions are under `/api/v1/channels/{id}/email`
-(`/secret`, `/domain-verification`, `/gmail`), and `PATCH /api/v1/channels/{id}` with `config`
-changes its address or sender name. `/api/v1/channels/email` and the MCP tools without `channel_id`
-act on the default mailbox, as before.
 
 ## Send from your own domain
 
@@ -507,15 +482,10 @@ on their side.
   counts 3 of the 200.
 - A copied person who answers with reply-all joins the same conversation.
 
-Through the API, send `cc` (a list of addresses) with `kind: "outgoing"`; in a multipart request
-send one `cc` field per address before the files. See `createMessage` in `contracts/openapi.yaml`.
-
 ## Limits
 
 - A reply carries at most 10 attachments and 10 MiB of files in total (the raw size, before email
-  encoding). The limit is also in `GET /api/v1/config` as `limits.outgoing_attachments_bytes` and
-  `limits.outgoing_attachments_files`. More answers `413` with the reason, and nothing is stored
-  or sent. Make sure your mail relay accepts a message of about 14 MiB; email encoding adds a third.
+  encoding). More is refused with the reason, and nothing is stored or sent. Make sure your mail relay accepts a message of about 14 MiB; email encoding adds a third.
   Some recipient servers cap incoming mail at about 10 MB, so a large reply can bounce; it then shows
   **Delivery failed** with **Retry delivery**.
 - If a stored file is gone when the reply is sent, the reply shows **Delivery failed** and names the
@@ -539,3 +509,50 @@ send one `cc` field per address before the files. See `createMessage` in `contra
   replies.
 - Replies are plain text. Markdown is sent as written.
 - One support address per email channel. For more addresses, add more channels (see [Several mailboxes](#several-mailboxes)).
+
+## For developers and AI agents
+
+An AI agent does what its token's [permissions](roles-and-permissions.md) allow, at once. The MCP tools
+are listed in [MCP](mcp.md).
+
+Setup and forwarding:
+
+- `GET /api/v1/channels/email` reads the default mailbox; `GET /api/v1/channels/{id}/email` reads one
+  mailbox. MCP: `colliedesk_email_channel_get`.
+- In that answer, `mail_through_mailbox` is `false` until customer mail arrives through the mailbox.
+  `answers_before_forwarding` is `colliedesk` or `support_mailbox`. `mail_switch` lists every mailbox of
+  the workspace still to move, each with `old_help_desk` (added before a finished import, so its mail
+  still arrives in the old help desk).
+- `GET /api/v1/channels/{id}/email/forwarding-confirmation` reads Gmail's forwarding confirmation code
+  and link, as the step shows them. MCP: `colliedesk_email_forwarding_confirmation_get`. It answers for
+  the last 24 hours.
+- The MCP tool `colliedesk_email_test_message_send` sends a test message. The limit of five an hour is
+  the same.
+
+Sender name and mailboxes:
+
+- `PUT /api/v1/channels/email` with `{"sender_name": "Acme Support"}` alone changes the sender name. The
+  address stays. Send `support_address` too only to change the address. MCP:
+  `colliedesk_email_channel_update`, the same way.
+- Each mailbox's settings and actions are under `/api/v1/channels/{id}/email` (`/secret`,
+  `/domain-verification`, `/gmail`). `PATCH /api/v1/channels/{id}` with `config` changes its address or
+  sender name.
+- `/api/v1/channels/email` and the MCP tools without `channel_id` act on the default mailbox.
+
+Gmail and Microsoft 365:
+
+- A token with `channels:manage_credentials` disconnects Gmail at once (`colliedesk_gmail_disconnect`)
+  and Microsoft 365 at once (`colliedesk_microsoft_disconnect`).
+- Connecting Gmail needs Google's consent. `colliedesk_gmail_connect` answers Google's address. Only the
+  person the token acts as can finish it: they open it within 10 minutes in a browser signed in to
+  Colliedesk and agree on Google's page.
+- `colliedesk_microsoft_connect` answers Microsoft's sign-in address. Only the person the token acts as
+  can finish it, signed in to Colliedesk.
+
+Replies:
+
+- To copy people on a reply, send `cc` (a list of addresses) with `kind: "outgoing"`. In a multipart
+  request, send one `cc` field per address before the files. See `createMessage` in
+  `contracts/openapi.yaml`.
+- The attachment limits are in `GET /api/v1/config` as `limits.outgoing_attachments_bytes` and
+  `limits.outgoing_attachments_files`. A reply above them answers `413` with the reason.
