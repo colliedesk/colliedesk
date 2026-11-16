@@ -84,9 +84,14 @@ func earlyCut(buffer string) int {
 	cut := strings.LastIndexFunc(buffer, unicode.IsSpace)
 	for cut > 0 {
 		before := strings.TrimRightFunc(buffer[:cut], unicode.IsSpace)
-		start := strings.LastIndexFunc(before, unicode.IsSpace) + 1
+		start := 0
+		if space := strings.LastIndexFunc(before, unicode.IsSpace); space >= 0 {
+			// A space may be more than one byte (a thin or no-break space).
+			_, size := utf8.DecodeRuneInString(before[space:])
+			start = space + size
+		}
 		word := before[start:]
-		if word == "" || strings.IndexFunc(word, func(r rune) bool { return !strings.ContainsRune("0123456789+().-", r) }) >= 0 {
+		if word == "" || strings.IndexFunc(word, func(r rune) bool { return !phoneWordRune(r) }) >= 0 {
 			break
 		}
 		cut = start
@@ -97,6 +102,9 @@ func earlyCut(buffer string) int {
 var (
 	chatEmail = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`)
 	chatPhone = regexp.MustCompile(`\+?\(?\d[\d\s().-]{4,}\d`)
+	// chatDashed is two or three groups of digits joined by dashes (after foldPhones), which
+	// isDashedRangeOrDate reads.
+	chatDashed = regexp.MustCompile(`^\(?(\d+)-(\d+)(?:-(\d+))?$`)
 	// chatLink: a scheme, www., a domain with a path, or a bare lower-case domain under any top-level
 	// domain of letters (acme-login.xyz, bit.ly). A capitalised word after a missing space ("Save.Then")
 	// is no domain, and a file name (invoice.pdf) is left to chatFileName.
@@ -104,6 +112,28 @@ var (
 	chatFileName = regexp.MustCompile(`^[^/]*\.(?:pdf|csv|png|jpe?g|gif|svg|webp|json|js|ts|txt|zip|docx?|xlsx?|pptx?|md|html?|css|py|xml|ya?ml|exe|dmg|apk|mp4|mp3)$`)
 	chatCitation = regexp.MustCompile(`\[#(\d{1,18})\]`)
 )
+
+// isDashedRangeOrDate reports whether a number chatPhone found (after foldPhones) is a range or a date
+// written with dashes, not a phone number. Only two forms are: a range whose sides have three digits
+// or fewer ("100–500", "9–5"), and a real year, month and day ("2026–11–15"). Every other dashed form
+// is read as a phone number, since the common short ones are dashed groups of four or three and four
+// digits: "1900-1234", "2123-4567", "555-1234". A range of years ("2024–2026") is one of them too: a
+// made-up hotline ("1900-2000") reads the same, and hiding a sentence costs less than showing one.
+func isDashedRangeOrDate(phone string) bool {
+	groups := chatDashed.FindStringSubmatch(phone)
+	if groups == nil {
+		return false
+	}
+	from, to, day := groups[1], groups[2], groups[3]
+	if day != "" {
+		if len(from) != 4 || len(to) != 2 || len(day) != 2 {
+			return false
+		}
+		_, err := time.Parse(time.DateOnly, from+"-"+to+"-"+day)
+		return err == nil
+	}
+	return len(from) <= 3 && len(to) <= 3
+}
 
 // chatFilter checks sentences against the text of the articles the AI read. One stream uses it, one
 // sentence after another, never from two goroutines.
@@ -128,34 +158,41 @@ func (f *chatFilter) knownDigits() []string {
 	return f.digits
 }
 
-// phoneDigits are the digits of each phone number (chatPhone) in text. A number is made only of
-// digits, ASCII spaces and +().-, and chatPhone has no anchor or word boundary, so its matches are
-// the same when it reads only the runs of those characters that hold two digits and six characters
-// or more: the pattern over 180 KB of excerpts took 12 ms (docs/internals/performance.md).
+// phoneDigits are the digits of each phone number (chatPhone) in text, read as foldPhones writes it.
+// A number is made only of digits, spaces and +().-, and chatPhone has no anchor or word boundary, so
+// its matches are the same when it reads only the runs of those characters that hold two digits and six
+// characters or more: the pattern over 180 KB of excerpts took 12 ms (docs/internals/performance.md).
+// Each run is folded on its own, so the letters between runs are never copied.
 func phoneDigits(text string) []string {
 	var digits []string
-	for start := 0; start < len(text); {
-		if !phoneByte(text[start]) {
-			start++
-			continue
+	var run []byte
+	count := 0
+	flush := func() {
+		if count >= 2 && len(run) >= 6 {
+			for _, match := range chatPhone.FindAll(run, -1) {
+				digits = append(digits, onlyDigits(string(match)))
+			}
 		}
-		end, count := start, 0
-		for ; end < len(text) && phoneByte(text[end]); end++ {
-			if text[end] >= '0' && text[end] <= '9' {
+		run, count = run[:0], 0
+	}
+	for _, r := range text {
+		f := foldPhoneRune(r)
+		switch {
+		case f < 0: // an invisible character inside a number
+		case f >= utf8.RuneSelf || !phoneByte(byte(f)):
+			flush()
+		default:
+			run = append(run, byte(f))
+			if f >= '0' && f <= '9' {
 				count++
 			}
 		}
-		if count >= 2 && end-start >= 6 {
-			for _, match := range chatPhone.FindAllString(text[start:end], -1) {
-				digits = append(digits, onlyDigits(match))
-			}
-		}
-		start = end
 	}
+	flush()
 	return digits
 }
 
-// phoneByte is a byte chatPhone can match: a digit, \s (ASCII spaces) or +().-.
+// phoneByte is a folded byte chatPhone can match: a digit, \s (ASCII spaces) or +().-.
 func phoneByte(b byte) bool {
 	return b >= '0' && b <= '9' || strings.IndexByte(" \t\n\f\r+().-", b) >= 0
 }
@@ -186,9 +223,9 @@ func (f *chatFilter) check(sentence string) (string, bool, []string) {
 			return hiddenSentence(sentence), true, nil
 		}
 	}
-	for _, phone := range chatPhone.FindAllString(sentence, -1) {
+	for _, phone := range chatPhone.FindAllString(foldPhones(sentence), -1) {
 		digits := onlyDigits(phone)
-		if len(digits) < 6 {
+		if len(digits) < 6 || isDashedRangeOrDate(phone) {
 			continue
 		}
 		if !slices.ContainsFunc(f.knownDigits(), func(known string) bool { return strings.Contains(known, digits) }) {

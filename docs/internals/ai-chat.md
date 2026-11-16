@@ -110,7 +110,18 @@ leaves still gets the answer stored and metered, and reads it back with `GET …
 - **Sentences and the contact filter** (`chat-filter.go`): text is sent at a sentence's end, or early
   at 200 characters or 1.5 s, at the last space that does not split a run of number groups (`+84 912
   345` waits for `678`). An email address, a run of 6 or more digits (compared digits only, so
-  `10.000.000` and `10,000,000` are the same) or a link (scheme, `www.`, a domain with a path, or a
+  `10.000.000` and `10,000,000` are the same; any script's decimal digits and the symbols that show
+  one digit (superscript, subscript, circled, parenthesized, `0️⃣` keycaps) count as their ASCII digit,
+  combining marks on a digit are ignored, and any Unicode space, dash, dot, Arabic separator (`٫`
+  `٬`) or invisible format character between groups is a separator, in the answer and the articles
+  alike, so `０９１２–３４５–６７８`, `٠٩١٢٬٣٤٥٬٦٧٨` and `⁰⁹¹² ³⁴⁵ ⁶⁷⁸` are `0912345678`,
+  `chat-phone-fold.go`; only two forms written with dashes and no spaces are not a number
+  (`isDashedRangeOrDate`): a range whose sides have three digits or fewer, `100-500` or `9–5`; and a
+  real year, month and day, `2026-11-15`. Every other dashed form still is a number, because the
+  common short phone numbers are dashed groups of four or three and four digits: `1900-1234`,
+  `1800–6789`, `2123-4567`, `555-1234`, `0987–654–321`, `12345-6789`. A range of years, `2024–2026`,
+  is hidden too: a made-up hotline such as `1900-2000` or `1900–2050` reads the same, and hiding a
+  sentence costs less than showing an invented number) or a link (scheme, `www.`, a domain with a path, or a
   bare lower-case domain under any top-level domain of letters, not a file name such as `invoice.pdf`; compared without scheme and `www.`, a translated `<placeholder>` keeps the
   part before it) that the articles the AI read do not hold replaces its whole sentence with
   `[contact details hidden — not in the articles]`. The 20 answers of the eval keep every word
