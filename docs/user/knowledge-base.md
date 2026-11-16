@@ -14,7 +14,8 @@ dates and images; see [Import from Freshdesk](import-freshdesk.md#knowledge-base
 
 A collection groups articles, like a Freshdesk category, folder and subfolder: collections go three
 levels deep. Every article has a home collection, so a new knowledge base starts by asking for
-one, for example "Getting started". An article can also be listed in more collections; see
+one, for example "Getting started": the **New collection** form is already open. **Cancel** closes it,
+and **New collection** opens it again. An article can also be listed in more collections; see
 [Several collections](#several-collections).
 
 - **Add**: select **New collection**, type a **Name** (and a description if you like), choose where it

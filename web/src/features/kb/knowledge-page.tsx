@@ -88,7 +88,10 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const [problem, setProblem] = useState<string>();
   const [trashOpen, setTrashOpen] = useState(false);
   const closeTrash = () => setTrashOpen(false);
-  useEffect(() => { setForm(null); setConfirming(false); setProblem(undefined); }, [search.collection]);
+  const noCollections = collections.isSuccess && nodes.length === 0;
+  // Choosing another collection closes the forms, except the new collection form of a knowledge base with no
+  // collection: deleting the last one leaves it open, as in a knowledge base that never had one.
+  useEffect(() => { setForm(noCollections ? 'new' : null); setConfirming(false); setProblem(undefined); }, [search.collection]);
   const save = async (values: CollectionValues) => {
     if (form === 'edit' && selected) {
       const original = selected.collection;
@@ -154,7 +157,10 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
     return saved;
   };
   const names = new Map(nodes.map((node) => [node.collection.id, node.collection.name]));
-  const noCollections = collections.isSuccess && nodes.length === 0;
+  // With no collection yet the new collection form opens by itself, as if New collection had been
+  // pressed: Cancel closes it and New collection opens it again. A collection that appears meanwhile (restored
+  // from the trash, made in another tab) leaves the form as the person left it.
+  useEffect(() => { if (noCollections) setForm('new'); }, [noCollections]);
   const total = nodes.reduce((sum, node) => sum + node.collection.article_count, 0);
   // Published is not public while the help center is off: the page says so, and how to turn it on.
   const holds = useHolds();
@@ -178,14 +184,15 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
       {trashOpen && <KBTrash timezone={timezone} onChanged={() => void refresh()} onClose={closeTrash} />}
       <OrderAnnouncement message={moves.message} />
       <div className="kb-art-layout">
-        <nav className="kb-collections" aria-labelledby="kb-collections-heading" data-form={creates && (form === 'new' || noCollections) ? 'true' : undefined}>
+        <nav className="kb-collections" aria-labelledby="kb-collections-heading" data-form={creates && form === 'new' ? 'true' : undefined}
+          data-empty={creates && noCollections && form !== 'new' ? 'true' : undefined}>
           <div className="kb-collections-head">
             <h2 id="kb-collections-heading">{kbMessages.collections}</h2>
             {creates && <button type="button" className="icon-button" aria-label={kbMessages.newCollection} data-tip={kbMessages.newCollection} aria-expanded={form === 'new'} onClick={newCollection}><Icon name="plus" /></button>}
           </div>
           {collections.isError && <p role="alert" className="error-copy">{kbMessages.collectionsFailed}{' '}
             <button type="button" className="link-action" onClick={() => void collections.refetch()}>{kbMessages.retry}</button></p>}
-          {creates && (form === 'new' || (noCollections && form === null)) && <CollectionForm tree={tree} onSubmit={save} onCancel={() => setForm(null)} />}
+          {creates && form === 'new' && <CollectionForm tree={tree} onSubmit={save} onCancel={() => setForm(null)} />}
           {noCollections && <p className="muted-copy">{creates ? <>{kbMessages.noCollections} <HelpTip label={kbMessages.collections} text={kbMessages.noCollectionsTip} /></> : kbMessages.noCollectionsYet}</p>}
           {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} hrefTo={collectionHref} /></div>}
         </nav>

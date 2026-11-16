@@ -19,6 +19,11 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge base' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Knowledge base' })).toBeVisible();
   const newCollection = page.getByRole('form', { name: 'New collection' });
+  // The form opens on its own with no collection yet; Cancel closes it and New collection opens it again.
+  await newCollection.getByRole('button', { name: 'Cancel' }).click();
+  await expect(newCollection).toBeHidden();
+  await expect(page.getByText('Start with a collection.', { exact: false })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Collections' }).getByRole('button', { name: 'New collection' }).click();
   await newCollection.getByRole('textbox', { name: 'Name' }).fill('Getting started');
   await newCollection.getByRole('button', { name: 'Create collection' }).click();
   await expect(page.getByRole('link', { name: 'Getting started, 0 articles' })).toHaveAttribute('aria-current', 'page');
@@ -251,6 +256,24 @@ test('knowledge base: an article moved with the keyboard keeps its new place on 
   const { url: helpCenter } = await (await page.request.get(`${servers.main}/api/v1/help-center`)).json() as { url: string };
   await page.goto(`${helpCenter}/c/billing`);
   await expect(page.locator('main ul.index a')).toHaveText(['Bravo refunds', 'Charlie taxes', 'Alpha invoices']);
+});
+
+test('knowledge base: on a phone with no collection yet, Cancel closes the new collection form and New collection opens it again', async ({ page }) => {
+  const suffix = `${Date.now()}-${process.pid}`;
+  const { url } = createWorkspaceWithSlug(`KB Phone ${suffix}`, `admin-${suffix}@example.com`);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
+  await expect(page).toHaveURL(`${servers.main}/`);
+  await page.goto(`${servers.main}/knowledge`);
+  const newCollection = page.getByRole('form', { name: 'New collection' });
+  await newCollection.getByRole('button', { name: 'Cancel' }).click();
+  await expect(newCollection).toBeHidden();
+  await expect(page.getByText('Start with a collection.', { exact: false })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Collections' }).getByRole('button', { name: 'New collection' }).click();
+  await newCollection.getByRole('textbox', { name: 'Name' }).fill('Billing');
+  await newCollection.getByRole('button', { name: 'Create collection' }).click();
+  await expect(page.getByRole('combobox', { name: 'Collection' })).toHaveValue(/.+/);
 });
 
 test('knowledge base: an article excluded from AI says since when and by whom, keeps it after a reload, shows it in the history, and lets AI read it again', async ({ page }) => {

@@ -69,11 +69,30 @@ test('a workspace without collections is asked for one first, and the new one op
   expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ name: 'Billing', parent_id: null });
 });
 
+test('with no collection yet, Cancel closes the new collection form and New collection opens and closes it again', async () => {
+  serve({ ...base, 'GET /api/v1/kb/collections': () => json(200, { items: [] }) });
+  open();
+  const form = await screen.findByRole('form', { name: 'New collection' });
+  const toggle = screen.getByRole('button', { name: 'New collection' });
+  fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByRole('form', { name: 'New collection' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Start with a collection/)).toBeInTheDocument();
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(toggle);
+  expect(screen.getByRole('form', { name: 'New collection' })).toBeInTheDocument();
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.click(toggle);
+  expect(screen.queryByRole('form', { name: 'New collection' })).not.toBeInTheDocument();
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+});
+
 test('a new collection is asked where it goes only once there is a collection to put it in', async () => {
   serve({ ...base, 'GET /api/v1/kb/collections': () => json(200, { items: [] }) });
   open();
   const first = await screen.findByRole('form', { name: 'New collection' });
   expect(within(first).queryByRole('combobox', { name: 'Inside' })).not.toBeInTheDocument();
+  // The form that opens on its own is the one New collection opens, so the button says it is open.
+  expect(screen.getByRole('button', { name: 'New collection' })).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('a new collection in a workspace with collections can go inside one of them', async () => {
@@ -294,6 +313,39 @@ test('restoring an article whose collection is in the trash shows the server\'s 
   const panel = await screen.findByRole('region', { name: 'Deleted articles' });
   fireEvent.click(await within(panel).findByRole('button', { name: 'Restore Old pricing' }));
   expect(await within(panel).findByRole('alert')).toHaveTextContent('The article\'s collection is in the trash; restore it first.');
+});
+
+test('deleting the last collection leaves the new collection form open, as in a knowledge base that never had one', async () => {
+  const only = collection(ids.billing, 'Billing', null);
+  let left = [only];
+  serve({ ...base, 'GET /api/v1/kb/collections': () => json(200, { items: left }),
+    [`DELETE /api/v1/kb/collections/${ids.billing}`]: () => { left = []; return new Response(null, { status: 204 }); } });
+  const show = open({ collection: ids.billing });
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete Billing' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Move to trash' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/knowledge', search: { collection: undefined }, replace: false }));
+  show({});
+  expect(await screen.findByRole('form', { name: 'New collection' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'New collection' })).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('a collection restored from the trash leaves the new collection form as the person left it', async () => {
+  const trashed = { ...collection(ids.billing, 'Billing', null), deleted_at: '2026-10-10T00:00:00Z', deleted_by: { agent_id: null, name: 'Ada' }, purges_at: '2026-11-09T00:00:00Z' };
+  let present: ReturnType<typeof collection>[] = [];
+  serve({ ...base, 'GET /api/v1/kb/collections': () => json(200, { items: present }),
+    'GET /api/v1/kb/articles/trash': () => json(200, { items: [], next_cursor: null }),
+    'GET /api/v1/kb/collections/trash': () => json(200, { items: present.length ? [] : [trashed] }),
+    'GET /api/v1/kb/translations/trash': () => json(200, { items: [], next_cursor: null }),
+    [`POST /api/v1/kb/collections/${ids.billing}/restore`]: () => { present = [collection(ids.billing, 'Billing', null)]; return json(200, present[0]); } });
+  open();
+  const form = await screen.findByRole('form', { name: 'New collection' });
+  fireEvent.change(within(form).getByRole('textbox', { name: 'Name' }), { target: { value: 'Shipping' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Trash' }));
+  const panel = await screen.findByRole('region', { name: 'Deleted collections' });
+  fireEvent.click(await within(panel).findByRole('button', { name: 'Restore Billing' }));
+  const tree = screen.getByRole('navigation', { name: 'Collections' });
+  expect(await within(tree).findByRole('link', { name: /^Billing/ })).toBeInTheDocument();
+  expect(within(screen.getByRole('form', { name: 'New collection' })).getByRole('textbox', { name: 'Name' })).toHaveValue('Shipping');
 });
 
 test('restoring a collection whose parent is in the trash shows the server\'s reason, not a general failure', async () => {
