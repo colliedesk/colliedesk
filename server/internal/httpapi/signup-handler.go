@@ -74,7 +74,11 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	}
 	ip := clientIP(request, a.config.TrustedProxies)
 	internal := a.hot().InternalSignups.Match(verified, ip)
-	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Internal: internal, Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.hostedMailDomain(), Onboarding: onboarding, Attribution: attribution})
+	via, app := a.signupVia(input.Next), ""
+	if via == signupViaAIAppConnector {
+		app = a.signupApp(request.Context(), input.Next)
+	}
+	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Internal: internal, App: app, Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.hostedMailDomain(), Onboarding: onboarding, Attribution: attribution})
 	switch {
 	case errors.Is(err, auth.ErrInvalidEmail):
 		writeError(response, http.StatusBadRequest, "invalid_request", "The identity provider returned an email address this service cannot use.")
@@ -111,7 +115,10 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	}
 	// Counted only once the person has a session, so a failed sign-in is not a started trial. The
 	// answers are fixed lists, never free text, and the event carries no email.
-	properties := map[string]any{"signup_via": a.signupVia(input.Next)}
+	properties := map[string]any{"signup_via": via}
+	if app != "" {
+		properties["signup_app"] = app
+	}
 	maps.Copy(properties, onboarding.Properties())
 	maps.Copy(properties, attribution.Properties())
 	if visitor := telemetry.WebsiteVisitorID(request); visitor != "" {

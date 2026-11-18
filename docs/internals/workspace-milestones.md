@@ -37,6 +37,9 @@ importer, the plan). It never holds a name, an address or message text. `signed_
 A report can leave internal workspaces out after the workspace and its trial record are deleted.
 `create-workspace` and the backfill write no `internal` key: the command line has no such list, and the
 list is server configuration that the database does not hold, so an absent key means unknown.
+A cloud sign-up an AI app's connector started also holds `"app"`: `claude`, `claude_code`, `chatgpt`,
+`codex`, `cursor`, `vscode`, `glama` or `other`, the same value as `trial_started`'s `signup_app`
+(`httpapi.signupApp`). A sign-up on the web, `create-workspace` and the backfill write no `app` key.
 
 ## Traps
 
