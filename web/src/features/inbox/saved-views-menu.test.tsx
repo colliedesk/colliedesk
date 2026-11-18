@@ -49,6 +49,13 @@ test('the view that matches the current filters is marked as current', () => {
   expect(within(menu).getByRole('button', { name: 'Waiting on me' })).not.toHaveAttribute('aria-current');
 });
 
+test('a view stays marked while the order or the search changes inside it, as the sidebar and the list title say', () => {
+  render(<SavedViewsMenu views={[urgent, mine]} trash={[]} query={{ assignee: 'me', awaiting: 'team', sort: 'priority', search: 'refund', status: 'pending' }} timezone="UTC" />);
+  const menu = open();
+  expect(within(menu).getByRole('button', { name: 'Waiting on me' })).toHaveAttribute('aria-current', 'true');
+  expect(within(menu).getByRole('button', { name: 'Urgent queue' })).not.toHaveAttribute('aria-current');
+});
+
 test('the current filters are saved under a name, for me or for everyone', async () => {
   const onCreate = vi.fn().mockResolvedValue(undefined);
   render(<SavedViewsMenu views={[]} trash={[]} query={{ priority: 'high,urgent', awaiting: 'team' }} timezone="UTC" onCreate={onCreate} />);

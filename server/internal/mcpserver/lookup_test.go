@@ -41,3 +41,14 @@ func TestLookupToolsReturnNamesNotJustIDs(t *testing.T) {
 		t.Error("a one-letter query must be refused so the whole table cannot be dumped")
 	}
 }
+
+// Before deleting a tag, a person sees how many conversations lose it; an agent reads the same number here.
+func TestTagsListSaysHowManyConversationsCarryEachTag(t *testing.T) {
+	e := newEnv(t)
+	f := seedInbox(t, e)
+	session := e.connect(f.w.read, "")
+	tags := e.ok(session, "colliedesk_tags_list", nil)
+	if first := at(t, tags, "tags", 0); at(t, first, "name") != "billing" || at(t, first, "conversation_count") != float64(1) {
+		t.Errorf("tags=%v, want billing on 1 conversation", tags)
+	}
+}

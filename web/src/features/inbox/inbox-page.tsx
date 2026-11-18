@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Conversation, ConversationViewer, EmailChannelSettings, Message, SavedReply, SettableStatus, SpamResult, TeamMember, Tag, TimeEntry } from '../../api/schemas';
+import type { Conversation, ConversationViewer, EmailChannelSettings, Message, SavedReply, SavedView, SettableStatus, SpamResult, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import { answerGoesToMailbox, MailSwitchLine } from './mail-switch';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
@@ -9,9 +9,11 @@ import { ConversationList } from './conversation-list';
 import type { SettingsTarget } from './conversation-list';
 import { AITriageSlot } from './ai-triage-slot';
 import { DetailsPanel } from './details-panel';
-import { InboxFilters } from './inbox-filters';
+import { InboxFilters, placeOf } from './inbox-filters';
 
+import { defaultStatus } from '../../lib/inbox-query';
 import type { InboxQuery } from '../../lib/inbox-query';
+import { narrowedInPlace, placeOnly } from '../../lib/inbox-scope';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
 import { EarlierDrafts, ReplyDraftCard } from './reply-draft-card';
@@ -19,7 +21,7 @@ import type { AIDraft } from './ai-draft-api';
 import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
-import { askableTeammates } from './mention-picker';
+import { askableTeammates } from './mention-match';
 import { messageMovesPart } from './message-moves-part';
 import { Part } from '../../ui/lazy-part';
 import { messages } from '../../messages';
@@ -44,8 +46,11 @@ interface InboxPageProps {
   // The filters of the list, as the address carries them, and a change to them.
   query?: InboxQuery;
   onQuery?: (query: InboxQuery) => void;
-  // The saved views menu, which sits in the filter bar (the route loads it lazily with its data).
+  // The saved views menu, offered in the list header while the list is narrowed (the route loads it lazily with its data).
   viewsMenu?: ReactNode;
+  // The workspace's channels and saved views, which name the place the list is in (InboxFilters).
+  channels?: Array<{ id: string; name: string }>;
+  savedViews?: Array<Pick<SavedView, 'id' | 'name' | 'filters'>>;
   // seen is the newest reply number on screen when the reply was started.
   // key is the send's Idempotency-Key when the reply box keeps a draft (it is stored with the draft).
   // mentions (last) are the teammates a note asks.
@@ -68,7 +73,8 @@ interface InboxPageProps {
   agentName?: string;
   onManageSavedReplies?: () => void;
   savedRepliesState?: 'loading' | 'failed' | 'ready';
-  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
+  // A details change settles when the server answered and rejects when it refused (the details say so).
+  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void | Promise<unknown>;
   // Changes one conversation's status and settles when the server answered: the thread header and Send and resolve.
   // notify false sets it without telling the customer in their chat.
   // The open chat conversation's statuses that would tell could not be read.
@@ -76,11 +82,13 @@ interface InboxPageProps {
   onSetStatus?: (conversationId: string, status: SettableStatus, options?: { notify?: boolean }) => Promise<unknown>;
   // Files conversations in Spam (true) or takes them out where they were (false), with their senders.
   onSpam?: (ids: string[], spam: boolean) => Promise<SpamResult>;
-  onAddTag?: (conversationId: string, tagId: string) => void;
-  onRemoveTag?: (conversationId: string, tagId: string) => void;
+  onAddTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
+  onRemoveTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
   onCreateTag?: (conversationId: string, name: string) => void;
-  // How many conversations each status holds under the other filters: the status tabs' numbers.
+  // How many conversations each status holds under the other filters: the status picker's numbers.
   statusCounts?: { open: number; pending: number; resolved: number; closed: number; spam: number };
+  // The order Due first gives the list, as the server answered it: waiting_longest while reply targets are off.
+  dueSort?: string;
   page?: number;
   hasNextPage?: boolean;
   // pageSize is the page length the list asked for, to number the conversations of a later page.
@@ -92,6 +100,8 @@ interface InboxPageProps {
   sendsFrom?: string;
   // channelLabel names the channel of a conversation where the workspace has two of its type.
   channelLabel?: (conversation: Conversation) => string | undefined;
+  // rowChannelLabel names it on the list's rows; the route leaves it out where the list is one channel.
+  rowChannelLabel?: (conversation: Conversation) => string | undefined;
   // outboundLink is where Open Settings in that notice leads: the channel that cannot send.
   outboundLink?: SettingsTarget;
   // noReplies: the conversation's channel was removed, so the composer sends notes only.
@@ -162,7 +172,7 @@ function bulkSaid(count: number, changes: BulkConversationChanges, rows: Convers
   return told === undefined ? `${messages.bulkUpdated(count)}.${messages.bulkMayHaveTold}` : messages.customersTold(count, changes.status, told);
 }
 
-export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, searchSignal = 0, onTestMessage, nextStep, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false, otherList }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, channels, savedViews, onMessage, onUpdate, onSetStatus, onSpam, noticesFailed = false, onAddTag, onRemoveTag, onCreateTag, statusCounts, dueSort, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, rowChannelLabel = channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, canManageChannels = false, currentAgentId, onBulkUpdate, replyDrafts = [], earlierDrafts = [], earlierDraftsNext, onLoadOlderDrafts, draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, onRestoreDraft, contactMatches, searchSignal = 0, onTestMessage, nextStep, defaultMailbox, replyMailbox, aiDrafts, aiTriage = false, onTriageApplied, onFindSent, autofix = false, otherList }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   // Where this browser keeps the unsent text: known once the workspace and agent load, which may be after
   // the conversation on a reload. The composer is remounted when it arrives, so it reads the kept draft.
@@ -175,7 +185,8 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   const [triageWaiting, setTriageWaiting] = useState(false);
   // Clearing from the empty list returns to the Open view and puts focus back on the search box.
   const [cleared, setCleared] = useState(0);
-  const clearFilters = () => { setCleared((current) => current + 1); onQuery?.({}); };
+  // Clear filters keeps the place: a channel list stays on its channel.
+  const clearFilters = () => { setCleared((current) => current + 1); onQuery?.(placeOnly(query)); };
   const focusSignal = cleared + searchSignal;
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
@@ -214,7 +225,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   useEffect(() => {
     if (selectAll.current) selectAll.current.indeterminate = checkedIds.length > 0 && !allChecked;
   });
-  // While rows are ticked, select all and the actions take the place of the status tabs, so the list never moves.
+  // While rows are ticked, select all and the actions take the place of the status and the order, so the list never moves.
   const selection = checkedIds.length > 0 && <div className="select-all" data-active>
     <label><input type="checkbox" ref={selectAll} checked={allChecked} onChange={(event) => toggleAll(event.target.checked)} />
       <span className="sr-only">{messages.selectAllOnPage}</span></label>
@@ -293,6 +304,12 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
   // With nothing open the thread pane says why in one line; a reply box and details would belong to no one. A
   // conversation named by the address is on its way (or failed) and says nothing yet; a mention opens its
   // conversation beside the Mentions list.
+  // An empty list where nothing but the place (a channel, a saved view) and the status narrow it is caught up there: it
+  // says so for that place and status, never that filters match nothing.
+  const place = placeOf(query, channels, savedViews);
+  const placeName = place.view || place.channel ? place.title || undefined : undefined;
+  const emptyListText = page === 1 && (place.view || !narrowedInPlace(query)) && (place.view || place.channel || (query.status ?? defaultStatus) !== defaultStatus)
+    ? messages.noConversationsIn(query.status ?? defaultStatus, placeName) : undefined;
   const emptyText = selected || threadOpen || conversationFailed ? undefined
     : otherList ? messages.selectConversation : loading || failed ? undefined : messages.nothingToOpen;
   return (
@@ -308,7 +325,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           <MailSwitchLine settings={defaultMailbox} canManageChannels={canManageChannels} />
           <div className="list-head">
             <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} currentAgentId={currentAgentId} timezone={timezone} conversations={conversations} focusSignal={focusSignal}
-              views={viewsMenu} selection={selection || undefined}
+              views={viewsMenu} selection={selection || undefined} dueSort={dueSort} channels={channels} savedViews={savedViews}
               counts={statusCounts ? { ...statusCounts, all: statusCounts.open + statusCounts.pending + statusCounts.resolved + statusCounts.closed }
                 // A search asks for no counts (they would search twice); one page of results counts its own tab.
                 : query.search && page === 1 && !hasNextPage && !loading ? { [query.status ?? 'all']: conversations.length } : undefined} />
@@ -321,9 +338,9 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           <p aria-live="polite" className="bulk-message">{bulkNotice}</p>
           {contactMatches}
         </header>
-        <ConversationList items={conversations} channelLabel={channelLabel} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
+        <ConversationList items={conversations} channelLabel={rowChannelLabel} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
-          failed={failed} onRetry={onRetry} onClearFilters={clearFilters}
+          failed={failed} onRetry={onRetry} onClearFilters={narrowedInPlace(query) ? clearFilters : undefined} emptyText={emptyListText}
           checkedIds={checked} onToggle={toggle} draftIds={draftConversationIds} viewers={viewers}
           grouped={query.sort === 'updated_desc'} onTestMessage={onTestMessage} nextStep={nextStep} />
         {spamToast && <div role="status" aria-label={messages.spam} className="spam-toast"><span>{spamToast.text}</span>

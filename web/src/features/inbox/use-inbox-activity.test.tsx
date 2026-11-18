@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryObserver, useQuery } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -191,6 +191,28 @@ test('a new customer message refetches the open conversation timeline and the li
   await tick(20_000);
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ['conversations'] });
   expect(invalidate).toHaveBeenCalledWith({ queryKey: ['messages', id(1)] });
+});
+
+// A note that asks me changes its conversation: the sidebar's Mentions count follows within that poll, not only when
+// the window gets the focus back.
+test('a changed conversation reads the Mentions unread count again, so a new mention shows in the sidebar', async () => {
+  focused = true;
+  let unread = 0;
+  const mentions = vi.fn(async () => ({ items: [], unread }));
+  api.inboxActivity.mockResolvedValueOnce(idle('2026-10-15T10:00:00Z'))
+    .mockResolvedValueOnce(idle('2026-10-15T10:00:20Z'))
+    .mockResolvedValueOnce(poll('2026-10-15T10:00:40Z', [changed(1)]));
+  const { result } = renderHook(() => {
+    useInboxActivity(true, me);
+    return useQuery({ queryKey: ['mentions', 'unread'], queryFn: mentions }).data?.unread;
+  }, { wrapper });
+  await tick(0);
+  expect(result.current).toBe(0);
+  unread = 1; // a teammate's note asks me
+  await tick(20_000);
+  expect(result.current).toBe(0); // nothing changed in that poll: no read
+  await tick(20_000);
+  expect(result.current).toBe(1);
 });
 
 test('another agent changing a conversation refreshes the list and that timeline without any alert', async () => {

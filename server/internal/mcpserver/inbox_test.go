@@ -138,6 +138,23 @@ func TestInboxSearchFilters(t *testing.T) {
 	}
 }
 
+// The answer names the order of its rows, so an agent that asks for due learns it got waiting_longest
+// while the workspace's reply targets are off, without another call.
+func TestInboxSearchSaysWhichOrderItUsed(t *testing.T) {
+	e := newEnv(t)
+	f := seedInbox(t, e)
+	session := e.connect(f.w.read, "")
+	for _, c := range []struct{ asked, want string }{{"", "updated_desc"}, {"priority", "priority"}, {"due", "waiting_longest"}} {
+		args := map[string]any{}
+		if c.asked != "" {
+			args["sort"] = c.asked
+		}
+		if got := e.ok(session, "colliedesk_inbox_search", args)["sort"]; got != c.want {
+			t.Errorf("sort %q answered sort %v, want %s", c.asked, got, c.want)
+		}
+	}
+}
+
 func TestInboxSearchNeverShowsAnotherWorkspace(t *testing.T) {
 	e := newEnv(t)
 	f := seedInbox(t, e)

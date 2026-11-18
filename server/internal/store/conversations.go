@@ -79,8 +79,10 @@ var conversationOrders = map[string]string{
 	ConversationSortCreatedDesc: `c.created_at DESC,c.id DESC`,
 	ConversationSortCreatedAsc:  `c.created_at ASC,c.id ASC`,
 	ConversationSortPriority:    `CASE c.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,c.updated_at DESC,c.id DESC`,
-	// Conversations awaiting the team, the oldest customer message first, then the rest by last update.
-	ConversationSortWaitingLongest: `CASE WHEN c.last_public_kind='incoming' THEN c.last_public_at END ASC NULLS LAST,c.updated_at DESC,c.id DESC`,
+	// Conversations awaiting the team, the oldest customer message first, then the rest by last update. Only an
+	// open one awaits: pending waits on the customer, and a team that resolves without answering in the chat
+	// (common on Zalo) leaves the customer's message last on a conversation nobody owes anything.
+	ConversationSortWaitingLongest: `CASE WHEN c.status='open' AND c.last_public_kind='incoming' THEN c.last_public_at END ASC NULLS LAST,c.updated_at DESC,c.id DESC`,
 	// The earliest running response target first, then the rest as the inbox shows them.
 	ConversationSortDue: `c.sla_due_at ASC NULLS LAST,c.updated_at DESC,c.id DESC`,
 }
@@ -89,6 +91,8 @@ type ConversationPage struct {
 	Items []domain.Conversation `json:"items"`
 	Page  int                   `json:"page"`
 	Size  int                   `json:"page_size"`
+	// Sort is the order the rows are in: the one asked for, except due while reply targets are off.
+	Sort string `json:"sort"`
 	// StatusCounts is how many conversations each status holds under every filter but the status, when
 	// the filter asked for them (the inbox's status tabs).
 	StatusCounts map[string]int `json:"status_counts,omitempty"`
@@ -464,9 +468,9 @@ func negateUnless(keep bool, condition string) string {
 }
 
 func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filter ConversationFilter, now time.Time) (ConversationPage, error) {
-	order, ok := conversationOrders[filter.Sort]
-	if !ok {
-		order = conversationOrders[ConversationSortUpdatedDesc]
+	sort := filter.Sort
+	if _, ok := conversationOrders[sort]; !ok {
+		sort = ConversationSortUpdatedDesc
 	}
 	if filter.ResultSnapshotID != "" {
 		var kept bool
@@ -481,12 +485,12 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT enabled FROM response_targets WHERE workspace_id=$1),false)`, workspaceID).Scan(&filter.slaOn); err != nil {
 			return ConversationPage{}, fmt.Errorf("read response targets: %w", err)
 		}
-		// Without reply targets nothing is due: Due first is who has waited longest, as Today orders it.
-		if !filter.slaOn && filter.Sort == ConversationSortDue {
-			filter.Sort = ConversationSortWaitingLongest
-			order = conversationOrders[ConversationSortWaitingLongest]
+		// Without reply targets nothing is due: Due first is who has waited longest, and the page says so.
+		if !filter.slaOn && sort == ConversationSortDue {
+			sort = ConversationSortWaitingLongest
 		}
 	}
+	order := conversationOrders[sort]
 	if filter.Ref != "" || filter.Search != "" {
 		code := filter.Ref
 		if code == "" {
@@ -521,7 +525,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		return ConversationPage{}, fmt.Errorf("scan conversation ids: %w", err)
 	}
 	if len(ids) == 0 {
-		return ConversationPage{Items: []domain.Conversation{}, Page: filter.Page, Size: filter.PageSize, StatusCounts: counts}, nil
+		return ConversationPage{Items: []domain.Conversation{}, Page: filter.Page, Size: filter.PageSize, Sort: sort, StatusCounts: counts}, nil
 	}
 
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
@@ -573,7 +577,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	if err := rows.Err(); err != nil {
 		return ConversationPage{}, fmt.Errorf("iterate conversations: %w", err)
 	}
-	return ConversationPage{Items: items, Page: filter.Page, Size: filter.PageSize, StatusCounts: counts}, nil
+	return ConversationPage{Items: items, Page: filter.Page, Size: filter.PageSize, Sort: sort, StatusCounts: counts}, nil
 }
 
 func conversationTags(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) ([]domain.Tag, error) {

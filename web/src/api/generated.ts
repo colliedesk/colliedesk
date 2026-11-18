@@ -7448,6 +7448,8 @@ export interface components {
             id: string;
             name: string;
             color: string;
+            /** @description Only in GET /api/v1/tags with counts=true. How many conversations of the workspace carry the tag, in any status. */
+            conversation_count?: number;
         };
         SavedReplyInput: {
             title: string;
@@ -8615,6 +8617,8 @@ export interface components {
             items: components["schemas"]["Conversation"][];
             page: number;
             page_size: number;
+            /** @description The order the rows are in: the sort asked for, except due while the workspace's reply targets are off, which is waiting_longest. */
+            sort?: components["schemas"]["ConversationSort"];
             /** @description Only with counts=true. How many conversations each status holds under every filter but the status. */
             status_counts?: {
                 open: number;
@@ -12730,7 +12734,7 @@ export interface operations {
                 created_before?: string;
                 updated_after?: string;
                 updated_before?: string;
-                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update), due (the earliest running response target first, then the rest by last update; while the workspace's reply targets are off, the same as waiting_longest). The web inbox asks for due unless the person picks another order. */
+                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (open conversations whose customer wrote last, the oldest customer message first, then every other conversation, pending, resolved or closed included, by last update), due (the earliest running response target first, then the rest by last update; while the workspace's reply targets are off, the same as waiting_longest, and the answer's sort says so). The web inbox asks for due unless the person picks another order. */
                 sort?: components["schemas"]["ConversationSort"];
                 /** @description true adds status_counts: how many conversations each status holds under every other filter given (the inbox's status tabs). Leave it out when only the page is needed. */
                 counts?: boolean;
@@ -15584,7 +15588,10 @@ export interface operations {
     };
     listTags: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description true adds conversation_count to each tag: how many conversations of the workspace carry it, in any status (Settings → Tags shows it before a rename or delete). Leave it out when only the names are needed. */
+                counts?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -15703,6 +15710,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description tag_name_taken, another tag of the workspace has the name; nothing was changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listSavedViews: {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/milestones"
 	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -58,7 +59,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, name, email string) (doma
 		var agentID string
 		var created bool
 		var err error
-		workspace, agentID, created, err = s.insertWorkspaceTx(ctx, tx, slug, name, email)
+		workspace, agentID, created, err = s.insertWorkspaceTx(ctx, tx, slug, name, email, nil)
 		if err != nil {
 			return err
 		}
@@ -75,11 +76,13 @@ func (s *Service) CreateWorkspace(ctx context.Context, name, email string) (doma
 }
 
 // insertWorkspaceTx creates a workspace on a fresh trial and its first admin inside tx. created is
-// false, and nothing is written, when the slug is already used by another workspace.
-func (s *Service) insertWorkspaceTx(ctx context.Context, tx pgx.Tx, slug, name, email string) (workspace domain.Workspace, agentID string, created bool, err error) {
+// false, and nothing is written, when the slug is already used by another workspace. signedUp is the
+// detail of the signed_up milestone (the cloud sign-up says whether it is the team's own).
+func (s *Service) insertWorkspaceTx(ctx context.Context, tx pgx.Tx, slug, name, email string, signedUp map[string]any) (workspace domain.Workspace, agentID string, created bool, err error) {
+	var createdAt time.Time
 	err = tx.QueryRow(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES($1,$2,$3) ON CONFLICT (slug) DO NOTHING
-		RETURNING id::text,slug,name,timezone`, slug, name, s.now().Add(domain.TrialLength)).
-		Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone)
+		RETURNING id::text,slug,name,timezone,created_at`, slug, name, s.now().Add(domain.TrialLength)).
+		Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone, &createdAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Workspace{}, "", false, nil
 	}
@@ -88,6 +91,9 @@ func (s *Service) insertWorkspaceTx(ctx context.Context, tx pgx.Tx, slug, name, 
 	}
 	if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),'admin') RETURNING id::text`, workspace.ID, email).Scan(&agentID); err != nil {
 		return domain.Workspace{}, "", false, fmt.Errorf("create admin agent: %w", err)
+	}
+	if err := milestones.Record(ctx, tx, workspace.ID, milestones.SignedUp, createdAt, signedUp); err != nil {
+		return domain.Workspace{}, "", false, err
 	}
 	return workspace, agentID, true, nil
 }

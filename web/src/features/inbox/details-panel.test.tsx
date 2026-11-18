@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { Conversation } from '../../api/schemas';
 import { permissionsOf, rolesOf } from '../../test-roles';
@@ -187,9 +187,56 @@ test('Tags is one row that names the tags; its menu ticks, unticks and creates o
   expect(menu.open).toBe(true);
 });
 
+// Firefox blurs a focused button the moment it becomes disabled (cross-browser run 43626779907): Create tag
+// clears the name, its button turns disabled, and the menu closed under the person creating tags.
+test('Tags stays open when Create tag turns disabled under focus, as Firefox blurs it; leaving still closes it', () => {
+  const tagged = { ...conversation(null), tags: [billing] } as Conversation;
+  render(<><DetailsPanel conversation={tagged} agents={[]} tags={[billing]} onCreateTag={vi.fn()} /><button type="button">Outside</button></>);
+  const menu = screen.getByText('billing', { selector: '.tags-pick summary *' }).closest('details')!;
+  menu.open = true;
+  const group = within(menu).getByRole('group', { name: 'Tags' });
+  fireEvent.change(within(group).getByRole('textbox', { name: 'New tag name' }), { target: { value: 'bank-delay' } });
+  const create = within(group).getByRole('button', { name: 'Create tag' });
+  create.focus();
+  fireEvent.click(create);
+  expect(create).toBeDisabled();
+  fireEvent.blur(create, { relatedTarget: null });
+  expect(menu.open).toBe(true);
+  expect(menu.querySelector('summary')).toHaveFocus();
+  fireEvent.blur(menu.querySelector('summary')!, { relatedTarget: screen.getByRole('button', { name: 'Outside' }) });
+  expect(menu.open).toBe(false);
+});
+
 test('a conversation without tags says None on the Tags row', () => {
   render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[billing]} />);
   expect(screen.getByText('None', { selector: '.tags-pick summary *' })).toBeInTheDocument();
+});
+
+// A value too long for the column is cut on screen; its full text is one hover away.
+test('each details value carries its full text in a tooltip, so a long name or tag list cut short can still be read', () => {
+  const long = { ...active, display_name: 'Nguyễn Thị Ngọc Anh Phạm' };
+  const tags = [billing, { ...billing, id: '99999999-9999-4999-8999-999999999998', name: 'refund-request' }];
+  render(<DetailsPanel conversation={{ ...conversation(long.id), priority: 'urgent', tags }} agents={[long]} tags={tags} onUpdate={vi.fn()}
+    onShowContactConversations={vi.fn()} />);
+  expect(screen.getByRole('combobox', { name: 'Assignee' })).toHaveAttribute('title', 'Nguyễn Thị Ngọc Anh Phạm');
+  expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveAttribute('title', 'Urgent');
+  expect(screen.getByText('billing · refund-request', { selector: '.tags-pick summary *' })).toHaveAttribute('title', 'billing · refund-request');
+  expect(screen.getByRole('button', { name: 'All conversations of Mai Linh' })).toHaveAttribute('title', 'All conversations of Mai Linh');
+});
+
+test('the Due row keeps counting how late the reply is while the conversation stays open', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
+  try {
+    const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
+    const sla = { state: 'overdue', first_response: { ...clock, due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true, business_minutes_left: -80 }, resolution: null };
+    render(<DetailsPanel conversation={{ ...conversation(null), sla } as unknown as Conversation} agents={[]} tags={[]} timezone="UTC" />);
+    expect(screen.getByText('1 h 20 min late', { selector: '.due-pick summary *' })).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(10 * 60_000); });
+    expect(screen.getByText('1 h 30 min late', { selector: '.due-pick summary *' })).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('Due is one row that says how late the reply is, in red; its menu holds every clock in full', () => {
@@ -213,4 +260,55 @@ test('the customer section names the customer above the link to all their conver
   const section = screen.getByRole('region', { name: 'Customer' });
   expect(within(section).getByText('Mai Linh', { selector: 'strong' })).toBeInTheDocument();
   expect(within(section).getByRole('button', { name: 'All conversations of Mai Linh' })).toBeInTheDocument();
+});
+
+// Two quick picks of one field: the earlier one failing must not say "not saved" once the later one saved.
+test('an earlier pick that fails says nothing once a later pick of the same field saved', async () => {
+  const answers: { resolve: () => void; reject: (error: Error) => void }[] = [];
+  const onUpdate = vi.fn(() => new Promise<void>((resolve, reject) => { answers.push({ resolve, reject }); }));
+  render(<DetailsPanel conversation={conversation(null)} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  const priority = screen.getByRole('combobox', { name: 'Priority' });
+  fireEvent.change(priority, { target: { value: 'urgent' } });
+  fireEvent.change(priority, { target: { value: 'high' } });
+  await act(async () => { answers[0].reject(new Error('refused')); });
+  await act(async () => { answers[1].resolve(); });
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+// "Status not saved" is about the value the conversation still has. Once that value changes from elsewhere (Resolve
+// in the header, a teammate), the message no longer describes the row and goes.
+test('a "not saved" message goes once the field changes from elsewhere', async () => {
+  const onUpdate = vi.fn(() => Promise.reject(new Error('refused')));
+  const open = { ...conversation(null), status: 'open' } as Conversation;
+  const { rerender } = render(<DetailsPanel conversation={open} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Pending' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Status not saved. Try again.');
+  rerender(<DetailsPanel conversation={{ ...open, priority: 'high' }} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Status not saved. Try again.');
+  rerender(<DetailsPanel conversation={{ ...open, priority: 'high', status: 'resolved' }} agents={[]} tags={[]} onUpdate={onUpdate} />);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+// The alert is read once when it appears; a person who tabs back to the control later hears why from the control.
+test('a "not saved" message is the description of its control', async () => {
+  const tag = { id: '99999999-9999-4999-8999-999999999999', name: 'billing', color: '#64748b' };
+  const refuse = vi.fn(() => Promise.reject(new Error('refused')));
+  render(<DetailsPanel conversation={{ ...conversation(null), status: 'open' }} agents={[active]} tags={[tag]} onUpdate={refuse} onAddTag={refuse} />);
+  const priority = screen.getByRole('combobox', { name: 'Priority' });
+  expect(priority).not.toHaveAccessibleDescription(/not saved/);
+  fireEvent.change(priority, { target: { value: 'urgent' } });
+  await screen.findByRole('alert');
+  expect(priority).toHaveAccessibleDescription('Priority not saved. Try again.');
+  const assignee = screen.getByRole('combobox', { name: 'Assignee' });
+  fireEvent.change(assignee, { target: { value: active.id } });
+  await screen.findByText('Assignee not saved. Try again.');
+  expect(assignee).toHaveAccessibleDescription('Assignee not saved. Try again.');
+  expect(priority).not.toHaveAccessibleDescription(/not saved/);
+  const status = screen.getByText('Open', { selector: '.status-pick summary *' }).closest('summary') as HTMLElement;
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Pending' }));
+  await screen.findByText('Status not saved. Try again.');
+  expect(status).toHaveAccessibleDescription('Status not saved. Try again.');
+  fireEvent.click(within(screen.getByRole('group', { name: 'Tags' })).getByRole('checkbox', { name: 'billing' }));
+  await screen.findByText('Tags not saved. Try again.');
+  expect(screen.getByText('None', { selector: '.tags-pick summary *' }).closest('summary')).toHaveAccessibleDescription('Tags not saved. Try again.');
 });

@@ -273,7 +273,7 @@ func TestNoticeThirtyDaysBeforeThenDeletionAfterTwelveMonths(t *testing.T) {
 	e := newEnv(t)
 	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example", "bob@alpha.example")
 	b := e.workspace(t, "Beta", "2027-03-01T00:00:00Z", "carl@beta.example")
-	beforeB := e.rows(t, b.ID)
+	beforeB := e.dataRows(t, b.ID)
 	for _, table := range []string{"autofix_github_installations", "autofix_repos", "autofix_connectors", "fix_attempts", "fix_attempt_events", "autofix_oauth_states", "workspace_migration_requests"} {
 		if beforeB[table] != 1 {
 			t.Fatalf("the fixture lacks %s: %v", table, beforeB)
@@ -320,8 +320,8 @@ func TestNoticeThirtyDaysBeforeThenDeletionAfterTwelveMonths(t *testing.T) {
 	if got.Deleted != 1 {
 		t.Fatalf("deletion day: %+v, want 1 deleted", got)
 	}
-	if e.exists(t, a.ID) || len(e.rows(t, a.ID)) != 0 {
-		t.Fatalf("workspace A left rows behind: %v", e.rows(t, a.ID))
+	if e.exists(t, a.ID) || len(e.dataRows(t, a.ID)) != 0 {
+		t.Fatalf("workspace A left rows behind: %v", e.dataRows(t, a.ID))
 	}
 	for _, key := range a.Keys {
 		if e.blobExists(key) {
@@ -331,7 +331,7 @@ func TestNoticeThirtyDaysBeforeThenDeletionAfterTwelveMonths(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(e.root, a.ID)); !os.IsNotExist(err) {
 		t.Fatalf("workspace directory still exists: %v", err)
 	}
-	if !e.exists(t, b.ID) || fmt.Sprint(e.rows(t, b.ID)) != fmt.Sprint(beforeB) || !e.blobExists(b.Keys[0]) || !e.blobExists(b.Keys[1]) {
+	if !e.exists(t, b.ID) || fmt.Sprint(e.dataRows(t, b.ID)) != fmt.Sprint(beforeB) || !e.blobExists(b.Keys[0]) || !e.blobExists(b.Keys[1]) {
 		t.Fatal("workspace B was touched")
 	}
 	again := e.run(t, "2027-11-02T00:00:00Z")

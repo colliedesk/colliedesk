@@ -36,9 +36,11 @@ beforeAll(async () => {
 test('shows the dense inbox filters and three-pane conversation workspace', async () => {
   render(<InboxPage />);
   const filters = screen.getByRole('search', { name: /inbox/i });
-  // At rest the list is one row: the status tabs, then Sort and Filter; the search box opens from the app's Search.
+  // At rest the list header is the place (every channel) with Search and Filter, then the status and the order; the
+  // search field opens from Search.
   expect(within(filters).queryByRole('searchbox')).not.toBeInTheDocument();
-  expect(within(filters).getByRole('radiogroup', { name: 'Status' })).toBeInTheDocument();
+  expect(within(filters).getByRole('heading', { level: 2, name: 'All channels' })).toBeInTheDocument();
+  expect(within(filters).getByRole('button', { name: 'Status: Open' })).toBeInTheDocument();
   expect(within(filters).getByRole('combobox', { name: 'Sort' })).toBeInTheDocument();
   fireEvent.click(within(filters).getByText('Filter'));
   await screen.findByRole('checkbox', { name: 'Urgent' });
@@ -255,17 +257,60 @@ test('an empty filtered list offers a way out that clears every filter back to t
   const onQuery = vi.fn();
   // The inbox follows the filters in the address; this stands in for it.
   function Routed() {
-    const [query, setQuery] = useState<InboxQuery>({});
+    const [query, setQuery] = useState<InboxQuery>({ priority: 'urgent' });
     return <InboxPage conversations={[]} filtered query={query} searchSignal={1} onQuery={(next) => { setQuery(next); onQuery(next); }} />;
   }
   render(<Routed />);
   fireEvent.change(screen.getByRole('searchbox', { name: /search conversations/i }), { target: { value: 'refund' } });
-  fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Status: Open' }));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Pending' }));
   fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
   expect(onQuery).toHaveBeenLastCalledWith({});
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveValue('');
-  expect(screen.getByRole('radio', { name: 'Open' })).toBeChecked();
+  expect(screen.getByRole('button', { name: 'Status: Open' })).toBeInTheDocument();
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveFocus();
+});
+
+const zaloChannel = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+
+test('Clear filters on an empty channel list keeps the channel: it is the place, not a filter', () => {
+  const onQuery = vi.fn();
+  render(<InboxPage conversations={[]} filtered query={{ channel_id: zaloChannel, priority: 'urgent', status: 'pending' }} onQuery={onQuery} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  expect(onQuery).toHaveBeenLastCalledWith({ channel_id: zaloChannel });
+});
+
+// Nothing was filtered there, so the list says what is empty in its place, never that filters match nothing.
+test('an empty list narrowed only by its place and its status says so for that place and status, and offers no Clear filters', () => {
+  const said: Array<[Record<string, string>, string]> = [
+    [{ channel_id: zaloChannel }, 'No open conversations in Zalo OA.'],
+    [{ channel_id: zaloChannel, status: 'pending' }, 'No pending conversations in Zalo OA.'],
+    [{ status: 'pending' }, 'No pending conversations.'],
+    [{ status: 'all', sort: 'priority' }, 'No conversations.'],
+  ];
+  for (const [query, text] of said) {
+    const { unmount } = render(<InboxPage conversations={[]} filtered query={query} onQuery={vi.fn()} channels={[{ id: zaloChannel, name: 'Zalo OA' }]} />);
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.queryByText('No conversations match these filters.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+    unmount();
+  }
+});
+
+// A saved view or a channel is only part of the Open queue: open conversations may wait outside it, so an empty one
+// says it is empty there and never that every customer has an answer.
+test('an empty Open list in a saved view or a channel never says every customer has an answer', () => {
+  const mineOpen = { id: 'abababab-abab-4bab-8bab-abababababab', name: 'Mine, open', filters: { status: ['open' as const], assignee: ['me'] } };
+  const said: Array<[Record<string, string>, string]> = [
+    [{ assignee: 'me' }, 'No open conversations in Mine, open.'],
+    [{ channel_id: zaloChannel }, 'No open conversations in Zalo OA.'],
+  ];
+  for (const [query, text] of said) {
+    const { unmount } = render(<InboxPage conversations={[]} filtered query={query} onQuery={vi.fn()} channels={[{ id: zaloChannel, name: 'Zalo OA' }]} savedViews={[mineOpen]} />);
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.queryByText(/Every customer has an answer/)).not.toBeInTheDocument();
+    unmount();
+  }
 });
 
 test('a list that failed to load says so and offers a retry, never "Get started"', () => {
@@ -349,7 +394,8 @@ test('Latest activity groups the list under Today and Earlier headings, only for
     const latest = { sort: 'updated_desc' };
     const { rerender } = render(<InboxPage conversations={[conversation, older]} query={latest} />);
     const list = screen.getByRole('region', { name: /conversation list/i });
-    const headings = within(list).getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+    // The day groups sit under the list's title (level 2).
+    const headings = within(list).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent);
     expect(headings).toEqual(['Today', 'Earlier']);
     rerender(<InboxPage conversations={[conversation]} query={latest} />);
     expect(screen.queryByRole('heading', { name: 'Earlier' })).not.toBeInTheDocument();

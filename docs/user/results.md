@@ -122,7 +122,7 @@ me on Mondays**; the email has the same link at the bottom. A workspace with no 
 email. It needs the server's outgoing mail settings ([self-host email](../self-host/email.md)); without
 them the page says so and shows no switch, and your choice shows again once the server can send.
 
-## For AI agents
+## For developers and AI agents
 
 `GET /api/v1/results` returns the numbers (`results:read`), and `GET /api/v1/conversations?result=…`
 the conversations behind one. The MCP tool `colliedesk_results_get` and the `result` argument of

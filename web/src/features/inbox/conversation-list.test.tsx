@@ -205,6 +205,54 @@ test('with nothing open j opens the first row, and the ends of the list stay put
   expect(onSelect).toHaveBeenCalledTimes(3);
 });
 
+// Resolving the open conversation takes it out of the Open list while it stays on screen: J goes on down the queue
+// from where it was, not back to the top.
+test('after the open conversation leaves the list, j opens the row that was below it and k the one above', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  const [alpha, bravo, charlie] = rows;
+  const { rerender } = render(<ConversationList items={rows} selectedId={bravo.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  rerender(<ConversationList items={[alpha, charlie]} selectedId={bravo.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(onSelect).toHaveBeenLastCalledWith(charlie.id);
+  onSelect.mockClear();
+  rerender(<ConversationList items={rows} selectedId={bravo.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  rerender(<ConversationList items={[alpha, charlie]} selectedId={bravo.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  fireEvent.keyDown(document.body, { key: 'k' });
+  expect(onSelect).toHaveBeenLastCalledWith(alpha.id);
+});
+
+const more = (subject: string, digit: number): Conversation => ({ ...row('2026-10-15T05:00:00Z'), id: `${digit}${digit}${digit}${digit}1111-1111-4111-8111-111111111111`, subject });
+
+// A different list (a saved view, a channel, the next page) without the open conversation starts again at its top:
+// the open conversation's old row number means nothing there.
+test('in another list without the open conversation, j opens its first row', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  const [, , charlie] = rows;
+  const other = [more('Delta', 4), more('Echo', 5), more('Foxtrot', 6)];
+  const { rerender } = render(<ConversationList items={rows} selectedId={charlie.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  rerender(<ConversationList items={other} selectedId={charlie.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(onSelect).toHaveBeenLastCalledWith(other[0].id);
+});
+
+// A live refresh can drop the open conversation and add a new one on top in the same answer: J still opens the
+// row that was below it and K the one above, not whatever now sits at its old row number.
+test('when a refresh drops the open conversation and adds one on top, j and k open its old neighbours', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  const [alpha, bravo, charlie] = rows;
+  const delta = more('Delta', 4);
+  const fresh = more('November', 7);
+  const { rerender } = render(<ConversationList items={[alpha, bravo, charlie, delta]} selectedId={charlie.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  rerender(<ConversationList items={[fresh, alpha, bravo, delta]} selectedId={charlie.id} timezone="UTC" page={1} hasNextPage={false} onSelect={onSelect} />);
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(onSelect).toHaveBeenLastCalledWith(delta.id);
+  fireEvent.keyDown(document.body, { key: 'k' });
+  expect(onSelect).toHaveBeenLastCalledWith(bravo.id);
+});
+
 test('ArrowDown and ArrowUp move while focus is in the list, and nowhere else', () => {
   vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
   const onSelect = vi.fn();
@@ -295,6 +343,19 @@ test('a row names the customer, says what they wrote last and when the reply is 
   expect(within(calmRow).getByText('Due 11:30 AM')).not.toHaveClass('row-due-late');
   expect(within(calmRow).getByText('Lena Fischer')).toBeInTheDocument();
   expect(screen.queryByText('printer')).toBeNull();
+});
+
+// A list left open keeps counting: "1 h 20 min late" grows to "2 h 30 min late" without a reload.
+test('how late a row is grows while the list stays open', () => {
+  vi.setSystemTime(new Date('2026-11-02T05:30:00Z'));
+  const clock = { state: 'running', due_at: null, warn_at: null, met_at: null, breached_at: null, due_soon: false, overdue: false, business_minutes_left: null };
+  const late = { ...row('2026-11-02T05:00:00Z'), subject: 'Refund still not on my card',
+    sla: { state: 'overdue', first_response: { ...clock, due_at: '2026-11-02T04:10:00Z', breached_at: '2026-11-02T04:10:00Z', overdue: true }, resolution: null } };
+  render(<ConversationList items={[late] as unknown as Conversation[]} timezone="UTC" page={1} hasNextPage={false} />);
+  const lateRow = screen.getByRole('button', { name: /Refund still not on my card/ });
+  expect(within(lateRow).getByText('1 h 20 min late')).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(70 * 60_000); });
+  expect(within(lateRow).getByText('2 h 30 min late')).toBeInTheDocument();
 });
 
 test('without a running target a row shows when the customer last wrote, never when the team last touched it', () => {

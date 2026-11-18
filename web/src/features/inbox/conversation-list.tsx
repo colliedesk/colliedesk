@@ -2,7 +2,7 @@ import { Fragment, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { Conversation, ConversationViewer } from '../../api/schemas';
 import { dayGroup, formatDate, formatListTime, formatShortDate, zoneSuffix } from '../../lib/format-date';
-import { useNow } from '../../lib/use-now';
+import { useMinuteNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
@@ -26,6 +26,8 @@ interface ConversationListProps {
   filtered?: boolean;
   // The Open view is empty but the workspace has conversations: caught up, not new.
   nothingOpen?: boolean;
+  // What an empty list says where nothing but its place and status narrow it (the inbox page words it).
+  emptyText?: string;
   loading?: boolean;
   // refreshing: a refetch is running while the previous rows stay on screen.
   refreshing?: boolean;
@@ -59,7 +61,7 @@ function dotOf(item: Conversation, late: boolean): { tone: string; words: string
   return { tone: late ? 'urgent' : item.status, words: status };
 }
 
-export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
+export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, emptyText, loading = false, refreshing = false,
   failed = false, onRetry, onClearFilters, checkedIds, onToggle, draftIds, viewers, grouped = true, onTestMessage, nextStep }: ConversationListProps) {
   const [testing, setTesting] = useState(false);
   const [testFailed, setTestFailed] = useState<string>();
@@ -73,7 +75,8 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
       .finally(() => { testInFlight.current = false; setTesting(false); });
   };
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
-  const now = useNow(timezone);
+  // Minutes, so how late a row is grows while the list stays open; the day groups follow at midnight too.
+  const now = useMinuteNow();
   const settled = !loading && !failed;
   const brandNew = items.length === 0 && !filtered && !nothingOpen && settled && page === 1;
   const selecting = items.some((item) => checkedIds?.has(item.id));
@@ -107,7 +110,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
           {onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilter}</button>}</div></div>}
       {failed === true && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
-      {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{nothingOpen ? messages.noOpenConversations : messages.noConversations}</p>
+      {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{nothingOpen ? messages.noOpenConversations : emptyText ?? messages.noConversations}</p>
         {filtered && onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilters}</button>}</div>}
       {items.map((item, index) => {
         const group = dayGroup(item.updated_at, timezone, now);
@@ -123,7 +126,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
         const dot = dotOf(item, due?.late ?? false);
         return (
           <Fragment key={item.id}>
-          {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
+          {startsGroup && <h3 className="group-label">{messages.dayGroups[group]}</h3>}
           <div className="conversation-item" data-conversation-id={item.id}>
           <label className="row-check">
             <input type="checkbox" aria-label={messages.selectRow(item.contact_name, item.subject, full)} checked={checkedIds?.has(item.id) ?? false}

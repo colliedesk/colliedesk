@@ -1,20 +1,18 @@
 package mcpserver
 
 import (
-	"embed"
 	"io/fs"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"unicode"
+
+	"github.com/colliedesk/colliedesk/docs"
 )
 
-// userDocs is a copy of docs/user (go:embed cannot reach outside the module). The test
-// TestEmbeddedUserGuidesMatchTheDocsDirectory fails when they differ; `make sync-user-docs` copies.
-//
-//go:embed userdocs/*.md
-var userDocs embed.FS
+// userDocs is docs/user itself, embedded by the docs package at the repository root.
+var userDocs = docs.UserGuides
 
 // docSection is one heading of a guide with the text under it, ready to be scored.
 type docSection struct {
@@ -29,7 +27,7 @@ var (
 )
 
 func docSections() []docSection {
-	docIndexOnce.Do(func() { docIndex = buildDocIndex(userDocs, "userdocs") })
+	docIndexOnce.Do(func() { docIndex = buildDocIndex(userDocs, "user") })
 	return docIndex
 }
 

@@ -1569,10 +1569,11 @@ paths:
           in: query
           description: >-
             updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first,
-            then the most recently updated), waiting_longest (conversations awaiting the team, the
-            oldest customer message first, then every other conversation by last update), due (the earliest
-            running response target first, then the rest by last update; while the workspace's reply targets
-            are off, the same as waiting_longest). The web inbox asks for due unless the person picks another order.
+            then the most recently updated), waiting_longest (open conversations whose customer wrote last,
+            the oldest customer message first, then every other conversation, pending, resolved or closed
+            included, by last update), due (the earliest running response target first, then the rest by
+            last update; while the workspace's reply targets are off, the same as waiting_longest, and the
+            answer's sort says so). The web inbox asks for due unless the person picks another order.
           schema: {$ref: '#/components/schemas/ConversationSort'}
         - name: counts
           in: query
@@ -3927,6 +3928,13 @@ paths:
     get:
       operationId: listTags
       x-permission: tags:read
+      parameters:
+        - name: counts
+          in: query
+          description: >-
+            true adds conversation_count to each tag: how many conversations of the workspace carry it, in any
+            status (Settings → Tags shows it before a rename or delete). Leave it out when only the names are needed.
+          schema: {type: boolean}
       responses:
         '200':
           description: Workspace tags
@@ -3987,6 +3995,9 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: tag_name_taken, another tag of the workspace has the name; nothing was changed
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     delete:
       operationId: deleteTag
       x-permission: tags:delete
@@ -11278,6 +11289,7 @@ components:
         id: {type: string, format: uuid}
         name: {type: string}
         color: {type: string}
+        conversation_count: {type: integer, minimum: 0, description: 'Only in GET /api/v1/tags with counts=true. How many conversations of the workspace carry the tag, in any status.'}
     SavedReplyInput:
       type: object
       required: [title, body]
@@ -12434,6 +12446,7 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
+        sort: {$ref: '#/components/schemas/ConversationSort', description: 'The order the rows are in: the sort asked for, except due while the workspace''s reply targets are off, which is waiting_longest.'}
         status_counts:
           type: object
           description: Only with counts=true. How many conversations each status holds under every filter but the status.

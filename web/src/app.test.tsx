@@ -545,7 +545,7 @@ test.each(movedAddresses)('the old address %s opens %s', async (from, to) => {
 
 // The addresses that stay, with the tab they name.
 test.each([['/settings/members?tab=people'], ['/settings/members?tab=invites'], ['/settings/members?tab=groups'], ['/settings/members?tab=advanced'],
-  ['/settings/ai?tab=built-in'], ['/settings/ai?tab=external'], ['/settings/fields'], ['/settings/channels'], ['/settings/targets'], ['/settings/saved-replies']])('%s stays where it is', async (address) => {
+  ['/settings/ai?tab=built-in'], ['/settings/ai?tab=external'], ['/settings/fields'], ['/settings/channels'], ['/settings/targets'], ['/settings/saved-replies'], ['/settings/tags']])('%s stays where it is', async (address) => {
   settingsServer();
   const router = open(address);
   await screen.findByRole('heading', { level: 1 });
@@ -995,9 +995,34 @@ test('on every page the sidebar counts the open conversations and lists the save
   await waitFor(() => expect(router.state.location.pathname).toBe('/'));
   expect(router.state.location.search).toEqual({ status: 'open', assignee: 'me' });
   expect(within(rail).getByRole('link', { name: 'Mine, open' })).toHaveAttribute('aria-current', 'page');
+  // One place is marked at a time: the view, not the Inbox around it.
+  expect(within(rail).getByRole('link', { name: 'Inbox, 23 open' })).not.toHaveAttribute('aria-current');
   fireEvent.click(within(rail).getByRole('link', { name: 'Chat widget, needs attention' }));
   await waitFor(() => expect(router.state.location.search).toEqual({ channel_id: '55555555-5555-4555-8555-555555555555' }));
   expect(within(rail).getByRole('link', { name: 'support@northwind.help' })).not.toHaveAttribute('aria-current');
+  // Every status of the channel is still the channel.
+  await act(async () => { await router.navigate({ to: '/', search: { channel_id: '55555555-5555-4555-8555-555555555555', status: 'all' } }); });
+  expect(within(rail).getByRole('link', { name: 'Chat widget, needs attention' })).toHaveAttribute('aria-current', 'page');
+  expect(within(rail).getByRole('link', { name: 'Inbox, 23 open' })).not.toHaveAttribute('aria-current');
+  await act(async () => { await router.navigate({ to: '/', search: {} }); });
+  expect(within(rail).getByRole('link', { name: 'Inbox, 23 open' })).toHaveAttribute('aria-current', 'page');
+});
+
+test('on the bare inbox address Inbox is the place, even with a saved view that holds only the Open status', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', null)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/conversations': () => json(200, { items: [], page: 1, page_size: 50, status_counts: { open: 23, pending: 4, resolved: 9, closed: 0, spam: 0 } }),
+    '/api/v1/saved-views': () => json(200, { items: [{ ...savedView, name: 'Open', filters: { status: ['open'] } }] }),
+    '/api/v1/channels': () => json(200, { items: [], types: [] }),
+  });
+  open('/');
+  const rail = await screen.findByRole('navigation', { name: 'Main' });
+  const view = await within(rail).findByRole('link', { name: 'Open' });
+  expect(await screen.findByRole('heading', { level: 2, name: 'All channels' })).toBeInTheDocument();
+  expect(view).not.toHaveAttribute('aria-current');
+  expect(within(rail).getByRole('link', { name: 'Inbox, 23 open' })).toHaveAttribute('aria-current', 'page');
+  expect(rail.querySelectorAll('.rail-link[aria-current="page"]')).toHaveLength(1);
 });
 
 test('the top bar names the customer page like every other page', async () => {

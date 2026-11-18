@@ -148,7 +148,7 @@
 .billing-action { justify-self: end; }
 .billing-action .icon { width: 14px; height: 14px; }
 /* A link that leads on (Invite people) is drawn as the secondary button beside it. */
-.billing-action a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--line-control);
+.billing-action a.button { min-height: var(--control); display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid var(--line-control);
   border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-1); padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 500; color: var(--text-1); text-decoration: none; white-space: nowrap; }
 .billing-action a.button:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--text-1); }
 .cancel-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); padding: 0 var(--space-5); color: var(--text-3); font-size: var(--fs-small); }

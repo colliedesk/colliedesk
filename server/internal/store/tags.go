@@ -28,6 +28,9 @@ func (s *Store) UpdateTag(ctx context.Context, workspaceID, id, name string) (do
 			RETURNING id::text,name,color`, workspaceID, id, name).
 			Scan(&tag.ID, &tag.Name, &tag.Color)
 	})
+	if isUniqueViolation(err) {
+		return domain.Tag{}, domain.ErrTagNameTaken
+	}
 	if err != nil {
 		return domain.Tag{}, fmt.Errorf("update tag: %w", err)
 	}

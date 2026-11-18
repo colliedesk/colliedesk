@@ -1,4 +1,4 @@
-.PHONY: test build e2e eval-chat dev clean sync-user-docs docs-mcp
+.PHONY: test build e2e e2e-cross-browser eval-chat dev clean docs-mcp
 
 TEST_DATABASE_URL ?= postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable
 
@@ -6,8 +6,8 @@ test:
 	sh tests/mail-pipe-test.sh
 	node --test infra/mail/cloud-inbound-worker/worker.test.mjs
 	sh tests/install-test.sh
-	test -z "$$(gofmt -l server)" || { gofmt -l server; echo 'gofmt: format the files above' >&2; exit 1; }
-	cd server && go vet ./...
+	test -z "$$(gofmt -l server docs)" || { gofmt -l server docs; echo 'gofmt: format the files above' >&2; exit 1; }
+	cd server && go vet ./... ../docs/...
 	cd server && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' go test ./...
 	cd web && corepack pnpm typecheck
 	cd web && corepack pnpm test
@@ -23,7 +23,13 @@ build:
 # E2E_ARGS selects tests, for example E2E_ARGS='--grep @onboarding'.
 e2e:
 	cd web && corepack pnpm build
-	cd web && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' corepack pnpm e2e $(E2E_ARGS)
+	cd web && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' corepack pnpm e2e --project=chromium $(E2E_ARGS)
+
+# The core journeys on WebKit (Safari's engine) and Firefox, as the daily cross-browser workflow runs them.
+# First time: cd web && corepack pnpm exec playwright install --with-deps webkit firefox
+e2e-cross-browser:
+	cd web && corepack pnpm build
+	cd web && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' corepack pnpm e2e --project=webkit --project=firefox $(E2E_ARGS)
 
 # The AI chat eval asks Claude the questions of server/internal/ai/testdata/chat-eval.json with the real
 # prompt (a few cents; never in CI). It needs PostgreSQL and ANTHROPIC_API_KEY; AI_CHAT_EVAL_MODEL picks
@@ -32,18 +38,11 @@ eval-chat:
 	cd server && AI_CHAT_EVAL=1 TEST_DATABASE_URL='$(TEST_DATABASE_URL)' go test ./internal/ai -run TestChatEval -count=1 -v
 	cd server && AI_CHAT_EVAL=1 TEST_DATABASE_URL='$(TEST_DATABASE_URL)' go test ./internal/httpapi -run TestHelpChatAgainstClaude -count=1 -v
 
-# The server embeds a copy of docs/user for its documentation search tool (go:embed cannot reach
-# outside the Go module). Run this after editing a guide; a Go test fails when the copy is stale.
-sync-user-docs:
-	rm -f server/internal/mcpserver/userdocs/*.md
-	cp docs/user/*.md server/internal/mcpserver/userdocs/
-
 # The tool table of docs/user/mcp.md, the host guides docs/user/connect-*.md and the web app's
 # connect-snippets.generated.ts come from the MCP tool catalog (server/internal/mcpserver/docgen).
 # Run this after changing a tool or a guide template; a Go test fails when they are stale.
 docs-mcp:
 	cd server && go test ./internal/mcpserver/docgen -run TestGeneratedDocs -count=1 -update
-	$(MAKE) sync-user-docs
 
 dev:
 	docker compose up --build

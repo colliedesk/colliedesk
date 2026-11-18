@@ -4,14 +4,16 @@ import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } f
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useCreateAction, useCreateMutation } from '../../api/use-create';
 import { api, ReplyConflictError } from '../../api/client';
+import { savedViewsApi } from '../../api/saved-views';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
 import { leaveList, listIsBehind, showList, showThread } from './list-return';
 import { contactPart, ContactsPart } from '../contacts/contact-part';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
-import { apiQuery, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
+import { apiQuery, defaultSort, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
+import { scopedChannel } from '../../lib/inbox-scope';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
@@ -36,6 +38,7 @@ import type { TokenPermission } from '../../api/schemas';
 import { MentionsPane, useMarkMentionsRead } from './mentions-pane';
 import { mentionMessages } from './mention-messages';
 import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
+import { usePhone } from '../../lib/use-phone';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -122,6 +125,14 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const searchTerm = filters.search ?? '';
   const searchSettled = searchTerm !== '' && conversations.isSuccess && !conversations.isPlaceholderData;
   const hasResults = (conversations.data?.items.length ?? 0) > 0;
+  // The order Due first gives this workspace's list, as the server last answered a request for it (waiting_longest
+  // while reply targets are off). It is kept across filter changes, so the Sort menu does not flip while a page loads.
+  const [dueSort, setDueSort] = useState<string>();
+  const answeredSort = conversations.isPlaceholderData ? undefined : conversations.data?.sort;
+  const askedSort = filters.sort ?? defaultSort;
+  useEffect(() => { if (askedSort === 'due' && answeredSort) setDueSort(answeredSort); }, [askedSort, answeredSort]);
+  // A cached answer counts at once, so the menu does not say Due first for a moment when the inbox opens again.
+  const shownDueSort = askedSort === 'due' && answeredSort ? answeredSort : dueSort;
   const reportedSearch = useRef('');
   useEffect(() => {
     if (!searchSettled || reportedSearch.current === searchTerm) return;
@@ -137,14 +148,29 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     track('conversation_opened', { source: 'link' });
   }, [params.conversationId, selectedId]);
   const filtered = !isDefaultQuery(filters);
-  // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
-  const checkAny = !filtered && page === 1 && conversations.data?.items.length === 0;
+  // An empty Open view is either a new workspace or one that is caught up. The answer's status counts tell which; an
+  // answer without them asks for one row of All.
+  const emptyOpen = !filtered && page === 1 && conversations.data?.items.length === 0;
+  const counts = conversations.isPlaceholderData ? undefined : conversations.data?.status_counts;
+  const checkAny = emptyOpen && !counts;
   const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
   // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
-  const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
-  const activeID = selectedId ?? params.conversationId;
-  // With no conversation picked, the first row is the one on screen.
-  const shownID = activeID ?? (mentionsMode ? undefined : conversations.data?.items[0]?.id);
+  const nothingOpen = emptyOpen && (counts ? counts.open + counts.pending + counts.resolved + counts.closed > 0
+    : anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
+  // On a phone the list and a conversation take turns on the screen (layout.css): only the one the address names is
+  // in front of the person. Another is not open there: no presence, no mention marked read, no thread requests.
+  const phone = usePhone();
+  const activeID = phone ? params.conversationId : selectedId ?? params.conversationId;
+  // With no conversation picked, the first row is the one on screen. It stays the one on screen for this list until
+  // the person picks another, so a live refresh that puts a new row on top never swaps the thread and its reply box.
+  const firstRow = mentionsMode || phone ? undefined : conversations.data?.items[0]?.id;
+  const [pinned, setPinned] = useState<{ query: string; id: string }>();
+  // A pin made on the wide layout ends when the screen narrows to the phone one (a phone turned upright).
+  const pinnedID = !phone && !mentionsMode && pinned?.query === query ? pinned.id : undefined;
+  // Rows kept from the previous filters are not this list's first row.
+  const firstOfList = conversations.isPlaceholderData ? undefined : firstRow;
+  useEffect(() => { if (!pinnedID && firstOfList) setPinned({ query, id: firstOfList }); }, [pinnedID, firstOfList, query]);
+  const shownID = activeID ?? pinnedID ?? firstRow;
   const listed = conversations.data?.items.find((item) => item.id === shownID);
   // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
@@ -158,7 +184,16 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const detail = opened.data?.id === shownID ? opened.data : undefined;
   // The row is the newer while a change refetches the list; it borrows the detail's notices while their status agrees.
   const withNotices = listed && detail?.status_notices && detail.status === listed.status ? { ...listed, status_notices: detail.status_notices } : listed;
-  const selected = withNotices ?? detail ?? (activeID || mentionsMode ? undefined : conversations.data?.items[0]);
+  const fresh = withNotices ?? detail;
+  // Whatever moves the conversation on screen out of the list (a reply puts it behind the waiting ones, off
+  // the page; Resolve, an assignee or a tag takes it out of a filter; a teammate's change arrives), its row is
+  // gone before its by-id read answers. Until then the panes keep the last of it shown, so the header, the
+  // timeline and the reply box with its draft never leave the screen. A read that fails (deleted) lets it go,
+  // and so does leaving it: a conversation opened again later never shows an earlier copy.
+  const lastShown = useRef<Conversation>(undefined);
+  if (fresh || lastShown.current?.id !== shownID) lastShown.current = fresh;
+  const kept = !fresh && !opened.isError && lastShown.current?.id === shownID ? lastShown.current : undefined;
+  const selected = fresh ?? kept;
   // A conversation the person opened (a row picked, or its address) heads Recent in the search palette.
   const workspaceId = me.data?.workspace?.id;
   const opening = activeID && selected?.id === activeID ? selected : undefined;
@@ -193,7 +228,8 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const drafts = useQuery({ queryKey: ['ai-drafts', openID], queryFn: () => aiDraftApi.list(openID!), enabled: Boolean(openID) && reads('ai_assist:read') });
   const selectedDrafts = waitingWritten(drafts.data?.items);
   const earlierDrafts = earlierWritten(drafts.data?.items);
-  const [draftNotice, setDraftNotice] = useState<string>();
+  // What happened to a draft sent from the card belongs to its conversation: opening another one hides it.
+  const [draftNotice, setDraftNotice] = useState<{ conversationId: string; text: string }>();
   const afterDraft = (conversationId: string) => {
     void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
     void client.invalidateQueries({ queryKey: ['messages', conversationId] });
@@ -216,7 +252,14 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   // The default mailbox says whether customer mail arrives through it yet (the line under the title). With no
   // conversation open it is the query above; with one open it was read with the list, or goes out beside it.
   const defaultMailbox = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel, enabled: reads('channels:read') }).data;
-  const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') }).data?.types;
+  const channelQuery = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts, enabled: reads('channels:read') });
+  const channelList = channelQuery.data;
+  const channelTypes = channelList?.types;
+  // The list's title names a channel from this list, and a saved view from the sidebar's (read after the page's own
+  // requests): the title asks for nothing of its own. A role that may not read channels, or a list that could not be
+  // read, gets no names, so the title says "A channel" instead of staying blank.
+  const channelNames = channelList?.items ?? ((me.data && !reads('channels:read')) || channelQuery.isError ? [] : undefined);
+  const savedViews = useQuery({ queryKey: ['saved-views'], queryFn: savedViewsApi.list, enabled: false }).data?.items;
   // An empty list is where the next setup step is offered; Quick start asks for the same steps, so this is one request.
   const listEmpty = conversations.data?.items.length === 0 && !filtered;
   const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: Boolean(listEmpty && me.data) });
@@ -228,6 +271,8 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     const ref = conversation.channel_ref;
     return ref && several.has(ref.type) ? (ref.deleted ? messages.removedChannel(ref.name) : ref.name) : undefined;
   };
+  // Inside one channel the list's title already names it, so the rows leave it out; the open thread still says it.
+  const rowChannelLabel = scopedChannel(filters) ? () => undefined : channelLabel;
   // Shared with the app shell, so the limits cost no extra request.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
   const limits = config?.limits;
@@ -349,17 +394,18 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
       void client.invalidateQueries({ queryKey: ['conversations'] });
       openConversation(test.conversation_id);
     }) : undefined}
-    statusCounts={conversations.data?.status_counts} page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
+    statusCounts={conversations.data?.status_counts} dueSort={shownDueSort} page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
     onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
     threadOpen={threadOpen} onBack={backToList}
     query={filters}
+    channels={channelNames} savedViews={savedViews}
     viewsMenu={(!me.data || reads('saved_views:read')) && <SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
-    onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
+    onUpdate={(conversationId, changes) => update.mutateAsync({ conversationId, changes })}
     noticesFailed={Boolean(selected && opened.isError && mayTell(selected) && noticesOf(selected) === undefined)}
     onSetStatus={(conversationId, status, options) => update.mutateAsync({ conversationId, changes: options?.notify === false ? { status, notify: false } : { status } })}
-    onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
-    onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
+    onAddTag={(conversationId, tagId) => addTag.mutateAsync({ conversationId, tagId })}
+    onRemoveTag={(conversationId, tagId) => removeTag.mutateAsync({ conversationId, tagId })}
     onMessage={(kind, body, files, cc, seen, aiDraft, key, mentions) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key, mentions })}
     otherList={mentionsMode ? { label: mentionMessages.mentions, content: <MentionsPane timezone={me.data?.timezone ?? 'UTC'} selectedConversation={activeID} /> } : undefined}
     onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={reads('ai_assist:read') ? me.data?.ai_features?.draft : undefined}
@@ -370,7 +416,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     onManageSavedReplies={() => { window.open('/settings/saved-replies', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
     defaultMailbox={defaultMailbox} replyMailbox={selected && (!repliesVia || repliesVia.type === 'email') ? emailChannel.data : undefined}
-    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} rowChannelLabel={rowChannelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice?.conversationId === selected?.id ? draftNotice?.text : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
@@ -391,25 +437,25 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
           edit?.files);
       } catch (error) {
         if (!(error instanceof ReplyConflictError)) {
-          setDraftNotice(messages.draftRefused(error instanceof Error ? error.message : undefined));
+          setDraftNotice({ conversationId: draft.conversation_id, text: messages.draftRefused(error instanceof Error ? error.message : undefined) });
           throw error;
         }
         await afterDraft(draft.conversation_id);
-        setDraftNotice(error.newer.length > 0 && error.newer.every((reply) => reply.origin) ? messages.draftAfterImport : messages.draftAfterReply);
+        setDraftNotice({ conversationId: draft.conversation_id, text: error.newer.length > 0 && error.newer.every((reply) => reply.origin) ? messages.draftAfterImport : messages.draftAfterReply });
         return;
       }
       track('reply_draft_decided', { decision: 'sent' });
       setDraftNotice(undefined);
       await afterDraft(draft.conversation_id);
     }}
-    onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
+    onDiscardDraft={async (draft) => { await aiDraftApi.discard(draft.conversation_id, draft.id); setDraftNotice(undefined); track('reply_draft_decided', { decision: 'discarded' }); await afterDraft(draft.conversation_id); }}
     earlierDrafts={earlierDrafts}
     earlierDraftsNext={drafts.data?.next_before}
     onLoadOlderDrafts={openID ? async (before) => {
       const page = await aiDraftApi.list(openID, before);
       return { drafts: earlierWritten(page.items), next: page.next_before };
     } : undefined}
-    onRestoreDraft={reads('ai_assist:create') ? async (draft) => { await aiDraftApi.restore(draft.conversation_id, draft.id); await afterDraft(draft.conversation_id); } : undefined}
+    onRestoreDraft={reads('ai_assist:create') ? async (draft) => { await aiDraftApi.restore(draft.conversation_id, draft.id); setDraftNotice(undefined); await afterDraft(draft.conversation_id); } : undefined}
     contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
     searchSignal={searchSignal} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}

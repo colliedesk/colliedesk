@@ -85,9 +85,9 @@ jobs:
           path: |
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
-          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
             go-${{ runner.os }}-
       # Compiling, linking and listing every test binary need no database, so they run while
@@ -99,7 +99,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
         run: |
-          if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
+          if [ -n "$(gofmt -l . ../docs)" ]; then gofmt -l . ../docs; echo 'gofmt: format the files above' >&2; exit 1; fi
           go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
           # Five regular shards of three go test processes each, and three latency shards that run their
@@ -111,8 +111,9 @@ jobs:
         run: sh .github/scripts/ci-services.sh wait postgres
       - name: Test
         working-directory: server
-        # Patterns run at once; a '--' line waits for the ones before it. -v prints each test's time
-        # for go-test-timings.py.
+        # Patterns run at once; a '--' line waits for the ones before it. A 'gates <pattern> <package>...'
+        # line runs those packages one binary at a time (-p 1), so a gate never measures beside another
+        # package's gates. -v prints each test's time for go-test-timings.py.
         run: |
           pids=()
           status=0
@@ -122,7 +123,13 @@ jobs:
               pids=()
               continue
             fi
-            go test -count=1 -run "$pattern" -v ./... &
+            packages=(./...)
+            case "$pattern" in 'gates '*)
+              read -r -a packages <<< "${pattern#gates }"
+              pattern=${packages[0]}
+              packages=(-p 1 "${packages[@]:1}");;
+            esac
+            go test -count=1 -run "$pattern" -v "${packages[@]}" &
             pids+=($!)
           done < "$RUNNER_TEMP/go-test-patterns.txt"
           for pid in "${pids[@]}"; do wait "$pid" || status=1; done
@@ -132,14 +139,14 @@ jobs:
       # (the Anthropic SDK: about 23 seconds per job). Only shard 7 uploads, so one job pays for it.
       - if: >-
           github.event_name == 'pull_request' && matrix.shard == 7 &&
-          !startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))
+          !startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', runner.os, steps.go.outputs.go-version, hashFiles('go.sum')))
         name: Save the Go build cache of a new go.sum
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
-          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
   web:
     needs: pr-verified
     if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
@@ -177,7 +184,7 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
       # The arguments of every shard's run, and of the check that the shards cover them.
-      E2E_ARGS: --grep-invert @onboarding --fully-parallel --workers=3
+      E2E_ARGS: --project=chromium --grep-invert @onboarding --fully-parallel --workers=3
       # The channels journeys read the From line of a reply in Mailpit.
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
@@ -215,9 +222,9 @@ jobs:
           path: |
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
-          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
             go-${{ runner.os }}-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -242,7 +249,7 @@ jobs:
         if: matrix.shard == strategy.job-total
         run: |
           (cd web && sh ../.github/scripts/ci-background.sh start typecheck nice -n 10 corepack pnpm typecheck)
-          (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... && go run ./cmd/migration-check --repo=..')
+          (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... ../docs/... && go run ./cmd/migration-check --repo=..')
       # In the foreground it took 10 seconds before Chromium could install (run 39904636025).
       - name: Start the check that the shards run every end-to-end test exactly once
         if: matrix.shard == strategy.job-total
@@ -338,9 +345,9 @@ jobs:
           path: |
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
-          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
             go-${{ runner.os }}-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -361,7 +368,7 @@ jobs:
         working-directory: web
         env:
           JOURNEY_PATTERN: ${{ matrix.pattern }}
-        run: corepack pnpm exec vite build && corepack pnpm exec vite build -c vite.operator.config.ts && corepack pnpm e2e --grep "$JOURNEY_PATTERN"
+        run: corepack pnpm exec vite build && corepack pnpm exec vite build -c vite.operator.config.ts && corepack pnpm e2e --project=chromium --grep "$JOURNEY_PATTERN"
   # Builds the server image once, boots it, then runs install.sh exactly as a self-hoster does.
   # On main the image is pushed as sha-<commit>; publish-edge.yml retags that digest after CI.
   image:
@@ -506,6 +513,21 @@ jobs:
           python3 -I .github/scripts/plugin-version-check.py "$BASE_SHA"
       - name: A closed milestone opens its AGENTS.md issue
         run: sh tests/milestone-agents-md-test.sh
+      - name: Agent context budget rules (throwaway repositories)
+        run: python3 -I tests/agent-context-budget-test.py
+      - name: AGENTS.md and CLAUDE.md do not grow without the agent-context-increase label
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ALLOW: ${{ contains(github.event.pull_request.labels.*.name, 'agent-context-increase') }}
+        run: |
+          set -eu
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if [ "$ALLOW" = true ]; then
+            python3 -I .github/scripts/agent-context-budget.py "$BASE_SHA" HEAD --allow-growth
+          else
+            python3 -I .github/scripts/agent-context-budget.py "$BASE_SHA" HEAD
+          fi
       - name: Release tags follow Semantic Versioning from v1.0.0
         run: sh tests/release-tag-test.sh
       - name: Release button picks the Cloud commit and the next tag
@@ -516,7 +538,9 @@ jobs:
         run: python3 -I tests/roadmap-check-test.py
       - name: Design spec gate rules (stubbed issue comments)
         run: python3 -I tests/design-spec-check-test.py
-      - name: The PR says what it did with its issue's design spec
+      - name: PR body review-log rules (bodies from merged pull requests)
+        run: python3 -I tests/pr-body-review-log-check-test.py
+      - name: The PR says what it did with its issue's design spec and states the review result, not its rounds
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -526,6 +550,7 @@ jobs:
           set -eu
           gh pr view "$PR_NUMBER" --repo "$REPO" --json body --jq .body > "$RUNNER_TEMP/pr-body.md"
           DESIGN_SPEC_REPO="$REPO" python3 -I .github/scripts/design-spec-check.py "$RUNNER_TEMP/pr-body.md"
+          python3 -I .github/scripts/pr-body-review-log-check.py "$RUNNER_TEMP/pr-body.md"
       - name: Mail pipe wrapper exit codes
         run: sh tests/mail-pipe-test.sh
       - name: MTA recipient policy answers

@@ -144,9 +144,8 @@ trial in the funnel and emails the team. Test locally or with the e2e suite firs
 - **Name a test workspace for what it is** (`e2e-…`, `test-…`), so a person reading the database
   sees it at once.
 - **Every count of trials, activation or payments leaves out internal sign-ups.** Only
-  `trial_started` carries the flag: drop a workspace's later events (`email_channel_saved`,
-  `reply_sent`, `teammate_invited`, `mcp_tool_called`, `trial_offer_accepted`, `subscription_activated`, `workspace_snapshot`) by its
-  workspace id from an internal `trial_started`. A new query, alert or report that skips this
+  `trial_started` carries the flag: drop every later event of a workspace by its workspace id
+  from an internal `trial_started`. A new query, alert or report that skips this
   inflates the funnel.
 - `TestInternalSignupIsMarkedOnTrialStarted` guards the flag. Never weaken it; a new place that
   starts a trial sets the flag through the API's hot settings (`InternalSignups`) too.

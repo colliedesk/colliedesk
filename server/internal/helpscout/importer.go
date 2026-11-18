@@ -6,6 +6,7 @@ package helpscout
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/url"
 	"sort"
@@ -91,6 +92,15 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		return results.MarkImportFinished(ctx, tx, r.workspaceID, r.ledger.source, report.Status, "", r.now())
 	}); err != nil {
 		log.Printf("helpscout import: results baseline not marked for workspace %s: %v", options.WorkspaceSlug, err)
+	}
+	// An OK run is also the workspace's import_finished milestone. Help Scout runs from the command line only, so
+	// the failure is returned with the report: the operator can run it again.
+	if report.Status == "OK" {
+		if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+			return results.RecordImportFinished(ctx, tx, r.workspaceID, r.ledger.source, r.now())
+		}); err != nil {
+			return report, fmt.Errorf("record the finished import: %w", err)
+		}
 	}
 	// The import is already committed; a failed extension must not hide its report. A rerun retries.
 	extendedTo, err := importkit.ExtendTrial(ctx, r.db, r.workspaceID, r.now())

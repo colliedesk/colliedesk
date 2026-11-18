@@ -1,4 +1,4 @@
-# Work the inbox
+# Inbox overview
 
 The inbox has three panes: the **conversation list** on the left, the **timeline** in the middle
 with the composer below it, and **conversation details** on the right. On a narrower screen the
@@ -23,7 +23,12 @@ On a computer the sidebar on the left starts open. From the top it has:
   **Reports** (the [results](results.md));
 - **Views**: your saved views, each opening the inbox on its filters;
 - **Channels**: each channel of the workspace, opening the inbox on its open conversations. A channel that needs
-  attention has an orange dot; its page in **Settings → Channels** says why;
+  attention has an orange dot; its page in **Settings → Channels** says why.
+
+The sidebar marks one place: the channel or saved view the list shows, or else **Inbox**. A channel stays marked
+while you change the status, the order or the search inside it, and while **Filter** picks narrow it; a second
+channel makes the list Inbox again. A view stays marked while you change its order or search, and its status too
+when the view saved none. A view that saved only a status is never marked on the plain inbox: that list is **Inbox**;
 - at the foot, **Invite teammates** (for someone who may invite; it opens **Settings → Members → Invites**), **Settings**, and
   you: your name and address, which open the account menu.
 
@@ -44,7 +49,9 @@ messages take most of it. The top row has **Back to Inbox** (the arrow), the sub
 and **Show details** (the panel icon), which opens the properties, tags and the customer's other
 conversations. Under it the status, priority and customer slide sideways beside **Resolve**. **Back to
 Inbox**, or the browser's Back, returns to the list with the same filters and scrolled to where you left
-it. The workspace name and your address stay at the top while the page scrolls.
+it. The workspace name and your address stay at the top while the page scrolls. While only the list is on
+screen, no conversation counts as open: teammates do not see you viewing one, and a note that asks you stays
+unread in Mentions until you tap its conversation.
 
 The composer at the bottom is one line with **Send reply** until you tap it; the lock beside it starts a
 **Private note** in one tap. Tapped, it opens with the cursor in it, with
@@ -88,10 +95,6 @@ your own, not only the default one: "support@acme.com and billing@acme.com" when
   come back here", and the reply box of an email conversation whose mailbox does not forward yet says:
   "The customer's answer goes to your mailbox until it forwards here."
 
-Agents read the same in one call: `mail_switch` (the mailboxes, each with `old_help_desk`, and whether
-the workspace finished an import), `mail_through_mailbox` and `answers_before_forwarding` of `GET /api/v1/channels/email`, or of the
-MCP tool `colliedesk_email_channel_get`.
-
 **Search from any page**
 
 The search field in the top bar (or **Ctrl K**, **⌘K** on a Mac, from any page) opens the search palette over the
@@ -103,63 +106,72 @@ page. Close it with **Esc**: the focus goes back to where it was.
   Only the places and actions your roles allow are listed, as in the sidebar.
 - Type a name, an email address or words from a subject: **Conversations** (with their status) and **Customers**
   that match are listed, the matching words in bold, the first row chosen. They are the same searches as the inbox
-  search box and its **Customers** list. A place or action whose name matches is listed too.
+  search field and its **Customers** list. A place or action whose name matches is listed too.
 - The last row, **See all results for "*words*" in the inbox**, opens the inbox list searched for those words in
   every status (`/?search=words&status=all`), with the number of conversations that match.
 - **↑** and **↓** move the chosen row, **Enter** opens it, a click opens any row.
 - Recent is kept by this browser only, for each workspace; clearing the browser's site data empties it.
 
-AI agents search the same way with `colliedesk_inbox_search` (conversations) and `colliedesk_contacts_find`
-(customers); see [MCP](mcp.md).
-
 **Find conversations**
-- The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every
+- The inbox opens on **Open** conversations, the ones that still need an answer. **All statuses** shows every
   status but Spam. When nothing is open but the workspace has conversations, the list says so instead of
-  showing the new-workspace steps.
-- The top of the list is one row: the **Status** tabs, then **Sort** and **Filter** on the right. While you
-  search or a filter is on, the search box takes a row of its own above the tabs, with **Filter**, **Sort** and
-  **Views** beside it, and the chips of the filters show below the tabs. When the tabs do not fit beside the icons,
-  they scroll sideways.
-- Pick a **Status** tab, and narrow further with **Filter** and **Sort**; see [Filter and sort](#filter-and-sort)
-  below. **Open**, **Pending** and **Resolved** are always there. **All** and **Closed** join them while you search
-  or a filter is on, and **Spam** once it holds a conversation.
-- **Open** and **Pending** say how many conversations they hold (**Open 23**), and so does the tab you are
-  on; the numbers follow the filters on screen. While you search, the tab counts the results when they fit
-  on one page. The API gives the same numbers with `counts=true` on `GET /api/v1/conversations`
-  (`status_counts`).
-- Start a search from the top bar's search field (from any page, **Ctrl K**, or **⌘K** on a Mac): type your words and
-  choose **See all results** (see **Search from any page** above). The list then shows its search
-  box, **Search conversations**, above the status tabs, with your words in it, for as long as the search is on;
-  refine the words there, or select its **×** to clear the search. An empty box closes again when you press
-  **Esc** or move on.
+  showing the new-workspace steps. Inside a channel or a saved view, or on another status, an empty list says
+  what is empty there (**No open conversations in Zalo OA.**, **No pending conversations.**). Only the whole
+  Open queue says **Every customer has an answer.**: open conversations may still wait outside a channel or a
+  view. **No conversations match these filters.** is kept for a search or a filter you added.
+- The top of the list has two rows. The first names where you are: the saved view on screen, else the channel
+  you opened from the sidebar, else **All channels**; then **Search** (the magnifier) and **Filter**. The second
+  row is the status on the left and the order on the right. Chips of the filters that are on show under it.
+- The status button shows the status you are on and how many conversations it holds (**Open 6**). Select it
+  for the menu: **Open**, **Pending**, **Resolved** and **Closed**, each with its count (a zero shows as 0),
+  **Spam** once it holds a conversation, then **All statuses**. One click picks a status and closes the menu.
+  A link or a view with several statuses shows their names on the button (**Open, Pending**), and no item is ticked.
+  From the keyboard, the arrow keys move, **Enter** picks and **Esc** closes it. The counts follow the filters
+  on screen; while you search they count the results when they fit on one page.
+- Narrow further with **Filter**, and change the order with the order on the right; see
+  [Filter and sort](#filter-and-sort) below.
+- **Search** turns the title into a search field, **Search conversations**, that says where it looks
+  (**in Zalo OA**, **in all channels**). The top bar's search field (from any page, **Ctrl K**, or **⌘K** on a
+  Mac) leads there too: type your words and choose **See all results** (see **Search from any page** above).
+  The field stays while the search is on; refine the words there, or select its **×** to clear the search and
+  bring the title back. An empty field closes again when you move on, or when you press **Esc**.
 - A search matches the subject, message text and the customer's name and email, in every status but Spam unless you picked a
-  status tab first, so imported closed tickets are found; the view stays on **All** after you clear
-  the search. Characters such as `%` and `_` are matched
+  status first, so imported closed tickets are found; the list stays on **All statuses** after you clear
+  the search. Inside a saved view that saved a status, the search keeps that status and the view stays the place. Characters such as `%` and `_` are matched
   literally.
 - A search for a name or an email address also lists the matching customers under **Customers**,
   above the conversations. Select one to open the customer's page with every conversation they had;
   see [Customers](contacts.md).
 - The customer's name under the subject of an open conversation opens the same page.
-- A conversation you opened stays on screen after you resolve or close it, although it leaves the
-  Open list.
-- When nothing matches, **Clear filters** below the message resets the search and every filter, and
-  returns to **Open**, in one step.
-- By default the list is ordered by **Due first** (see [Filter and sort](#filter-and-sort)); ordered by latest activity it is grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
+- A conversation you opened stays on screen, with your half-written reply, whenever it leaves the list
+  you are looking at: you resolve or close it, assign it out of **Unassigned**, remove the tag you
+  filtered on, or reply and it moves behind the conversations still waiting, onto the next page.
+- When you open the inbox without picking a conversation, the first one in the list shows beside it. It stays
+  there until you pick another, so mail that arrives on top of the list never swaps it, or your half-written
+  reply, for another conversation.
+- When nothing matches while a search or a filter is on, **Clear filters** below the message resets the search
+  and every filter, and returns to **Open**, in one step. In a channel it keeps the channel.
+- By default the list is ordered by **Due first** (**Waiting longest** while reply targets are off; see [Filter and sort](#filter-and-sort)); ordered by latest activity it is grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
 - Each row shows, from the top: a status dot and the customer's name, with the time on the right; the
   subject; and the start of what the customer wrote last, on one line. The dot is the status colour (blue
   Open, amber Pending, green Resolved, a ring for Closed and Spam) and red for an urgent conversation or one
   whose reply target passed; a screen reader reads the status in words.
+- When the workspace has two or more channels of one type, each row also names its channel. Inside one channel the
+  title already names it, so the rows leave it out; the open conversation still shows it above the thread.
 - The time on the right is when the customer last wrote: your own replies and private notes never change
   it. A conversation the customer never wrote in shows when it last changed. While a
   [reply target](response-targets.md) runs, the row shows **Due** and the time instead, and once it passed,
-  how late it is in red (**12 min late**); the tooltip names the clock and says it counts business hours.
+  how late it is in red (**12 min late**), counted again each minute while the inbox stays open; the tooltip
+  names the clock and says it counts business hours.
 - A row under **Today** shows only its time; an earlier row shows its date. Days follow your timezone
   (see [Timezones](timezones.md)). The full date and time are in the tooltip of the row and are read out
   by a screen reader. Tags are in the conversation's details, not on the row.
 - Dates from an earlier year show the year, for example imported history.
 - **Move with the keyboard:** press **J** to open the next conversation in the list and **K** for the
   previous one. While a row (or its box) has the focus, **Down arrow** and **Up arrow** do the same. The
-  focus moves to the row you opened. With no conversation open, **J** opens the first one. The keys do
+  focus moves to the row you opened. With no conversation open, **J** opens the first one. Once the open
+  conversation leaves the list (you resolved it, for example), **J** opens the one that was below it and **K**
+  the one above. In another list without it (a saved view, a channel, the next page), **J** opens the first row. The keys do
   nothing while you type in a box, while you hold Ctrl, Cmd, Alt or Shift, or at the first and last row of the
   page; use **Next page** to go on.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
@@ -190,19 +202,15 @@ In the web app:
 4. A link with `?ref=` opens the list on that conversation, in every status, with a **Reference** chip
    that removes it.
 
-`GET /api/v1/conversation-number-series` lists the series; `PUT /api/v1/conversation-number-series/{series}`
-adds or changes one (`workspace:update`, which the Admin role holds; an agent token with it does it at once). MCP: `colliedesk_number_series_list`,
-`colliedesk_number_series_set`.
-
-Find a conversation by its code with `?ref=` on `GET /api/v1/conversations` (MCP `ref` of
-`colliedesk_inbox_search`): another case, spaces around it or more or fewer leading zeros match, a code of
-another year does not. Search words that are a code find that conversation, ahead of the rest.
+A code finds its conversation in another case, with spaces around it, or with more or fewer leading
+zeros; a code of another year does not. Search words that are a code find that conversation, ahead of the
+rest.
 
 ## Filter and sort
 
-**Filter** (the funnel icon at the right of the status tabs; next to the search box while you search or a filter
-is on) holds every filter. Ticking several values of one filter shows
-conversations with any of them; each filter you add narrows the list further.
+**Filter** (the three lines at the right of the list's title) holds every filter. Each value has a box, ticked once you
+pick it. Ticking several values of one filter shows conversations with any of them; each filter you add narrows the
+list further. The menu stays inside the screen and scrolls by itself when its filters do not fit.
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me**, each other teammate, or **Unassigned**.
 - **Tags**: conversations with any of the ticked tags. Once you tick two or more, **Has every chosen tag**
@@ -225,9 +233,12 @@ conversations with any of them; each filter you add narrows the list further.
   details name it under **Organization**; selecting it lists that organization's conversations in every
   status (`organization=`).
 
-Each active filter shows as a chip under the status tabs; select its **x** to remove it, or **Clear all**
-to go back to **Open**. While a filter is on, the search box shows above the tabs, and the Filter button is
-filled and counts the filters that are on.
+Each active filter shows as a chip under the status and the order, the filter's name then its value
+(**Priority Urgent**); select its **×** to remove it, or **Clear** to go back to **Open** in the same place (the
+channel the title names stays). While a filter is on,
+the Filter icon turns orange and says how many filters are on beside it. The channel the title names has no chip
+and is not counted: the title says it. The status, the order and the search have their own places and never show
+as chips.
 
 A link can set filters that the menu does not list. They work and show as chips:
 `awaiting=customer` (**Waiting on the customer**: the newest message is your team's reply),
@@ -236,10 +247,13 @@ A link can set filters that the menu does not list. They work and show as chips:
 `created_before`, `updated_after` and `updated_before` (UTC instants; the chip shows the days in your
 timezone, see [Timezones](timezones.md)).
 
-**Sort** (the arrows icon next to Filter; its tooltip names the order in use) orders the list by **Due first** (the default:
-the earliest [reply target](response-targets.md) first; while reply targets are off, the same as Waiting longest), **Latest activity**,
-**Waiting longest** (conversations waiting on you, the customer who wrote longest ago first, then everything else) or
-**Priority** (urgent first). Only the
+The order (at the right of the status, the arrows icon and the order in use in words, such as **Due first**) opens
+the **Sort** menu. It orders the list by **Due first** (the default:
+the earliest [reply target](response-targets.md) first; while reply targets are off nothing is due, so the list is ordered
+Waiting longest and the menu says **Waiting longest**), **Latest activity**,
+**Waiting longest** (open conversations waiting on you, the customer who wrote longest ago first, then everything else by
+latest activity: pending ones wait on the customer, and a resolved or closed one waits on nobody, even when the customer
+wrote last) or **Priority** (urgent first). Only the
 latest-activity order is grouped under Today and Earlier. A link can also set `sort=updated_asc`,
 `created_desc` or `created_asc`; the menu then shows that order as chosen.
 
@@ -247,14 +261,11 @@ The filters, the sort and the search are part of the page address, so you can bo
 link to a teammate. Back returns to the list you came from. A value the inbox does not know (an old or
 mistyped link) is left out, and the rest of the link still applies. The search runs once you pause typing.
 
-The same filters work in the API (`GET /api/v1/conversations`, see `contracts/openapi.yaml`) and for AI
-agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
-
 ## Saved views
 
-**Views** (the bookmark icon next to Sort, beside the search box) keeps sets of filters under a name. It shows
-while you search or a filter is on; with neither, search from the top bar or turn a filter on to reach it. The
-sidebar lists your views at all times.
+**Views** (the bookmark icon after Filter) keeps sets of filters under a name. It shows while you search or a
+filter is on; with neither, search or turn a filter on to reach it. The sidebar lists your views at all times, and
+the list's title names the view on screen.
 - Set the filters, sort and search you want, then under **Save these filters** type a name, choose **Only
   me** or **Everyone in the workspace**, and select **Save view**.
 - Select a view to open its filters. The view that matches the list on screen is marked.
@@ -267,8 +278,7 @@ sidebar lists your views at all times.
   never changes a conversation.
 - Names are unique, ignoring case, among your personal views and among the shared ones. Each person keeps
   at most 50 personal views and a workspace at most 50 shared ones.
-- Views are in the [export](export.md) (`saved-views.ndjson`), and AI agents use them through the
-  `colliedesk_saved_view_*` tools.
+- Views are in the [export](export.md) (`saved-views.ndjson`).
 
 **Know when something new arrives**
 - Any page of Colliedesk you have open (including Settings) checks every 20 seconds. The inbox reloads the list by itself when a conversation is created, when a teammate assigns one
@@ -313,8 +323,6 @@ sidebar lists your views at all times.
   leaving the inbox takes you off at once; a tab that stops answering (a laptop that sleeps) drops
   off within 15 seconds, or 150 seconds with a reply typed.
 - Only the fact that a reply is being written is shared, never its text. Private notes do not count.
-- The same list is in the API: the `viewing` field of `GET /api/v1/inbox/activity`, and
-  `PUT /api/v1/conversations/{id}/presence` for one conversation.
 
 **Change many conversations at once**
 - At rest the list shows no boxes. Point at a row, or move the focus to it, and its box shows at its left;
@@ -324,12 +332,12 @@ sidebar lists your views at all times.
   tick every row between it and the row you ticked last. Ticking a box does not open the conversation; a
   click anywhere else on the row opens it, also while selecting. With the keyboard, press Tab to reach a
   box and Space to tick it.
-- While at least one row is selected, the status tabs give their place to the selection: a box that
+- While at least one row is selected, the status and the order give their place to the selection: a box that
   ticks every row of this page (**Select all on this page**; a dash means some are ticked), how many are
   selected of the rows on the page (**3 of 23 selected**) and a row of icon buttons; hover or focus one to see its name:
   **Resolve** (one press), **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
-  **Tags**, **Spam** and **Clear selection**. Sort, Filter and, while it shows, the search box stay in view. There is no bulk delete.
-  In the **Spam** tab the bar offers **Not spam** in place of **Resolve** and **Set status**; see [Spam](#spam).
+  **Tags**, **Spam** and **Clear selection**. The title (or the search field), Search and Filter stay in view. There is no bulk delete.
+  In **Spam** the bar offers **Not spam** in place of **Resolve** and **Set status**; see [Spam](#spam).
 - With a conversation in the selection whose status may tell its customer (one of a Zalo OA, or one a
   Zalo message was moved into), **Tell customers** sits before the icons, ticked for each new selection: **Resolve** and **Set status** then tell each
   customer whose channel has words for the new status (see [Telling the customer](#telling-the-customer)).
@@ -337,7 +345,7 @@ sidebar lists your views at all times.
 - In **Tags**, a check mark means every selected row has the tag and a dash means some do. Choosing a
   checked tag removes it from all of them; choosing any other tag adds it to the rows that lack it.
 - Press Escape to close an open menu; press it again, anywhere in the list, to clear the selection. The
-  tabs come back.
+  status and the order come back.
 - A choice applies to every selected row at once, up to 50 rows. It is all or nothing: if one change
   cannot be made, no conversation changes, the selection stays and a message says so. Try again.
 - After a successful change the selection clears, the list reloads and a line says
@@ -345,8 +353,6 @@ sidebar lists your views at all times.
   use the other tag action.
 - Only rows on the current page stay selected. Changing the page, the filters or the search drops the
   rows that left the list from the selection.
-- The same change is available through the API: `PATCH /api/v1/conversations` with
-  `{"ids": [...], "changes": {...}}`. See `contracts/openapi.yaml`.
 
 **Who wrote each message**
 - A reply or private note shows the name of the teammate who wrote it (their email when they have no
@@ -377,20 +383,21 @@ sidebar lists your views at all times.
   send the reply or note. If the send fails, or a reload cuts it off, the text is written back, and the
   next time the conversation opens it is dropped if the reply or note did arrive, so it is never offered
   twice. It also goes seven days after you last opened or edited it, and for every conversation when you sign out, so a
-  teammate who signs in on the same browser never sees it. Attached files are not kept. Another browser or
-  device does not see it. Two tabs of the same browser share it: when you type in one, the other tab's
+  teammate who signs in on the same browser never sees it. The **Cc** is kept with the text as you left it, so an
+  address you removed is not copied when you come back. Attached files are not kept. Another browser or
+  device does not see it. Two tabs of the same browser share it, **Cc** included: when you type in one, the other tab's
   box takes the newer text and says **Updated from another tab**, unless you typed different text in that
   tab too. Then your text stays, and the tab says **Another tab has a different draft** with **Use it**
   and **Keep mine**.
 - **One press sends once.** The button is disabled while a message is being sent, and every send carries
   its own key, so pressing twice, or retrying after a lost connection, never posts the same note or reply
-  twice. Through the API, send the same `Idempotency-Key` header on every retry of one message.
+  twice.
 - **Someone replied while you were writing.** When a teammate's reply (or one you sent from another
   tab, or an AI agent's) reached the customer after you started your reply, Colliedesk does not send
   yours. Your text stays in the box, their reply shows above it with its time (an imported reply keeps
   its own time and says where it came from), and you choose **Send anyway** or **Edit reply**. Either
   way you are asked about those replies once. Private notes never trigger it.
-- A reply draft an AI agent left (`colliedesk_reply_draft`) shows above the reply box with the
+- A reply draft an AI agent left shows above the reply box with the
   token's name; you edit it, send it or discard it. Sending it is a reply like any other, so the same
   check applies.
 - A draft can carry files (up to 10, like a message). They are listed on the draft, each a download,
@@ -448,8 +455,6 @@ sidebar lists your views at all times.
 - On the hosted cloud trial, email goes only to customers who wrote to you first, so a new conversation
   cannot be sent until you verify your sending domain or choose a plan. The window says so before you
   type, links to Settings and the plans, and takes no input. See [Plan and billing](billing.md).
-- AI agents start one with the MCP tool `colliedesk_conversation_start`, or the API
-  `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
 
 **Change the conversation**
 - **Resolve** above the thread sets an open or pending conversation to Resolved in one press, at any
@@ -467,28 +472,28 @@ In the details pane (**Show details** on a narrower screen):
 - **Priority**: Urgent, High, Normal, Low.
 - **Assignee**: **Me** first, then each teammate, then **Unassigned**.
 - **Tags**: see [Tags](tags.md).
+- A change shows the value you picked at once, while it saves. If it cannot be saved, a message under the
+  row says so (**Priority not saved. Try again.**) and the row shows the value the conversation still has.
 
 ## Spam
 
 Junk that reached the support address (adverts, phishing) does not belong in the queue. **Spam** sits
 beside **Resolve** above the thread, and in the action bar when rows are selected.
 
-- **Spam** moves the conversation out of the inbox and every view, the **All** tab and search
-  included, into the **Spam** tab. Its [response clocks](response-targets.md) stop and
+- **Spam** moves the conversation out of the inbox and every view, **All statuses** and search
+  included, into **Spam** (in the status menu). Its [response clocks](response-targets.md) stop and
   [Results](results.md) stop counting it. Nobody is told, the customer included.
 - The sender is marked too: their later mail opens (or joins) a conversation straight in **Spam**, with
   no notification, no clock and no received notice. Mail from the same address to another workspace is
   not touched.
 - A message at the foot of the list names the sender, with **Undo**. Undo is the same as **Not spam**.
-- The **Spam** tab lists these conversations under one line that says what Spam does. Open one and
+- **Spam** in the status menu lists these conversations under one line that says what Spam does. Open one and
   press **Not spam** above the thread, or select several and press **Not spam** in the action bar: each
   goes back to the status it had (a conversation that arrived in Spam goes to **Open**), and mail from its
   sender reaches the inbox again.
 - A conversation in Spam keeps its status until it is taken out: **Resolve**, **Set status** and the
   details' **Status** do not apply to it.
 - Spam is a status in the [export](export.md) (`spam`); a marked sender's contact carries `spam_since`.
-- AI agents use `colliedesk_conversations_spam` (permission `conversations:update`); the API is
-  `PUT /api/v1/conversations/spam` with `{"ids": [...], "spam": true}` (or `false` for Not spam).
 
 **Move messages to another conversation**
 A customer's message that landed in the wrong conversation can be moved, with its files: to another
@@ -516,23 +521,16 @@ line. A message taken back waits in Review as a card that says who took it back.
 - A resolved or closed conversation that gets a moved message reopens, as it does when the customer
   writes again.
 - When every customer message of a conversation goes to another and nobody replied in it, wrote a note
-  or assigned it yet, the move can also close it as no new request (`close_source`); it then points to
+  or assigned it yet, the move can also close it as no new request; it then points to
   where its messages went. Once someone worked on it, closing is refused and only the messages move.
 - A message moved into a conversation of another customer stays theirs: replies go to the conversation's
-  customer only, never suggest copying the writer and never thread on their mail. The move says so
-  (`other_contact`), and says when the message came through another channel (`other_channel`).
+  customer only, never suggest copying the writer and never thread on their mail. The move says so, and
+  says when the message came through another channel.
 - A customer's later answer to a moved message follows it to where it went.
 - Every move can be undone: the messages go back, a conversation the move closed reopens, a status it
   changed comes back while nobody changed the conversation or wrote in it since, and a conversation a
   split opened closes and points back. Only the newest move of a message can be undone, and a message
   taken back to the queue only while its card waits.
-
-AI agents move messages with the MCP tools `colliedesk_messages_move`, `colliedesk_message_moves_list`
-and `colliedesk_message_move_undo`, or the API `POST /api/v1/conversations/{id}/messages/move`
-(`message_ids`, `to: {conversation_id}`, `{new: {subject}}` or `{queue: true}`, `close_source`), `GET
-/api/v1/conversations/{id}/message-moves` (the moves out of and into a conversation) and `POST
-/api/v1/message-moves/{id}/undo`; moving and undoing need `conversations:update`. Through the API, send the same
-`Idempotency-Key` header on every retry of one move or undo: a repeat answers what the first one got.
 
 **Trial and locked workspaces** (hosted cloud only)
 During the trial a banner under the workspace name shows the days left. When the trial or the
@@ -548,11 +546,49 @@ See [Plan and billing](billing.md).
   channel, as its own message, shown in the timeline as **Sent by the channel · not a reply**. Email and
   web form conversations are never told.
 - Every way to set a status has a quiet one: the arrow next to **Resolve** / **Reopen**, unticking **Tell
-  the customer** in Status, or **Tell customers** in the bulk bar. The API takes `notify: false` on
-  `PATCH /api/v1/conversations/{id}` and on the bulk change.
+  the customer** in Status, or **Tell customers** in the bulk bar.
 - When a status was set by something other than a person on your team (an AI agent, the customer
   writing or typing Reopen, the import, or the channel closing it by itself), a quiet line in the
   timeline says who, at the time it happened.
-- A status change that would tell a customer needs `messages:send`. An AI agent whose token lacks it
-  is refused with the channel that would tell them, and can set the status quietly with
-  `notify: false` instead.
+- A status change that would tell a customer needs `messages:send`.
+
+## For developers and AI agents
+
+The routes are in `contracts/openapi.yaml`; the MCP tools are in [MCP](mcp.md).
+
+- Moving your email: `GET /api/v1/channels/email`, or the MCP tool `colliedesk_email_channel_get`, gives
+  the same facts in one call: `mail_switch` (the mailboxes, each with `old_help_desk`, and whether the
+  workspace finished an import), `mail_through_mailbox` and `answers_before_forwarding`.
+- Search: AI agents search the same way as the inbox with `colliedesk_inbox_search` (conversations) and
+  `colliedesk_contacts_find` (customers).
+- Filters and counts: the inbox filters are the filters of `GET /api/v1/conversations` and of
+  `colliedesk_inbox_search`. `counts=true` on `GET /api/v1/conversations` returns the status counts
+  (`status_counts`).
+- Reply drafts: an AI agent leaves a reply draft with `colliedesk_reply_draft`.
+- Conversation numbers: `GET /api/v1/conversation-number-series` lists the series.
+  `PUT /api/v1/conversation-number-series/{series}` adds or changes one. It needs `workspace:update`, which
+  the Admin role holds; an agent token with it does it at once. The MCP tools are
+  `colliedesk_number_series_list` and `colliedesk_number_series_set`.
+- Find by code: `?ref=` on `GET /api/v1/conversations`, or `ref` of `colliedesk_inbox_search`, finds a
+  conversation by its code, with the same matching as the inbox.
+- Saved views: AI agents use them through the `colliedesk_saved_view_*` tools.
+- Who else is on a conversation: the `viewing` field of `GET /api/v1/inbox/activity` gives the same list.
+  `PUT /api/v1/conversations/{id}/presence` reports presence on one conversation.
+- Change many conversations: `PATCH /api/v1/conversations` with `{"ids": [...], "changes": {...}}` makes
+  the same change as the bulk bar.
+- Send once: send the same `Idempotency-Key` header on every retry of one message, so it is posted once.
+- Start a conversation: AI agents use the MCP tool `colliedesk_conversation_start`, or
+  `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
+- Spam: AI agents use `colliedesk_conversations_spam` (permission `conversations:update`). The route is
+  `PUT /api/v1/conversations/spam` with `{"ids": [...], "spam": true}` (or `false` for Not spam).
+- Move messages: AI agents use the MCP tools `colliedesk_messages_move`, `colliedesk_message_moves_list`
+  and `colliedesk_message_move_undo`. The routes are `POST /api/v1/conversations/{id}/messages/move`
+  (`message_ids`, `to: {conversation_id}`, `{new: {subject}}` or `{queue: true}`, `close_source` to close
+  the emptied conversation), `GET /api/v1/conversations/{id}/message-moves` (the moves out of and into a
+  conversation) and `POST /api/v1/message-moves/{id}/undo`. Moving and undoing need
+  `conversations:update`. The answer flags a message moved to another customer (`other_contact`) or from
+  another channel (`other_channel`). Send the same `Idempotency-Key` header on every retry of one move or
+  undo: a repeat answers what the first one got.
+- Telling the customer: `notify: false` on `PATCH /api/v1/conversations/{id}` and on the bulk change sets
+  a status quietly. An AI agent whose token lacks `messages:send` is refused with the channel that would
+  tell the customer, and can set the status quietly with `notify: false` instead.

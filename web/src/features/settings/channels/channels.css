@@ -75,7 +75,7 @@ a.ch-type::after, button.ch-type::after { content: ""; flex: none; width: 16px; 
 .ch-detail-head .ch-row-name > span { gap: var(--space-1); }
 .ch-detail-head h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 28px; }
 .ch-detail-head .ch-row-actions { min-height: var(--control); }
-.ch-back { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control, 32px); color: var(--text-2); font-size: var(--fs-ui); text-decoration: none; }
+.ch-back { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control); color: var(--text-2); font-size: var(--fs-ui); text-decoration: none; }
 .ch-back:hover { color: var(--text-1); }
 /* Underline tabs inside a channel: 36px tall, 20px apart, the open one underlined in text-1. */
 .ch-detail > .seg-tabs, .ch-tabs-row > .seg-tabs { display: flex; gap: var(--space-5); border: 0; border-radius: 0; background: none; padding: 0; box-shadow: inset 0 -1px var(--line); }

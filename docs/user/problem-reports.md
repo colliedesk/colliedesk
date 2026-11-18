@@ -15,7 +15,7 @@ Before you send, the dialog lists every field under **What will be sent**. A rep
 | App version, browser, window size | `0.0.41`, `Firefox 133 on Linux`, `1280x720` | To reproduce the problem. |
 | Page | `/conversations/…` | Where you were. The query string is removed. |
 | Recent errors in the browser (up to 20) | message, source, time | The error the page raised. |
-| Recent failed requests (up to 20) | `GET /api/v1/conversations` 500, **request id** `9f3ac1d2b7e4`, time | The request id finds that exact request in the server log. |
+| Recent failed requests (up to 20) | method, address and status (for example a 500 on the conversation list), **request id** `9f3ac1d2b7e4`, time | The request id finds that exact request in the server log. |
 | Names of the last actions (up to 30) | `conversation_opened`, `inbox_searched` | What led to the problem. Names only. |
 | Who and where, added by the server | your agent id, email, display name and roles; the workspace id, name, address and plan; the server version; the id of this report | So the team knows whose report it is. |
 
@@ -39,20 +39,21 @@ forgets it.
 
 An agent may send 5 reports an hour. The 6th is refused until an hour has passed.
 
-## Request ids
-
-Every answer of the API and of the MCP endpoints (`/mcp`, `/mcp/operator`) has an `X-Request-Id`
-header, and every error body of the API has `error.request_id`.
-The server log lines of that request carry the same id. If you put a reverse proxy in front of
-Colliedesk, it may set `X-Request-Id` itself (8 to 64 characters: letters, digits, `.`, `_`, `-`); the
-server keeps it. Otherwise the server makes a 12-character id.
-
-## For AI agents
-
-The MCP tool `colliedesk_problem_report` and `POST /api/v1/support/problem-reports` send the same
-report. Any agent token may use them: they need no permission. An agent should pass the request ids of the failed calls in
-`diagnostics.failed_api_calls`. On a server that takes no reports the tool says so and points to
-GitHub issues.
-
 The web app also reports that you sent a report as the product event `problem_reported` (the name
 only), when [usage reporting](telemetry.md) is on.
+
+## Request ids
+
+Every request to Colliedesk gets a request id. The server log lines of that request carry the same
+id, so the request id in a report finds that exact request. If you put a reverse proxy in front of
+Colliedesk, it may set the id itself in the `X-Request-Id` header (8 to 64 characters: letters,
+digits, `.`, `_`, `-`); the server keeps it. Otherwise the server makes a 12-character id.
+
+## For developers and AI agents
+
+- Every answer of the API and of the MCP endpoints (`/mcp`, `/mcp/operator`) has an `X-Request-Id`
+  header. Every error body of the API has `error.request_id`.
+- The MCP tool `colliedesk_problem_report` and `POST /api/v1/support/problem-reports` send the same
+  report as **Report a problem**. Any agent token may use them: they need no permission.
+- An agent should pass the request ids of its failed calls in `diagnostics.failed_api_calls`.
+- On a server that takes no reports, the tool says so and points to GitHub issues.

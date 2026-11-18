@@ -36,7 +36,7 @@ that way.
 
 ## Reference
 
-1. [Work the inbox](https://colliedesk.com/docs/inbox.md)
+1. [Inbox overview](https://colliedesk.com/docs/inbox.md)
 2. [Tags](https://colliedesk.com/docs/tags.md)
 3. [Manage your team](https://colliedesk.com/docs/team.md)
 4. [AI providers and features](https://colliedesk.com/docs/ai.md)

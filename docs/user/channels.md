@@ -29,8 +29,7 @@ and its state:
 - **Waiting for first message**: it is set up, but nothing has arrived yet. Send a test message (to
   your support address from a different address, or through the form) and check that it opens a
   conversation in the inbox; the channel then reads Working. Mail sent from the support address itself,
-  or an automatic reply, still ends the wait but opens no conversation. Through the API the state is
-  `waiting` with reason `no_message_yet`.
+  or an automatic reply, still ends the wait but opens no conversation.
 - **Off**: an admin turned it off. See [Turn a channel off](#turn-a-channel-off).
 - **Needs attention**: it works only in part, and says why with a link to fix it. Email: sending is
   paused after spam complaints, the server cannot send (no SMTP relay and no Gmail), the Gmail
@@ -81,8 +80,8 @@ Turning a channel off keeps its settings and its conversations. While it is off:
 
 - **Email**: mail that arrives is kept, not opened. The channel shows **N messages arrived while
   off**; an admin opens them as conversations (**Open them as conversations**, as they would have
-  been had the channel been on) or discards them (**Discard N messages…**). Through the API they can
-  also be added to an existing conversation. Discarding cannot be undone; the history
+  been had the channel been on) or discards them (**Discard N messages…**). Adding them to an existing
+  conversation cannot be done in the app yet. Discarding cannot be undone; the history
   keeps how many. Kept messages count toward your storage until they are opened or discarded.
 - **Zalo OA**: what arrives is kept the same way, shown as **N messages arrived while off**, for an
   admin to open or discard.
@@ -135,26 +134,21 @@ On a chat channel, every message said in a place (a one-to-one chat, a group) is
 whatever became of it: the customers' messages that opened or joined a conversation, chatter the channel
 kept without one, what waits for review, and what the team and the channel sent. A conversation can show
 the place around its own messages, with other customers of a group marked. Nothing of a place is ever on
-a page a customer sees. Email and web forms have no places. For AI agents and the API:
-`GET /api/v1/conversations/{id}/chat` (`linked=only` keeps the conversation's own), `GET
-/api/v1/channels/{id}/threads`, `GET /api/v1/channels/{id}/threads/{threadId}/items` and `GET
-/api/v1/channel-thread-items` (messages nobody concluded on), and the MCP tools
-`colliedesk_conversation_chat_get`, `colliedesk_channel_threads_list`, `colliedesk_channel_thread_items` and
-`colliedesk_channel_unresolved_items`.
+a page a customer sees. Email and web forms have no places.
 
 The people who wrote in a channel's places (customers and the team, never the channel itself) are listed
 once each, with the place and time they last wrote and the name the channel last gave them, most recent
 first, at most 200: every member of a group, not only its last writer (to pick a team member, for one).
-`GET /api/v1/channels/{id}/senders`, MCP `colliedesk_channel_senders`; `channels:read` is enough.
+Everyone with `channels:read` sees the list.
 
 ## Chat rules
 
 A chat channel's scopes (its one-to-one chats, its groups) can each set how a customer's messages become
-requests, in the channel's settings (`settings.scopes.<scope>`, an admin's change). `GET
-/api/v1/channels/{id}` answers `settings`, what the channel stores over its type's defaults, and
-`effective_settings`, the rules in force; `PATCH /api/v1/channels/{id}` with `settings` replaces the stored
-ones whole, so send them all. On a Zalo OA, the channel's **Messages** tab sets the commands, the
-notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab)).
+requests, in the channel's settings (`settings.scopes.<scope>`, an admin's change). On a Zalo OA, the
+channel's **Messages** tab sets the commands, the notices and asking before opening
+([The Messages tab](zalo.md#the-messages-tab)). The other rules below cannot be changed in the app yet.
+The names in code type below are the names of the settings.
+
 - `gather` collects what a customer says close together into one batch: `quiet_seconds` of silence
   closes it, `max_seconds` after its first message at the latest. With `pre_command_seconds`, what the
   customer said that long before a command (a screenshot sent just before "report a bug") is part of
@@ -232,17 +226,16 @@ notices and asking before opening ([The Messages tab](zalo.md#the-messages-tab))
   `{subject}`), and `reopened` when the team opens it again. It is the channel's own message, quoting the
   customer's first message only one to one (in a group, and for a chat moved into another conversation, it
   quotes nothing), and changes neither the status nor the response clocks. Empty texts
-  (the default) tell nothing; `notify: false` on `PATCH /api/v1/conversations/{id}` (or the bulk change, or
-  MCP `colliedesk_conversation_update`) changes the status quietly. A conversation of no chat (an email, one
+  (the default) tell nothing. **Resolve without telling the customer** (and **Tell customers** unticked on a
+  bulk change) changes the status quietly ([Telling the customer](inbox.md#telling-the-customer)). A conversation of no chat (an email, one
   the team started) or of a channel removed or turned off is told nothing; a chat message moved into a
   conversation that came by email or the web form is told in its chat, through the chat's channel, never by
   email; a channel whose processing is paused
   sends it once it resumes. A change of several conversations at once tells
   each customer a few seconds after it is saved; a conversation whose status changes again before then is
-  told only that later change. A change that would tell a customer needs `messages:send`, from a person or an AI
-  agent's token alike; without it the change is refused with what each channel would send, and
-  `notify: false` makes it quietly instead. A conversation shows its last status
-  change and who made it (a team member, an AI agent's token, the customer, their reopen command, the
+  told only that later change. A change that would tell a customer needs `messages:send`; without it the
+  change is refused with what each channel would send, and a quiet change still works. A conversation shows
+  its last status change and who made it (a team member, an AI agent, the customer, their reopen command, the
   channel closing it, an import), and which statuses would tell its customer.
 - `settings.auto_close_hours` (0 to 720, none by default) closes a conversation resolved after it was turned
   on, that long after its resolve and the customer's last message, and tells the customer with
@@ -309,23 +302,6 @@ was decided. Messages of a card are decided in the queue, not one by one as held
 set aside can be discarded with the held messages. Email and web forms have no cards: every message is
 decided by the channel's rules, as before. In the web app, people decide cards on [Review](review.md).
 
-For AI agents and the API: `GET /api/v1/intake/gatherings` (`state=review`, `deciding`, `ignored` or
-`decided`, `channel_id`, `scope`, `decided_by` `rules`, `ai` or `agent`), `GET
-/api/v1/intake/gatherings/{id}` (with `candidates` and `commands`), `POST
-/api/v1/intake/gatherings/{id}/decide` (`action` `create`, `attach` with `conversation_id`, or `ignore`
-with an optional `ignore_reason` `chat`, `handled_in_chat`, `duplicate` or `other`; `follows_decision_id`
-names the card's `suggestion` it follows), `POST
-/api/v1/intake/gatherings/{id}/requeue`, `GET /api/v1/intake/summary` (how many cards wait for a person
-and for AI, and the channels and scopes they come from), `GET /api/v1/intake/stats` and `GET
-/api/v1/conversations/{id}/intake` (why each message is in a conversation), and the MCP tools
-`colliedesk_intake_list`, `colliedesk_intake_get`, `colliedesk_intake_decide`, `colliedesk_intake_requeue`,
-`colliedesk_intake_summary`, `colliedesk_intake_stats` and `colliedesk_conversation_intake_get`. Reading
-cards needs `messages:read`, the summary and counts `conversations:read`;
-opening a conversation from one needs `messages:send` (the channel may tell the customer it was received),
-the other decisions and requeue `conversations:update`; without it, the decision is refused and names
-the permission. Through the API, send the same `Idempotency-Key` header on every retry of one
-decision or requeue: a repeat answers what the first one got and decides nothing more.
-
 ## AI on a channel
 
 Each channel's **AI** tab sets what each AI feature does by itself on it (triage and drafts; intake
@@ -333,26 +309,79 @@ comes on chat channels), apart from the workspace's default; see [AI per channel
 Everyone with `ai_settings:read` sees the tab; changing it needs `ai_settings:update`.
 A change shows in the channel's history as "changed what AI triage does by itself".
 
-## For AI agents and the API
-
-Everything above is available through `GET/POST /api/v1/channels` (`include_removed=true` lists
-removed channels too; each type says its `default_channel_id`), `GET/PATCH/DELETE
-/api/v1/channels/{id}` (`is_default: true` makes it the default; a name or address another channel
-has is a 409 with `conflict` naming that channel), `/api/v1/channels/{id}/held/replay` and `/held/discard`, and
-`/api/v1/channels/events`, and through the MCP tools `colliedesk_channels_*` ([MCP](mcp.md)). A channel's
-rules (`settings`: how messages join conversations, default tags and priority, rate limits) can be
-changed there only, not in Settings yet. Changing a channel and discarding held messages need `channels:update`; storing
-a channel's secret and removing a channel need `channels:manage_credentials`. An AI agent's token with
-the permission does it at once; a token created before roles cannot, and needs a new token. A channel's AI levels are `GET /api/v1/channels/{id}/ai` and
-`PUT /api/v1/channels/{id}/ai/{slot}` (`colliedesk_channel_ai_get`, `colliedesk_channel_ai_set`).
-
 ## Pause processing
 
 Moving a channel over from another system, you can pause its processing: **Pause processing** at the top
-of a Zalo OA's page (admins; it asks first), and **Resume processing** in its place while paused. With the
-API: `PATCH /api/v1/channels/{id}` with `{"processing_paused": true}` (Zalo channels only, whose messages
-wait in a journal). While it is paused, every message that arrives is kept as it came and nothing is decided, opened, answered or sent;
-replies you write wait too. Resume it (`{"processing_paused": false}`) and what arrived is processed in
-order by the channel's rules, as if it had just come, and the waiting replies go out. The channel's
-history shows who paused and resumed it; `processing_paused_at` on the channel says it is paused and
-`paused_count` how many messages wait.
+of a Zalo OA's page (admins; it asks first), and **Resume processing** in its place while paused. Only a
+Zalo OA can be paused, because its messages wait in a journal. While it is paused, every message that
+arrives is kept as it came and nothing is decided, opened, answered or sent; replies you write wait too.
+Resume it and what arrived is processed in order by the channel's rules, as if it had just come, and the
+waiting replies go out. The channel's history shows who paused and resumed it, and the channel shows how
+many messages wait.
+
+## For developers and AI agents
+
+An AI agent does what its token's [permissions](roles-and-permissions.md) allow, at once. A token created
+before roles cannot change channels; create a new token for it. The MCP tools are listed in [MCP](mcp.md).
+
+Channels:
+
+- `GET/POST /api/v1/channels` lists and adds channels. `include_removed=true` lists removed channels too;
+  each type says its `default_channel_id`.
+- `GET/PATCH/DELETE /api/v1/channels/{id}` reads, changes and removes a channel. `is_default: true` makes it
+  the default. A name or address another channel has is a 409 with `conflict` naming that channel.
+- A channel waiting for its first message has the state `waiting` with reason `no_message_yet`.
+- `/api/v1/channels/{id}/held/replay` opens the messages held while a channel was off, or adds them to an
+  existing conversation (`conversation_id`). `/api/v1/channels/{id}/held/discard` discards them.
+- `/api/v1/channels/events` is the channels' history.
+- The MCP tools are `colliedesk_channels_*`.
+- Changing a channel and discarding held messages need `channels:update`. Storing a channel's secret and
+  removing a channel need `channels:manage_credentials`.
+- A channel's AI levels are `GET /api/v1/channels/{id}/ai` and `PUT /api/v1/channels/{id}/ai/{slot}`
+  (`colliedesk_channel_ai_get`, `colliedesk_channel_ai_set`).
+- Pause processing on a Zalo OA with `PATCH /api/v1/channels/{id}` and `{"processing_paused": true}`;
+  resume it with `{"processing_paused": false}`. On the channel, `processing_paused_at` says it is paused
+  and `paused_count` how many messages wait.
+
+Chat rules:
+
+- A channel's rules (`settings`: how messages join conversations, default tags and priority, rate limits)
+  are changed through the API. `GET /api/v1/channels/{id}` answers `settings`, what the channel stores
+  over its type's defaults, and `effective_settings`, the rules in force.
+- `PATCH /api/v1/channels/{id}` with `settings` replaces the stored settings whole, so send them all.
+- `notify: false` on `PATCH /api/v1/conversations/{id}`, on the bulk change, or on MCP
+  `colliedesk_conversation_update` changes a status without telling the customer. A change that would tell
+  a customer needs `messages:send`, from a person or an AI agent's token alike.
+
+Chat threads:
+
+- `GET /api/v1/conversations/{id}/chat` is the chat around a conversation (`linked=only` keeps the
+  conversation's own messages). MCP: `colliedesk_conversation_chat_get`.
+- `GET /api/v1/channels/{id}/threads` and `GET /api/v1/channels/{id}/threads/{threadId}/items` list a
+  channel's places and their messages. MCP: `colliedesk_channel_threads_list`, `colliedesk_channel_thread_items`.
+- `GET /api/v1/channel-thread-items` lists the messages nobody concluded on. MCP:
+  `colliedesk_channel_unresolved_items`.
+- `GET /api/v1/channels/{id}/senders` lists who wrote in a channel's places. MCP: `colliedesk_channel_senders`.
+  `channels:read` is enough.
+
+Intake queue:
+
+- `GET /api/v1/intake/gatherings` lists cards. Filters: `state` (`review`, `deciding`, `ignored` or
+  `decided`), `channel_id`, `scope`, and `decided_by` (`rules`, `ai` or `agent`).
+- `GET /api/v1/intake/gatherings/{id}` reads a card with its `candidates` and `commands`.
+- `POST /api/v1/intake/gatherings/{id}/decide` decides a card. `action` is `create`, `attach` with
+  `conversation_id`, or `ignore` with an optional `ignore_reason` (`chat`, `handled_in_chat`, `duplicate`
+  or `other`). `follows_decision_id` names the card's `suggestion` it follows.
+- `POST /api/v1/intake/gatherings/{id}/requeue` puts a card back.
+- `GET /api/v1/intake/summary` says how many cards wait for a person and for AI, and the channels and
+  scopes they come from. `GET /api/v1/intake/stats` gives the counts.
+- `GET /api/v1/conversations/{id}/intake` says why each message is in a conversation.
+- MCP tools: `colliedesk_intake_list`, `colliedesk_intake_get`, `colliedesk_intake_decide`,
+  `colliedesk_intake_requeue`, `colliedesk_intake_summary`, `colliedesk_intake_stats` and
+  `colliedesk_conversation_intake_get`.
+- Reading cards needs `messages:read`; the summary and counts need `conversations:read`. Opening a
+  conversation from a card needs `messages:send`, because the channel may tell the customer it was
+  received. The other decisions and requeue need `conversations:update`. Without the permission, the
+  decision is refused and names it.
+- Send the same `Idempotency-Key` header on every retry of one decision or requeue. A repeat answers
+  what the first one got and decides nothing more.

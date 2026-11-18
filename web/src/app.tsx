@@ -31,6 +31,7 @@ import { AppShell } from './features/shell/app-shell';
 import { askInbox } from './features/shell/inbox-intents';
 import type { InboxIntent } from './features/shell/inbox-intents';
 import { useSidebarData } from './features/shell/use-sidebar-data';
+import { inboxIsCurrent } from './features/shell/sidebar-items';
 import { paletteEntries } from './features/shell/palette-entries';
 import { preloadQuickStart, QuickStart } from './features/onboarding/quick-start';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
@@ -38,6 +39,7 @@ import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
 import { AtIcon, BookIcon, ChartIcon, ChatIcon, InboxIcon, SettingsIcon, UserIcon } from './ui/icons';
 import { mentionMessages } from './features/inbox/mention-messages';
+import { mentionsListPart } from './features/inbox/mentions-list-part';
 import { customersPageName } from './features/contacts/contact-page-name';
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
@@ -175,6 +177,8 @@ function AppLayout() {
   // Knowledge opens on what the session reads of it: the articles, the media or the help center's settings.
   const knowledge = me.data ? knowledgeHome(me.data) : '/knowledge';
   const inboxOpen = sidebar.inboxOpen ?? 0;
+  // One place is marked at a time: a channel or saved view on screen, or else the Inbox around them.
+  const inboxCurrent = inboxIsCurrent(sidebar.views, sidebar.channels);
   const mentionsUnread = sidebar.mentionsUnread ?? 0;
   // The page the top bar names: the area the sidebar marks current.
   const page = inSettings ? { title: messages.settings, icon: <SettingsIcon /> } : inReview ? { title: messages.review, icon: <ChatIcon /> }
@@ -205,7 +209,10 @@ function AppLayout() {
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
       {shows('conversations:read') && <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={inboxOpen > 0 ? messages.inboxOpenCount(inboxOpen) : messages.inbox}
-        aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || inMentions || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span>
+        aria-current={inSettings || inReview || inKnowledge || inResults || inFixes || inMentions || notFound || !inboxCurrent ? undefined : 'page'}
+        // The router marks a link current on any address under it; while a channel or view is the place on screen, only
+        // the bare inbox address marks Inbox.
+        activeOptions={inboxCurrent ? undefined : { exact: true }}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span>
         {inboxOpen > 0 && <span className="rail-badge" aria-hidden="true">{inboxOpen > 999 ? '999+' : inboxOpen}</span>}</Link>}
       {shows('messages:read') && <Link to="/mentions" className="rail-link" data-tip={mentionMessages.mentions}
         aria-label={mentionsUnread > 0 ? mentionMessages.mentionsUnread(mentionsUnread) : mentionMessages.mentions} aria-current={inMentions ? 'page' : undefined}>
@@ -252,8 +259,8 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({ component: AppLa
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 // Mentions: the notes that asked the person, in the inbox's list column; a row opens its conversation beside it.
-const mentionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions', component: () => <InboxRoute list="mentions" /> });
-const mentionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions/$conversationId', component: () => <InboxRoute list="mentions" /> });
+const mentionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions', loader: pageChunk(mentionsListPart), component: () => <InboxRoute list="mentions" /> });
+const mentionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/mentions/$conversationId', loader: pageChunk(mentionsListPart), component: () => <InboxRoute list="mentions" /> });
 // The customer page is its own chunk (contact-part.tsx), so the inbox bundle does not carry it.
 const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId', loader: pageChunk(contactPart),
   component: () => <ContactsPart render={(chunk) => <chunk.ContactRoute />} failed={<main className="settings-page"><PartUnavailable /></main>} /> });
@@ -404,6 +411,8 @@ const fieldsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setti
   component: () => <SettingsChunkPage title={conversationFieldsTitle} render={({ FieldsRoute }) => <FieldsRoute />} /> });
 const savedRepliesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/saved-replies', loader: pageChunk(settingsRoutePart),
   component: () => <SettingsChunkPage title={messages.savedReplies} render={({ SavedRepliesRoute }) => <SavedRepliesRoute />} /> });
+const tagsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings/tags', loader: pageChunk(settingsRoutePart),
+  component: () => <SettingsChunkPage title={messages.tags} render={({ TagsRoute }) => <TagsRoute />} /> });
 // Agent requests were removed: an agent token acts at once when it holds the permission. An old bookmark opens the inbox.
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: () => <Navigate to="/" replace /> });
 // The tab and the channel filter of Review are in the address, so a link opens the same list.
@@ -648,7 +657,7 @@ const trialOfferRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, tagsRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 // Every router Link loads its page ahead when the pointer or the focus reaches it (plain links: lib/in-app-links.ts).
 export const router = createRouter({ routeTree, context: {}, defaultPreload: 'intent' });
 

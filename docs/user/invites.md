@@ -15,7 +15,7 @@ their unused invites that would give it back.
 
 Inviting someone who is already in the workspace adds the invite's roles and signs in as them, so
 only someone who may change their roles can do it: you need `team:manage_roles` and every permission
-they hold. An AI agent's token cannot; it changes their roles in [Manage your team](team.md) instead.
+they hold.
 An invite link made before its address joined the workspace no longer signs anyone in.
 
 Each invite shows its state: **Pending** (not used yet), **Accepted**, **Revoked** or **Expired**, and
@@ -27,16 +27,10 @@ When you may revoke (`team:revoke`), Colliedesk revokes the old pending invite r
 if that revoke fails, the page says "New link made. The old link still works: revoke it." and the old invite stays
 listed. Without `team:revoke` the page says the earlier link still works until it expires, or until someone who may
 revoke invites revokes it. The menu offers no new link for an invite whose roles hold a permission you lack: the
-server refuses it (`role_exceeds_yours`). A pending invite already holds its address's seat, so a new link for it
+server refuses it. A pending invite already holds its address's seat, so a new link for it
 never meets a full plan; a new link for an expired invite takes a seat and is refused, with the plan's message, when
 the plan has none left. To end a teammate's access after they joined,
 deactivate them in [Manage your team](team.md).
-
-An AI agent whose [token](sessions.md#agent-tokens) holds `team:invite` creates an invite at once with
-`colliedesk_invite_create`, naming the roles by name or id, and gets the one-time link back to give
-to you; nothing waits for approval. It lists invites with `colliedesk_invites_list` (`team:read`) and
-revokes one with `colliedesk_invite_revoke` (`team:revoke`). A token created before roles cannot
-create invites; create a new token for it.
 
 ## What the invited person sees
 
@@ -55,9 +49,8 @@ If the workspace has no free seat (hosted cloud), the page says so, names who in
 the link keeps working until it expires: once a seat is free, **Try again** joins. A link that is not
 an invite (a pairing link, or a mistyped one) shows the ordinary sign-in link page.
 
-Looking at an invite never uses it up. An AI agent or script can read the same facts with
-`GET /api/v1/auth/invite-preview?token=…`; it needs no session. A client address that tries 30
-tokens no link has within a minute must wait a minute before it opens or previews another link.
+Looking at an invite never uses it up. A device that tries 30 links that do not exist within a
+minute must wait a minute before it opens another link.
 
 ## Agent limit on the hosted cloud
 
@@ -66,3 +59,19 @@ agent takes none. The trial and Team 25 have 25 seats; Team and Founding have 10
 when every seat is taken fails with a message that names the limit.
 Revoke an invite you no longer need. See [Plan and billing](billing.md). A locked workspace (trial or
 subscription ended) cannot create or accept invites until it has a plan.
+
+## For developers and AI agents
+
+- An AI agent whose [token](sessions.md#agent-tokens) holds `team:invite` creates an invite at once
+  with the MCP tool `colliedesk_invite_create`. It names the roles by name or id and gets the one-time
+  link back to give to you. Nothing waits for approval.
+- `colliedesk_invites_list` lists invites (`team:read`). `colliedesk_invite_revoke` revokes one
+  (`team:revoke`).
+- A token created before roles cannot create invites; create a new token for it.
+- An agent token cannot invite someone who is already in the workspace. It changes their roles in
+  [Manage your team](team.md) instead.
+- A new link for an invite whose roles hold a permission you lack is refused with
+  `role_exceeds_yours`.
+- `GET /api/v1/auth/invite-preview?token=…` returns what the invite page shows. It needs no session
+  and does not use the invite up. A client address that tries 30 tokens no link has within a minute
+  must wait a minute before it opens or previews another link.

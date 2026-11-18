@@ -104,7 +104,7 @@ export const trashedSavedReplySchema = z.object({
   ...savedReplyFields, deleted_at: z.string().datetime(), deleted_by: savedReplyPersonSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedSavedReply'>>;
 export const savedReplyVersionSchema = z.object({ ...savedReplyChangeFields, title: z.string(), body: z.string() }) satisfies z.ZodType<Generated<'SavedReplyVersion'>>;
-export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string() }) satisfies z.ZodType<Generated<'Tag'>>;
+export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string(), conversation_count: z.number().int().nonnegative().optional() }) satisfies z.ZodType<Generated<'Tag'>>;
 export const contactIdentitySchema = z.object({
   channel_id: z.string().uuid(), kind: z.string(), value: z.string(), display_name: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'ContactIdentity'>>;
@@ -354,7 +354,9 @@ export const inviteListSchema = z.object({ items: z.array(inviteSchema) }) satis
 // A repeat of the same press (200) answers the invite without its one-time link.
 export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url().optional() }) satisfies z.ZodType<JsonResponse<'createInvite', 201> | JsonResponse<'createInvite', 200>>;
 export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number(),
-  // How many each status holds under the other filters (counts=true): the status tabs' numbers.
+  // The order the rows are in: due comes back as waiting_longest while the workspace's reply targets are off.
+  sort: conversationSortSchema.optional(),
+  // How many each status holds under the other filters (counts=true): the status picker's numbers.
   status_counts: z.object({ open: z.number(), pending: z.number(), resolved: z.number(), closed: z.number(), spam: z.number() }).optional() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
 export const conversationViewerSchema = z.object({
   agent_id: z.string().uuid(), name: z.string(), writing: z.boolean(), writing_since: z.string().datetime().nullable(), edited_at: z.string().datetime().nullable(),
@@ -376,6 +378,8 @@ export const trashedSavedReplyListSchema = z.object({ items: z.array(trashedSave
 export const savedReplyVersionListSchema = z.object({ items: z.array(savedReplyVersionSchema), next_before_version: z.number().int().nullable() }) satisfies z.ZodType<JsonResponse<'listSavedReplyVersions', 200>>;
 export const bulkUpdateResultSchema = z.object({ updated: z.number().int(), told: z.number().int().optional() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
+// 204: no body; parsed like a body, so a refusal keeps its reason (requestNoContent drops it).
+export const noContentSchema = z.undefined();
 export const spamResultSchema = z.object({ updated: z.number().int(), senders: z.array(z.object({ id: z.string().uuid(), name: z.string(), email: z.string() })) }) satisfies z.ZodType<JsonResponse<'markConversationsSpam', 200>>;
 export type SpamResult = z.infer<typeof spamResultSchema>;
 

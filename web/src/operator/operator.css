@@ -45,7 +45,7 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .ops-id { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
 .ops-id strong { flex: none; font-weight: 600; font-size: var(--fs-ui); }
 .ops-host { min-width: 0; overflow: hidden; color: var(--on-brand-panel-2); font-family: var(--font-mono); font-size: var(--fs-label); text-overflow: ellipsis; white-space: nowrap; }
-.ops-ledger { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; min-width: 0; min-height: var(--control, 32px); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--on-brand-panel-2); font-size: var(--fs-small); text-decoration: none; white-space: nowrap; }
+.ops-ledger { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; min-width: 0; min-height: var(--control); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--on-brand-panel-2); font-size: var(--fs-small); text-decoration: none; white-space: nowrap; }
 .ops-ledger b { color: var(--on-brand-panel); font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 500; }
 .ops-ledger:hover { color: var(--on-brand-panel); background: color-mix(in srgb, var(--on-brand-panel) 10%, transparent); }
 .ops-dot { width: 8px; height: 8px; flex: none; border-radius: var(--radius-full); background: var(--on-brand-panel-2); }
@@ -82,7 +82,7 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .ops-nav { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: var(--space-5); padding: var(--space-5) var(--space-3); }
 .ops-nav ul { display: grid; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .ops-nav .settings-group-label { padding: 0 var(--space-2); }
-.ops-nav a { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control, 32px); border-radius: var(--radius); padding: 0 var(--space-2);
+.ops-nav a { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control); border-radius: var(--radius); padding: 0 var(--space-2);
   color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; text-decoration: none; }
 .ops-nav .seg-count { margin-left: auto; border-radius: var(--radius-full); background: var(--warn-soft); color: var(--warn); }
 .ops-main:focus, .ops-sign:focus { outline: none; }
@@ -376,7 +376,7 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .ops-warnings li { display: flex; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--line); padding: var(--space-3) var(--space-4); font-size: var(--fs-ui); line-height: 20px; }
 .ops-warnings li:last-child { border-bottom: 0; }
 .ops-table-wrap { border-radius: var(--radius-lg); background: var(--surface-1); }
-.ops-table th { height: var(--control, 32px); background: var(--surface-2); padding: 0 var(--space-4); font-weight: 500; }
+.ops-table th { height: var(--control); background: var(--surface-2); padding: 0 var(--space-4); font-weight: 500; }
 .ops-table td { height: var(--touch); padding: 0 var(--space-4); font-size: var(--fs-ui); }
 .ops-env { display: grid; margin: 0; overflow: hidden; gap: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
 .ops-env > div { display: grid; grid-template-columns: minmax(10rem, 16rem) 1fr; gap: var(--space-3); border-bottom: 1px solid var(--line); padding: var(--space-2) var(--space-4); font-size: var(--fs-small); }
@@ -419,7 +419,7 @@ code { font-family: var(--font-mono); font-size: var(--fs-label); }
 .ops-page-inner:is(:has(> .version-layout), :has(.ops-table-wrap):not(:has(.ops-tiles))) { max-width: 72rem; }
 .ops-when { white-space: nowrap; }
 /* The page head's link (Export CSV) is as tall as a button. */
-.page-head a { display: inline-flex; align-items: center; min-height: var(--control, 32px); }
+.page-head a { display: inline-flex; align-items: center; min-height: var(--control); }
 @media (pointer: coarse), (max-width: 44rem) { .page-head a { min-height: var(--touch); } }
 /* Under 72rem a table is one card per row, each cell naming its column: six columns do not fit a tablet. */
 @media (max-width: 72rem) {

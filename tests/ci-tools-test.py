@@ -42,6 +42,9 @@ class Shards(unittest.TestCase):
                                   'TestTimelineReadWithHeavyHTMLMailStaysInBudget\n')
         patterns = [run('go-test-shard.py', str(i), '3', stdin=listing).stdout.strip()
                     for i in range(1, 4)]
+        # The job runs a line starting 'gates ' with go test -p 1: one package's gates at a time.
+        self.assertTrue(patterns[-1].startswith('gates '), patterns[-1])
+        patterns = [pattern.removeprefix('gates ').split(' ')[0] for pattern in patterns]
         for name in ['TestInboxListLatencyBudget', 'TestPendingAgentRequestsLatencyBudget',
                      'TestStorageUsageStaysFastWithAHugeAttachmentTable',
                      'TestTimelineReadWithHeavyHTMLMailStaysInBudget']:
@@ -61,7 +64,7 @@ class Shards(unittest.TestCase):
                      'FuzzBytes', 'ExampleClient']:
             self.assertRegex(name, whole[0][0])
         # The gates run in one process however many parts a regular shard has.
-        self.assertEqual(parted[1], ['^(TestInboxListLatencyBudget|TestTrialCapStaysFast)$'])
+        self.assertEqual(parted[1], ['gates ^(TestInboxListLatencyBudget|TestTrialCapStaysFast)$ ./...'])
         self.assertEqual(whole[1], parted[1])
         self.assertNotEqual(run('go-test-shard.py', '1', '2', '--parts', '0', stdin=listing).returncode, 0)
 
@@ -74,18 +77,19 @@ class Shards(unittest.TestCase):
         for shard in range(1, 5):
             result = run('go-test-shard.py', str(shard), '4', '--latency-shards', '2', '--parts', '3', stdin=listing)
             self.assertEqual(result.returncode, 0, result.stderr)
-            shards.append(result.stdout.split())
+            shards.append(result.stdout.splitlines())
         for name in ['TestAlpha', 'TestBeta', 'TestGamma', 'TestDelta', 'FuzzBytes', 'ExampleClient'] + latency:
-            hits = [i for i, patterns in enumerate(shards) if any(re.search(p, name) for p in patterns)]
+            hits = [i for i, patterns in enumerate(shards)
+                    if any(re.search(p.removeprefix('gates ').split(' ')[0], name) for p in patterns)]
             self.assertEqual(len(hits), 1, name)
             self.assertEqual(hits[0] >= 2, name in latency, name)
         # One process on each latency runner, so a gate never measures beside another test binary
         # of its own shard; the tests that build the shared knowledge-base seed stay together.
         self.assertEqual([len(patterns) for patterns in shards[2:]], [1, 1])
         for name in latency[:3]:
-            self.assertRegex(name, shards[2][0])
+            self.assertRegex(name, shards[2][0].removeprefix('gates ').split(' ')[0])
         for name in latency[3:]:
-            self.assertRegex(name, shards[3][0])
+            self.assertRegex(name, shards[3][0].removeprefix('gates ').split(' ')[0])
 
     def shards(self, listing, total, *args, timings=None):
         """Each shard's pattern lines, after checking every name runs exactly once."""
@@ -101,7 +105,8 @@ class Shards(unittest.TestCase):
             result.append(run_.stdout.split('\n')[:-1])
         for name in {line.strip() for line in listing.splitlines()} - {''}:
             if re.fullmatch(r'(Test|Example|Fuzz)\w*', name):
-                hits = [i for i, lines in enumerate(result) for p in lines if p != '--' and re.search(p, name)]
+                hits = [i for i, lines in enumerate(result) for p in lines
+                        if p != '--' and re.search(p.removeprefix('gates ').split(' ')[0], name)]
                 self.assertEqual(len(hits), 1, name)
         return result
 
@@ -118,7 +123,7 @@ class Shards(unittest.TestCase):
         shards = self.shards(listing, 3, '--latency-shards', '1', timings=timings)
         self.assertEqual(shards[0], ['^(TestHeavy)$'])
         self.assertEqual(shards[1], ['^(' + '|'.join(short) + ')$'])
-        self.assertEqual(shards[2], ['^(TestInboxListLatencyBudget|TestTrialCapStaysFast)$'])
+        self.assertEqual(shards[2], ['gates ^(TestInboxListLatencyBudget|TestTrialCapStaysFast)$ ./...'])
 
     def test_measured_times_balance_the_parts_of_a_shard(self):
         listing = 'TestA\nTestB\nTestC\nTestD\nTestInboxListLatencyBudget\n'
@@ -133,12 +138,12 @@ class Shards(unittest.TestCase):
                    **{name: 1 for name in regular}}
         shards = self.shards(listing, 4, '--latency-shards', '2', '--parts', '2', timings=timings)
         # The short gates leave room: the regular tests start once they finished (the '--' line).
-        self.assertEqual(shards[2][0], '^(TestHelpCenterPagesLatencyBudget)$')
+        self.assertEqual(shards[2][0], 'gates ^(TestHelpCenterPagesLatencyBudget)$ ./...')
         self.assertEqual(shards[2][1], '--')
         self.assertEqual(len(shards[2][2:]), 2)
-        self.assertFalse(any(re.search(shards[2][0], name) for name in regular))
+        self.assertFalse(any(re.search(shards[2][0].removeprefix('gates ').split(' ')[0], name) for name in regular))
         # The long gates take as long as a regular shard: gates only, in one process.
-        self.assertEqual(shards[3], ['^(TestInboxListLatencyBudget)$'])
+        self.assertEqual(shards[3], ['gates ^(TestInboxListLatencyBudget)$ ./...'])
         self.assertTrue(all('--' not in lines for lines in shards[:2]))
 
     def test_a_part_counts_its_overlapping_tests_and_its_process_start(self):
@@ -149,7 +154,7 @@ class Shards(unittest.TestCase):
         # a part pays 3 seconds to start its process. The gates run one after another.
         shards = self.shards(listing, 2, '--parallel', '2', '--process-seconds', '3', timings=timings)
         self.assertEqual(shards[0], ['^(TestA|TestB|TestC|TestD|TestE)$'])
-        self.assertEqual(shards[1], ['^(TestInboxListLatencyBudget)$', '--', '^(TestF)$'])
+        self.assertEqual(shards[1], ['gates ^(TestInboxListLatencyBudget)$ ./...', '--', '^(TestF)$'])
         for bad in (('--parallel', '0'), ('--process-seconds', '-1')):
             self.assertNotEqual(run('go-test-shard.py', '1', '2', *bad, stdin=listing).returncode, 0, bad)
 
@@ -160,8 +165,8 @@ class Shards(unittest.TestCase):
         timings = {kb[0]: 5, kb[1]: 5, others[0]: 8, others[1]: 4, others[2]: 4, 'TestAlpha': 1}
         shards = self.shards(listing, 3, '--latency-shards', '2', timings=timings)
         # 10 seconds of seed gates; 8, 4 and 4 longest first onto the runner that ends earlier.
-        self.assertEqual(shards[1], ['^(TestHelpCenterPagesLatencyBudget|TestKnowledgeBaseSearchLatencyBudget|TestTrialCapStaysFast)$'])
-        self.assertEqual(shards[2], ['^(TestInboxListLatencyBudget|TestStorageUsageStaysFast)$'])
+        self.assertEqual(shards[1], ['gates ^(TestHelpCenterPagesLatencyBudget|TestKnowledgeBaseSearchLatencyBudget|TestTrialCapStaysFast)$ ./...'])
+        self.assertEqual(shards[2], ['gates ^(TestInboxListLatencyBudget|TestStorageUsageStaysFast)$ ./...'])
 
     def test_tests_without_a_measurement_weigh_the_median(self):
         listing = 'TestOld1\nTestOld2\nTestOld3\nTestOld4\nTestNew1\nTestNew2\nTestInboxListLatencyBudget\n'
@@ -187,7 +192,7 @@ class Shards(unittest.TestCase):
         timings = json.loads((ROOT / '.github/go-test-timings.json').read_text())
         self.assertGreater(len(timings), 100)
         # -v prints each test's time, which go-test-timings.py reads back from the job logs.
-        self.assertRegex(go, r'go test -count=1 -run "\$pattern" -v \./\.\.\. &')
+        self.assertRegex(go, r'go test -count=1 -run "\$pattern" -v "\$\{packages\[@\]\}" &')
 
     def test_the_go_job_starts_a_latency_shards_regular_tests_only_after_its_gates_exit(self):
         go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
@@ -196,20 +201,33 @@ class Shards(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = pathlib.Path(tmp)
             # A stand-in go: the gate sleeps, a regular pattern fails, each logs start and end.
-            (tmp / 'go').write_text('#!/bin/bash\necho "start $4" >> "$LOG"\n'
+            # It logs its flags too: the gates run one package at a time (-p 1), regular patterns at once.
+            (tmp / 'go').write_text('#!/bin/bash\necho "start $4 ${*:5}" >> "$LOG"\n'
                                     '[ "$4" = GATE ] && sleep 0.5\necho "end $4" >> "$LOG"\n'
                                     '[ "$4" = B ] && exit 3\nexit 0\n')
             (tmp / 'go').chmod(0o755)
             runner = tmp / 'temp'
             runner.mkdir()
-            (runner / 'go-test-patterns.txt').write_text('GATE\n--\nA\nB\n')
+            (runner / 'go-test-patterns.txt').write_text('gates GATE example.com/m/httpapi\n--\nA\nB\n')
             env = dict(os.environ, PATH=f'{tmp}:{os.environ["PATH"]}', RUNNER_TEMP=str(runner), LOG=str(tmp / 'log'))
             result = subprocess.run(['bash', '-e', '-c', script], env=env, capture_output=True, text=True)
             log = (tmp / 'log').read_text().split('\n')
         self.assertNotEqual(result.returncode, 0, 'a failing pattern after the gates fails the step')
-        self.assertLess(log.index('end GATE'), log.index('start A'), log)
-        self.assertLess(log.index('end GATE'), log.index('start B'), log)
-        self.assertNotIn('start --', log)
+        self.assertIn('start GATE -v -p 1 example.com/m/httpapi', log)
+        self.assertLess(log.index('end GATE'), log.index('start A -v ./...'), log)
+        self.assertLess(log.index('end GATE'), log.index('start B -v ./...'), log)
+        self.assertFalse(any(line.startswith('start --') for line in log), log)
+
+    def test_the_gates_line_names_only_the_packages_that_hold_gates(self):
+        # go test -list prints a package's names, then 'ok <package> <time>'. With -p 1 every package
+        # named starts its test binary in turn, so the gates line names only the packages with gates.
+        listing = ('TestAlpha\nTestInboxListLatencyBudget\nok  \texample.com/m/httpapi\t0.10s\n'
+                   'TestBeta\nok  \texample.com/m/store\t0.01s\n'
+                   '? \texample.com/m/empty\t[no test files]\n'
+                   'TestImportStatusLatencyBudget\nok  \texample.com/m/importjobs\t0.02s\n')
+        shards = self.shards(listing, 2)
+        self.assertEqual(shards[1][0], 'gates ^(TestImportStatusLatencyBudget|TestInboxListLatencyBudget)$ '
+                                       'example.com/m/httpapi example.com/m/importjobs')
 
     def test_latency_shards_leave_at_least_one_regular_shard(self):
         for args in (('1', '2', '--latency-shards', '2'), ('1', '3', '--latency-shards', '0')):
@@ -381,7 +399,8 @@ class E2EShards(unittest.TestCase):
         e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
         self.assertRegex(e2e, r'(?m)^        shard: \[1, 2\]$')
         self.assertRegex(e2e, r'(?m)^    timeout-minutes: 10$')
-        self.assertRegex(e2e, r"(?m)^      E2E_ARGS: --grep-invert @onboarding --fully-parallel --workers=3$")
+        # Pull requests run Chromium only; WebKit and Firefox run once a day (cross-browser.yml).
+        self.assertRegex(e2e, r"(?m)^      E2E_ARGS: --project=chromium --grep-invert @onboarding --fully-parallel --workers=3$")
         self.assertIn('corepack pnpm e2e $E2E_ARGS --shard="$SHARD/$SHARDS"', e2e)
         self.assertIn('python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS', e2e)
         self.assertEqual(e2e.count('SHARDS: ${{ strategy.job-total }}'), 2, 'the run and the check use the matrix size')
@@ -598,7 +617,7 @@ class GoBuildCache(unittest.TestCase):
         # One shard uploads, a latency shard (6, 7 and 8 of 8).
         self.assertIn('matrix.shard == 7', condition)
         self.assertIn("!startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', "
-                      "runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))", condition)
+                      "runner.os, steps.go.outputs.go-version, hashFiles('go.sum')))", condition)
         go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
         self.assertIn('id: go-cache', go)
         self.assertRegex(go, r"latency-shards 3\b")

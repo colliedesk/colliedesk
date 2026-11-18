@@ -112,9 +112,10 @@ test('a filter from the Filter menu reports its kind, never its value', async ()
   expect(JSON.stringify(analytics.track.mock.calls)).not.toContain('urgent');
 });
 
-test('a status tab reports inbox_filtered with the filter kind', async () => {
+test('a status picked in the status menu reports inbox_filtered with the filter kind', async () => {
   await open();
-  fireEvent.click(screen.getByRole('radio', { name: 'Resolved' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Status: Open' }));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Resolved' }));
   expect(analytics.track).toHaveBeenCalledWith('inbox_filtered', { filter: 'status' });
 });
 

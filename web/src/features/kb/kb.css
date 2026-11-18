@@ -75,7 +75,7 @@ span.kb-article-open { opacity: 0.35; }
 /* Move up and Move down: a column of their own while a collection's list is its order. */
 .kb-list[data-order="true"] :is(.kb-cols-head, .kb-article-item) { grid-template-columns: minmax(0, 1fr) 10rem 8rem 2.5rem 4.5rem; }
 .kb-order { display: flex; justify-content: flex-end; gap: 2px; padding-right: var(--space-2); }
-.kb-order-gap { width: var(--control, 32px); flex: none; }
+.kb-order-gap { width: var(--control); flex: none; }
 .kb-order button[aria-disabled="true"] { opacity: 0.5; cursor: progress; }
 .kb-order[data-text="true"] { display: contents; }
 .kb-order[data-text="true"] svg { width: 16px; height: 16px; }
@@ -141,7 +141,7 @@ span.kb-article-open { opacity: 0.35; }
 }
 .kb-toast button { border-color: transparent; background: transparent; box-shadow: none; color: var(--text-inverse); text-decoration: underline; text-underline-offset: 2px; }
 .kb-toast button:hover:not(:disabled) { background: rgb(127 127 127 / 0.2); border-color: transparent; color: var(--text-inverse); }
-.kb-toast .kb-toast-close { width: var(--control, 32px); padding: 0; text-decoration: none; }
+.kb-toast .kb-toast-close { width: var(--control); padding: 0; text-decoration: none; }
 .kb-toast svg { width: 14px; height: 14px; }
 
 /* Phone: the page scrolls as one, page actions are in reach, menus and dialogs are sheets from the bottom,
@@ -207,7 +207,7 @@ span.kb-article-open { opacity: 0.35; }
 
 /* A link that looks like a button (New article). */
 .button-link {
-  display: inline-flex; align-items: center; justify-content: center; min-height: var(--control, 32px); border: 1px solid var(--line-control);
+  display: inline-flex; align-items: center; justify-content: center; min-height: var(--control); border: 1px solid var(--line-control);
   border-radius: var(--radius); box-shadow: var(--shadow-1); padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 500; text-decoration: none;
   white-space: nowrap; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
@@ -217,7 +217,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-tree, .kb-tree ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .kb-tree ul { margin-top: 2px; padding-left: var(--space-3); border-left: 1px solid var(--line); margin-left: var(--space-2); }
 .kb-tree-link {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--control, 32px); border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--control); border-radius: var(--radius-sm);
   padding: var(--space-1) var(--space-2); color: var(--text-2); font-size: var(--fs-small); text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
@@ -246,7 +246,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-art-bar .kb-crumbs { flex: 1; overflow: hidden; }
 .kb-art-state { display: flex; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--fs-label); white-space: nowrap; }
 .kb-art-acts { display: flex; align-items: center; gap: var(--space-2); }
-.kb-more-button { width: var(--control, 32px); padding: 0; }
+.kb-more-button { width: var(--control); padding: 0; }
 .kb-more-button svg { width: 16px; height: 16px; }
 .kb-editor-notes { display: grid; gap: var(--space-2); }
 .kb-conflict { display: grid; gap: var(--space-2); }
@@ -497,7 +497,7 @@ span.kb-article-open { opacity: 0.35; }
 .media-notice button { margin-left: auto; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-inverse); text-decoration: underline; }
 .media-notice button + button { margin-left: 0; }
 .media-notice button:hover:not(:disabled) { background: rgb(127 127 127 / 0.2); border-color: transparent; color: var(--text-inverse); }
-.media-notice-close { width: var(--control, 32px); padding: 0; text-decoration: none; }
+.media-notice-close { width: var(--control); padding: 0; text-decoration: none; }
 .media-replace .kb-dialog-body input { width: 100%; }
 .media-replace-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 .media-replace-list button { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--space-2); justify-content: flex-start; text-align: left; }
@@ -738,7 +738,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-collections-head h2 { color: var(--text-3); font-size: var(--fs-label); font-weight: 600; line-height: 16px; }
 .kb-tree, .kb-tree ul { gap: var(--space-1); }
 .kb-tree ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); border-left: 0; }
-.kb-tree-link { min-height: var(--control, 32px); border-radius: var(--radius); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; }
+.kb-tree-link { min-height: var(--control); border-radius: var(--radius); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; }
 .kb-tree-link:hover { background: var(--surface-2); }
 .kb-tree-link[aria-current="page"] { background: var(--surface-3); font-weight: 500; box-shadow: none; }
 .kb-tree-count { width: 24px; text-align: right; }
@@ -762,7 +762,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-frame .kb-search input:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-1); }
 .kb-frame .segmented { border: 0; background: var(--surface-2); gap: 0; }
 /* 32 px to click (rule: controls >= 32 px with a mouse); the design draws 28. */
-.kb-frame .segmented label { min-height: 32px; padding: 0 var(--space-3); }
+.kb-frame .segmented label { min-height: 28px; padding: 0 var(--space-3); }
 .kb-frame .segmented label:has(input:checked) { box-shadow: var(--shadow-1); }
 .kb-cols-head { min-height: 36px; border-bottom: 1px solid var(--line); background: var(--surface-1); padding: 0 0 0 var(--space-4); color: var(--text-3); font-weight: 600; line-height: 16px; }
 .kb-list-scroll { background: var(--surface-1); }
@@ -820,7 +820,7 @@ span.kb-article-open { opacity: 0.35; }
   .kb-editor-notes { padding: var(--space-3) var(--space-4) 0; }
 }
 .kb-tabs { gap: 0; border: 0; background: var(--surface-2); }
-.kb-tabs button { --control: 32px; min-height: 32px; font-size: var(--fs-small); font-weight: 500; }
+.kb-tabs button { --control: 28px; min-height: 28px; font-size: var(--fs-small); font-weight: 500; }
 .kb-tabs button[aria-selected="true"] { box-shadow: var(--shadow-1); }
 
 /* H1-c: version history. 600 px; each version a row on a hairline, its restore button at the right. */
@@ -947,8 +947,8 @@ span.kb-article-open { opacity: 0.35; }
 
 /* ── rv3 review: hit areas, a few contrasts and edges. ── */
 /* KB-02 … KB-04, KB-06: links and small controls are 32 px to click with a mouse, 44 px with a finger. */
-:is(.kb-language-counts .link-action, .kb-language-visible, .kb-back, .kb-crumbs a, .media-review, .media-select-all, .kb-history .link-button, .kb-translation-list li > a) { display: inline-flex; align-items: center; min-height: var(--control, 32px); }
-.media-tabs button { --control: 32px; min-height: 32px; }
+:is(.kb-language-counts .link-action, .kb-language-visible, .kb-back, .kb-crumbs a, .media-review, .media-select-all, .kb-history .link-button, .kb-translation-list li > a) { display: inline-flex; align-items: center; min-height: var(--control); }
+.media-tabs button { --control: 28px; min-height: 28px; }
 @media (pointer: coarse), (max-width: 44rem) {
   :is(.kb-language-counts .link-action, .kb-language-visible, .kb-back, .kb-crumbs a, .media-review, .media-select-all, .kb-history .link-button, .kb-translation-list li > a, .media-tabs button) { min-height: var(--touch); }
 }

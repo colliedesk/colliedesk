@@ -57,7 +57,9 @@ that rule looks at the kept contact's address: a conversation whose customer wro
 address is a first email to the kept address, so it waits for a verified sending domain or a plan.
 The refusal says so and names the address the reply would go to.
 
-## Through the API and MCP
+The [export](export.md) keeps every merge, undone or not.
+
+## For developers and AI agents
 
 - `GET /api/v1/contacts/{id}`: the contact, `conversation_count`, `merged_into` and `merges`.
 - `GET /api/v1/conversations?contact={id}`: the history, a page at a time.
@@ -67,5 +69,3 @@ The refusal says so and names the address the reply would go to.
   `DELETE /api/v1/contacts/{id}/merges/{mergeId}` undoes a merge.
 - MCP tools: `colliedesk_contact_get`, `colliedesk_contacts_find`, `colliedesk_contact_update`,
   `colliedesk_contact_merge` and `colliedesk_contact_unmerge` (see [MCP](mcp.md)).
-
-The [export](export.md) keeps every merge, undone or not.

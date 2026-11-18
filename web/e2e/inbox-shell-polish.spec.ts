@@ -59,8 +59,8 @@ test('Start a conversation and Add channel share one title and one label style',
   for (const look of [started, added]) {
     expect(look.title).toEqual({ size: '16px', weight: '600', line: '24px', color: 'rgb(23, 23, 23)' });
   }
-  // The drawn label: 13 px, medium, the second text colour.
-  expect(started.field).toEqual({ size: '13px', weight: '500', color: 'rgb(77, 77, 77)' });
+  // The drawn label: 12 px (--fs-small, the secondary size of the dense scale), medium, the second text colour.
+  expect(started.field).toEqual({ size: '12px', weight: '500', color: 'rgb(77, 77, 77)' });
 });
 
 test('the AI draft control keeps its name and state in words on a narrow reply box, and every tool has a tooltip', async ({ page }) => {

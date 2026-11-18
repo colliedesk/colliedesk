@@ -97,20 +97,24 @@ test.describe('at 1440 px', () => {
     await page.screenshot({ path: test.info().outputPath('mentions-nothing-open-1440.png') });
   });
 
-  test('a conversation keeps its form and address on one line, nothing floats over a row, and the search box shows its whole placeholder', async ({ page }) => {
+  test('a conversation keeps its form and address on one line, nothing floats over a row, and the search field shows its whole placeholder', async ({ page }) => {
     const suffix = await newWorkspace(page, 'Header Panes');
     await formConversations(page, suffix, 10);
     await page.goto(`${base}/`);
     const rows = page.locator('.conversation-scroll > .conversation-item');
     await expect(rows).toHaveCount(10);
 
-    // The search box reads "Search conversations" in full: its placeholder's box (inside the input) is as wide as
-    // the words. It shows empty while a filter is on (every conversation here came through a web form), beside the
-    // Filter count.
+    // The search field reads its placeholder in full: its placeholder's box (inside the input) is as wide as the words,
+    // beside where it searches. A filter is on (every conversation here came through a web form); Search opens the field.
     await page.goto(`${base}/?channel=web_form`);
     await expect(rows).toHaveCount(10);
+    await page.getByRole('search', { name: 'Inbox' }).getByRole('button', { name: 'Search' }).click();
     const search = page.getByRole('searchbox', { name: 'Search conversations' });
     await expect(search).toHaveValue('');
+    await expect(search).toBeFocused();
+    const scope = page.locator('.list-search-scope');
+    await expect(scope).toHaveText('in all channels');
+    expect.soft(await scope.evaluate((element) => element.scrollWidth <= element.clientWidth), 'where it searches reads in full').toBe(true);
     const words = await search.evaluate((input: HTMLInputElement) => {
       const style = getComputedStyle(input);
       const context = document.createElement('canvas').getContext('2d')!;

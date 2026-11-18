@@ -4,6 +4,7 @@ import type { UpdateConversationRequest } from '../../api/client';
 import type { TeamMember, Conversation, ConversationOrigin, SettableStatus, Tag } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { clockLine, rowDue, slaOf } from '../../lib/sla';
+import { useMinuteNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, UserIcon } from '../../ui/icons';
 import { ActionMenu } from './action-menu';
@@ -17,9 +18,10 @@ interface DetailsPanelProps {
   conversation?: Conversation;
   agents: TeamMember[];
   tags: Tag[];
-  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
-  onAddTag?: (conversationId: string, tagId: string) => void;
-  onRemoveTag?: (conversationId: string, tagId: string) => void;
+  // Each change settles when the server answered; a refusal rejects, and the details say it was not saved.
+  onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void | Promise<unknown>;
+  onAddTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
+  onRemoveTag?: (conversationId: string, tagId: string) => void | Promise<unknown>;
   onCreateTag?: (conversationId: string, name: string) => void;
   timezone?: string;
   onClose?: () => void;
@@ -41,13 +43,64 @@ interface DetailsPanelProps {
 
 const statusOrder = ['pending', 'resolved', 'closed', 'open'] as const;
 
+type Field = 'status' | 'priority' | 'assignee' | 'tags';
+const fieldNames: Record<Field, string> = { status: messages.status, priority: messages.priority, assignee: messages.assignee, tags: messages.tags };
+
+// The value an edit key ('status', 'priority', 'assignee', 'tag:<id>') has on the server, to tell whether a refused
+// change still describes the row.
+const serverValue = (conversation: Conversation, key: string) => key === 'status' ? conversation.status
+  : key === 'priority' ? conversation.priority : key === 'assignee' ? conversation.assignee_id ?? ''
+    : String(conversation.tags.some((tag) => `tag:${tag.id}` === key));
+
+// useEdits keeps the details honest about a change on its way: while it saves, the value picked shows (not the old
+// one), and one the server refuses goes back to the conversation's value with a message under its row. The message
+// is about the latest pick of that field only, and goes once the field changes from elsewhere (the header, a teammate).
+function useEdits(conversation?: Conversation) {
+  const conversationId = conversation?.id;
+  const id = useId();
+  const [saving, setSaving] = useState<Record<string, { value: unknown; token: object }>>({});
+  const [failed, setFailed] = useState<{ conversationId: string; field: Field; key: string; was: string }>();
+  // The latest pick of each value: an earlier pick's answer, refused or not, no longer speaks for it.
+  const latest = useRef<Record<string, object>>({});
+  const shown = <T,>(key: string, value: T): T => {
+    const edit = conversationId ? saving[`${conversationId}:${key}`] : undefined;
+    return edit ? edit.value as T : value;
+  };
+  const save = (field: Field, key: string, value: unknown, change: () => void | Promise<unknown>) => {
+    if (!conversation || !conversationId) return;
+    const at = `${conversationId}:${key}`;
+    const token = {};
+    const was = serverValue(conversation, key);
+    latest.current[at] = token;
+    setFailed(undefined);
+    setSaving((now) => ({ ...now, [at]: { value, token } }));
+    const settle = () => setSaving((now) => {
+      if (now[at]?.token !== token) return now;
+      const rest = { ...now };
+      delete rest[at];
+      return rest;
+    });
+    let result: void | Promise<unknown>;
+    try { result = change(); } catch (error) { result = Promise.reject(error); }
+    Promise.resolve(result).then(settle, () => {
+      settle();
+      if (latest.current[at] === token) setFailed({ conversationId, field, key, was });
+    });
+  };
+  const failing = conversation && failed && failed.conversationId === conversationId && failed.was === serverValue(conversation, failed.key) ? failed.field : undefined;
+  // The message under a row is also its control's description, so focus coming back to the control says why.
+  const describedBy = (field: Field) => failing === field ? `${id}-${field}-error` : undefined;
+  const error = (field: Field) => failing === field
+    ? <p role="alert" id={describedBy(field)} className="error-copy property-error">{messages.notSaved(fieldNames[field])}</p> : null;
+  return { shown, save, error, describedBy };
+}
+
 // Status is a menu, not a select: a closed select fires change on every arrow key in some browsers, and each
 // step would change the conversation (and on a chat tell the customer). Where a status may tell, Tell the
 // customer comes first, ticked each time the menu opens.
-function StatusPick({ conversation, onUpdate }: { conversation?: Conversation; onUpdate?: DetailsPanelProps['onUpdate'] }) {
+function StatusPick({ conversation, status = conversation?.status ?? 'open', onUpdate, describedBy }: { conversation?: Conversation; status?: Conversation['status']; onUpdate?: DetailsPanelProps['onUpdate']; describedBy?: string }) {
   const [tell, setTell] = useState(true);
   const id = useId();
-  const status = conversation?.status ?? 'open';
   // Asked only where a status may tell: a chat whose channel is on and has words (the server's word).
   const asks = conversation ? mayTell(conversation) : false;
   const channel = conversation?.channel_ref?.name ?? messages.theChannel;
@@ -57,7 +110,7 @@ function StatusPick({ conversation, onUpdate }: { conversation?: Conversation; o
   const quiet = others.filter((value) => !told.includes(value));
   return <div className="property-row status-pick-row"><span id={`${id}-label`}>{messages.status}</span>
     {/* A conversation in Spam keeps its status until Not spam (the header) takes it out. */}
-    <ActionMenu<SettableStatus> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} disabled={!conversation || !onUpdate || status === 'spam'}
+    <ActionMenu<SettableStatus> className="status-pick" label={messages.status} labelledBy={`${id}-label ${id}-value`} describedBy={describedBy} disabled={!conversation || !onUpdate || status === 'spam'}
       summary={<span id={`${id}-value`}><StatusLabel status={status} /></span>}
       onToggle={(open) => { if (open) setTell(true); }}
       onApply={(value) => conversation && onUpdate?.(conversation.id, !asks || tell ? { status: value } : { status: value, notify: false })}>
@@ -78,6 +131,15 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
   const readsTeam = holds('team:read');
   const readsTags = holds('tags:read');
   const [tagName, setTagName] = useState('');
+  const edits = useEdits(conversation);
+  // A select cannot wrap, so a long value is cut on screen; its title holds the full text.
+  const priority = edits.shown('priority', conversation?.priority ?? 'normal');
+  const assignee = edits.shown('assignee', conversation?.assignee_id ?? '');
+  const holder = agents.find((agent) => agent.id === assignee);
+  const assigneeName = !assignee ? messages.unassigned : assignee === currentAgentId ? messages.assignToMe
+    : holder ? holder.display_name || holder.email : messages.anotherTeammate;
+  const update = (field: Field, key: string, value: unknown, changes: UpdateConversationRequest) =>
+    conversation && onUpdate && edits.save(field, key, value, () => onUpdate(conversation.id, changes));
   const createTag = () => {
     if (!conversation || !tagName.trim()) return;
     onCreateTag?.(conversation.id, tagName.trim());
@@ -92,13 +154,16 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
         currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} onWaiting={onTriageWaiting} />}
       <section className="details-section">
         <h2 className="sr-only">{messages.properties}</h2>
-        <StatusPick key={conversation?.id} conversation={conversation} onUpdate={onUpdate} />
-        <label className="property-row"><span>{messages.priority}</span><select value={conversation?.priority ?? 'normal'} disabled={!conversation}
-          onChange={(event) => conversation && onUpdate?.(conversation.id, { priority: event.target.value as UpdateConversationRequest['priority'] })}>
+        <StatusPick key={conversation?.id} conversation={conversation} status={edits.shown('status', conversation?.status ?? 'open')}
+          describedBy={edits.describedBy('status')} onUpdate={onUpdate && ((_id, changes) => update('status', 'status', changes.status, changes))} />
+        {edits.error('status')}
+        <label className="property-row"><span>{messages.priority}</span><select value={priority} title={messages.priorities[priority]} aria-describedby={edits.describedBy('priority')} disabled={!conversation}
+          onChange={(event) => { const priority = event.target.value as UpdateConversationRequest['priority']; update('priority', 'priority', priority, { priority }); }}>
           {Object.entries(messages.priorities).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
-        <label className="property-row"><span>{messages.assignee}</span><select value={conversation?.assignee_id ?? ''} disabled={!conversation}
-          onChange={(event) => conversation && onUpdate?.(conversation.id, { assignee_id: event.target.value || null })}>
+        {edits.error('priority')}
+        <label className="property-row"><span>{messages.assignee}</span><select value={assignee} title={assigneeName} aria-describedby={edits.describedBy('assignee')} disabled={!conversation}
+          onChange={(event) => update('assignee', 'assignee', event.target.value, { assignee_id: event.target.value || null })}>
           {/* The signed-in agent is Me, first; teammates follow and Unassigned comes last, as in the Filter menu. */}
           {currentAgentId && <option value={currentAgentId}>{messages.assignToMe}</option>}
           {agents.filter((agent) => agent.id !== currentAgentId && (!agent.deactivated_at || agent.id === conversation?.assignee_id)).map((agent) =>
@@ -107,14 +172,16 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
           {!readsTeam && conversation?.assignee_id && conversation.assignee_id !== currentAgentId && <option value={conversation.assignee_id}>{messages.anotherTeammate}</option>}
           <option value="">{messages.unassigned}</option>
         </select></label>
+        {edits.error('assignee')}
         <div className="property-row tags-row"><span>{messages.tags}</span>
           {/* Without the tag list (tags:read) the conversation's own tags are named, and nothing else is offered. */}
-          {!readsTags ? <span className="tag-names">{tagNames(conversation)}</span> : <PropertyMenu className="tags-pick" label={messages.tags} disabled={!conversation} summary={tagNames(conversation)}>
+          {!readsTags ? <span className="tag-names">{tagNames(conversation)}</span> : <PropertyMenu className="tags-pick" label={messages.tags} describedBy={edits.describedBy('tags')} disabled={!conversation} summary={<span title={tagNames(conversation)}>{tagNames(conversation)}</span>}>
             {tags.length === 0 && <p className="muted-copy">{messages.noTagsYet}</p>}
             {tags.map((tag) => {
-              const checked = conversation?.tags.some((item) => item.id === tag.id) ?? false;
+              const checked = edits.shown(`tag:${tag.id}`, conversation?.tags.some((item) => item.id === tag.id) ?? false);
+              const change = checked ? onRemoveTag : onAddTag;
               return <label className="tag-check" key={tag.id}><input type="checkbox" checked={checked}
-                onChange={() => conversation && (checked ? onRemoveTag?.(conversation.id, tag.id) : onAddTag?.(conversation.id, tag.id))} />{tag.name}</label>;
+                onChange={() => conversation && change && edits.save('tags', `tag:${tag.id}`, !checked, () => change(conversation.id, tag.id))} />{tag.name}</label>;
             })}
             {holds('tags:create') && <form className="tag-create" onSubmit={(event) => { event.preventDefault(); createTag(); }}>
               <input aria-label={messages.newTagName} placeholder={messages.newTagName} value={tagName} onChange={(event) => setTagName(event.target.value)} />
@@ -122,6 +189,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
             </form>}
           </PropertyMenu>}
         </div>
+        {edits.error('tags')}
         {conversation && slaOf(conversation) && <DueRow sla={slaOf(conversation)!} timezone={timezone} canManage={canManage} />}
       </section>
       {conversation && (
@@ -133,7 +201,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
               ? <button type="button" className="link-button" title={messages.showOrganizationConversations(conversation.contact_organization)}
                 onClick={() => onShowOrganizationConversations(conversation.contact_organization ?? '')}>{conversation.contact_organization}</button>
               : <span>{conversation.contact_organization}</span>}</div>}
-          {onShowContactConversations && <button type="button" className="details-link" onClick={() => onShowContactConversations(conversation.contact_id)}>
+          {onShowContactConversations && <button type="button" className="details-link" title={messages.showContactConversations(conversation.contact_name)} onClick={() => onShowContactConversations(conversation.contact_id)}>
             <UserIcon /><span>{messages.showContactConversations(conversation.contact_name)}</span><ChevronRightIcon /></button>}
         </section>
       )}
@@ -147,25 +215,31 @@ const tagNames = (conversation?: Conversation) => conversation?.tags.map((tag) =
 
 // PropertyMenu is a property's value that opens a popover in place: ticking in it keeps it open, so several
 // tags change in one visit. Escape or focus leaving closes it.
-function PropertyMenu({ className, label, summary, disabled, children }: { className: string; label: string; summary: ReactNode; disabled?: boolean; children: ReactNode }) {
+function PropertyMenu({ className, label, summary, describedBy, disabled, children }: { className: string; label: string; summary: ReactNode; describedBy?: string; disabled?: boolean; children: ReactNode }) {
   const menu = useRef<HTMLDetailsElement>(null);
   const close = () => { if (menu.current) menu.current.open = false; };
   return <details ref={menu} className={`action-menu property-menu ${className}`} data-disabled={disabled || undefined}
     onKeyDown={(event) => { if (event.key === 'Escape' && menu.current?.open) { event.stopPropagation(); close(); menu.current.querySelector('summary')?.focus(); } }}
-    onBlur={(event) => { if (!menu.current?.contains(event.relatedTarget as Node | null)) close(); }}>
-    <summary aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}><span>{summary}</span><ChevronDownIcon /></summary>
+    onBlur={(event) => {
+      if (menu.current?.contains(event.relatedTarget as Node | null)) return;
+      // Firefox blurs a button the moment it becomes disabled (Create tag after its name is cleared); focus
+      // has not left the menu, so it stays open and focus returns to its summary.
+      if (event.relatedTarget === null && (event.target as HTMLElement).matches(':disabled')) { menu.current?.querySelector('summary')?.focus(); return; }
+      close();
+    }}>
+    <summary aria-disabled={disabled} aria-describedby={describedBy} onClick={(event) => { if (disabled) event.preventDefault(); }}><span>{summary}</span><ChevronDownIcon /></summary>
     <div className="action-popover" role="group" aria-label={label}>{children}</div>
   </details>;
 }
 
 // The Due row: when the reply is due, or how late, as the list row says it; its menu holds each clock in full.
 function DueRow({ sla, timezone, canManage }: { sla: NonNullable<ReturnType<typeof slaOf>>; timezone: string; canManage: boolean }) {
-  const due = rowDue(sla, timezone);
+  const due = rowDue(sla, timezone, useMinuteNow());
   const first = clockLine(sla.first_response, timezone);
   const text = due?.text ?? first.text;
   const tone = due ? (due.late ? 'late' : undefined) : first.tone;
   return <div className="property-row due-row"><span>{messages.dueAt}</span>
-    <PropertyMenu className="due-pick" label={messages.targets} summary={<span className={tone ? `target-${tone}` : undefined} title={due?.full}>{text}</span>}>
+    <PropertyMenu className="due-pick" label={messages.targets} summary={<span className={tone ? `target-${tone}` : undefined} title={due?.full ?? text}>{text}</span>}>
       <Targets sla={sla} timezone={timezone} canManage={canManage} />
     </PropertyMenu></div>;
 }

@@ -1,7 +1,7 @@
 /* Review: the intake queue of chat channels. Loaded with its chunk; scrollbars follow base.css. */
 /* Paper "17 Review" (R1-a…d): a 720px column of cards with the shared 1px ring. */
 .review-page > header { max-width: 720px; margin-bottom: var(--space-6); }
-.review-page > header h1 { font: 500 26px/32px var(--font-display); letter-spacing: -0.015em; }
+.review-page > header h1 { font: 500 var(--fs-heading)/32px var(--font-display); letter-spacing: -0.015em; }
 .review-page > header p { color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
 
 .review-stats { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); max-width: 720px; margin: 0 0 var(--space-4); color: var(--text-3); font-size: var(--fs-small); line-height: 20px; font-variant-numeric: tabular-nums; }
@@ -79,5 +79,5 @@
 /* Tap targets: the underline tabs are 36px in ui/controls.css, which a phone needs at 44px; the link to the
    conversation a decided card opened is a 32px (44px on a phone) target without moving its line. */
 @media (pointer: coarse), (max-width: 37.5rem) { .review-bar .seg-tabs-underline button { min-height: var(--touch); } }
-.intake-conversation > a { display: inline-flex; align-items: center; min-height: 32px; }
+.intake-conversation > a { display: inline-flex; align-items: center; min-height: 28px; }
 @media (pointer: coarse), (max-width: 30rem) { .intake-conversation > a { min-height: var(--touch); } }

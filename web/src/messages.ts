@@ -113,11 +113,28 @@ export const messages = {
   allAssignees: 'Any assignee',
   unassigned: 'Unassigned',
   allTags: 'All tags',
-  allConversations: 'All',
+  // The list header: the place the list is in, its status picker and its search field.
+  allChannels: 'All channels',
+  allStatuses: 'All statuses',
+  statusPicked: (status: string) => `Status: ${status}`,
+  // Where the search field looks: the place the title named.
+  searchIn: (place: string) => `in ${place}`,
+  searchInAllChannels: 'in all channels',
+  // A channel the loaded channel list does not name (it could not be read): the title says unknownChannel.
+  searchInThisChannel: 'in this channel',
+  clearSearch: 'Clear search',
+  unknownChannel: 'A channel',
   filter: 'Filter',
   filtersActive: (count: number) => `${count} filter${count === 1 ? '' : 's'} active`,
   noConversations: 'No conversations match these filters.',
   noOpenConversations: 'No open conversations. Every customer has an answer.',
+  // An empty list inside a place (a channel or a saved view) or a status where nothing else narrows it: it is caught up
+  // there, not filtered. Only the whole Open queue (noOpenConversations) may say every customer has an answer; a place
+  // is part of it, and open conversations may wait outside.
+  noConversationsIn: (status: string, place?: string) => {
+    const where = place ? ` in ${place}` : '';
+    return ['open', 'pending', 'resolved', 'closed', 'spam'].includes(status) ? `No ${status} conversations${where}.` : `No conversations${where}.`;
+  },
   bulkActions: 'Bulk actions',
   // SelectAll ticks this page only, so the count says of how many.
   selectedCount: (count: number, of: number) => `${count} of ${of} selected`,
@@ -198,6 +215,10 @@ export const messages = {
   // The Filter, Sort and Views buttons load with the first screen; the rest of the filter and saved view
   // wording loads with their menus (src/features/inbox/filter-messages.ts).
   inboxSort: 'Sort',
+  // The orders of the list, named beside the sort icon. The Sort menu offers Due first (not while reply targets are off:
+  // it orders as Waiting longest then), Latest activity, Waiting longest and Priority; the others are named only while a
+  // link sets them.
+  sorts: { updated_desc: 'Latest activity', waiting_longest: 'Waiting longest', priority: 'Priority', updated_asc: 'Oldest activity', created_desc: 'Newest first', created_asc: 'Oldest first', due: 'Due first' } as Record<string, string>,
   savedViewsTitle: 'Views',
   previousPage: 'Previous page',
   nextPage: 'Next page',
@@ -292,6 +313,8 @@ export const messages = {
   dayGroups: { today: 'Today', earlier: 'Earlier' },
   showDetails: 'Show details',
   hideDetails: 'Hide details',
+  // A change in the details the server refused: the details show the value the conversation still has.
+  notSaved: (what: string) => `${what} not saved. Try again.`,
   aiSuggestionWaiting: 'AI suggestion',
   noTagsYet: 'No tags yet.',
   settingsSections: 'Settings sections',
@@ -372,6 +395,7 @@ export const messages = {
   trialEnds: (when: string) => `Trial ends ${when}`,
   trialLocks: 'Then the workspace locks. Nothing is deleted.',
   trialAskAdmin: 'Ask an admin to choose a plan.',
+  hideTrialNotice: 'Hide the trial notice',
   buyPlan: (plan: string) => `Buy ${plan}`,
   trialExtendedNote: 'Your trial was extended after your Freshdesk import.',
   choosePlan: 'Choose a plan',

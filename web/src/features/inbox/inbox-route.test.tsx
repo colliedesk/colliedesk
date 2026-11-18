@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
+import { ReplyConflictError } from '../../api/client';
 import { InboxRoute } from './inbox-route';
 import { askInbox } from '../shell/inbox-intents';
 import { readRecent } from '../shell/recent-items';
@@ -460,6 +461,35 @@ test('the inbox opens on open conversations', async () => {
   expect(new URLSearchParams(api.conversations.mock.calls[0][0]).get('status')).toBe('open');
 });
 
+test('with reply targets off the server answers Due first in Waiting longest order; the Sort menu says so, also while the next filters load', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  // The server orders due as waiting_longest and says so; Pending in the default order never answers in this test.
+  api.conversations.mockImplementation((query: string) => {
+    const params = new URLSearchParams(query);
+    const sort = params.get('sort') === 'due' ? 'waiting_longest' : params.get('sort');
+    if (params.get('status') === 'pending' && sort === 'waiting_longest') return new Promise(() => {});
+    return Promise.resolve({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50, sort });
+  });
+  const lastQuery = () => new URLSearchParams(api.conversations.mock.lastCall?.[0]);
+  const sortMenu = () => screen.getByRole('combobox', { name: 'Sort' });
+  renderRoute();
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  expect(new URLSearchParams(api.conversations.mock.calls[0][0]).get('sort')).toBe('due');
+  await waitFor(() => expect(sortMenu()).toHaveValue('waiting_longest'));
+  fireEvent.change(sortMenu(), { target: { value: 'priority' } });
+  fireEvent.click(screen.getByRole('button', { name: /^Status: / }));
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Pending' }));
+  await waitFor(() => expect(lastQuery().get('status')).toBe('pending'));
+  expect(lastQuery().get('sort')).toBe('priority');
+  // Back to the default order: its page is still loading and the Priority page holds the screen meanwhile.
+  fireEvent.change(sortMenu(), { target: { value: 'waiting_longest' } });
+  await waitFor(() => expect(lastQuery().get('sort')).toBe('due'));
+  expect(sortMenu()).toHaveValue('waiting_longest');
+  // The order in use reads in words beside the sort icon.
+  expect(screen.getByText('Waiting longest', { selector: 'span.sort-label' })).toBeInTheDocument();
+});
+
 test('a workspace whose conversations are all closed says nothing is open, not "Get started"', async () => {
   quietApis();
   api.conversations.mockReset();
@@ -552,6 +582,160 @@ test('resolving the open conversation never swaps the screen to another one, so 
   expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer');
+});
+
+// A reply answers with a message, not the conversation, so nothing seeds it. On a full page of Waiting longest
+// the reply moves it off the page, and it stays on screen all the same while its by-id read is on the way.
+test('a reply that moves the open conversation off the page keeps it and its reply box on screen', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  api.createMessage.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  let answered = false;
+  api.conversations.mockImplementation(async () => ({ items: answered ? [beta] : [alpha, beta], page: 1, page_size: 50 }));
+  api.conversation.mockReturnValue(new Promise(() => {})); // the by-id read never answers
+  api.createMessage.mockImplementation(async () => { answered = true; return { id: '77777777-7777-4777-8777-777777777777' }; });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Answered' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: /alpha conversation/i })).not.toBeInTheDocument());
+  expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Message body')).toBeInTheDocument();
+});
+
+// With nothing picked the first row is on screen; a live refresh that puts a new conversation on top must not
+// swap the thread and the reply box under the agent who started reading and writing there.
+test('with nothing picked, the conversation shown first stays on screen when a live refresh puts another on top', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  let arrived = false;
+  api.conversations.mockImplementation(async () => ({ items: arrived ? [beta, alpha] : [alpha], page: 1, page_size: 50 }));
+  api.conversation.mockReturnValue(new Promise(() => {}));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('heading', { name: 'Alpha conversation' });
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Half-written answer to Alpha' } });
+  arrived = true;
+  await act(async () => { await client.invalidateQueries({ queryKey: ['conversations'] }); });
+  await screen.findByRole('button', { name: /beta conversation/i });
+  expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer to Alpha');
+  // A pick still changes it.
+  fireEvent.click(screen.getByRole('button', { name: /beta conversation/i }));
+  expect(await screen.findByRole('heading', { name: 'Beta conversation' })).toBeInTheDocument();
+});
+
+// On a phone the list and a conversation take turns on the screen: a conversation the person has not tapped is not
+// in front of them, so teammates must not see them viewing it, and the notes asking them stay unread.
+test('on a phone the list opens no conversation until a tap: no presence, no thread requests, no row marked open', async () => {
+  const phone = { matches: true, media: '(max-width: 44rem)', addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  vi.stubGlobal('matchMedia', (query: string) => (query.includes('44rem') ? phone : { ...phone, matches: false, media: query }));
+  try {
+    quietApis();
+    const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.messages.mockClear();
+    api.timeEntries.mockClear();
+    drafts.list.mockClear();
+    api.announcePresence.mockClear();
+    renderRoute();
+    const row = await screen.findByRole('button', { name: /alpha conversation/i });
+    await waitFor(() => expect(api.agents).toHaveBeenCalled());
+    await act(async () => { await new Promise((done) => setTimeout(done, 200)); });
+    expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
+    expect(row).not.toHaveAttribute('aria-current');
+    expect(api.messages).not.toHaveBeenCalled();
+    expect(api.timeEntries).not.toHaveBeenCalled();
+    expect(drafts.list).not.toHaveBeenCalled();
+    expect(api.announcePresence).not.toHaveBeenCalled();
+    // A tap opens it (the address names it), and only then is it read and announced.
+    testRouter.params = { conversationId: alpha.id };
+    fireEvent.click(row);
+    expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+    await waitFor(() => expect(api.messages).toHaveBeenCalledWith(alpha.id));
+    await waitFor(() => expect(api.announcePresence).toHaveBeenCalledWith(alpha.id, expect.anything()), { timeout: 3_000 });
+  } finally {
+    vi.unstubAllGlobals();
+    testRouter.params = {};
+  }
+});
+
+// A phone turned from landscape (the wide layout shows the first row) to portrait puts the list in front of the
+// person: the first row they never tapped is no longer open there, so it is not marked open and its thread goes.
+test('when the screen narrows to the phone layout, the first row shown on the wide layout is no longer open', async () => {
+  const listeners = new Set<(event: { matches: boolean }) => void>();
+  const phone = { matches: false, media: '(max-width: 44rem)',
+    addEventListener: (_: string, change: (event: { matches: boolean }) => void) => { listeners.add(change); },
+    removeEventListener: (_: string, change: (event: { matches: boolean }) => void) => { listeners.delete(change); } };
+  const other = (query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  vi.stubGlobal('matchMedia', (query: string) => (query.includes('44rem') ? phone : other(query)));
+  try {
+    quietApis();
+    const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    renderRoute();
+    expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+    const row = screen.getByRole('button', { name: /alpha conversation/i });
+    expect(row).toHaveAttribute('aria-current', 'true');
+    act(() => {
+      phone.matches = true;
+      for (const change of listeners) change({ matches: true });
+    });
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull());
+    expect(screen.getByRole('button', { name: /alpha conversation/i })).not.toHaveAttribute('aria-current');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+// A change in the details that the server refuses must not look saved: the details say so and show the value the
+// conversation still has. While it saves, the details show the value picked, not the old one.
+test('a details edit that fails says it was not saved and shows the value back; while it saves, the pick shows', async () => {
+  quietApis();
+  const tag = { id: '44444444-4444-4444-8444-444444444444', name: 'billing', color: '#64748b' };
+  api.tags.mockResolvedValue({ items: [tag] });
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  let refuse!: (error: Error) => void;
+  api.updateConversation.mockReset();
+  api.updateConversation.mockImplementation(() => new Promise((_resolve, reject) => { refuse = reject; }));
+  api.addConversationTag.mockReset();
+  api.addConversationTag.mockRejectedValue(new Error('API 500'));
+  renderRoute();
+  await screen.findByRole('heading', { name: 'Alpha conversation' });
+  const priority = screen.getByRole('combobox', { name: 'Priority' });
+  fireEvent.change(priority, { target: { value: 'urgent' } });
+  expect(priority).toHaveValue('urgent');
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledTimes(1));
+  await act(async () => { refuse(new Error('API 500')); });
+  expect(await screen.findByRole('alert')).toHaveTextContent('Priority not saved. Try again.');
+  expect(priority).toHaveValue('normal');
+  // The status menu: the picked status shows while it saves, then comes back with the message.
+  fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Pending' }));
+  const statusShown = () => document.querySelector('.status-pick-row summary');
+  await waitFor(() => expect(statusShown()).toHaveTextContent('Pending'));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledTimes(2));
+  await act(async () => { refuse(new Error('API 500')); });
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Status not saved. Try again.'));
+  expect(statusShown()).toHaveTextContent('Open');
+  // A tag ticked and refused is unticked again.
+  const billing = await within(document.getElementById('conversation-details')!).findByRole('checkbox', { name: 'billing' });
+  fireEvent.click(billing);
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Tags not saved. Try again.'));
+  expect(billing).not.toBeChecked();
 });
 
 test('resolving quietly from the header sends notify false; a plain press sends none', async () => {
@@ -1279,6 +1463,33 @@ const writtenDraft = (conversationId: string, outcome: 'discarded' | null) => ({
   requested_by_agent_id: null, automatic: false, answers_message_id: null, reply_needed: null, created_at: '2026-10-14T00:00:00Z', ready_at: '2026-10-14T00:00:00Z',
   decided_at: outcome ? '2026-10-14T01:00:00Z' : null, decided_by_name: null, restored_at: null });
 
+// The notice that a reply came while the draft was reviewed is about that conversation; another one opened next
+// must not say someone replied to it.
+test('the notice that someone replied while a draft was reviewed stays with its conversation', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  api.conversations.mockResolvedValue({ items: [alpha, beta], page: 1, page_size: 50 });
+  drafts.list.mockImplementation(async (id: string) => ({ items: id === alpha.id ? [writtenDraft(alpha.id, null)] : [], next_before: null }));
+  api.createMessage.mockReset();
+  api.createMessage.mockRejectedValue(Object.assign(new (ReplyConflictError as unknown as new () => Error)(), { newer: [{ reply_number: 1, origin: null }] }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  const card = await screen.findByRole('region', { name: /draft from claude/i });
+  fireEvent.click(within(card).getByRole('button', { name: 'Send' }));
+  const notice = /Someone replied to this conversation while you were reviewing the draft/;
+  expect(await screen.findByText(notice)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /beta conversation/i }));
+  expect(await screen.findByRole('heading', { name: 'Beta conversation' })).toBeInTheDocument();
+  expect(screen.queryByText(notice)).toBeNull();
+  // Back on the conversation it happened in, it still says so.
+  fireEvent.click(screen.getByRole('button', { name: /alpha conversation/i }));
+  expect(await screen.findByText(notice)).toBeInTheDocument();
+  drafts.list.mockReset();
+  drafts.list.mockImplementation(async () => ({ items: [], next_before: null }));
+});
+
 test('resolving a conversation takes its waiting draft away at once: it moves to Earlier drafts', async () => {
   quietApis();
   api.conversations.mockReset();
@@ -1400,4 +1611,94 @@ test('with a conversation open on another mailbox, the default mailbox is asked 
     api.emailChannel.mockReset();
     api.emailChannelOf.mockReset();
   }
+});
+
+// The list's title names the place it is in, from what the inbox and the sidebar already read: no request of its own.
+test('a channel in the address titles the list with its name, from the channel list the inbox already reads', async () => {
+  quietApis();
+  const zalo = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  api.channelCounts.mockClear();
+  api.channelCounts.mockResolvedValueOnce({ types: [{ type: 'zalo_oa', count: 1 }], items: [{ id: zalo, name: 'Zalo OA', type: 'zalo_oa', status: { state: 'working' } }] } as never);
+  testRouter.search = { channel_id: zalo, status: 'all' };
+  renderRoute();
+  expect(await screen.findByRole('heading', { level: 2, name: 'Zalo OA' })).toBeInTheDocument();
+  expect(api.channelCounts).toHaveBeenCalledTimes(1);
+});
+
+test('inside one channel the rows leave out the channel name the title already says; every channel names it on each row', async () => {
+  quietApis();
+  const zalo = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const ref = { id: zalo, type: 'zalo_oa', name: 'Tea House', enabled: true, deleted: false, replies_via: null };
+  const channels = { types: [{ type: 'zalo_oa', count: 2 }], items: [{ id: zalo, name: 'Tea House', type: 'zalo_oa', status: { state: 'working' } },
+    { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', name: 'Zalo Shop', type: 'zalo_oa', status: { state: 'working' } }] };
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [{ ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel_ref: ref }], page: 1, page_size: 50 });
+  api.channelCounts.mockResolvedValue(channels as never);
+  testRouter.search = { channel_id: zalo, status: 'all' };
+  const { unmount } = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByRole('heading', { level: 2, name: 'Tea House' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Alpha conversation/ })).not.toHaveTextContent('Tea House');
+  unmount();
+  testRouter.search = { status: 'all' };
+  renderRoute();
+  await waitFor(() => expect(screen.getByRole('button', { name: /Alpha conversation/ })).toHaveTextContent('Tea House'));
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
+});
+
+test('a saved view the sidebar has read titles the list with its name, without asking for the views again', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  views.list.mockClear();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['saved-views'], { items: [{ id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', name: 'Urgent', scope: 'shared', filters: { priority: ['urgent'] },
+    owner_agent_id: null, created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', deleted_at: null, purges_at: null }] });
+  testRouter.search = { priority: 'urgent', status: 'all' };
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByRole('heading', { level: 2, name: 'Urgent' })).toBeInTheDocument();
+  expect(views.list).not.toHaveBeenCalled();
+});
+
+// Inside a channel nothing was filtered: an empty status there is caught up, and says so for that place.
+test('an empty status inside a channel says so for that channel, not that filters match nothing', async () => {
+  quietApis();
+  const zalo = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const counts = { open: 0, pending: 0, resolved: 2, closed: 0, spam: 0 };
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50, status_counts: counts });
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'zalo_oa', count: 1 }], items: [{ id: zalo, name: 'Zalo OA', type: 'zalo_oa', status: { state: 'working' } }] } as never);
+  testRouter.search = { channel_id: zalo };
+  renderRoute();
+  expect(await screen.findByText('No open conversations in Zalo OA.')).toBeInTheDocument();
+  expect(screen.queryByText('No conversations match these filters.')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+  act(() => testRouter.navigate({ search: { channel_id: zalo, status: 'pending' } }));
+  expect(await screen.findByText('No pending conversations in Zalo OA.')).toBeInTheDocument();
+  api.channelCounts.mockReset();
+  api.channelCounts.mockImplementation(async () => ({ types: [{ type: 'email', count: 1 }] }));
+});
+
+// The first answer already counts every status: a workspace with conversations but none open is caught up, known
+// without asking for the list a second time.
+test('an empty Open inbox tells caught up from new from the status counts of its own answer, with no second request', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50, status_counts: { open: 0, pending: 0, resolved: 0, closed: 4, spam: 0 } });
+  renderRoute();
+  expect(await screen.findByText('No open conversations. Every customer has an answer.')).toBeInTheDocument();
+  expect(api.conversations).toHaveBeenCalledTimes(1);
+});
+
+test('a channel list whose channel names could not be read still has a title: never a blank heading', async () => {
+  quietApis();
+  const zalo = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  api.channelCounts.mockClear();
+  api.channelCounts.mockRejectedValueOnce(new Error('channels unavailable'));
+  testRouter.search = { channel_id: zalo, status: 'all' };
+  renderRoute();
+  expect(await screen.findByRole('heading', { level: 2, name: 'A channel' })).toBeInTheDocument();
 });

@@ -15,12 +15,12 @@ async function newDesk(page: Page, label: string): Promise<void> {
 
 const at = (page: Page) => { const url = new URL(page.url()); return `${url.pathname}${url.search}${url.hash}`; };
 
-test('the menu lists the nine items and the reserved Conversation fields, with no sub-items, and the reserved page says what is coming', async ({ page }) => {
+test('the menu lists the ten items and the reserved Conversation fields, with no sub-items, and the reserved page says what is coming', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await newDesk(page, 'E2E settings menu');
   await page.goto(`${baseURL}/settings/channels`);
   const menu = page.getByRole('navigation', { name: 'Settings sections' });
-  await expect(menu.getByRole('link')).toHaveText(['Account', 'General', 'Members', 'Channels', 'Response targets', 'AI & agents', 'Saved replies', 'Conversation fields Coming', 'Data']);
+  await expect(menu.getByRole('link')).toHaveText(['Account', 'General', 'Members', 'Channels', 'Response targets', 'AI & agents', 'Saved replies', 'Tags', 'Conversation fields Coming', 'Data']);
   await expect(menu.getByRole('link', { name: 'Channels' })).toHaveAttribute('aria-current', 'page');
   await expect(menu.locator('ul ul')).toHaveCount(0);
   for (const name of ['Email', 'Web form', 'Help chat', 'Zalo OA']) await expect(menu.getByRole('link', { name, exact: true }), name).toHaveCount(0);
@@ -204,7 +204,7 @@ test('on a phone the list of settings shows the new menu, and a page goes back t
   await newDesk(page, 'E2E settings phone menu');
   await page.goto(`${baseURL}/settings`);
   const list = page.getByRole('navigation', { name: 'Settings sections' });
-  await expect(list.getByRole('link')).toHaveText(['Account', 'General', 'Members', 'Channels', 'Response targets', 'AI & agents', 'Saved replies', 'Conversation fields Coming', 'Data']);
+  await expect(list.getByRole('link')).toHaveText(['Account', 'General', 'Members', 'Channels', 'Response targets', 'AI & agents', 'Saved replies', 'Tags', 'Conversation fields Coming', 'Data']);
   await list.getByRole('link', { name: 'Members', exact: true }).click();
   await expect(page).toHaveURL(`${baseURL}/settings/members`);
   await expect(page.getByRole('tab', { name: /^People/ })).toBeVisible();
