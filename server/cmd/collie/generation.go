@@ -296,10 +296,11 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		// Provider set to Off with its models kept: workspaces that picked it see it greyed, as when switched off.
 		aiConfig.ServerOff, aiConfig.ServerOffLabel = true, config.AIServerOffLabel
 	}
+	funnel := telemetry.NewFunnel(telemetryConfig, nil)
 	apiConfig := httpapi.Config{Cursor: p.cursor, AI: aiConfig, ImportKeys: p.importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth,
 		Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: config.MailImageCacheBytes,
 		KBVideoMaxBytes: config.KBVideoMaxBytes, RequestPool: p.requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey,
-		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil), MetaConversions: metaConfig,
+		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: funnel, MetaConversions: metaConfig,
 		ProblemReportWorkspace: config.ProblemReportWorkspace, SwitchedOff: off, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
 		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv,
 		ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
@@ -340,7 +341,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		consoleSignIn.PublishableKey = cloudAuth.PublishableKey
 	}
 	// The help center is outermost: a request to a help center host never reaches the app, the API or MCP.
-	inner := mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators, Origin: origin}, webui.Handler(api, consoleSignIn))
+	inner := mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators, Origin: origin, Funnel: funnel}, webui.Handler(api, consoleSignIn))
 	g.handler = operatorHost(origin, p.operatorOrigin, api.WrapHelpCenter(inner), inner, webui.OperatorHandler("", consoleSignIn))
 	return g
 }
