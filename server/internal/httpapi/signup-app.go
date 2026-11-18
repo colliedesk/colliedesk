@@ -9,12 +9,19 @@ import (
 // signupAppOther is the app of a connector sign-up whose client this server cannot name.
 const signupAppOther = "other"
 
-// metadataHostApps names the app of a client ID metadata document by the host that serves it. The host is
-// where the document lives, so a stranger cannot claim it; the address is only parsed, never fetched.
+// metadataHostApps names the app of a client ID metadata document by the host that serves it; the address
+// is only parsed, never fetched. The sign-up form carries the address, so anyone can make a sign-up name an
+// app: the name only counts sign-ups by source and is never trusted for anything else.
 var metadataHostApps = []struct{ host, app string }{
 	{"claude.ai", "claude"}, {"anthropic.com", "claude"},
 	{"chatgpt.com", "chatgpt"}, {"openai.com", "chatgpt"},
 	{"cursor.com", "cursor"}, {"glama.ai", "glama"},
+}
+
+// metadataPathApps names the vendor's other app whose document sits on the same host under its own path:
+// Claude Code on the Claude hosts, Codex on the ChatGPT hosts.
+var metadataPathApps = []struct{ hostApp, word, app string }{
+	{"claude", "claude-code", "claude_code"}, {"chatgpt", "codex", "codex"},
 }
 
 // registeredNameApps names the app of a registration by the name it gave, first match wins: "Claude Code"
@@ -55,10 +62,19 @@ func metadataApp(clientID string) string {
 	host := address.Hostname()
 	for _, known := range metadataHostApps {
 		if host == known.host || strings.HasSuffix(host, "."+known.host) {
-			return known.app
+			return pathApp(known.app, strings.ToLower(address.Path))
 		}
 	}
 	return signupAppOther
+}
+
+func pathApp(hostApp, path string) string {
+	for _, known := range metadataPathApps {
+		if known.hostApp == hostApp && strings.Contains(path, known.word) {
+			return known.app
+		}
+	}
+	return hostApp
 }
 
 func registeredApp(name string) string {

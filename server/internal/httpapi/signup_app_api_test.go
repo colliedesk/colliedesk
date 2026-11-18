@@ -67,6 +67,9 @@ func TestATrialFromAnAIAppConnectorNamesTheApp(t *testing.T) {
 
 	signUp(signup{authorizeNext("https://claude.ai/oauth/mcp-oauth-client-metadata"), "claude"})
 	signUp(signup{testOrigin + authorizeNext("https://claude.ai/oauth/mcp-oauth-client-metadata"), "claude"})
+	// Claude Code and Codex publish their documents on the Claude and ChatGPT hosts, under their own path.
+	signUp(signup{authorizeNext("https://claude.ai/oauth/claude-code-client-metadata"), "claude_code"})
+	signUp(signup{authorizeNext("https://chatgpt.com/oauth/codex/client.json"), "codex"})
 	signUp(signup{authorizeNext("https://glama.ai/mcp/oauth/client.json"), "glama"})
 	signUp(signup{authorizeNext("https://claude.ai.attacker.example/client.json"), "other"})
 	signUp(signup{authorizeNext("https://claude.ai:8443/client.json"), "other"})
