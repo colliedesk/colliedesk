@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -18,7 +19,7 @@ type handler func(c *call, arguments map[string]any) (any, error)
 
 // register adds the tool to the server with the validation, the bearer hand-over and the error
 // mapping that every tool shares.
-func register(server *mcp.Server, spec Spec, rest *restClient) {
+func register(server *mcp.Server, spec Spec, rest *restClient, funnel httpapi.FunnelRecorder) {
 	var schema jsonschema.Schema
 	if err := json.Unmarshal([]byte(spec.Input), &schema); err != nil {
 		panic(fmt.Errorf("tool %s: input schema: %w", spec.Name, err))
@@ -38,11 +39,11 @@ func register(server *mcp.Server, spec Spec, rest *restClient) {
 	tool := &mcp.Tool{Name: spec.Name, Title: spec.Title, Description: spec.Description, Annotations: annotations,
 		InputSchema: json.RawMessage(spec.Input), OutputSchema: json.RawMessage(spec.Output)}
 	server.AddTool(tool, func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return execute(ctx, request, spec, resolved, rest), nil
+		return execute(ctx, request, spec, resolved, rest, funnel), nil
 	})
 }
 
-func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input *jsonschema.Resolved, rest *restClient) (result *mcp.CallToolResult) {
+func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input *jsonschema.Resolved, rest *restClient, funnel httpapi.FunnelRecorder) (result *mcp.CallToolResult) {
 	c := &call{rest: rest, spec: spec}
 	who, started, end := callerOf(ctx), time.Now(), ending{outcome: outcomeOK}
 	defer func() {
@@ -50,7 +51,9 @@ func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input
 			end = ending{outcome: outcomeError, errorType: "panic", err: fmt.Errorf("panic: %v", recovered)}
 			result = failure(failureText(c, end.err))
 		}
-		end.log(ctx, who, spec.Name, time.Since(started))
+		took := time.Since(started)
+		end.log(ctx, who, spec.Name, took)
+		end.record(funnel, who, spec.Name, took)
 	}()
 	token, ok := bearerFrom(request)
 	if !ok {

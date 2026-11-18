@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 // callerKey carries the caller of an authenticated MCP request to the tool call log line.
@@ -71,4 +73,15 @@ func (e ending) log(ctx context.Context, who caller, tool string, took time.Dura
 		attributes = append(attributes, "error", e.err.Error())
 	}
 	slog.Log(ctx, level, "mcp tool call", attributes...)
+}
+
+// record sends the same facts as log to the funnel as mcp_tool_called, keyed by the workspace id, so
+// the team sees which tools a trial that works only through an AI app called and how each call ended.
+// An operator call names no workspace and is never recorded.
+func (e ending) record(funnel httpapi.FunnelRecorder, who caller, tool string, took time.Duration) {
+	if funnel == nil || who.workspace == "" {
+		return
+	}
+	funnel.Record("mcp_tool_called", who.workspace, map[string]any{"tool": tool, "token": who.token, "outcome": e.outcome,
+		"error_type": e.errorType, "duration_ms": took.Milliseconds()})
 }
