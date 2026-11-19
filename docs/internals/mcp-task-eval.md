@@ -137,4 +137,5 @@ then the second, so both met the same API conditions.
   hint: a few more repairs, but no more passed runs.
 - The most common invalid call is now `id` for `conversation_id` on `colliedesk_conversation_get`
   (12 and 13 calls), then `tags` on `colliedesk_conversation_update` (4 and 4) and
-  `seen_reply_number` left out of `colliedesk_reply_send` (3 and 5).
+  `seen_reply_number` left out of `colliedesk_reply_send` (3 and 5). Since then a tool with one required `*_id`
+  takes `id` for it (`docs/internals/mcp.md`).
