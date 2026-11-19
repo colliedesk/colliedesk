@@ -1,7 +1,9 @@
 # MCP server internals
 
 `/mcp` (package `server/internal/mcpserver`) lets an AI agent work the inbox. User-facing page:
-`docs/user/mcp.md`. The server adapts the REST API; it adds no data access of its own.
+`docs/user/mcp.md`. The server adapts the REST API; it adds no data access of its own. Whether a
+model picks the right tools and finishes a task in few calls is measured by hand with
+[the MCP task eval](mcp-task-eval.md).
 
 ## Shape
 

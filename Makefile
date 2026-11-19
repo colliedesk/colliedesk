@@ -1,4 +1,4 @@
-.PHONY: test build e2e e2e-cross-browser eval-chat dev clean docs-mcp
+.PHONY: test build e2e e2e-cross-browser eval-chat eval-mcp dev clean docs-mcp
 
 TEST_DATABASE_URL ?= postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable
 
@@ -37,6 +37,10 @@ e2e-cross-browser:
 eval-chat:
 	cd server && AI_CHAT_EVAL=1 TEST_DATABASE_URL='$(TEST_DATABASE_URL)' go test ./internal/ai -run TestChatEval -count=1 -v
 	cd server && AI_CHAT_EVAL=1 TEST_DATABASE_URL='$(TEST_DATABASE_URL)' go test ./internal/httpapi -run TestHelpChatAgainstClaude -count=1 -v
+
+# The MCP task eval calls the Claude API (it costs money); see docs/internals/mcp-task-eval.md.
+eval-mcp:
+	cd server && MCP_TASK_EVAL=1 TEST_DATABASE_URL='$(TEST_DATABASE_URL)' go test ./internal/mcpserver -run TestMCPTaskEval -count=1 -v -timeout 60m
 
 # The tool table of docs/user/mcp.md, the host guides docs/user/connect-*.md and the web app's
 # connect-snippets.generated.ts come from the MCP tool catalog (server/internal/mcpserver/docgen).
