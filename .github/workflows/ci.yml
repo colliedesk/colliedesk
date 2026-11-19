@@ -495,6 +495,8 @@ jobs:
         run: python3 tests/ci-tools-test.py
       - name: Background checks pass on their output and exit status
         run: sh tests/ci-background-test.sh
+      - name: Compose smoke shows why docker compose up failed
+        run: sh tests/compose-smoke-test.sh
       - name: Background test services wait for readiness
         run: sh tests/ci-services-test.sh
       - name: Product name spelled Colliedesk
