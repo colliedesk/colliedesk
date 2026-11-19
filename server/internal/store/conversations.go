@@ -416,19 +416,26 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 		}
 	}
 	if filter.Search != "" {
-		pattern := q.arg(escapeLikePattern(filter.Search))
-		like := `ILIKE '%'||` + pattern + `||'%' ESCAPE '\'`
 		// The words may be a conversation's code, read as ?ref= reads it; only then do they change the order.
+		var either []string
 		if len(filter.refIDs) > 0 {
 			q.searchRef = "c.id=ANY(" + q.arg(filter.refIDs) + "::uuid[])"
+			either = append(either, q.searchRef)
 		}
-		byCode := ""
-		if q.searchRef != "" {
-			byCode = q.searchRef + ` OR `
+		// Every word must be somewhere in the conversation, each in any of its fields and in any order.
+		var every []string
+		for _, word := range searchWords(filter.Search) {
+			like := `ILIKE '%'||` + q.arg(escapeLikePattern(word)) + `||'%' ESCAPE '\'`
+			every = append(every, `(c.subject `+like+
+				` OR EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.detached_at IS NULL AND m.body `+like+`)`+
+				` OR EXISTS(SELECT 1 FROM contacts k WHERE k.workspace_id=c.workspace_id AND k.id=c.contact_id AND (k.name `+like+` OR k.email `+like+`)))`)
 		}
-		q.and(`(` + byCode + `c.subject ` + like +
-			` OR EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.detached_at IS NULL AND m.body ` + like + `)` +
-			` OR EXISTS(SELECT 1 FROM contacts k WHERE k.workspace_id=c.workspace_id AND k.id=c.contact_id AND (k.name ` + like + ` OR k.email ` + like + `)))`)
+		if len(every) > 0 {
+			either = append(either, strings.Join(every, " AND "))
+		}
+		if len(either) > 0 {
+			q.and(`(` + strings.Join(either, " OR ") + `)`)
+		}
 	}
 	if filter.ResultSnapshotID != "" {
 		q.and(`EXISTS(SELECT 1 FROM results_members rm WHERE rm.workspace_id=c.workspace_id AND rm.snapshot_id=` + q.arg(filter.ResultSnapshotID) +
