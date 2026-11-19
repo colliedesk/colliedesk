@@ -93,3 +93,29 @@ The error named only what was wrong (`unexpected additional properties ["query"]
 argument to use. Haiku's `refused-send` run was first scored a failure because its corrected search
 counted as a retried refusal; the scorer now tells the two apart and the run passes (in the table
 above).
+
+### 2026-11-19 Haiku, 3 rounds
+
+One Haiku round is too noisy to judge a change by: on the same build, three rounds passed 13, 15
+and 16 of 20 (44/60 with the rescored `refused-send`). Compare builds over three rounds, and treat
+a gap of about 5 runs in 60 as noise.
+
+| Build | Passed | Rounds | Calls per run | Invalid calls | Unsafe |
+|---|---|---|---|---|---|
+| before the search change | 44/60 | 13, 15, 16 | 5.03 | 30 | 0 |
+| a search finds every word in any field (#661) | 47/60 | 16, 15, 16 | 4.85 | 31 | 0 |
+| the same, and an invalid call names the argument to use (#662, draft) | 42/60 | 15, 12, 15 | 5.15 | 51 | 0 |
+
+- What #661 measurably changed: before, a search of several words (`q="Alan refund"`) could return
+  nothing when the words sat in different fields (1 of 16 such searches); after, none of 17 did.
+  The pass-rate gain is within the round spread.
+- What #662 measurably changed: after a hinted error, 42 of 43 repairs worked on the next turn (the
+  43rd was six parallel calls in one turn, all fixed in the next). Its pass rate is lower but within
+  the spread, and it had more runs with an invalid call (24 against 16), which the error text cannot
+  cause: it only changes what the model reads after its first mistake. It is not shown to keep the
+  pass rate, so it stays a draft.
+- `query` for `q` on `colliedesk_inbox_search` stays the most common invalid call (16, 16 and 22
+  calls on the three builds). Removing those calls alone would have brought 1 of 15, 0 of 10 and 5 of
+  17 over-budget failures within budget. Accepting `query` changes the contract and is undecided.
+- `reply-login-for-review` failed 3 of 3 on the second build with no error: the model wrote the
+  draft into its answer instead of calling `colliedesk_reply_draft`.
