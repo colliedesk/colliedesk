@@ -47,6 +47,22 @@ func callEvalTool(session *mcp.ClientSession, tool string, args map[string]any) 
 	return call, said
 }
 
+// The scorer reads a refusal from the text a model sees. A missing permission must read as a refusal
+// and a wrong argument name must not, or a retried refusal passes (or a fixed call fails) unnoticed
+// when the error text changes.
+func TestEvalTellsARefusalFromAnInvalidCall(t *testing.T) {
+	e := newEnvWith(t, withSMTP)
+	f := seedEval(t, e, "inbox")
+	session := e.connect(f.w.read, "")
+	send := map[string]any{"conversation_id": f.conversations["refund"], "seen_reply_number": 0, "body": "Hi"}
+	if call, said := callEvalTool(session, "colliedesk_reply_send", send); !call.IsError || !call.Refused {
+		t.Fatalf("send without messages:send: error %v refused %v, want both: %s", call.IsError, call.Refused, said)
+	}
+	if call, said := callEvalTool(session, "colliedesk_inbox_search", map[string]any{"query": "refund"}); !call.IsError || call.Refused {
+		t.Fatalf("search with an unknown argument: error %v refused %v, want an error that is not a refusal: %s", call.IsError, call.Refused, said)
+	}
+}
+
 // Every task names a known token, seed and check, and its conversations exist in the seed. A run
 // that does nothing fails every task, so a pass always means the model did the work.
 func TestEvalTasksFailWhenNothingIsDone(t *testing.T) {
