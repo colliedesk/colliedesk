@@ -4,7 +4,7 @@
 set -eu
 
 ROOT=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
-TMP=${TMPDIR:-/tmp}/colliedesk-compose-smoke-test-$$
+TMP=${TMPDIR:-/tmp}/colliedesk-compose-up-output-test-$$
 mkdir -p "$TMP/bin"
 trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 
