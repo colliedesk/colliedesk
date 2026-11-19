@@ -116,6 +116,6 @@ a gap of about 5 runs in 60 as noise.
   pass rate, so it stays a draft.
 - `query` for `q` on `colliedesk_inbox_search` stays the most common invalid call (16, 16 and 22
   calls on the three builds). Removing those calls alone would have brought 1 of 15, 0 of 10 and 5 of
-  17 over-budget failures within budget. Accepting `query` changes the contract and is undecided.
+  17 over-budget failures within budget. Since then `colliedesk_inbox_search` takes `query` as well as `q`, the name the other search tools use.
 - `reply-login-for-review` failed 3 of 3 on the second build with no error: the model wrote the
   draft into its answer instead of calling `colliedesk_reply_draft`.

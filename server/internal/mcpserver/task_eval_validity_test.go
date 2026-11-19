@@ -58,7 +58,7 @@ func TestEvalTellsARefusalFromAnInvalidCall(t *testing.T) {
 	if call, said := callEvalTool(session, "colliedesk_reply_send", send); !call.IsError || !call.Refused {
 		t.Fatalf("send without messages:send: error %v refused %v, want both: %s", call.IsError, call.Refused, said)
 	}
-	if call, said := callEvalTool(session, "colliedesk_inbox_search", map[string]any{"query": "refund"}); !call.IsError || call.Refused {
+	if call, said := callEvalTool(session, "colliedesk_inbox_search", map[string]any{"text": "refund"}); !call.IsError || call.Refused {
 		t.Fatalf("search with an unknown argument: error %v refused %v, want an error that is not a refusal: %s", call.IsError, call.Refused, said)
 	}
 }
