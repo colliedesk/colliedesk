@@ -70,7 +70,6 @@ const resultsSharePart = lazyPart(() => import('./features/results/results-share
 // Review (the intake queue of chat channels) is its own chunk; only workspaces with a chat channel open it.
 const reviewRoutePart = lazyPart(() => import('./features/review/review-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
-const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 // A trial offer link is opened once by a few admins: its page loads from its own chunk.
 const trialOfferPart = lazyPart(() => import('./features/auth/trial-offer-page'));
 // The consent page carries help tips, so it loads with its own chunk, not with the first screen.
@@ -200,10 +199,7 @@ function AppLayout() {
     palette={palette} onNewConversation={onNewConversation}
     quickStart={me.data && !locked ? <QuickStart key={String(me.data.setup_guide_hidden)} progress={setup.data} me={me.data} /> : undefined}
     canInvite={!locked && can(me.data, 'team:invite')}
-    notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
-      {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
-      {config.data?.product_analytics.realm === 'cloud' && can(me.data, 'billing:manage') && me.data.plan?.plan === 'trial'
-        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => { if (confirmDiscardUnsavedSettings()) signOut.mutate(); }} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
+    notice={me.data && <PlanNotices me={me.data} onBillingPage={inBilling} analytics={config.data?.product_analytics} />} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={can(me.data, 'billing:manage')} onSignOut={() => { if (confirmDiscardUnsavedSettings()) signOut.mutate(); }} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
     onSignOut={() => { if (confirmDiscardUnsavedSettings()) signOut.mutate(); }} signOutFailed={signOut.isError} signingOut={signOut.isPending} workspaceSwitch={workspaceSwitch}
     settingsExit={inSettings && !phone && !locked && !closed && !notFound ? { href: keeper ? beforeSettings(keeper) : '/', onBack: backToApp } : undefined}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}

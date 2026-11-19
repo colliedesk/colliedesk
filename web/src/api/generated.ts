@@ -7283,6 +7283,8 @@ export interface components {
             plan: null | {
                 /** @enum {string} */
                 plan: "trial" | "solo" | "small" | "team" | "team25" | "founding" | "none";
+                /** @description True when the signed-in person's address is on this server's team list (`internal_signup.emails`), so the web app asks them no trial survey. */
+                internal: boolean;
                 /** @description How many active agents the workspace has beyond its plan's agent cap; 0 when it fits. */
                 agents_over: number;
                 /** @description True when this agent is beyond the cap and paused (requests answer 402 `seat_paused`). */

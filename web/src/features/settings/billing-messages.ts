@@ -2,6 +2,13 @@
 // in those chunks and not in the first bundle.
 export const billingMessages = {
   surveyQuestion: 'What is still missing for you to leave Freshdesk for good?',
+  surveyPrompt: "What's still missing to leave Freshdesk?",
+  surveyOpen: 'Tell us',
+  surveyHide: 'Hide the Freshdesk question',
+  surveyCallLead: 'Rather talk?',
+  surveyCall: 'Book 15 minutes with Chính',
+  // The founder's booking page; the survey only runs on Colliedesk Cloud, which HC Labs operates.
+  surveyCallUrl: 'https://cal.com/chinh/colliedesk-switch',
   surveySend: 'Send',
   surveyNotNow: 'Not now',
   surveyThanks: 'Thank you. Your answer helps us decide what to build next.',

@@ -115,6 +115,7 @@ export interface EventProperties {
   // step is the setup guide row only: email, import, ai_drafts, reply_targets, invite or first_reply.
   onboarding_step_started: { step: SetupStepKey };
   onboarding_step_completed: { step: SetupStepKey };
+  survey_opened: { survey: SurveyId };
   survey_answered: { survey: SurveyId; answer: string };
   survey_dismissed: { survey: SurveyId };
 }

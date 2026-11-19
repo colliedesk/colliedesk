@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Billing, Me } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
 import { formatMonthDay } from '../../lib/format-date';
@@ -22,6 +22,8 @@ interface PlanBannerProps {
   planIntent?: PlanIntent;
   // onChoosePlan is left out where the plan choice is already on screen.
   onChoosePlan?: () => void;
+  // aside follows the date in the same strip (the trial question) and leaves with it when the strip is closed.
+  aside?: ReactNode;
 }
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -33,7 +35,7 @@ const lockWarningDays = 3;
 // PlanBanner tells everyone in a trial workspace when it ends, and tells admins when the attachment storage
 // of the trial is nearly full. Paid and self-hosted workspaces show nothing. Anyone can close the trial
 // strip; it comes back once when the lock gets close. The storage warning cannot be closed.
-export function PlanBanner({ plan, isAdmin, workspaceId, billing, timezone = 'UTC', now, planIntent, onChoosePlan }: PlanBannerProps) {
+export function PlanBanner({ plan, isAdmin, workspaceId, billing, timezone = 'UTC', now, planIntent, onChoosePlan, aside }: PlanBannerProps) {
   // The day count follows the calendar day of the browser, so a tab left open overnight updates.
   const clock = useNow('UTC');
   const [closedNow, setClosedNow] = useState<TrialStripStage | null>(null);
@@ -67,6 +69,7 @@ export function PlanBanner({ plan, isAdmin, workspaceId, billing, timezone = 'UT
         {ending ? <TriangleAlertIcon /> : <span className="icon-quiet"><ClockIcon /></span>}
         {sentences.length === 0 ? <strong>{ends}</strong> : <span><strong>{ends}.</strong> {sentences.join(' ')}</span>}
       </p>}
+      {!closed && aside}
       {storageFull && <p role="status" className="plan-banner-warning"><TriangleAlertIcon />
         {messages.storageWarning(Math.floor((used / limit) * 100), formatBytes(used), formatBytes(limit))}</p>}
       {isAdmin && onChoosePlan && <button type="button" className="plan-banner-action" onClick={onChoosePlan}>

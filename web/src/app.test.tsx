@@ -77,7 +77,7 @@ beforeAll(async () => {
 
 test('a locked workspace sees the locked screen with the identity bar and an admin\'s plan choices', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })),
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false, internal: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, billing),
     '/api/v1/conversations': () => json(402, locked),
@@ -95,7 +95,7 @@ test('a locked admin can still take the workspace out: Export all data asks for 
   Object.defineProperty(window, 'location', { configurable: true, value: { ...original, assign, search: '' } });
   try {
     serve({
-      '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })),
+      '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false, internal: false })),
       '/api/v1/config': () => json(200, config),
       '/api/v1/billing': () => json(200, billing),
       '/api/v1/conversations': () => json(402, locked),
@@ -112,7 +112,7 @@ test('a locked admin can still take the workspace out: Export all data asks for 
 
 test('a 402 workspace_locked from the inbox replaces the inbox with the locked screen', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, admins: ['Maya Reyes', 'Daniel Kim'] })),
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, internal: false, admins: ['Maya Reyes', 'Daniel Kim'] })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/conversations': () => json(402, locked),
     '/api/v1/agents': () => json(402, locked),
@@ -128,7 +128,7 @@ test('a 402 workspace_locked from the inbox replaces the inbox with the locked s
 
 test('the inbox activity poll runs on every signed-in page, not only in the inbox', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false })),
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, internal: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
   });
@@ -138,7 +138,7 @@ test('the inbox activity poll runs on every signed-in page, not only in the inbo
 
 test('a locked workspace does not poll for inbox activity', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })),
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false, internal: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, billing),
   });
@@ -147,7 +147,7 @@ test('a locked workspace does not poll for inbox activity', async () => {
   expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(false);
 });
 
-const trialPlan = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false };
+const trialPlan = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, internal: false };
 const trialBilling = { ...billing, plan: 'trial', locked: false, checkout_plans: [...billing.checkout_plans, 'founding'] };
 
 test('the billing link with buy=founding sends a signed-out visitor straight to sign-up as a buyer, keeping the plan', async () => {
@@ -304,7 +304,7 @@ test('a link the invite preview does not describe (a pairing link, an unknown to
 test('a locked workspace drops the remembered plan and shows its own plan choices', async () => {
   rememberCheckoutIntent('founding');
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })),
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false, internal: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, billing),
   });
@@ -425,7 +425,7 @@ test('signing out forgets every unsent reply and note kept in this browser, and 
 
 test('a paused agent sees why and can sign out, and nothing else', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'small', trial_ends_at: '2026-10-01T09:00:00Z', locked: false, trial_extended: false, agents_over: 1, seat_paused: true })),
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'small', trial_ends_at: '2026-10-01T09:00:00Z', locked: false, trial_extended: false, agents_over: 1, seat_paused: true, internal: false })),
     '/api/v1/config': () => json(200, config),
   });
   open();
@@ -441,7 +441,7 @@ test('a paused admin can still open the billing portal from the paused screen', 
   const original = window.location;
   Object.defineProperty(window, 'location', { configurable: true, value: { ...original, assign } });
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'solo', trial_ends_at: '2026-10-01T09:00:00Z', locked: false, trial_extended: false, agents_over: 1, seat_paused: true })),
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'solo', trial_ends_at: '2026-10-01T09:00:00Z', locked: false, trial_extended: false, agents_over: 1, seat_paused: true, internal: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing/portal': () => json(200, { url: 'https://polar.test/portal' }),
   });
@@ -678,7 +678,7 @@ test('on the cloud, sign out from the account menu lands on the sign-in page and
 test('on the cloud, sign out from the locked screen ends the identity provider session too', async () => {
   clerk.signedIn = true;
   clerk.signOut.mockImplementation(() => { clerk.signedIn = false; return Promise.resolve(); });
-  serveUntilSignedOut(() => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })), config,
+  serveUntilSignedOut(() => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false, internal: false })), config,
     { '/api/v1/billing': () => json(200, billing) });
   const router = open();
   expect(await screen.findByRole('heading', { level: 1, name: 'Your trial has ended' })).toBeInTheDocument();
@@ -776,7 +776,7 @@ test('with the browser\'s key on, Autofix shows: the Fixes link with its badge',
 
 
 test('Review is on the rail only where a chat channel collects messages, with the cards that wait', async () => {
-  const trial = meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false });
+  const trial = meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, internal: false });
   serve({
     '/api/v1/auth/me': () => json(200, trial),
     '/api/v1/config': () => json(200, config),
@@ -799,7 +799,7 @@ test('Review is on the rail only where a chat channel collects messages, with th
 });
 
 test('Review opened with a channel and no scope lists that channel\'s cards only', async () => {
-  const trial = meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false });
+  const trial = meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, internal: false });
   const channel = '44444444-4444-4444-8444-444444444444';
   serve({
     '/api/v1/auth/me': () => json(200, trial),
@@ -816,7 +816,7 @@ test('Review opened with a channel and no scope lists that channel\'s cards only
   expect(list).not.toContain('scope=');
 });
 
-const openTrial = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false };
+const openTrial = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, internal: false };
 const narrow = (permissions: string[]) => ({ ...meBody('agent', openTrial), permissions });
 
 // A role that reads only the knowledge base sees only what it opens: the rail offers Knowledge and Settings,

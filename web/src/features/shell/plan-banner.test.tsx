@@ -4,7 +4,7 @@ import type { Billing } from '../../api/schemas';
 import { PlanBanner } from './plan-banner';
 
 const trialEnd = '2026-10-15T09:00:00Z';
-const trial = { plan: 'trial' as const, trial_ends_at: trialEnd, locked: false, trial_extended: false, agents_over: 0, seat_paused: false };
+const trial = { plan: 'trial' as const, trial_ends_at: trialEnd, locked: false, trial_extended: false, agents_over: 0, seat_paused: false, internal: false };
 const at = (iso: string) => new Date(iso);
 const GiB = 1024 ** 3;
 const billing = (storageBytes: number): Billing => ({
@@ -55,7 +55,7 @@ test('an agent who is not an admin is told to ask one, and has no button', () =>
 });
 
 test('an extended trial says so, however many days are left', () => {
-  const { rerender } = render(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-10-20T09:00:00Z', trial_extended: true, agents_over: 0, seat_paused: false }} isAdmin timezone="UTC" now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
+  const { rerender } = render(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-10-20T09:00:00Z', trial_extended: true, agents_over: 0, seat_paused: false, internal: false }} isAdmin timezone="UTC" now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
   expect(screen.getByText(/^Trial ends Oct 20/)).toBeInTheDocument();
   expect(screen.getByText(/was extended/i)).toBeInTheDocument();
   rerender(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-11-14T09:00:00Z' }} isAdmin timezone="UTC" now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
@@ -76,14 +76,14 @@ test('storage at 85 percent warns the admin; 75 percent does not', () => {
 });
 
 test('a paid or self-hosted workspace shows nothing', () => {
-  const { container, rerender } = render(<PlanBanner plan={{ plan: 'team', trial_ends_at: trialEnd, locked: false, trial_extended: false, agents_over: 0, seat_paused: false }} isAdmin onChoosePlan={vi.fn()} />);
+  const { container, rerender } = render(<PlanBanner plan={{ plan: 'team', trial_ends_at: trialEnd, locked: false, trial_extended: false, agents_over: 0, seat_paused: false, internal: false }} isAdmin onChoosePlan={vi.fn()} />);
   expect(container).toBeEmptyDOMElement();
   rerender(<PlanBanner plan={null} isAdmin onChoosePlan={vi.fn()} />);
   expect(container).toBeEmptyDOMElement();
 });
 
 test('an admin of a workspace over its agent cap is told on every page; an agent is not', () => {
-  const over = { plan: 'small' as const, trial_ends_at: trialEnd, locked: false, trial_extended: false, agents_over: 2, seat_paused: false };
+  const over = { plan: 'small' as const, trial_ends_at: trialEnd, locked: false, trial_extended: false, agents_over: 2, seat_paused: false, internal: false };
   const { container, rerender } = render(<PlanBanner plan={over} isAdmin />);
   expect(screen.getByRole('alert')).toHaveTextContent('This workspace has 2 agents more than the Small plan allows. The 2 most recently added cannot work until you deactivate agents in Settings > Team or upgrade in the billing portal.');
   rerender(<PlanBanner plan={over} isAdmin={false} />);
@@ -130,6 +130,14 @@ describe('closing the trial strip', () => {
     unmount();
     render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceB} timezone="UTC" now={at('2026-10-05T09:00:00Z')} onChoosePlan={vi.fn()} />);
     expect(screen.getByText('Trial ends Oct 15')).toBeInTheDocument();
+  });
+
+  test('what the strip carries beside the date (the trial question) sits in the same strip and leaves with it', () => {
+    render(<PlanBanner plan={trial} isAdmin workspaceId={workspaceA} timezone="UTC" now={at('2026-10-12T09:00:00Z')} onChoosePlan={vi.fn()}
+      aside={<span>Extra line</span>} />);
+    expect(screen.getByRole('region', { name: /plan notices/i })).toHaveTextContent('Extra line');
+    hideStrip();
+    expect(screen.queryByText('Extra line')).not.toBeInTheDocument();
   });
 
   test('the storage warning stays after the strip is closed', () => {

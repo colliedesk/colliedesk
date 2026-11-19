@@ -772,18 +772,40 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .plan-banner .plan-banner-close { --control: 24px; color: var(--text-inverse); }
 .plan-banner .plan-banner-close:hover:not(:disabled) { color: var(--text-1); }
 .plan-banner .plan-banner-warning { flex-basis: 100%; order: 3; }
-.plan-banner button { margin-left: auto; }
-.plan-banner button + .plan-banner-close { margin-left: calc(-1 * var(--space-1)); }
+.plan-banner > button { margin-left: auto; }
+.plan-banner > button + .plan-banner-close { margin-left: calc(-1 * var(--space-1)); }
 @media (pointer: coarse), (max-width: 44rem) { .plan-banner :is(.plan-banner-action, .plan-banner-close) { --control: var(--touch); } }
 
-.trial-survey {
-  flex: none; display: grid; gap: var(--space-2); margin: 0; border: 1px solid var(--line);
-  border-radius: var(--radius-lg); background: var(--surface, transparent); padding: var(--space-3) var(--space-4); font-size: var(--fs-small);
+.trial-survey { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); min-width: 0; color: var(--text-inverse); }
+.trial-survey-dot { opacity: 0.6; }
+.plan-banner .trial-survey-open { --control: 24px; padding: 0 var(--space-1); border: 0; background: none; box-shadow: none;
+  color: var(--text-inverse); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.plan-banner .trial-survey-open:hover:not(:disabled) { background: none; text-decoration-thickness: 2px; }
+.plan-banner .trial-survey-hide { --control: 24px; color: var(--text-inverse); }
+.plan-banner .trial-survey-hide:hover:not(:disabled) { color: var(--text-1); }
+.plan-banner .trial-survey-hide svg { width: 14px; height: 14px; }
+/* The question opens under Tell us, above the inbox (position fixed by Floating UI), in the page's own colours. */
+.trial-survey-layer {
+  z-index: 40; display: grid; gap: var(--space-2); width: min(24rem, calc(100vw - var(--space-4))); margin: 0;
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-3);
+  padding: var(--space-3) var(--space-4); color: var(--text-1); font-size: var(--fs-small);
 }
-.trial-survey label { color: var(--text-1); font-weight: 600; }
-.trial-survey textarea { width: 100%; min-height: 3.5rem; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; padding: var(--space-2) var(--space-3); line-height: 1.5; }
-.trial-survey textarea:focus-visible, .trial-survey button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.trial-survey p { margin: 0; color: var(--text-1); }
+.trial-survey-layer label { color: var(--text-1); font-weight: 600; }
+.trial-survey-layer textarea { width: 100%; min-height: 4.5rem; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-1); padding: var(--space-2) var(--space-3); line-height: 1.5; }
+.trial-survey-layer :is(textarea, button, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.trial-survey-layer p { display: block; margin: 0; }
+.trial-survey-layer p:not(.error-copy) { color: var(--text-2); }
+.trial-survey-layer .trial-survey-call a { color: var(--text-1); text-decoration: underline; text-underline-offset: 3px; }
+.trial-survey-layer .button-row { justify-content: flex-end; }
+/* On a phone the question is a sheet from the bottom of the screen, over a dimmed page. */
+.trial-survey-backdrop { position: fixed; inset: 0; z-index: 39; background: rgb(0 0 0 / 0.35); }
+.trial-survey-layer.trial-survey-sheet { position: fixed; inset: auto 0 0 0; width: auto; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--space-4) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom)); }
+.trial-survey-sheet .button-row button { flex: 1 1 0; --control: var(--touch); }
+@media (pointer: coarse), (max-width: 44rem) { .plan-banner :is(.trial-survey-open, .trial-survey-hide) { --control: var(--touch); } }
+/* On a phone the question takes a line of its own, where a leading separator dot reads as a stray mark. */
+@media (max-width: 44rem) { .trial-survey-dot { display: none; } }
 
 /* Locked workspace and export. */
 .locked-screen .settings-body p { margin: 0; color: var(--text-2); }
@@ -806,9 +828,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .plan-banner { margin: var(--space-2) var(--space-2) 0; padding: var(--space-2) var(--space-3); }
   .plan-banner p { align-items: flex-start; }
   .plan-banner p .icon, .plan-banner p .icon-quiet { margin-top: 2px; }
-  .plan-banner button { margin-left: 0; }
-  .trial-survey { margin-right: var(--space-2); padding-inline: var(--space-3); }
-  .trial-survey .button-row button { flex: 1 1 100%; --control: var(--touch); }
+  .plan-banner > button { margin-left: 0; }
   .locked-screen { padding: var(--space-6) var(--space-4); }
   .locked-screen .button-row button { flex: 1 1 100%; --control: var(--touch); }
 }
