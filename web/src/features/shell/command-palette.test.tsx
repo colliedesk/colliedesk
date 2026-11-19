@@ -106,6 +106,14 @@ test('typing groups conversations and customers, the match in bold, the first ro
   expect(last).toHaveTextContent('2 conversations');
 });
 
+test('each typed word is in bold wherever it is in the name, as the search finds every word in any order', async () => {
+  const { input } = open();
+  fireEvent.change(input, { target: { value: 'sato  HANA' } });
+  await screen.findByRole('group', { name: 'Customers' });
+  const bold = [...optionsOf('Customers')[0].querySelectorAll('.palette-name b')].map((b) => b.textContent);
+  expect(bold).toEqual(['Hana', 'Sato']);
+});
+
 test('See all results opens the inbox list searched in every status', async () => {
   const { input, onNavigate, onClose } = open();
   fireEvent.change(input, { target: { value: 'refund card' } });
