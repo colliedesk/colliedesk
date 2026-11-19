@@ -804,6 +804,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   padding: var(--space-4) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom)); }
 .trial-survey-sheet .button-row button { flex: 1 1 0; --control: var(--touch); }
 @media (pointer: coarse), (max-width: 44rem) { .plan-banner :is(.trial-survey-open, .trial-survey-hide) { --control: var(--touch); } }
+/* On a phone the question takes a line of its own, where a leading separator dot reads as a stray mark. */
+@media (max-width: 44rem) { .trial-survey-dot { display: none; } }
 
 /* Locked workspace and export. */
 .locked-screen .settings-body p { margin: 0; color: var(--text-2); }
