@@ -440,25 +440,29 @@ class E2ESplit(unittest.TestCase):
         timings = {'a.spec.ts': 1, 'b.spec.ts': 1}
         # An empty filter would run every test, so a shard without files is an error.
         cases = [
-            ('more shards than files', dict(files=['a.spec.ts'], shard=2, shards=2, timings=timings)),
-            ('no listed test', dict(files=[], shard=1, shards=1, timings=timings)),
-            ('no listed file measured', dict(files=['e2e/a.spec.ts', 'e2e/b.spec.ts'], shard=1, shards=2, timings=timings)),
-            ('broken timings', dict(files=['a.spec.ts'], shard=1, shards=1, timings='{')),
-            ('negative time', dict(files=['a.spec.ts'], shard=1, shards=1, timings={'a.spec.ts': -1})),
-            ('shard out of range', dict(files=['a.spec.ts', 'b.spec.ts'], shard=3, shards=2, timings=timings)),
-            ('no shards', dict(files=['a.spec.ts'], shard=0, shards=0, timings=timings)),
-            ('a colon reads as a line number', dict(files=['a:1.spec.ts'], shard=1, shards=1, timings={'a:1.spec.ts': 1})),
-            ('not a report', dict(files=None, shard=1, shards=1, timings=timings, listing='no json here')),
-            ('a report with errors', dict(files=None, shard=1, shards=1, timings=timings,
-                                          listing=json.dumps({'suites': [], 'errors': [{'message': 'syntax'}]}))),
+            ('a shard has no files', dict(files=['a.spec.ts'], shard=2, shards=2, timings=timings)),
+            ('the listing has no tests', dict(files=[], shard=1, shards=1, timings=timings)),
+            ('the timings name none', dict(files=['e2e/a.spec.ts', 'e2e/b.spec.ts'], shard=1, shards=2, timings=timings)),
+            ('timings: ', dict(files=['a.spec.ts'], shard=1, shards=1, timings='{')),
+            ('non-negative seconds', dict(files=['a.spec.ts'], shard=1, shards=1, timings={'a.spec.ts': -1})),
+            ('shard must be between', dict(files=['a.spec.ts', 'b.spec.ts'], shard=3, shards=2, timings=timings)),
+            ('shard must be between', dict(files=['a.spec.ts'], shard=0, shards=0, timings=timings)),
+            # Playwright reads a colon in a file filter as a line number.
+            ('a file name has a colon', dict(files=['a:1.spec.ts'], shard=1, shards=1, timings={'a:1.spec.ts': 1})),
+            ('not a JSON report', dict(files=None, shard=1, shards=1, timings=timings, listing='no json here')),
+            ('reported errors', dict(files=None, shard=1, shards=1, timings=timings,
+                                     listing=json.dumps({'suites': [], 'errors': [{'message': 'syntax'}]}))),
         ]
-        for name, case in cases:
+        for reason, case in cases:
             result = self.split(case['files'] or [], case['shard'], case['shards'], case['timings'],
                                 listing=case.get('listing'))
-            self.assertNotEqual(result.returncode, 0, name)
-            self.assertEqual(result.stdout, '', name)
+            self.assertNotEqual(result.returncode, 0, reason)
+            self.assertIn(reason, result.stderr)
+            self.assertEqual(result.stdout, '', reason)
         for bad in (('--parallel', '0'), ('--last-shard-delay', '-1')):
-            self.assertNotEqual(self.split(['a.spec.ts', 'b.spec.ts'], 1, 2, timings, *bad).returncode, 0, bad)
+            result = self.split(['a.spec.ts', 'b.spec.ts'], 1, 2, timings, *bad)
+            self.assertEqual(result.returncode, 2, bad)
+            self.assertIn('parallel must be positive and the delay non-negative', result.stderr)
 
 
 class E2ETimings(unittest.TestCase):
@@ -470,6 +474,8 @@ class E2ETimings(unittest.TestCase):
         '2026-11-19T08:57:51.0000000Z   ✓    4 [chromium] › e2e/channels.spec.ts:12:3 › Mail › replies (retry #1) (1.2m)\n'
         '2026-11-19T08:57:52.0000000Z   -    5 [chromium] › e2e/skipped.spec.ts:3:1 › later\n'
         '2026-11-19T08:57:53.0000000Z   ✓    6 [chromium] › e2e/nested/deep.spec.ts:3:1 › a › b › c (2.0s)\n'
+        # gh run view --log puts the job and the step before each line.
+        'e2e (2)\tRun end-to-end workflows\t2026-11-19T16:09:06.2750436Z   ✓    1 [chromium] › e2e/nested/deep.spec.ts:9:3 › d (0.5s)\n'
         '2026-11-19T08:57:54.0000000Z noise ✓ 7 [chromium] e2e/noise.spec.ts (9.0s)\n'
         '2026-11-19T08:57:55.0000000Z   101 passed (3.9m)\n'
     )
@@ -487,7 +493,7 @@ class E2ETimings(unittest.TestCase):
         result = self.timings(self.log)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout),
-                         {'ai-chat.spec.ts': 5.95, 'channels.spec.ts': 102.0, 'nested/deep.spec.ts': 2.0})
+                         {'ai-chat.spec.ts': 5.95, 'channels.spec.ts': 102.0, 'nested/deep.spec.ts': 2.5})
         self.assertEqual(result.stdout, json.dumps(json.loads(result.stdout), indent=1, sort_keys=True) + '\n')
 
     def test_several_runs_take_the_median(self):
@@ -500,6 +506,7 @@ class E2ETimings(unittest.TestCase):
         for log in ['', '2026-11-19T08:57:55.0000000Z   101 passed (3.9m)\n']:
             result = self.timings(log)
             self.assertNotEqual(result.returncode, 0, log)
+            self.assertIn('no test times in the logs', result.stderr)
             self.assertEqual(result.stdout, '')
 
 
@@ -539,11 +546,16 @@ class E2EShards(unittest.TestCase):
             self.assertIn(culprit, result.stderr, broken)
 
     def test_no_tests_a_failed_listing_a_failed_split_or_a_bad_shard_count_fail_closed(self):
-        for name, kwargs in [('no tests', dict(tests=[])), ('listing', dict(FAKE_E2E_BREAK='listing')),
-                             ('shard listing', dict(FAKE_E2E_BREAK='filtered-listing')),
-                             ('nothing measured', dict(timings={'other.spec.ts': 1})),
-                             ('empty shard', dict(shards='4')), ('zero', dict(shards='0')), ('x', dict(shards='x'))]:
-            self.assertNotEqual(self.check(**kwargs).returncode, 0, name)
+        for reason, kwargs in [('lists no tests', dict(tests=[])),
+                               ('listing all tests failed', dict(FAKE_E2E_BREAK='listing')),
+                               ('listing shard 1/2 failed', dict(FAKE_E2E_BREAK='filtered-listing')),
+                               ('the timings name none', dict(timings={'other.spec.ts': 1})),
+                               ('a shard has no files', dict(shards='4')),
+                               ('shards must be at least 1', dict(shards='0')),
+                               ('shards must be at least 1', dict(shards='x'))]:
+            result = self.check(**kwargs)
+            self.assertNotEqual(result.returncode, 0, reason)
+            self.assertIn(reason, result.stderr)
 
     def test_the_e2e_job_runs_its_shard_with_the_arguments_the_check_lists(self):
         e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
