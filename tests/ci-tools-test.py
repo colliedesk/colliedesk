@@ -338,62 +338,212 @@ class Onboarding(unittest.TestCase):
 
 
 FAKE_PLAYWRIGHT = '''import json, os, re, sys
-lists = json.loads(os.environ['FAKE_E2E_LISTS'])
+tests = json.loads(os.environ['FAKE_E2E_TESTS'])
+broken = os.environ.get('FAKE_E2E_BREAK', '')
 if '--list' not in sys.argv or '--reporter=json' not in sys.argv:
     sys.exit('fake playwright: expected --list --reporter=json')
-shard = next((re.fullmatch(r'--shard=(\\d+)/(\\d+)', a) for a in sys.argv if a.startswith('--shard=')), None)
-key = f'{shard.group(1)}/{shard.group(2)}' if shard else 'all'
-if key not in lists:
-    sys.exit(f'fake playwright: no listing for {key}')
+files = [a for a in sys.argv[1:] if len(a) > 1 and a.startswith('/') and a.endswith('/')]
+if broken == 'listing' or (files and broken == 'filtered-listing'):
+    sys.exit('fake playwright: listing failed')
+listed, shift = tests, 0
+if files:
+    # Playwright matches a file filter against the test file's absolute path.
+    pattern = re.compile(files[-1][1:-1])
+    listed = [t for t in tests if pattern.search('/repo/web/e2e/' + t[0])]
+    if broken == 'ignore-filter':
+        listed = tests
+    if broken.startswith('drop:'):
+        listed = [t for t in listed if t[1] != broken[5:]]
+    if broken.startswith('add:') and listed:
+        listed = listed + [['d.spec.ts', broken[4:]]]
+    shift = int(os.environ.get('FAKE_E2E_SHIFT', '0'))
 suites = {}
-for file, title, *line in lists[key]:
-    suites.setdefault(file, []).append({'title': title, 'file': file, 'line': (line or [1])[0], 'column': 1,
-                                        'tests': [{'projectName': ''}]})
+for file, title, *line in listed:
+    suites.setdefault(file, []).append({'title': title, 'file': file, 'line': (line or [1])[0] + shift,
+                                        'column': 1, 'tests': [{'projectName': ''}]})
 print('npm noise before the report')
 print(json.dumps({'suites': [{'title': f, 'file': f, 'specs': specs, 'suites': []} for f, specs in suites.items()],
                   'errors': []}))
 '''
 
 
+def e2e_listing(files):
+    """A Playwright --list --reporter=json report with one test per (file, title)."""
+    suites = {}
+    for file, title in files:
+        suites.setdefault(file, []).append({'title': title, 'file': file, 'line': 1, 'column': 1,
+                                            'tests': [{'projectName': 'chromium'}]})
+    return json.dumps({'suites': [{'title': f, 'file': f, 'specs': s, 'suites': []} for f, s in suites.items()],
+                       'errors': []})
+
+
+class E2ESplit(unittest.TestCase):
+    """e2e-shard.py gives each shard whole test files by measured time, longest first, as one file
+    filter for the Playwright command line."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def split(self, files, shard, shards, timings, *args, listing=None):
+        path = pathlib.Path(self.tmp.name) / 'timings.json'
+        path.write_text(timings if isinstance(timings, str) else json.dumps(timings))
+        stdin = listing if listing is not None else e2e_listing([(f, 'a test') for f in files])
+        return run('e2e-shard.py', str(shard), str(shards), '--timings', str(path), *args, stdin=stdin)
+
+    def filters(self, files, shards, timings, *args):
+        result = []
+        for shard in range(1, shards + 1):
+            out = self.split(files, shard, shards, timings, *args)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            result.append(out.stdout.strip())
+        return result
+
+    def test_measured_times_balance_the_shards_longest_first(self):
+        # 10 to the first shard, 6 and then 5 to the second (6 < 10), 4 to the first (10 < 11).
+        timings = {'a.spec.ts': 10, 'b.spec.ts': 6, 'c.spec.ts': 5, 'd.spec.ts': 4}
+        self.assertEqual(self.filters(['d.spec.ts', 'c.spec.ts', 'b.spec.ts', 'a.spec.ts'], 2, timings),
+                         [r'/(^|\/)(a\.spec\.ts|d\.spec\.ts)$/', r'/(^|\/)(b\.spec\.ts|c\.spec\.ts)$/'])
+
+    def test_the_last_shard_starts_later_so_it_takes_less(self):
+        # Two tests at once, and the last shard starts its tests 3 seconds after the others: a ends
+        # at 5 on the first; b at 3+3=6 on the last; c at 5+2.5=7.5 on the first; d at 6+2=8 on the last.
+        timings = {'a.spec.ts': 10, 'b.spec.ts': 6, 'c.spec.ts': 5, 'd.spec.ts': 4}
+        self.assertEqual(self.filters(list(timings), 2, timings, '--parallel', '2', '--last-shard-delay', '3'),
+                         [r'/(^|\/)(a\.spec\.ts|c\.spec\.ts)$/', r'/(^|\/)(b\.spec\.ts|d\.spec\.ts)$/'])
+
+    def test_a_file_without_a_measurement_weighs_the_median_of_the_measured_ones(self):
+        # The median of 10, 9 and 1 is 9: new.spec.ts joins b (9 < 10) and c then fits on the first.
+        timings = {'a.spec.ts': 10, 'b.spec.ts': 9, 'c.spec.ts': 1, 'gone.spec.ts': 50}
+        self.assertEqual(self.filters(['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'new.spec.ts'], 2, timings),
+                         [r'/(^|\/)(a\.spec\.ts|c\.spec\.ts)$/', r'/(^|\/)(b\.spec\.ts|new\.spec\.ts)$/'])
+
+    def test_every_listed_file_matches_exactly_one_shard_and_nothing_else_matches(self):
+        files = [f'feature-{i:02d}.spec.ts' for i in range(20)] + ['x.y.spec.ts']
+        timings = {name: (i * 7) % 11 + 1 for i, name in enumerate(files)}
+        patterns = [re.compile(f[1:-1]) for f in self.filters(files, 3, timings)]
+        for name in files:
+            self.assertEqual(sum(bool(p.search('/home/runner/work/web/e2e/' + name)) for p in patterns), 1, name)
+        for other in ['prefix-feature-01.spec.ts', 'feature-01.spec.ts.bak', 'xzy.spec.ts', 'onboarding-signup.spec.ts']:
+            self.assertFalse(any(p.search('/home/runner/work/web/e2e/' + other) for p in patterns), other)
+
+    def test_it_reports_the_predicted_time_of_every_shard(self):
+        timings = {'a.spec.ts': 10, 'b.spec.ts': 6, 'c.spec.ts': 5}
+        result = self.split(['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'new.spec.ts'], 1, 2, timings)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('3 of 4 files measured', result.stderr)
+        # new.spec.ts weighs the median, 6: a 10 and c 5 on the first; b 6 and new 6 on the second.
+        self.assertIn('shard 1/2: 2 files, 15s', result.stderr)
+        self.assertIn('shard 2/2: 2 files, 12s', result.stderr)
+
+    def test_an_empty_shard_or_an_unusable_input_fails_closed(self):
+        timings = {'a.spec.ts': 1, 'b.spec.ts': 1}
+        # An empty filter would run every test, so a shard without files is an error.
+        cases = [
+            ('more shards than files', dict(files=['a.spec.ts'], shard=2, shards=2, timings=timings)),
+            ('no listed test', dict(files=[], shard=1, shards=1, timings=timings)),
+            ('no listed file measured', dict(files=['e2e/a.spec.ts', 'e2e/b.spec.ts'], shard=1, shards=2, timings=timings)),
+            ('broken timings', dict(files=['a.spec.ts'], shard=1, shards=1, timings='{')),
+            ('negative time', dict(files=['a.spec.ts'], shard=1, shards=1, timings={'a.spec.ts': -1})),
+            ('shard out of range', dict(files=['a.spec.ts', 'b.spec.ts'], shard=3, shards=2, timings=timings)),
+            ('no shards', dict(files=['a.spec.ts'], shard=0, shards=0, timings=timings)),
+            ('a colon reads as a line number', dict(files=['a:1.spec.ts'], shard=1, shards=1, timings={'a:1.spec.ts': 1})),
+            ('not a report', dict(files=None, shard=1, shards=1, timings=timings, listing='no json here')),
+            ('a report with errors', dict(files=None, shard=1, shards=1, timings=timings,
+                                          listing=json.dumps({'suites': [], 'errors': [{'message': 'syntax'}]}))),
+        ]
+        for name, case in cases:
+            result = self.split(case['files'] or [], case['shard'], case['shards'], case['timings'],
+                                listing=case.get('listing'))
+            self.assertNotEqual(result.returncode, 0, name)
+            self.assertEqual(result.stdout, '', name)
+        for bad in (('--parallel', '0'), ('--last-shard-delay', '-1')):
+            self.assertNotEqual(self.split(['a.spec.ts', 'b.spec.ts'], 1, 2, timings, *bad).returncode, 0, bad)
+
+
+class E2ETimings(unittest.TestCase):
+    """e2e-test-timings.py reads the e2e jobs' logs back into the file e2e-shard.py balances by."""
+    log = (
+        '2026-11-19T08:57:18.7663864Z   ✓    1 [chromium] › e2e/ai-chat.spec.ts:79:1 › asks a question (5.1s)\n'
+        '2026-11-19T08:57:19.1000000Z   ✓    2 [chromium] › e2e/ai-chat.spec.ts:90:1 › keeps the thread (853ms)\n'
+        '2026-11-19T08:57:20.0000000Z   ✘    3 [chromium] › e2e/channels.spec.ts:12:3 › Mail › replies (30.0s)\n'
+        '2026-11-19T08:57:51.0000000Z   ✓    4 [chromium] › e2e/channels.spec.ts:12:3 › Mail › replies (retry #1) (1.2m)\n'
+        '2026-11-19T08:57:52.0000000Z   -    5 [chromium] › e2e/skipped.spec.ts:3:1 › later\n'
+        '2026-11-19T08:57:53.0000000Z   ✓    6 [chromium] › e2e/nested/deep.spec.ts:3:1 › a › b › c (2.0s)\n'
+        '2026-11-19T08:57:54.0000000Z noise ✓ 7 [chromium] e2e/noise.spec.ts (9.0s)\n'
+        '2026-11-19T08:57:55.0000000Z   101 passed (3.9m)\n'
+    )
+
+    def timings(self, *logs):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = []
+            for i, log in enumerate(logs):
+                path = pathlib.Path(tmp) / f'{i}.log'
+                path.write_text(log, encoding='utf-8')
+                paths.append(str(path))
+            return run('e2e-test-timings.py', *paths)
+
+    def test_seconds_per_file_summed_over_its_tests_and_retries_relative_to_the_test_dir(self):
+        result = self.timings(self.log)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout),
+                         {'ai-chat.spec.ts': 5.95, 'channels.spec.ts': 102.0, 'nested/deep.spec.ts': 2.0})
+        self.assertEqual(result.stdout, json.dumps(json.loads(result.stdout), indent=1, sort_keys=True) + '\n')
+
+    def test_several_runs_take_the_median(self):
+        runs = [f'2026-11-19T09:00:00.0Z   ✓    1 [chromium] › e2e/ai-chat.spec.ts:79:1 › x ({s}s)\n' for s in (4, 40)]
+        timings = json.loads(self.timings(self.log, *runs).stdout)
+        self.assertEqual(timings['ai-chat.spec.ts'], 5.95)
+        self.assertEqual(timings['channels.spec.ts'], 102.0)
+
+    def test_a_log_without_test_times_fails_closed(self):
+        for log in ['', '2026-11-19T08:57:55.0000000Z   101 passed (3.9m)\n']:
+            result = self.timings(log)
+            self.assertNotEqual(result.returncode, 0, log)
+            self.assertEqual(result.stdout, '')
+
+
 class E2EShards(unittest.TestCase):
     """The browser tests run in shards: every test outside the onboarding jobs runs in exactly one
-    shard, so splitting the job never drops or doubles a test."""
+    shard, so splitting the job never drops or doubles a test. The check lists every shard through
+    the file filter e2e-shard.py gives it, as the job's run does."""
     tests = [['a.spec.ts', 'one'], ['a.spec.ts', 'two'], ['b.spec.ts', 'three'], ['c.spec.ts', 'four']]
+    measured = {'a.spec.ts': 6, 'b.spec.ts': 3, 'c.spec.ts': 3}
 
-    def check(self, lists, shards='2'):
+    def check(self, tests=None, shards='2', timings=None, **env):
         with tempfile.TemporaryDirectory() as tmp:
             fake = pathlib.Path(tmp) / 'playwright.py'
             fake.write_text(FAKE_PLAYWRIGHT)
-            env = {**os.environ, 'FAKE_E2E_LISTS': json.dumps(lists)}
+            path = pathlib.Path(tmp) / 'timings.json'
+            path.write_text(json.dumps(self.measured if timings is None else timings))
+            env = {**os.environ, 'FAKE_E2E_TESTS': json.dumps(self.tests if tests is None else tests), **env}
             return subprocess.run([sys.executable, str(ROOT / '.github/scripts/e2e-shard-check.py'), shards,
+                                   '--timings', str(path), '--parallel', '2',
                                    '--', sys.executable, str(fake), '--grep-invert', '@onboarding'],
                                   text=True, capture_output=True, env=env)
 
     def test_shards_that_cover_every_test_once_pass(self):
-        result = self.check({'all': self.tests, '1/2': self.tests[:2], '2/2': self.tests[2:]})
+        result = self.check()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('4 tests', result.stdout)
+        self.assertIn('2 shards run all 4 tests exactly once', result.stdout)
 
     def test_a_test_reported_at_another_line_is_still_the_same_test(self):
         # Run 39904337642 listed bulk-actions.spec.ts at line 7 unsharded and line 5 in its shard.
-        moved = [['a.spec.ts', 'one', 5]] + self.tests[1:2]
-        result = self.check({'all': self.tests, '1/2': moved, '2/2': self.tests[2:]})
+        result = self.check(FAKE_E2E_SHIFT='-2')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_a_missing_or_doubled_test_fails_and_names_it(self):
-        for name, lists, culprit in [
-            ('missing', {'all': self.tests, '1/2': self.tests[:2], '2/2': self.tests[3:]}, 'three'),
-            ('doubled', {'all': self.tests, '1/2': self.tests[:3], '2/2': self.tests[2:]}, 'three'),
-            ('unknown', {'all': self.tests, '1/2': self.tests[:2], '2/2': self.tests[2:] + [['d.spec.ts', 'five']]}, 'five'),
-        ]:
-            result = self.check(lists)
-            self.assertNotEqual(result.returncode, 0, name)
-            self.assertIn(culprit, result.stderr, name)
+        for broken, culprit in [('drop:three', 'three'), ('ignore-filter', 'runs 2 times'), ('add:five', 'five')]:
+            result = self.check(FAKE_E2E_BREAK=broken)
+            self.assertNotEqual(result.returncode, 0, broken)
+            self.assertIn(culprit, result.stderr, broken)
 
-    def test_no_tests_a_failed_listing_or_a_bad_shard_count_fail_closed(self):
-        for shards, lists in [('2', {'all': [], '1/2': [], '2/2': []}), ('2', {'all': self.tests, '1/2': self.tests}),
-                              ('0', {'all': self.tests}), ('x', {'all': self.tests})]:
-            self.assertNotEqual(self.check(lists, shards).returncode, 0, (shards, lists))
+    def test_no_tests_a_failed_listing_a_failed_split_or_a_bad_shard_count_fail_closed(self):
+        for name, kwargs in [('no tests', dict(tests=[])), ('listing', dict(FAKE_E2E_BREAK='listing')),
+                             ('shard listing', dict(FAKE_E2E_BREAK='filtered-listing')),
+                             ('nothing measured', dict(timings={'other.spec.ts': 1})),
+                             ('empty shard', dict(shards='4')), ('zero', dict(shards='0')), ('x', dict(shards='x'))]:
+            self.assertNotEqual(self.check(**kwargs).returncode, 0, name)
 
     def test_the_e2e_job_runs_its_shard_with_the_arguments_the_check_lists(self):
         e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
@@ -401,11 +551,24 @@ class E2EShards(unittest.TestCase):
         self.assertRegex(e2e, r'(?m)^    timeout-minutes: 10$')
         # Pull requests run Chromium only; WebKit and Firefox run once a day (cross-browser.yml).
         self.assertRegex(e2e, r"(?m)^      E2E_ARGS: --project=chromium --grep-invert @onboarding --fully-parallel --workers=3$")
-        self.assertIn('corepack pnpm e2e $E2E_ARGS --shard="$SHARD/$SHARDS"', e2e)
-        self.assertIn('python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS', e2e)
-        self.assertEqual(e2e.count('SHARDS: ${{ strategy.job-total }}'), 2, 'the run and the check use the matrix size')
+        self.assertRegex(e2e, r"(?m)^      E2E_SPLIT: --timings \.\./\.github/e2e-test-timings\.json --parallel [0-9.]+ --last-shard-delay [0-9.]+$")
+        listing = 'corepack pnpm exec playwright test $E2E_ARGS'
+        self.assertIn(f'{listing} --list --reporter=json | python3 ../.github/scripts/e2e-shard.py "$SHARD" "$SHARDS" $E2E_SPLIT', e2e)
+        self.assertIn(f'python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" $E2E_SPLIT -- {listing}', e2e)
+        self.assertIn('corepack pnpm e2e $E2E_ARGS "$FILES"', e2e)
+        self.assertNotIn('--shard=', e2e)
+        self.assertEqual(e2e.count('SHARDS: ${{ strategy.job-total }}'), 3, 'the split, the run and the check use the matrix size')
         self.assertIn('ci-background.sh wait shards', e2e, 'the job waits for the check it started')
         self.assertEqual(e2e.count('corepack pnpm e2e '), 1, 'one Playwright run per shard')
+
+    def test_the_checked_in_timings_name_spec_files_relative_to_the_test_dir(self):
+        # A key that never matches a listed file weighs nothing; e2e-shard.py then falls back to the
+        # median for every file, and the shards would split by file count without failing.
+        timings = json.loads((ROOT / '.github/e2e-test-timings.json').read_text())
+        specs = {p.name for p in (ROOT / 'web/e2e').glob('*.spec.ts')}
+        self.assertGreater(len(timings), 30)
+        self.assertLessEqual(set(timings), specs)
+        self.assertTrue(all(isinstance(s, (int, float)) and s >= 0 for s in timings.values()))
 
 
 class Budget(unittest.TestCase):

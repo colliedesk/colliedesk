@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
 """Fails unless the Playwright shards together list every test of the unsharded run exactly once.
 
-Usage: e2e-shard-check.py SHARDS -- COMMAND...
+Usage: e2e-shard-check.py SHARDS [SPLIT OPTIONS...] -- COMMAND...
 COMMAND is the Playwright invocation the shards run (for example
 `corepack pnpm exec playwright test --grep-invert @onboarding --fully-parallel`); the check adds
-`--list --reporter=json`, then `--shard=i/SHARDS` for each shard.
+`--list --reporter=json`, asks e2e-shard.py with the SPLIT OPTIONS (--timings FILE ...) for each
+shard's file filter, as the e2e job does, and lists COMMAND with that filter.
 """
-import argparse
 import collections
 import json
+import pathlib
 import subprocess
 import sys
 
-parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('shards', type=int)
-parser.add_argument('command', nargs=argparse.REMAINDER)
-args = parser.parse_args()
-command = args.command[1:] if args.command[:1] == ['--'] else args.command
-if args.shards < 1:
-    parser.error('shards must be at least 1')
+USAGE = 'usage: e2e-shard-check.py SHARDS [SPLIT OPTIONS...] -- COMMAND...'
+argv = sys.argv[1:]
+if '--' not in argv:
+    sys.exit(USAGE)
+split, command = argv[:argv.index('--')], argv[argv.index('--') + 1:]
+if not split or not split[0].isdigit() or int(split[0]) < 1:
+    sys.exit(f'{USAGE}\nshards must be at least 1')
 if not command:
-    parser.error('give the Playwright command after --')
+    sys.exit(f'{USAGE}\ngive the Playwright command after --')
+shards, split = int(split[0]), split[1:]
+SPLITTER = pathlib.Path(__file__).with_name('e2e-shard.py')
 
 
 def specs(suite, path):
@@ -36,33 +39,43 @@ def specs(suite, path):
         yield from specs(child, path)
 
 
-def listing(extra):
+def report(text, what):
+    # A package manager may print a banner before the report.
+    start = text.find('\n{')
+    text = text if text.startswith('{') else text[start + 1:] if start >= 0 else ''
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as error:
+        sys.exit(f'e2e-shard-check: listing {what} is not a JSON report: {error}')
+    if parsed.get('errors'):
+        sys.exit(f'e2e-shard-check: listing {what} reported errors: {parsed["errors"]}')
+    return [key for suite in parsed.get('suites', []) for key in specs(suite, [])]
+
+
+def listing(extra, what):
     result = subprocess.run(command + ['--list', '--reporter=json'] + extra, capture_output=True, text=True)
     if result.returncode != 0:
-        sys.exit(f'e2e-shard-check: listing {extra or "all tests"} failed ({result.returncode}):\n'
-                 f'{result.stderr}{result.stdout}')
-    # A package manager may print a banner before the report.
-    start = result.stdout.find('\n{')
-    text = result.stdout if result.stdout.startswith('{') else result.stdout[start + 1:] if start >= 0 else ''
-    try:
-        report = json.loads(text)
-    except json.JSONDecodeError as error:
-        sys.exit(f'e2e-shard-check: listing {extra or "all tests"} is not a JSON report: {error}')
-    if report.get('errors'):
-        sys.exit(f'e2e-shard-check: listing {extra or "all tests"} reported errors: {report["errors"]}')
-    return [key for suite in report.get('suites', []) for key in specs(suite, [])]
+        sys.exit(f'e2e-shard-check: listing {what} failed ({result.returncode}):\n{result.stderr}{result.stdout}')
+    return result.stdout
 
 
-expected = collections.Counter(listing([]))
+unsharded = listing([], 'all tests')
+expected = collections.Counter(report(unsharded, 'all tests'))
 if not expected:
     sys.exit('e2e-shard-check: the unsharded run lists no tests')
 seen = collections.Counter()
-for shard in range(1, args.shards + 1):
-    seen.update(listing([f'--shard={shard}/{args.shards}']))
+for shard in range(1, shards + 1):
+    result = subprocess.run([sys.executable, str(SPLITTER), str(shard), str(shards), *split],
+                            input=unsharded, capture_output=True, text=True)
+    if result.returncode != 0 or not result.stdout.strip():
+        sys.exit(f'e2e-shard-check: e2e-shard.py gave shard {shard}/{shards} no filter ({result.returncode}):\n'
+                 f'{result.stderr}')
+    what = f'shard {shard}/{shards}'
+    seen.update(report(listing([result.stdout.strip()], what), what))
 
 problems = [f'missing from every shard: {key}' for key in expected if seen[key] == 0]
 problems += [f'runs {count} times across shards: {key}' for key, count in seen.items() if key in expected and count > 1]
 problems += [f'in a shard but not in the unsharded run: {key}' for key in seen if key not in expected]
 if problems:
     sys.exit('e2e-shard-check: the shards do not run every test exactly once\n' + '\n'.join(problems))
-print(f'e2e-shard-check: {args.shards} shards run all {sum(expected.values())} tests exactly once')
+print(f'e2e-shard-check: {shards} shards run all {sum(expected.values())} tests exactly once')
