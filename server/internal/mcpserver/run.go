@@ -63,7 +63,11 @@ func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input
 	arguments, err := parseArguments(request.Params.Arguments, input)
 	if err != nil {
 		end = refusedAs("invalid_arguments")
-		return failure("Invalid arguments for " + spec.Name + ": " + err.Error())
+		message := "Invalid arguments for " + spec.Name + ": " + err.Error()
+		if hint := argumentHint(spec.Name, input.Schema(), arguments); hint != "" {
+			message += ". " + hint
+		}
+		return failure(message)
 	}
 	runCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
@@ -114,7 +118,8 @@ func bearerFrom(request *mcp.CallToolRequest) (string, bool) {
 	return bearerToken(&http.Request{Header: extra.Header})
 }
 
-// parseArguments decodes the arguments object and checks it against the tool's input schema.
+// parseArguments decodes the arguments object and checks it against the tool's input schema. Arguments
+// that decode but fail the schema come back with the error, so the error can say how to fix them.
 func parseArguments(raw json.RawMessage, schema *jsonschema.Resolved) (map[string]any, error) {
 	arguments := map[string]any{}
 	if len(strings.TrimSpace(string(raw))) > 0 && string(raw) != "null" {
@@ -123,7 +128,7 @@ func parseArguments(raw json.RawMessage, schema *jsonschema.Resolved) (map[strin
 		}
 	}
 	if err := schema.Validate(arguments); err != nil {
-		return nil, fmt.Errorf("%s", argumentProblem.Replace(err.Error()))
+		return arguments, fmt.Errorf("%s", argumentProblem.Replace(err.Error()))
 	}
 	return arguments, nil
 }

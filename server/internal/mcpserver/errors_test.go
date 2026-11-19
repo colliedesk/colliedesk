@@ -62,6 +62,35 @@ func TestToolArgumentsAreValidatedAgainstTheSchema(t *testing.T) {
 	}
 }
 
+// A wrong argument name says which name to use, and a missing one says what to put in it, so the next
+// call is the right one instead of a guess.
+func TestAnInvalidCallSaysWhichArgumentToUse(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Hint Desk", "admin@hint.example.com")
+	session := e.connect(w.adminTier, "")
+	id := "9758712d-1cd3-4eea-b8b2-881a7cac46da"
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+		want []string
+	}{
+		{"colliedesk_inbox_search", map[string]any{"query": "refund"}, []string{"Did you mean q instead of query?"}},
+		{"colliedesk_inbox_search", map[string]any{"search": "refund"}, []string{"colliedesk_inbox_search takes: ", " q, "}},
+		{"colliedesk_conversation_get", map[string]any{"id": id}, []string{"Did you mean conversation_id instead of id?"}},
+		{"colliedesk_conversation_update", map[string]any{"conversation_id": id, "assignee_id": id}, []string{"Did you mean assignee instead of assignee_id?"}},
+		{"colliedesk_conversation_update", map[string]any{"conversation_id": id, "tags": []string{"billing"}}, []string{"Did you mean add_tags or remove_tags instead of tags?"}},
+		{"colliedesk_reply_send", map[string]any{"conversation_id": id, "body": "Hi"},
+			[]string{"seen_reply_number: latest_reply_number from the colliedesk_conversation_get you based this reply on."}},
+	} {
+		message := e.fails(session, c.tool, c.args)
+		for _, want := range c.want {
+			if !strings.HasPrefix(message, "Invalid arguments") || !strings.Contains(message, want) {
+				t.Errorf("%s %v: message %q, want it to say %q", c.tool, c.args, message, want)
+			}
+		}
+	}
+}
+
 func TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError(t *testing.T) {
 	e := newEnv(t)
 	w := e.newWorkspace("Huge Desk", "admin@huge.example.com")
