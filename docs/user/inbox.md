@@ -135,7 +135,9 @@ page. Close it with **Esc**: the focus goes back to where it was.
   Mac) leads there too: type your words and choose **See all results** (see **Search from any page** above).
   The field stays while the search is on; refine the words there, or select its **×** to clear the search and
   bring the title back. An empty field closes again when you move on, or when you press **Esc**.
-- A search matches the subject, message text and the customer's name and email, in every status but Spam unless you picked a
+- A search finds the conversations that have every word you typed, each in the subject, the message text or the
+  customer's name or email, in any order: **Alan refund** finds Alan's question about a refund. It reads the first
+  8 words. It looks in every status but Spam unless you picked a
   status first, so imported closed tickets are found; the list stays on **All statuses** after you clear
   the search. Inside a saved view that saved a status, the search keeps that status and the view stays the place. Characters such as `%` and `_` are matched
   literally.

@@ -37,17 +37,17 @@ function useSettled(value: string) {
   return settled;
 }
 
-// Marked sets each place the typed words appear in the name in bold.
+// Marked sets each place a typed word appears in the name in bold: the search finds every word, in any order.
 function Marked({ text, words }: { text: string; words: string }) {
-  if (!words) return text;
+  const typed = words.split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (typed.length === 0) return text;
+  const pattern = new RegExp(typed.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi');
   const parts: ReactNode[] = [];
-  const lower = text.toLowerCase();
-  const needle = words.toLowerCase();
   let from = 0;
-  for (let at = lower.indexOf(needle); at >= 0; at = lower.indexOf(needle, from)) {
-    if (at > from) parts.push(text.slice(from, at));
-    parts.push(<b key={at}>{text.slice(at, at + needle.length)}</b>);
-    from = at + needle.length;
+  for (const match of text.matchAll(pattern)) {
+    if (match.index > from) parts.push(text.slice(from, match.index));
+    parts.push(<b key={match.index}>{match[0]}</b>);
+    from = match.index + match[0].length;
   }
   if (from < text.length) parts.push(text.slice(from));
   return parts;
