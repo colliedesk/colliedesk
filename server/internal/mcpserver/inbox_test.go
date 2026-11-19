@@ -97,6 +97,23 @@ func TestInboxSearchReturnsReadableConversationsAndACursor(t *testing.T) {
 	}
 }
 
+// The other search tools name their words query, so an agent often sends query here too.
+func TestInboxSearchTakesQueryLikeTheOtherSearchTools(t *testing.T) {
+	e := newEnv(t)
+	f := seedInbox(t, e)
+	session := e.connect(f.w.read, "")
+	if got := conversationIDs(t, e.ok(session, "colliedesk_inbox_search", map[string]any{"query": "refund"})); !slices.Equal(got, []string{f.c2}) {
+		t.Errorf("query refund: got %v, want [%s]", got, f.c2)
+	}
+	if got := conversationIDs(t, e.ok(session, "colliedesk_inbox_search", map[string]any{"query": "refund", "q": "refund"})); !slices.Equal(got, []string{f.c2}) {
+		t.Errorf("query and q both refund: got %v, want [%s]", got, f.c2)
+	}
+	msg := e.fails(session, "colliedesk_inbox_search", map[string]any{"query": "refund", "q": "budget"})
+	if !strings.Contains(msg, "query") || !strings.Contains(msg, "q") {
+		t.Errorf("query and q differ: message=%q, want it to name both", msg)
+	}
+}
+
 func TestInboxSearchFilters(t *testing.T) {
 	e := newEnv(t)
 	f := seedInbox(t, e)

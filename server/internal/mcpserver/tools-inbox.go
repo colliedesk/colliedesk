@@ -60,6 +60,7 @@ type inboxArgs struct {
 	Sort            string     `json:"sort"`
 	SLA             stringList `json:"sla"`
 	Q               string     `json:"q"`
+	Query           string     `json:"query"`
 	Result          string     `json:"result"`
 	Limit           int        `json:"limit"`
 	Cursor          string     `json:"cursor"`
@@ -80,6 +81,14 @@ func inboxSearch(c *call, arguments map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// query is q under the name the other search tools use; after this only Q is read.
+	if args.Query != "" && args.Q != "" && args.Query != args.Q {
+		return nil, &toolError{"query and q are the same argument and differ here. Give only one of them."}
+	}
+	if args.Q == "" {
+		args.Q = args.Query
+	}
+	args.Query = ""
 	if args.Limit == 0 {
 		args.Limit = defaultInboxLimit
 	}
