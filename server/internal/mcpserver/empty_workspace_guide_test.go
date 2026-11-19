@@ -36,7 +36,7 @@ func TestInstructionsSaySampleConversationsArePractice(t *testing.T) {
 	w := e.newWorkspace("Sample Desk", "admin@sample-desk.example.com")
 	instructions := e.connect(w.read, "").InitializeResult().Instructions
 
-	for _, want := range []string{"tagged sample", "not customers"} {
+	for _, want := range []string{"tagged sample", "not customers", "from anyone else is real mail"} {
 		if !strings.Contains(instructions, want) {
 			t.Errorf("instructions do not mention %q; a model would read the samples as real customers:\n%s", want, instructions)
 		}

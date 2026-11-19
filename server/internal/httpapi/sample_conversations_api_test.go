@@ -47,6 +47,9 @@ func TestAnAIAppSignupStartsWithSampleConversationsFromThePersonsOwnAddress(t *t
 	if got := queryString(t, f.pool, `SELECT count(*)::text FROM workspace_events WHERE workspace_id=$1 AND kind='first_customer_message'`, workspace); got != "0" {
 		t.Fatalf("first_customer_message recorded %s times, want 0: a sample is not a customer writing in", got)
 	}
+	if got := queryString(t, f.pool, `SELECT count(*)::text FROM channel_outbox WHERE workspace_id=$1`, workspace); got != "0" {
+		t.Fatalf("emails queued at sign-up = %s, want 0: adding samples sends nothing", got)
+	}
 	events := funnel.named("sample_conversations_added")
 	if len(events) != 1 || events[0].Workspace != workspace || events[0].Properties["count"] != 3 {
 		t.Fatalf("sample_conversations_added events = %+v, want one with count 3 for the workspace", events)
