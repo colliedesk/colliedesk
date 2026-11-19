@@ -122,6 +122,9 @@ func parseArguments(raw json.RawMessage, schema *jsonschema.Resolved) (map[strin
 			return nil, fmt.Errorf("the arguments must be a JSON object")
 		}
 	}
+	if err := renameIDArgument(schema.Schema(), arguments); err != nil {
+		return nil, err
+	}
 	if err := schema.Validate(arguments); err != nil {
 		return nil, fmt.Errorf("%s", argumentProblem.Replace(err.Error()))
 	}

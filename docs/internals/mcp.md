@@ -92,6 +92,11 @@ instructions; `/mcp` never registers them. See [operator console internals](oper
   `colliedesk_reply_draft_restore` brings an earlier written one back; a draft's file is read through
   `colliedesk_attachment_get` with `draft_id` rather than a tool of its own. No tool creates a token:
   `POST /auth/tokens` is `PersonOnly`.
+- **`id` names the one required `*_id`.** A tool whose schema requires exactly one `*_id` argument and
+  has no `id` of its own reads `id` as that argument (`renameIDArgument`, before schema validation):
+  agents send `id` for `conversation_id` on `colliedesk_conversation_get` more than any other wrong
+  name (`docs/internals/mcp-task-eval.md`). The listed schema does not change. Both names with different
+  values are refused. REST still checks the workspace (`TestIDNamesTheOneRequiredIDArgument`).
 - **Tags are created by name.** `colliedesk_conversation_update` creates a name in `add_tags` that no
   tag has, because `POST /tags` is a `draft` route and triage must not stall on a missing tag. Every
   other check runs first (assignee, unknown `remove_tags`, a tag in both lists, the conversation
