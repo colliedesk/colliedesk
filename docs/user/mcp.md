@@ -72,6 +72,12 @@ support address to forward to (`colliedesk_email_channel_get`), sending a test m
 first conversation (`colliedesk_email_test_message_send`) and reading Google's forwarding
 confirmation code (`colliedesk_email_forwarding_confirmation_get`).
 
+A workspace you sign up for from an AI app (Colliedesk Cloud, when the sign-in starts on the app's
+**Allow** page) starts with three sample conversations, so the app has something to work on at once.
+They come from your own address and carry the tag `sample`; a reply to one is emailed only to you,
+and none counts as a customer writing in. Close them when you are done.
+A sign-up on the website starts with an empty inbox.
+
 A tool the token has no permission for fails with the message, `missing_permissions` and
 `missing_from` of [a refused call](roles-and-permissions.md#when-a-permission-is-missing): `token`
 means you hold the permission and a token that includes it would work, `person` that you would need a
