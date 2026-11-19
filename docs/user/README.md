@@ -47,6 +47,12 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Claude Desktop](connect-claude-desktop.md)
 - [Agent skills](agent-skills.md)
 
+## Recipes: AI agents at work
+
+- [Morning triage on a schedule](recipe-morning-triage.md)
+- [The agent drafts, a person sends](recipe-draft-then-approve.md)
+- [Move from Freshdesk and let an agent check the result](recipe-move-from-freshdesk.md)
+
 ## Team and account
 
 - [Manage your team](team.md)
