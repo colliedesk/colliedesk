@@ -167,9 +167,12 @@ jobs:
         # of the same commit: Vitest is this job's long pole.
         run: corepack pnpm test
   # The browser tests outside onboarding, in shards: one job ran them in 48 of its 117 seconds
-  # (run 39902604105) and set the end of the whole run. With --fully-parallel Playwright splits by
-  # test, not by file. Each shard builds the app itself while Chromium installs, so sharing a build
-  # would only add a job in front of them. A third shard would pass the account's runner limit
+  # (run 39902604105) and set the end of the whole run. Each shard runs whole test files, which
+  # e2e-shard.py balances by their measured time (.github/e2e-test-timings.json): Playwright's own
+  # --shard splits by test count, and the first shard ran 221 to 273 seconds of tests to the
+  # second's 118 to 136 (8 runs, 2026-11-19). Each shard builds the app itself while Chromium
+  # installs, so sharing a build would only add a job in front of them. A third shard would pass
+  # the account's runner limit
   # (RunnerConcurrency in tests/ci-tools-test.py).
   e2e:
     needs: pr-verified
@@ -185,6 +188,9 @@ jobs:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
       # The arguments of every shard's run, and of the check that the shards cover them.
       E2E_ARGS: --project=chromium --grep-invert @onboarding --fully-parallel --workers=3
+      # How e2e-shard.py splits the files: 3 workers ran 2.4 to 2.7 tests at once, and the last
+      # shard's tests started a median 17 seconds after the first's (8 runs, 2026-11-19).
+      E2E_SPLIT: --timings ../.github/e2e-test-timings.json --parallel 2.5 --last-shard-delay 17
       # The channels journeys read the From line of a reply in Mailpit.
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
@@ -241,6 +247,15 @@ jobs:
         run: |
           sh .github/scripts/ci-background.sh start app sh -c \
             'cd web && corepack pnpm exec vite build && corepack pnpm exec vite build -c vite.operator.config.ts && cd ../server && go build -tags e2e -o /dev/null ./cmd/collie && go build -o /dev/null ./cmd/collie'
+      - name: Pick this shard's test files in the background
+        working-directory: web
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
+        run: |
+          # shellcheck disable=SC2016
+          sh ../.github/scripts/ci-background.sh start split nice -n 10 bash -c \
+            'set -o pipefail; corepack pnpm exec playwright test $E2E_ARGS --list --reporter=json | python3 ../.github/scripts/e2e-shard.py "$SHARD" "$SHARDS" $E2E_SPLIT > "$RUNNER_TEMP/e2e-files"'
       # The API drift and TypeScript checks of the web app, go vet and migration validation run here,
       # in the background while Chromium installs and the database starts: this job finished at 56
       # seconds, while each of them made the job it ran in end later (the web job, the Go shards).
@@ -260,7 +275,7 @@ jobs:
         run: |
           # shellcheck disable=SC2086
           sh ../.github/scripts/ci-background.sh start shards nice -n 10 \
-            python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS
+            python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" $E2E_SPLIT -- corepack pnpm exec playwright test $E2E_ARGS
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install --only-shell chromium
@@ -275,7 +290,8 @@ jobs:
           SHARDS: ${{ strategy.job-total }}
         run: |
           # shellcheck disable=SC2086
-          sh ../.github/scripts/ci-background.sh wait app && corepack pnpm e2e $E2E_ARGS --shard="$SHARD/$SHARDS"
+          sh ../.github/scripts/ci-background.sh wait app && sh ../.github/scripts/ci-background.sh wait split &&
+            FILES=$(cat "$RUNNER_TEMP/e2e-files") && [ -n "$FILES" ] && corepack pnpm e2e $E2E_ARGS "$FILES"
       - name: The production bundle stays within its size budget
         if: ${{ !cancelled() }}
         working-directory: web
