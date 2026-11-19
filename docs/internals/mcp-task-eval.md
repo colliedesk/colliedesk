@@ -119,3 +119,22 @@ a gap of about 5 runs in 60 as noise.
   17 over-budget failures within budget. Since then `colliedesk_inbox_search` takes `query` as well as `q`, the name the other search tools use.
 - `reply-login-for-review` failed 3 of 3 on the second build with no error: the model wrote the
   draft into its answer instead of calling `colliedesk_reply_draft`.
+
+### 2026-11-19 Haiku, 5 rounds, interleaved
+
+Both builds include `query` on `colliedesk_inbox_search` (#664). Each round ran the first build,
+then the second, so both met the same API conditions.
+
+| Build | Passed | Rounds | Calls per run | Invalid calls | Unsafe |
+|---|---|---|---|---|---|
+| `colliedesk_inbox_search` takes `query` (#664) | 82/100 | 17, 15, 19, 16, 15 | 4.55 | 30 | 0 |
+| the same, and an invalid call names the argument to use (#662) | 80/100 | 17, 14, 16, 16, 17 | 4.54 | 32 | 0 |
+
+- What #664 measurably changed: invalid calls to `colliedesk_inbox_search` fell from 16, 16 and 22
+  in 60 runs to 4 and 3 in 100, and none of them sent `query`.
+- #662 did not keep the pass rate (80 against 82, within the round spread), so it was closed. The
+  next call to the same tool worked after 27 of 32 hinted errors, and after 23 of 30 without the
+  hint: a few more repairs, but no more passed runs.
+- The most common invalid call is now `id` for `conversation_id` on `colliedesk_conversation_get`
+  (12 and 13 calls), then `tags` on `colliedesk_conversation_update` (4 and 4) and
+  `seen_reply_number` left out of `colliedesk_reply_send` (3 and 5).
