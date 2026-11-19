@@ -130,6 +130,11 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	a.recordFunnel("trial_started", workspace.ID, properties)
 	a.queueStartTrial(request, workspace.ID, attribution, ip)
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
+	// A team that works the inbox only through an AI app gets something to work on at once; a web
+	// sign-up keeps the empty inbox, which says the next step itself.
+	if via == signupViaAIAppConnector {
+		a.addSampleConversations(request.Context(), workspace.ID, result.Agent)
+	}
 	if !a.finishBrowserSignIn(response, request, &result, input.Next) {
 		return
 	}

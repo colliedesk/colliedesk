@@ -104,24 +104,29 @@ func (a *API) deliverTestMessage(ctx context.Context, response http.ResponseWrit
 	return map[string]string{"conversation_id": *outcome.ConversationID, "message_id": *outcome.MessageID, "sent_to": agent.Email}, nil
 }
 
-// testMessage writes the RFC 5322 message an agent sends itself: from their own address to the
-// channel's support address, with a Message-ID of its own so it never threads into another conversation.
+// testMessage writes the RFC 5322 message an agent sends themself from the empty inbox.
 func testMessage(agent domain.Agent, supportAddress, date string) ([]byte, error) {
+	return selfMessage(agent, supportAddress, testMessageSubject, []string{
+		"This is a test message you sent yourself from Colliedesk.",
+		"",
+		"It arrived the way a customer's email does. Write a reply and send it: the reply is emailed to " + agent.Email +
+			", so you see exactly what your customers receive.",
+	}, date)
+}
+
+// selfMessage writes an RFC 5322 message from the agent's own address to the channel's support address,
+// with a Message-ID of its own so it never threads into another conversation.
+func selfMessage(agent domain.Agent, supportAddress, subject string, lines []string, date string) ([]byte, error) {
 	messageID, err := email.NewMessageID(email.Domain(supportAddress))
 	if err != nil {
 		return nil, err
 	}
 	from := (&mail.Address{Name: agent.DisplayName, Address: agent.Email}).String()
-	body := strings.Join([]string{
-		"This is a test message you sent yourself from Colliedesk.",
-		"",
-		"It arrived the way a customer's email does. Write a reply and send it: the reply is emailed to " + agent.Email +
-			", so you see exactly what your customers receive.",
-	}, "\r\n")
+	body := strings.Join(lines, "\r\n")
 	headers := []string{
 		"From: " + from,
 		"To: " + supportAddress,
-		"Subject: " + mime.QEncoding.Encode("utf-8", testMessageSubject),
+		"Subject: " + mime.QEncoding.Encode("utf-8", subject),
 		"Date: " + date,
 		"Message-ID: <" + messageID + ">",
 		"MIME-Version: 1.0",

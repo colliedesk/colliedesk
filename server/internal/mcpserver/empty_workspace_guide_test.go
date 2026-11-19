@@ -29,6 +29,20 @@ func TestInstructionsGuideTheModelThroughAnEmptyWorkspace(t *testing.T) {
 	}
 }
 
+// A workspace that signed up from an AI app starts with conversations tagged sample. The model must know
+// they are practice, so it never reports them as customers and still leads the person to real mail.
+func TestInstructionsSaySampleConversationsArePractice(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Sample Desk", "admin@sample-desk.example.com")
+	instructions := e.connect(w.read, "").InitializeResult().Instructions
+
+	for _, want := range []string{"tagged sample", "not customers"} {
+		if !strings.Contains(instructions, want) {
+			t.Errorf("instructions do not mention %q; a model would read the samples as real customers:\n%s", want, instructions)
+		}
+	}
+}
+
 // Every tool the instructions name must exist, so a renamed tool never leaves the model calling a
 // name the server does not have.
 func TestEveryToolTheInstructionsNameExists(t *testing.T) {
