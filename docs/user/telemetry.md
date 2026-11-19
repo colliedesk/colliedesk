@@ -174,11 +174,17 @@ counting the same visits, match the old values to the new ones:
 
 ### Trial question (Colliedesk Cloud only)
 
-In the last 7 days of a free trial, an admin sees one question: "What is still missing for you to
-leave Freshdesk for good?" It appears once; "Not now" or "Send" closes it for good in that browser.
+In the last 7 days of a free trial, an admin sees one short line in the trial notice: "What's still
+missing to leave Freshdesk? Tell us". **Tell us** opens the question "What is still missing for you to
+leave Freshdesk for good?" under the notice (from the bottom of the screen on a phone), with a link to
+book a 15-minute call instead. Opening it sends `survey_opened` with no text, once per page load.
+Escape or a press outside closes it and keeps what was typed until the page reloads.
 The text of the answer is sent only when the admin presses **Send**, as the event
-`survey_answered`. This is the one event that carries text a person typed. "Not now" sends
-`survey_dismissed` with no text. Self-hosted installs never show the question.
+`survey_answered`. This is the one event that carries text a person typed. "Not now", or the close
+mark on the line, sends `survey_dismissed` with no text. "Send", "Not now" and the close mark end the
+question for good in that browser; closing the whole trial notice hides it with the notice.
+People whose address is on the team list of the server (`internal_signup.emails`, the team running
+Colliedesk Cloud) are never asked. Self-hosted installs never show the question.
 
 ## Where it goes
 

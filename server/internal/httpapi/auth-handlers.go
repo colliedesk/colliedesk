@@ -77,11 +77,12 @@ func clearSessionCookie(response http.ResponseWriter) {
 	http.SetCookie(response, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 }
 
-// mePlan is the plan of GET /auth/me: the workspace's access, and for a non-admin person without a paid
-// plan the admins to ask.
+// mePlan is the plan of GET /auth/me: the workspace's access, whether the person is on the team running
+// this cloud, and for a non-admin person without a paid plan the admins to ask.
 type mePlan struct {
 	domain.Access
-	Admins []string `json:"admins,omitempty"`
+	Internal bool     `json:"internal"`
+	Admins   []string `json:"admins,omitempty"`
 }
 
 // maxPlanNames bounds the people listed to someone who must ask one of them for a plan.
@@ -97,7 +98,8 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 	// plan is null without billing (self-hosted) so the client shows no trial or lock.
 	var plan *mePlan
 	if a.limits {
-		plan = &mePlan{Access: identity.Access}
+		// Only the address counts: a customer signing in from a network on the team list is still a customer.
+		plan = &mePlan{Access: identity.Access, Internal: a.hot().InternalSignups.Match(identity.Agent.Email, "")}
 		// A person who cannot change the plan and cannot use the workspace for lack of one learns whom to ask.
 		if !identity.IsToken() && !identity.Can(auth.PermBillingManage) && (identity.Access.Plan == domain.PlanTrial || identity.Access.Plan == domain.PlanNone) {
 			if plan.Admins, err = a.store.NamesHolding(request.Context(), identity.Workspace.ID, auth.PermBillingManage); err != nil {

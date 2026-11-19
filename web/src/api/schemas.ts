@@ -344,7 +344,7 @@ export const meSchema = z.object({
   setup_guide_hidden: z.boolean().catch(false),
   // An older server offers no AI feature.
   ai_features: z.object({ triage: z.boolean(), draft: z.boolean() }).catch({ triage: false, draft: false }),
-  plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean(), admins: z.array(z.string()).optional() }).nullable(),
+  plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean(), internal: z.boolean(), admins: z.array(z.string()).optional() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
 // The raw token is in this answer only; the client keeps it in no cache. A repeat of the same press (200)

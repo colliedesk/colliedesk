@@ -23,7 +23,7 @@ const me = (role: 'admin' | 'agent', admins?: string[]) => ({
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null }, permissions: permissionsOf(role),
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC',
-  plan: admins ? { plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, admins } : null,
+  plan: admins ? { plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, internal: false, admins } : null,
 });
 const free = {
   plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, checkout_refusals: [], storage_upgrade_plan: null, purchased_plan: null, complimentary: false, complimentary_until: null, migration_requested_at: null, checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
