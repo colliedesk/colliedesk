@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ports, scratchDir } from './e2e/support/checkout';
 import { defineConfig, devices } from '@playwright/test';
-import { attachmentsDir, bootstrapEnv, databaseFor, databaseNameFor, goEnv, postgresURL, servers, settingsFile } from './e2e/support/cli';
+import { attachmentsDir, binaryPath, bootstrapEnv, databaseFor, databaseNameFor, goEnv, postgresURL, servers, settingsFile } from './e2e/support/cli';
 import { ensureIdentityKey, identity, identityKeyFile, jwksURL } from './e2e/support/identity-provider';
 import { inAppFreshdesk } from './e2e/support/fake-freshdesk';
 import { dnsFile } from './e2e/support/dns';
@@ -24,16 +24,18 @@ const webkitJourneys = ['sign-in-page.spec.ts'];
 // Each server is the real `collie serve` on a database of its own, configured the way an operator
 // configures one: the environment opens the database, and `collie config import` writes the settings
 // into it. They differ in what is plugged in: nothing, an SMTP relay, cloud sign-in. Every run starts
-// each server on a new database and migrates it, as a fresh install does.
+// each server on a new database and migrates it, as a fresh install does. `go build` links the CLI
+// only when the binary is not current, so where CI has built it the server starts at once.
 function server(origin: string, env: Record<string, string> = {}, tags = '') {
-  const run = tags ? `go run -tags ${tags} ./cmd/collie` : 'go run ./cmd/collie';
+  const run = binaryPath(tags);
+  const build = `go build${tags ? ` -tags ${tags}` : ''} -o ${run} ./cmd/collie`;
   const serve = `${run} serve --listen 127.0.0.1:${new URL(origin).port}`;
   const name = databaseNameFor(origin);
   const fresh = `psql '${postgresURL}' -q -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS ${name} WITH (FORCE)' -c 'CREATE DATABASE ${name}'`;
   const all = { EMAIL_TRUSTED_AUTHSERV_ID: 'mx.example.net', ...env };
   const file = settingsFile(name, all);
   return {
-    command: `${fresh} && ${run} migrate && ${run} config import --replace ${file} && ${serve}`,
+    command: `${fresh} && ${build} && ${run} migrate && ${run} config import --replace ${file} && ${serve}`,
     cwd: '../server',
     env: {
       ...process.env as Record<string, string>, ...goEnv,
