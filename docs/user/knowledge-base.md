@@ -163,8 +163,8 @@ fmt.Println("hello")
 The help center colours a code block that names a language it knows, in the light and in the dark
 theme. The colours are worked out on the server and are part of the page's style, so the page still
 runs no script. A block with no language or a language it does not know stays plain text. An article
-colours its first 10,000 characters of code; a block that would go past them, and the blocks after
-very slow code, stay plain. The editor's preview shows code blocks plain. On the help center, one click selects
+colours its code blocks in order up to 10,000 characters of code in all: a block that would go past
+that stays plain, and so do the blocks after very slow code. The editor's preview shows code blocks plain. On the help center, one click selects
 all the code in a block, ready to copy.
 
 ### On this page

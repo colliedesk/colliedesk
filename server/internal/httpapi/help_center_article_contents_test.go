@@ -139,8 +139,8 @@ func TestAContentsLinkShowsTheHeadingsWords(t *testing.T) {
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
 	var article contentsArticleView
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Words guide", "status": "published",
-		"body_md": "## Tom &amp; Jerry\n\na\n\n## Use \\*stars\\*\n\nb\n\n## Three\n\nc"}, admin, http.StatusCreated, &article)
+		"body_md": "## Tom &amp; Jerry\n\na\n\n## Use \\*stars\\*\n\nb\n\n## End &lt;/script&gt;&lt;b&gt;\n\nc"}, admin, http.StatusCreated, &article)
 	page := visit(site, fmt.Sprintf("/help/%s/a/%d-%s", slug, article.Number, article.Slug), "192.0.2.141")
-	wantPage(t, page, http.StatusOK, []string{`">Tom &amp; Jerry</a>`, `">Use *stars*</a>`,
-		`<meta name="description" content="Tom &amp; Jerry a Use *stars* b Three c">`}, []string{`&amp;amp;`, `\\*`})
+	wantPage(t, page, http.StatusOK, []string{`">Tom &amp; Jerry</a>`, `">Use *stars*</a>`, `">End &lt;/script&gt;&lt;b&gt;</a>`,
+		`<meta name="description" content="Tom &amp; Jerry a Use *stars* b End &lt;/script&gt;&lt;b&gt; c">`}, []string{`&amp;amp;`, `\\*`, `</script><b>`, `<b>`})
 }
