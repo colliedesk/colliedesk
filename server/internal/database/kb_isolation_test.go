@@ -21,6 +21,7 @@ func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name stri
 		c2 AS (INSERT INTO kb_collections(workspace_id,name,slug) VALUES($1,$2,'more') RETURNING id),
 		x AS (INSERT INTO kb_article_collections(workspace_id,article_id,collection_id) SELECT $1,a.id,c2.id FROM a,c2 RETURNING 1),
 		tr AS (INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug) SELECT $1,id,'de',$2,'text','t' FROM a RETURNING 1),
+		d AS (INSERT INTO kb_article_drafts(workspace_id,article_id,title,slug,body_md) SELECT $1,id,$2,'a','next' FROM a RETURNING 1),
 		i AS (INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type) VALUES($1,$1::text||'/00/'||$3,$3,10,'image/png') RETURNING id),
 		l AS (INSERT INTO kb_article_media(workspace_id,article_id,media_id,current) SELECT $1,a.id,i.id,true FROM a,i RETURNING 1),
 		b AS (INSERT INTO kb_media_batches(workspace_id,action,media_ids) SELECT $1,'trash',ARRAY[i.id] FROM i RETURNING 1),
@@ -32,7 +33,7 @@ func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name stri
 	}
 }
 
-var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_article_collections", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "help_centers"}
+var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_article_collections", "kb_article_drafts", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "help_centers"}
 
 func TestKnowledgeBaseTablesAreScopedByRowLevelSecurity(t *testing.T) {
 	pool := testPool(t)
