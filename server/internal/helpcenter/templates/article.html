@@ -8,6 +8,20 @@
 <div class="prose">
 {{.Body}}
 </div>
+{{- with .Votes}}
+<section class="helpful" id="helpful" aria-labelledby="helpful-title">
+<h2 id="helpful-title" class="helpful-title">{{.T.Question}}</h2>
+{{- if .Action}}
+<form class="helpful-form" method="post" action="{{.Action}}">
+<button type="submit" name="helpful" value="yes">{{.T.Yes}}</button>
+<button type="submit" name="helpful" value="no">{{.T.No}}</button>
+</form>
+{{- end}}
+{{- if .Count}}
+<p class="helpful-count">{{.Count}}</p>
+{{- end}}
+</section>
+{{- end}}
 </article>
 {{- if .Neighbours}}
 <aside class="rail" aria-labelledby="rail-title">

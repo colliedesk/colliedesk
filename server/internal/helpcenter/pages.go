@@ -133,6 +133,8 @@ type page struct {
 	Updated, UpdatedISO        string
 	CollectionName, Collection string
 	Neighbours                 []articleLink
+	// Votes is the article's "Was this article helpful?" box (votes.go).
+	Votes *voteBox
 
 	Searched bool
 	Results  []searchResult
@@ -530,7 +532,7 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		return
 	}
 	// A query names no other article: the address without it is the canonical one, checked below.
-	if request.URL.RawQuery == "" && fresh(response, request, v.etag) {
+	if request.URL.RawQuery == "" && fresh(response, request, v.articleTag()) {
 		return
 	}
 	article, err := s.config.Store.HelpCenterArticleIn(request.Context(), v.site.WorkspaceID, number, v.lang)
@@ -626,6 +628,7 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 		data.RailLabel = fmt.Sprintf(v.text.InCollection, collection.Name)
 	}
 	data.Neighbours = v.articleLinks(neighbours, article.Number)
+	data.Votes = voteBoxOf(v, article)
 	paths := pagePaths{}
 	for lang, slug := range article.Alternates {
 		paths[lang] = ArticlePath(article.Number, slug)

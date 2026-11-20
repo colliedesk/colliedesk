@@ -91,6 +91,8 @@ func (s *Site) Preview(ctx context.Context, workspaceID string, theme domain.Hel
 		data = s.homeOf(v, t, read.Articles)
 	case read.Article != nil:
 		data, _ = s.articleOf(v, t, *read.Article, read.Articles)
+		// A preview has no public address to vote at.
+		data.Votes.Action = ""
 		data.Body = template.HTML(playerElement.ReplaceAllLiteralString(string(data.Body), previewVideo)) //nolint:gosec // the rendered body with whole elements swapped for a constant
 	default:
 		if data, err = s.sampleArticle(v); err != nil {

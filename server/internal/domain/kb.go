@@ -452,7 +452,10 @@ type HelpCenterSite struct {
 	Title          string
 	Locale         string
 	ContentVersion int64
-	Trial          bool
+	// VotesVersion grows with every vote and reset of its articles' votes: a page that shows the
+	// counts is stale once it moves.
+	VotesVersion int64
+	Trial        bool
 	// Theme is the brand the pages show. A logo or favicon that is no longer an image of the library
 	// outside its trash is left out (nil), so a page never links an image it cannot serve.
 	Theme HelpCenterTheme
@@ -501,6 +504,8 @@ type PublicKBArticle struct {
 	// are its slug in every language it is published and shown in, "" the primary one.
 	Locale     string
 	Alternates map[string]string
+	// Votes are what the page counts of "Was this article helpful?", read with the article page only.
+	Votes KBVoteCount
 }
 
 // PublicKBTranslation is a published translation the help center shows, for sitemap.xml.
