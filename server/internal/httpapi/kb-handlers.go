@@ -3,8 +3,6 @@ package httpapi
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -735,7 +733,6 @@ func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusServiceUnavailable, "storage_unavailable", "File storage is not configured on this server.")
 		return
 	}
-	who := principal(request)
 	if request.ContentLength > domain.MaxKBImageBytes {
 		writeError(response, http.StatusRequestEntityTooLarge, "too_large", "An image holds at most 5 MiB; nothing was stored.")
 		return
@@ -747,62 +744,9 @@ func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "The image could not be read.")
 		return
 	}
-	if len(data) > domain.MaxKBImageBytes {
-		writeError(response, http.StatusRequestEntityTooLarge, "too_large", "An image holds at most 5 MiB; nothing was stored.")
-		return
-	}
-	// The bytes decide the type, never the declared Content-Type, so nothing else is served as an image.
-	info, err := media.InspectImage(data)
-	if err != nil {
+	a.storeKBImage(response, request, data, upload, func(err error) {
 		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+"; nothing was stored.")
-		return
-	}
-	// Location, camera and comments leave before anything is stored or compared.
-	data, err = media.StripMetadata(info, data)
-	if err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+"; nothing was stored.")
-		return
-	}
-	sum := sha256.Sum256(data)
-	if image, found, err := a.store.FindKBImage(request.Context(), who.Workspace.ID, hex.EncodeToString(sum[:]), upload); err != nil {
-		writeKBError(response, err)
-		return
-	} else if found {
-		// Bytes the workspace already holds take no room: a full workspace can still use them again.
-		writeJSON(response, http.StatusCreated, image)
-		return
-	}
-	if err := a.store.CheckKBImageAdmission(request.Context(), who.Workspace.ID, int64(len(data))); err != nil {
-		writeStoreError(response, err)
-		return
-	}
-	object, err := a.config.Attachments.Put(request.Context(), who.Workspace.ID, bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		writeInternalError(response, err)
-		return
-	}
-	input := store.NewKBImage{Object: object, ContentType: info.ContentType, Width: info.Width, Height: info.Height, KBImageUpload: upload}
-	input.Thumb = a.storeKBThumbnail(request.Context(), who.Workspace.ID, info, data)
-	image, created, err := a.store.CreateKBImage(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), input)
-	discard := func(keys ...string) {
-		for _, key := range keys {
-			if discardErr := a.store.DiscardObject(request.Context(), who.Workspace.ID, key); discardErr != nil {
-				log.Printf("knowledge base image: discard unrecorded bytes: %v", discardErr)
-			}
-		}
-	}
-	if err != nil {
-		discard(object.Key)
-		if input.Thumb != nil {
-			discard(input.Thumb.Key)
-		}
-		writeKBError(response, err)
-		return
-	}
-	if !created && input.Thumb != nil {
-		discard(input.Thumb.Key)
-	}
-	writeJSON(response, http.StatusCreated, image)
+	})
 }
 
 // storeKBThumbnail makes and stores the library thumbnail of an image, or returns nil: an image too

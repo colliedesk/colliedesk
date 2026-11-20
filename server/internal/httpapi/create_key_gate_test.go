@@ -57,6 +57,7 @@ var postWithoutKey = map[string]string{
 	"POST /api/v1/conversations/{id}/ai-drafts": "The person's earlier draft on the conversation is replaced: repeats leave one draft.",
 	"POST /api/v1/conversations/{id}/ai-triage": "The open suggestion is replaced: repeats leave one suggestion.",
 	"POST /api/v1/kb/images":                    "Stored by content: the same bytes again answer the image already stored.",
+	"POST /api/v1/kb/images/import":             "Stored by content: fetching the same image again answers the image already stored.",
 	"POST /api/v1/kb/media-uploads":             "An upload in progress holds no media; one left without parts expires, and the same bytes complete into the same item.",
 	"POST /api/v1/autofix/repos":                "One row per GitHub repository: connecting it again updates that row (ON CONFLICT), never a second one.",
 	// Autofix's fixes: the body names the send (client_key), or the action finds the fix already moved.

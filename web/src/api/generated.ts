@@ -4464,6 +4464,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/images/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Store an image found at a web address in the media library, so an article shows the library's copy and never loads it from the other site: the editor does this for an image pasted from a web page or a document. The server fetches it once and stores it as POST /api/v1/kb/images stores an upload (the same checks, metadata removal, thumbnail, storage cap and 30-day purge unless kept); the same bytes give the item already stored. The server refuses private, loopback, link-local, CGNAT, multicast and metadata addresses (also after DNS and on every redirect, at most 3) and ports other than 80 and 443, and nothing is stored after a refusal. A `data:` image or a file is uploaded to POST /api/v1/kb/images instead. */
+        post: operations["importKBImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/media": {
         parameters: {
             query?: never;
@@ -20903,6 +20920,88 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    importKBImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The image's full http or https address. */
+                    url: string;
+                    /** @description The name the library shows; the last part of the address without its extension when left out. */
+                    name?: string;
+                    /** @description Alt text the editor offers when it inserts the image. */
+                    alt?: string;
+                    /** @description true keeps the image from the purge of unused items. */
+                    keep?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The stored image, or the item that already held the same bytes */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMedia"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Error code `address_refused`: the address is private, internal or not on a web port. Also a missing permission, or `storage_limit_reached`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            /** @description The image is over 5 MiB; nothing was stored. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The address answered with something that is not a PNG, JPEG, GIF or WebP image; nothing was stored. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The address could not be reached or answered with an error; nothing was stored. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many images are being fetched (`busy`, with Retry-After), or file storage is not configured. */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listKBMedia: {

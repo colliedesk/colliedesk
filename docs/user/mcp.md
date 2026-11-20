@@ -180,6 +180,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_article_votes_get` | Reads an article's "Was this article helpful?" counts, each reader's vote and what they said was missing | `kb_articles:read` |
 | `colliedesk_kb_article_votes_reset` | Starts an article's helpful count again from 0; the earlier counts stay under resets. Cannot be undone | `kb_articles:update` |
 | `colliedesk_kb_image_upload` | Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one | `kb_media:create` |
+| `colliedesk_kb_image_import` | Stores an image found at a public web address in the media library and gives the link to put in an article | `kb_media:create` |
 | `colliedesk_kb_image_get` | Shows a knowledge base image to the model | `kb_media:read` |
 | `colliedesk_kb_media_list` | Lists the media library: what no article uses (with the space it takes) and images missing alt text | `kb_media:read` |
 | `colliedesk_kb_media_get` | Shows one library item, its thumbnail and the articles that use it | `kb_media:read` |

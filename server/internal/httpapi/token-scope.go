@@ -138,6 +138,7 @@ var routeAccess = map[string]TokenAccess{
 	"DELETE /api/v1/kb/collections/{id}/translations/{locale}":                       need(auth.PermKBArticlesUpdate),
 	"POST /api/v1/kb/images":                                                         need(auth.PermKBMediaCreate),
 	"GET /api/v1/kb/images/{id}":                                                     need(auth.PermKBMediaRead),
+	"POST /api/v1/kb/images/import":                                                  need(auth.PermKBMediaCreate),
 	"GET /api/v1/kb/media":                                                           need(auth.PermKBMediaRead),
 	"PATCH /api/v1/kb/media/{id}":                                                    need(auth.PermKBMediaUpdate),
 	"GET /api/v1/kb/media/trash":                                                     need(auth.PermKBMediaRead),

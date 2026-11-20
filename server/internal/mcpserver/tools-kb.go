@@ -615,6 +615,23 @@ func kbImageUpload(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"image": image}, nil
 }
 
+func kbImageImport(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		URL  string `json:"url"`
+		Name string `json:"name,omitempty"`
+		Alt  string `json:"alt,omitempty"`
+		Keep bool   `json:"keep,omitempty"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	var image restKBImage
+	if err := c.send(http.MethodPost, "/api/v1/kb/images/import", args, &image); err != nil {
+		return nil, err
+	}
+	return map[string]any{"image": image}, nil
+}
+
 // kbImageLimit is the most an image download reads: the upload limit.
 const kbImageLimit = 5 << 20
 

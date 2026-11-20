@@ -166,6 +166,7 @@ var routesReachingOutside = map[string]string{
 	"DELETE /api/v1/channels/email/gmail":                        "revokes the Google grant",
 	"DELETE /api/v1/channels/{id}/email/gmail":                   "revokes the Google grant",
 	"DELETE /api/v1/channels/{id}":                               "revokes an email channel's Google grant",
+	"POST /api/v1/kb/images/import":                              "downloads the image from its web address",
 
 	// What the public help center, a public link or the public web form shows.
 	"PUT /api/v1/help-center":                                                        "public site",

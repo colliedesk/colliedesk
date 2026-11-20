@@ -47,7 +47,7 @@ func Catalog() []Spec {
 		kbTemplatesListSpec(), kbTemplateGetSpec(), kbTemplateCreateSpec(), kbTemplateUpdateSpec(), kbTemplateDeleteSpec(), kbTemplateUndeleteSpec(),
 		kbTemplateHistorySpec(), kbTemplateVersionRestoreSpec(),
 		kbArticlesSearchSpec(), kbArticleGetSpec(), kbArticleCreateSpec(), kbArticleUpdateSpec(), kbArticleDeleteSpec(), kbArticlesTrashSpec(), kbArticleUndeleteSpec(),
-		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbArticleAIExcludeSpec(), kbArticleAIIncludeSpec(), kbArticleDraftPublishSpec(), kbArticleDraftDiscardSpec(), kbArticleVotesGetSpec(), kbArticleVotesResetSpec(), kbImageUploadSpec(), kbImageGetSpec(),
+		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbArticleAIExcludeSpec(), kbArticleAIIncludeSpec(), kbArticleDraftPublishSpec(), kbArticleDraftDiscardSpec(), kbArticleVotesGetSpec(), kbArticleVotesResetSpec(), kbImageUploadSpec(), kbImageImportSpec(), kbImageGetSpec(),
 		kbMediaListSpec(), kbMediaGetSpec(), kbMediaUpdateSpec(), kbMediaTrashSpec(), kbMediaTrashListSpec(), kbMediaUndeleteSpec(), kbMediaPurgeSpec(), kbMediaReplaceSpec(), kbMediaReplaceUndoSpec(),
 		kbFileUploadSpec(), kbArticleAttachmentsSetSpec(), kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
 		helpCenterLanguagesGetSpec(), helpCenterLanguagesSetSpec(), kbTranslationsListSpec(), kbTranslationsTrashSpec(), kbTranslationCreateSpec(), kbTranslationGetSpec(),
