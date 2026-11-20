@@ -786,7 +786,7 @@ class GoBuildCache(unittest.TestCase):
         prefix = prefixes.pop().split('${{')[0]
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         restores = re.findall(r'restore-keys: \|\n((?:\s{12}\S.*\n)+)', workflow)
-        self.assertEqual(len(restores), 3, 'the go, e2e and onboarding jobs restore the Go cache')
+        self.assertEqual(len(restores), 4, 'the go, e2e, onboarding and postgres-floor jobs restore the Go cache')
         for block in restores:
             for key in (line.strip() for line in block.splitlines()):
                 self.assertTrue(key.startswith(prefix), f'{key} can match an entry setup-go saved')
