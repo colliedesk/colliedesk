@@ -369,9 +369,10 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 }
 
 // Publishing changes what the public help center shows, which reaches customers: a token without
-// kb_articles:publish may write drafts, and a change to what the help center shows (a published
-// article, the media in one, a collection) waits for a person (an agent request), however the route
-// itself is classified.
+// kb_articles:publish may write drafts and save or discard the unpublished changes of a published
+// article, and a change to what the help center shows (publishing those changes, the media in a
+// published article, a collection) waits for a person (an agent request), however the route itself
+// is classified.
 var (
 	kbArticleCreateRoute        = Route{http.MethodPost, "/api/v1/kb/articles", auth.PermissionSession}
 	kbArticleUpdateRoute        = Route{http.MethodPatch, "/api/v1/kb/articles/{id}", auth.PermissionSession}

@@ -41,8 +41,9 @@ There are 62 permissions. **Admin** holds them all; **Agent** holds the 42 below
 
 "Admin only" describes the two built-in roles; a role you make can hold any of them.
 `kb_articles:publish` is needed for anything that changes the public help center: publishing an
-article, editing, trashing or restoring a published one, and renaming, moving or deleting a
-collection. Some things need no permission at all: signing out, seeing and revoking your own
+article or its [unpublished changes](knowledge-base.md#unpublished-changes), unpublishing, trashing or
+restoring a published one, and renaming, moving or deleting a collection. Saving or discarding
+unpublished changes needs `kb_articles:update` only. Some things need no permission at all: signing out, seeing and revoking your own
 sessions and tokens, and reporting a problem.
 
 ## Roles
