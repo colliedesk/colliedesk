@@ -53,6 +53,8 @@ test('a chosen file goes up in parts, kept in the library, is listed under the a
   open({ articleId: ids.article });
   fireEvent.change(await screen.findByLabelText('Choose files'), { target: { files: [new File([new Uint8Array(12)], 'Warranty form.pdf', { type: 'application/pdf' })] } });
   const strip = screen.getByRole('region', { name: 'Attachments' });
+  expect(within(strip).getByRole('button', { name: 'About Attachments' }))
+    .toHaveAccessibleDescription('Readers download them under the text. Up to 25 MiB each and 100 MiB in all.');
   expect(await within(strip).findByRole('link', { name: 'Warranty form.pdf' })).toHaveAttribute('href', `/api/v1/kb/media/${fileId}`);
   expect(within(strip).getByText('PDF · 12 B')).toBeInTheDocument();
   expect(calls.find((call) => call.path === '/api/v1/kb/media-uploads')?.body).toEqual({ kind: 'file', size: 12, name: 'Warranty form.pdf', keep: true });
