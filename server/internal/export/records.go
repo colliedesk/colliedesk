@@ -1298,6 +1298,7 @@ type Sink interface {
 	KBArticleVersion(KBArticleVersion) error
 	KBArticleTranslation(KBArticleTranslation) error
 	KBArticleTranslationVersion(KBArticleTranslationVersion) error
+	KBArticleDraft(KBArticleDraft) error
 	KBImage(KBImage) error
 	KBVideo(KBVideo) error
 	KBMediaReplacement(KBMediaReplacement) error

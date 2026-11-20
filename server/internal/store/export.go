@@ -773,6 +773,9 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	if err := rowsError("export knowledge base translation versions", rows); err != nil {
 		return err
 	}
+	if err := exportKBArticleDrafts(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 
 	rows, err = tx.Query(ctx, `SELECT id::text,content_type,size,sha256,storage_key,created_by_agent_id::text,created_at,
 			name,alt,width,height,kept,deleted_at,deleted_by_agent_id::text,updated_at,updated_by_agent_id::text

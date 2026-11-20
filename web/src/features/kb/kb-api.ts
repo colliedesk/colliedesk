@@ -9,7 +9,7 @@ const nullableDate = z.string().datetime().nullable();
 const personSchema = z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }) satisfies z.ZodType<Generated<'SavedReplyPerson'>>;
 const statusSchema = z.enum(['draft', 'published']) satisfies z.ZodType<Generated<'KBArticleStatus'>>;
 const changeFields = {
-  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include']), restored_from_version: z.number().int().nullable(),
+  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft']), restored_from_version: z.number().int().nullable(),
   changed_by: personSchema.nullable(), token: z.object({ id: z.string().uuid().nullable(), label: z.string() }).nullable(),
   agent_request_id: z.string().uuid().nullable(), created_at: z.string().datetime(),
 };
@@ -38,14 +38,24 @@ const summaryFields = {
   id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), collection_ids: z.array(z.string().uuid()).min(1), position: z.number().int(), title: z.string(), slug: z.string(), status: statusSchema,
   published_at: nullableDate, author_agent_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   last_change: changeSchema.nullable(), url: z.string(),
+  // has_draft: a published article with unpublished changes; the help center still shows the published text.
+  has_draft: z.boolean(),
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
+// The unpublished changes of a published article: what publishing them puts live. Its updated_at is the
+// version every save, publish, discard, restore or delete sends while it exists.
+const draftSchema = z.object({
+  title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), collection_id: z.string().uuid(),
+  collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  updated_by: personSchema.nullable(),
+}) satisfies z.ZodType<Generated<'KBArticleDraft'>>;
 export const kbArticleSchema = z.object({
   ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
   ai_exclusion: z.object({ at: z.string().datetime(), by: personSchema.nullable() }).nullable(),
   // Only when one article is read: the AI reply drafts this month that used it.
   ai_drafts_this_month: z.number().int().optional(),
   translations: z.array(translationSummarySchema),
+  draft: draftSchema.nullable(),
 }) satisfies z.ZodType<Generated<'KBArticle'>>;
 export const kbTranslationSchema = z.object({
   ...translationSummaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), has_source_html: z.boolean(), deleted_at: nullableDate,
@@ -103,6 +113,7 @@ export type KBCollection = z.infer<typeof kbCollectionSchema>;
 export type TrashedKBCollection = z.infer<typeof trashedCollectionSchema>;
 export type KBArticleSummary = z.infer<typeof summarySchema>;
 export type KBArticle = z.infer<typeof kbArticleSchema>;
+export type KBArticleDraft = z.infer<typeof draftSchema>;
 export type TrashedKBArticle = z.infer<typeof trashedArticleSchema>;
 export type KBArticleVersion = z.infer<typeof versionSchema>;
 export type KBArticlePage = z.infer<typeof articlePageSchema>;
@@ -120,15 +131,15 @@ export type KBLanguageState = 'missing' | 'outdated' | 'translated';
 
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
   | 'restoreKBArticleVersion' | 'putHelpCenter' | 'setKBOrder' | 'putHelpCenterLanguages' | 'createKBTranslation' | 'updateKBTranslation' | 'restoreKBTranslation'
-  | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation';
+  | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation' | 'publishKBArticleDraft';
 const json = <O extends Operation>(value: RequestBody<O>): string => JSON.stringify(value);
 
 // The calls that answer 204 carry no body.
 const noContent = z.undefined();
 
 // sort is the order without q: recent (the default without collection_id) or manual, the help center's.
-// limit is the page size, 1 to 200 (50 when left out).
-export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string };
+// limit is the page size, 1 to 200 (50 when left out). has_draft 'true' keeps the articles with unpublished changes.
+export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string; has_draft?: 'true' };
 
 // query is called with a variable, never an object literal, inside a path: the gate that checks every path
 // the web app calls is a route (web_routes_test.go) reads a path up to its first closing brace.
@@ -160,6 +171,11 @@ export const kbApi = {
     { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createKBArticle'>(value) }),
   updateArticle: (id: string, value: RequestBody<'updateKBArticle'>) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema, { method: 'PATCH', body: json<'updateKBArticle'>(value) }),
   deleteArticle: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
+  // Publishing the unpublished changes puts them on the help center; key names the press (Idempotency-Key).
+  publishDraft: (id: string, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/draft/publish`, kbArticleSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'publishKBArticleDraft'>({ updated_at: updatedAt }) }),
+  // Discarding them leaves the published article and its history as they are.
+  discardDraft: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}/draft${version(updatedAt)}`, kbArticleSchema, { method: 'DELETE' }),
   restoreArticle: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}/restore`, kbArticleSchema, { method: 'POST', body: json<'restoreKBArticle'>({ updated_at: updatedAt }) }),
   // AI may not read an excluded article, in any language; including it again undoes that.
   excludeFromAI: (id: string) => request(`/api/v1/kb/articles/${id}/ai-exclusion`, kbArticleSchema, { method: 'POST' }),

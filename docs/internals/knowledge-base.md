@@ -189,9 +189,60 @@ The public help center is in `help-center.md`.
 - **Permissions.** Reads need `kb_articles:read`/`kb_media:read`; writes `kb_articles:create`,
   `:update`, `:delete` and `kb_media:*`; anything the help center shows also `kb_articles:publish`
   (a publish reaches customers, but it is a version and can be undone); `PUT /help-center` needs
-  `help_center:update`. A call without the permission is 403 `permission_missing`.
+  `help_center:update`. A call without the permission is 403 `permission_missing`. Saving or
+  discarding the unpublished changes of a published article changes nothing customers read, so it
+  needs `:update` only; publishing them needs `:publish` ([Drafts](#drafts)).
 - **Locked workspaces get 402 on every KB route.** None is in `lockedAllowed`; the export still runs.
 
+## Drafts
+
+Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
+`catalog-kb-drafts.go`, web `article-draft.tsx` and `line-diff.ts`. Issue #673.
+
+- **One row of unpublished changes per published item.** `kb_article_drafts` holds the full text
+  (title, slug, body, SEO fields, collections, On this page switch) of the next version. `locale` is NULL for the article's
+  own text and a language for a translation; two partial unique indexes (per article where `locale IS
+  NULL`, per article and locale otherwise) keep one row each. One table with a locale beat a
+  `translation_id` column: one index shape, one export file, one cascade. `collection_id`,
+  `extra_collection_ids` and `show_contents` NULL mean "keep as it is"; a translation row has none of
+  them, since the article holds its collections and its On this page switch. A row exists only while its item is published:
+  a never-published article is still written directly, and unpublishing folds the row into the
+  article and deletes it.
+- **Save never touches the live row.** `PATCH` on a published article upserts the row (based on the
+  row, else the live article) and records a version of kind `draft`; `kb_articles.updated_at`,
+  `published_at`, `help_centers.content_version` and every public read stay as they were, so no
+  `bumpKB`. Publish (`POST …/draft/publish`, in `routesReachingOutside`) copies the row into the
+  article in one transaction, records an `edit` version, marks translations outdated as an edit does,
+  deletes the row and bumps the help center. Discard (`DELETE …/draft`) deletes the row and relinks
+  media; versions stay.
+- **One concurrency token per article** (`kbArticleToken`): the later of the article's and the draft's
+  `updated_at`. Every read (get, list, search, trash, `?version=draft`) shows it as `updated_at`, and
+  every writer (save, publish, discard, restore, delete, undelete) checks it, so a publish never puts
+  live text its caller has not read and a client never has to tell the two apart.
+- **Public reads see only live rows.** Help center pages, `.md`, search, `llms.txt`, sitemap and the
+  help chat read `kb_articles` and `kb_article_translations`, never the drafts; the chat cites the
+  newest non-`draft` version. Image and video serving checks the live text and published translations
+  (`shownTextNames`), so an item only a draft shows is not public; `linkKBMedia` still counts drafts,
+  so the library never purges it as unused.
+- **Restore on a published article writes the draft**, needs `:update` only, and keeps the old rule
+  that a restore never publishes.
+- **Delete and undelete keep the row**: it goes to the trash with the article and comes back with it;
+  a purge cascades.
+- **Media replacement rewrites drafts too** (`replaceInKBDraft`), so a later publish never brings the
+  replaced item back. The undo puts the old text back only while the draft still holds the replaced
+  text; otherwise the article is listed as skipped. The undo's "previous version" of an article skips
+  `draft` versions, so it restores the live text.
+- **A Freshdesk rerun leaves an article with a draft alone**, live text and draft, and lists it under
+  `kb_article_changed_in_both`. `KBImportedLastSQL` (rerun, undo, link rewrite) skips `draft`
+  versions and checks for a draft row instead, so a discarded draft leaves the article the import's
+  again: nothing of the person's work is lost by taking the next Freshdesk change.
+- **No slug uniqueness check** on a draft: the address carries the number, and article slugs are not
+  unique today.
+- **Export** writes `kb-article-drafts.ndjson`; the versions file carries the `draft` kind.
+- **Agents:** `kb_article_update` saves the draft, `kb_article_get` returns `draft` in the same call
+  (no separate draft tool, the tool list is near its budget), and `kb_article_draft_publish` /
+  `kb_article_draft_discard` act on it. Translations still write their live row until #694 gives them
+  the same flow on this table.
 ## Votes
 
 Migration `20261120073704-kb-article-votes`; code `helpcenter/votes.go` (form, cookie, redirect),

@@ -466,25 +466,18 @@ test('Publish anyway publishes an article whose images still lack alt text', asy
   await waitFor(() => expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: article().updated_at, status: 'published' }));
 });
 
-test('saving a published article asks about an image without alt text it brings in, not about one it already had', async () => {
+// withChanges is a published article whose unpublished changes have the text body.
+const withChanges = (live: string, body: string) => article({ status: 'published', body_md: live, has_draft: true, draft: { title: 'Reset your password', slug: 'reset-your-password',
+  body_md: body, seo_title: '', seo_description: '', collection_id: ids.setup, collection_ids: [ids.setup], show_contents: true, created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: null } });
+
+test('publishing changes does not ask about an image without alt text the published article already has', async () => {
   const old = '![](https://example.com/old.png)';
-  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ status: 'published', body_md: old })),
-    'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': (call) => json(200, article({ status: 'published', body_md: (call.body as { body_md: string }).body_md, updated_at: `2026-10-0${3 + calls.filter((each) => each.method === 'PATCH').length}T00:00:00Z` })) });
+  const calls = serve({ ...base, [articlePath]: () => json(200, withChanges(old, `${old}\n\nMore.`)),
+    [`POST /api/v1/kb/articles/${ids.article}/draft/publish`]: () => json(200, article({ status: 'published', body_md: `${old}\n\nMore.`, updated_at: '2026-10-04T00:00:00Z' })) });
   open({ articleId: ids.article });
-  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
-  fireEvent.change(text, { target: { value: `${old}\n\nMore.` } });
-  await settle();
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
+  fireEvent.click(await screen.findByRole('button', { name: 'Publish changes' }));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1));
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-  fireEvent.change(text, { target: { value: `${old}\n\nMore.\n\n![](https://example.com/new.png)` } });
-  await settle();
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  const asking = screen.getByRole('alertdialog', { name: '2 images have no alt text' });
-  expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
-  fireEvent.click(within(asking).getByRole('button', { name: 'Save anyway' }));
-  await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(2));
-  expect(calls.filter((call) => call.method === 'PATCH')[1]!.body).not.toHaveProperty('status');
 });
 
 test('on a phone a saved draft offers Publish in the bottom bar, and Details opens without a keyboard', async () => {
@@ -676,13 +669,11 @@ test('the question before publishing asks in one line, and says why alt text mat
   expect(within(asking).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('Screen readers say nothing for an image without alt text.');
 });
 
-test('the question before saving a published article says a new image goes live in one line, and why alt text matters in a tip', async () => {
-  serve({ ...base, [articlePath]: () => json(200, article({ status: 'published', body_md: 'Steps.' })) });
+test('the question before publishing changes says a new image goes live in one line, and why alt text matters in a tip', async () => {
+  serve({ ...base, [articlePath]: () => json(200, withChanges('Steps.', 'Steps.\n\n![](https://example.com/new.png)')) });
   open({ articleId: ids.article });
-  fireEvent.change(await screen.findByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Steps.\n\n![](https://example.com/new.png)' } });
-  await settle();
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Publish changes' }));
   const asking = screen.getByRole('alertdialog', { name: '1 image has no alt text' });
   expect(asking).toHaveTextContent('Published: an image without alt text goes live at once.');
-  expect(within(asking).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('Screen readers say nothing for an image without alt text. Add it now, or save as it is.');
+  expect(within(asking).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('Screen readers say nothing for an image without alt text. Add it now, or publish as it is.');
 });

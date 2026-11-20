@@ -129,7 +129,9 @@ func TestKnowledgeBaseOrderIsTheOrderOfTheHelpCenterTheCollectionListAndTheReply
 	// After an order by hand, a new or moved article goes last instead of jumping to the top.
 	echo := kbArticle(t, api, admin, map[string]any{"collection_id": billing.ID, "title": "Aaa newest", "body_md": "e", "status": "published"})
 	moved := kbArticle(t, api, admin, map[string]any{"collection_id": accounts.ID, "title": "Aab moved", "body_md": "m", "status": "published"})
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+moved.ID, map[string]any{"updated_at": moved.UpdatedAt, "collection_id": billing.ID}, admin, http.StatusOK, nil)
+	var move kbDraftedArticle
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+moved.ID, map[string]any{"updated_at": moved.UpdatedAt, "collection_id": billing.ID}, admin, http.StatusOK, &move)
+	kbPublishDraft(t, api, admin, moved.ID, move.Draft.UpdatedAt, nil)
 	if got := kbSearch(t, api, admin, "collection_id="+billing.ID); !slices.Equal(got, []string{"Charlie taxes", "Delta draft", "Alpha invoices", "Bravo refunds", echo.Title, "Aab moved"}) {
 		t.Fatalf("collection list after a new and a moved article = %v", got)
 	}

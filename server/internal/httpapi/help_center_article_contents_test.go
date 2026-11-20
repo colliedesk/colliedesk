@@ -57,8 +57,9 @@ func TestAnArticleWithThreeOrMoreHeadingsShowsItsContents(t *testing.T) {
 		[]string{`<h2 id="one">`}, []string{`class="contents`, `href="#one"`})
 
 	// Turned off, no language of the article lists its contents; the headings keep their anchors.
+	// The article is published, so the switch is saved as a draft and goes live when it is published.
 	var off contentsArticleView
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+long.ID, map[string]any{"updated_at": long.UpdatedAt, "show_contents": false}, admin, http.StatusOK, &off)
+	kbPublishChange(t, api, admin, long.ID, map[string]any{"updated_at": long.UpdatedAt, "show_contents": false}, &off)
 	if off.ShowContents {
 		t.Fatal("show_contents stayed true after turning it off")
 	}
@@ -72,8 +73,8 @@ func TestAnArticleWithThreeOrMoreHeadingsShowsItsContents(t *testing.T) {
 		} `json:"items"`
 	}
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+long.ID+"/versions", nil, admin, http.StatusOK, &versions)
-	if len(versions.Items) != 2 || versions.Items[0].ShowContents || !versions.Items[1].ShowContents {
-		t.Fatalf("versions = %+v, want the newest off and the first on", versions.Items)
+	if n := len(versions.Items); n != 3 || versions.Items[0].ShowContents || versions.Items[1].ShowContents || !versions.Items[n-1].ShowContents {
+		t.Fatalf("versions = %+v, want the published edit and its draft off and the first on", versions.Items)
 	}
 	entries := unzip(t, request(t, api, http.MethodGet, "/api/v1/export", nil, admin, nil).Body.Bytes())
 	for _, record := range ndjsonLines(t, entries["kb-articles.ndjson"]) {

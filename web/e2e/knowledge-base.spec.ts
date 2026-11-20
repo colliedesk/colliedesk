@@ -302,8 +302,10 @@ test('knowledge base: an article also listed in a second collection shows in bot
   await page.goto(`${servers.main}/knowledge/articles/${article.id}`);
   await page.getByRole('combobox', { name: 'Also list in' }).selectOption({ label: 'Bookings' });
   await expect(page.getByRole('button', { name: 'Remove Bookings' })).toBeVisible();
+  // A save of a published article keeps the change off the help center until Publish changes.
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Publish changes' }).click();
+  await expect(page.getByRole('button', { name: 'Publish changes' })).toHaveCount(0);
 
   const { url: helpCenter } = await (await page.request.get(`${servers.main}/api/v1/help-center`)).json() as { url: string };
   const address = new URL(article.url).pathname;
@@ -315,7 +317,8 @@ test('knowledge base: an article also listed in a second collection shows in bot
   await page.goto(`${servers.main}/knowledge/articles/${article.id}`);
   await page.getByRole('button', { name: 'Remove Bookings' }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Publish changes' }).click();
+  await expect(page.getByRole('button', { name: 'Publish changes' })).toHaveCount(0);
   await page.goto(`${helpCenter}/c/bookings`);
   await expect(page.locator(`main a[href="${address}"]`)).toHaveCount(0);
   await page.goto(article.url);

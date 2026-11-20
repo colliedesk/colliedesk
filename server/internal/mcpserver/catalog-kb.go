@@ -35,7 +35,7 @@ const (
 
 	// kbArticleChangeSchema is a saved reply change with the kinds only articles have: written by an
 	// import, a library item replaced in the text, AI kept away from the article or let read it again.
-	kbArticleChangeSchema = `{"type":["object","null"],"properties":{"version":{"type":"integer"},"kind":{"type":"string","enum":["create","edit","delete","restore","undelete","import","media_replace","ai_exclude","ai_include"]},` +
+	kbArticleChangeSchema = `{"type":["object","null"],"properties":{"version":{"type":"integer"},"kind":{"type":"string","enum":["create","edit","draft","delete","restore","undelete","import","media_replace","ai_exclude","ai_include"]},` +
 		`"restored_from_version":{"type":["integer","null"]},"by":{"type":["string","null"],"description":"The person who made the change (or, before roles, approved the request that made it)."},` +
 		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made it; null when a person made it in the web app."},` +
 		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
@@ -44,11 +44,13 @@ const (
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,` +
 		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
+		`"has_draft":{"type":"boolean","description":"Unpublished changes wait in a draft; colliedesk_kb_article_get shows them."},` +
 		`"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}}}`
 
 	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations"],"properties":{` +
 		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
-		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
+		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
+		`"has_draft":{"type":"boolean"},"draft":` + kbArticleDraftSchema + `,"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
 		kbShowContentsProperty + `,"in_trash":{"type":"boolean"},"has_source_html":{"type":"boolean","description":"An import kept the original HTML; it is in the workspace export."},` +
 		`"ai_exclusion":{"type":["object","null"],"description":"Set while AI may not read the article (colliedesk_kb_article_ai_exclude); null while it may.","required":["at","by"],"properties":{"at":{"type":"string"},"by":{"type":["string","null"]}}},` +
 		`"translations":{"type":"array","description":"Its versions in the help center's other languages, without their text (in the trash too). Read one with colliedesk_kb_translation_get.","items":` + kbTranslationSummarySchema + `}}}`
@@ -158,13 +160,13 @@ func kbArticlesSearchSpec() Spec {
 		Title: "Search knowledge base articles",
 		Description: `List or search the articles outside the trash, without their text, one page at a time. With query, articles whose title or text hold every word of it as a word or the start of one ` +
 			`(or whose title holds it) come first by relevance. Without it the order is sort: recent (most recently updated first) or manual (the help center's order, set with colliedesk_kb_order_set; ` +
-			`collections in their order, each with its own articles before those of its collections). With collection_id the default is manual, otherwise recent. Filter by status or collection_id. ` +
+			`collections in their order, each with its own articles before those of its collections). With collection_id the default is manual, otherwise recent. Filter by status or collection_id; has_draft true keeps the published articles with unpublished changes. ` +
 			`Words are matched with no language rules: a word inside another word, or text in scripts written without spaces (Chinese, Japanese, Thai), is found only where it starts a word or in the title. ` +
 			`Read one whole with colliedesk_kb_article_get. For the next page pass next_cursor as cursor. ` +
 			`Each article has its public address (url); to link one in a reply, search with status published.` + "\n\n" + kbTextNotice,
 		REST: []string{"GET /api/v1/kb/articles"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","maxLength":200},"status":{"type":"string","enum":["draft","published"]},` +
-			`"collection_id":{"type":"string",` + uuid + `},"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
+			`"collection_id":{"type":"string",` + uuid + `},"has_draft":{"type":"boolean"},"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
 		Output: `{"type":"object","required":["articles","next_cursor"],"properties":{"articles":{"type":"array","items":` + kbArticleRowSchema + `},` +
 			`"next_cursor":{"type":["string","null"],"description":"Null on the last page."}}}`,
 		run: kbArticlesSearch,
@@ -175,7 +177,7 @@ func kbArticleGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_get",
 		Title: "Read a knowledge base article",
-		Description: `Read one article with its whole Markdown text and its public address (url). It also finds an article in the trash, and says so with in_trash. Use its updated_at when you change it.` +
+		Description: `Read one article with its whole Markdown text and its public address (url), and its unpublished changes (draft) if it has any. It also finds an article in the trash, and says so with in_trash. Use its updated_at when you change it.` +
 			"\n\n" + kbTextNotice,
 		REST:   []string{"GET /api/v1/kb/articles/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["article_id"],"properties":{` + kbArticleIDProperty + `}}`,
@@ -208,6 +210,7 @@ func kbArticleUpdateSpec() Spec {
 		Name:  "colliedesk_kb_article_update",
 		Title: "Edit a knowledge base article",
 		Description: `Change the title, text, slug, collection, search title (seo_title), meta description (seo_description) or On this page switch (show_contents) of an article, or publish (status published) or unpublish it (status draft). ` +
+			`On a published article the change goes to its draft and the help center keeps the live text until colliedesk_kb_article_draft_publish (status draft unpublishes it with the draft as its text). ` +
 			`collection_id moves it to a new home; collection_ids replaces every collection it is listed in (the home first), and its address never changes. Every change is a new version; ` +
 			`colliedesk_kb_article_version_restore brings an earlier text back.` + "\n\n" + kbTextNotice,
 
@@ -288,7 +291,7 @@ func kbArticleVersionRestoreSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_version_restore",
 		Title: "Restore an earlier version of a knowledge base article",
-		Description: `Make the title, slug and text of an earlier version (from colliedesk_kb_article_history) current again, as a new version; the status and collection stay as they are. ` +
+		Description: `Make the title, slug and text of an earlier version (from colliedesk_kb_article_history) current again, as a new version; the status and collection stay as they are. On a published article it goes to the draft, to publish with colliedesk_kb_article_draft_publish. ` +
 			`Nothing in the history is rewritten, so it can be undone the same way. An article in the trash must be undeleted first.` + "\n\n" + kbTextNotice,
 
 		REST: []string{"POST /api/v1/kb/articles/{id}/versions/{version}/restore"},

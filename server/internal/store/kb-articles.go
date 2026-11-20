@@ -21,7 +21,7 @@ const kbArticleChangeColumns = `v.version,v.kind,v.restored_from_version,v.chang
 
 // kbArticleSelect reads articles a with their newest version; extra columns follow the change columns.
 func kbArticleSelect(extra, join string) string {
-	return `SELECT a.id::text,a.number,a.collection_id::text,a.position,a.title,a.slug,a.status,a.published_at,a.author_agent_id::text,a.created_at,a.updated_at,` +
+	return `SELECT a.id::text,a.number,a.collection_id::text,a.position,a.title,a.slug,a.status,a.published_at,a.author_agent_id::text,a.created_at,` + kbArticleToken + `,` + kbHasDraft + `,` +
 		kbArticleChangeColumns + extra + `
 	FROM kb_articles a
 	LEFT JOIN LATERAL (SELECT * FROM kb_article_versions x WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id ORDER BY x.version DESC LIMIT 1) v ON true
@@ -63,7 +63,7 @@ func scanKBSummary(row pgx.Row, extra ...any) (domain.KBArticleSummary, error) {
 	var item domain.KBArticleSummary
 	var change changeRow
 	targets := append([]any{&item.ID, &item.Number, &item.CollectionID, &item.Position, &item.Title, &item.Slug, &item.Status, &item.PublishedAt, &item.AuthorAgentID,
-		&item.CreatedAt, &item.UpdatedAt}, change.targets()...)
+		&item.CreatedAt, &item.UpdatedAt, &item.HasDraft}, change.targets()...)
 	if err := row.Scan(append(targets, extra...)...); err != nil {
 		return item, err
 	}
@@ -96,6 +96,9 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 	if err := fillKBCollectionIDs(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
 		return article, err
 	}
+	if article.Draft, err = readKBArticleDraft(ctx, tx, workspaceID, article); err != nil {
+		return article, err
+	}
 	article.Translations, err = listKBArticleTranslations(ctx, tx, workspaceID, id)
 	return article, err
 }
@@ -122,6 +125,8 @@ type KBArticleFilter struct {
 	Query, Status, CollectionID, Sort string
 	Limit                             int
 	Cursor                            string
+	// HasDraft keeps only the articles with unpublished changes.
+	HasDraft bool
 }
 
 // likePattern escapes the wildcards of ILIKE so the text matches as typed.
@@ -160,6 +165,9 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 		}
 		args = append(args, filter.CollectionID)
 		where += fmt.Sprintf(` AND a.collection_id=$%d`, len(args))
+	}
+	if filter.HasDraft {
+		where += ` AND ` + kbHasDraft
 	}
 	sort := filter.Sort
 	if sort == "" && filter.CollectionID != "" {
@@ -289,6 +297,7 @@ func linkKBMedia(ctx context.Context, tx pgx.Tx, workspaceID, articleID string) 
 	var text string
 	if err := tx.QueryRow(ctx, `SELECT a.body_md || ' ' || COALESCE((SELECT string_agg(t.body_md, ' ') FROM kb_article_translations t
 			WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id), '')
+			|| ' ' || COALESCE((SELECT string_agg(d.body_md, ' ') FROM kb_article_drafts d WHERE d.workspace_id=a.workspace_id AND d.article_id=a.id), '')
 		FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, articleID).Scan(&text); err != nil {
 		return nil, fmt.Errorf("read knowledge base article texts: %w", err)
 	}
@@ -562,36 +571,59 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 		}
 		*field.value = &cleaned
 	}
-	return s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleEdited, nil, change.CollectionID != nil, func(tx pgx.Tx) error {
-		if change.CollectionID != nil {
-			if err := checkKBCollection(ctx, tx, workspaceID, *change.CollectionID); err != nil {
-				return err
+	// Unpublishing folds the draft into the article, which may move it.
+	places := change.CollectionID != nil || (change.Status != nil && *change.Status == domain.KBDraft)
+	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
+		if places {
+			if err := lockKB(ctx, tx, workspaceID); err != nil {
+				return domain.KBArticle{}, err
 			}
 		}
-		var extras []string
-		if change.ExtraCollectionIDs != nil {
-			home := ""
-			if change.CollectionID != nil {
-				home = *change.CollectionID
-			} else if err := tx.QueryRow(ctx, `SELECT collection_id::text FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&home); err != nil {
-				return err
-			}
-			var err error
-			if extras, err = checkKBExtraCollections(ctx, tx, workspaceID, home, *change.ExtraCollectionIDs); err != nil {
-				return err
-			}
+		status, _, err := lockKBArticle(ctx, tx, workspaceID, id, seen)
+		if err != nil {
+			return domain.KBArticle{}, err
 		}
-		if err := updateKBArticleRow(ctx, tx, workspaceID, id, change); err != nil {
+		// A published article keeps its live text until someone publishes the change.
+		if status == domain.KBPublished && (change.Status == nil || *change.Status == domain.KBPublished) {
+			return saveKBArticleDraft(ctx, tx, workspaceID, actor, id, change)
+		}
+		return changeKBArticleLocked(ctx, tx, workspaceID, actor, id, domain.KBArticleEdited, nil, func(tx pgx.Tx) error {
+			return publishKBArticleChange(ctx, tx, workspaceID, id, change)
+		})
+	})
+	return article, kbError("change knowledge base article", err)
+}
+
+// writeKBArticleChange writes change to the article's row and the collections it is listed in.
+func writeKBArticleChange(ctx context.Context, tx pgx.Tx, workspaceID, id string, change KBArticleChange) error {
+	if change.CollectionID != nil {
+		if err := checkKBCollection(ctx, tx, workspaceID, *change.CollectionID); err != nil {
 			return err
 		}
-		if change.ExtraCollectionIDs != nil {
-			return setKBArticleCollections(ctx, tx, workspaceID, id, extras)
+	}
+	var extras []string
+	if change.ExtraCollectionIDs != nil {
+		home := ""
+		if change.CollectionID != nil {
+			home = *change.CollectionID
+		} else if err := tx.QueryRow(ctx, `SELECT collection_id::text FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&home); err != nil {
+			return err
 		}
-		// A new home is no longer one of the other collections.
-		_, err := tx.Exec(ctx, `DELETE FROM kb_article_collections x USING kb_articles a WHERE x.workspace_id=$1 AND x.article_id=$2
-			AND a.workspace_id=x.workspace_id AND a.id=x.article_id AND x.collection_id=a.collection_id`, workspaceID, id)
+		var err error
+		if extras, err = checkKBExtraCollections(ctx, tx, workspaceID, home, *change.ExtraCollectionIDs); err != nil {
+			return err
+		}
+	}
+	if err := updateKBArticleRow(ctx, tx, workspaceID, id, change); err != nil {
 		return err
-	})
+	}
+	if change.ExtraCollectionIDs != nil {
+		return setKBArticleCollections(ctx, tx, workspaceID, id, extras)
+	}
+	// A new home is no longer one of the other collections.
+	_, err := tx.Exec(ctx, `DELETE FROM kb_article_collections x USING kb_articles a WHERE x.workspace_id=$1 AND x.article_id=$2
+		AND a.workspace_id=x.workspace_id AND a.id=x.article_id AND x.collection_id=a.collection_id`, workspaceID, id)
+	return err
 }
 
 // updateKBArticleRow writes the fields of change that are set to the article's row.
@@ -606,19 +638,29 @@ func updateKBArticleRow(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 }
 
 // RestoreKBArticleVersion makes the title, slug, text and search fields of version current as a new version; the
-// status, collection and contents switch stay.
+// status, collection and contents switch stay. On a published article it makes them the draft instead.
 func (s *Store) RestoreKBArticleVersion(ctx context.Context, workspaceID string, actor Actor, id string, version int, seen time.Time) (domain.KBArticle, error) {
 	if !savedReplyID.MatchString(id) {
 		return domain.KBArticle{}, domain.ErrKBArticleNotFound
 	}
-	return s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleRestored, &version, false, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE kb_articles a SET title=v.title, slug=v.slug, body_md=v.body_md, seo_title=v.seo_title, seo_description=v.seo_description, updated_at=clock_timestamp() FROM kb_article_versions v
-			WHERE a.workspace_id=$1 AND a.id=$2 AND v.workspace_id=a.workspace_id AND v.article_id=a.id AND v.version=$3`, workspaceID, id, version)
-		if err == nil && tag.RowsAffected() == 0 {
-			return domain.ErrKBArticleVersionNotFound
+	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
+		status, _, err := lockKBArticle(ctx, tx, workspaceID, id, seen)
+		if err != nil {
+			return domain.KBArticle{}, err
 		}
-		return err
+		if status == domain.KBPublished {
+			return restoreKBArticleDraft(ctx, tx, workspaceID, actor, id, version)
+		}
+		return changeKBArticleLocked(ctx, tx, workspaceID, actor, id, domain.KBArticleRestored, &version, func(tx pgx.Tx) error {
+			tag, err := tx.Exec(ctx, `UPDATE kb_articles a SET title=v.title, slug=v.slug, body_md=v.body_md, seo_title=v.seo_title, seo_description=v.seo_description, updated_at=clock_timestamp() FROM kb_article_versions v
+				WHERE a.workspace_id=$1 AND a.id=$2 AND v.workspace_id=a.workspace_id AND v.article_id=a.id AND v.version=$3`, workspaceID, id, version)
+			if err == nil && tag.RowsAffected() == 0 {
+				return domain.ErrKBArticleVersionNotFound
+			}
+			return err
+		})
 	})
+	return article, kbError("change knowledge base article", err)
 }
 
 // changeKBArticle locks a live, unchanged article, runs write and records the version of kind. A write
@@ -632,26 +674,31 @@ func (s *Store) changeKBArticle(ctx context.Context, workspaceID string, actor A
 				return domain.KBArticle{}, err
 			}
 		}
-		if err := kbLiveAndCurrent(ctx, tx, `kb_articles`, workspaceID, id, seen, domain.ErrKBArticleNotFound); err != nil {
+		if _, _, err := lockKBArticle(ctx, tx, workspaceID, id, seen); err != nil {
 			return domain.KBArticle{}, err
 		}
-		var wasTitle, wasBody string
-		if err := tx.QueryRow(ctx, `SELECT title, body_md FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&wasTitle, &wasBody); err != nil {
-			return domain.KBArticle{}, err
-		}
-		if err := write(tx); err != nil {
-			return domain.KBArticle{}, err
-		}
-		// An edit or a restore of the article's own words leaves its translations behind.
-		if err := markKBTranslationsOutdated(ctx, tx, workspaceID, id, wasTitle, wasBody); err != nil {
-			return domain.KBArticle{}, err
-		}
-		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, kind, restoredFrom); err != nil {
-			return domain.KBArticle{}, err
-		}
-		return readKBArticle(ctx, tx, workspaceID, id)
+		return changeKBArticleLocked(ctx, tx, workspaceID, actor, id, kind, restoredFrom, write)
 	})
 	return article, kbError("change knowledge base article", err)
+}
+
+// changeKBArticleLocked runs write on an article locked by lockKBArticle and records the version of kind.
+func changeKBArticleLocked(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id, kind string, restoredFrom *int, write func(pgx.Tx) error) (domain.KBArticle, error) {
+	var wasTitle, wasBody string
+	if err := tx.QueryRow(ctx, `SELECT title, body_md FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&wasTitle, &wasBody); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if err := write(tx); err != nil {
+		return domain.KBArticle{}, err
+	}
+	// An edit or a restore of the article's own words leaves its translations behind.
+	if err := markKBTranslationsOutdated(ctx, tx, workspaceID, id, wasTitle, wasBody); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, kind, restoredFrom); err != nil {
+		return domain.KBArticle{}, err
+	}
+	return readKBArticle(ctx, tx, workspaceID, id)
 }
 
 // DeleteKBArticle moves an article to the trash and records the version.
@@ -679,8 +726,16 @@ func (s *Store) UndeleteKBArticle(ctx context.Context, workspaceID string, actor
 		if err := lockKB(ctx, tx, workspaceID); err != nil {
 			return domain.KBArticle{}, err
 		}
-		if err := kbTrashedAndCurrent(ctx, tx, `kb_articles`, workspaceID, id, seen, domain.ErrKBArticleNotFound); err != nil {
+		var token time.Time
+		err := tx.QueryRow(ctx, `SELECT `+kbArticleToken+` FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2 AND a.deleted_at IS NOT NULL FOR UPDATE OF a`, workspaceID, id).Scan(&token)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.KBArticle{}, domain.ErrKBArticleNotFound
+		}
+		if err != nil {
 			return domain.KBArticle{}, err
+		}
+		if !token.Equal(seen) {
+			return domain.KBArticle{}, domain.ErrKBChanged
 		}
 		var collectionLive bool
 		// Share lock as in checkKBCollection.

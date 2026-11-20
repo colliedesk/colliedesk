@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -22,7 +23,9 @@ func (s *Store) KBArticlePublished(ctx context.Context, workspaceID, id string) 
 	})
 }
 
-// KBMediaShownPublished reports whether a live published article shows the media item now.
+// KBMediaShownPublished reports whether the help center shows the media item now, by the rule of
+// HelpCenterImage (shownTextNames): unpublished changes that name it are not on any live page. The text
+// is searched for the id itself, as texts link an image by either of its paths.
 func (s *Store) KBMediaShownPublished(ctx context.Context, workspaceID, mediaID string) (bool, error) {
 	if !savedReplyID.MatchString(mediaID) {
 		return false, nil
@@ -30,7 +33,7 @@ func (s *Store) KBMediaShownPublished(ctx context.Context, workspaceID, mediaID 
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
 		var shown bool
 		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
-			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND a.deleted_at IS NULL AND a.status='published')`, workspaceID, mediaID).Scan(&shown)
+			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND `+shownTextNames+`)`, workspaceID, mediaID, strings.ToLower(mediaID)).Scan(&shown)
 		return shown, err
 	})
 }

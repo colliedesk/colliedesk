@@ -50,6 +50,8 @@ func writeKBError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "not_found", "The image was not found.")
 	case errors.Is(err, domain.ErrKBTranslationNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The article has no translation in that language outside the trash. GET /api/v1/kb/articles/{id} lists its translations; GET /api/v1/kb/translations/trash those in the trash.")
+	case errors.Is(err, domain.ErrKBDraftNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "There are no unpublished changes: the published text is the current one.")
 	case errors.Is(err, domain.ErrKBTranslationVersionNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The translation has no version with that number.")
 	case errors.Is(err, domain.ErrKBTranslationExists):
@@ -264,6 +266,14 @@ func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request
 	query := request.URL.Query()
 	filter := store.KBArticleFilter{Query: query.Get("q"), Status: query.Get("status"), CollectionID: query.Get("collection_id"), Sort: query.Get("sort"),
 		Limit: limit, Cursor: query.Get("cursor")}
+	switch query.Get("has_draft") {
+	case "", "false":
+	case "true":
+		filter.HasDraft = true
+	default:
+		writeError(response, http.StatusBadRequest, "invalid_request", "has_draft is true or false.")
+		return
+	}
 	if filter.Sort != "" && filter.Sort != store.KBSortRecent && filter.Sort != store.KBSortManual {
 		writeError(response, http.StatusBadRequest, "invalid_request", "sort is recent or manual.")
 		return
@@ -338,6 +348,9 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 		writeKBError(response, err)
 		return
 	}
+	if !draftedKBArticle(response, request, &article) {
+		return
+	}
 	home, ok := a.helpCenterHome(response, request)
 	if !ok {
 		return
@@ -356,9 +369,10 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 }
 
 // Publishing changes what the public help center shows, which reaches customers: a token without
-// kb_articles:publish may write drafts, and a change to what the help center shows (a published
-// article, the media in one, a collection) waits for a person (an agent request), however the route
-// itself is classified.
+// kb_articles:publish may write drafts and save or discard the unpublished changes of a published
+// article, and a change to what the help center shows (publishing those changes, the media in a
+// published article, a collection) waits for a person (an agent request), however the route itself
+// is classified.
 var (
 	kbArticleCreateRoute        = Route{http.MethodPost, "/api/v1/kb/articles", auth.PermissionSession}
 	kbArticleUpdateRoute        = Route{http.MethodPatch, "/api/v1/kb/articles/{id}", auth.PermissionSession}
@@ -518,12 +532,14 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	who := principal(request)
-	// Making an article published, or changing one that is, changes the help center.
+	// Publishing or unpublishing changes the help center; a change to a published article is saved
+	// as its draft, which the help center does not show.
 	publishes := func() (bool, error) {
-		if input.Status != nil && *input.Status == "published" {
-			return true, nil
+		if input.Status == nil {
+			return false, nil
 		}
-		return a.store.KBArticlePublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
+		published, err := a.store.KBArticlePublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
+		return (*input.Status == domain.KBPublished) != published, err
 	}
 	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, publishes) {
 		return
@@ -656,11 +672,8 @@ func (a *API) restoreKBArticleVersion(response http.ResponseWriter, request *htt
 	if !ok {
 		return
 	}
+	// On a published article the version becomes its draft, so the help center does not change.
 	who := principal(request)
-	// Restoring a version of a published article changes what the help center shows.
-	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, a.articleIsPublished(request, who)) {
-		return
-	}
 	article, err := a.store.RestoreKBArticleVersion(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), version, seen)
 	if err != nil {
 		writeKBError(response, err)

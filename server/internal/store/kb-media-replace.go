@@ -12,11 +12,13 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// replacedTranslation is a translation a replacement rewrote, with its text before and after, so an
-// undo puts back the text before only while the translation still holds the text after.
+// replacedTranslation is a translation, or with Draft an article's unpublished changes, that a
+// replacement rewrote, with its text before and after, so an undo puts back the text before only while
+// it still holds the text after.
 type replacedTranslation struct {
 	ArticleID string `json:"article_id"`
 	Locale    string `json:"locale"`
+	Draft     bool   `json:"draft,omitempty"`
 	Before    string `json:"before"`
 	After     string `json:"after"`
 }
@@ -45,7 +47,8 @@ func lockKBArticlesForMedia(ctx context.Context, tx pgx.Tx, workspaceID string, 
 }
 
 // ReplaceKBMedia puts the item with in the place of the item id in every live article whose current
-// text (or a translation) shows it, as a new version of kind media_replace, and records the
+// text (or a translation) shows it, as a new version of kind media_replace, and in their unpublished
+// changes (replaceInKBDraft), and records the
 // replacement so it can be undone. An image is replaced by an image, a video by a video; with is
 // taken out of the library's trash if it is there.
 func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Actor, id, with string) (domain.KBMediaReplacement, error) {
@@ -92,6 +95,13 @@ func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Ac
 				changed, versions = append(changed, articleID), append(versions, version)
 			}
 			translations = append(translations, rewritten...)
+			draft, err := replaceInKBDraft(ctx, tx, workspaceID, articleID, from, to)
+			if err != nil {
+				return domain.KBMediaReplacement{}, err
+			}
+			if draft != nil {
+				translations = append(translations, *draft)
+			}
 		}
 		recorded, _ := json.Marshal(translations)
 		return scanKBMediaReplacement(tx.QueryRow(ctx, `INSERT INTO kb_media_replacements(workspace_id,from_media_id,to_media_id,article_ids,article_versions,translations,replaced_by_agent_id)
@@ -203,6 +213,17 @@ func (s *Store) UndoKBMediaReplacement(ctx context.Context, workspaceID string, 
 		skipped := []string{}
 		restored := map[string]bool{}
 		for _, item := range translations {
+			if item.Draft {
+				put, err := undoKBDraftReplacement(ctx, tx, workspaceID, item)
+				if err != nil {
+					return domain.KBMediaReplacement{}, err
+				}
+				if !put && !slices.Contains(skipped, item.ArticleID) {
+					skipped = append(skipped, item.ArticleID)
+				}
+				restored[item.ArticleID] = true
+				continue
+			}
 			tag, err := tx.Exec(ctx, `UPDATE kb_article_translations SET body_md=$4, updated_at=clock_timestamp()
 				WHERE workspace_id=$1 AND article_id=$2 AND locale=$3 AND body_md=$5`, workspaceID, item.ArticleID, item.Locale, item.Before, item.After)
 			if err != nil {
@@ -221,8 +242,11 @@ func (s *Store) UndoKBMediaReplacement(ctx context.Context, workspaceID string, 
 		for i, articleID := range replacement.ArticleIDs {
 			var newest int
 			var before *string
-			if err := tx.QueryRow(ctx, `SELECT COALESCE(max(version),0), (SELECT body_md FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2 AND version=$3-1)
-				FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2`, workspaceID, articleID, versions[i]).Scan(&newest, &before); err != nil {
+			// A draft version holds unpublished changes, never the article's text, so it neither stops the undo
+			// nor is the text put back.
+			if err := tx.QueryRow(ctx, `SELECT COALESCE(max(version),0), (SELECT body_md FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2
+					AND version<$3 AND kind<>'draft' ORDER BY version DESC LIMIT 1)
+				FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2 AND kind<>'draft'`, workspaceID, articleID, versions[i]).Scan(&newest, &before); err != nil {
 				return domain.KBMediaReplacement{}, err
 			}
 			if newest != versions[i] || before == nil {
@@ -271,9 +295,11 @@ func scanKBMediaReplacement(row pgx.Row) (domain.KBMediaReplacement, error) {
 	if err := json.Unmarshal(translations, &recorded); err != nil {
 		return replacement, fmt.Errorf("read replaced translations: %w", err)
 	}
-	replacement.Translations = make([]domain.KBMediaReplacedTranslation, len(recorded))
-	for i, item := range recorded {
-		replacement.Translations[i] = domain.KBMediaReplacedTranslation{ArticleID: item.ArticleID, Locale: item.Locale}
+	replacement.Translations = []domain.KBMediaReplacedTranslation{}
+	for _, item := range recorded {
+		if !item.Draft {
+			replacement.Translations = append(replacement.Translations, domain.KBMediaReplacedTranslation{ArticleID: item.ArticleID, Locale: item.Locale})
+		}
 	}
 	return replacement, nil
 }

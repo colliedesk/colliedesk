@@ -437,7 +437,7 @@ func (s *Store) UndeleteKBCollection(ctx context.Context, workspaceID string, ac
 var kbErrors = []error{domain.ErrKBArticleNotFound, domain.ErrKBArticleVersionNotFound, domain.ErrKBCollectionNotFound, domain.ErrKBImageNotFound, domain.ErrKBMediaNotFound, domain.ErrKBMediaBatchNotFound, domain.ErrKBMediaUploadNotFound, domain.ErrKBMediaUploadLimit, domain.ErrKBMediaUploadIncomplete,
 	domain.ErrKBChanged, domain.ErrKBDuplicateSlug, domain.ErrKBCollectionNotEmpty, domain.ErrKBParentInTrash, domain.ErrKBCollectionInTrash,
 	domain.ErrKBArticleLimit, domain.ErrKBCollectionLimit, domain.ErrKBMediaLimit,
-	domain.ErrKBTranslationNotFound, domain.ErrKBTranslationExists, domain.ErrKBTranslationVersionNotFound, domain.ErrKBLanguageNotListed}
+	domain.ErrKBTranslationNotFound, domain.ErrKBTranslationExists, domain.ErrKBTranslationVersionNotFound, domain.ErrKBLanguageNotListed, domain.ErrKBDraftNotFound}
 
 func kbError(what string, err error) error {
 	if err == nil {

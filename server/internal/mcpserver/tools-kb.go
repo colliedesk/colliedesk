@@ -83,6 +83,8 @@ type restKBArticle struct {
 	DeletedAt     *string               `json:"deleted_at"`
 	DeletedBy     *restPerson           `json:"deleted_by"`
 	PurgesAt      string                `json:"purges_at"`
+	HasDraft      bool                  `json:"has_draft"`
+	Draft         *restKBDraft          `json:"draft"`
 	AIExclusion   *struct {
 		At string      `json:"at"`
 		By *restPerson `json:"by"`
@@ -106,6 +108,7 @@ type kbArticleRowOut struct {
 	LastChange    *savedReplyChangeOut `json:"last_change"`
 	URL           string               `json:"url"`
 	TeamText      kbTitle              `json:"team_text"`
+	HasDraft      bool                 `json:"has_draft"`
 	DeletedAt     string               `json:"deleted_at,omitempty"`
 	DeletedBy     *string              `json:"deleted_by,omitempty"`
 	PurgesAt      string               `json:"purges_at,omitempty"`
@@ -121,7 +124,7 @@ func kbCollectionIDs(article restKBArticle) []string {
 
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
 	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Position: article.Position, Status: article.Status, Slug: article.Slug,
-		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, PurgesAt: article.PurgesAt}
+		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, HasDraft: article.HasDraft, PurgesAt: article.PurgesAt}
 	if article.DeletedAt != nil {
 		out.DeletedAt = *article.DeletedAt
 	}
@@ -144,6 +147,8 @@ type kbArticleOut struct {
 	URL           string                `json:"url"`
 	TeamText      kbTeamText            `json:"team_text"`
 	ShowContents  bool                  `json:"show_contents"`
+	HasDraft      bool                  `json:"has_draft"`
+	Draft         *kbArticleDraftOut    `json:"draft"`
 	InTrash       bool                  `json:"in_trash"`
 	HasSourceHTML bool                  `json:"has_source_html"`
 	AIExclusion   *kbAIExclusionOut     `json:"ai_exclusion"`
@@ -171,6 +176,7 @@ func kbArticleView(article restKBArticle) map[string]any {
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, kbTranslationRow(translation))
 	}
+	out.withDraft(article)
 	if article.AIExclusion != nil {
 		out.AIExclusion = &kbAIExclusionOut{At: article.AIExclusion.At}
 		if article.AIExclusion.By != nil {
@@ -311,6 +317,7 @@ func kbArticlesSearch(c *call, arguments map[string]any) (any, error) {
 		Status       string `json:"status"`
 		CollectionID string `json:"collection_id"`
 		Sort         string `json:"sort"`
+		HasDraft     bool   `json:"has_draft"`
 		Limit        int    `json:"limit"`
 		Cursor       string `json:"cursor"`
 	}](arguments)
@@ -325,6 +332,9 @@ func kbArticlesSearch(c *call, arguments map[string]any) (any, error) {
 	}
 	if args.Limit > 0 {
 		query.Set("limit", strconv.Itoa(args.Limit))
+	}
+	if args.HasDraft {
+		query.Set("has_draft", "true")
 	}
 	return kbArticlePage(c, "/api/v1/kb/articles", query)
 }

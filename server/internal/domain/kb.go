@@ -106,6 +106,8 @@ type KBArticleSummary struct {
 	LastChange    *KBArticleChange `json:"last_change"`
 	// URL is the public address on the help center; the API fills it in, the store does not know it.
 	URL string `json:"url"`
+	// HasDraft is set while a published article has unpublished changes (KBArticle.Draft).
+	HasDraft bool `json:"has_draft"`
 }
 
 // KBTranslationSummary is one language version of an article without its text, as the article and
@@ -255,10 +257,12 @@ type KBArticle struct {
 	SEODescription string `json:"seo_description"`
 	// ShowContents lists the article's headings ("On this page") on its help center page, in every
 	// language, when it has three or more.
-	ShowContents  bool                   `json:"show_contents"`
-	HasSourceHTML bool                   `json:"has_source_html"`
-	Translations  []KBTranslationSummary `json:"translations"`
-	DeletedAt     *time.Time             `json:"deleted_at"`
+	ShowContents  bool `json:"show_contents"`
+	HasSourceHTML bool `json:"has_source_html"`
+	// Draft is the unpublished changes of a published article; nil without them.
+	Draft        *KBArticleDraft        `json:"draft"`
+	Translations []KBTranslationSummary `json:"translations"`
+	DeletedAt    *time.Time             `json:"deleted_at"`
 	// AIExclusion is set while AI may not read the article, in any language.
 	AIExclusion *KBAIExclusion `json:"ai_exclusion"`
 	// MissingMedia is set only in the answer to a save: media ids the text names that the library

@@ -17,7 +17,7 @@ const kbMediaTrashRoute = "/api/v1/kb/media/trash"
 // warnMissingKBMedia sets the media ids the saved article's text names that the library does not
 // have; a failure to look only costs the warning.
 func (a *API) warnMissingKBMedia(ctx context.Context, workspaceID string, article *domain.KBArticle) {
-	missing, err := a.store.MissingKBMedia(ctx, workspaceID, domain.KBMediaIDs(article.BodyMD))
+	missing, err := a.store.MissingKBMedia(ctx, workspaceID, domain.KBMediaIDs(article.AsDrafted().BodyMD))
 	if err != nil {
 		log.Printf("knowledge base article %s: check its media: %v", article.ID, err)
 		return

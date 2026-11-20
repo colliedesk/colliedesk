@@ -23,9 +23,18 @@ type kbListedArticle struct {
 func patchKBCollections(t *testing.T, api http.Handler, token string, article kbListedArticle, body map[string]any) kbListedArticle {
 	t.Helper()
 	body["updated_at"] = article.UpdatedAt
-	var updated kbListedArticle
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, body, token, http.StatusOK, &updated)
-	return updated
+	var saved struct {
+		kbListedArticle
+		Draft *kbDraftView `json:"draft"`
+	}
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, body, token, http.StatusOK, &saved)
+	if saved.Draft == nil {
+		return saved.kbListedArticle
+	}
+	// A published article keeps the change in a draft until it is published.
+	var published kbListedArticle
+	kbPublishDraft(t, api, token, article.ID, saved.Draft.UpdatedAt, &published)
+	return published
 }
 
 // One article, two collections: the help center lists it in both, at one address; search, the sitemap

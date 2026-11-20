@@ -12,6 +12,7 @@ import { SavedReplyHistory } from '../settings/saved-reply-panels';
 import { ArticleTranslationsBox } from './article-translations';
 import { ArticleVotesBox } from './article-votes';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
+import { ArticleDraftBar, draftMessages, editable } from './article-draft';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
 import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
@@ -137,9 +138,11 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const navigate = useNavigate();
   const refresh = useRefreshKB();
   const tree = useMemo(() => flatten(buildTree(collections)), [collections]);
-  // base is the article as the server last answered; every save and restore sends its updated_at.
-  const [base, setBase] = useState(article);
-  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(article) : { title: '', slug: '', body: '', collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '', show_contents: true }));
+  // raw is the article as the server last answered; base is it as the editor shows and saves it: with unpublished
+  // changes, those (editable). Every save, restore and delete sends base's updated_at.
+  const [raw, setBase] = useState(article);
+  const base = useMemo(() => raw && editable(raw), [raw]);
+  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(editable(article)) : { title: '', slug: '', body: '', collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '', show_contents: true }));
   const wide = useSyncExternalStore(subscribeWide, isWide);
   const [chosen, setMode] = useState<ViewMode>(() => (isWide() && (!article || characters(article.body_md) <= splitLimit) ? 'split' : 'edit'));
   const mode: ViewMode = chosen === 'split' && !wide ? 'edit' : chosen;
@@ -189,7 +192,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const createArticle = useCreateAction((value: Parameters<typeof kbApi.createArticle>[0], key: string) => kbApi.createArticle(value, key));
   const save = async (status?: KBArticleStatus, over?: KBArticle) => {
     const body = bodyNow();
-    const current = over ?? base;
+    const current = over ? editable(over) : base;
     const sent = body === draft.body ? draft : { ...draft, body };
     // Typing not yet on the counter is now; a text over the limit shows there and is not sent.
     if (sent !== draft) setDraft(sent);
@@ -225,7 +228,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       const updated = await kbApi.updateArticle(current.id, { updated_at: current.updated_at, ...change });
       setBase(updated);
       // The server may write the title or address name its own way; text typed during the save stays.
-      setDraft((now) => (now === sent ? { ...draftOf(updated), body: sent.body } : now));
+      setDraft((now) => (now === sent ? { ...draftOf(editable(updated)), body: sent.body } : now));
       client.setQueryData(['kb-article', updated.id], updated);
       setConflict(false);
       setSavedOnce(true);
@@ -254,8 +257,9 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   };
   // show puts an article's text on screen, in the form and in the editor.
   const show = (shown: KBArticle) => {
-    setDraft(draftOf(shown));
-    handle?.load(shown.body_md);
+    const text = editable(shown);
+    setDraft(draftOf(text));
+    handle?.load(text.body_md);
   };
   const loadTheirs = async () => {
     const fresh = await latest();
@@ -441,8 +445,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const collectionName = tree.find((node) => node.collection.id === draft.collection_id)?.collection.name;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  // askingAlt: what waits for the answer about images without alt text, publishing a draft or saving a published article.
-  const [askingAlt, setAskingAlt] = useState<'publish' | 'save'>();
+  // askingAlt: what waits for the answer about images without alt text, publishing a draft or publishing changes.
+  const [askingAlt, setAskingAlt] = useState<'publish' | 'changes'>();
   const [altFor, setAltFor] = useState<MissingAlt>();
   // Images in the text without alt text: the side column lists them, and publishing asks about them again.
   const missing = useMemo(() => missingAlt(draft.body), [draft.body]);
@@ -451,12 +455,37 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   });
   const nameOf = (image: MissingAlt, at: number) => missingNames[at]?.data?.name || image.fallback;
   const publish = () => { if (missing.length > 0) setAskingAlt('publish'); else void save('published'); };
-  // Saving a published article asks too when it brings in an image without alt text the saved version did not
-  // have: that image would go on the help center at once.
-  const savedMissing = useMemo(() => (base ? missingAlt(base.body_md).map((image) => image.markdown) : []), [base]);
+  // Publishing changes asks too when they bring in an image without alt text the published version does not
+  // have: that image would go on the help center at once. A save of a published article keeps it off.
+  const liveMissing = useMemo(() => (raw ? missingAlt(raw.body_md).map((image) => image.markdown) : []), [raw]);
   const newMissing = missing.filter((image, at) => missing.slice(0, at + 1).filter((each) => each.markdown === image.markdown).length
-    > savedMissing.filter((markdown) => markdown === image.markdown).length);
-  submit.current = () => { if (status === 'published' && newMissing.length > 0) setAskingAlt('save'); else void save(); };
+    > liveMissing.filter((markdown) => markdown === image.markdown).length);
+  submit.current = () => { void save(); };
+  // Publishing the changes or discarding them sends the version they were saved with; the answer is the article
+  // without them, on screen at once.
+  const publishDraft = useCreateAction((of: { id: string; updatedAt: string }, key: string) => kbApi.publishDraft(of.id, of.updatedAt, key));
+  const draftAction = async (act: (of: KBArticle) => Promise<KBArticle>, done: string) => {
+    if (!base || busy || saving.current) return;
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      const answered = await act(base);
+      setBase(answered);
+      show(answered);
+      client.setQueryData(['kb-article', answered.id], answered);
+      setConflict(false);
+      setNotice(done);
+      void refresh();
+    } catch (error) {
+      if (error instanceof ChangedElsewhereError) setConflict(true);
+      else setProblem(reason(error, kbMessages.articleActionFailed));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const publishChanges = () => draftAction((of) => publishDraft.run({ id: of.id, updatedAt: of.updated_at }), draftMessages.changesPublished);
+  const discardChanges = () => draftAction((of) => kbApi.discardDraft(of.id, of.updated_at), draftMessages.changesDiscarded);
+  const askPublishChanges = () => { if (newMissing.length > 0) setAskingAlt('changes'); else void publishChanges(); };
   const disabledSave = busy || invalid || (base !== undefined && !dirty);
   const saveLabel = busy ? kbMessages.saving : base ? kbMessages.saveChanges : kbMessages.saveDraft;
   const publishLabel = dirty || !base ? kbMessages.saveAndPublish : kbMessages.publish;
@@ -473,7 +502,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       : { label: publishLabel, icon: 'globe' as const, disabled: busy || invalid, onSelect: publish },
     ...(base ? [{ label: kbMessages.deleteArticleMenu, icon: 'trash' as const, danger: true, separated: true, onSelect: () => setDeleting(true) }] : []),
   ];
-  const stateWords = [status === 'published' ? (isPublic === false ? kbMessages.notPublicShort : '') : '', dirty ? kbMessages.unsaved : savedOnce ? kbMessages.saved : ''].filter(Boolean);
+  const stateWords = [status === 'published' ? (isPublic === false ? kbMessages.notPublicShort : '') : '', raw?.has_draft ? draftMessages.unpublishedChanges : '', dirty ? kbMessages.unsaved : savedOnce ? kbMessages.saved : ''].filter(Boolean);
   const details = (
     <>
       <section className="kb-side-box" aria-labelledby={`${id}-visibility`}>
@@ -551,8 +580,9 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           </span>
         </>}
       </header>
-      {(conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || (base?.ai_exclusion && !phone)) && <div className="kb-editor-notes">
+      {(raw?.draft || conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || (base?.ai_exclusion && !phone)) && <div className="kb-editor-notes">
         {base?.ai_exclusion && !phone && <ArticleAINote article={base} onChanged={aiChangedFromNote} />}
+        {raw?.draft && <ArticleDraftBar article={raw} title={draft.title} body={bodyNow} busy={busy} dirty={dirty} onPublish={askPublishChanges} onDiscard={discardChanges} />}
         {conflict && <div role="alert" className="warning-note kb-conflict">
           <p>{kbMessages.changedElsewhere}</p>
           <div className="button-row">
@@ -625,11 +655,11 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       </>}><p className="muted-copy">{kbMessages.deleteBody} <HelpTip label={kbMessages.trashLabel} text={kbMessages.deleteTip} /></p></KBDialog>}
       {askingAlt && <KBDialog title={kbMessages.imagesWithoutAlt(missing.length)} role="alertdialog" onClose={() => setAskingAlt(undefined)} footer={<>
         <button type="button" onClick={() => setAskingAlt(undefined)}>{kbMessages.cancel}</button>
-        <button type="button" className="primary-action" disabled={busy || invalid} onClick={() => { const then = askingAlt; setAskingAlt(undefined); void save(then === 'publish' ? 'published' : undefined); }}>
-          {askingAlt === 'publish' ? kbMessages.publishAnyway : kbMessages.saveAnyway}</button>
+        <button type="button" className="primary-action" disabled={busy || invalid} onClick={() => { const then = askingAlt; setAskingAlt(undefined); void (then === 'publish' ? save('published') : publishChanges()); }}>
+          {kbMessages.publishAnyway}</button>
       </>}>
-        <p className="muted-copy">{askingAlt === 'publish' ? kbMessages.publishAltHelp : kbMessages.saveAltHelp}{' '}
-          <HelpTip label={kbMessages.altLabel} text={askingAlt === 'publish' ? kbMessages.publishAltTip : kbMessages.saveAltTip} /></p>
+        <p className="muted-copy">{askingAlt === 'publish' ? kbMessages.publishAltHelp : kbMessages.changesAltHelp}{' '}
+          <HelpTip label={kbMessages.altLabel} text={askingAlt === 'publish' ? kbMessages.publishAltTip : kbMessages.changesAltTip} /></p>
         <ul className="kb-alt-list">{missing.map((image, at) => (
           <li key={`${image.url}-${at}`}><span title={nameOf(image, at)}>{nameOf(image, at)}</span>
             <button type="button" aria-label={kbMessages.addAltFor(nameOf(image, at))} onClick={() => { setAskingAlt(undefined); setAltFor({ ...image, fallback: nameOf(image, at) }); }}>{kbMessages.addAlt}</button></li>

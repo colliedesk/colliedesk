@@ -396,17 +396,32 @@ func TestSolutionsAnImageThatFailsMakesTheRunFailedAndTheRerunBringsItOver(t *te
 	}
 }
 
-// editArticle changes an imported article through the API store, as an agent would.
+// editArticle changes an imported article through the API store, as an agent would: a save, and on a
+// published article Publish changes, so the help center shows the edit.
 func (e *importEnv) editArticle(t *testing.T, articleID, body string) {
+	t.Helper()
+	saved := e.saveArticleDraft(t, articleID, body)
+	if saved.Draft == nil {
+		return
+	}
+	if _, err := store.New(e.pool).PublishKBArticleDraft(context.Background(), e.workspaceID, store.Actor{}, articleID, saved.Draft.UpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// saveArticleDraft saves a new body; on a published article that is unpublished changes only.
+func (e *importEnv) saveArticleDraft(t *testing.T, articleID, body string) domain.KBArticle {
 	t.Helper()
 	s := store.New(e.pool)
 	article, err := s.GetKBArticle(context.Background(), e.workspaceID, articleID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpdateKBArticle(context.Background(), e.workspaceID, store.Actor{}, articleID, article.UpdatedAt, store.KBArticleChange{BodyMD: &body}); err != nil {
+	saved, err := s.UpdateKBArticle(context.Background(), e.workspaceID, store.Actor{}, articleID, article.AsDrafted().UpdatedAt, store.KBArticleChange{BodyMD: &body})
+	if err != nil {
 		t.Fatal(err)
 	}
+	return saved
 }
 
 func TestSolutionsRerunUpdatesFreshdeskChangesAndKeepsColliedeskEdits(t *testing.T) {

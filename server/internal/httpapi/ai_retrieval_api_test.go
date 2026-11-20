@@ -116,7 +116,7 @@ func TestAIRetrievalFindsPublishedArticlesWithoutAccentsAndInEveryLanguage(t *te
 	}
 
 	// An edit is found after the next build; unpublishing hides it at once.
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+login.ID, map[string]any{"body_md": "Dùng mật khẩu một lần.", "updated_at": login.UpdatedAt}, admin, http.StatusOK, &login)
+	kbPublishChange(t, api, admin, login.ID, map[string]any{"body_md": "Dùng mật khẩu một lần.", "updated_at": login.UpdatedAt}, &login)
 	buildAIRetrieval(t, pool)
 	if got := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "mat khau", KBLimit: 5}); len(got) == 0 || got[0].KBArticleID != login.ID {
 		t.Errorf("edited text not found: %v", retrievedTitles(got))
@@ -423,7 +423,7 @@ func TestExcludingAnArticleFromAIIsAVersionThatKeepsTheTextAndCanBeUndone(t *tes
 		t.Error("an excluded article reached AI")
 	}
 	// An edit opened before the exclusion still saves.
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, map[string]any{"body_md": "Refunds above 200 need approval.", "updated_at": article.UpdatedAt}, admin, http.StatusOK, nil)
+	kbPublishChange(t, api, admin, article.ID, map[string]any{"body_md": "Refunds above 200 need approval.", "updated_at": article.UpdatedAt}, nil)
 	buildAIRetrieval(t, pool)
 	if found("refund rules") {
 		t.Error("an excluded article reached AI after an edit")
@@ -440,8 +440,8 @@ func TestExcludingAnArticleFromAIIsAVersionThatKeepsTheTextAndCanBeUndone(t *tes
 	for _, version := range versions.Items {
 		kinds = append(kinds, version.Kind)
 	}
-	if strings.Join(kinds, ",") != "edit,ai_exclude,create" {
-		t.Errorf("versions = %v, want edit, ai_exclude, create", kinds)
+	if strings.Join(kinds, ",") != "edit,draft,ai_exclude,create" {
+		t.Errorf("versions = %v, want edit, draft, ai_exclude, create", kinds)
 	}
 
 	var included struct {
