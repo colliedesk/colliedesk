@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
+import { untilShown } from './support/clock';
 import { waitForMail } from './support/mailpit';
 
 // docs/user/email-channel.md: Settings → Email walks a new workspace through four steps on one page. Each
@@ -9,8 +10,9 @@ import { waitForMail } from './support/mailpit';
 const baseURL = servers.mail;
 
 test('email setup: a new workspace saves its address, the first forwarded mail flips step 2 without a reload, and the delivered test reply finishes step 4', async ({ page }) => {
-  // The first email shows on the app's inbox poll, every 20 s.
+  // The first email shows on the app's inbox poll, every 20 s; the page's clock runs ahead to it.
   test.setTimeout(120_000);
+  await page.clock.install();
   const suffix = uniqueSuffix();
   const admin = `admin-${suffix}@acme.example`;
   const support = `support-${suffix}@acme.example`;
@@ -51,7 +53,7 @@ test('email setup: a new workspace saves its address, the first forwarded mail f
       `Message-ID: <first-${suffix}@customer.example>`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', '', 'Hello there.', ''].join('\r\n')),
   });
   expect(inbound.status()).toBe(200);
-  await expect(forward.getByText(/^First email received/)).toBeVisible({ timeout: 45_000 });
+  await untilShown(page, () => expect(forward.getByText(/^First email received/)).toBeVisible({ timeout: 1_000 }), 45_000);
   expect(await page.evaluate(() => (window as unknown as { stillHere?: boolean }).stillHere)).toBe(true);
   await expect(forward.getByRole('button', { name: 'Continue' })).toBeEnabled();
 
