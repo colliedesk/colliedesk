@@ -381,6 +381,37 @@ the same article, as Freshdesk does it, never an article of its own.
 - **History and trash are the saved reply panels** (`saved-reply-panels.tsx`), made generic with
   optional props; the change line reads the same, with `import` added.
 
+## Templates
+
+Migration `20261120141816-kb-article-templates`; code `store/kb-templates.go`, `store/kb-template-history.go`,
+`httpapi/kb-template-handlers.go`, MCP `catalog-kb-templates.go`, web `features/kb/templates-page.tsx` and
+`article-template.tsx`. Issue #678.
+
+- **A template is copied, never linked.** Creating an article copies the body once; the article keeps
+  no reference to the template, so editing or trashing a template can never change an article
+  (`TestAnArticleCreatedFromATemplateCopiesItsBodyOnce`). `POST /api/v1/kb/articles` with both
+  `body_md` and `template_id` is a 400; with neither it uses the collection's `default_template_id`.
+- **History and trash copy saved replies.** Versions are append-only for the app role (the migration
+  revokes UPDATE and DELETE on `kb_template_versions`), the trash lasts 30 days, writes are optimistic
+  with `updated_at`, and the 200-template limit counts the trash. Nothing deletes a template for good
+  before then, so the limit refusal says to edit one instead.
+- **Trashing a template clears the collections that start from it** in the same transaction
+  (`default_template_id` set to null), so a collection never names a template in the trash. A trashed
+  template named by `template_id` or `default_template_id` is a 409 `template_in_trash`; a `GET` of one
+  is a 404 outside `/trash`.
+- **Starters are seeded once per workspace.** `kb_seed_starter_templates` runs in the migration for
+  every workspace and at workspace creation, and sets `workspaces.kb_starter_templates_at` first: a
+  workspace that has the timestamp never gets starters again, so a starter the team deleted never
+  comes back (`TestANewWorkspaceStartsWithThreeStarterTemplatesAndADeletedOneNeverComesBack`).
+- **Never public.** No help center reader joins `kb_templates` (`TestNoPublicSurfaceShowsATemplate`).
+  An image a template names is public only through a published article. `kbMediaNamedByTemplate`
+  matches the media id in the text of a template outside the trash, so such an item counts as in use
+  and is never purged as unused.
+- **No Freshdesk import.** Freshdesk's API does not expose its article templates, so the importer
+  brings none and the user docs say so.
+- **Insert template is Markdown only.** It inserts at the CodeMirror cursor; it is hidden in
+  **Preview**.
+
 ## Traps
 
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges
