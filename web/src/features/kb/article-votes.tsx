@@ -1,10 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { newSubmitKey } from '../../api/submit-key';
+import { useCreateMutation } from '../../api/use-create';
 import { formatDay } from '../../lib/format-date';
 import { useHolds } from '../../lib/permissions-context';
 import { KBDialog } from './kb-ui';
-import { votesApi } from './votes-api';
+import { votesApi, type KBArticleVotes } from './votes-api';
 import { votesMessages as m } from './votes-messages';
 
 // ArticleVotesBox shows what readers answered to "Was this article helpful?" on the public page: the count
@@ -21,11 +21,10 @@ export function ArticleVotesBox({ articleId, title, timezone, headingId }: Artic
   const votes = useQuery({ queryKey, queryFn: () => votesApi.votes(articleId) });
   const [asking, setAsking] = useState(false);
   const [all, setAll] = useState(false);
-  // One key per confirmation: a double press or a retry of the same one resets once.
-  const [key, setKey] = useState(newSubmitKey);
-  const reset = useMutation({
-    mutationFn: () => votesApi.reset(articleId, key),
-    onSuccess: (answer) => { client.setQueryData(queryKey, answer); setAsking(false); setKey(newSubmitKey()); },
+  // One key per press: a double press or a retry after a failure resets once.
+  const reset = useCreateMutation<KBArticleVotes>({
+    create: (_none, key) => votesApi.reset(articleId, key),
+    onSuccess: (answer) => { client.setQueryData(queryKey, answer); setAsking(false); },
   });
   const data = votes.data;
   const total = data ? data.helpful + data.not_helpful : 0;
@@ -65,7 +64,7 @@ export function ArticleVotesBox({ articleId, title, timezone, headingId }: Artic
         <button type="button" disabled={reset.isPending} onClick={() => setAsking(false)}>{m.cancel}</button>
         <button type="button" className="danger-solid" disabled={reset.isPending} onClick={() => reset.mutate()}>{m.reset}</button>
       </>}>
-        <p className="muted-copy">{m.resetBody}</p>
+        <p className="muted-copy" data-quiet="consequence">{m.resetBody}</p>
         {reset.isError && <small role="alert" className="error-copy">{m.resetFailed}</small>}
       </KBDialog>}
     </section>
