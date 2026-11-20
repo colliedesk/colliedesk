@@ -63,8 +63,9 @@ var (
 	ErrKBTemplateDuplicateName = errors.New("a template with this name already exists; pick another name")
 	// ErrKBTemplateChanged means the template was saved by someone else after the client read it.
 	ErrKBTemplateChanged = errors.New("this template was changed by someone else; reload to see their version")
-	// ErrKBTemplateLimit means the workspace already holds MaxKBTemplates templates.
-	ErrKBTemplateLimit = fmt.Errorf("a workspace holds at most %d templates, counting the trash; delete one for good first", MaxKBTemplates)
+	// ErrKBTemplateLimit means the workspace already holds MaxKBTemplates templates. Nothing deletes a
+	// template for good before its 30 days in the trash, so the way on is to edit one.
+	ErrKBTemplateLimit = fmt.Errorf("a workspace holds at most %d templates, counting the ones in the trash for 30 days; edit one you no longer need instead", MaxKBTemplates)
 	// ErrKBTemplateVersionNotFound means the template has no version with that number.
 	ErrKBTemplateVersionNotFound = errors.New("template version not found")
 )
