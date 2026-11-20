@@ -164,9 +164,10 @@ jobs:
       - name: Unit tests
         working-directory: web
         # The type check runs in the e2e job, and the bundle budget after the e2e job's own Vite build
-        # of the same commit: Vitest is this job's long pole. Outside watch mode Vitest starts one
-        # worker fewer than the runner's 4 CPUs; the job runs nothing else, so it takes all four.
-        run: corepack pnpm test --maxWorkers=4
+        # of the same commit: Vitest is this job's long pole. It keeps its default of one worker fewer
+        # than the runner's 4 CPUs: with four, the knowledge base page's lazy chunk missed its wait in
+        # app.test.tsx (run 44705059381), and the suite took 148 seconds against 152 to 243 with three.
+        run: corepack pnpm test
   # The browser tests outside onboarding, in shards: one job ran them in 48 of its 117 seconds
   # (run 39902604105) and set the end of the whole run. Each shard runs whole test files, which
   # e2e-shard.py balances by their measured time (.github/e2e-test-timings.json): Playwright's own
