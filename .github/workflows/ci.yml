@@ -216,7 +216,7 @@ jobs:
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
       # Ubuntu 24.04's gcc differs from ubuntu-latest's, where main's Go cache is built, and gcc's version is
-      # part of runtime/cgo's cache key: with cgo on, 107 of 484 packages compiled again here (run
+      # part of runtime/cgo's cache key: with cgo on, `go list` reported 107 of 484 packages stale here (run
       # 44719216506). The release image builds without cgo too.
       CGO_ENABLED: '0'
     steps:
@@ -345,7 +345,7 @@ jobs:
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
       # Ubuntu 24.04's gcc differs from ubuntu-latest's, where main's Go cache is built, and gcc's version is
-      # part of runtime/cgo's cache key: with cgo on, 107 of 484 packages compiled again here (run
+      # part of runtime/cgo's cache key: with cgo on, `go list` reported 107 of 484 packages stale here (run
       # 44719216506). The release image builds without cgo too.
       CGO_ENABLED: '0'
     steps:
