@@ -31,6 +31,7 @@ import type { KBMediaDetails } from './media-api';
 import { embedFor } from './media-grid';
 import { baseName, fileProblem, kindOf, uploadVideo } from './media-uploads';
 import { addPoster } from './video-poster';
+import { InsertTemplateMenu, useTemplateStart } from './article-template';
 
 // The limits the server checks (server/internal/domain/kb.go), counted in characters like the server.
 export const maxTitle = 300;
@@ -84,15 +85,21 @@ const contentsMessages = {
 // seoValue is a search field as the server stores it: on one line, runs of spaces as one, trimmed.
 const seoValue = (text: string) => text.trim().split(/\s+/).filter(Boolean).join(' ');
 
-// ArticleRoute opens an article in the editor, or a new one (in collectionId when given).
-export function ArticleRoute({ articleId, collectionId }: { articleId?: string; collectionId?: string }) {
+// ArticleRoute opens an article in the editor, or a new one (in collectionId when given), started from
+// templateId ('none' for blank) or else from the collection's default template.
+export function ArticleRoute({ articleId, collectionId, templateId }: { articleId?: string; collectionId?: string; templateId?: string }) {
   // The editor's chunk loads alongside the article, not after it.
   useEffect(editorPart.preload, []);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const collections = useQuery({ queryKey: ['kb-collections'], queryFn: kbApi.collections });
   const article = useQuery({ queryKey: ['kb-article', articleId], queryFn: () => kbApi.article(articleId ?? ''), enabled: articleId !== undefined, retry: false });
+  const items = collections.data?.items ?? [];
+  const known = collectionId && items.some((item) => item.id === collectionId) ? collectionId : undefined;
+  const defaultCollection = known ?? (items.length === 1 ? items[0].id : '');
+  const start = useTemplateStart(articleId || collections.isPending ? 'none' : templateId,
+    items.find((item) => item.id === defaultCollection)?.default_template_id);
   const back = <BackLink />;
-  if ((articleId && article.isPending) || collections.isPending) {
+  if ((articleId && article.isPending) || collections.isPending || start.pending) {
     return <main className="kb-frame kb-editor-page">{back}<p role="status" className="empty-copy">{messages.loading}</p></main>;
   }
   if (articleId && !article.data) {
@@ -102,10 +109,8 @@ export function ArticleRoute({ articleId, collectionId }: { articleId?: string; 
   if (article.data?.deleted_at) {
     return <main className="kb-frame kb-editor-page">{back}<p role="status" className="warning-note">{kbMessages.articleInTrash}</p></main>;
   }
-  const items = collections.data?.items ?? [];
-  const known = collectionId && items.some((item) => item.id === collectionId) ? collectionId : undefined;
-  return <ArticleEditor article={article.data} collections={items} defaultCollection={known ?? (items.length === 1 ? items[0].id : '')}
-    timezone={me.data?.timezone ?? 'UTC'} collectionsFailed={collections.isError} />;
+  return <ArticleEditor article={article.data} collections={items} defaultCollection={defaultCollection}
+    timezone={me.data?.timezone ?? 'UTC'} collectionsFailed={collections.isError} startBody={start.body} startNotice={start.notice} />;
 }
 
 function BackLink() {
@@ -130,9 +135,12 @@ interface ArticleEditorProps {
   defaultCollection: string;
   timezone: string;
   collectionsFailed?: boolean;
+  // startBody is a new article's text from its template; startNotice says why it starts blank instead.
+  startBody?: string;
+  startNotice?: string;
 }
 
-export function ArticleEditor({ article, collections, defaultCollection, timezone, collectionsFailed }: ArticleEditorProps) {
+export function ArticleEditor({ article, collections, defaultCollection, timezone, collectionsFailed, startBody = '', startNotice }: ArticleEditorProps) {
   const id = useId();
   const client = useQueryClient();
   const navigate = useNavigate();
@@ -142,7 +150,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // changes, those (editable). Every save, restore and delete sends base's updated_at.
   const [raw, setBase] = useState(article);
   const base = useMemo(() => raw && editable(raw), [raw]);
-  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(editable(article)) : { title: '', slug: '', body: '', collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '', show_contents: true }));
+  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(editable(article)) : { title: '', slug: '', body: startBody, collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '', show_contents: true }));
   const wide = useSyncExternalStore(subscribeWide, isWide);
   const [chosen, setMode] = useState<ViewMode>(() => (isWide() && (!article || characters(article.body_md) <= splitLimit) ? 'split' : 'edit'));
   const mode: ViewMode = chosen === 'split' && !wide ? 'edit' : chosen;
@@ -164,7 +172,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     // a change (the server keeps the old one), so a form is never dirty with nothing to send.
     ? form.title.trim() !== base.title || (form.slug.trim() !== '' && form.slug.trim() !== base.slug) || !sameBody(form.body, base) || Object.keys(listChange(form, base)).length > 0
       || seoValue(form.seo_title) !== base.seo_title || seoValue(form.seo_description) !== base.seo_description || form.show_contents !== base.show_contents
-    : form.title.trim() !== '' || form.body.trim() !== '');
+    // A new article's text is unchanged while it is still its template's.
+    : form.title.trim() !== '' || (form.body.trim() !== '' && form.body !== startBody));
   const dirty = isDirty(draft);
   // bodyNow reads the editor at once: it tells the page of typing a moment after it stops.
   const bodyNow = () => handle?.markdown() ?? draft.body;
@@ -580,7 +589,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           </span>
         </>}
       </header>
-      {(raw?.draft || conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || (base?.ai_exclusion && !phone)) && <div className="kb-editor-notes">
+      {(startNotice || raw?.draft || conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || (base?.ai_exclusion && !phone)) && <div className="kb-editor-notes">
+        {startNotice && !base && <p role="status" className="warning-note">{startNotice}</p>}
         {base?.ai_exclusion && !phone && <ArticleAINote article={base} onChanged={aiChangedFromNote} />}
         {raw?.draft && <ArticleDraftBar article={raw} title={draft.title} body={bodyNow} busy={busy} dirty={dirty} onPublish={askPublishChanges} onDiscard={discardChanges} />}
         {conflict && <div role="alert" className="warning-note kb-conflict">
@@ -618,6 +628,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
                     {name === 'edit' ? kbMessages.write : name === 'split' ? kbMessages.split : kbMessages.preview}</button>
                 ))}
               </div>
+              {mode !== 'preview' && <InsertTemplateMenu disabled={!handle} defaultTemplateId={collections.find((item) => item.id === draft.collection_id)?.default_template_id}
+                onInsert={(body) => handle?.insert(body)} />}
               <small id={`${id}-count`} className={tooLong ? 'error-copy kb-count' : 'kb-count'}>{kbMessages.characters(bodyLength, maxBody)}</small>
               <small id={`${id}-help`} className="sr-only">{kbMessages.bodyHelp}</small>
             </div>

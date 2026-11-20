@@ -453,5 +453,6 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 			"response_type": "code", "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", "code_challenge_method": "S256", "state": "s"}, token: admin, status: 200},
 	}
 	maps.Copy(cases, kbContractCases(f))
+	maps.Copy(cases, kbTemplateContractCases(f))
 	return cases
 }

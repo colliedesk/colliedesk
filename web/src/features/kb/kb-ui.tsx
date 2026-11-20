@@ -5,6 +5,7 @@ import { Icon } from './editor/icons';
 import type { IconName } from './editor/icons';
 import { kbMessages } from './kb-messages';
 import { mediaMessages } from './media-messages';
+import { templateMessages } from './template-messages';
 import { translationMessages } from './translation-messages';
 import { useHolds } from '../../lib/permissions-context';
 
@@ -160,7 +161,7 @@ export function KBToast({ text, undo, onUndo, onDismiss }: { text: string; undo?
 }
 
 interface HeadProps {
-  current: 'articles' | 'media' | 'languages' | 'settings';
+  current: 'articles' | 'media' | 'languages' | 'templates' | 'settings';
   heading: string;
   // articles counts the live articles, from the collections; the Media tab has no count the API gives.
   articles?: number;
@@ -179,6 +180,7 @@ export function KBHead({ current, heading, articles, actions }: HeadProps) {
           {mediaMessages.articlesTab}{articles !== undefined && <span className="kb-count-tag">{articles.toLocaleString('en')}</span>}</a>}
         {holds('kb_media:read') && <a href="/knowledge/media" aria-current={current === 'media' ? 'page' : undefined}>{mediaMessages.mediaTab}</a>}
         {holds('kb_articles:read') && holds('help_center:read') && <a href="/knowledge/languages" aria-current={current === 'languages' ? 'page' : undefined}>{translationMessages.languagesTab}</a>}
+        {holds('kb_articles:read') && <a href="/knowledge/templates" aria-current={current === 'templates' ? 'page' : undefined}>{templateMessages.templatesTab}</a>}
         {holds('help_center:read') && <a href="/knowledge/settings" aria-current={current === 'settings' ? 'page' : undefined}>{kbMessages.settingsTab}</a>}
       </nav>
       {actions && <div className="kb-head-actions">{actions}</div>}

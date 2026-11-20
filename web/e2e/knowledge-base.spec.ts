@@ -24,7 +24,9 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   await expect(page.getByRole('link', { name: 'Getting started, 0 articles' })).toHaveAttribute('aria-current', 'page');
   expect(editorChunks).toEqual([]);
 
-  await page.getByRole('link', { name: 'New article' }).click();
+  // A new workspace has starter templates, so New article asks what to start from.
+  await page.getByRole('button', { name: 'New article' }).click();
+  await page.getByRole('menuitem', { name: /^Blank/ }).click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Reset your password');
   const text = page.getByRole('textbox', { name: 'Text (Markdown)' });
   await text.click();
@@ -263,7 +265,8 @@ test('knowledge base: an article excluded from AI says since when and by whom, k
   const newCollection = page.getByRole('form', { name: 'New collection' });
   await newCollection.getByRole('textbox', { name: 'Name' }).fill('Billing');
   await newCollection.getByRole('button', { name: 'Create collection' }).click();
-  await page.getByRole('link', { name: 'New article' }).click();
+  await page.getByRole('button', { name: 'New article' }).click();
+  await page.getByRole('menuitem', { name: /^Blank/ }).click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Internal refund rules');
   await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
   await page.keyboard.type('Refunds above 100 need a second approval.');

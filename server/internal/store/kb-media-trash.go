@@ -172,7 +172,7 @@ func (s *Store) TrashUnusedKBMedia(ctx context.Context, workspaceID string, acto
 	}
 	out, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (answer, error) {
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.deleted_at IS NULL AND m.created_at<$2
-				AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` ORDER BY m.id LIMIT `+strconv.Itoa(domain.MaxKBMediaUnusedBatch)+` FOR UPDATE OF m SKIP LOCKED`,
+				AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` AND NOT `+kbMediaNamedByTemplate+` ORDER BY m.id LIMIT `+strconv.Itoa(domain.MaxKBMediaUnusedBatch)+` FOR UPDATE OF m SKIP LOCKED`,
 			workspaceID, before, includeKept)
 		if err != nil {
 			return answer{}, err
@@ -213,7 +213,7 @@ func (s *Store) TrashUnusedKBMedia(ctx context.Context, workspaceID string, acto
 func (s *Store) UnusedKBMediaIDs(ctx context.Context, workspaceID string, includeKept bool, before time.Time, limit int) ([]string, error) {
 	ids, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]string, error) {
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.deleted_at IS NULL AND m.created_at<$2
-			AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` ORDER BY m.size DESC, m.id LIMIT $4`, workspaceID, before, includeKept, limit)
+			AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` AND NOT `+kbMediaNamedByTemplate+` ORDER BY m.size DESC, m.id LIMIT $4`, workspaceID, before, includeKept, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -281,9 +281,9 @@ func (s *Store) RestoreKBMedia(ctx context.Context, workspaceID string, ids []st
 }
 
 // PurgeKBMediaNow deletes for good the items of ids that are in the library's trash, with their files,
-// and answers each: purged, not_in_trash, not_found, or in_use for the help center's logo or favicon,
-// which stays in the trash until the theme names another image. Articles in the trash and older
-// versions that named one then show "Media no longer exists".
+// and answers each: purged, not_in_trash, not_found, or in_use for the help center's logo or favicon
+// or an image a live template names, which stays in the trash until nothing names it. Articles in the
+// trash and older versions that named one then show "Media no longer exists".
 func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []string) ([]domain.KBMediaResult, error) {
 	ids, err := validKBMediaIDs(ids)
 	if err != nil {
@@ -302,7 +302,7 @@ func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []s
 		if err != nil {
 			return answer{}, err
 		}
-		named, err := kbMediaIDsWhere(ctx, tx, workspaceID, ids, kbMediaNamedByHelpCenter)
+		named, err := kbMediaIDsWhere(ctx, tx, workspaceID, ids, "("+kbMediaNamedByHelpCenter+" OR "+kbMediaNamedByTemplate+")")
 		if err != nil {
 			return answer{}, err
 		}
@@ -317,7 +317,8 @@ func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []s
 			case !inTrash || inUse[id]:
 				status = domain.KBMediaNotInTrash
 			case named[id]:
-				// The help center's logo or favicon waits in the trash until the theme lets go of it.
+				// The help center's logo or favicon, or an image a live template names, waits in the trash
+				// until the theme or the template lets go of it.
 				status = domain.KBMediaInUse
 			default:
 				gone = append(gone, id)

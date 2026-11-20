@@ -156,6 +156,14 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_collections_trash` | Lists the collections in the trash | `kb_articles:read` |
 | `colliedesk_kb_collection_undelete` | Takes a collection out of the trash | `kb_articles:delete` |
 | `colliedesk_kb_order_set` | Sets the order of a collection's collections and articles, or of the top-level collections | `kb_articles:update` |
+| `colliedesk_kb_templates_list` | Lists the article templates, or the ones in the trash, with what each is for | `kb_articles:read` |
+| `colliedesk_kb_template_get` | Reads one article template with its whole Markdown text | `kb_articles:read` |
+| `colliedesk_kb_template_create` | Adds an article template | `kb_articles:update` |
+| `colliedesk_kb_template_update` | Edits a template's name, description or text; every edit is a version, and articles made from it never change | `kb_articles:update` |
+| `colliedesk_kb_template_delete` | Moves a template to the trash and sets the collections that started from it back to blank. Restorable for 30 days, so not marked destructive | `kb_articles:update` |
+| `colliedesk_kb_template_undelete` | Takes a template out of the trash | `kb_articles:update` |
+| `colliedesk_kb_template_history` | Lists the versions of a template a page at a time: who, through which token, and the text | `kb_articles:read` |
+| `colliedesk_kb_template_version_restore` | Makes an earlier version of a template current again, as a new version | `kb_articles:update` |
 | `colliedesk_kb_articles_search` | Lists or searches the articles, without their text, a page at a time, each with its public address (`url`) to link in a reply | `kb_articles:read` |
 | `colliedesk_kb_article_get` | Reads one article with its whole Markdown text and its public address (`url`), also from the trash | `kb_articles:read` |
 | `colliedesk_kb_article_create` | Writes an article, as a draft or published | `kb_articles:create` |

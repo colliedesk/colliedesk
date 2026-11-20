@@ -12,7 +12,7 @@ export const ids = {
 };
 
 export const collection = (id: string, name: string, parent: string | null, count = 0, slug = name.toLowerCase()) => ({
-  id, parent_id: parent, name, slug, description: '', position: 0, article_count: count, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', translations: [] as never[],
+  id, parent_id: parent, name, slug, description: '', position: 0, default_template_id: null as string | null, article_count: count, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', translations: [] as never[],
 });
 
 export const collections = [

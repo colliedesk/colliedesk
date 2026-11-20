@@ -257,6 +257,8 @@ type KBPurge struct {
 	Articles, Collections, Images int64
 	// Translations are those deleted on their own (an article's go with it).
 	Translations int64
+	// Templates are article templates, with their history.
+	Templates int64
 }
 
 // kbMediaPurgeable is the purge rule for library items, on rows aliased m: in the trash for longer than
@@ -268,7 +270,8 @@ const kbMediaPurgeable = `((m.deleted_at IS NOT NULL AND m.deleted_at<$1)
 			AND NOT EXISTS(SELECT 1 FROM kb_article_media l WHERE l.workspace_id=m.workspace_id AND l.media_id=m.id)))
 	AND NOT EXISTS(SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
 		WHERE l.workspace_id=m.workspace_id AND l.media_id=m.id AND l.current AND a.deleted_at IS NULL)
-	AND NOT ` + kbMediaNamedByHelpCenter
+	AND NOT ` + kbMediaNamedByHelpCenter + `
+	AND NOT ` + kbMediaNamedByTemplate
 
 // PurgeKBTrash deletes for good, in every workspace, the articles and collections that have been in
 // the trash longer than domain.KBTrashRetention (with the articles' history, translations and media
@@ -312,6 +315,11 @@ func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
 			}
 			purged.Collections += tag.RowsAffected()
 		}
+		tag, err = tx.Exec(ctx, `DELETE FROM kb_templates WHERE deleted_at IS NOT NULL AND deleted_at<$1`, cutoff)
+		if err != nil {
+			return fmt.Errorf("purge knowledge base templates: %w", err)
+		}
+		purged.Templates = tag.RowsAffected()
 		if err := purgeKBMediaBatches(ctx, tx, cutoff); err != nil {
 			return fmt.Errorf("purge knowledge base media batches: %w", err)
 		}

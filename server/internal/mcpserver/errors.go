@@ -43,6 +43,9 @@ func (c *call) refuse(err error, notFound string) error {
 	case failure.Status == 409 && failure.Code == "conversation_spam":
 		return c.refusal("conflict", "A conversation in Spam keeps its status, so nothing was changed. Take it out with colliedesk_conversations_spam (spam: false), "+
 			"which puts it back in the status it had; then change it.")
+	case failure.Status == 409 && failure.Code == "template_in_trash":
+		return c.refusal("conflict", "The template is in the trash; undelete it or pick another: colliedesk_kb_template_undelete brings it back, "+
+			"colliedesk_kb_templates_list lists the others.")
 	case failure.Status == 409:
 		return c.refusal("conflict", "Colliedesk refused this: "+failure.Message)
 	case failure.Status == 400 || failure.Status == 422:

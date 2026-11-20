@@ -16,6 +16,7 @@ import { kbApi } from './kb-api';
 import type { KBArticleStatus, KBArticleSummary, KBCollection } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { CollectionNames } from './collection-names';
+import { NewArticleMenu } from './new-article-menu';
 import { languageName, translationMessages } from './translation-messages';
 import { KBDialog, KBHead } from './kb-ui';
 import { HelpTip } from '../../ui/help-tip';
@@ -105,12 +106,14 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
         ...(values.slug && values.slug !== original.slug ? { slug: values.slug } : {}),
         ...(values.description !== original.description ? { description: values.description } : {}),
         ...(values.parent_id !== original.parent_id ? { parent_id: values.parent_id } : {}),
+        ...(values.default_template_id !== (original.default_template_id ?? null) ? { default_template_id: values.default_template_id } : {}),
       });
       await refresh();
       setForm(null);
       return;
     }
-    const created = await createCollection.run({ name: values.name, ...(values.description ? { description: values.description } : {}), parent_id: values.parent_id });
+    const created = await createCollection.run({ name: values.name, ...(values.description ? { description: values.description } : {}), parent_id: values.parent_id,
+      ...(values.default_template_id ? { default_template_id: values.default_template_id } : {}) });
     await refresh();
     setForm(null);
     setSearch({ collection: created.id });
@@ -169,13 +172,11 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter, enabled: holds('help_center:read') });
   const publicNow = center.data?.enabled;
   const newCollection = () => { setProblem(undefined); setForm(form === 'new' ? null : 'new'); };
-  const newArticle = `/knowledge/new${selected ? `?${new URLSearchParams({ collection: selected.collection.id })}` : ''}`;
   return (
     <main className="kb-frame kb-articles-page" aria-labelledby="kb-heading">
       <KBHead current="articles" heading={kbMessages.heading} articles={collections.isSuccess ? total : undefined} actions={<>
         <button type="button" aria-haspopup="dialog" aria-label={kbMessages.trash} onClick={() => setTrashOpen(true)}><Icon name="trash" /><span className="kb-label">{kbMessages.trash}</span></button>
-        {/* A pointer or the focus on New article loads the editor's chunk ahead of the click (editor-part.ts). */}
-        {creates && !noCollections && <span onPointerOver={editorPart.preload} onFocus={editorPart.preload}><a className="button-link primary-action" href={newArticle}><Icon name="plus" />{kbMessages.newArticle}</a></span>}
+        {creates && !noCollections && <NewArticleMenu collectionId={selected?.collection.id} defaultTemplateId={selected?.collection.default_template_id} />}
       </>} />
       {publicNow === false && <div className="kb-notice" role="status">
         <Icon name="globe" />
