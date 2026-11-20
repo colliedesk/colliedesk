@@ -9100,10 +9100,10 @@ export interface components {
             from: string;
             authentication: components["schemas"]["EmailAuthentication"];
             /**
-             * @description Door the message came through; absent on mail stored before this was recorded. `web_form` is text typed into the public web form: the address is unverified (authentication `none`). Trial replies need `platform`.
+             * @description Door the message came through; absent on mail stored before this was recorded. `web_form` is text typed into the public web form: the address is unverified (authentication `none`). `gmail` was read from the channel's connected Gmail inbox; authentication is Gmail's verdict. Trial replies need `platform`.
              * @enum {string}
              */
-            via?: "platform" | "workspace" | "web_form";
+            via?: "platform" | "workspace" | "gmail" | "web_form";
             /** @description Other addresses on the Cc line of the email (not the sender, not our own addresses), as the reply box offers them to copy. Absent on mail stored before Cc was kept. */
             cc?: string[];
             /**
@@ -9205,7 +9205,7 @@ export interface components {
         };
         EmailChannelSettings: {
             mail_switch: components["schemas"]["EmailMailSwitch"];
-            /** @description Whether customer mail has arrived on this channel through its support mailbox (forwarded here under the current support address). Until it has, new customer mail may still arrive in the team's old help desk, and the inbox says so. A test message, Gmail's forwarding confirmation, an answer to a `reply+…@` address, dropped mail and mail under an earlier support address do not count. False without a channel. */
+            /** @description Whether customer mail has arrived on this channel through its support mailbox (forwarded here, or read from its connected Gmail inbox, under the current support address). Until it has, new customer mail may still arrive in the team's old help desk, and the inbox says so. A test message, Gmail's forwarding confirmation, an answer to a `reply+…@` address, dropped mail and mail under an earlier support address do not count. False without a channel. */
             mail_through_mailbox: boolean;
             /**
              * @description Where a customer's answer to a reply goes while `mail_through_mailbox` is false. `colliedesk`: replies carry `Reply-To: reply+<token>@<server's sending domain>`, which this server receives, so the answer joins the conversation. `support_mailbox`: this server does not receive mail on its sending domain, so the answer goes to the support address and reaches Colliedesk only once that mailbox forwards here.
@@ -9253,6 +9253,10 @@ export interface components {
             old_help_desk: boolean;
         };
         GmailSettings: {
+            /** @description Whether this server reads connected Gmail inboxes for new mail (its operator turned on google.read_mailbox). When true, connecting Gmail also asks Google for permission to read email (gmail.readonly); when false, the consent only asks to send and mail comes in by forwarding. */
+            reads_inbox: boolean;
+            /** @description Whether new mail of the connected inbox comes in by itself; null without a Gmail connection. */
+            inbox: null | components["schemas"]["GmailInbox"];
             /** @description Whether this server can connect Gmail (its operator set the Google OAuth client and token keys, and has not switched Gmail off). */
             available: boolean;
             /**
@@ -9270,6 +9274,20 @@ export interface components {
             connection: null | components["schemas"]["MailboxConnection"];
             /** @description Only with a connection: whether its account is the channel's support address mailbox. A connection made before Gmail had to match keeps sending; connect it again with the support address to fix it. */
             address_matches?: boolean;
+        };
+        GmailInbox: {
+            /**
+             * @description reading: new inbox mail comes in by itself, beside forwarding (only mail that arrived after the connection; a message that also arrives by forwarding is kept once). not_granted: the connection only sends; connect Gmail again and allow reading email. refused: Google stopped letting Colliedesk read the inbox (permission withdrawn); connect Gmail again. off: this server does not read inboxes. Sending is the same in every state.
+             * @enum {string}
+             */
+            state: "reading" | "not_granted" | "refused" | "off";
+            /**
+             * Format: date-time
+             * @description When the inbox was last read; null before the first read.
+             */
+            read_at: string | null;
+            /** @description What the state means and the next step, in words. */
+            message: string;
         };
         MicrosoftSettings: {
             /** @description Whether this server can connect Microsoft 365 (its operator registered an app in Microsoft Entra and set the token keys, and has not switched it off). */
@@ -10169,7 +10187,7 @@ export interface components {
                 /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
                 refused_cc?: string[];
                 /**
-                 * @description Only on trial_outbound_restricted when the customer did write, but the trial cannot count the mail. `contact_address_differs`: the customer wrote from another address than the contact's (a contact merged into this one), and the reply would go to `reply_to`, which never wrote. `mail_not_via_hosted_address`: the mail was posted to the workspace's own inbound URL, not received at its hosted forwarding address, so nothing proves who sent it. `sender_authentication_failed`: the mail arrived at the forwarding address but failed sender verification (SPF, DKIM or DMARC).
+                 * @description Only on trial_outbound_restricted when the customer did write, but the trial cannot count the mail. `contact_address_differs`: the customer wrote from another address than the contact's (a contact merged into this one), and the reply would go to `reply_to`, which never wrote. `mail_not_via_hosted_address`: the mail was posted to the workspace's own inbound URL, or read from its connected Gmail inbox (where the account can add any message), not received at its hosted forwarding address, so nothing proves who sent it. `sender_authentication_failed`: the mail arrived at the forwarding address but failed sender verification (SPF, DKIM or DMARC).
                  * @enum {string}
                  */
                 reason?: "contact_address_differs" | "mail_not_via_hosted_address" | "sender_authentication_failed";
@@ -10835,7 +10853,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. A caller without the operation's permission gets error code `permission_missing` with `missing_permissions`, `missing_from` (`token` or `person`) and `ask` (who in the workspace holds them); an agent token on an action only a person makes gets `person_only` with `where`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address). When the customer wrote but the mail does not count, `reason` says why: `mail_not_via_hosted_address` (posted to the workspace's own inbound URL) or `sender_authentication_failed` (sender verification failed). Nothing was stored. */
+        /** @description Permission or CSRF check failed. A caller without the operation's permission gets error code `permission_missing` with `missing_permissions`, `missing_from` (`token` or `person`) and `ask` (who in the workspace holds them); an agent token on an action only a person makes gets `person_only` with `where`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address). When the customer wrote but the mail does not count, `reason` says why: `mail_not_via_hosted_address` (posted to the workspace's own inbound URL, or read from its Gmail inbox) or `sender_authentication_failed` (sender verification failed). Nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;

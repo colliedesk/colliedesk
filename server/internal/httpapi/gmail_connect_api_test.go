@@ -577,3 +577,59 @@ func TestGmailConnectsOnlyTheChannelsOwnAddressAndOnlyOnce(t *testing.T) {
 		}
 	}
 }
+
+type gmailInboxView struct {
+	Gmail struct {
+		ReadsInbox bool `json:"reads_inbox"`
+		Inbox      *struct {
+			State   string `json:"state"`
+			Message string `json:"message"`
+		} `json:"inbox"`
+	} `json:"gmail"`
+}
+
+func (d gmailDesk) inbox(t *testing.T, session string) gmailInboxView {
+	t.Helper()
+	response := request(t, d.api, http.MethodGet, "/api/v1/channels/email", nil, session, nil)
+	validateContractResponse(t, newRequest(t, http.MethodGet, "/api/v1/channels/email", nil, session, nil), response)
+	var view gmailInboxView
+	decode(t, response, &view)
+	return view
+}
+
+func TestOnAServerThatReadsInboxesTheConsentAsksToReadAndTheSettingsSayWhetherMailComesIn(t *testing.T) {
+	desk := newGmailDeskWith(t, "Reading Desk", func(config *httpapi.Config) { config.Google.ReadMailbox = true })
+	if view := desk.inbox(t, desk.admin); !view.Gmail.ReadsInbox || view.Gmail.Inbox != nil {
+		t.Fatalf("before connecting: %+v", view.Gmail)
+	}
+	consent := desk.startGmail(t, desk.admin)
+	if !strings.Contains(consent, url.QueryEscape(google.ScopeGmailRead)) {
+		t.Fatalf("the consent does not ask to read: %s", consent)
+	}
+	desk.finish(t, consent, "support@reading-desk.example.com", sessionCookieOf(desk.admin))
+	if view := desk.inbox(t, desk.admin); view.Gmail.Inbox == nil || view.Gmail.Inbox.State != domain.InboxReading {
+		t.Fatalf("connected with reading: %+v", view.Gmail.Inbox)
+	}
+	// The person unticked reading at Google: the connection still sends, and the settings say how to read.
+	desk.fake.Set(func(s *googletest.Server) { s.GrantScope = "openid email " + google.ScopeGmailSend })
+	desk.finish(t, desk.startGmail(t, desk.admin), "support@reading-desk.example.com", sessionCookieOf(desk.admin))
+	view := desk.inbox(t, desk.admin)
+	if view.Gmail.Inbox == nil || view.Gmail.Inbox.State != domain.InboxNotGranted || !strings.Contains(view.Gmail.Inbox.Message, "connect Gmail again") {
+		t.Fatalf("send-only grant: %+v", view.Gmail.Inbox)
+	}
+	if settings := desk.settings(t, desk.admin); settings.Gmail.Connection == nil || settings.Gmail.Connection.Status != domain.MailboxConnected {
+		t.Fatalf("a send-only grant does not send: %+v", settings.Gmail.Connection)
+	}
+}
+
+func TestOnAServerThatDoesNotReadInboxesNothingChanges(t *testing.T) {
+	desk := newGmailDesk(t, "Sending Desk")
+	consent := desk.startGmail(t, desk.admin)
+	if strings.Contains(consent, "gmail.readonly") {
+		t.Fatalf("a send-only server asks to read: %s", consent)
+	}
+	desk.finish(t, consent, "support@sending-desk.example.com", sessionCookieOf(desk.admin))
+	if view := desk.inbox(t, desk.admin); view.Gmail.ReadsInbox || view.Gmail.Inbox == nil || view.Gmail.Inbox.State != domain.InboxOff {
+		t.Fatalf("send-only server: %+v", view.Gmail)
+	}
+}

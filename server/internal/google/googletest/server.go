@@ -1,6 +1,7 @@
 // Package googletest is a local stand-in for the Google endpoints Colliedesk calls to connect Gmail:
-// the consent page, the token endpoint (authorization code with PKCE, refresh), revoke, and Gmail's
-// messages.send media upload. Tests and the e2e build point google.Config.Base at it; no real Google
+// the consent page, the token endpoint (authorization code with PKCE, refresh), revoke, Gmail's
+// messages.send media upload, and the read calls (profile, history, messages list and get) over a
+// mailbox tests fill with Deliver. Tests and the e2e build point google.Config.Base at it; no real Google
 // account or credential is involved. Answers follow Google's documented shapes.
 package googletest
 
@@ -18,8 +19,10 @@ import (
 	"net/http/httptest"
 	"net/mail"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Sent is one message the stand-in accepted for sending.
@@ -49,8 +52,15 @@ type Server struct {
 	codes   map[string]pendingCode
 	refresh map[string]string // refresh token -> account
 	access  map[string]string // access token -> account
-	revoked map[string]bool
-	sent    []Sent
+	// scopes are the scopes each refresh and access token was granted.
+	scopes  map[string]string
+	inbox   map[string][]stored // account -> its mailbox, oldest first
+	history int64
+	// historyFloor: a start history id below it is answered 404, as Gmail does for one it no longer keeps.
+	historyFloor int64
+	reads        int
+	revoked      map[string]bool
+	sent         []Sent
 	// GrantScope replaces the scope the consent grants (a person can untick gmail.send).
 	GrantScope string
 	// OmitRefreshToken answers a code exchange without a refresh token.
@@ -63,13 +73,15 @@ type Server struct {
 	IDTokenAudience string
 	// TokenDown makes the token endpoint answer 503.
 	TokenDown bool
-	tokens    int
+	// ReadFailures are answered, in order, to the next read calls (profile, history, list, get).
+	ReadFailures []Failure
+	tokens       int
 }
 
 // New returns a stand-in for the given OAuth client.
 func New(clientID, clientSecret string) *Server {
 	return &Server{ClientID: clientID, ClientSecret: clientSecret, codes: map[string]pendingCode{}, refresh: map[string]string{},
-		access: map[string]string{}, revoked: map[string]bool{}}
+		access: map[string]string{}, revoked: map[string]bool{}, scopes: map[string]string{}, inbox: map[string][]stored{}, history: 1000}
 }
 
 // Start serves the stand-in on a local port; close it with the returned server.
@@ -88,6 +100,8 @@ func (s *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) 
 		s.revoke(response, request)
 	case request.URL.Path == "/upload/gmail/v1/users/me/messages/send" && request.Method == http.MethodPost:
 		s.send(response, request)
+	case strings.HasPrefix(request.URL.Path, "/gmail/v1/users/me/") && request.Method == http.MethodGet:
+		s.read(response, request)
 	default:
 		http.NotFound(response, request)
 	}
@@ -203,11 +217,13 @@ func (s *Server) token(response http.ResponseWriter, request *http.Request) {
 		}
 		access := randomToken("access-")
 		s.access[access] = pending.account
+		s.scopes[access] = pending.scope
 		answer := map[string]any{"access_token": access, "expires_in": 3599, "token_type": "Bearer", "scope": pending.scope,
 			"id_token": s.idToken(pending.account)}
 		if !s.OmitRefreshToken {
 			refresh := randomToken("refresh-")
 			s.refresh[refresh] = pending.account
+			s.scopes[refresh] = pending.scope
 			answer["refresh_token"] = refresh
 		}
 		writeJSON(response, http.StatusOK, answer)
@@ -219,7 +235,8 @@ func (s *Server) token(response http.ResponseWriter, request *http.Request) {
 		}
 		access := randomToken("access-")
 		s.access[access] = account
-		writeJSON(response, http.StatusOK, map[string]any{"access_token": access, "expires_in": 3599, "token_type": "Bearer", "scope": "openid email https://www.googleapis.com/auth/gmail.send"})
+		s.scopes[access] = s.scopes[form.Get("refresh_token")]
+		writeJSON(response, http.StatusOK, map[string]any{"access_token": access, "expires_in": 3599, "token_type": "Bearer", "scope": s.scopes[access]})
 	default:
 		writeJSON(response, http.StatusBadRequest, map[string]string{"error": "unsupported_grant_type"})
 	}
@@ -336,4 +353,151 @@ func (s *Server) RefreshTokens() []string {
 		tokens = append(tokens, token)
 	}
 	return tokens
+}
+
+// stored is one message of a stand-in mailbox.
+type stored struct {
+	id      string
+	labels  []string
+	raw     []byte
+	at      time.Time
+	history int64
+}
+
+// Deliver puts a raw message in an account's mailbox, as Gmail does when mail arrives: with the INBOX
+// label unless labels are given. It returns Gmail's id of it.
+func (s *Server) Deliver(account string, raw []byte, at time.Time, labels ...string) string {
+	if len(labels) == 0 {
+		labels = []string{"INBOX", "UNREAD"}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.history++
+	id := strconv.FormatInt(s.history, 16) + randomToken("")[:8]
+	account = strings.ToLower(account)
+	s.inbox[account] = append(s.inbox[account], stored{id: id, labels: labels, raw: raw, at: at.UTC(), history: s.history})
+	return id
+}
+
+// ForgetHistory plays Gmail dropping old history: every history id issued so far is answered 404.
+func (s *Server) ForgetHistory() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.history++
+	s.historyFloor = s.history
+}
+
+// Reads counts the read calls answered so far.
+func (s *Server) Reads() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reads
+}
+
+func gmailFailure(response http.ResponseWriter, status int, reason, message string) {
+	writeJSON(response, status, map[string]any{"error": map[string]any{"code": status, "message": message,
+		"errors": []map[string]string{{"reason": reason, "message": message}}}})
+}
+
+// read answers the Gmail read calls for the account of the access token, which needs gmail.readonly.
+func (s *Server) read(response http.ResponseWriter, request *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reads++
+	token := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
+	account, ok := s.access[token]
+	if !ok {
+		writeJSON(response, http.StatusUnauthorized, map[string]any{"error": map[string]any{"code": 401, "message": "Request had invalid authentication credentials."}})
+		return
+	}
+	if len(s.ReadFailures) > 0 {
+		failure := s.ReadFailures[0]
+		s.ReadFailures = s.ReadFailures[1:]
+		gmailFailure(response, failure.Status, failure.Reason, "scripted failure")
+		return
+	}
+	if !strings.Contains(" "+s.scopes[token]+" ", " https://www.googleapis.com/auth/gmail.readonly ") {
+		gmailFailure(response, http.StatusForbidden, "insufficientPermissions", "Request had insufficient authentication scopes.")
+		return
+	}
+	query := request.URL.Query()
+	mailbox := s.inbox[account]
+	path := strings.TrimPrefix(request.URL.Path, "/gmail/v1/users/me/")
+	switch {
+	case path == "profile":
+		writeJSON(response, http.StatusOK, map[string]any{"emailAddress": account, "messagesTotal": len(mailbox), "historyId": strconv.FormatInt(s.history, 10)})
+	case path == "history":
+		start, err := strconv.ParseInt(query.Get("startHistoryId"), 10, 64)
+		if err != nil {
+			gmailFailure(response, http.StatusBadRequest, "invalidArgument", "Invalid startHistoryId")
+			return
+		}
+		if start < s.historyFloor {
+			gmailFailure(response, http.StatusNotFound, "notFound", "Requested entity was not found.")
+			return
+		}
+		// One record per page, so a test sees paging.
+		var records []map[string]any
+		next := ""
+		for index, message := range mailbox {
+			if message.history <= start || (query.Get("labelId") != "" && !contains(message.labels, query.Get("labelId"))) {
+				continue
+			}
+			if query.Get("pageToken") != "" {
+				skip, _ := strconv.Atoi(query.Get("pageToken"))
+				if index < skip {
+					continue
+				}
+			}
+			if len(records) == 1 {
+				next = strconv.Itoa(index)
+				break
+			}
+			records = append(records, map[string]any{"id": strconv.FormatInt(message.history, 10), "messagesAdded": []map[string]any{
+				{"message": map[string]any{"id": message.id, "threadId": message.id, "labelIds": message.labels}}}})
+		}
+		answer := map[string]any{"historyId": strconv.FormatInt(s.history, 10)}
+		if len(records) > 0 {
+			answer["history"] = records
+		}
+		if next != "" {
+			answer["nextPageToken"] = next
+		}
+		writeJSON(response, http.StatusOK, answer)
+	case path == "messages":
+		var after int64
+		if value, found := strings.CutPrefix(query.Get("q"), "after:"); found {
+			after, _ = strconv.ParseInt(value, 10, 64)
+		}
+		var listed []map[string]string
+		for index := len(mailbox) - 1; index >= 0; index-- {
+			message := mailbox[index]
+			if message.at.Unix() > after && (query.Get("labelIds") == "" || contains(message.labels, query.Get("labelIds"))) {
+				listed = append(listed, map[string]string{"id": message.id, "threadId": message.id})
+			}
+		}
+		writeJSON(response, http.StatusOK, map[string]any{"messages": listed, "resultSizeEstimate": len(listed)})
+	case strings.HasPrefix(path, "messages/"):
+		id := strings.TrimPrefix(path, "messages/")
+		for _, message := range mailbox {
+			if message.id == id {
+				writeJSON(response, http.StatusOK, map[string]any{"id": message.id, "threadId": message.id, "labelIds": message.labels,
+					"raw": base64.URLEncoding.EncodeToString(message.raw), "internalDate": strconv.FormatInt(message.at.UnixMilli(), 10),
+					"historyId": strconv.FormatInt(message.history, 10)})
+				return
+			}
+		}
+		gmailFailure(response, http.StatusNotFound, "notFound", "Requested entity was not found.")
+	default:
+		http.NotFound(response, request)
+	}
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

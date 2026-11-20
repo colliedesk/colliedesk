@@ -450,6 +450,8 @@ type MessageDelivery struct {
 const (
 	ViaPlatform  = "platform"
 	ViaWorkspace = "workspace"
+	// ViaGmail marks mail read from the channel's connected Gmail inbox; authentication is Gmail's own verdict.
+	ViaGmail = "gmail"
 	// ViaWebForm marks a message typed into the public web form: the address was never verified.
 	ViaWebForm = "web_form"
 	// ViaProblemReport marks a report an agent filed with "Report a problem": the sender is a signed-in agent.
@@ -462,7 +464,7 @@ type IncomingEmail struct {
 	Authentication string `json:"authentication"`
 	// CC are the other addresses on the Cc line, without our own; mail stored before they were kept has none.
 	CC []string `json:"cc,omitempty"`
-	// Via is how the message arrived: ViaPlatform, ViaWorkspace or ViaWebForm. Mail stored before this field
+	// Via is how the message arrived: ViaPlatform, ViaWorkspace, ViaGmail or ViaWebForm. Mail stored before this field
 	// existed has none.
 	Via         string            `json:"via,omitempty"`
 	Attachments []EmailAttachment `json:"attachments"`

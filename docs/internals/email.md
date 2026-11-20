@@ -386,9 +386,9 @@ Code: `internal/google` (OAuth with PKCE, Gmail `messages.send`, no SDK), `inter
 stand-in tests and `cmd/google-stand-in` use), `internal/tokenseal`, `store/mailbox-connections.go`,
 `httpapi/gmail-handlers.go`, `emailoutbox/gmail.go`.
 
-- **Send only.** Scopes are `gmail.send` (sensitive, no CASA) plus `openid email`: `gmail.send` cannot read
-  the address it sends from (`users.getProfile` needs a read scope), and the ID token names it. Inbound
-  stays forwarding. Mailbox sync (`gmail.modify`, restricted, CASA) is phase B.
+- **Send only by default.** Scopes are `gmail.send` (sensitive, no CASA) plus `openid email`: `gmail.send` cannot
+  read the address it sends from (`users.getProfile` needs a read scope), and the ID token names it. Inbound
+  stays forwarding unless the operator turns on reading (next section).
 - **The transport is chosen when the reply is queued** (`email_outbox.transport`, also on retry), not when it
   is sent. A reply accepted for Gmail never leaves through SMTP: no connection (disconnected meanwhile) fails
   it with `MailboxDisconnectedNote`; a failed connection fails it with the reason. A retry chooses again.
@@ -454,6 +454,46 @@ stand-in tests and `cmd/google-stand-in` use), `internal/tokenseal`, `store/mail
 - **Agents.** Connect and disconnect need `channels:manage_credentials`. A token gets the consent URL
   as `url`, but only the token's person can finish it, in a browser signed in to Colliedesk. The callback
   is NotForPeople: no token can drive a browser through Google.
+
+
+## Reading the Gmail inbox (issue #95, phase B)
+
+Code: `internal/google/read.go` (profile, `history.list`, `messages.list`, `messages.get?format=raw`),
+`internal/gmailinbox` (the reader), `store/mailbox-inbox.go`, migration `20261120120000-gmail-inbox-read`.
+
+- **Behind a server switch, off by default.** `google.read_mailbox` adds `gmail.readonly` to the consent.
+  `gmail.readonly` is restricted (Google verification with CASA), so a server whose client is verified only
+  for `gmail.send` keeps exactly its old consent. Read only: nothing in the mailbox is changed, so not
+  `gmail.modify`, which Google would refuse without a feature that uses it. A grant without the scope (the
+  person unticked it) still connects and sends; `GmailSettings.inbox` says `not_granted`.
+- **Polling, not push.** Every minute, `MailboxesToRead` (`PrivilegeMailboxInboxRead`) lists up to 50 readable
+  connections least recently read first; each is read in its own workspace. Push (`users.watch` + Pub/Sub)
+  would need a Google Cloud topic per server, which a self-hosted server should not need.
+- **From the connection on, never a backfill.** The first read lists the inbox since the connection's second
+  (`after:`, whole seconds), so mail between the consent and that read is not skipped, and stores the
+  profile's history id taken before listing. Later reads
+  list `messageAdded` records with label INBOX since it and store the new history id only after every message
+  went through the pipeline; an error reads the same records again, and the pipeline finds the duplicates by
+  Message-ID (a message without one gets the same synthetic id from the same bytes). A history id Gmail no
+  longer keeps (404) falls back to listing the inbox since the last read minus an hour, after taking the
+  profile's history id first so nothing arriving meanwhile is skipped.
+- **The same door as forwarded mail.** Each message is `email.Parse`d with `mx.google.com` as the trusted
+  authserv-id (Gmail's own stamp is the top `Authentication-Results`), marked `Gmail` (not `Direct`: it passed the
+  support mailbox, so `mail_through_mailbox` turns true as with forwarding), and given to `pipeline.Receive` like the inbound route does: own address,
+  auto-replies, bounces, rate limits and plan limits all apply. Stored as `email_meta.via = gmail`; the held
+  copy's envelope keeps `gmail`, so parsing it again believes Gmail's verdict too.
+- **Only the channel's mail.** A connection whose account is the support address takes the whole inbox; one
+  that is not (an alias of a larger account) takes only mail with the support address among its recipients.
+  Spam and drafts are skipped. A message over 25 MiB or 100 files is skipped with a log line, as the inbound
+  route refuses it.
+- **The trial does not count it.** The account's owner can put any message in their own inbox
+  (`messages.insert`), headers included, so `via = gmail` is like `via = workspace` for the first-contact rule:
+  the refusal reason is `mail_not_via_hosted_address` with its own sentence.
+- **Failure is visible and one-way only where it must be.** A revoked grant marks the connection failed, as a
+  send does. A 403 that is not a rate limit (the scope withdrawn) sets `inbox_error_code=permission`: reading
+  stops, sending goes on, and the settings say `refused`. Reconnecting clears the history, the refusal and the
+  read time (`SaveMailboxConnection`), and the reader starts again from the new connection; a read that raced
+  a reconnect stores nothing (`connected_at` must match).
 
 ## Sending through Microsoft 365 (issue #95, step 1)
 

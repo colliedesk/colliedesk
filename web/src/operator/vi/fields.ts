@@ -27,6 +27,7 @@ export const fields: Record<string, FieldWords> = {
   'resend.api_key': { label: 'Resend API key' },
   'google.client_id': { label: 'Google client ID', help: 'Tắt khi để trống.' },
   'google.client_secret': { label: 'Google client secret' },
+  'google.read_mailbox': { label: 'Đọc hộp thư đến Gmail', help: 'Xin Google quyền gmail.readonly để mail mới trong hộp thư đến tự vào, không cần chuyển tiếp. Cần Google client đã được duyệt quyền này.' },
   'microsoft.client_id': { label: 'Microsoft client ID', help: 'Tắt khi để trống.' },
   'microsoft.client_secret': { label: 'Microsoft client secret' },
   'microsoft.tenant': { label: 'Ai được kết nối', options: [['common', 'Tài khoản công việc, trường học và cá nhân'], ['organizations', 'Tài khoản công việc và trường học'], ['consumers', 'Tài khoản cá nhân (Outlook.com)']], other: 'Một tenant (ID hoặc tên miền của nó)' },

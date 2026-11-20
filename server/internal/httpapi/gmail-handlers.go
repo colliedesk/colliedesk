@@ -29,13 +29,23 @@ type gmailSettings struct {
 	// AddressMatches is false for a connection whose account is not the channel's support address;
 	// absent without a connection.
 	AddressMatches *bool `json:"address_matches,omitempty"`
+	// ReadsInbox is whether this server reads connected inboxes (google.read_mailbox); Inbox is the
+	// connection's reading, nil without one.
+	ReadsInbox bool               `json:"reads_inbox"`
+	Inbox      *domain.GmailInbox `json:"inbox"`
 }
 
 func (a *API) gmailRedirectURI() string { return a.redirectURI(a.gmail()) }
 
 func (a *API) gmailSettings(connection *domain.MailboxConnection) gmailSettings {
 	off := a.offReason(serverconfig.FeatureGmail, a.config.Google.Missing())
-	return gmailSettings{Available: off == nil, MissingSettings: []string{}, OffReason: off, RedirectURI: a.gmailRedirectURI(), Connection: connection}
+	settings := gmailSettings{Available: off == nil, MissingSettings: []string{}, OffReason: off, RedirectURI: a.gmailRedirectURI(), Connection: connection,
+		ReadsInbox: off == nil && a.config.Google.ReadMailbox}
+	if connection != nil {
+		inbox := domain.DescribeGmailInbox(*connection, settings.ReadsInbox)
+		settings.Inbox = &inbox
+	}
+	return settings
 }
 
 // connectGmail starts the consent: it records who started it and answers Google's consent address.

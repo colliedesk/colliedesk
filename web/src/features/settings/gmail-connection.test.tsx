@@ -9,6 +9,7 @@ import { gmailReturn } from './gmail-return';
 
 const available: GmailSettings = {
   available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null,
+  reads_inbox: false, inbox: null,
 };
 const connected: GmailSettings = {
   ...available,
@@ -211,4 +212,26 @@ test('every help tip of the mailbox block is named after the label it explains, 
   render(<GmailConnection gmail={other} supportAddress="support@example.com" timezone="UTC" canManage />, cloud);
   const names = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')).filter((name) => name?.startsWith('About '));
   expect(names).toEqual(['About Send from your mailbox', 'About Sender address']);
+});
+
+test('on a server that reads inboxes, a connected Gmail says new mail comes in, and a send-only one offers to allow reading', () => {
+  const reading: GmailSettings = { ...connected, reads_inbox: true,
+    inbox: { state: 'reading', read_at: '2026-10-19T08:05:00Z', message: 'New mail in this inbox comes in by itself, within about a minute, also without forwarding.' } };
+  const view = render(<GmailConnection gmail={reading} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.getByText(/brings new inbox mail in/)).toBeInTheDocument();
+  expect(screen.queryByText(/cannot read the mailbox/)).not.toBeInTheDocument();
+  expect(screen.getByTestId('gmail-inbox')).toHaveTextContent(/comes in by itself.*Last read/);
+  view.unmount();
+  const onConnect = vi.fn();
+  const sendOnly: GmailSettings = { ...reading, inbox: { state: 'not_granted', read_at: null, message: 'This connection only sends.' } };
+  render(<GmailConnection gmail={sendOnly} supportAddress="support@example.com" timezone="UTC" canManage onConnect={onConnect} />);
+  expect(screen.getByRole('note')).toHaveTextContent('This connection only sends.');
+  fireEvent.click(screen.getByRole('button', { name: 'Connect Gmail again' }));
+  expect(onConnect).toHaveBeenCalledWith('google');
+});
+
+test('a server that does not read inboxes says nothing about reading', () => {
+  render(<GmailConnection gmail={{ ...connected, inbox: { state: 'off', read_at: null, message: 'off' } }} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.queryByTestId('gmail-inbox')).not.toBeInTheDocument();
+  expect(screen.getByText(/cannot read the mailbox/)).toBeInTheDocument();
 });

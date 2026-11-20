@@ -4,6 +4,10 @@
 export const gmailMessages = {
   mailboxHeading: 'Send from your mailbox',
   mailboxDescription: 'Colliedesk can only send; it cannot read the mailbox.',
+  // On a server that reads Gmail inboxes (google.read_mailbox): Gmail sends and reads, Microsoft 365 only sends.
+  mailboxDescriptionGmailReads: 'With Gmail, Colliedesk sends your replies and brings new inbox mail in; with Microsoft 365 it only sends.',
+  gmailInboxReadAt: (when: string) => `Last read ${when}.`,
+  gmailInboxAllowReading: 'Connect Gmail again',
   mailboxWhy: 'Connect the mailbox of your support address: replies are sent from that address and a copy stays in its Sent folder. Incoming mail still arrives by forwarding.',
   mailboxAdminOnly: 'Only an admin can connect a mailbox.',
   gmailLabel: 'Gmail',
