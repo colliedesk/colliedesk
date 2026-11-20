@@ -24,6 +24,15 @@
 .md-toolbar [data-tip]::after { display: none; }
 .md-toolbar.scroll-x-fade { overflow-y: visible; }
 .md-video input { width: 100%; }
+/* Link to article opens as a popover under the button that opened it, over the text, so the text does not move;
+   near the bar's right edge it shifts left to stay inside. */
+/* No z-index on the bar itself: it would trap the phone's More formatting sheet under the article actions bar. */
+.md-bar { position: relative; }
+.md-bar > .article-link-picker { display: block; position: absolute; z-index: 30; top: calc(100% + var(--space-1)); left: clamp(var(--space-2), var(--link-at, var(--space-2)), calc(100% - min(26rem, 100% - var(--space-4)) - var(--space-2)));
+  width: min(26rem, calc(100% - var(--space-4))); }
+.md-bar > .article-link-picker .saved-reply-picker { margin: 0; }
+/* The button's tooltip would sit on the list's search box. */
+.md-bar:has(> .article-link-picker) .md-tool[data-tip]::after { display: none; }
 
 
 /* Body: CodeMirror with the app's tokens. The editor scrolls inside .cm-scroller, so it has a bounded height; its

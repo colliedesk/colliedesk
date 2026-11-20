@@ -337,3 +337,23 @@ func bestOf(n int, f func()) time.Duration {
 	}
 	return best
 }
+
+// The editor's Link to article writes /a/<n>-slug, relative to the help center: on a help center served
+// under a path that address must keep the path, or it leaves the help center.
+func TestArticleLinksToOtherArticlesStayInTheHelpCenter(t *testing.T) {
+	html, err := renderArticle("[Reset](/a/7-reset-your-password) and [Billing](/c/2-billing), not [the app](/settings) or [outside](https://example.com/a/1)", "https://desk.example.com/help/acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(html)
+	for _, want := range []string{
+		`<a href="https://desk.example.com/help/acme/a/7-reset-your-password">Reset</a>`,
+		`<a href="https://desk.example.com/help/acme/c/2-billing">Billing</a>`,
+		`<a href="/settings">the app</a>`,
+		`<a href="https://example.com/a/1">outside</a>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered %s\nwant it to hold %s", got, want)
+		}
+	}
+}

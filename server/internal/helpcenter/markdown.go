@@ -81,6 +81,9 @@ var baseKey, libraryKey = parser.NewContextKey(), parser.NewContextKey()
 
 // kbImageID matches the path an article uses for its own images, as the API writes it (lowercase):
 // the public image route looks for exactly this path in the published text.
+// helpCenterPath is an address the editor's Link to article writes: relative to the help center, not the host.
+var helpCenterPath = regexp.MustCompile(`^/[ac]/[^/]`)
+
 var kbImageID = regexp.MustCompile(`^` + regexp.QuoteMeta(domain.KBImagePath) + `([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
 
 // renderArticle turns an article's Markdown into HTML for a help center at base, with no library
@@ -248,6 +251,7 @@ func hasInline(node ast.Node) bool {
 // publicLinks rewrites the links of a text before it is rendered:
 //   - an image of the knowledge base points at the help center's public copy;
 //   - any other image becomes a link to it, since the page loads images from its own host only;
+//   - a link to an article or collection of the help center (/a/…, /c/…) keeps the help center's path;
 //   - a link whose scheme is not http, https, mailto or tel keeps its text and loses the link.
 type publicLinks struct{}
 
@@ -270,6 +274,8 @@ func (publicLinks) Transform(document *ast.Document, reader text.Reader, context
 		case *ast.Link:
 			if match := kbImageID.FindSubmatch(node.Destination); match != nil {
 				node.Destination = []byte(base + "/images/" + string(match[1]))
+			} else if helpCenterPath.Match(node.Destination) {
+				node.Destination = append([]byte(base), node.Destination...)
 			} else if !safeURL(string(node.Destination)) {
 				replace = append(replace, node)
 			}

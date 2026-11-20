@@ -102,9 +102,11 @@ the end of a published article's row opens its public page.
    - The toolbar sets the block (**Text**, **Heading 2**, **Heading 3**; the title is the article's
      Heading 1, so the text starts at Heading 2, and a `#` line written before still shows as **Heading 1**)
      and adds bold, italic, a link, numbered and bulleted lists, a quote and a table; **Insert image or
-     video** adds an [image](#images) or a [video](#videos); **⋯** (More formatting) holds
-     strikethrough, code, a checklist, a code block, a divider and redo. On a phone the toolbar keeps **Insert**, bold,
-     italic and link, and the rest is under **⋯**. With the keyboard, Tab reaches the toolbar and the
+     video** adds an [image](#images) or a [video](#videos); **Link to article** links
+     [another article](#link-another-article-from-the-editor); **⋯** (More formatting) holds
+     strikethrough, code, a checklist, a code block, a divider and redo. On a phone, and in an editor
+     narrower than 720 pixels, the toolbar keeps **Insert**, bold,
+     italic and link, and the rest, **Link to article** included, is under **⋯**. With the keyboard, Tab reaches the toolbar and the
      arrow keys move along it.
    - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
      `Ctrl+F` find and replace (`Cmd` on a Mac).
@@ -130,6 +132,22 @@ spaces.
 `Ctrl+S` (`Cmd+S` on a Mac) saves. The text holds at most 100,000 characters and a title 300. A longer
 text is never cut: the counter turns red and saving waits until you shorten it, or split it into
 two articles.
+
+### Link another article from the editor
+
+To point from one article to another, select **Link to article** in the toolbar (under **⋯** in a narrow
+editor) and choose the article. It is the same list as **Articles** in the reply box: the published
+articles in the help center's [order](#order), with a search, `Enter` or a click to pick and `Esc` to close.
+The article you are editing is not in it, and the list is empty while the help center is off.
+
+- With text selected, the selection becomes the link text: `to reset it` becomes
+  `[to reset it](/a/7-reset-your-password)`.
+- With nothing selected, the article's title is the link text, where the cursor is. Signs such as `*`
+  or `_` in a title show as written.
+
+The address is relative to the help center (`/a/7-reset-your-password`, with no host). The help center
+adds its own address in front when it shows the page, so the link works on the workspace address, under
+a path, and on a [custom domain](#custom-domain) alike. `Ctrl+Z` takes the link back out.
 
 ### Images
 

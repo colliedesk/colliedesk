@@ -109,7 +109,7 @@ export const kbMessages = {
   blockType: 'Block type',
   tools: {
     paragraph: 'Text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', code: 'Code',
-    link: 'Link', bullet: 'Bulleted list', ordered: 'Numbered list', task: 'Checklist', quote: 'Quote', codeBlock: 'Code block', table: 'Table',
+    link: 'Link', articleLink: 'Link to article', bullet: 'Bulleted list', ordered: 'Numbered list', task: 'Checklist', quote: 'Quote', codeBlock: 'Code block', table: 'Table',
     hr: 'Divider', insertImage: 'Upload', insertMedia: 'Media', insertVideo: 'Insert video', search: 'Find and replace', undo: 'Undo', redo: 'Redo',
     insertMenu: 'Insert', insertMenuMore: ' image or video', insertMenuLong: 'Insert image or video', moreFormatting: 'More formatting',
     fromLibrary: 'From the media library', fromLibraryHint: 'Pick one or more, with their alt text',
