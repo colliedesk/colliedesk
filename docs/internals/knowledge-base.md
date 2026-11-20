@@ -381,6 +381,31 @@ the same article, as Freshdesk does it, never an article of its own.
 - **History and trash are the saved reply panels** (`saved-reply-panels.tsx`), made generic with
   optional props; the change line reads the same, with `import` added.
 
+## Files
+
+- **A file is a media library row of kind `file`.** It shares the library's history, trash, purge,
+  Undo and storage count, and its bytes live in the same content-addressed storage. `kb_article_attachments`
+  (RLS, `workspace_id` in every key) lists files on an article (`translation_id` null) or a translation
+  by `position`. A draft carries its own `attachment_ids`; publishing copies them to the live rows, so a
+  published article's readers never see a list that is not published. A translation's list changes at
+  once, as its text does on a save, and a published one needs `kb_articles:publish`.
+- **The type comes from the name and the bytes together** (`media.InspectFile`): the extension picks
+  the type, and the file must start with that type's magic bytes (PDF, RTF, OLE2 for doc/xls/ppt, ZIP
+  for OOXML, OpenDocument and zip, 7z, gzip); CSV and TXT must be UTF-8 with no NUL. The content type
+  comes from the table, never from the client, so an `.exe` renamed `.pdf` is refused before it is stored.
+- **Public only while listed.** `/files/{id}/{slug}` looks the file up by id; the slug is for people.
+  The query joins a published, public article or translation that lists it, so a draft, an unpublished
+  article, a removed entry or another workspace's id answers 404. Answers carry
+  `Content-Disposition: attachment` with `filename*=UTF-8''`, `nosniff` and
+  `default-src 'none'; sandbox`, and revalidate (`no-cache`, ETag = SHA-256), so a replaced file is
+  served new on the next request.
+- **Text for search, not for export.** The first 200 KiB of a PDF (`github.com/ledongthuc/pdf`), TXT or
+  CSV goes into `kb_media.text` and its `text_search`; the help center search and AI retrieval match it
+  only through a listing article. The export leaves the text out; a restore reads the files again.
+- **Replace keeps the id.** A file is replaced in place by a file no article lists: the two rows trade
+  their bytes, so every list and address of the first keeps its id and the second holds the earlier
+  version in the trash for Undo. Images and videos are still replaced article by article.
+
 ## Traps
 
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges
@@ -406,6 +431,9 @@ the same article, as Freshdesk does it, never an article of its own.
   replacement do; taking them the other way round deadlocks against an article save.
 - **A test that inserts a translation by SQL needs a slug** (NOT NULL since the translations migration)
   and `status 'published'` if AI retrieval should read it.
+- **Two files cannot trade bytes in two plain updates.** `kb_media` has a unique index on
+  `(workspace_id, sha256)`, checked row by row, so writing a's hash into b while a still holds it
+  fails. `swapKBFileBytes` first gives a a placeholder hash made from its own id, then writes b, then a.
 - **One file can back several rows.** Storage keys are content addresses, so an image and an attachment
   with the same bytes share a file, and so can a thumbnail or poster. `DiscardObject` checks
   `kb_media.storage_key`, `thumb_storage_key` and `poster_storage_key`; without that, deleting the

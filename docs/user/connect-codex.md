@@ -73,7 +73,7 @@ summary."
 
 ## What the agent can do
 
-Colliedesk has 254 tools. The agent acts as you, with the permissions you gave the token,
+Colliedesk has 256 tools. The agent acts as you, with the permissions you gave the token,
 never more than you hold now. A tool it has the permissions for runs at once; any other is refused
 with the permission it lacks. See [Roles and permissions](roles-and-permissions.md).
 
