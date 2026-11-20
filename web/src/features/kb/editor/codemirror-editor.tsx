@@ -244,43 +244,46 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     trigger={<><Icon name="image" /><span>{t.insertMenu}</span><span className="md-insert-long">{t.insertMenuMore}</span><Icon name="chevronDown" /></>} />;
   return (
     <div ref={shell} className="md-shell" data-mode={mode} data-compact={compact ? 'true' : undefined}>
-      <div className="md-toolbar" role="toolbar" aria-label={kbMessages.formatting} onKeyDown={onToolbarKey}>
-        {compact && insertMenu}
-        {!compact && <>
-          <label className="sr-only" htmlFor={`${id}-block`}>{kbMessages.blockType}</label>
-          <select id={`${id}-block`} className="md-block" value={active?.block ?? 'paragraph'} disabled={!editing}
-            onChange={(event) => act((view) => setHeading(view, event.target.value as Block))}>
-            <option value="paragraph">{t.paragraph}</option>
-            {/* The article page shows the title as its h1, so the text offers no Heading 1; a stored one still shows here. */}
-            {active?.block === 'h1' && <option value="h1">{t.h1}</option>}
-            <option value="h2">{t.h2}</option>
-            <option value="h3">{t.h3}</option>
-          </select>
-          <span className="md-sep" aria-hidden="true" />
-        </>}
-        {compact && <span className="md-grow" />}
-        {tool('bold', t.bold, `${mod}B`, (view) => toggleMark(view, '**'), active?.strong)}
-        {tool('italic', t.italic, `${mod}I`, (view) => toggleMark(view, '*'), active?.emphasis)}
-        {tool('link', t.link, `${mod}K`, insertLink, active?.link)}
-        {!compact && tool('article', t.articleLink, '', () => setLinking(true))}
-        {!compact && <>
-          <span className="md-sep" aria-hidden="true" />
-          {tool('ordered', t.ordered, '', line('ordered'), active?.ordered)}
-          {tool('bullet', t.bullet, '', line('bullet'), active?.bullet)}
-          {tool('quote', t.quote, '', line('quote'), active?.quote)}
-          {tool('table', t.table, '', (view) => insertBlock(view, tableTemplate, [2, 8]))}
-          <span className="md-sep" aria-hidden="true" />
-          {insertMenu}
-          <span className="md-grow" />
-          {tool('search', t.search, `${mod}F`, openSearchPanel)}
-          {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
-        </>}
-        <KBMenu label={t.moreFormatting} title={t.moreFormatting} items={more} grid className="md-more" buttonClassName="md-tool" tool="more" tabIndex={stop === 'more' ? 0 : -1}
-          disabled={!editing} trigger={<Icon name="more" />} />
+      {/* The bar holds the toolbar and the article list that opens over the text just under it. */}
+      <div className="md-bar">
+        <div className="md-toolbar" role="toolbar" aria-label={kbMessages.formatting} onKeyDown={onToolbarKey}>
+          {compact && insertMenu}
+          {!compact && <>
+            <label className="sr-only" htmlFor={`${id}-block`}>{kbMessages.blockType}</label>
+            <select id={`${id}-block`} className="md-block" value={active?.block ?? 'paragraph'} disabled={!editing}
+              onChange={(event) => act((view) => setHeading(view, event.target.value as Block))}>
+              <option value="paragraph">{t.paragraph}</option>
+              {/* The article page shows the title as its h1, so the text offers no Heading 1; a stored one still shows here. */}
+              {active?.block === 'h1' && <option value="h1">{t.h1}</option>}
+              <option value="h2">{t.h2}</option>
+              <option value="h3">{t.h3}</option>
+            </select>
+            <span className="md-sep" aria-hidden="true" />
+          </>}
+          {compact && <span className="md-grow" />}
+          {tool('bold', t.bold, `${mod}B`, (view) => toggleMark(view, '**'), active?.strong)}
+          {tool('italic', t.italic, `${mod}I`, (view) => toggleMark(view, '*'), active?.emphasis)}
+          {tool('link', t.link, `${mod}K`, insertLink, active?.link)}
+          {!compact && tool('article', t.articleLink, '', () => setLinking(true))}
+          {!compact && <>
+            <span className="md-sep" aria-hidden="true" />
+            {tool('ordered', t.ordered, '', line('ordered'), active?.ordered)}
+            {tool('bullet', t.bullet, '', line('bullet'), active?.bullet)}
+            {tool('quote', t.quote, '', line('quote'), active?.quote)}
+            {tool('table', t.table, '', (view) => insertBlock(view, tableTemplate, [2, 8]))}
+            <span className="md-sep" aria-hidden="true" />
+            {insertMenu}
+            <span className="md-grow" />
+            {tool('search', t.search, `${mod}F`, openSearchPanel)}
+            {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
+          </>}
+          <KBMenu label={t.moreFormatting} title={t.moreFormatting} items={more} grid className="md-more" buttonClassName="md-tool" tool="more" tabIndex={stop === 'more' ? 0 : -1}
+            disabled={!editing} trigger={<Icon name="more" />} />
+        </div>
+        {linking && editing && <ArticleLinkPicker exclude={articleId}
+          onPick={(article) => { setLinking(false); act((view) => insertArticleLink(view, article)); }}
+          onClose={(restoreFocus) => { setLinking(false); if (restoreFocus) viewRef.current?.focus(); }} />}
       </div>
-      {linking && editing && <ArticleLinkPicker exclude={articleId}
-        onPick={(article) => { setLinking(false); act((view) => insertArticleLink(view, article)); }}
-        onClose={(restoreFocus) => { setLinking(false); if (restoreFocus) viewRef.current?.focus(); }} />}
       {picking && editing && <MediaPicker onClose={() => { setPicking(false); viewRef.current?.focus(); }}
         onUpload={() => { setPicking(false); fileInput.current?.click(); }}
         onInsert={(items) => { setPicking(false); act((view) => insertBlock(view, items.map(embedFor).join('\n\n'))); }} />}

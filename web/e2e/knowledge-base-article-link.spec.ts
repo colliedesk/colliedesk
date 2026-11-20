@@ -35,8 +35,16 @@ test('knowledge base: Link to article in the editor writes a relative link to an
   await page.keyboard.press('ControlOrMeta+End');
 
   // Two actions: the button, then the article.
+  const toolbar = page.getByRole('toolbar', { name: 'Formatting' });
+  const textTop = (await text.boundingBox())!.y;
   await page.getByRole('button', { name: 'Link to article' }).click();
   const picker = page.getByRole('dialog', { name: 'Articles' });
+  // The list opens over the text, just under the toolbar, as a popover: the text stays where it was.
+  await expect(picker).toBeVisible();
+  const bar = (await toolbar.boundingBox())!;
+  const box = (await picker.boundingBox())!;
+  expect(Math.abs(box.y - (bar.y + bar.height))).toBeLessThanOrEqual(8);
+  expect((await text.boundingBox())!.y).toBe(textTop);
   await expect(picker.getByRole('option', { name: `Billing basics ${suffix}` })).toHaveCount(0);
   await picker.getByRole('option', { name: `Reset your password ${suffix}` }).click();
   await expect(picker).toBeHidden();

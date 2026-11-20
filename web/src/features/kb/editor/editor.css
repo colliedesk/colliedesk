@@ -24,6 +24,11 @@
 .md-toolbar [data-tip]::after { display: none; }
 .md-toolbar.scroll-x-fade { overflow-y: visible; }
 .md-video input { width: 100%; }
+/* Link to article opens as a popover under the toolbar, over the text, so the text does not move. */
+.md-bar { position: relative; z-index: 2; }
+.md-bar > .article-link-picker { display: block; position: absolute; top: calc(100% + var(--space-1)); left: var(--space-2);
+  width: min(26rem, calc(100% - var(--space-4))); }
+.md-bar > .article-link-picker .saved-reply-picker { margin: 0; }
 
 
 /* Body: CodeMirror with the app's tokens. The editor scrolls inside .cm-scroller, so it has a bounded height; its
