@@ -823,8 +823,11 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	if err := rowsError("export knowledge base videos", rows); err != nil {
 		return err
 	}
+	if err := exportKBFiles(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 
-	rows, err = tx.Query(ctx, `SELECT id::text,from_media_id::text,to_media_id::text,article_ids::text[],article_versions,translations,skipped_article_ids::text[],replaced_by_agent_id::text,created_at,undone_at,undone_by_agent_id::text
+	rows, err = tx.Query(ctx, `SELECT id::text,from_media_id::text,to_media_id::text,article_ids::text[],article_versions,translations,skipped_article_ids::text[],replaced_by_agent_id::text,created_at,undone_at,undone_by_agent_id::text,in_place
 		FROM kb_media_replacements WHERE workspace_id=$1 ORDER BY created_at, id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base media replacements: %w", err)
@@ -832,7 +835,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBMediaReplacement
 		if err := rows.Scan(&record.ID, &record.FromMediaID, &record.ToMediaID, &record.ArticleIDs, &record.ArticleVersions, &record.Translations, &record.SkippedArticleIDs, &record.ReplacedByAgentID,
-			&record.CreatedAt, &record.UndoneAt, &record.UndoneByAgentID); err != nil {
+			&record.CreatedAt, &record.UndoneAt, &record.UndoneByAgentID, &record.InPlace); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base media replacements: %w", err)
 		}
