@@ -53,15 +53,19 @@ func KBFileLabel(name string) string {
 	return strings.ToUpper(strings.TrimPrefix(path.Ext(lower), "."))
 }
 
+// KBFileStem is a file's name without its extension ("Warranty form.pdf" gives "Warranty form").
+func KBFileStem(name string) string {
+	if ext := KBFileLabel(name); ext != "" && len(ext) < len(name) {
+		return name[:len(name)-len(ext)-1]
+	}
+	return name
+}
+
 // KBFileSlug is the last part of a file's public address: the name as a slug, then its extension
 // ("Warranty form.pdf" gives "warranty-form.pdf"). Only the id finds the file; the slug is for people.
 func KBFileSlug(name string) string {
 	ext := strings.ToLower(KBFileLabel(name))
-	stem := name
-	if ext != "" && len(ext) < len(name) {
-		stem = name[:len(name)-len(ext)-1]
-	}
-	slug := Slugify(stem, "file")
+	slug := Slugify(KBFileStem(name), "file")
 	ext = strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '.' {
 			return r

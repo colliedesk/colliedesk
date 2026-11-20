@@ -132,6 +132,10 @@ func chatFingerprint(articles []store.ChatKBArticle) []byte {
 		if a.Locale != "" {
 			fmt.Fprintf(sum, "\x00%s\x00%s", a.Locale, a.TextKey)
 		}
+		// So do the files its page lists.
+		if a.FilesKey != "" {
+			fmt.Fprintf(sum, "\x00files\x00%s", a.FilesKey)
+		}
 		sum.Write([]byte{1})
 	}
 	return sum.Sum(nil)

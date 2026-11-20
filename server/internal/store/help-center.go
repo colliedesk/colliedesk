@@ -423,12 +423,15 @@ type ChatKBArticle struct {
 	Version int
 	Title   string
 	Folder  string
-	// Size is the body's length in bytes; Body is read only when asked for.
+	// Size is the body's length in bytes, with the text of the files its page lists (kbFilesText);
+	// Body is read only when asked for, followed by that text.
 	Size int
 	Body string
 	// Locale is the language of Title and Body when they are a published translation shown to
 	// customers ("" the article's own text); TextKey changes with that translation.
 	Locale, TextKey string
+	// FilesKey changes with the files the page lists; "" while it lists none.
+	FilesKey string
 }
 
 // ChatKBArticles lists the articles the help center shows (publishedKBArticle) that are not kept away
@@ -460,11 +463,15 @@ func ChatKBArticlesIn(ctx context.Context, tx pgx.Tx, workspaceID string, withBo
 	if err != nil {
 		return nil, fmt.Errorf("read the help center for AI chat: %w", err)
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ChatKBArticle, error) {
+	articles, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ChatKBArticle, error) {
 		var a ChatKBArticle
 		err := row.Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey)
 		return a, err
 	})
+	if err != nil {
+		return nil, fmt.Errorf("read the help center for AI chat: %w", err)
+	}
+	return articles, withKBFiles(ctx, tx, workspaceID, articles, withBodies)
 }
 
 // ChatKBArticleIDOf is the id of the article the help center shows under a number, when ChatKBArticles
@@ -503,6 +510,9 @@ func ChatKBArticlesByIDIn(ctx context.Context, tx pgx.Tx, workspaceID string, id
 	if err != nil {
 		return nil, fmt.Errorf("read help center articles for AI chat: %w", err)
 	}
+	if err := withKBFiles(ctx, tx, workspaceID, list, true); err != nil {
+		return nil, err
+	}
 	for _, a := range list {
 		found[a.ID] = a
 	}
@@ -517,5 +527,12 @@ func ChatKBArticleByIDIn(ctx context.Context, tx pgx.Tx, workspaceID, id, locale
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ChatKBArticle{}, false, nil
 	}
-	return a, err == nil, err
+	if err != nil {
+		return ChatKBArticle{}, false, err
+	}
+	one := []ChatKBArticle{a}
+	if err := withKBFiles(ctx, tx, workspaceID, one, true); err != nil {
+		return ChatKBArticle{}, false, err
+	}
+	return one[0], true, nil
 }
