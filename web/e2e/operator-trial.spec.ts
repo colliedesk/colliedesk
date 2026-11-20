@@ -49,8 +49,9 @@ test('a trial change reverts by itself unless confirmed, and stays once confirme
   const strip = page.getByRole('region', { name: 'Trial in progress' });
   await expect(strip).toBeVisible({ timeout: 15_000 });
   await expect(strip.getByRole('timer')).toHaveText(/^0:0\d$/);
-  // Nobody confirms: the server reverts it, and the band follows within its next look at the status.
-  await expect(strip).toBeHidden({ timeout: 45_000 });
+  // Nobody confirms: the server reverts it on its next reload (every 5 seconds), and the band, which reads the
+  // status again once its time is up, goes within seconds instead of on its 30-second read.
+  await expect(strip).toBeHidden({ timeout: 15_000 });
   expect(mustColliedesk(['config', 'get', 'trusted_proxies'], { databaseURL: trialURL, origin })).toBe('trusted_proxies=127.0.0.0/8');
   await page.getByRole('link', { name: 'History', exact: true }).click();
   await expect(page.getByText(/trial-auto-revert/).first()).toBeVisible();

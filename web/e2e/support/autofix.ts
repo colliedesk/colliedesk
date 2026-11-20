@@ -35,6 +35,8 @@ export function autofixEnv(): Record<string, string> {
     APP_ORIGIN: origin, GITHUB_APP_ID: app.id, GITHUB_APP_SLUG: app.slug, GITHUB_APP_PRIVATE_KEY: readFileSync(keyFile, 'utf8'),
     GITHUB_APP_CLIENT_ID: app.clientID, GITHUB_APP_CLIENT_SECRET: app.clientSecret, GITHUB_APP_WEBHOOK_SECRET: app.webhookSecret,
     COLLIEDESK_E2E_GITHUB_URL: githubStandIn.url, COLLIEDESK_E2E_CURSOR_URL: cursorStandIn.url,
+    // A sent Cursor run is read every second, not every 15 seconds, so a journey waits on the run, not the clock.
+    COLLIEDESK_E2E_CURSOR_READ_SECONDS: '1',
   };
 }
 
@@ -62,7 +64,11 @@ export const github = {
 export interface CreatedIssue { number: number; title: string; body: string; author: string; state: string; comments: { body: string; author: string }[]; assignees: string[] }
 
 // cursor scripts the stand-in's next runs and reads what it received.
+type CursorStep = { status: string; result?: string; branch?: string; pr_url?: string };
+
 export const cursor = {
-  script: (steps: { status: string; result?: string; branch?: string; pr_url?: string }[]) => post(cursorStandIn.url, '/stand-in/script', steps),
+  // script sets the steps of the agents created from now on, or with agent those of one already created; no steps
+  // keep a run CREATING.
+  script: (steps: CursorStep[], agent?: string) => post(cursorStandIn.url, `/stand-in/script${agent ? `?agent=${encodeURIComponent(agent)}` : ''}`, steps),
   state: async () => await (await fetch(`${cursorStandIn.url}/stand-in/state`)).json() as { creates: { agent_id: string; repo: string; prompt: string }[]; cancels: string[]; agents: number },
 };

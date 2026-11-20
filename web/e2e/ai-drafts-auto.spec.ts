@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
 import { databaseFor, psql, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
+import { untilShown } from './support/clock';
 import { createWorkspaceWithSlug } from './support/workspace';
 
 const baseURL = servers.main;
@@ -27,7 +28,9 @@ async function draftModel() {
 test('an admin lets drafts write themselves; a customer email gets a draft the team uses and sends, and AI sends nothing', async ({ page }) => {
   // Three drafts wait for an AI worker tick (up to 5 s each) and two of them for the card's next check
   // (every 10 s while a draft is being written): up to 35 s of waiting by design, past the default 30 s.
+  // The page's clock runs ahead to the card's next check.
   test.setTimeout(60_000);
+  await page.clock.install();
   const suffix = uniqueSuffix();
   const support = `support-${suffix}@acme.example`;
   const workspace = createWorkspaceWithSlug(`E2E Auto Drafts ${suffix}`, `admin-${suffix}@acme.example`);
@@ -69,7 +72,8 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     await page.goto(`${baseURL}/conversations/${conversation}`);
     const card = page.getByRole('region', { name: 'Automatic AI draft' });
     // On this 720-pixel screen it starts folded, with its buttons; Show draft opens it.
-    await card.getByRole('button', { name: 'Show draft' }).click({ timeout: 30_000 });
+    await untilShown(page, () => expect(card.getByRole('button', { name: 'Show draft' })).toBeVisible({ timeout: 1_000 }));
+    await card.getByRole('button', { name: 'Show draft' }).click();
     await expect(card).toContainText('Hi Erin, the office printer is back');
     expect(psql(`SELECT count(*) FROM messages WHERE conversation_id='${conversation}' AND kind='outgoing'`)).toBe('0');
     await card.getByRole('button', { name: 'Use draft' }).click();
@@ -87,7 +91,7 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     customerWrites('Thanks, and the scanner?');
     psql(`UPDATE ai_tasks SET next_run_at=now() WHERE conversation_id='${conversation}' AND kind='draft' AND automatic AND state='queued'`);
     await page.reload();
-    await expect(card.getByRole('button', { name: 'Use draft' })).toBeVisible({ timeout: 30_000 });
+    await untilShown(page, () => expect(card.getByRole('button', { name: 'Use draft' })).toBeVisible({ timeout: 1_000 }));
     psql(`INSERT INTO ai_tasks(workspace_id,kind,conversation_id,automatic,state,started_at,finished_at)
       SELECT workspace_id,'draft',id,true,'done',now()-g*interval '1 hour',now() FROM conversations, generate_series(1,4) g WHERE id='${conversation}'`);
     customerWrites('Hello? Anyone there for the scanner too?');
@@ -114,6 +118,7 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
 
 test('on a phone the automatic draft waits on one line: the messages keep the screen, and Send stays on it while the agent writes', async ({ page }) => {
   test.setTimeout(60_000);
+  await page.clock.install();
   // The mail server sends replies by SMTP, as a real install does: no "outgoing email is not configured" notice
   // stands between the conversation and the reply box.
   const baseURL = servers.mail;
@@ -152,7 +157,7 @@ test('on a phone the automatic draft waits on one line: the messages keep the sc
     for (const viewport of [{ width: 390, height: 844 }, { width: 412, height: 915 }]) {
       await page.setViewportSize(viewport);
       await page.goto(`${baseURL}/conversations/${conversation}`);
-      await expect(card.getByRole('button', { name: 'Use draft' })).toBeVisible({ timeout: 30_000 });
+      await untilShown(page, () => expect(card.getByRole('button', { name: 'Use draft' })).toBeVisible({ timeout: 1_000 }));
       await expect(card).not.toContainText('Hi Erin, the office printer is back');
       expect((await card.boundingBox())!.height, `${viewport.width}: the draft is one line`).toBeLessThan(60);
       expect(await reading(), `${viewport.width}: the messages keep over half the screen`).toBeGreaterThan(0.55);
