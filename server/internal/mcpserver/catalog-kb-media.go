@@ -14,7 +14,7 @@ const (
 		`"help_center":{"type":"array","items":{"type":"string","enum":["logo","favicon"]},"description":"What the help center shows it as; empty when it does not. Such an item is in use: never unused, never purged, even in the trash."}}}`
 
 	kbMediaSchema = `{"type":"object","required":["id","kind","content_type","size","url","width","height","kept","in_trash","created_at","updated_at","team_text"],"properties":{` +
-		`"id":{"type":"string"},"kind":{"type":"string","enum":["image","video"]},"content_type":{"type":"string"},"size":{"type":"integer","description":"Bytes."},` +
+		`"id":{"type":"string"},"kind":{"type":"string","enum":["image","video","file"]},"content_type":{"type":"string"},"size":{"type":"integer","description":"Bytes."},` +
 		`"url":{"type":"string","description":"The path to put in an article: ![alt](url) for an image."},` +
 		`"width":{"type":["integer","null"]},"height":{"type":["integer","null"]},"duration_ms":{"type":["integer","null"]},"codecs":{"type":"array","items":{"type":"string"}},"has_poster":{"type":"boolean"},` +
 		`"has_thumbnail":{"type":"boolean"},"kept":{"type":"boolean","description":"Never deleted by the purge of unused items."},"in_trash":{"type":"boolean"},` +
@@ -31,7 +31,7 @@ func kbMediaListSpec() Spec {
 			`usage "unused" lists what no live article's current text names (an article in the trash or an older version does not count as use) and adds a summary of their count and bytes; ` +
 			`"missing_alt" lists images with no alt text, to write some with colliedesk_kb_media_update. query matches the name or alt text. ` + kbMediaTextNotice,
 		REST: []string{"GET /api/v1/kb/media"},
-		Input: `{"type":"object","additionalProperties":false,"properties":{"kind":{"type":"string","enum":["image","video"]},"query":{"type":"string","maxLength":200},` +
+		Input: `{"type":"object","additionalProperties":false,"properties":{"kind":{"type":"string","enum":["image","video","file"]},"query":{"type":"string","maxLength":200},` +
 			`"usage":{"type":"string","enum":["in_use","unused","missing_alt"]},"sort":{"type":"string","enum":["newest","oldest","name","largest"]},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string","description":"next_cursor of the previous page."}}}`,
 		Output: `{"type":"object","required":["media","next_cursor"],"properties":{"media":{"type":"array","items":` + kbMediaSchema + `},` +

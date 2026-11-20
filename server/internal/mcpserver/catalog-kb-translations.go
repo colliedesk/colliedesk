@@ -22,14 +22,14 @@ const (
 		`"last_change":` + kbTranslationChangeSchema + `,"url":{"type":"string","description":"Its public address while customers see its language (it opens once it and its article are published); in a hidden language, the article's own page in the primary language."},` +
 		`"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}}}`
 
-	kbTranslationSchema = `{"type":"object","required":["article_id","locale","status","outdated","in_trash","slug","updated_at","url","team_text","language_visible","original"],"properties":{` +
+	kbTranslationSchema = `{"type":"object","required":["article_id","locale","status","outdated","in_trash","slug","updated_at","url","team_text","language_visible","original","attachments"],"properties":{` +
 		`"article_id":{"type":"string"},"locale":{"type":"string"},"status":{"type":"string","enum":["draft","published"]},"outdated":{"type":"boolean"},"outdated_at":{"type":["string","null"]},` +
 		`"in_trash":{"type":"boolean"},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string","description":"Pass it back to change, delete or restore the translation."},` +
 		`"last_change":` + kbTranslationChangeSchema + `,"url":{"type":"string"},"team_text":` + kbTeamTextSchema + `,` +
 		`"language_visible":{"type":"boolean","description":"Whether the help center shows this language to customers (colliedesk_help_center_languages_set)."},` +
 		`"original":{"type":"object","description":"The article it translates, as it is now.","required":["article_id","number","locale","status","collection","version","team_text"],"properties":{` +
 		`"article_id":{"type":"string"},"number":{"type":"integer"},"locale":{"type":"string","description":"The help center's primary language."},"status":{"type":"string"},` +
-		`"collection":{"type":"string","description":"The name of its collection."},"version":{"type":"integer"},"updated_at":{"type":"string"},"team_text":` + kbTeamTextSchema + `}}}}`
+		`"collection":{"type":"string","description":"The name of its collection."},"version":{"type":"integer"},"updated_at":{"type":"string"},"team_text":` + kbTeamTextSchema + `}},"attachments":` + kbAttachmentsSchema + `}}`
 
 	kbTranslationOutput = `{"type":"object","required":["translation"],"properties":{"translation":` + kbTranslationSchema + `}}`
 

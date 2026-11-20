@@ -85,6 +85,7 @@ type restKBArticle struct {
 	PurgesAt      string                `json:"purges_at"`
 	HasDraft      bool                  `json:"has_draft"`
 	Draft         *restKBDraft          `json:"draft"`
+	Attachments   []restKBAttachment    `json:"attachments"`
 	AIExclusion   *struct {
 		At string      `json:"at"`
 		By *restPerson `json:"by"`
@@ -153,6 +154,7 @@ type kbArticleOut struct {
 	HasSourceHTML bool                  `json:"has_source_html"`
 	AIExclusion   *kbAIExclusionOut     `json:"ai_exclusion"`
 	Translations  []kbTranslationRowOut `json:"translations"`
+	Attachments   []kbAttachmentOut     `json:"attachments"`
 }
 
 // kbTeamText is what the team wrote of an article: its title, text and search fields.
@@ -172,7 +174,7 @@ type kbAIExclusionOut struct {
 func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
-		ShowContents: article.ShowContents, InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}}
+		ShowContents: article.ShowContents, InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}, Attachments: kbAttachmentsView(article.Attachments)}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, kbTranslationRow(translation))
 	}

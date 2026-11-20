@@ -22,7 +22,8 @@ func kbVideoUploadStartSpec() Spec {
 			`The plan's storage and the server's disk must have room first. At most 3 uploads are in progress in a workspace; the parts are thrown away after 24 hours.`,
 
 		REST: []string{"POST /api/v1/kb/media-uploads"},
-		Input: `{"type":"object","additionalProperties":false,"required":["size"],"properties":{"size":{"type":"integer","minimum":1},"name":{"type":"string","maxLength":200},` +
+		Input: `{"type":"object","additionalProperties":false,"required":["size"],"properties":{"size":{"type":"integer","minimum":1},` +
+			`"kind":{"type":"string","enum":["video","file"],"description":"file starts a file of up to 25 MiB to list under articles (colliedesk_kb_file_upload takes up to 5 MiB in one call); it needs name with its extension. Default video."},"name":{"type":"string","maxLength":200},` +
 			`"alt":{"type":"string","maxLength":500,"description":"The video's title for screen readers."},"keep":{"type":"boolean","description":"Keep it in the library even if no article ever uses it."}}}`,
 		Output: kbUploadSchema,
 		run:    kbVideoUploadStart,
