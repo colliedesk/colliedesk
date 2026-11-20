@@ -103,8 +103,8 @@ jobs:
           go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
           # Five regular shards of three go test processes each, and three latency shards that run their
-          # gates as one process (about 100 seconds of gates in run 39903507509), then regular tests if
-          # their gates end early. Each test weighs its time in CI (go-test-timings.json);
+          # gates as one process (about 240 seconds of gates in all, runs of 2026-11-20), then regular
+          # tests if their gates end early. Each test weighs its time in CI (go-test-timings.json);
           # go-test-shard.py says how a shard's time is estimated, go-test-timings.py how to refresh it.
           python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 --latency-shards 3 --parallel 2.7 --process-seconds 11 --timings ../.github/go-test-timings.json < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
       - name: Wait for test services
@@ -164,8 +164,9 @@ jobs:
       - name: Unit tests
         working-directory: web
         # The type check runs in the e2e job, and the bundle budget after the e2e job's own Vite build
-        # of the same commit: Vitest is this job's long pole.
-        run: corepack pnpm test
+        # of the same commit: Vitest is this job's long pole. Outside watch mode Vitest starts one
+        # worker fewer than the runner's 4 CPUs; the job runs nothing else, so it takes all four.
+        run: corepack pnpm test --maxWorkers=4
   # The browser tests outside onboarding, in shards: one job ran them in 48 of its 117 seconds
   # (run 39902604105) and set the end of the whole run. Each shard runs whole test files, which
   # e2e-shard.py balances by their measured time (.github/e2e-test-timings.json): Playwright's own
