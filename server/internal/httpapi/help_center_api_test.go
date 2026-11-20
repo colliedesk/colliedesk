@@ -126,7 +126,12 @@ func TestHelpCenterShowsOnlyPublishedArticlesOfItsOwnWorkspace(t *testing.T) {
 	if response := visit(site, base+"/images/"+hidden.ID, "192.0.2.10"); response.Code != http.StatusOK {
 		t.Fatalf("image of a published article status=%d", response.Code)
 	}
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+edited.ID, map[string]any{"updated_at": edited.UpdatedAt, "body_md": "No picture now."}, adminA, http.StatusOK, nil)
+	var unpublished kbDraftedArticle
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+edited.ID, map[string]any{"updated_at": edited.UpdatedAt, "body_md": "No picture now."}, adminA, http.StatusOK, &unpublished)
+	if response := visit(site, base+"/images/"+hidden.ID, "192.0.2.10"); response.Code != http.StatusOK {
+		t.Fatalf("image of the published text, dropped only in its draft, status=%d", response.Code)
+	}
+	kbPublishDraft(t, api, adminA, edited.ID, kbSeen(unpublished), nil)
 	if response := visit(site, base+"/images/"+hidden.ID, "192.0.2.10"); response.Code != http.StatusNotFound {
 		t.Fatalf("image dropped from the text status=%d, want 404", response.Code)
 	}
@@ -481,16 +486,18 @@ func TestEveryArticleAnswerCarriesTheAddressTheHelpCenterServesItAt(t *testing.T
 			}
 			// A new slug is a new address; the answer to the change already has it.
 			var renamed kbArticleView
-			kbCall(t, f.api, http.MethodPatch, "/api/v1/kb/articles/"+created.ID, map[string]any{"updated_at": created.UpdatedAt, "slug": "reset"}, f.adminA, http.StatusOK, &renamed)
-			if want := fmt.Sprintf("%s/a/%d-reset", home, created.Number); renamed.URL != want {
-				t.Fatalf("update url=%q, want %q", renamed.URL, want)
+			kbPublishChange(t, f.api, f.adminA, created.ID, map[string]any{"updated_at": created.UpdatedAt, "slug": "reset"}, &renamed)
+			want = fmt.Sprintf("%s/a/%d-reset", home, created.Number)
+			if renamed.URL != want {
+				t.Fatalf("publish url=%q, want %q", renamed.URL, want)
 			}
-			var restored kbArticleView
+			// Restoring a version of a published article fills its draft: the address stays until it is published.
+			var restored kbDraftedArticle
 			kbCall(t, f.api, http.MethodPost, "/api/v1/kb/articles/"+created.ID+"/versions/1/restore", map[string]any{"updated_at": renamed.UpdatedAt}, f.adminA, http.StatusOK, &restored)
 			if restored.URL != want {
 				t.Fatalf("version restore url=%q, want %q", restored.URL, want)
 			}
-			kbCall(t, f.api, http.MethodDelete, "/api/v1/kb/articles/"+created.ID+"?updated_at="+url.QueryEscape(restored.UpdatedAt), nil, f.adminA, http.StatusNoContent, nil)
+			kbCall(t, f.api, http.MethodDelete, "/api/v1/kb/articles/"+created.ID+"?updated_at="+url.QueryEscape(kbSeen(restored)), nil, f.adminA, http.StatusNoContent, nil)
 			var trash struct {
 				Items []kbTrashItem `json:"items"`
 			}

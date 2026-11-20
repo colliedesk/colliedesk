@@ -49,7 +49,7 @@ func TestArticleSearchTitleAndDescriptionReachTheHelpCenter(t *testing.T) {
 		}
 	}
 	var cleared seoArticleView
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, map[string]any{"updated_at": article.UpdatedAt, "seo_title": "", "seo_description": ""}, admin, http.StatusOK, &cleared)
+	kbPublishChange(t, api, admin, article.ID, map[string]any{"updated_at": article.UpdatedAt, "seo_title": "", "seo_description": ""}, &cleared)
 	if cleared.SEOTitle != "" || cleared.SEODescription != "" {
 		t.Fatalf("cleared seo fields = %q, %q", cleared.SEOTitle, cleared.SEODescription)
 	}
@@ -68,8 +68,10 @@ func TestArticleSearchTitleAndDescriptionReachTheHelpCenter(t *testing.T) {
 	if first.Version != 1 || first.SEOTitle != "Reset an Acme password" {
 		t.Fatalf("versions = %+v", versions.Items)
 	}
+	var drafted kbDraftedArticle
+	kbCall(t, api, http.MethodPost, fmt.Sprintf("/api/v1/kb/articles/%s/versions/1/restore", article.ID), map[string]any{"updated_at": cleared.UpdatedAt}, admin, http.StatusOK, &drafted)
 	var restored seoArticleView
-	kbCall(t, api, http.MethodPost, fmt.Sprintf("/api/v1/kb/articles/%s/versions/1/restore", article.ID), map[string]any{"updated_at": cleared.UpdatedAt}, admin, http.StatusOK, &restored)
+	kbPublishDraft(t, api, admin, article.ID, kbSeen(drafted), &restored)
 	if restored.SEOTitle != "Reset an Acme password" || restored.SEODescription != "Choose a new password in two steps." {
 		t.Fatalf("restored seo fields = %q, %q", restored.SEOTitle, restored.SEODescription)
 	}
@@ -85,10 +87,10 @@ func TestArticleSearchTitleAndDescriptionReachTheHelpCenter(t *testing.T) {
 	}
 }
 
-// TestArticleSearchFieldsOfAPublishedArticleNeedASendToken: a published article's search title
-// reaches the public help center, so a token that may edit articles but not publish files an agent
-// request; on a draft it changes nothing public and goes through.
-func TestArticleSearchFieldsOfAPublishedArticleNeedASendToken(t *testing.T) {
+// TestArticleSearchFieldsOfAPublishedArticleNeedASendTokenToGoLive: a published article's search title
+// reaches the public help center, so a token that may edit articles but not publish saves it as
+// unpublished changes and cannot publish them; a send token can.
+func TestArticleSearchFieldsOfAPublishedArticleNeedASendTokenToGoLive(t *testing.T) {
 	api, service, _, _ := testAPIWithStorage(t)
 	admin := createSession(t, api, service, "SEO Tiers", "admin@seo-tiers.example.com")
 	draftToken := issueCustomToken(t, api, admin, "Editor", "kb_articles:read", "kb_articles:update").Token
@@ -98,17 +100,22 @@ func TestArticleSearchFieldsOfAPublishedArticleNeedASendToken(t *testing.T) {
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Live", "body_md": "x", "status": "published"}, admin, http.StatusCreated, &published)
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Draft", "body_md": "x"}, admin, http.StatusCreated, &draft)
 
-	change := map[string]any{"updated_at": published.UpdatedAt, "seo_title": "Proposed title"}
-	if response := request(t, api, http.MethodPatch, "/api/v1/kb/articles/"+published.ID, change, draftToken, nil); response.Code != http.StatusForbidden {
-		t.Fatalf("editor token on a published article status=%d body=%s, want 403", response.Code, response.Body.String())
+	var saved kbDraftedArticle
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+published.ID, map[string]any{"updated_at": published.UpdatedAt, "seo_title": "Proposed title"}, draftToken, http.StatusOK, &saved)
+	if saved.Draft == nil || saved.Draft.SEOTitle != "Proposed title" {
+		t.Fatalf("editor token draft = %+v", saved.Draft)
+	}
+	publish := map[string]any{"updated_at": kbSeen(saved)}
+	if response := request(t, api, http.MethodPost, "/api/v1/kb/articles/"+published.ID+"/draft/publish", publish, draftToken, nil); response.Code != http.StatusForbidden {
+		t.Fatalf("editor token publishing status=%d body=%s, want 403", response.Code, response.Body.String())
 	}
 	var unchanged seoArticleView
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+published.ID, nil, admin, http.StatusOK, &unchanged)
 	if unchanged.SEOTitle != "" {
-		t.Fatalf("a request changed the article before approval: %q", unchanged.SEOTitle)
+		t.Fatalf("a draft changed the article before it was published: %q", unchanged.SEOTitle)
 	}
 	var sent seoArticleView
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+published.ID, change, send, http.StatusOK, &sent)
+	kbPublishDraft(t, api, send, published.ID, kbSeen(saved), &sent)
 	if sent.SEOTitle != "Proposed title" {
 		t.Fatalf("send token seo title = %q", sent.SEOTitle)
 	}

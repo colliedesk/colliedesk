@@ -6702,6 +6702,7 @@ paths:
         - {name: q, in: query, schema: {type: string, maxLength: 200}}
         - {name: status, in: query, schema: {type: string, enum: [draft, published]}}
         - {name: collection_id, in: query, description: Only the articles directly in this collection., schema: {type: string, format: uuid}}
+        - {name: has_draft, in: query, description: 'true: only the published articles with unpublished changes (has_draft).', schema: {type: boolean}}
         - {name: sort, in: query, description: The order without `q`; ignored with `q`., schema: {type: string, enum: [recent, manual]}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
@@ -6780,7 +6781,11 @@ paths:
       x-permission: kb_articles:read
       description: >
         One article with its Markdown text and its stored translations. It also finds an article in
-        the trash (`deleted_at` is then set).
+        the trash (`deleted_at` is then set). A published article with unpublished changes has
+        `has_draft` and `draft`; `version=draft` answers the article as it will be once they are
+        published (404 when it has none).
+      parameters:
+        - {name: version, in: query, description: 'draft: the title, slug, text, SEO fields and collections of the unpublished changes in place of the published ones.', schema: {type: string, enum: [draft]}}
       responses:
         '200':
           description: The article
@@ -6792,10 +6797,14 @@ paths:
       x-permission: kb_articles:update
       description: >
         Change the title, slug, text, collection (or the collections it is listed in), status (publish or
-        unpublish), search title or meta description. Send back the
-        `updated_at` you read; when the article was saved since, nothing changes and the answer is 409
-        `changed_elsewhere`. Every change adds a version to the history. An article in the trash is
-        404. At most 64 KiB of JSON.
+        unpublish), search title or meta description. On a draft article the change is made at once. On
+        a published article it is saved as unpublished changes (`draft`, a version of kind `draft`): the
+        help center, its search, sitemap.xml, llms.txt and AI keep the published text until
+        `POST /api/v1/kb/articles/{id}/draft/publish`, and saving again changes the same draft.
+        `status: draft` on a published article unpublishes it, with its unpublished changes, and needs
+        `kb_articles:publish`. Send back the `updated_at` you read, the draft's when there is one; when
+        it was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change
+        adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON.
       requestBody:
         required: true
         content:
@@ -6827,7 +6836,8 @@ paths:
       x-permission: kb_articles:delete
       description: >
         Move the article to the trash: it leaves the list and the help center, and can be restored for
-        30 days. Send the `updated_at` you read (409 `changed_elsewhere`).
+        30 days, with its unpublished changes. Send the `updated_at` you read, the draft's when there is
+        one (409 `changed_elsewhere`).
       parameters:
         - {name: updated_at, in: query, required: true, schema: {type: string, format: date-time}}
       responses:
@@ -6932,8 +6942,10 @@ paths:
       x-permission: kb_articles:update
       description: >
         Make the title, slug and text of an earlier version current again, as a new version; the
-        status and collection stay as they are now, and nothing in the history is rewritten. Send back
-        the `updated_at` you read (409 `changed_elsewhere`). An article in the trash is 404.
+        status and collection stay as they are now, and nothing in the history is rewritten. On a
+        published article they become its unpublished changes (`draft`), to publish with
+        `POST /api/v1/kb/articles/{id}/draft/publish`. Send back the `updated_at` you read, the draft's
+        when there is one (409 `changed_elsewhere`). An article in the trash is 404.
       requestBody:
         required: true
         content:
@@ -6952,6 +6964,60 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/{id}/draft:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    delete:
+      operationId: discardKBArticleDraft
+      x-permission: kb_articles:update
+      description: >
+        Throw away the unpublished changes of a published article. The published article and its
+        history stay as they are; the versions that saved the draft stay in the history and can be
+        restored. Send the draft's `updated_at` (409 `changed_elsewhere`). 404 when the article has no
+        unpublished changes.
+      parameters:
+        - {name: updated_at, in: query, required: true, schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: The published article, without unpublished changes
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/{id}/draft/publish:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: publishKBArticleDraft
+      x-permission: kb_articles:publish
+      description: >
+        Put the unpublished changes of a published article on the help center: they become the
+        article (a version of kind `edit`), the draft is gone, and translations are marked outdated
+        when the title or text changed. Send the draft's `updated_at` (409 `changed_elsewhere`). 404
+        when the article has no unpublished changes; 409 `collection_in_trash` when the draft moves
+        it to a collection in the trash.
+        A repeat with the same Idempotency-Key answers the first publish again (200) and changes nothing.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+      responses:
+        '200':
+          description: The published article
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/translations:
     get:
       operationId: listKBLanguage
@@ -11454,8 +11520,8 @@ components:
         version: {type: integer, minimum: 1}
         kind:
           type: string
-          enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include]
-          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change).'
+          enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft]
+          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change).'
         restored_from_version: {type: [integer, 'null'], description: The version a restore copied.}
         changed_by:
           description: The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person.
@@ -11490,7 +11556,7 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1, description: 'Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>.'}
@@ -11520,6 +11586,7 @@ components:
             It is the one to put in a reply. The help center shows the article there only while the
             article is published and the help center is on; a new slug is a new address, and the old
             one still leads to the article.
+        has_draft: {type: boolean, description: 'The article is published and has unpublished changes (GET /api/v1/kb/articles/{id} returns them as draft).'}
     KBArticleAIExclusion:
       type: object
       required: [at, by]
@@ -11703,7 +11770,7 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description]
       properties:
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
         id: {type: string, format: uuid}
@@ -11723,6 +11790,12 @@ components:
             - {type: 'null'}
             - {$ref: '#/components/schemas/KBArticleChange'}
         url: {type: string, format: uri, description: 'The public address of the article, as in KBArticleSummary.'}
+        has_draft: {type: boolean, description: 'The article is published and has unpublished changes, in draft.'}
+        draft:
+          description: 'The unpublished changes of a published article; null when it has none. The help center shows the published fields until they are published.'
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBArticleDraft'}
         body_md: {type: string}
         seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
         seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
@@ -11741,9 +11814,28 @@ components:
           type: array
           description: 'Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through.'
           items: {type: string, format: uuid}
+    KBArticleDraft:
+      type: object
+      description: 'The unpublished changes of a published article: every field as it will be once published.'
+      required: [title, slug, body_md, seo_title, seo_description, collection_id, collection_ids, created_at, updated_at, updated_by]
+      properties:
+        title: {type: string}
+        slug: {type: string}
+        body_md: {type: string}
+        seo_title: {type: string}
+        seo_description: {type: string}
+        collection_id: {type: string, format: uuid, description: Its home collection once published.}
+        collection_ids: {type: array, minItems: 1, items: {type: string, format: uuid}, description: 'Every collection it will be listed in, its home first.'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time, description: 'Send it back to save, publish or discard the draft.'}
+        updated_by:
+          description: Who saved it last; null when that person was removed.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
     TrashedKBArticle:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, deleted_at, deleted_by, purges_at]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, deleted_at, deleted_by, purges_at]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
@@ -11762,6 +11854,7 @@ components:
             - {type: 'null'}
             - {$ref: '#/components/schemas/KBArticleChange'}
         url: {type: string, format: uri, description: 'The public address of the article, as in KBArticleSummary.'}
+        has_draft: {type: boolean, description: 'It has unpublished changes, which come back with it.'}
         deleted_at: {type: string, format: date-time}
         deleted_by:
           oneOf:
@@ -11773,7 +11866,7 @@ components:
       required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id, seo_title, seo_description]
       properties:
         version: {type: integer, minimum: 1}
-        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include]}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft]}
         restored_from_version: {type: [integer, 'null']}
         changed_by:
           oneOf:

@@ -21,6 +21,9 @@ type contractKB struct {
 	trashArticleID, trashArticleSeen string
 	versionArticleID                 string
 	versionArticleSeen               string
+	// Published articles with unpublished changes: one to publish, one to discard.
+	publishDraftID, publishDraftSeen string
+	discardDraftID, discardDraftSeen string
 	imageID, imageSeen               string
 	// Library items: one to move to the trash, one to delete, two already in the trash.
 	trashMediaID, deleteMediaID  string
@@ -102,6 +105,8 @@ func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 	var edited kbArticleView
 	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+versioned.ID, map[string]any{"updated_at": versioned.UpdatedAt, "body_md": "Second"}, admin, http.StatusOK, &edited)
 	kb.versionArticleID, kb.versionArticleSeen = versioned.ID, edited.UpdatedAt
+	kb.publishDraftID, kb.publishDraftSeen = contractDraft(t, api, admin, collection.ID, "Contract article with changes to publish")
+	kb.discardDraftID, kb.discardDraftSeen = contractDraft(t, api, admin, collection.ID, "Contract article with changes to discard")
 	kbCall(t, api, http.MethodPut, "/api/v1/help-center/languages", map[string]any{"languages": contractLanguages}, admin, http.StatusOK, nil)
 	var translation kbTranslationView
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+article.ID+"/translations", map[string]any{"locale": "fr", "title": "Article de contrat", "body_md": "x"}, admin, http.StatusCreated, &translation)
@@ -116,6 +121,19 @@ func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 	kb.esTrashSeen = translation.UpdatedAt
 	kbCall(t, api, http.MethodPut, "/api/v1/kb/collections/"+collection.ID+"/translations/de", map[string]any{"name": "Vertragssammlung"}, admin, http.StatusOK, nil)
 	return kb
+}
+
+// contractDraft makes a published article with unpublished changes and answers its id and the
+// draft's updated_at.
+func contractDraft(t *testing.T, api http.Handler, admin, collectionID, title string) (string, string) {
+	t.Helper()
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": collectionID, "title": title, "body_md": "Published", "status": "published"})
+	var saved kbDraftedArticle
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, map[string]any{"updated_at": article.UpdatedAt, "body_md": "Unpublished"}, admin, http.StatusOK, &saved)
+	if saved.Draft == nil {
+		t.Fatalf("%s has no draft", title)
+	}
+	return article.ID, saved.Draft.UpdatedAt
 }
 
 // contractLanguages are the contract workspace's languages besides English.
@@ -156,6 +174,8 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/kb/articles/{id}/versions/{version}/restore":    {"/api/v1/kb/articles/" + kb.versionArticleID + "/versions/1/restore", map[string]any{"updated_at": kb.versionArticleSeen}, admin, 200, ""},
 		"POST /api/v1/kb/articles/{id}/ai-exclusion":                  {"/api/v1/kb/articles/" + kb.articleID + "/ai-exclusion", nil, admin, 200, ""},
 		"DELETE /api/v1/kb/articles/{id}/ai-exclusion":                {"/api/v1/kb/articles/" + kb.versionArticleID + "/ai-exclusion", nil, admin, 200, ""},
+		"POST /api/v1/kb/articles/{id}/draft/publish":                 {"/api/v1/kb/articles/" + kb.publishDraftID + "/draft/publish", map[string]any{"updated_at": kb.publishDraftSeen}, admin, 200, ""},
+		"DELETE /api/v1/kb/articles/{id}/draft":                       {"/api/v1/kb/articles/" + kb.discardDraftID + "/draft?updated_at=" + url.QueryEscape(kb.discardDraftSeen), nil, admin, 200, ""},
 		"POST /api/v1/kb/images":                                      {path: kbImagesPath, token: admin, status: 201},
 		"GET /api/v1/kb/images/{id}":                                  {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},
 		"GET /api/v1/kb/media":                                        {path: "/api/v1/kb/media?usage=unused&sort=largest", token: admin, status: 200},
