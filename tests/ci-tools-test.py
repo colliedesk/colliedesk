@@ -838,6 +838,52 @@ class WebShards(unittest.TestCase):
         self.assertIn('run: corepack pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }}', web)
 
 
+class StaticChecks(unittest.TestCase):
+    """The type and API checks, go vet and migration validation run once each, after the tests of a
+    job that ends well before the gate. On the last e2e shard they started its tests later and made
+    it the gate. They run in the foreground there: beside three Vitest workers a page test missed a
+    wait, and the last Go shards time their latency gates alone."""
+
+    def setUp(self):
+        self.ci = (ROOT / '.github/workflows/ci.yml').read_text()
+        self.jobs = {name: '\n'.join(body) for name, body in workflow_jobs(ROOT / '.github/workflows/ci.yml')}
+
+    def step(self, job, command):
+        steps = re.split(r'\n      - ', self.jobs[job])
+        found = [s for s in steps if command in s]
+        self.assertEqual(len(found), 1, f'{command} must be one step of the {job} job')
+        return found[0], steps.index(found[0]), steps
+
+    def test_each_check_runs_once_in_the_whole_workflow(self):
+        for command in ('corepack pnpm typecheck', 'go vet ./... ../docs/...', 'go run ./cmd/migration-check --repo=..'):
+            self.assertEqual(self.ci.count(command), 1, command)
+        self.assertNotIn('typecheck', self.jobs['e2e'])
+        self.assertNotIn('go vet', self.jobs['e2e'])
+
+    def test_the_type_check_follows_vitest_on_one_web_shard(self):
+        step, index, steps = self.step('web', 'corepack pnpm typecheck')
+        vitest = next(i for i, s in enumerate(steps) if 'corepack pnpm test --shard=' in s)
+        self.assertGreater(index, vitest)
+        self.assertIn('if: ${{ !cancelled() && matrix.shard == strategy.job-total }}', step)
+        self.assertNotIn('ci-background', step)
+
+    def test_vet_and_migrations_follow_the_tests_of_a_regular_go_shard(self):
+        step, index, steps = self.step('go', 'go vet ./... ../docs/...')
+        self.assertIn('go run ./cmd/migration-check --repo=..', step)
+        tests = next(i for i, s in enumerate(steps) if s.startswith('name: Test\n'))
+        self.assertGreater(index, tests)
+        self.assertIn('if: ${{ !cancelled() && matrix.shard == 1 }}', step)
+        self.assertNotIn('ci-background', step)
+        latency = int(re.search(r'--latency-shards (\d+)', self.jobs['go']).group(1))
+        shards = len(re.search(r'shard: \[([\d, ]+)\]', self.jobs['go']).group(1).split(','))
+        self.assertLessEqual(1, shards - latency, 'shard 1 must be a regular shard, not a latency shard')
+
+    def test_ci_ok_waits_for_the_jobs_that_run_them(self):
+        needs = re.search(r'^    needs:\s*\[([^\]]*)\]', self.jobs['ci-ok'], re.M)
+        self.assertIsNotNone(needs, self.jobs['ci-ok'][:400])
+        self.assertTrue({'go', 'web'} <= {n.strip() for n in needs.group(1).split(',')})
+
+
 class BundleBudget(unittest.TestCase):
     def test_e2e_checks_the_bundle_it_built(self):
         e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
