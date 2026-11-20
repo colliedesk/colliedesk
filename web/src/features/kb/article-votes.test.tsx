@@ -51,7 +51,7 @@ test('a reset asks first, starts the count from 0, and the earlier count stays r
   const box = await screen.findByRole('region', { name: 'Readers\' votes' });
   fireEvent.click(await within(box).findByRole('button', { name: 'Reset votes' }));
   const confirm = screen.getByRole('alertdialog', { name: 'Reset the votes of "Reset your password"?' });
-  expect(confirm).toHaveTextContent('The count starts again from 0. The votes and what readers wrote are deleted; the earlier count stays in the history.');
+  expect(confirm).toHaveTextContent('The count starts again from 0. The current votes and what readers wrote stop counting and leave this list; the earlier count stays in the history.');
   fireEvent.click(within(confirm).getByRole('button', { name: 'Reset votes' }));
   expect(await within(box).findByText('No votes yet.')).toBeInTheDocument();
   expect(within(box).getByText('Before Nov 20, 2026: 13 out of 17, reset by Ada')).toBeInTheDocument();

@@ -40,7 +40,7 @@ func kbArticleVotesResetSpec() Spec {
 		Name:  "colliedesk_kb_article_votes_reset",
 		Title: "Reset the votes of a knowledge base article",
 		Description: `Start the article's "Was this article helpful?" count again from 0, for example after rewriting it. ` +
-			`The votes and the lines readers wrote are deleted and cannot be undone; the counts the page showed are kept under resets with who reset them. ` +
+			`The current votes and the lines readers wrote stop counting and leave this answer, which cannot be undone; the counts the page showed are kept under resets with who reset them. ` +
 			`Calling it again with nothing counted changes nothing.` + "\n\n" + untrustedNotice,
 		Idempotent: true,
 		REST:       []string{"POST /api/v1/kb/articles/{id}/votes/reset"},

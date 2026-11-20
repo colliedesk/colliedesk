@@ -14,7 +14,7 @@ export const votesMessages = {
   showAll: (count: number) => `Show all ${count}`,
   reset: 'Reset votes',
   resetHeading: (title: string) => `Reset the votes of "${title}"?`,
-  resetBody: 'The count starts again from 0. The votes and what readers wrote are deleted; the earlier count stays in the history.',
+  resetBody: 'The count starts again from 0. The current votes and what readers wrote stop counting and leave this list; the earlier count stays in the history.',
   resetFailed: 'Could not reset the votes. Try again.',
   cancel: 'Cancel',
   history: 'Earlier counts',
