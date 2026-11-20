@@ -60,6 +60,13 @@ test('knowledge base: Link to article in the editor writes a relative link to an
   const stored = await (await page.request.get(`${baseURL}/api/v1/kb/articles/${editing.id}`)).json() as { body_md: string };
   expect(stored.body_md).toBe(`To change it, [Reset your password ${suffix}](${address})`);
 
+  // On the help center the link opens the other article, under whatever path the help center lives.
+  const reader = await page.context().newPage();
+  await reader.goto(editing.url);
+  await reader.locator('.prose').getByRole('link', { name: `Reset your password ${suffix}` }).click();
+  await expect(reader).toHaveURL(target.url);
+  await reader.close();
+
   // With Find open at the top of the text, the list still sits on top: its search box takes the click.
   await text.click();
   await page.keyboard.press('ControlOrMeta+f');

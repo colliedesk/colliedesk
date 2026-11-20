@@ -48,3 +48,25 @@ test('every selection gets its own link', () => {
   insertArticleLink(view, reset);
   expect(view.state.doc.toString()).toBe('[a](/a/12-reset-your-password) b[Reset your password](/a/12-reset-your-password)');
 });
+
+test('a selection is Markdown and keeps its meaning: escapes and code stay as written', () => {
+  const escaped = viewOf('\\*a\\*', EditorSelection.single(0, 5));
+  insertArticleLink(escaped, reset);
+  expect(escaped.state.doc.toString()).toBe('[\\*a\\*](/a/12-reset-your-password)');
+  const code = viewOf('run `a]b` now', EditorSelection.single(4, 9));
+  insertArticleLink(code, reset);
+  expect(code.state.doc.toString()).toBe('run [`a]b`](/a/12-reset-your-password) now');
+});
+
+test('a title is plain text: Markdown signs in it show as written', () => {
+  const view = viewOf('', EditorSelection.single(0));
+  insertArticleLink(view, { title: 'Use *.csv or my_file `x`', url: 'https://acme.example.com/a/4-csv' });
+  expect(view.state.doc.toString()).toBe('[Use \\*.csv or my\\_file \\`x\\`](/a/4-csv)');
+});
+
+test('right after an exclamation mark the link stays a link, not an image', () => {
+  const view = viewOf('Read this!', EditorSelection.single(10));
+  insertArticleLink(view, reset);
+  expect(view.state.doc.toString()).toBe('Read this\\![Reset your password](/a/12-reset-your-password)');
+  expect(view.state.selection.main.head).toBe(view.state.doc.length);
+});

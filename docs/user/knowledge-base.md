@@ -142,10 +142,12 @@ The article you are editing is not in it, and the list is empty while the help c
 
 - With text selected, the selection becomes the link text: `to reset it` becomes
   `[to reset it](/a/7-reset-your-password)`.
-- With nothing selected, the article's title is the link text, where the cursor is.
+- With nothing selected, the article's title is the link text, where the cursor is. Signs such as `*`
+  or `_` in a title show as written.
 
-The address is relative (`/a/7-reset-your-password`, with no host), so the link works on the workspace
-address and on a [custom domain](#custom-domain) alike. `Ctrl+Z` takes the link back out.
+The address is relative to the help center (`/a/7-reset-your-password`, with no host). The help center
+adds its own address in front when it shows the page, so the link works on the workspace address, under
+a path, and on a [custom domain](#custom-domain) alike. `Ctrl+Z` takes the link back out.
 
 ### Images
 

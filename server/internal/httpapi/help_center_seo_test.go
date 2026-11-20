@@ -27,7 +27,7 @@ func TestHelpCenterHostServesItsOwnRobotsSitemapAndLLMsFiles(t *testing.T) {
 	guides := kbCollection(t, f.api, f.adminA, map[string]any{"name": "Guides"})
 	image := uploadKBImage(t, f.api, f.adminA, kbPNG, http.StatusCreated)
 	start := kbArticle(t, f.api, f.adminA, map[string]any{"collection_id": guides.ID, "title": "Start here", "status": "published",
-		"body_md": "Sign in **first**.\n\n<!-- internal: ask Sam -->\n\n![Form](" + image.URL + ")"})
+		"body_md": "Sign in **first**.\n\n<!-- internal: ask Sam -->\n\n![Form](" + image.URL + ")\n\nThen read [Billing](/a/9-billing)."})
 	draft := kbArticle(t, f.api, f.adminA, map[string]any{"collection_id": guides.ID, "title": "Secret draft", "body_md": "marigold"})
 	bravo := kbCollection(t, f.api, f.adminB, map[string]any{"name": "Bravo shelf"})
 	bravoArticle := kbArticle(t, f.api, f.adminB, map[string]any{"collection_id": bravo.ID, "title": "Bravo only", "status": "published", "body_md": "bravo"})
@@ -59,7 +59,9 @@ func TestHelpCenterHostServesItsOwnRobotsSitemapAndLLMsFiles(t *testing.T) {
 	if !strings.HasPrefix(md.Header().Get("Content-Type"), "text/markdown") || md.Header().Get("Link") != "<"+startURL+`>; rel="canonical"` {
 		t.Fatalf("markdown type=%q link=%q", md.Header().Get("Content-Type"), md.Header().Get("Link"))
 	}
-	wantPage(t, md, http.StatusOK, []string{"# Start here\n", "Sign in **first**.", "![Form](https://" + hostA + "/help/images/" + image.ID + ")"},
+	wantPage(t, md, http.StatusOK, []string{"# Start here\n", "Sign in **first**.", "![Form](https://" + hostA + "/help/images/" + image.ID + ")",
+		// A link the editor wrote to another article is on the help center's address too.
+		"[Billing](https://" + hostA + "/help/a/9-billing)"},
 		[]string{"/api/v1/", "internal: ask Sam", testOriginHost})
 	// The number finds the article; another slug moves to the current Markdown address.
 	if moved := visit(site, fmt.Sprintf("/help/a/%d-old.md", start.Number), "192.0.2.80", "Host", hostA); moved.Code != http.StatusMovedPermanently ||
