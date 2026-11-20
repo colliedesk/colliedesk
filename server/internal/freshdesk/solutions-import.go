@@ -358,10 +358,11 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 			return r.keepKBArticle(ctx, key, existing)
 		}
 	}
-	if len(article.Attachments) > 0 {
-		r.warn("kb_article_attachments_not_imported", "This Freshdesk article has files attached. Knowledge base articles hold text and images only, so the files were not imported; download them from Freshdesk if they are still needed.", key)
-	}
 	images, pending, failed, err := r.fetchKBImages(ctx, key, article.Description)
+	if err != nil {
+		return err
+	}
+	files, failedFiles, err := r.fetchKBFiles(ctx, key, article.Attachments)
 	if err != nil {
 		return err
 	}
@@ -420,9 +421,12 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 	if err != nil {
 		return fail(err)
 	}
-	ledgerStatus, errText := ledgerDone, ""
-	if failed > 0 {
-		ledgerStatus, errText = ledgerFailed, fmt.Sprintf("%d image(s) of this article failed; see their entries. The article keeps their Freshdesk links until a rerun brings them over", failed)
+	if err := r.saveKBFiles(ctx, tx, target, nil, files); err != nil {
+		return fail(fmt.Errorf("list the article's files: %w", err))
+	}
+	ledgerStatus, errText := ledgerDone, kbPartsFailed("article", failed, failedFiles)
+	if errText != "" {
+		ledgerStatus = ledgerFailed
 	}
 	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entityKBArticle, sourceID: key, targetID: &target, status: ledgerStatus, errText: errText, sourceUpdatedAt: &updated}); err != nil {
 		return err
@@ -639,6 +643,10 @@ func (r *run) importKBTranslation(ctx context.Context, translation kbTranslation
 	if err != nil {
 		return err
 	}
+	files, failedFiles, err := r.fetchKBFiles(ctx, key, translation.Attachments)
+	if err != nil {
+		return err
+	}
 	tx, err := r.begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin translation import: %w", err)
@@ -680,9 +688,13 @@ func (r *run) importKBTranslation(ctx context.Context, translation kbTranslation
 		_ = tx.Rollback(ctx)
 		return keep()
 	}
-	ledgerStatus, errText := ledgerDone, ""
-	if failed > 0 {
-		ledgerStatus, errText = ledgerFailed, fmt.Sprintf("%d image(s) of this translation failed; see their entries", failed)
+	locale := translation.language
+	if err := r.saveKBFiles(ctx, tx, articleID, &locale, files); err != nil {
+		return fail(fmt.Errorf("list the translation's files: %w", err))
+	}
+	ledgerStatus, errText := ledgerDone, kbPartsFailed("translation", failed, failedFiles)
+	if errText != "" {
+		ledgerStatus = ledgerFailed
 	}
 	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entityKBTranslation, sourceID: key, targetID: &articleID, status: ledgerStatus, errText: errText, sourceUpdatedAt: &updated}); err != nil {
 		return err
