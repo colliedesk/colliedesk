@@ -412,6 +412,44 @@ Migration `20261120141816-kb-article-templates`; code `store/kb-templates.go`, `
 - **Insert template is Markdown only.** It inserts at the CodeMirror cursor; it is hidden in
   **Preview**.
 
+## Review and approval
+
+Migration `20261120184320-kb-article-reviews`; code `store/kb-reviews.go`, `kb-review-gate.go`,
+`kb-review-decide.go`, `kb-review-edits.go`, `kb-review-translations.go`, `kb-review-mail.go`,
+`httpapi/kb-review-*handlers.go`, `kbreviewmail/`, MCP `catalog-kb-reviews.go`, web
+`features/kb/review-*.tsx`, `reviews-page.tsx`, `approval-state.ts`. Issue #674.
+
+- **The gate runs after the write, in its transaction.** `guardKBPublish` compares the text as it
+  was and as it is: text that becomes live with a new hash needs an approved review of exactly that
+  hash where any collection before or after the change requires approval. Every article and
+  translation write calls it (`changeKBArticleLocked`, `CreateKBArticle`, `afterKBTranslationWrite`),
+  so bulk publish, MCP and a status `PATCH` cannot skip it. Live text that keeps its hash passes:
+  undeleting a published article brings back what was live
+  (`TestUndeletingPublishedTextNeedsNoNewApprovalAndTrashedTextCannotChange`).
+- **The hash is the whole reviewed text.** `KBContent.Hash` is the SHA-256 of title, slug, body, SEO
+  title and description and the sorted collection ids. A move to another collection is a new text.
+- **State is derived.** In review and Approved are not columns of the article: an open review, or an
+  approved one whose hash is still the pending text. `approves_pending` caches the second for the
+  Approved list and `settleKBReviewAfterEdit` keeps it right after every write.
+- **Four-eyes is by person, not by token.** A decision compares the requester's agent id, so neither
+  their session nor any of their tokens decides; the decider must be listed in `kb_review_reviewers`;
+  `kbTextAuthors` refuses a reviewer who wrote a text-changing version since the last published one
+  (`TestATokensDraftIsApprovedOnlyByAnotherTeammate`, `TestAReviewerMustBeAnotherTeammateWhoMayPublish`).
+- **An edit supersedes, then reopens without the editor.** The new review copies the sender and note,
+  points at the old one (`supersedes_review_id`) and drops the reviewer who edited, so a second
+  person still approves. With nobody left it stays superseded
+  (`TestAnEditInReviewReopensTheReviewWithoutTheReviewerWhoEdited`).
+- **A translation has no draft layer.** Its pending text is a translation in draft status; saving a
+  published one where approval is required is refused (`ErrKBTranslationApprovalRequired`) and the
+  error says to set it to draft first.
+- **Mail goes through the outbox columns.** `kb_review_reviewers.email` and `kb_reviews.author_email`
+  move `queued` → `sending` → `sent` (or `rejected`, or `off` for a deactivated person or a closed
+  review); the `kbreviewmail` sender claims each row right before it sends, so two servers never send
+  the same one, and a claim left `sending` goes again after a while
+  (`TestEachReviewerIsEmailedOnceAndTheAuthorHearsTheDecision`, `TestAFailedSendGoesAgainLater`).
+- **Not gated on purpose.** A media replacement already needs `kb_articles:publish` and changes every
+  article that shows the item; a Freshdesk import writes the source's status. Neither opens a review.
+
 ## Traps
 
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges

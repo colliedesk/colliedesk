@@ -42,8 +42,10 @@ There are 62 permissions. **Admin** holds them all; **Agent** holds the 42 below
 "Admin only" describes the two built-in roles; a role you make can hold any of them.
 `kb_articles:publish` is needed for anything that changes the public help center: publishing an
 article or its [unpublished changes](knowledge-base.md#unpublished-changes), unpublishing, trashing or
-restoring a published one, and renaming, moving or deleting a collection. Saving or discarding
-unpublished changes needs `kb_articles:update` only. Resetting an article's
+restoring a published one, and renaming, moving or deleting a collection. It is also what a teammate
+needs to [review and approve](knowledge-base.md#review-before-publishing) an article, and to turn that
+approval on or off. Saving or discarding unpublished changes, and sending them for review, need
+`kb_articles:update` only. Resetting an article's
 [readers' votes](knowledge-base.md#votes-from-readers) changes the count its page shows, but needs
 only `kb_articles:update`: it changes no words, and the earlier counts stay readable. Some things
 need no permission at all: signing out, seeing and revoking your own
@@ -132,7 +134,9 @@ of yours loses it too, and if you are deactivated, your tokens stop working. **S
 shows each token as "Follows role …", "Fixed · N permissions", or "Stopped" with the reason. Revoke a
 token there. More about tokens: [Sessions and devices](sessions.md#agent-tokens).
 
-An AI agent does what its token's permissions allow, at once. Nothing waits for approval. An invite,
+An AI agent does what its token's permissions allow, at once. Nothing waits for approval, except
+publishing an article where your team [requires a teammate's approval](knowledge-base.md#review-before-publishing):
+there the agent sends it for review, and a token never approves a text its maker sent. An invite,
 a new inbound email secret or an export link is returned to the agent so it can give it to you.
 Connecting Gmail, Microsoft 365 or GitHub, and paying, still happen in your browser: the agent gets
 the address to open, and only you can finish it, signed in to Colliedesk. A reply the agent may not
