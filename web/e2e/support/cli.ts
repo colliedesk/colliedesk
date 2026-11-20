@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { randomInt } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkoutID, ports, scratchDir } from './checkout';
+import { checkoutID, ports, repoRoot, scratchDir } from './checkout';
 import type { ChildProcess } from 'node:child_process';
 
 // Ports and URLs shared with playwright.config.ts.
@@ -49,14 +49,21 @@ export interface CommandResult { status: number | null; stdout: string; stderr: 
 
 interface CommandOptions { origin?: string; databaseURL?: string; env?: Record<string, string>; tags?: string }
 
-const binDir = join(scratchDir, 'bin');
+// Inside the checkout, like its ports and databases, so two checkouts never share a binary. The e2e
+// CI job links both kinds here in the background; a later `go build` finds them current.
+const binDir = join(repoRoot, '.cache', 'e2e');
 const built = new Set<string>();
+
+// binaryPath is where the CLI built with tags lives; the Playwright servers run it too.
+export function binaryPath(tags = ''): string {
+  return `${binDir}/colliedesk${tags ? `-${tags}` : ''}`;
+}
 
 // binary builds the real CLI from source once per test worker; tags 'e2e' adds only the seams of
 // end-to-end builds (cmd/collie/e2e_*.go: the fake-Freshdesk, Google and Microsoft networks, the
 // loopback chat type), each off until its environment turns it on.
 export function binary(tags = ''): string {
-  const path = `${binDir}/colliedesk${tags ? `-${tags}` : ''}`;
+  const path = binaryPath(tags);
   if (!built.has(path)) {
     mkdirSync(binDir, { recursive: true });
     const result = spawnSync('go', ['build', ...(tags ? ['-tags', tags] : []), '-o', path, './cmd/collie'], {
