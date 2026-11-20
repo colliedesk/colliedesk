@@ -249,6 +249,31 @@ func TestACursorFixIsSentFollowedToItsPullRequestAndThenLeftToGitHub(t *testing.
 	}
 }
 
+func TestFirstReadsShortensHowSoonASentRunIsReadAgain(t *testing.T) {
+	e := newEnv(t)
+	e.worker.Cursor.FirstReads = 2 * time.Second
+	e.cursor.Script(cursortest.Step{Status: "RUNNING"},
+		cursortest.Step{Status: "FINISHED", Result: "Fixed the checkout button.", Branch: "cursor/fix-checkout", PRURL: "https://github.com/acme/shop-web/pull/42"})
+	fix := e.send(t, e.a)
+	if e.tick(t) != 1 {
+		t.Fatal("the due fix was not leased")
+	}
+	e.clock.Add(time.Second)
+	if e.tick(t) != 0 {
+		t.Fatal("the run was read again before FirstReads passed")
+	}
+	e.clock.Add(2 * time.Second)
+	e.tick(t)
+	if work := e.work(t, e.a, fix.ID); work.State != autofix.Working {
+		t.Fatalf("three seconds after the create: %s", work.State)
+	}
+	e.clock.Add(3 * time.Second)
+	e.tick(t)
+	if work := e.work(t, e.a, fix.ID); work.State != autofix.PROpen {
+		t.Fatalf("three seconds after the first read: %s", work.State)
+	}
+}
+
 func TestASecondCreateOfTheSameFixReadsTheAgentBackAndSendsNothingTwice(t *testing.T) {
 	e := newEnv(t)
 	fix := e.send(t, e.a)

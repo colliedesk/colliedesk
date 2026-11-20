@@ -330,7 +330,11 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		g.Go(func(ctx context.Context) { sync.Run(ctx, githubsync.ReconcileEvery) })
 		// Fixes sent to Cursor: the worker reads each repository on GitHub before a fix leaves for it.
 		fixes := &autofixworker.Worker{Cursor: p.cursor, Repos: sync}
-		g.Go(func(ctx context.Context) { fixes.Run(ctx, 5*time.Second) })
+		every := 5 * time.Second
+		if cursorReadEvery > 0 {
+			every = cursorReadEvery
+		}
+		g.Go(func(ctx context.Context) { fixes.Run(ctx, every) })
 	}
 	if billingOn {
 		g.Go(func(ctx context.Context) { refreshFoundingAtStart(ctx, api) })

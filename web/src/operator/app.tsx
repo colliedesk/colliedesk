@@ -160,7 +160,7 @@ function Shell({ data, ended, path, reload, children }: { data: { me: Me; status
       </header>
       {/* The shell's second row: the strips every screen shares (empty most of the time). */}
       <div className="ops-strips">{data?.status.trial && !ended && <Suspense fallback={null}>
-        <TrialStrip trial={data.status.trial} totp={data.me.operator.totp_enabled} onDecided={() => reload?.()} /></Suspense>}</div>
+        <TrialStrip trial={data.status.trial} totp={data.me.operator.totp_enabled} onDecided={() => reload?.()} onTimeUp={reload} /></Suspense>}</div>
       <div className="ops-body">
         <nav className="ops-nav" aria-label={m.consoleName}>
           <div><p className="settings-group-label">{m.navServer}</p><ul><NavLink to="/" path={path} icon={<HomeIcon />}>{m.overview}</NavLink></ul></div>

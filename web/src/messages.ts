@@ -345,6 +345,7 @@ export const messages = {
   invites: 'Invites',
   copied: 'Link copied',
   loading: 'Loading workspace…',
+  slowConnection: 'Still loading. Your connection to Colliedesk is slow.',
   error: 'Colliedesk could not load this view.',
   settingsActionFailed: 'The settings action failed. Try again.',
   cancel: 'Cancel',

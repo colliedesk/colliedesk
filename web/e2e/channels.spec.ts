@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
+import { untilShown } from './support/clock';
 import { waitForMail } from './support/mailpit';
 
 // docs/user/channels.md: add a channel, turn it off and on again, and what a reply does while its channel is off.
@@ -79,6 +80,7 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
 // refused first for an address the first one has, made the default; a new conversation sent from the
 // first; mail to the second answered from it; two forms on one site.
 test('channels: a second mailbox is its own channel, a new conversation leaves from the one chosen, and its replies leave from the mailbox the mail reached', async ({ page }) => {
+  await page.clock.install();
   const suffix = uniqueSuffix();
   const support = `support-${suffix}@acme.example`;
   const billing = `billing-${suffix}@acme.example`;
@@ -148,8 +150,11 @@ test('channels: a second mailbox is its own channel, a new conversation leaves f
       'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', '', 'Where is my invoice?', ''].join('\r\n')),
   });
   expect(inbound.status()).toBe(200);
+  // The inbox list read a moment ago is reused until its next refresh; the page's clock runs ahead to it.
   await page.getByRole('link', { name: 'Inbox' }).click();
-  await page.getByRole('button', { name: new RegExp(`Invoice ${suffix}`) }).click();
+  const invoice = page.getByRole('button', { name: new RegExp(`Invoice ${suffix}`) });
+  await untilShown(page, () => expect(invoice).toBeVisible({ timeout: 1_000 }));
+  await invoice.click();
   await expect(page.getByText('Replies send from Billing.')).toBeVisible();
   await page.getByLabel('Message body').last().fill(`Attached, Erin (${suffix}).`);
   await page.getByRole('button', { name: 'Send reply' }).click();

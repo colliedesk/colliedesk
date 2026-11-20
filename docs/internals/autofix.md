@@ -84,9 +84,10 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
 
 - Everything Colliedesk knows of Cursor's Cloud Agents API v1 (public beta) is in
   `server/internal/cursor/client.go`; `cursor/cursortest` stands in for it in tests, and `cmd/cursor-stand-in`
-  serves it to the e2e server (`POST /stand-in/script` sets the next runs, `GET /stand-in/state` reads what
-  Cursor received, never the key). Cursor
-  v1 has no webhook yet, so fixes sent to Cursor are polled.
+  serves it to the e2e server (`POST /stand-in/script` sets the next runs, `?agent=` one agent's, `GET /stand-in/state`
+  reads what Cursor received, never the key). Cursor v1 has no webhook yet, so fixes sent to Cursor are polled.
+  The e2e build reads `COLLIEDESK_E2E_CURSOR_READ_SECONDS`: the worker then looks for due fixes, and rereads a
+  run in its first five minutes, every that many seconds (release builds: 5 and 15).
 - The key is sealed with `MAILBOX_TOKEN_KEYS` under the context `autofix:cursor:<workspace id>`: a
   sealed key copied into another workspace's row does not open. It is tried (`GET /v1/me`) before it
   is kept, so a wrong key never replaces a working one; nothing of it is shown again, not the last
