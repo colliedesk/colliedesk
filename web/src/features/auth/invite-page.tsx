@@ -60,11 +60,12 @@ export function InvitePage({ preview, cloud, pending = false, planLimited = fals
 }
 
 // LinkPageLoading holds the card while the page asks what a link is, so a person never reads one page's
-// words before the other's.
-export function LinkPageLoading() {
+// words before the other's. label names the wait for screen readers.
+export function LinkPageLoading({ label }: { label?: string }) {
   return (
     <main className="redeem-page invite-page" aria-busy="true">
-      <section className="redeem-panel"><div className="brand-lockup"><LogoMark size={20} /><span>{messages.brand}</span></div></section>
+      <section className="redeem-panel"><div className="brand-lockup"><LogoMark size={20} /><span>{messages.brand}</span></div>
+        {label && <p role="status" className="sr-only">{label}</p>}</section>
     </main>
   );
 }

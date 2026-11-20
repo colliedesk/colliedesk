@@ -5,7 +5,7 @@ import { messages } from '../../messages';
 import { PanelRightIcon, PenIcon } from '../../ui/icons';
 import { lazyPart, Part } from '../../ui/lazy-part';
 import { BackToApp } from '../settings/back-to-app';
-import { SettingsMenuSlot } from '../settings/settings-nav';
+import { SettingsMenuSlot } from '../settings/settings-nav-link';
 import { AccountMenu } from './account-menu';
 import type { WorkspaceSwitch } from './account-menu';
 import type { PaletteSource } from './palette-entries';

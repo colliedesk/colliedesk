@@ -4,8 +4,9 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
-While the list or a timeline loads it says **Loading workspace…**. When that takes more than 5 seconds, it
-adds "Still loading. Your connection to Colliedesk is slow." and a **Try again** button, which stops waiting
+While the list or a timeline loads, grey rows and messages hold its place, so nothing moves when the
+conversations arrive; a screen reader hears **Loading workspace…**. When that takes more than 5 seconds, it
+says "Loading workspace… Still loading. Your connection to Colliedesk is slow." and shows a **Try again** button, which stops waiting
 for that request and sends it again.
 
 A conversation opens at its newest message, and a reply or note you just sent is in view. A message

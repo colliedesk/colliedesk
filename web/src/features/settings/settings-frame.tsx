@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { messages } from '../../messages';
 import { SettingsEditsProvider } from './settings-edits';
 import { SettingsNav } from './settings-nav';
-import type { SettingsPath, Shown } from './settings-nav';
+import type { SettingsPath } from './settings-nav-link';
+import type { Shown } from './settings-nav';
 import './settings-v2.css';
 
 // Every page the menu can show; SettingsNav narrows it to what the signed-in person may see.

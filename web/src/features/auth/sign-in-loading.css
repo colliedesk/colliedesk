@@ -1,0 +1,17 @@
+/* Sizes measured on Clerk's form as clerkAppearance() styles it: 339 px tall on a wide window, 393 px at
+   30rem or less, where its controls are 44 px tall. */
+.signin-skeleton { --control-h: 30px; width: 100%; }
+.signin-skeleton-card { display: flex; flex-direction: column; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--line); padding: 32px 39px; font-size: 13px; line-height: 18px; }
+.signin-skeleton-control { display: block; height: var(--control-h); border-radius: var(--radius); background: var(--surface-2); animation: skeleton-pulse 1.4s var(--ease) infinite; }
+.signin-skeleton-card > :nth-child(2) { margin-top: 24px; }
+.signin-skeleton-card > :nth-child(3) { margin-top: 24px; }
+.signin-skeleton-card > :nth-child(4) { margin-top: 8px; }
+.signin-skeleton-card > :nth-child(5) { margin-top: 32px; }
+.signin-skeleton-divider { display: flex; justify-content: center; }
+/* Clerk's footer tucks 9 px under the card. */
+.signin-skeleton-footer { display: grid; place-items: center; height: 70px; margin-top: -9px; padding-top: 9px; font-size: 13px; line-height: 18px; }
+@media (max-width: 30rem) {
+  .signin-skeleton { --control-h: 44px; }
+  .signin-skeleton-footer { height: 82px; }
+}
+@media (prefers-reduced-motion: reduce) { .signin-skeleton-control { animation: none; } }

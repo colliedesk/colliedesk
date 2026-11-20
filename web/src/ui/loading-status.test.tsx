@@ -39,3 +39,21 @@ test('without a retry the slow notice still shows, with no button', () => {
   expect(screen.getByRole('status')).toHaveTextContent(slowText);
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
+
+test('with a page shape, the wait shows grey blocks in that shape and keeps the words for screen readers only', () => {
+  const { container } = render(<LoadingStatus shape={<i className="skeleton-line" />} />);
+  const status = screen.getByRole('status');
+  expect(status).toHaveTextContent('Loading workspace…');
+  expect(status).toHaveClass('sr-only');
+  expect(container.querySelector('[aria-busy="true"]')).toContainElement(status);
+  const blocks = container.querySelector('[aria-hidden="true"]');
+  expect(blocks?.querySelector('.skeleton-line')).not.toBeNull();
+});
+
+test('a slow wait over a page shape says so out loud, above the blocks', () => {
+  render(<LoadingStatus shape={<i className="skeleton-line" />} onRetry={() => undefined} />);
+  act(() => { vi.advanceTimersByTime(5_000); });
+  expect(screen.getByRole('status')).not.toHaveClass('sr-only');
+  expect(screen.getByRole('status')).toHaveTextContent(slowText);
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+});

@@ -6,6 +6,7 @@ import { signupMessages } from './signup-messages';
 import { ClerkSession } from './clerk-session';
 import type { RefusedIdentity } from './clerk-session';
 import { CloudSignup } from './cloud-signup';
+import { SignInLoading } from './sign-in-loading';
 
 interface CloudSignInProps {
   publishableKey: string;
@@ -49,6 +50,6 @@ export function CloudSignIn({ publishableKey, onSessionToken, onSignUp, buying, 
     </div>;
   };
   return <ClerkProvider publishableKey={publishableKey}>
-    <ClerkSession copy={copy} onSessionToken={onSessionToken} isRefused={isNotAnAgent} refused={noWorkspace} endSession={endSession} />
+    <ClerkSession copy={copy} onSessionToken={onSessionToken} isRefused={isNotAnAgent} refused={noWorkspace} endSession={endSession} placeholder={<SignInLoading />} />
   </ClerkProvider>;
 }
