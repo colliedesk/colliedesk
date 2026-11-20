@@ -397,8 +397,8 @@ func checkKBVideo(path string, size int64) (media.Video, error) {
 	return video, file.Sync()
 }
 
-// getKBMediaFile streams the bytes of a library item, with ranges, so a video seeks: an id always
-// names the same bytes, so any range of them may be cached for a year.
+// getKBMediaFile streams the bytes of a library item, with ranges, so a video seeks: an image's or a
+// video's id always names the same bytes, so any range of them may be cached for a year.
 func (a *API) getKBMediaFile(response http.ResponseWriter, request *http.Request) {
 	workspaceID := principal(request).Workspace.ID
 	item, err := a.store.GetKBMedia(request.Context(), workspaceID, request.PathValue("id"))
@@ -408,6 +408,14 @@ func (a *API) getKBMediaFile(response http.ResponseWriter, request *http.Request
 			return
 		}
 		writeKBMediaError(response, domain.ErrKBMediaNotFound)
+		return
+	}
+	if item.Kind == domain.KBMediaFile {
+		// A file is only ever downloaded, and a replacement puts new bytes under its id, so each answer revalidates.
+		if !attachments.Serve(response, request, a.config.Attachments, attachments.Served{Key: item.StorageKey, ContentType: item.ContentType, Size: item.Size,
+			ETag: item.SHA256, Cache: "private, no-cache", Disposition: "attachment; filename*=UTF-8''" + attachments.EncodeFilename(item.Name)}) {
+			writeKBMediaError(response, domain.ErrKBMediaNotFound)
+		}
 		return
 	}
 	disposition := "inline"

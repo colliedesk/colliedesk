@@ -4024,6 +4024,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/articles/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Set the files the article lists under its text for download, in order: items of kind `file` of the media library (upload one with POST /api/v1/kb/media-uploads and `kind` file). On a published article the list goes into its draft, as an edit does, and the help center shows it once the draft is published; otherwise it is the article's list at once. A file is downloadable from the help center only while a published article or translation lists it. An id that is not a file of this workspace's library outside the trash is 404 `file_not_found` naming it. The same id twice is 400. */
+        put: operations["setKBArticleAttachments"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/{id}/votes": {
         parameters: {
             query?: never;
@@ -4214,6 +4233,26 @@ export interface paths {
         patch: operations["updateKBTranslation"];
         trace?: never;
     };
+    "/api/v1/kb/articles/{id}/translations/{locale}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Set the files the translation lists under its text, in order, as for an article. A translation has no draft: the list changes at once. A translation that lists no file shows the article's files on its page. */
+        put: operations["setKBTranslationAttachments"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/{id}/translations/{locale}/restore": {
         parameters: {
             query?: never;
@@ -4318,7 +4357,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The media library outside its trash, 60 items a page unless `limit` says otherwise, newest first unless `sort` says otherwise, each with its usage. `usage=unused` lists what no live article's current text names (articles in the trash and older versions do not count as use); its first page adds `summary`, the count and bytes of every unused item the filter selects, kept items apart. `q` matches the name or alt text. */
+        /** @description The media library outside its trash, 60 items a page unless `limit` says otherwise, newest first unless `sort` says otherwise, each with its usage. `usage=unused` lists what no live article's current text names or lists as a file (articles in the trash and older versions do not count as use); its first page adds `summary`, the count and bytes of every unused item the filter selects, kept items apart. `q` matches the name or alt text. */
         get: operations["listKBMedia"];
         put?: never;
         post?: never;
@@ -4406,7 +4445,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description The bytes of a library item, with ranges (206) so a video seeks, `nosniff` and a sandboxing Content-Security-Policy. An id always names the same bytes: the answer may be cached for a year. `download=1` asks the browser to save it under its name. */
+        /** @description The bytes of a library item, with ranges (206) so a video seeks, `nosniff` and a sandboxing Content-Security-Policy. An image's or a video's id always names the same bytes: the answer may be cached for a year. `download=1` asks the browser to save it under its name. A file (kind `file`) is always a download (`Content-Disposition: attachment; filename*=UTF-8''…`) and is revalidated each time (`private, no-cache`), since replacing it puts new bytes under its id. */
         get: operations["getKBMediaFile"];
         put?: never;
         post?: never;
@@ -4448,7 +4487,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Put another library item (`with_media_id`, an image for an image, a video for a video) in the place of this one in every live article whose current text or a translation shows it. Each such article gets a new version of kind `media_replace`, and published ones change on the help center at once. Ids never change their bytes, so the new item keeps its own id and caches stay right. The answer is the replacement; `POST /api/v1/kb/media-replacements/{id}/undo` reverses it. 400 when the kinds differ. */
+        /**
+         * @description Put another library item (`with_media_id`, an image for an image, a video for a video) in the place of this one in every live article whose current text or a translation shows it. Each such article gets a new version of kind `media_replace`, and published ones change on the help center at once. Ids never change their bytes, so the new item keeps its own id and caches stay right. The answer is the replacement; `POST /api/v1/kb/media-replacements/{id}/undo` reverses it. 400 when the kinds differ.
+         *     A file (kind `file`) is replaced in place, since articles list it by its id: it keeps its id and address and takes the bytes and name of `with_media_id`, which goes to the trash holding the earlier version (`in_place` true, no article gets a new version). 400 when an article or a draft lists `with_media_id`: upload the new version as a file no article lists. Replacing a file a published article lists needs kb_articles:publish.
+         */
         post: operations["replaceKBMedia"];
         delete?: never;
         options?: never;
@@ -4485,7 +4527,7 @@ export interface paths {
         /** @description The workspace's video uploads in progress, the oldest first: who started each, the bytes received and when its parts expire. At most 3 are in progress at once (429 `too_many_uploads` on a fourth); the person who started one, or someone with `kb_media:purge`, cancels it to make room. */
         get: operations["listKBMediaUploads"];
         put?: never;
-        /** @description Start an upload of a video in parts: MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included) or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says otherwise. Nothing is converted, so the video must be one every browser plays: an H.265 (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads in progress) and the server's disk (counting every upload in progress on the server) must have room before any byte is sent: 403 `storage_limit_reached`, 507 `insufficient_disk`; past 200 uploads in progress on the server a new one is 503 `server_busy`. At most 3 uploads are in progress in a workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are thrown away after 24 hours. */
+        /** @description Start an upload in parts of a video (`kind` video, the default) or of a file an article lists for download (`kind` file). A file is at most 25 MiB (413 `too_large`) and needs its `name` with its extension: a PDF; Word, Excel or PowerPoint (.doc, .docx, .xls, .xlsx, .ppt, .pptx); OpenDocument (.odt, .ods, .odp); CSV, TXT or RTF; or a ZIP, 7z or tar.gz archive. Any other name (an executable, a script, HTML, SVG) is 400 `unsupported_file_type` with that list, before any byte is sent. A video is MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included) or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says otherwise. Nothing is converted, so the video must be one every browser plays: an H.265 (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads in progress) and the server's disk (counting every upload in progress on the server) must have room before any byte is sent: 403 `storage_limit_reached`, 507 `insufficient_disk`; past 200 uploads in progress on the server a new one is 503 `server_busy`. At most 3 uploads are in progress in a workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are thrown away after 24 hours. */
         post: operations["createKBMediaUpload"];
         delete?: never;
         options?: never;
@@ -4525,7 +4567,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Check and store the video once every part arrived. The server reads its length, size and codecs from the file, and removes in place what a camera or phone leaves in it (location, titles, XMP, tracks of data such as GPS or subtitles) without changing a frame. A video it refuses (400 `unsupported_codec`, `invalid_request`; more than 8,192 pixels on a side) is thrown away with the upload. A full library or plan (409) keeps the parts, so the same upload completes once there is room; parts gone from the server are 409 `upload_lost` and the upload is cancelled. Location, titles and recording dates are removed. The same bytes give the item that holds them, and a repeated complete answers the same item. Put it in an article as `<video controls src="/api/v1/kb/media/<id>"></video>`. */
+        /** @description Check and store the video or file once every part arrived. A file's first bytes must be what its name says (an executable renamed .pdf is 400 `unsupported_file_type`, and the upload is thrown away); the text of a PDF, TXT or CSV is read for the help center search. The server reads a video's length, size and codecs from the file, and removes in place what a camera or phone leaves in it (location, titles, XMP, tracks of data such as GPS or subtitles) without changing a frame. A video it refuses (400 `unsupported_codec`, `invalid_request`; more than 8,192 pixels on a side) is thrown away with the upload. A full library or plan (409) keeps the parts, so the same upload completes once there is room; parts gone from the server are 409 `upload_lost` and the upload is cancelled. Location, titles and recording dates are removed. The same bytes give the item that holds them, and a repeated complete answers the same item. Put it in an article as `<video controls src="/api/v1/kb/media/<id>"></video>`. */
         post: operations["completeKBMediaUpload"];
         delete?: never;
         options?: never;
@@ -7874,6 +7916,8 @@ export interface components {
             /** @description Whether the help center shows this language to customers. */
             language_visible: boolean;
             original: components["schemas"]["KBTranslationOriginal"];
+            /** @description The files it lists under its text for download, in order. */
+            attachments: components["schemas"]["KBAttachment"][];
             missing_media?: string[];
         };
         TrashedKBTranslation: {
@@ -7993,6 +8037,8 @@ export interface components {
             has_source_html: boolean;
             /** @description Its versions in the help center's other languages (also those in the trash), without their text. */
             translations: components["schemas"]["KBTranslationSummary"][];
+            /** @description The files the help center lists under its text for download, in order (PUT /api/v1/kb/articles/{id}/attachments). */
+            attachments: components["schemas"]["KBAttachment"][];
             /**
              * Format: date-time
              * @description Set while the article is in the trash.
@@ -8019,6 +8065,8 @@ export interface components {
             collection_ids: string[];
             /** @description Whether the help center will list its headings as On this page once published. */
             show_contents: boolean;
+            /** @description The files it will list once published, in order. */
+            attachments: components["schemas"]["KBAttachment"][];
             /** Format: date-time */
             created_at: string;
             /**
@@ -8028,6 +8076,21 @@ export interface components {
             updated_at: string;
             /** @description Who saved it last; null when that person was removed. */
             updated_by: null | components["schemas"]["SavedReplyPerson"];
+        };
+        /** @description A file of the media library an article or translation lists for download. */
+        KBAttachment: {
+            /**
+             * Format: uuid
+             * @description The media library item.
+             */
+            id: string;
+            /** @description The name it downloads as, with its extension. */
+            name: string;
+            content_type: string;
+            /** @description Bytes. */
+            size: number;
+            /** @description /api/v1/kb/media/<id> for the team; the help center serves it at /files/<id>/<name> while a published article lists it. */
+            url: string;
         };
         TrashedKBArticle: {
             /** Format: uuid */
@@ -8145,13 +8208,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "image" | "video";
+            kind: "image" | "video" | "file";
             /** @enum {string} */
-            content_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "video/mp4" | "video/webm";
+            content_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "video/mp4" | "video/webm" | "application/pdf" | "application/msword" | "application/vnd.ms-excel" | "application/vnd.ms-powerpoint" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document" | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" | "application/vnd.openxmlformats-officedocument.presentationml.presentation" | "application/vnd.oasis.opendocument.text" | "application/vnd.oasis.opendocument.spreadsheet" | "application/vnd.oasis.opendocument.presentation" | "text/csv" | "text/plain" | "application/rtf" | "application/zip" | "application/x-7z-compressed" | "application/gzip";
             /** @description Bytes of the original. */
             size: number;
             sha256: string;
-            /** @description The path to put in an article: /api/v1/kb/images/<id> for an image, /api/v1/kb/media/<id> for a video. */
+            /** @description The path to put in an article: /api/v1/kb/images/<id> for an image, /api/v1/kb/media/<id> for a video or file. An article lists a file with PUT /api/v1/kb/articles/{id}/attachments, not in its text. */
             url: string;
             /** @description What the library shows; empty when nobody named it. */
             name: string;
@@ -8243,12 +8306,14 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             undone_at: string | null;
+            /** @description A file's replacement: from_media_id kept its id and took the new bytes; to_media_id holds the earlier version in the trash. Undo moves them back. */
+            in_place: boolean;
         };
         KBMediaUpload: {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "video";
+            kind: "video" | "file";
             name: string;
             /** @description The bytes announced. */
             size: number;
@@ -19645,6 +19710,54 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    setKBArticleAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Every file in the order the page lists them; an empty list removes them all (the files stay in the library). */
+                    media_ids: string[];
+                    /**
+                     * Format: date-time
+                     * @description The updated_at you last read; when sent, a later change by someone else is 409 `changed_elsewhere`.
+                     */
+                    updated_at?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The article with its files (in `draft.attachments` while a draft holds them) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description Error code `too_large`: one file is over 25 MiB, or the files come to more than 100 MiB; nothing changed. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getKBArticleVotes: {
         parameters: {
             query?: never;
@@ -20040,6 +20153,55 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    setKBTranslationAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Every file in the order the page lists them; an empty list removes them all (the files stay in the library). */
+                    media_ids: string[];
+                    /**
+                     * Format: date-time
+                     * @description The updated_at you last read; when sent, a later change by someone else is 409 `changed_elsewhere`.
+                     */
+                    updated_at?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The translation with its files */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleTranslation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description Error code `too_large`: one file is over 25 MiB, or the files come to more than 100 MiB; nothing changed. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     restoreKBTranslation: {
         parameters: {
             query?: never;
@@ -20231,9 +20393,9 @@ export interface operations {
     listKBMedia: {
         parameters: {
             query?: {
-                kind?: "image" | "video";
+                kind?: "image" | "video" | "file";
                 q?: string;
-                /** @description in_use: a live article shows it, or the help center as its logo or favicon; unused: neither. */
+                /** @description in_use: a live article shows it or lists it as a file, or the help center as its logo or favicon; unused: neither. */
                 usage?: "in_use" | "unused" | "missing_alt";
                 sort?: "newest" | "oldest" | "name" | "largest";
                 /** @description The next_cursor of the previous page. */
@@ -20451,8 +20613,9 @@ export interface operations {
             /** @description The bytes */
             200: {
                 headers: {
-                    /** @description private, max-age=31536000, immutable */
+                    /** @description private, max-age=31536000, immutable; a file: private, no-cache */
                     "Cache-Control"?: string;
+                    "Content-Disposition"?: string;
                     ETag?: string;
                     "Accept-Ranges"?: string;
                     [name: string]: unknown;
@@ -20464,6 +20627,22 @@ export interface operations {
                     "image/jpeg": string;
                     "image/gif": string;
                     "image/webp": string;
+                    "application/pdf": string;
+                    "application/msword": string;
+                    "application/vnd.ms-excel": string;
+                    "application/vnd.ms-powerpoint": string;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation": string;
+                    "application/vnd.oasis.opendocument.text": string;
+                    "application/vnd.oasis.opendocument.spreadsheet": string;
+                    "application/vnd.oasis.opendocument.presentation": string;
+                    "text/csv": string;
+                    "text/plain": string;
+                    "application/rtf": string;
+                    "application/zip": string;
+                    "application/x-7z-compressed": string;
+                    "application/gzip": string;
                 };
             };
             /** @description The range asked for */
@@ -20478,6 +20657,22 @@ export interface operations {
                     "image/jpeg": string;
                     "image/gif": string;
                     "image/webp": string;
+                    "application/pdf": string;
+                    "application/msword": string;
+                    "application/vnd.ms-excel": string;
+                    "application/vnd.ms-powerpoint": string;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation": string;
+                    "application/vnd.oasis.opendocument.text": string;
+                    "application/vnd.oasis.opendocument.spreadsheet": string;
+                    "application/vnd.oasis.opendocument.presentation": string;
+                    "text/csv": string;
+                    "text/plain": string;
+                    "application/rtf": string;
+                    "application/zip": string;
+                    "application/x-7z-compressed": string;
+                    "application/gzip": string;
                 };
             };
             /** @description Not modified (If-None-Match) */
@@ -20678,11 +20873,17 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /**
+                     * @default video
+                     * @enum {string}
+                     */
+                    kind?: "video" | "file";
                     size: number;
+                    /** @description What the library shows; a file needs it, with its extension (Warranty form.pdf). */
                     name?: string;
                     /** @description The video's title for screen readers. */
                     alt?: string;
-                    /** @description true keeps the video from the purge of unused items, as an upload in the library does. */
+                    /** @description true keeps the item from the purge of unused items, as an upload in the library does. */
                     keep?: boolean;
                 };
             };
@@ -20701,7 +20902,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
-            /** @description The video is larger than the server takes; nothing was stored. */
+            /** @description The video or file is larger than the server takes; nothing was stored. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -20848,7 +21049,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The video in the library */
+            /** @description The video or file in the library */
             201: {
                 headers: {
                     [name: string]: unknown;

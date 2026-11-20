@@ -226,6 +226,9 @@ type KBMediaReplacement struct {
 	SkippedArticleIDs []string   `json:"skipped_article_ids"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UndoneAt          *time.Time `json:"undone_at"`
+	// InPlace is a file's replacement: the file kept its id and took the new bytes, and the item put in
+	// its place holds the earlier version in the trash.
+	InPlace bool `json:"in_place"`
 }
 
 // KBMediaReplacedTranslation is a translation a replacement rewrote.

@@ -7634,15 +7634,18 @@ paths:
       x-permission: kb_media:read
       description: >
         The bytes of a library item, with ranges (206) so a video seeks, `nosniff` and a sandboxing
-        Content-Security-Policy. An id always names the same bytes: the answer may be cached for a
-        year. `download=1` asks the browser to save it under its name.
+        Content-Security-Policy. An image's or a video's id always names the same bytes: the answer may
+        be cached for a year. `download=1` asks the browser to save it under its name. A file (kind
+        `file`) is always a download (`Content-Disposition: attachment; filename*=UTF-8''…`) and is
+        revalidated each time (`private, no-cache`), since replacing it puts new bytes under its id.
       parameters:
         - {name: download, in: query, schema: {type: string, enum: ['1']}}
       responses:
         '200':
           description: The bytes
           headers:
-            Cache-Control: {schema: {type: string}, description: 'private, max-age=31536000, immutable'}
+            Cache-Control: {schema: {type: string}, description: 'private, max-age=31536000, immutable; a file: private, no-cache'}
+            Content-Disposition: {schema: {type: string}}
             ETag: {schema: {type: string}}
             Accept-Ranges: {schema: {type: string}}
           content:
@@ -7652,6 +7655,22 @@ paths:
             image/jpeg: {schema: {type: string, format: binary}}
             image/gif: {schema: {type: string, format: binary}}
             image/webp: {schema: {type: string, format: binary}}
+            application/pdf: {schema: {type: string, format: binary}}
+            application/msword: {schema: {type: string, format: binary}}
+            application/vnd.ms-excel: {schema: {type: string, format: binary}}
+            application/vnd.ms-powerpoint: {schema: {type: string, format: binary}}
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document: {schema: {type: string, format: binary}}
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+            application/vnd.openxmlformats-officedocument.presentationml.presentation: {schema: {type: string, format: binary}}
+            application/vnd.oasis.opendocument.text: {schema: {type: string, format: binary}}
+            application/vnd.oasis.opendocument.spreadsheet: {schema: {type: string, format: binary}}
+            application/vnd.oasis.opendocument.presentation: {schema: {type: string, format: binary}}
+            text/csv: {schema: {type: string, format: binary}}
+            text/plain: {schema: {type: string, format: binary}}
+            application/rtf: {schema: {type: string, format: binary}}
+            application/zip: {schema: {type: string, format: binary}}
+            application/x-7z-compressed: {schema: {type: string, format: binary}}
+            application/gzip: {schema: {type: string, format: binary}}
         '206':
           description: The range asked for
           content:
@@ -7661,6 +7680,22 @@ paths:
             image/jpeg: {schema: {type: string, format: binary}}
             image/gif: {schema: {type: string, format: binary}}
             image/webp: {schema: {type: string, format: binary}}
+            application/pdf: {schema: {type: string, format: binary}}
+            application/msword: {schema: {type: string, format: binary}}
+            application/vnd.ms-excel: {schema: {type: string, format: binary}}
+            application/vnd.ms-powerpoint: {schema: {type: string, format: binary}}
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document: {schema: {type: string, format: binary}}
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+            application/vnd.openxmlformats-officedocument.presentationml.presentation: {schema: {type: string, format: binary}}
+            application/vnd.oasis.opendocument.text: {schema: {type: string, format: binary}}
+            application/vnd.oasis.opendocument.spreadsheet: {schema: {type: string, format: binary}}
+            application/vnd.oasis.opendocument.presentation: {schema: {type: string, format: binary}}
+            text/csv: {schema: {type: string, format: binary}}
+            text/plain: {schema: {type: string, format: binary}}
+            application/rtf: {schema: {type: string, format: binary}}
+            application/zip: {schema: {type: string, format: binary}}
+            application/x-7z-compressed: {schema: {type: string, format: binary}}
+            application/gzip: {schema: {type: string, format: binary}}
         '304': {description: Not modified (If-None-Match)}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -7734,6 +7769,12 @@ paths:
         center at once. Ids never change their bytes, so the new item keeps its own id and caches stay
         right. The answer is the replacement; `POST /api/v1/kb/media-replacements/{id}/undo` reverses
         it. 400 when the kinds differ.
+
+        A file (kind `file`) is replaced in place, since articles list it by its id: it keeps its id and
+        address and takes the bytes and name of `with_media_id`, which goes to the trash holding the
+        earlier version (`in_place` true, no article gets a new version). 400 when an article or a
+        draft lists `with_media_id`: upload the new version as a file no article lists. Replacing a
+        file a published article lists needs kb_articles:publish.
       requestBody:
         required: true
         content:
@@ -12188,7 +12229,7 @@ components:
         batch_id: {type: [string, 'null'], format: uuid, description: 'The trash batch the moved items joined, for Undo; null when nothing moved.'}
     KBMediaReplacement:
       type: object
-      required: [id, from_media_id, to_media_id, article_ids, translations, skipped_article_ids, created_at, undone_at]
+      required: [id, from_media_id, to_media_id, article_ids, translations, skipped_article_ids, created_at, undone_at, in_place]
       properties:
         id: {type: string, format: uuid}
         from_media_id: {type: string, format: uuid}
@@ -12205,6 +12246,7 @@ components:
         skipped_article_ids: {type: array, items: {type: string, format: uuid}, description: 'After an undo: the articles (or their translations) that changed since the replacement and kept their text.'}
         created_at: {type: string, format: date-time}
         undone_at: {type: [string, 'null'], format: date-time}
+        in_place: {type: boolean, description: 'A file''s replacement: from_media_id kept its id and took the new bytes; to_media_id holds the earlier version in the trash. Undo moves them back.'}
     KBMediaUpload:
       type: object
       required: [id, kind, name, size, offset, part_size, expires_at, media_id, created_by, created_at]

@@ -33,7 +33,9 @@ func (s *Store) KBMediaShownPublished(ctx context.Context, workspaceID, mediaID 
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
 		var shown bool
 		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
-			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND `+shownTextNames+`)`, workspaceID, mediaID, strings.ToLower(mediaID)).Scan(&shown)
+			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND `+shownTextNames+`)
+			OR EXISTS(SELECT 1 FROM kb_article_attachments l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+			WHERE l.workspace_id=$1 AND l.media_id=$2 AND `+listedByShownArticle+`)`, workspaceID, mediaID, strings.ToLower(mediaID)).Scan(&shown)
 		return shown, err
 	})
 }
@@ -47,7 +49,9 @@ func (s *Store) KBReplacementTouchesPublished(ctx context.Context, workspaceID, 
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
 		var touches bool
 		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_media_replacements r JOIN kb_articles a ON a.workspace_id=r.workspace_id AND a.id=ANY(r.article_ids)
-			WHERE r.workspace_id=$1 AND r.id=$2 AND a.deleted_at IS NULL AND a.status='published')`, workspaceID, replacementID).Scan(&touches)
+			WHERE r.workspace_id=$1 AND r.id=$2 AND a.deleted_at IS NULL AND a.status='published')
+			OR EXISTS(SELECT 1 FROM kb_media_replacements r JOIN kb_article_attachments l ON l.workspace_id=r.workspace_id AND l.media_id=r.from_media_id
+			JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id WHERE r.workspace_id=$1 AND r.id=$2 AND r.in_place AND `+listedByShownArticle+`)`, workspaceID, replacementID).Scan(&touches)
 		return touches, err
 	})
 }
