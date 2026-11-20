@@ -124,7 +124,7 @@ const (
 // skipped so that discarded changes leave the article as the import wrote it.
 func KBImportedLastSQL(a string) string {
 	return `(COALESCE((SELECT v.kind FROM kb_article_versions v WHERE v.workspace_id=` + a + `.workspace_id AND v.article_id=` + a + `.id
-		AND v.kind<>'` + domain.KBArticleDrafted + `' ORDER BY v.version DESC LIMIT 1), '')='` + domain.KBArticleImported + `'
+		AND ` + kbTextVersion("v.") + ` ORDER BY v.version DESC LIMIT 1), '')='` + domain.KBArticleImported + `'
 		AND NOT EXISTS (SELECT 1 FROM kb_article_drafts d WHERE d.workspace_id=` + a + `.workspace_id AND d.article_id=` + a + `.id AND d.locale IS NULL))`
 }
 

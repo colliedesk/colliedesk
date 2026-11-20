@@ -63,7 +63,9 @@ func writeKBError(response http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrKBLanguageNotListed):
 		writeError(response, http.StatusBadRequest, "language_not_listed", "This language is not one of the help center's languages (or it is the primary language, the article's own). Add it with PUT /api/v1/help-center/languages first.")
 	default:
-		writeStoreError(response, err)
+		if !writeKBReviewError(response, err) {
+			writeStoreError(response, err)
+		}
 	}
 }
 
@@ -161,12 +163,17 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 		Position    *int            `json:"position"`
 		ParentID    json.RawMessage `json:"parent_id"`
 		Template    json.RawMessage `json:"default_template_id"`
+		Approval    *string         `json:"require_approval"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and what to change.")
 		return
 	}
-	change := store.KBCollectionChange{Name: input.Name, Slug: input.Slug, Description: input.Description, Position: input.Position}
+	// Whether a collection needs approval is a help center setting, like the workspace's own.
+	if input.Approval != nil && a.refuseUnlessHeld(response, request, principal(request), auth.PermHelpCenterUpdate, nil) {
+		return
+	}
+	change := store.KBCollectionChange{Name: input.Name, Slug: input.Slug, Description: input.Description, Position: input.Position, RequireApproval: input.Approval}
 	if input.ParentID != nil {
 		change.MoveParent = true
 		if string(input.ParentID) != "null" {

@@ -454,5 +454,6 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 	}
 	maps.Copy(cases, kbContractCases(f))
 	maps.Copy(cases, kbTemplateContractCases(f))
+	maps.Copy(cases, kbReviewContractCases(f))
 	return cases
 }

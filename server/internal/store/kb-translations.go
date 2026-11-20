@@ -67,7 +67,7 @@ func readKBTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID, l
 	summary, err := scanKBTranslationSummary(tx.QueryRow(ctx, kbTranslationSelect(`,t.body_md,t.seo_title,t.seo_description,t.source_html IS NOT NULL,t.deleted_at,
 			COALESCE((SELECT l.visible FROM help_center_languages l WHERE l.workspace_id=t.workspace_id AND l.locale=t.locale), false),
 			a.id::text,a.number,COALESCE(h.locale,'en'),a.title,a.body_md,a.seo_title,a.seo_description,a.status,a.collection_id::text,c.name,
-			COALESCE((SELECT max(w.version) FROM kb_article_versions w WHERE w.workspace_id=a.workspace_id AND w.article_id=a.id AND w.kind<>'draft'), 0),a.updated_at`,
+			COALESCE((SELECT max(w.version) FROM kb_article_versions w WHERE w.workspace_id=a.workspace_id AND w.article_id=a.id AND `+kbTextVersion("w.")+`), 0),a.updated_at`,
 		` JOIN kb_articles a ON a.workspace_id=t.workspace_id AND a.id=t.article_id
 			JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
 			LEFT JOIN help_centers h ON h.workspace_id=t.workspace_id`)+` WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3`, workspaceID, articleID, locale),

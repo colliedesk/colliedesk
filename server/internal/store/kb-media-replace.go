@@ -245,8 +245,8 @@ func (s *Store) UndoKBMediaReplacement(ctx context.Context, workspaceID string, 
 			// A draft version holds unpublished changes, never the article's text, so it neither stops the undo
 			// nor is the text put back.
 			if err := tx.QueryRow(ctx, `SELECT COALESCE(max(version),0), (SELECT body_md FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2
-					AND version<$3 AND kind<>'draft' ORDER BY version DESC LIMIT 1)
-				FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2 AND kind<>'draft'`, workspaceID, articleID, versions[i]).Scan(&newest, &before); err != nil {
+					AND version<$3 AND `+kbTextVersion("")+` ORDER BY version DESC LIMIT 1)
+				FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2 AND `+kbTextVersion(""), workspaceID, articleID, versions[i]).Scan(&newest, &before); err != nil {
 				return domain.KBMediaReplacement{}, err
 			}
 			if newest != versions[i] || before == nil {

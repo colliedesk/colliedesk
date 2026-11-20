@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -55,14 +56,14 @@ func kbSavepoint[T any](ctx context.Context, tx pgx.Tx, write func(pgx.Tx) (T, e
 }
 
 const kbCollectionColumns = `c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,
-	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.default_template_id::text,c.created_at,c.updated_at,
+	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.default_template_id::text,c.require_approval,c.created_at,c.updated_at,
 	COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'imported',t.source_meta IS NOT NULL,
 		'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY t.locale)
 		FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id),'[]'::jsonb)`
 
 func kbCollectionTargets(collection *domain.KBCollection) []any {
 	return []any{&collection.ID, &collection.ParentID, &collection.Name, &collection.Slug, &collection.Description, &collection.Position,
-		&collection.ArticleCount, &collection.DefaultTemplateID, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations}
+		&collection.ArticleCount, &collection.DefaultTemplateID, &collection.RequireApproval, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations}
 }
 
 func scanKBCollection(row pgx.Row) (domain.KBCollection, error) {
@@ -265,6 +266,8 @@ type KBCollectionChange struct {
 	// SetDefaultTemplate set changes the default template to DefaultTemplateID (nil: none).
 	SetDefaultTemplate bool
 	DefaultTemplateID  *string
+	// RequireApproval, when set, is inherit, on or off (domain.KBApprovalModes).
+	RequireApproval *string
 }
 
 // UpdateKBCollection changes a live collection. seen is the updated_at the client read.
@@ -293,6 +296,9 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 		if err := domain.CheckKBPosition(*change.Position); err != nil {
 			return domain.KBCollection{}, err
 		}
+	}
+	if change.RequireApproval != nil && !slices.Contains(domain.KBApprovalModes, *change.RequireApproval) {
+		return domain.KBCollection{}, &domain.InvalidKBError{Message: "require_approval is inherit (the workspace setting), on or off."}
 	}
 	collection, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBCollection, error) {
 		if err := lockKB(ctx, tx, workspaceID); err != nil {
@@ -326,9 +332,9 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 			if _, err := sub.Exec(ctx, `UPDATE kb_collections SET name=COALESCE($3,name), slug=COALESCE($4,slug), description=COALESCE($5,description),
 				position=CASE WHEN $6::int IS NOT NULL THEN $6 WHEN $7 AND $8::uuid IS DISTINCT FROM parent_id THEN `+kbCollectionEnd(`$8::uuid`, `$2::uuid`)+` ELSE position END,
 				parent_id=CASE WHEN $7 THEN $8::uuid ELSE parent_id END,
-				default_template_id=CASE WHEN $9 THEN $10::uuid ELSE default_template_id END, updated_at=clock_timestamp()
+				default_template_id=CASE WHEN $9 THEN $10::uuid ELSE default_template_id END, require_approval=COALESCE($11,require_approval), updated_at=clock_timestamp()
 				WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Name, change.Slug, change.Description, change.Position, change.MoveParent, change.Parent,
-				change.SetDefaultTemplate, change.DefaultTemplateID); err != nil {
+				change.SetDefaultTemplate, change.DefaultTemplateID, change.RequireApproval); err != nil {
 				return domain.KBCollection{}, err
 			}
 			return readKBCollection(ctx, sub, workspaceID, id)
@@ -453,7 +459,8 @@ var kbErrors = []error{domain.ErrKBArticleNotFound, domain.ErrKBArticleVersionNo
 	domain.ErrKBChanged, domain.ErrKBDuplicateSlug, domain.ErrKBCollectionNotEmpty, domain.ErrKBParentInTrash, domain.ErrKBCollectionInTrash,
 	domain.ErrKBArticleLimit, domain.ErrKBCollectionLimit, domain.ErrKBMediaLimit,
 	domain.ErrKBTranslationNotFound, domain.ErrKBTranslationExists, domain.ErrKBTranslationVersionNotFound, domain.ErrKBLanguageNotListed, domain.ErrKBDraftNotFound,
-	domain.ErrKBTemplateNotFound, domain.ErrKBTemplateInTrash}
+	domain.ErrKBTemplateNotFound, domain.ErrKBTemplateInTrash,
+	domain.ErrKBApprovalRequired, domain.ErrKBReviewNotFound, domain.ErrKBNothingToReview, domain.ErrKBReviewClosed, domain.ErrKBReviewOpen, domain.ErrKBNotAReviewer, domain.ErrKBOwnReview}
 
 func kbError(what string, err error) error {
 	if err == nil {

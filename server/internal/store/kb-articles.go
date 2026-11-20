@@ -524,7 +524,11 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleCreated, nil); err != nil {
 			return domain.KBArticle{}, err
 		}
-		return readKBArticle(ctx, tx, workspaceID, id)
+		article, err := readKBArticle(ctx, tx, workspaceID, id)
+		if err != nil {
+			return domain.KBArticle{}, err
+		}
+		return article, guardKBPublish(ctx, tx, workspaceID, id, nil, kbPublishState{}, articlePublishState(article))
 	})
 	return article, kbError("create knowledge base article", err)
 }
@@ -693,21 +697,25 @@ func (s *Store) changeKBArticle(ctx context.Context, workspaceID string, actor A
 
 // changeKBArticleLocked runs write on an article locked by lockKBArticle and records the version of kind.
 func changeKBArticleLocked(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id, kind string, restoredFrom *int, write func(pgx.Tx) error) (domain.KBArticle, error) {
-	var wasTitle, wasBody string
-	if err := tx.QueryRow(ctx, `SELECT title, body_md FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&wasTitle, &wasBody); err != nil {
+	was, err := readKBArticle(ctx, tx, workspaceID, id)
+	if err != nil {
 		return domain.KBArticle{}, err
 	}
 	if err := write(tx); err != nil {
 		return domain.KBArticle{}, err
 	}
 	// An edit or a restore of the article's own words leaves its translations behind.
-	if err := markKBTranslationsOutdated(ctx, tx, workspaceID, id, wasTitle, wasBody); err != nil {
+	if err := markKBTranslationsOutdated(ctx, tx, workspaceID, id, was.Title, was.BodyMD); err != nil {
 		return domain.KBArticle{}, err
 	}
 	if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, kind, restoredFrom); err != nil {
 		return domain.KBArticle{}, err
 	}
-	return readKBArticle(ctx, tx, workspaceID, id)
+	article, err := readKBArticle(ctx, tx, workspaceID, id)
+	if err != nil {
+		return domain.KBArticle{}, err
+	}
+	return article, guardKBPublish(ctx, tx, workspaceID, id, nil, articlePublishState(was), articlePublishState(article))
 }
 
 // DeleteKBArticle moves an article to the trash and records the version.

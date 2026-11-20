@@ -43,6 +43,8 @@ const (
 	intakeEvaluationOperation            = "intake_evaluation"
 	allowOAuthOperation                  = "oauth_allow"
 	resetKBVotesOperation                = "kb_votes_reset"
+	createKBReviewOperation              = "kb_review"
+	approveKBReviewOperation             = "kb_review_approve"
 )
 
 // shownOnce is a create's answer that holds a secret shown once (an invite link, a token): the first

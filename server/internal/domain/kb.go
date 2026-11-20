@@ -75,8 +75,11 @@ type KBCollection struct {
 	ArticleCount int     `json:"article_count"`
 	// DefaultTemplateID is the template every new article in it starts from; trashing that template
 	// clears it.
-	DefaultTemplateID *string   `json:"default_template_id"`
-	CreatedAt         time.Time `json:"created_at"`
+	DefaultTemplateID *string `json:"default_template_id"`
+	// RequireApproval is whether an article in it needs an approved version before it is published:
+	// inherit (the workspace setting), on or off.
+	RequireApproval string    `json:"require_approval"`
+	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 	// Translations are its name and description in the help center's other languages.
 	Translations []KBCollectionTranslation `json:"translations"`
