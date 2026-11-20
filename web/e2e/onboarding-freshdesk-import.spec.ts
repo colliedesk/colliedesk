@@ -269,7 +269,7 @@ test('freshdesk import: the knowledge base keeps its timestamps, drafts stay dra
 
     const undo = colliedesk(['import', 'undo', '--workspace', workspace.slug]);
     expect(undo.status, undo.stderr).toBe(0);
-    expect(undo.stdout).toContain('Knowledge base: 3 articles, 2 collections, 1 images.');
+    expect(undo.stdout).toContain('Knowledge base: 3 articles, 2 collections, 1 images, 0 files.');
     expect((await (await page.request.get(`${baseURL}/api/v1/kb/articles`)).json() as { items: unknown[] }).items).toEqual([]);
   } finally {
     await fake.stop();
