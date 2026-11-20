@@ -53,6 +53,7 @@ export type KBMediaPage = z.infer<typeof pageSchema>;
 export type KBMediaSummary = z.infer<typeof summarySchema>;
 export type KBMediaResult = z.infer<typeof resultSchema>;
 export type KBMediaUpload = z.infer<typeof uploadSchema>;
+export type KBMediaReplacement = z.infer<typeof replacementSchema>;
 export type MediaKind = KBMedia['kind'];
 export type MediaUsage = 'in_use' | 'unused' | 'missing_alt';
 export type MediaSort = 'newest' | 'oldest' | 'name' | 'largest';

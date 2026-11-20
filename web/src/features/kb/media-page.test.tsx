@@ -377,7 +377,7 @@ test('a file that cannot go up opens the tray with why, instead of a full bar; D
   serve(base);
   open();
   // With nothing open, the panel says what it is for, so opening an item never moves the grid.
-  expect(await screen.findByText(/Select an image or video to see its alt text/)).toBeInTheDocument();
+  expect(await screen.findByText(/Select an image, video or file to see its alt text/)).toBeInTheDocument();
   const input = document.querySelector('input[type="file"][multiple]') as HTMLInputElement;
   fireEvent.change(input, { target: { files: [new File(['x'], 'release-notes.html', { type: 'text/html' })] } });
   const tray = await screen.findByRole('region', { name: 'Uploads' });
@@ -422,7 +422,7 @@ test('the tray closes only when every upload is over, and closing clears them', 
   let refuse: (response: Response) => void = () => undefined;
   serve({ ...base, 'POST /api/v1/kb/images': () => new Promise<Response>((resolve) => { refuse = resolve; }) });
   open();
-  await screen.findByText(/Select an image or video/);
+  await screen.findByText(/Select an image, video or file/);
   const input = document.querySelector('input[type="file"][multiple]') as HTMLInputElement;
   // An upload still going keeps the tray: there is no way to hide it.
   fireEvent.change(input, { target: { files: [new File([new Uint8Array(4)], 'shot.png', { type: 'image/png' }), new File(['x'], 'notes.txt', { type: 'text/plain' })] } });
