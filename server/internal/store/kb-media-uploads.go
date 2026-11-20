@@ -48,7 +48,7 @@ func (s *Store) KBMediaUploadsInProgress(ctx context.Context) (int, int64, error
 	return open, reserved, err
 }
 
-// CreateKBMediaUpload starts an upload in parts of a video of input.Size bytes. It refuses, before any
+// CreateKBMediaUpload starts an upload in parts of a video or file of input.Size bytes. It refuses, before any
 // byte is sent, a video the plan's storage has no room for counting the uploads in progress, a
 // workspace with too many uploads in progress or a full library, and a person who started too many in
 // the last hour. It returns the room the workspace's other uploads still reserve, for the disk check.
@@ -86,9 +86,13 @@ func (s *Store) CreateKBMediaUpload(ctx context.Context, workspaceID string, act
 		if err := s.CheckStorage(ctx, tx, workspaceID, input.Size+reserved, s.now()); err != nil {
 			return answer{}, err
 		}
-		created, err := scanKBMediaUpload(tx.QueryRow(ctx, `INSERT INTO kb_media_uploads(workspace_id,name,alt,keep,size,created_by_agent_id,expires_at)
-			VALUES($1,$2,$3,$4,$5,$6,clock_timestamp()+$7::interval) RETURNING `+kbMediaUploadColumns,
-			workspaceID, upload.Name, upload.Alt, upload.Keep, input.Size, optionalID(actor.AgentID), domain.KBMediaUploadTTL.String()))
+		kind := input.Kind
+		if kind == "" {
+			kind = domain.KBMediaVideo
+		}
+		created, err := scanKBMediaUpload(tx.QueryRow(ctx, `INSERT INTO kb_media_uploads(workspace_id,kind,name,alt,keep,size,created_by_agent_id,expires_at)
+			VALUES($1,$8,$2,$3,$4,$5,$6,clock_timestamp()+$7::interval) RETURNING `+kbMediaUploadColumns,
+			workspaceID, upload.Name, upload.Alt, upload.Keep, input.Size, optionalID(actor.AgentID), domain.KBMediaUploadTTL.String(), kind))
 		return answer{upload: created, reserved: reserved}, err
 	})
 	if err != nil {
@@ -209,8 +213,11 @@ func (s *Store) CheckKBVideoAdmission(ctx context.Context, workspaceID string, s
 	return kbError("check knowledge base video", err)
 }
 
-// NewKBVideo is a completed upload's video: its stored bytes and what the server read from them.
+// NewKBVideo is a completed upload's video or file: its stored bytes and what the server read from
+// them. Kind is KBMediaFile for a file, which has a text and no picture size or codecs; empty is a video.
 type NewKBVideo struct {
+	Kind        string
+	Text        string
 	Object      attachments.Object
 	ContentType string
 	Width       int
@@ -267,11 +274,18 @@ func (s *Store) CompleteKBMediaUpload(ctx context.Context, workspaceID string, a
 			if codecs == nil {
 				codecs = []string{}
 			}
+			kind, width, height, text := domain.KBMediaVideo, any(video.Width), any(video.Height), any(nil)
+			if video.Kind == domain.KBMediaFile {
+				kind, width, height = domain.KBMediaFile, nil, nil
+				if video.Text != "" {
+					text = video.Text
+				}
+			}
 			media, err = scanKBMedia(tx.QueryRow(ctx, `INSERT INTO kb_media AS m(workspace_id,kind,storage_key,sha256,size,content_type,created_by_agent_id,
-					name,alt,width,height,duration_ms,codecs,inspected_at,kept,updated_by_agent_id)
-				VALUES($1,'video',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,clock_timestamp(),$13,$6) ON CONFLICT (workspace_id, sha256) DO NOTHING RETURNING `+kbMediaColumns,
+					name,alt,width,height,duration_ms,codecs,inspected_at,kept,updated_by_agent_id,text)
+				VALUES($1,$14,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,clock_timestamp(),$13,$6,$15) ON CONFLICT (workspace_id, sha256) DO NOTHING RETURNING `+kbMediaColumns,
 				workspaceID, video.Object.Key, video.Object.SHA256, video.Object.Size, video.ContentType, optionalID(actor.AgentID),
-				name, alt, video.Width, video.Height, video.DurationMS, codecs, keep))
+				name, alt, width, height, video.DurationMS, codecs, keep, kind, text))
 			if errors.Is(err, pgx.ErrNoRows) {
 				// Another upload of the same bytes completed first; answer its item.
 				media, err = touchKBImage(ctx, tx, workspaceID, video.Object.SHA256, upload)

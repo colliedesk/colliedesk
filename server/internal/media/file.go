@@ -51,16 +51,30 @@ var fileTypes = map[string]fileType{
 	".tgz":    {"application/gzip", gzMagic},
 }
 
-// InspectFile returns the content type of a file named name that starts with head (its first bytes,
-// 8 KB are enough): the type its name gives, when its bytes are that type. A text file has no NUL byte
-// and is UTF-8.
-func InspectFile(name string, head []byte) (string, error) {
+// fileTypeOf returns the allowed type a file name gives by its extension.
+func fileTypeOf(name string) (fileType, bool) {
 	lower := strings.ToLower(strings.TrimSpace(name))
 	ext := path.Ext(lower)
 	if strings.HasSuffix(lower, ".tar.gz") {
 		ext = ".tar.gz"
 	}
 	kind, ok := fileTypes[ext]
+	return kind, ok
+}
+
+// CheckFileName refuses, before any byte is sent, a file whose name is not of an allowed type.
+func CheckFileName(name string) error {
+	if _, ok := fileTypeOf(name); !ok {
+		return ErrFileType
+	}
+	return nil
+}
+
+// InspectFile returns the content type of a file named name that starts with head (its first bytes,
+// 8 KB are enough): the type its name gives, when its bytes are that type. A text file has no NUL byte
+// and is UTF-8.
+func InspectFile(name string, head []byte) (string, error) {
+	kind, ok := fileTypeOf(name)
 	if !ok {
 		return "", ErrFileType
 	}

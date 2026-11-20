@@ -7718,7 +7718,12 @@ paths:
       operationId: createKBMediaUpload
       x-permission: kb_media:create
       description: >
-        Start an upload of a video in parts: MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included)
+        Start an upload in parts of a video (`kind` video, the default) or of a file an article lists for
+        download (`kind` file). A file is at most 25 MiB (413 `too_large`) and needs its `name` with its
+        extension: a PDF; Word, Excel or PowerPoint (.doc, .docx, .xls, .xlsx, .ppt, .pptx); OpenDocument
+        (.odt, .ods, .odp); CSV, TXT or RTF; or a ZIP, 7z or tar.gz archive. Any other name (an
+        executable, a script, HTML, SVG) is 400 `unsupported_file_type` with that list, before any byte
+        is sent. A video is MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included)
         or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says
         otherwise. Nothing is converted, so the video must be one every browser plays: an H.265
         (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with
@@ -7736,10 +7741,11 @@ paths:
               type: object
               required: [size]
               properties:
+                kind: {type: string, enum: [video, file], default: video}
                 size: {type: integer, minimum: 1}
-                name: {type: string, maxLength: 200}
+                name: {type: string, maxLength: 200, description: 'What the library shows; a file needs it, with its extension (Warranty form.pdf).'}
                 alt: {type: string, maxLength: 500, description: The video's title for screen readers.}
-                keep: {type: boolean, description: 'true keeps the video from the purge of unused items, as an upload in the library does.'}
+                keep: {type: boolean, description: 'true keeps the item from the purge of unused items, as an upload in the library does.'}
       responses:
         '201':
           description: The upload, at offset 0
@@ -7749,7 +7755,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
         '413':
-          description: The video is larger than the server takes; nothing was stored.
+          description: The video or file is larger than the server takes; nothing was stored.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '429':
           description: Too many uploads in progress or started this hour.
@@ -7820,7 +7826,9 @@ paths:
       operationId: completeKBMediaUpload
       x-permission: kb_media:create
       description: >
-        Check and store the video once every part arrived. The server reads its length, size and codecs
+        Check and store the video or file once every part arrived. A file's first bytes must be what its
+        name says (an executable renamed .pdf is 400 `unsupported_file_type`, and the upload is thrown
+        away); the text of a PDF, TXT or CSV is read for the help center search. The server reads a video's length, size and codecs
         from the file, and removes in place what a camera or phone leaves in it (location, titles,
         XMP, tracks of data such as GPS or subtitles) without changing a frame. A video it refuses
         (400 `unsupported_codec`, `invalid_request`; more than 8,192 pixels on a side) is thrown away with
@@ -7831,7 +7839,7 @@ paths:
         as `<video controls src="/api/v1/kb/media/<id>"></video>`.
       responses:
         '201':
-          description: The video in the library
+          description: The video or file in the library
           content: {application/json: {schema: {$ref: '#/components/schemas/KBMedia'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -11994,11 +12002,35 @@ components:
       required: [id, kind, content_type, size, sha256, url, name, alt, width, height, duration_ms, codecs, thumbnail_url, poster_url, kept, deleted_at, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [image, video]}
-        content_type: {type: string, enum: [image/png, image/jpeg, image/gif, image/webp, video/mp4, video/webm]}
+        kind: {type: string, enum: [image, video, file]}
+        content_type:
+          type: string
+          enum:
+            - image/png
+            - image/jpeg
+            - image/gif
+            - image/webp
+            - video/mp4
+            - video/webm
+            - application/pdf
+            - application/msword
+            - application/vnd.ms-excel
+            - application/vnd.ms-powerpoint
+            - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+            - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+            - application/vnd.openxmlformats-officedocument.presentationml.presentation
+            - application/vnd.oasis.opendocument.text
+            - application/vnd.oasis.opendocument.spreadsheet
+            - application/vnd.oasis.opendocument.presentation
+            - text/csv
+            - text/plain
+            - application/rtf
+            - application/zip
+            - application/x-7z-compressed
+            - application/gzip
         size: {type: integer, description: Bytes of the original.}
         sha256: {type: string}
-        url: {type: string, description: 'The path to put in an article: /api/v1/kb/images/<id> for an image, /api/v1/kb/media/<id> for a video.'}
+        url: {type: string, description: 'The path to put in an article: /api/v1/kb/images/<id> for an image, /api/v1/kb/media/<id> for a video or file. An article lists a file with PUT /api/v1/kb/articles/{id}/attachments, not in its text.'}
         name: {type: string, maxLength: 200, description: What the library shows; empty when nobody named it.}
         alt: {type: string, maxLength: 500, description: An image's alt text or a video's title; the editor offers it when it inserts the item.}
         width: {type: [integer, 'null'], description: Pixels as shown (a photo turned a quarter has width and height swapped); null until the server read them.}
@@ -12081,7 +12113,7 @@ components:
       required: [id, kind, name, size, offset, part_size, expires_at, media_id, created_by, created_at]
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [video]}
+        kind: {type: string, enum: [video, file]}
         name: {type: string}
         size: {type: integer, description: The bytes announced.}
         offset: {type: integer, description: The bytes received; the next part starts here.}

@@ -13,7 +13,10 @@ import (
 func TestInspectFileJudgesTheBytesAndTheName(t *testing.T) {
 	zip := []byte("PK\x03\x04\x14\x00\x00\x00\x08\x00rest of the archive")
 	ole := []byte("\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1rest of the document")
-	for _, ok := range []struct{ name, want string; data []byte }{
+	for _, ok := range []struct {
+		name, want string
+		data       []byte
+	}{
 		{"Warranty form.pdf", "application/pdf", pdfsample.PDF("warranty", 0)},
 		{"REPORT.PDF", "application/pdf", []byte("%PDF-1.7\n...")},
 		{"letter.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", zip},
@@ -38,7 +41,10 @@ func TestInspectFileJudgesTheBytesAndTheName(t *testing.T) {
 			t.Errorf("InspectFile(%q) = %q, %v; want %q", ok.name, got, err, ok.want)
 		}
 	}
-	for _, bad := range []struct{ name string; data []byte }{
+	for _, bad := range []struct {
+		name string
+		data []byte
+	}{
 		{"setup.pdf", []byte("MZ\x90\x00\x03\x00\x00\x00 an executable")},
 		{"setup.exe", []byte("MZ\x90\x00\x03\x00\x00\x00 an executable")},
 		{"page.html", []byte("<!doctype html><script>alert(1)</script>")},
