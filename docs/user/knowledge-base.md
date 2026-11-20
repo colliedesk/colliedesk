@@ -101,9 +101,9 @@ the end of a published article's row opens its public page.
    shown, except a [YouTube or Vimeo video](#videos).
    - The toolbar sets the block (**Text**, **Heading 2**, **Heading 3**; the title is the article's
      Heading 1, so the text starts at Heading 2, and a `#` line written before still shows as **Heading 1**)
-     and adds bold, italic, a link, numbered and bulleted lists, a quote and a table; **Insert image or
-     video** adds an [image](#images) or a [video](#videos); **⋯** (More formatting) holds
-     strikethrough, code, a checklist, a code block, a divider and redo. On a phone the toolbar keeps **Insert**, bold,
+     and adds bold, italic, a link, numbered and bulleted lists, a quote and a table; **Insert image, video
+     or callout** adds an [image](#images), a [video](#videos) or a [callout](#callouts); **⋯** (More formatting) holds
+     strikethrough, code, a checklist, a [code block](#code-blocks), a divider and redo. On a phone the toolbar keeps **Insert**, bold,
      italic and link, and the rest is under **⋯**. With the keyboard, Tab reaches the toolbar and the
      arrow keys move along it.
    - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
@@ -133,13 +133,13 @@ two articles.
 
 ### Images
 
-Paste an image into the text, drag it in, or select **Insert image or video → Upload from this
+Paste an image into the text, drag it in, or select **Insert image, video or callout → Upload from this
 device**. Colliedesk uploads it and writes an image line, `![name](…)`, on a line of its own after the
 paragraph, list or table you are in;
 while it uploads, a box says so and nothing is added to the text. A video pasted, dropped or chosen
 the same way goes up in parts, the box shows how much has gone, and it goes in as a
 `<video controls preload="metadata" src="…"></video>` line; leaving the page cancels a
-video still uploading. **Insert image or video → From the media library** opens the library in a
+video still uploading. **Insert image, video or callout → From the media library** opens the library in a
 dialog: search it, pick one or more images and videos (they go in in the order you picked them, each a
 block of its own), and check each one's alt text (a video's title). An image without alt text in the
 library asks for it, and **Insert** waits until it has one; what you type is saved to the library
@@ -228,7 +228,7 @@ the preview or on the help center; the preview says so. Download it and paste it
 
 ### Videos
 
-An article can show a YouTube or Vimeo video. Select **Insert image or video → YouTube or Vimeo
+An article can show a YouTube or Vimeo video. Select **Insert image, video or callout → YouTube or Vimeo
 link**, paste the video's link (a watch page, a `youtu.be` short link, a Vimeo page, or a player
 address), and press Enter: the player goes in a block of its own after the one the cursor is in. A
 YouTube link's start time (`?t=1m5s`) is kept. A link the help center cannot show is refused, with

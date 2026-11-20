@@ -253,16 +253,17 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID string, num
 		var body string
 		var id string
 		var seoTitle, seoDescription string
+		var showContents bool
 		var article domain.PublicKBArticle
 		var err error
 		if locale == "" {
-			article, err = scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBArticleColumns+`, a.body_md, a.id::text, a.seo_title, a.seo_description FROM kb_articles a
-				WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number), &body, &id, &seoTitle, &seoDescription)
+			article, err = scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBArticleColumns+`, a.body_md, a.id::text, a.seo_title, a.seo_description, a.show_contents FROM kb_articles a
+				WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number), &body, &id, &seoTitle, &seoDescription, &showContents)
 		} else {
-			article, err = scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBTranslationColumns+`, t.body_md, a.id::text, t.seo_title, t.seo_description FROM kb_articles a`+
-				shownTranslation(`$3`)+` WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number, locale), &body, &id, &seoTitle, &seoDescription)
+			article, err = scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBTranslationColumns+`, t.body_md, a.id::text, t.seo_title, t.seo_description, a.show_contents FROM kb_articles a`+
+				shownTranslation(`$3`)+` WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number, locale), &body, &id, &seoTitle, &seoDescription, &showContents)
 		}
-		article.SEOTitle, article.SEODescription, article.Locale = seoTitle, seoDescription, locale
+		article.SEOTitle, article.SEODescription, article.ShowContents, article.Locale = seoTitle, seoDescription, showContents, locale
 		article.BodyMD = body
 		if err != nil {
 			return article, err

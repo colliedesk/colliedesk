@@ -439,6 +439,7 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 		Status        string    `json:"status"`
 		SEOTitle      string    `json:"seo_title"`
 		SEODesc       string    `json:"seo_description"`
+		ShowContents  *bool     `json:"show_contents"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.BodyMD == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "An article needs a collection_id, a title and body_md; slug and status are optional.")
@@ -472,10 +473,10 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 	if input.Status == "published" && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, *input.BodyMD, input.Status, input.SEOTitle, input.SEODesc}, func(ctx context.Context) (any, error) {
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, *input.BodyMD, input.Status, input.SEOTitle, input.SEODesc, showContentsKey(input.ShowContents)}, func(ctx context.Context) (any, error) {
 		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
 			store.KBArticleInput{CollectionID: input.CollectionID, ExtraCollectionIDs: extraIDs, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status,
-				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc})
+				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered
@@ -504,10 +505,11 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		Status        *string    `json:"status"`
 		SEOTitle      *string    `json:"seo_title"`
 		SEODesc       *string    `json:"seo_description"`
+		ShowContents  *bool      `json:"show_contents"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
-		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.CollectionIDs == nil && input.Status == nil && input.SEOTitle == nil && input.SEODesc == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title or seo_description.")
+		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.CollectionIDs == nil && input.Status == nil && input.SEOTitle == nil && input.SEODesc == nil && input.ShowContents == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title, seo_description or show_contents.")
 		return
 	}
 	homeCollection, extras, problem := kbArticleCollections(input.CollectionID, input.CollectionIDs)
@@ -528,7 +530,7 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 	}
 	article, err := a.store.UpdateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt,
 		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: homeCollection, ExtraCollectionIDs: extras, Status: input.Status,
-			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc})
+			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents})
 	if err != nil {
 		writeKBError(response, err)
 		return
@@ -846,4 +848,12 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 	}
 	center.URL = home
 	writeJSON(response, http.StatusOK, center)
+}
+
+// showContentsKey is the contents switch of a create as its idempotency key part: "" when left out.
+func showContentsKey(value *bool) string {
+	if value == nil {
+		return ""
+	}
+	return strconv.FormatBool(*value)
 }

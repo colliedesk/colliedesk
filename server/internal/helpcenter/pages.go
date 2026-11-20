@@ -133,6 +133,8 @@ type page struct {
 	Updated, UpdatedISO        string
 	CollectionName, Collection string
 	Neighbours                 []articleLink
+	// Contents are the article's headings, listed above its text and in the rail.
+	Contents []contentsItem
 
 	Searched bool
 	Results  []searchResult
@@ -603,6 +605,9 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 	collection := t.byID[article.CollectionID]
 	data = s.page(v, article.Title, v.crumbs(collection))
 	data.Heading, data.Body = article.Title, rendered.body
+	if article.ShowContents {
+		data.Contents = rendered.contents
+	}
 	data.Description, data.Canonical = rendered.description, v.rootAddress+ArticlePath(article.Number, article.Slug)
 	data.Markdown = data.Canonical + markdownSuffix
 	// The article's own search title and description replace the defaults.

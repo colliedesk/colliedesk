@@ -74,14 +74,15 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 				workspaceID, 0, homeArticles).Query(collectArticles)
 		} else {
 			const first = `(SELECT min(a.number) FROM kb_articles a WHERE ` + publishedKBArticle + `)`
-			batch.Queue(`SELECT `+publicKBArticleColumns+`, a.body_md FROM kb_articles a WHERE `+publishedKBArticle+` AND a.number=`+first, workspaceID).
+			batch.Queue(`SELECT `+publicKBArticleColumns+`, a.body_md, a.show_contents FROM kb_articles a WHERE `+publishedKBArticle+` AND a.number=`+first, workspaceID).
 				QueryRow(func(row pgx.Row) error {
 					var body string
-					found, err := scanPublicKBArticle(row, &body)
+					var showContents bool
+					found, err := scanPublicKBArticle(row, &body, &showContents)
 					if errors.Is(err, pgx.ErrNoRows) {
 						return nil
 					}
-					found.BodyMD = body
+					found.BodyMD, found.ShowContents = body, showContents
 					got.Article = &found
 					return err
 				})

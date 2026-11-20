@@ -35,6 +35,8 @@ type rendered struct {
 	description string
 	// faq is the article's questions when it is a list of questions (questionList).
 	faq []faqItem
+	// contents is the article's headings when it has enough for a list of them (contentsOf).
+	contents []contentsItem
 	// plain is a page that shows the text as written because rendering took too long; it must not
 	// be cached by the visitor's browser under the page's ETag.
 	plain bool
@@ -44,6 +46,9 @@ func (r rendered) size() int {
 	size := len(r.body) + len(r.description)
 	for _, item := range r.faq {
 		size += len(item.question) + len(item.answer)
+	}
+	for _, item := range r.contents {
+		size += len(item.ID) + len(item.Text)
 	}
 	return size
 }

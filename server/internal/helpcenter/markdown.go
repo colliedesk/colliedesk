@@ -115,7 +115,7 @@ func renderArticlePage(body, base, lang string, videos []domain.PublicKBVideo) (
 	if err := writer.Flush(); err != nil {
 		return rendered{}, err
 	}
-	return rendered{body: template.HTML(out.String()), faq: questionList(document, source)}, nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
+	return rendered{body: template.HTML(out.String()), faq: questionList(document, source), contents: contentsOf(document, source)}, nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
 }
 
 // pageWriter is the buffered writer goldmark renders a page into, with the library of that page.
