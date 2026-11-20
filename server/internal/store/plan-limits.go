@@ -175,24 +175,26 @@ const contactIsProvenAgent = `SELECT EXISTS(SELECT 1 FROM conversations c
 // customerMailThatDidNotCount reads, for a conversation the first-contact rule refused, the contact's
 // address and which customer mail it holds that the rule did not count: trusted mail from another
 // address (a contact merged into this one wrote it), platform mail that failed sender verification, and
-// mail posted to the workspace's own inbound URL.
+// mail posted to the workspace's own inbound URL, and mail read from its connected Gmail inbox.
 const customerMailThatDidNotCount = `SELECT COALESCE(k.email,''),
 	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
 		AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND COALESCE(m.email_meta->>'authentication','none') <> 'fail'),
 	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
 		AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND m.email_meta->>'authentication'='fail'),
 	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
-		AND m.kind='incoming' AND m.email_meta->>'via'='workspace')
+		AND m.kind='incoming' AND m.email_meta->>'via'='workspace'),
+	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+		AND m.kind='incoming' AND m.email_meta->>'via'='gmail')
 	FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`
 
 // trialFirstContactRefusal says why the first-contact rule refused a reply: nobody wrote, the customer
 // wrote from another address than the one the reply goes to, their mail failed sender verification, or
-// it was posted to the workspace's own inbound URL. The rule itself is customerWroteFirst; this only
+// it was posted to the workspace's own inbound URL or read from its Gmail inbox. The rule itself is customerWroteFirst; this only
 // names the reason.
 func trialFirstContactRefusal(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) error {
 	var contactEmail string
-	var wroteElsewhere, failedVerification, postedToWorkspace bool
-	err := tx.QueryRow(ctx, customerMailThatDidNotCount, workspaceID, conversationID).Scan(&contactEmail, &wroteElsewhere, &failedVerification, &postedToWorkspace)
+	var wroteElsewhere, failedVerification, postedToWorkspace, readFromMailbox bool
+	err := tx.QueryRow(ctx, customerMailThatDidNotCount, workspaceID, conversationID).Scan(&contactEmail, &wroteElsewhere, &failedVerification, &postedToWorkspace, &readFromMailbox)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &domain.TrialOutboundError{}
 	}
@@ -206,6 +208,8 @@ func trialFirstContactRefusal(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		return &domain.TrialOutboundError{Unverified: domain.ReasonSenderAuthenticationFailed}
 	case postedToWorkspace:
 		return &domain.TrialOutboundError{Unverified: domain.ReasonMailNotViaHostedAddress}
+	case readFromMailbox:
+		return &domain.TrialOutboundError{Unverified: domain.ReasonMailNotViaHostedAddress, FromMailbox: true}
 	}
 	return &domain.TrialOutboundError{}
 }

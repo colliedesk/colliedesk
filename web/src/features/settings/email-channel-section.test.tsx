@@ -15,7 +15,7 @@ const disconnected: EmailChannelSettings = {
   hosted_address: null,
   domain_verification: 'txt',
   sending_pause: null,
-  gmail: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null },
+  gmail: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null, reads_inbox: false, inbox: null },
   microsoft: {
     available: false, missing_settings: [], off_reason: 'not_set_up',
     redirect_uri: 'https://desk.example.com/api/v1/channels/email/microsoft/callback',

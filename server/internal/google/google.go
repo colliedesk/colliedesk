@@ -1,7 +1,8 @@
-// Package google connects a workspace's Gmail account for sending: the OAuth 2.0 authorization code
-// flow with PKCE (consent, code exchange, refresh, revoke) and the Gmail API messages.send call. Only
-// the gmail.send scope is asked for besides openid email, which names the address that connected.
-// Plain net/http against Google's documented endpoints; no SDK.
+// Package google connects a workspace's Gmail account: the OAuth 2.0 authorization code flow with PKCE
+// (consent, code exchange, refresh, revoke), the Gmail API messages.send call, and, on a server whose
+// operator turned reading on (Config.ReadMailbox), the read calls that bring new inbox mail in (read.go).
+// The gmail.send scope is asked for besides openid email, which names the address that connected, and
+// gmail.readonly only when reading is on. Plain net/http against Google's documented endpoints; no SDK.
 package google
 
 import (
@@ -23,10 +24,12 @@ import (
 )
 
 // Scopes asked for at consent. gmail.send is a sensitive scope (no CASA); openid email only identify
-// the account, because gmail.send cannot read the address it sends from.
+// the account, because gmail.send cannot read the address it sends from. gmail.readonly is a restricted
+// scope (Google verification with a CASA assessment), asked for only when Config.ReadMailbox is set.
 const (
 	ScopeGmailSend = "https://www.googleapis.com/auth/gmail.send"
-	scopes         = "openid email " + ScopeGmailSend
+	ScopeGmailRead = "https://www.googleapis.com/auth/gmail.readonly"
+	sendScopes     = "openid email " + ScopeGmailSend
 )
 
 const (
@@ -51,6 +54,9 @@ type Config struct {
 	ClientID     string
 	ClientSecret string
 	Keys         tokenseal.Keys
+	// ReadMailbox asks for gmail.readonly at consent, so the inbox of a connected account is read for new
+	// mail (setting google.read_mailbox). Off, the consent is the send-only one Google verified.
+	ReadMailbox bool
 	// Base replaces every Google address with one local server (tests and the e2e stand-in). Empty is Google.
 	Base string
 	HTTP *http.Client
@@ -61,16 +67,34 @@ const (
 	EnvClientID     = "GOOGLE_OAUTH_CLIENT_ID"
 	EnvClientSecret = "GOOGLE_OAUTH_CLIENT_SECRET"
 	EnvTokenKeys    = "MAILBOX_TOKEN_KEYS"
+	// SettingReadMailbox has no variable: it is a setting of the operator console only ("true" or "false").
+	SettingReadMailbox = "google.read_mailbox"
 )
 
-// ConfigFromEnv reads GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET and MAILBOX_TOKEN_KEYS. A
-// malformed key ring is an error; missing settings are not (Missing names them).
+// ConfigFromEnv reads GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, MAILBOX_TOKEN_KEYS and
+// google.read_mailbox. A malformed key ring or switch is an error; missing settings are not (Missing names them).
 func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	keys, err := tokenseal.ParseKeys(getenv(EnvTokenKeys))
 	if err != nil {
 		return Config{}, fmt.Errorf("%s: %w", EnvTokenKeys, err)
 	}
-	return Config{ClientID: strings.TrimSpace(getenv(EnvClientID)), ClientSecret: strings.TrimSpace(getenv(EnvClientSecret)), Keys: keys}, nil
+	var read bool
+	switch value := strings.ToLower(strings.TrimSpace(getenv(SettingReadMailbox))); value {
+	case "", "false":
+	case "true":
+		read = true
+	default:
+		return Config{}, fmt.Errorf("%s must be true or false, got %q", SettingReadMailbox, value)
+	}
+	return Config{ClientID: strings.TrimSpace(getenv(EnvClientID)), ClientSecret: strings.TrimSpace(getenv(EnvClientSecret)), Keys: keys, ReadMailbox: read}, nil
+}
+
+// scopes is what the consent asks for: send, and read when the operator turned reading on.
+func (c Config) scopes() string {
+	if c.ReadMailbox {
+		return sendScopes + " " + ScopeGmailRead
+	}
+	return sendScopes
 }
 
 // Missing names the settings still needed before Gmail can be connected, empty when none.
@@ -117,9 +141,11 @@ func Challenge(verifier string) string {
 
 // AuthorizationURL is where the person's browser goes to consent. access_type=offline and
 // prompt=consent make Google return a refresh token every time, also when the account consented before.
+// Google's consent lets the person untick each scope: a grant without gmail.readonly still sends
+// (CanRead says whether it reads).
 func (c Config) AuthorizationURL(redirectURI, state, verifier string) string {
 	query := url.Values{
-		"client_id": {c.ClientID}, "redirect_uri": {redirectURI}, "response_type": {"code"}, "scope": {scopes},
+		"client_id": {c.ClientID}, "redirect_uri": {redirectURI}, "response_type": {"code"}, "scope": {c.scopes()},
 		"state": {state}, "code_challenge": {Challenge(verifier)}, "code_challenge_method": {"S256"},
 		"access_type": {"offline"}, "prompt": {"consent"},
 	}

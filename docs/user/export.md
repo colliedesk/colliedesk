@@ -139,7 +139,7 @@ name of an imported message, `null` for a message written in Colliedesk, whose a
 `author_agent_id`, and for received mail, whose sender is in `email_meta`), `kind`
 (`incoming`, `outgoing` or `note`), `body`, `body_html`, `origin`, `email_message_id`,
 `email_meta` (the sender, authentication result, `via`, Cc addresses and attachment names of a
-received message; `via` is `platform` or `workspace` for email and `web_form` for text typed into
+received message; `via` is `platform` or `workspace` for email (`gmail` for mail read from a connected Gmail inbox) and `web_form` for text typed into
 the web form, whose sender address is unverified and whose `authentication` is `none`), `cc` (the
 addresses a reply was copied to, or `null`), `agent_request_id` (the agent request whose approval sent
 this reply, from before agent requests were removed, or `null`), `ai_draft_id` (the AI draft it was written from, or `null`), `channel_id` (the

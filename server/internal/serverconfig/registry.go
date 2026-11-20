@@ -77,6 +77,9 @@ var keys = []Key{
 
 	{Name: "google.client_id", Env: "GOOGLE_OAUTH_CLIENT_ID", Group: GroupMailboxes, Import: "google"},
 	{Name: "google.client_secret", Env: "GOOGLE_OAUTH_CLIENT_SECRET", Secret: true, Group: GroupMailboxes, Import: "google", Guards: []Guard{GuardReauth}},
+	// Reading the inbox asks Google for gmail.readonly, a restricted scope: turn it on only once the OAuth
+	// client is verified for it (docs/self-host/email.md). Off, consent and sending are as they were.
+	{Name: "google.read_mailbox", Default: "false", Group: GroupMailboxes, Guards: []Guard{GuardReauth}},
 	{Name: "microsoft.client_id", Env: "MICROSOFT_OAUTH_CLIENT_ID", Group: GroupMailboxes, Import: "microsoft"},
 	{Name: "microsoft.client_secret", Env: "MICROSOFT_OAUTH_CLIENT_SECRET", Secret: true, Group: GroupMailboxes, Import: "microsoft", Guards: []Guard{GuardReauth}},
 	{Name: "microsoft.tenant", Env: "MICROSOFT_OAUTH_TENANT", Default: "common", Group: GroupMailboxes, Import: "microsoft"},

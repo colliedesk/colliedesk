@@ -16,6 +16,46 @@ type MailboxConnection struct {
 	Error       *string    `json:"error"`
 	FailedAt    *time.Time `json:"failed_at"`
 	ConnectedAt time.Time  `json:"connected_at"`
+	// InboxGranted, InboxErrorCode and InboxReadAt are the Gmail inbox reading as stored; the settings
+	// show them as a GmailInbox (DescribeGmailInbox).
+	InboxGranted   bool       `json:"-"`
+	InboxErrorCode *string    `json:"-"`
+	InboxReadAt    *time.Time `json:"-"`
+}
+
+// GmailInbox says whether new mail of a connected Gmail inbox comes in by itself.
+type GmailInbox struct {
+	State   string     `json:"state"`
+	ReadAt  *time.Time `json:"read_at"`
+	Message string     `json:"message"`
+}
+
+// States of a GmailInbox.
+const (
+	InboxReading    = "reading"
+	InboxNotGranted = "not_granted"
+	InboxRefused    = "refused"
+	InboxOff        = "off"
+)
+
+// DescribeGmailInbox is the inbox reading of a Gmail connection on a server that reads inboxes or not.
+func DescribeGmailInbox(connection MailboxConnection, serverReads bool) GmailInbox {
+	inbox := GmailInbox{ReadAt: UTCOptional(connection.InboxReadAt)}
+	switch {
+	case !serverReads:
+		inbox.State = InboxOff
+		inbox.Message = "This server does not read Gmail inboxes: mail comes in by forwarding to Colliedesk."
+	case connection.InboxErrorCode != nil:
+		inbox.State = InboxRefused
+		inbox.Message = "Google stopped letting Colliedesk read this inbox. Connect Gmail again and allow Colliedesk to read your email; until then mail comes in only by forwarding."
+	case !connection.InboxGranted:
+		inbox.State = InboxNotGranted
+		inbox.Message = "This connection only sends. To bring new mail in without forwarding, connect Gmail again and allow Colliedesk to read your email."
+	default:
+		inbox.State = InboxReading
+		inbox.Message = "New mail in this inbox comes in by itself, within about a minute, also without forwarding. Mail that was there before the connection stays in Gmail."
+	}
+	return inbox
 }
 
 // Mailbox providers.

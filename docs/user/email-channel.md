@@ -216,7 +216,8 @@ sending domain stay as they are.
 If your support address is a Gmail or Google Workspace mailbox, an admin can connect it. Replies are
 then sent through Gmail from that address, and a copy of each reply stays in the mailbox's **Sent**
 folder. Incoming mail still arrives by forwarding, as set up above. Colliedesk asks Google only for
-permission to send email and to see the account's address; it cannot read the mailbox.
+permission to send email and to see the account's address; it cannot read the mailbox, unless the server
+reads Gmail inboxes (see [bring new mail in from Gmail](#bring-new-mail-in-from-gmail)).
 
 On Colliedesk Cloud, next to **Connect Gmail** an admin also sees that Colliedesk's use of data from
 Google APIs adheres to the Google API Services User Data Policy, including the Limited Use
@@ -255,6 +256,27 @@ admin reads that it is not turned on).
 they did before Gmail was connected (the server's SMTP relay). A reply that was still waiting for Gmail
 fails with a note and can be retried. **Use another Gmail account** replaces the connected account.
 Disconnecting the whole email channel also disconnects Gmail.
+
+### Bring new mail in from Gmail
+
+On a server whose operator turned on reading Gmail inboxes, **Send from your mailbox** says "Gmail sends
+your replies and brings new mail in", and Google's page also asks to **Read your
+email** (`gmail.readonly`, read only: Colliedesk never changes, labels or deletes anything in the
+mailbox). Leave it ticked. Then:
+
+- New mail that arrives in the inbox comes into Colliedesk by itself, within about a minute, also when
+  the mailbox does not forward. Mail that was in the inbox before you connected stays in Gmail only.
+- Only the inbox is read: not Sent, Drafts, Spam or other labels. When the connected account is not the
+  support address itself (an alias of a larger account), only mail sent to the support address comes in.
+- Forwarding can stay on: a message that arrives both ways is kept once.
+- Under the connected account, **Send from your mailbox** says when the inbox was last read.
+- If you unticked **Read your email**, or Google stops allowing it later, sending goes on and **Send from
+  your mailbox** says that mail comes in only by forwarding, with **Connect Gmail again** to allow reading.
+- During a Colliedesk Cloud trial, replies go only to mail that arrived at the forwarding address: mail
+  read from the inbox does not count, because an account can add any message to its own inbox. The refusal
+  says so; verifying your sending domain or choosing a plan lifts it.
+
+A server that does not read inboxes shows none of this, and Google asks only to send.
 
 ### Self-hosted
 

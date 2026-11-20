@@ -173,7 +173,7 @@ export const messageDeliverySchema = z.object({
 }) satisfies z.ZodType<Generated<'MessageDelivery'>>;
 export const emailAuthenticationSchema = z.enum(['pass', 'fail', 'none']);
 export const incomingEmailSchema = z.object({
-  from: z.string(), authentication: emailAuthenticationSchema, via: z.enum(['platform', 'workspace', 'web_form']).optional(),
+  from: z.string(), authentication: emailAuthenticationSchema, via: z.enum(['platform', 'workspace', 'gmail', 'web_form']).optional(),
   cc: z.array(z.string()).optional(),
   attachments: z.array(z.object({ filename: z.string(), content_type: z.string() })),
   original_attachment_id: z.string().uuid().nullable(),
@@ -241,8 +241,13 @@ export const mailboxConnectionSchema = z.object({
   error_code: z.enum(['revoked', 'permission', 'mailbox_unavailable']).nullable(), error: z.string().nullable(),
   failed_at: nullableDate, connected_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'MailboxConnection'>>;
+export const gmailInboxSchema = z.object({
+  state: z.enum(['reading', 'not_granted', 'refused', 'off']), read_at: nullableDate, message: z.string(),
+}) satisfies z.ZodType<Generated<'GmailInbox'>>;
 export const gmailSettingsSchema = z.object({
   available: z.boolean(),
+  // A server from before inbox reading sends neither: it reads nothing.
+  reads_inbox: z.boolean().catch(false), inbox: gmailInboxSchema.nullable().catch(null),
   missing_settings: z.array(z.enum(['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'MAILBOX_TOKEN_KEYS'])),
   off_reason: featureOffReason,
   redirect_uri: z.string().url(), connection: mailboxConnectionSchema.nullable(), address_matches: z.boolean().optional(),

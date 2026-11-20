@@ -118,14 +118,16 @@ func (s *Store) TakeOAuthState(ctx context.Context, workspaceID, provider, state
 	return result.state, nil
 }
 
-const mailboxColumns = `provider,address,status,error_code,failed_at,connected_at`
+const mailboxColumns = `provider,address,status,error_code,failed_at,connected_at,
+	' ' || scopes || ' ' LIKE '% ` + gmailReadScope + ` %',inbox_error_code,inbox_read_at`
 
 // grantColumns are a SealedGrant's columns, in its field order.
 const grantColumns = `token_key_id,refresh_token_sealed,address,provider`
 
 func scanMailbox(row pgx.Row) (domain.MailboxConnection, error) {
 	var connection domain.MailboxConnection
-	if err := row.Scan(&connection.Provider, &connection.Address, &connection.Status, &connection.ErrorCode, &connection.FailedAt, &connection.ConnectedAt); err != nil {
+	if err := row.Scan(&connection.Provider, &connection.Address, &connection.Status, &connection.ErrorCode, &connection.FailedAt, &connection.ConnectedAt,
+		&connection.InboxGranted, &connection.InboxErrorCode, &connection.InboxReadAt); err != nil {
 		return domain.MailboxConnection{}, err
 	}
 	if connection.ErrorCode != nil {
@@ -174,6 +176,7 @@ func (s *Store) SaveMailboxConnection(ctx context.Context, workspaceID, channelI
 			VALUES($1,$9,lower($2),$3,$4,$5,NULLIF($6,'')::uuid,$7,$7,$8::uuid,NULLIF($10,''))
 			ON CONFLICT(channel_id) DO UPDATE SET provider=EXCLUDED.provider,address=EXCLUDED.address,scopes=EXCLUDED.scopes,token_key_id=EXCLUDED.token_key_id,account_id=EXCLUDED.account_id,
 				refresh_token_sealed=EXCLUDED.refresh_token_sealed,status='connected',error_code=NULL,failed_at=NULL,
+				inbox_history_id=NULL,inbox_read_at=NULL,inbox_error_code=NULL,
 				connected_by_agent_id=EXCLUDED.connected_by_agent_id,connected_at=EXCLUDED.connected_at,updated_at=EXCLUDED.updated_at
 			RETURNING `+mailboxColumns, workspaceID, address, scopes, grant.KeyID, grant.Sealed, agentID, now, channelID, grant.Provider, grant.AccountID))
 		return result, err
