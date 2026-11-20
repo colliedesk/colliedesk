@@ -90,6 +90,8 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   // picking is the media library picker, open or not.
   const [picking, setPicking] = useState(false);
   const [coding, setCoding] = useState(false);
+  // full: the text and its toolbar fill the window until the button or Escape leaves.
+  const [full, setFull] = useState(false);
   // linkAt is where the list of articles to link to opens, measured from the bar's left edge: under the button
   // that opened it. Undefined while the list is closed.
   const [linkAt, setLinkAt] = useState<number>();
@@ -251,6 +253,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     ...(compact ? [{ label: t.articleLink, icon: 'article' as const, disabled: !editing, onSelect: openLinking, separated: true }] : []),
     ...(compact ? [item(t.search, 'search', openSearchPanel), item(t.undo, 'undo', undo, !active?.canUndo)] : []),
     item(t.redo, 'redo', redo, !active?.canRedo),
+    ...(compact ? [{ label: full ? t.exitFullscreen : t.fullscreen, icon: 'fullscreen' as const, onSelect: () => setFull(!full), separated: true }] : []),
   ];
   const insert: MenuItem[] = [
     { label: t.fromLibrary, hint: t.fromLibraryHint, icon: 'library', disabled: !editing, onSelect: () => setPicking(true) },
@@ -261,8 +264,21 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const insertMenu = <KBMenu label={t.insertMenuLong} title={t.insertMenuLong} align="start" describe items={insert} className="md-insert" buttonClassName="md-insert-button"
     tool="insert" tabIndex={stop === 'insert' ? 0 : -1} disabled={!editing}
     trigger={<><Icon name="image" /><span>{t.insertMenu}</span><span className="md-insert-long">{t.insertMenuMore}</span><Icon name="chevronDown" /></>} />;
+  // Full screen works in the preview too, so its button is never disabled. A dialog, a menu or the search panel
+  // takes its own Escape first (each prevents it); a plain Escape in the text leaves full screen.
+  const fullscreen = (
+    <button type="button" data-tool="fullscreen" className="md-tool" aria-label={`${t.fullscreen} (${t.fullscreenKeys})`} data-tip={full ? t.exitFullscreen : t.fullscreen}
+      aria-pressed={full} tabIndex={stop === 'fullscreen' ? 0 : -1} onMouseDown={(event) => event.preventDefault()} onClick={() => setFull(!full)}>
+      <Icon name="fullscreen" />
+    </button>
+  );
+  const onShellKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape' || !full || event.defaultPrevented) return;
+    event.preventDefault();
+    setFull(false);
+  };
   return (
-    <div ref={shell} className="md-shell" data-mode={mode} data-compact={compact ? 'true' : undefined}>
+    <div ref={shell} className="md-shell" data-mode={mode} data-compact={compact ? 'true' : undefined} data-fullscreen={full ? 'true' : undefined} onKeyDown={onShellKey}>
       {/* The bar holds the toolbar and the article list that opens over the text just under it. */}
       <div ref={bar} className="md-bar" style={linkAt === undefined ? undefined : { '--link-at': `${linkAt}px` } as CSSProperties}>
         <div className="md-toolbar" role="toolbar" aria-label={kbMessages.formatting} onKeyDown={onToolbarKey}>
@@ -293,6 +309,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
             <span className="md-sep" aria-hidden="true" />
             {insertMenu}
             <span className="md-grow" />
+            {fullscreen}
             {tool('search', t.search, `${mod}F`, openSearchPanel)}
             {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
           </>}
