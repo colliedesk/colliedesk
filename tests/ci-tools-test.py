@@ -912,11 +912,6 @@ class PrebuiltTestServers(unittest.TestCase):
         self.assertIn('binaryPath(tags)', self.config)
         self.assertIn('export function binaryPath(', self.cli)
 
-    def test_the_two_servers_link_side_by_side(self):
-        # The untagged link runs beside the tagged build, and the step still fails when either fails.
-        # One after the other they took 5.6 seconds on four cores, side by side 2.1.
-        self.assertRegex(self.step, r'go build -o \S+ \./cmd/collie & (\w+)=\$!; go build -tags e2e -o \S+ \./cmd/collie && wait \$\1')
-
     def test_main_caches_the_packages_the_e2e_tag_changes(self):
         # internal/freshdesk has an e2e file, so httpapi, mcpserver and importjobs compile again under
         # the tag; `go test -c` alone left them to every e2e shard (2.1 of 3.7 seconds of its build).

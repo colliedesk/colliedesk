@@ -264,12 +264,20 @@ jobs:
       # The Vite build and the servers' link also run while Chromium installs, to the paths the
       # tests run them from (web/e2e/support/cli.ts): the test servers then start this commit's
       # binaries, embedded app included, without linking. The tests wait for it, so it starts
-      # first and the checks below yield the cores to it (nice). The two links run side by side,
-      # each mostly on one core, and the step fails when either fails.
+      # first and the checks below yield the cores to it (nice).
+      - name: Probe which packages the restored cache misses
+        working-directory: server
+        run: |
+          gcc --version | head -1
+          for t in "" e2e; do
+            go list -tags "$t" -deps -f '{{if .Stale}}{{.ImportPath}}: {{.StaleReason}}{{end}}' ./cmd/collie > "$RUNNER_TEMP/stale.txt"
+            echo "tags=$t stale=$(wc -l < "$RUNNER_TEMP/stale.txt") of $(go list -tags "$t" -deps ./cmd/collie | wc -l)"
+            grep -v 'stale dependency' "$RUNNER_TEMP/stale.txt" | head -20
+          done
       - name: Build the app and compile the test servers in the background
         run: |
           sh .github/scripts/ci-background.sh start app sh -c \
-            'cd web && corepack pnpm exec vite build && corepack pnpm exec vite build -c vite.operator.config.ts && cd ../server && { go build -o ../.cache/e2e/colliedesk ./cmd/collie & plain=$!; go build -tags e2e -o ../.cache/e2e/colliedesk-e2e ./cmd/collie && wait $plain; }'
+            'cd web && corepack pnpm exec vite build && corepack pnpm exec vite build -c vite.operator.config.ts && cd ../server && go build -tags e2e -o ../.cache/e2e/colliedesk-e2e ./cmd/collie && go build -o ../.cache/e2e/colliedesk ./cmd/collie'
       - name: Pick this shard's test files in the background
         working-directory: web
         env:
