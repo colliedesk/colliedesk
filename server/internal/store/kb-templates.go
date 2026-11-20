@@ -131,9 +131,14 @@ func (s *Store) RestoreKBTemplateVersion(ctx context.Context, workspaceID string
 }
 
 // DeleteKBTemplate moves a template to the trash and, in the same statement, clears it as the default
-// template of every collection. seen works as in UpdateKBTemplate.
+// template of every collection. seen works as in UpdateKBTemplate. It holds the knowledge base lock
+// first, as a collection save that names a default does (lockKB): a save that read the template as live
+// has committed before the clear starts, and a later one reads it in the trash.
 func (s *Store) DeleteKBTemplate(ctx context.Context, workspaceID string, actor Actor, id string, seen time.Time) error {
 	_, err := s.changeKBTemplate(ctx, workspaceID, actor, id, true, domain.SavedReplyDeleted, nil, func(tx pgx.Tx) pgx.Row {
+		if err := lockKB(ctx, tx, workspaceID); err != nil {
+			return errorRow{err}
+		}
 		return tx.QueryRow(ctx, `WITH t AS (
 			UPDATE kb_templates SET deleted_at=clock_timestamp(), deleted_by_agent_id=$3, updated_at=clock_timestamp()
 			WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL AND updated_at=$4
