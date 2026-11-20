@@ -20,7 +20,7 @@ import (
 // 180 KB more).
 const highlightLimit = 10_000
 
-// highlightTime is the most time an article's lexing takes, counted from its first coloured block.
+// highlightTime is the most time an article spends lexing its code blocks.
 // Some lexers are quadratic on crafted code (8,000 newlines in C or Java, colons in YAML take
 // seconds), so the block lexing when it runs out and every later block show as plain text. A var so
 // a test can spend it.
@@ -65,10 +65,10 @@ func renderFencedCode(w util.BufWriter, source []byte, node ast.Node, entering b
 	return ast.WalkSkipChildren, nil
 }
 
-// codeBudget is what an article has left for colouring code: characters and lexing time.
+// codeBudget is what an article has used for colouring code: characters and lexing time.
 type codeBudget struct {
 	used  int
-	until time.Time // zero until the first block is lexed
+	lexed time.Duration
 	spent bool
 }
 
@@ -80,9 +80,7 @@ func (budget *codeBudget) highlight(w util.BufWriter, language, code string) boo
 		return false
 	}
 	budget.used += len(code)
-	if budget.until.IsZero() {
-		budget.until = time.Now().Add(highlightTime)
-	}
+	// Tokenise compiles a lexer's rules on its first use in the process, so only the tokens are timed.
 	tokens, err := lexer.Tokenise(nil, code)
 	if err != nil {
 		return false
@@ -105,10 +103,16 @@ func (budget *codeBudget) highlight(w util.BufWriter, language, code string) boo
 		}
 		run.Reset()
 	}
-	for token := tokens(); token != chroma.EOF; token = tokens() {
-		if !time.Now().Before(budget.until) {
+	for {
+		if budget.lexed >= highlightTime {
 			budget.spent = true
 			return false
+		}
+		started := time.Now()
+		token := tokens()
+		budget.lexed += time.Since(started)
+		if token == chroma.EOF {
+			break
 		}
 		if token.Value == "" {
 			continue

@@ -3,6 +3,7 @@ package helpcenter
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestCodeWithALanguageIsHighlightedWithClassesOnly: a fenced block in a known language gets token
@@ -92,6 +93,9 @@ func TestALanguageIsFoundByItsNameOrAliasOnly(t *testing.T) {
 // within 10,000 characters; a block that would pass it stays plain, and a later one that fits is
 // still coloured. Highlighting multiplies a block's HTML by up to 18, so this bounds the page too.
 func TestAnArticleColoursAtMostItsLimitOfCode(t *testing.T) {
+	saved := highlightTime
+	highlightTime = time.Hour // the characters are under test here, not the time
+	t.Cleanup(func() { highlightTime = saved })
 	block := strings.Repeat("x := 1\n", 571) // 3,997 characters
 	body := "```go\n" + block + "```\n\n```go\n" + block + "```\n\n```go\n" + block + "```\n\n```go\nx := 2\n```\n"
 	got, err := renderArticle(body, "/help/acme")
