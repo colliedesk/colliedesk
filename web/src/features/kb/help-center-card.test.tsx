@@ -72,7 +72,8 @@ test('an admin who may not publish sees whether approval is required but cannot 
   serve({ 'GET /api/v1/help-center': () => json(200, { ...off, require_approval: true }) });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <PermissionsContext.Provider value={['help_center:read', 'help_center:update']}><HelpCenterSettings canManage workspaceName="Acme" /></PermissionsContext.Provider></QueryClientProvider>);
-  expect(await screen.findByText('Approval before publishing: required. Only a role that may publish articles changes it.')).toBeInTheDocument();
+  expect(await screen.findByText('Approval before publishing: required.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Approval before publishing' })).toHaveAccessibleDescription('Only a role that may publish articles changes it.');
   expect(screen.queryByRole('checkbox', { name: 'Require approval before publishing' })).not.toBeInTheDocument();
 });
 

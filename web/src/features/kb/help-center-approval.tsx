@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { InvalidRequestError } from '../../api/client';
 import { useHolds } from '../../lib/permissions-context';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { kbApi } from './kb-api';
 import type { HelpCenter } from './kb-api';
 import { reviewMessages as r } from './review-messages';
@@ -18,12 +19,12 @@ export function HelpCenterApproval({ settings, canManage }: { settings: HelpCent
   });
   const on = save.isPending ? save.variables : settings.require_approval;
   if (!canManage || !holds('kb_articles:publish')) {
-    return <p className="muted-copy">{r.approvalState(settings.require_approval)}{canManage && <> {r.approvalNeedsPublish}</>}</p>;
+    return <p className="muted-copy">{r.approvalState(settings.require_approval)}{canManage && <> <HelpTip label={r.collectionApproval} text={r.approvalNeedsPublish} /></>}</p>;
   }
   return <div className="field">
     <label className="field-inline"><input type="checkbox" checked={on} disabled={save.isPending} aria-describedby="help-center-approval-help"
       onChange={(event) => save.mutate(event.target.checked)} /><span>{r.requireApproval}</span></label>
-    <small id="help-center-approval-help" className="muted-copy">{r.requireApprovalHelp}</small>
+    <HelpTip label={r.requireApproval} text={r.requireApprovalTip} id="help-center-approval-help" />
     {save.isError && <p role="alert" className="error-copy">{save.error instanceof InvalidRequestError ? save.error.message : messages.settingsActionFailed}</p>}
   </div>;
 }

@@ -6,6 +6,7 @@ import { reason } from './kb-tree';
 import { KBDialog } from './kb-ui';
 import { openForMeKey, reviewApi, reviewsKey } from './review-api';
 import type { KBReview } from './review-api';
+import { HelpTip } from '../../ui/help-tip';
 import { reviewMessages as r } from './review-messages';
 
 export interface Candidate { id: string; name: string }
@@ -60,7 +61,7 @@ export function ReviewSendDialog({ articleId, locale, meId, onSent, onClose }: {
       <fieldset className="kb-reviewer-list">
         <legend>{r.reviewers}</legend>
         {loading ? <p className="kb-hint" role="status">…</p>
-          : reviewers.length === 0 ? <p className="kb-hint">{r.noReviewers}</p>
+          : reviewers.length === 0 ? <p className="kb-hint">{r.noReviewers} <HelpTip label={r.reviewers} text={r.noReviewersTip} /></p>
             : reviewers.map((reviewer) => (
               <label key={reviewer.id} className="check-row"><input type="checkbox" checked={chosen.includes(reviewer.id)}
                 onChange={(event) => toggle(reviewer.id, event.target.checked)} /><span>{reviewer.name}</span></label>
