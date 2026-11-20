@@ -59,10 +59,10 @@ func TestCalloutsRenderWithTheirLabelAndANoteRole(t *testing.T) {
 // TestOtherQuotesStayQuotes: only a known type alone on the first line makes a callout.
 func TestOtherQuotesStayQuotes(t *testing.T) {
 	cases := map[string]string{
-		"> [!DANGER]\n> Unknown type.":      "<blockquote>\n<p>[!DANGER]\nUnknown type.</p>\n</blockquote>\n",
-		"> [!NOTE] same line\n> text.":      "<blockquote>\n<p>[!NOTE] same line\ntext.</p>\n</blockquote>\n",
-		"> Just a quote.":                   "<blockquote>\n<p>Just a quote.</p>\n</blockquote>\n",
-		"Text [!NOTE] in a paragraph.":      "<p>Text [!NOTE] in a paragraph.</p>\n",
+		"> [!DANGER]\n> Unknown type.":        "<blockquote>\n<p>[!DANGER]\nUnknown type.</p>\n</blockquote>\n",
+		"> [!NOTE] same line\n> text.":        "<blockquote>\n<p>[!NOTE] same line\ntext.</p>\n</blockquote>\n",
+		"> Just a quote.":                     "<blockquote>\n<p>Just a quote.</p>\n</blockquote>\n",
+		"Text [!NOTE] in a paragraph.":        "<p>Text [!NOTE] in a paragraph.</p>\n",
 		"> - [!NOTE]\n>   inside a list item": "<blockquote>\n<ul>\n<li>[!NOTE]\ninside a list item</li>\n</ul>\n</blockquote>\n",
 	}
 	for body, want := range cases {

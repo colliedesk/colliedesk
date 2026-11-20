@@ -33,7 +33,7 @@ var markdown = goldmark.New(
 		extension.Strikethrough, linkify{}, extension.TaskList, extension.Footnote),
 	goldmark.WithParserOptions(parser.WithAutoHeadingID(), parser.WithASTTransformers(util.Prioritized(publicLinks{}, 100), util.Prioritized(hiddenText{}, 200), util.Prioritized(callouts{}, 300))),
 	// Below the default renderers' 1000, so these functions replace theirs.
-	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(rawHTML{}, 100), util.Prioritized(calloutHTML{}, 100))),
+	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(rawHTML{}, 100), util.Prioritized(calloutHTML{}, 100), util.Prioritized(codeHTML{}, 100))),
 )
 
 // linkify is goldmark's Linkify (bare URLs, www. addresses and e-mail addresses become links), asked
