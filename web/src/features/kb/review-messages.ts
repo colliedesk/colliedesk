@@ -69,6 +69,8 @@ export const reviewMessages = {
   // Settings.
   requireApproval: 'Require approval before publishing',
   requireApprovalHelp: 'A teammate who may publish approves each new or changed article before it goes on the help center. Collections can override it.',
+  approvalState: (on: boolean) => `Approval before publishing: ${on ? 'required' : 'not required'}.`,
+  approvalNeedsPublish: 'Only a role that may publish articles changes it.',
   collectionApproval: 'Approval before publishing',
   approvalModes: { inherit: (on: boolean) => `As the help center (${on ? 'required' : 'not required'})`, on: 'Required', off: 'Not required' },
 };
