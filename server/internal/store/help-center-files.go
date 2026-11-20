@@ -40,6 +40,50 @@ func (s *Store) HelpCenterFile(ctx context.Context, workspaceID, id string) (Sto
 	return file, nil
 }
 
+// fileHits is the query files(article_id, rank) of the articles whose page lists a file outside the
+// trash whose text matches the search $2 of workspace $1, the lists chosen by listed on rows l.
+func fileHits(listed string) string {
+	return `files AS (SELECT l.article_id, max(ts_rank(m.text_search, q.q)) AS rank
+		FROM kb_media m CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) q
+		JOIN kb_article_attachments l ON l.workspace_id=m.workspace_id AND l.media_id=m.id
+		WHERE m.workspace_id=$1 AND m.kind='file' AND m.deleted_at IS NULL AND m.text IS NOT NULL AND m.text_search @@ q.q AND ` + listed + `
+		GROUP BY l.article_id)`
+}
+
+// translationFiles picks, on rows l, the lists the page in language $6 shows (publicKBAttachments): the
+// translation's own, or the article's while the translation lists no file outside the trash.
+const translationFiles = `(l.locale=$6 OR l.locale IS NULL AND NOT EXISTS (SELECT 1 FROM kb_article_attachments o
+		JOIN kb_media om ON om.workspace_id=o.workspace_id AND om.id=o.media_id AND om.kind='file' AND om.deleted_at IS NULL
+		WHERE o.workspace_id=l.workspace_id AND o.article_id=l.article_id AND o.locale=$6))`
+
+// indexedKBAttachments fills in the files each published article's own page lists, in one read.
+func indexedKBAttachments(ctx context.Context, tx pgx.Tx, workspaceID string, articles []domain.PublicKBArticle) error {
+	if len(articles) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `SELECT a.number, m.id::text, m.name, m.content_type, m.size FROM kb_article_attachments l
+		JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+		JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id AND m.kind='file' AND m.deleted_at IS NULL
+		WHERE l.workspace_id=$1 AND l.locale IS NULL AND `+publishedKBArticle+` ORDER BY a.number, l.position`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("read help center index attachments: %w", err)
+	}
+	byNumber := map[int64]domain.KBAttachments{}
+	var number int64
+	var item domain.KBAttachment
+	_, err = pgx.ForEachRow(rows, []any{&number, &item.ID, &item.Name, &item.ContentType, &item.Size}, func() error {
+		byNumber[number] = append(byNumber[number], item)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("read help center index attachments: %w", err)
+	}
+	for i := range articles {
+		articles[i].Attachments = byNumber[articles[i].Number]
+	}
+	return nil
+}
+
 // publicKBAttachments are the files a published article's page lists in language locale ("" the
 // primary one): the translation's own list, or the article's when the translation lists none. Files in
 // the library's trash are left out.

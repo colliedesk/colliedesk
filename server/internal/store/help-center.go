@@ -348,21 +348,22 @@ func (s *Store) SearchHelpCenter(ctx context.Context, workspaceID, query string,
 }
 
 // SearchHelpCenterIn is SearchHelpCenter in language locale: it searches the published translations
-// in it ("" is the primary language), their own words, never the primary text.
+// in it ("" is the primary language), their own words, never the primary text. The text of a file the
+// page lists finds its article too, ranked below the article's own words.
 func (s *Store) SearchHelpCenterIn(ctx context.Context, workspaceID, locale, query string, limit int) ([]domain.PublicKBArticle, error) {
-	sql := `WITH hits AS (
-				SELECT a.id, COALESCE(ts_rank(a.search, t.q), 0) AS rank, a.updated_at
-				FROM kb_articles a CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) t
-				WHERE ` + publishedKBArticle + ` AND (a.search @@ t.q OR a.title ILIKE $3)
+	sql := `WITH ` + fileHits(`l.locale IS NULL`) + `, hits AS (
+				SELECT a.id, COALESCE(ts_rank(a.search, t.q), 0) + COALESCE(f.rank, 0) / 2 AS rank, a.updated_at
+				FROM kb_articles a CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) t LEFT JOIN files f ON f.article_id=a.id
+				WHERE ` + publishedKBArticle + ` AND (a.search @@ t.q OR a.title ILIKE $3 OR f.article_id IS NOT NULL)
 				ORDER BY rank DESC, a.updated_at DESC, a.id DESC LIMIT $4)
 			SELECT ` + publicKBArticleColumns + `, left(a.body_md, $5) FROM hits h JOIN kb_articles a ON a.workspace_id=$1 AND a.id=h.id
 			ORDER BY h.rank DESC, h.updated_at DESC, h.id DESC`
 	args := []any{workspaceID, query, "%" + likePattern.Replace(query) + "%", limit, helpCenterExcerptChars}
 	if locale != "" {
-		sql = `WITH hits AS (
-				SELECT a.id, COALESCE(ts_rank(t.search, w.q), 0) AS rank, t.updated_at
-				FROM kb_articles a` + shownTranslation(`$6`) + ` CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) w
-				WHERE ` + publishedKBArticle + ` AND (t.search @@ w.q OR t.title ILIKE $3)
+		sql = `WITH ` + fileHits(translationFiles) + `, hits AS (
+				SELECT a.id, COALESCE(ts_rank(t.search, w.q), 0) + COALESCE(f.rank, 0) / 2 AS rank, t.updated_at
+				FROM kb_articles a` + shownTranslation(`$6`) + ` CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) w LEFT JOIN files f ON f.article_id=a.id
+				WHERE ` + publishedKBArticle + ` AND (t.search @@ w.q OR t.title ILIKE $3 OR f.article_id IS NOT NULL)
 				ORDER BY rank DESC, t.updated_at DESC, a.id DESC LIMIT $4)
 			SELECT ` + publicKBTranslationColumns + `, left(t.body_md, $5) FROM hits h JOIN kb_articles a ON a.workspace_id=$1 AND a.id=h.id
 				JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$6

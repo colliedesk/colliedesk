@@ -27,6 +27,16 @@ func (v view) fileLinks(items domain.KBAttachments) []fileLink {
 	return links
 }
 
+// markdownFiles is a Markdown list of the files, each line led by indent, linked by their absolute addresses.
+func (v view) markdownFiles(items domain.KBAttachments, indent string) string {
+	var out strings.Builder
+	for _, item := range items {
+		out.WriteString(indent + "- [" + markdownText.Replace(item.Name) + "](" + v.address + filesPath + item.ID + "/" + domain.KBFileSlug(item.Name) +
+			") (" + domain.KBFileLabel(item.Name) + ", " + domain.KBFileSize(item.Size) + ")\n")
+	}
+	return out.String()
+}
+
 // file hands out a file a published article lists, always as a download that cannot run on this
 // origin. Any other id, a draft's file or another workspace's, gets the help center's 404 page. Only
 // the id finds the file; the slug after it is for people. Each answer revalidates, so a file stops

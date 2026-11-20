@@ -198,7 +198,7 @@ func (s *Site) sitemap(response http.ResponseWriter, request *http.Request, v vi
 var markdownText = strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`, "\n", " ", "\r", " ")
 
 // llms is /llms.txt (llmstxt.org): the help center's title, then each collection that holds
-// published articles with a link to the Markdown of each.
+// published articles with a link to the Markdown of each and, below it, the files its page lists.
 func (s *Site) llms(response http.ResponseWriter, request *http.Request, v view) {
 	if fresh(response, request, v.etag) {
 		return
@@ -224,6 +224,7 @@ func (s *Site) llms(response http.ResponseWriter, request *http.Request, v view)
 		out.WriteString("\n## " + markdownText.Replace(name) + "\n\n")
 		for _, article := range list {
 			out.WriteString("- [" + markdownText.Replace(article.Title) + "](" + v.address + ArticlePath(article.Number, article.Slug) + markdownSuffix + ")\n")
+			out.WriteString(v.markdownFiles(article.Attachments, "  "))
 		}
 	}
 	for _, n := range collections {
@@ -255,12 +256,16 @@ var helpCenterLink = regexp.MustCompile(`\]\((/[ac]/[^/)\s])`)
 var htmlComment = regexp.MustCompile(`(?s)<!--.*?-->`)
 
 // articleMarkdown is the article as written, under its title, with its images, videos and links to other
-// articles on the help center's address and without the notes its page hides; the canonical address is its page.
+// articles on the help center's address and without the notes its page hides, then the files its page
+// lists; the canonical address is its page.
 func (s *Site) articleMarkdown(response http.ResponseWriter, request *http.Request, v view, article domain.PublicKBArticle) {
 	text := htmlComment.ReplaceAllString(article.BodyMD, "")
 	text = apiMediaPath.ReplaceAllString(text, v.address+"/$1/$2")
 	text = helpCenterLink.ReplaceAllString(text, "]("+v.address+"$1")
 	body := "# " + strings.TrimSpace(strings.NewReplacer("\n", " ", "\r", " ").Replace(article.Title)) + "\n\n" + strings.TrimSpace(text) + "\n"
+	if len(article.Attachments) > 0 {
+		body += "\n## " + v.text.Downloads + "\n\n" + v.markdownFiles(article.Attachments, "")
+	}
 	response.Header().Set("Link", "<"+v.rootAddress+ArticlePath(article.Number, article.Slug)+`>; rel="canonical"`)
 	s.writeFile(response, request, v, "text/markdown; charset=utf-8", []byte(body))
 }

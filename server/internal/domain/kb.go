@@ -518,7 +518,7 @@ type PublicKBArticle struct {
 	// Votes are what the page counts of "Was this article helpful?", read with the article page only.
 	Votes KBVoteCount
 	// Attachments are the files the page lists for download under the text, read with the article
-	// page only; URL is left empty, the help center gives each its own address.
+	// page and the help center index only; URL is left empty, the help center gives each its own address.
 	Attachments KBAttachments
 }
 
