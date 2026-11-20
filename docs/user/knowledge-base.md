@@ -312,7 +312,7 @@ collection). **Restore version N** makes that version's title, address name and 
 as a new version; the status and collection stay as they are, so a restore never publishes or moves
 an article by surprise. Save or undo your own changes first.
 
-## Readers' votes
+## Votes from readers
 
 **Readers' votes** on an article (on the right; on a phone, under the text) shows what readers of the
 public page answered to **Was this article helpful?**:
@@ -677,7 +677,7 @@ to serve on the domain again.
 - Every article ends with **Was this article helpful?** and **Yes** / **No**, with the count so far
   ("12 out of 15 found this helpful", votes imported from Freshdesk included). After **No** the reader
   can say **What was missing?** in one line. Both are plain forms that work without script. The words
-  are in the article's language (English for a language without them). See [Readers' votes](#readers-votes).
+  are in the article's language (English for a language without them). See [Readers' votes](#votes-from-readers).
 
 Every page carries structured data for search engines (schema.org JSON-LD, which runs nothing): a
 breadcrumb trail, and on an article page an `Article` with its title, description and dates. An article
@@ -833,7 +833,7 @@ Articles and collections:
   `PATCH /api/v1/kb/articles`, and on `colliedesk_kb_article_create` and `colliedesk_kb_article_update`.
 - Keep an article away from AI: `colliedesk_kb_article_ai_exclude` and `colliedesk_kb_article_ai_include`,
   with `kb_articles:update`.
-- [Readers' votes](#readers-votes): `colliedesk_kb_article_votes_get` or
+- [Readers' votes](#votes-from-readers): `colliedesk_kb_article_votes_get` or
   `GET /api/v1/kb/articles/{id}/votes` reads the count, each vote with its line, and the earlier counts
   (`kb_articles:read`). `colliedesk_kb_article_votes_reset` or `POST /api/v1/kb/articles/{id}/votes/reset`
   resets them (`kb_articles:update`); a repeat of the same press, or a reset with nothing counted, stores
