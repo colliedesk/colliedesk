@@ -24,7 +24,7 @@ export const reviewMessages = {
   changesAsked: (by: string, note: string) => `${by} asked for changes: ${note}`,
   editsNeedApproval: 'Your edits need a new approval: save them and send them for review.',
   approvedBy: (by: string) => `Approved by ${by}. Publish it now.`,
-  notRequired: 'This text can be published without an approval.',
+  approvalNeeded: 'Needs approval',
   byAgent: (label: string) => `Written by an AI agent through ${label}`,
   // The Reviews page.
   heading: 'Knowledge base',

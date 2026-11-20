@@ -48,12 +48,14 @@ interface DraftBarProps {
   busy: boolean;
   // dirty: edits on screen are not saved yet, and Publish changes would not include them.
   dirty: boolean;
+  // blocked says why the changes cannot be published yet (they need a teammate's approval); unset, they can.
+  blocked?: string;
   onPublish: () => void;
   onDiscard: () => Promise<void>;
 }
 
 // ArticleDraftBar says the article has unpublished changes and offers what comes next for them.
-export function ArticleDraftBar({ article, title, body, busy, dirty, onPublish, onDiscard }: DraftBarProps) {
+export function ArticleDraftBar({ article, title, body, busy, dirty, blocked, onPublish, onDiscard }: DraftBarProps) {
   const id = useId();
   const [compared, setCompared] = useState<{ title: string; lines: DiffLine[] }>();
   const [discarding, setDiscarding] = useState(false);
@@ -62,12 +64,14 @@ export function ArticleDraftBar({ article, title, body, busy, dirty, onPublish, 
     <div className="warning-note kb-draft-bar" role="group" aria-labelledby={`${id}-heading`}>
       <p><strong id={`${id}-heading`}>{draftMessages.unpublishedChanges}</strong>{' '}{draftMessages.draftHelp(article.draft?.updated_by?.name)}</p>
       <div className="button-row">
-        <button type="button" className="primary-action" disabled={busy || dirty} aria-describedby={dirty ? `${id}-save-first` : undefined} onClick={onPublish}>
+        <button type="button" className="primary-action" disabled={busy || dirty || blocked !== undefined}
+          aria-describedby={dirty ? `${id}-save-first` : blocked ? `${id}-blocked` : undefined} onClick={onPublish}>
           {draftMessages.publishChanges}</button>
         <button type="button" onClick={() => setCompared({ title: title.trim(), lines: lineDiff(article.body_md, body()) })}>{draftMessages.compare}</button>
         <button type="button" className="danger-action" disabled={busy} onClick={() => setDiscarding(true)}>{draftMessages.discard}</button>
       </div>
       {dirty && <small id={`${id}-save-first`} className="kb-hint">{draftMessages.saveFirst}</small>}
+      {!dirty && blocked && <small id={`${id}-blocked`} className="kb-hint">{blocked}</small>}
       {compared && <KBDialog title={draftMessages.unpublishedChanges} className="kb-compare" phone="full" closeLabel={draftMessages.close} onClose={() => setCompared(undefined)}>
         {compared.title === live && compared.lines.every((line) => line.change === 'same') ? <p className="muted-copy">{draftMessages.noDifference}</p>
           : <ul className="kb-diff">
