@@ -42,7 +42,9 @@ There are 62 permissions. **Admin** holds them all; **Agent** holds the 42 below
 "Admin only" describes the two built-in roles; a role you make can hold any of them.
 `kb_articles:publish` is needed for anything that changes the public help center: publishing an
 article, editing, trashing or restoring a published one, and renaming, moving or deleting a
-collection. Some things need no permission at all: signing out, seeing and revoking your own
+collection. Resetting an article's [readers' votes](knowledge-base.md#votes-from-readers) changes the
+count its page shows, but needs only `kb_articles:update`: it changes no words, and the earlier
+counts stay readable. Some things need no permission at all: signing out, seeing and revoking your own
 sessions and tokens, and reporting a problem.
 
 ## Roles

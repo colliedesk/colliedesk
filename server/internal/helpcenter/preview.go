@@ -91,6 +91,8 @@ func (s *Site) Preview(ctx context.Context, workspaceID string, theme domain.Hel
 		data = s.homeOf(v, t, read.Articles)
 	case read.Article != nil:
 		data, _ = s.articleOf(v, t, *read.Article, read.Articles)
+		// A preview has no public address to vote at.
+		data.Votes.Action = ""
 		data.Body = template.HTML(playerElement.ReplaceAllLiteralString(string(data.Body), previewVideo)) //nolint:gosec // the rendered body with whole elements swapped for a constant
 	default:
 		if data, err = s.sampleArticle(v); err != nil {
@@ -131,6 +133,8 @@ func (s *Site) sampleArticle(v view) (page, error) {
 	}
 	data := s.page(v, sampleTitle, []link{{Name: "Home", URL: v.home}})
 	data.Heading, data.Body = sampleTitle, body
+	// The vote question shows how it looks; with no address to post to, it has no buttons.
+	data.Votes = &voteBox{T: voteTextFor(v.locale()), MaxMissing: domain.MaxKBVoteMissingChars}
 	now := time.Now().UTC()
 	data.Updated, data.UpdatedISO = now.Format("2 Jan 2006"), now.Format(time.RFC3339)
 	return data, nil

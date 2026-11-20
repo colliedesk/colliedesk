@@ -501,6 +501,8 @@ type PublicKBArticle struct {
 	// are its slug in every language it is published and shown in, "" the primary one.
 	Locale     string
 	Alternates map[string]string
+	// Votes are what the page counts of "Was this article helpful?", read with the article page only.
+	Votes KBVoteCount
 }
 
 // PublicKBTranslation is a published translation the help center shows, for sitemap.xml.

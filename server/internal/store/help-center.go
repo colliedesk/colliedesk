@@ -280,6 +280,9 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID string, num
 		}); err != nil {
 			return article, err
 		}
+		if article.Votes, err = publicKBVoteCount(ctx, tx, workspaceID, id); err != nil {
+			return article, err
+		}
 		if !strings.Contains(body, domain.KBMediaPath) {
 			return article, nil
 		}
