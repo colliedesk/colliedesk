@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { createWorkspace, databaseFor, psql, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
+import { untilShown } from './support/clock';
 
 // A long conversation opens at its newest message, and what the person just sent is in view. Real browser,
 // real layout, mail through the inbound route: the positions are bounding boxes, not scroll offsets.
@@ -155,8 +156,9 @@ test.describe('on a wide screen', () => {
   });
 
   test('a customer reply that arrives keeps a reader who scrolled up where they are, and a reader at the bottom at the bottom', async ({ page }) => {
-    // The inbox looks for new mail every 20 seconds, twice here.
+    // The inbox looks for new mail every 20 seconds, twice here; the page's clock runs ahead to it.
     test.setTimeout(120_000);
+    await page.clock.install();
     const desk = await signIn(page, 'Arrive Desk');
     const thread = await longThread(page, desk, 'Waiting for news', 'Message 9: still waiting.');
     await page.reload();
@@ -165,14 +167,14 @@ test.describe('on a wide screen', () => {
 
     // At the bottom: the next mail comes into view by itself.
     arrive(thread, 'Message 10: hello again?');
-    await expect(message(page, 'hello again?')).toBeVisible({ timeout: 45_000 });
+    await untilShown(page, () => expect(message(page, 'hello again?')).toBeVisible({ timeout: 1_000 }), 45_000);
     await expectEndInView(page, message(page, 'hello again?'), 'a customer reply that arrived while the reader was at the bottom');
 
     // Scrolled up: the position does not move when the next one comes.
     await scrollPaneTo(page, 400);
     const kept = await scrollOffset(page);
     arrive(thread, 'Message 11: anyone there?');
-    await expect(pane(page).locator('article.message')).toHaveCount(11, { timeout: 45_000 });
+    await untilShown(page, () => expect(pane(page).locator('article.message')).toHaveCount(11, { timeout: 1_000 }), 45_000);
     await page.waitForTimeout(500);
     expect(Math.abs((await scrollOffset(page)) - kept)).toBeLessThanOrEqual(1);
   });

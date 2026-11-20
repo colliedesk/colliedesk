@@ -5,6 +5,7 @@ import { colliedesk, databaseURL, mustColliedesk, psql, startServer, stopServer,
 import { ports } from './support/checkout';
 import { redeemLink } from './support/browser';
 import { autofixEnv, cursor, cursorStandIn, github, startAutofixStandIns } from './support/autofix';
+import { untilShown } from './support/clock';
 
 // Autofix, the bridge to a team's own coding agent, end to end against the GitHub and Cursor stand-ins, on a
 // server and database of their own: the shared e2e servers run Autofix workers without a GitHub App.
@@ -29,6 +30,7 @@ test.beforeAll(async () => {
 // Autofix is in preview: its screens show only in a browser that turned it on (features/autofix/autofix-preview.ts).
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem('colliedesk.autofix', 'on'));
+  await page.clock.install();
 });
 
 test.afterAll(async () => {
@@ -109,7 +111,7 @@ async function sendThroughGitHub(page: Page, dialogName: string, agent?: string)
 }
 
 async function badge(fix: Locator, text: string, timeout = 30_000): Promise<void> {
-  await expect(fix.locator('header .status')).toHaveText(text, { timeout });
+  await untilShown(fix.page(), () => expect(fix.locator('header .status')).toHaveText(text, { timeout: 1_000 }), timeout);
 }
 
 test('Claude: connect GitHub, a public repository is refused, send as the person, follow the pull request to its merge, release and draft the reply', async ({ page }) => {
@@ -206,7 +208,8 @@ test('Cursor: the workspace key, send, the run finishes with a pull request, mer
   await expect(page.locator('body')).not.toContainText(cursorStandIn.key.slice(-6));
 
   const pr = 7;
-  await cursor.script([{ status: 'RUNNING' }, { status: 'FINISHED', result: 'Fixed the rounding.', branch: 'cursor/fix-rounding', pr_url: `https://github.com/${api.full_name}/pull/${pr}` }]);
+  // The run stays CREATING until the badge shows Sent, so a run read every second cannot skip it.
+  await cursor.script([]);
   await receive(page, desk, 'Invoice total off by one cent', 'The invoice total is one cent more than the sum of the lines.');
   const fix = block(page);
   await fix.getByRole('button', { name: 'Send to agent' }).click();
@@ -219,6 +222,7 @@ test('Cursor: the workspace key, send, the run finishes with a pull request, mer
   const created = (await cursor.state()).creates.at(-1)!;
   expect(created.repo).toBe(`https://github.com/${api.full_name}`);
   expect(created.prompt).toContain('one cent more');
+  await cursor.script([{ status: 'RUNNING' }, { status: 'FINISHED', result: 'Fixed the rounding.', branch: 'cursor/fix-rounding', pr_url: `https://github.com/${api.full_name}/pull/${pr}` }], created.agent_id);
   await badge(fix, 'PR open', 90_000);
   await expect(fix).toContainText(`#${pr}`);
 
