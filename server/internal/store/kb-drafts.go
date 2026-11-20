@@ -112,17 +112,23 @@ func foldKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 	var title, slug, body, seoTitle, seoDescription string
 	var home *string
 	var showContents *bool
-	var extras []string
+	var extras, attachments []string
 	var keepExtras bool
 	err := tx.QueryRow(ctx, `DELETE FROM kb_article_drafts WHERE workspace_id=$1 AND article_id=$2 AND locale IS NULL
 		RETURNING title,slug,body_md,seo_title,seo_description,collection_id::text,show_contents,COALESCE(extra_collection_ids::text[],'{}'),
-			extra_collection_ids IS NULL`,
-		workspaceID, id).Scan(&title, &slug, &body, &seoTitle, &seoDescription, &home, &showContents, &extras, &keepExtras)
+			extra_collection_ids IS NULL,attachment_ids::text[]`,
+		workspaceID, id).Scan(&title, &slug, &body, &seoTitle, &seoDescription, &home, &showContents, &extras, &keepExtras, &attachments)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return change, nil
 	}
 	if err != nil {
 		return change, fmt.Errorf("read knowledge base article draft: %w", err)
+	}
+	// The draft's files become the article's; a draft that never changed them leaves them as they are.
+	if attachments != nil {
+		if err := replaceKBAttachments(ctx, tx, workspaceID, id, nil, attachments); err != nil {
+			return change, err
+		}
 	}
 	for _, field := range []struct {
 		target **string

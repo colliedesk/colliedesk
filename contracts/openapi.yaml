@@ -6908,6 +6908,44 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/articles/{id}/attachments:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    put:
+      operationId: setKBArticleAttachments
+      x-permission: kb_articles:update
+      description: >
+        Set the files the article lists under its text for download, in order: items of kind `file` of
+        the media library (upload one with POST /api/v1/kb/media-uploads and `kind` file). On a
+        published article the list goes into its draft, as an edit does, and the help center shows it
+        once the draft is published; otherwise it is the article's list at once. A file is downloadable
+        from the help center only while a published article or translation lists it. An id that is not
+        a file of this workspace's library outside the trash is 404 `file_not_found` naming it. The same id twice is 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [media_ids]
+              properties:
+                media_ids:
+                  type: array
+                  maxItems: 50
+                  description: 'Every file in the order the page lists them; an empty list removes them all (the files stay in the library).'
+                  items: {type: string, format: uuid}
+                updated_at: {type: string, format: date-time, description: 'The updated_at you last read; when sent, a later change by someone else is 409 `changed_elsewhere`.'}
+      responses:
+        '200':
+          description: The article with its files (in `draft.attachments` while a draft holds them)
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413':
+          description: 'Error code `too_large`: one file is over 25 MiB, or the files come to more than 100 MiB; nothing changed.'
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/kb/articles/{id}/votes:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -7220,6 +7258,43 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/{id}/translations/{locale}/attachments:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: locale, in: path, required: true, schema: {type: string, minLength: 2, maxLength: 35}}
+    put:
+      operationId: setKBTranslationAttachments
+      x-permission: kb_articles:update
+      description: >
+        Set the files the translation lists under its text, in order, as for an article. A translation
+        has no draft: the list changes at once. A translation that lists no file shows the article's
+        files on its page.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [media_ids]
+              properties:
+                media_ids:
+                  type: array
+                  maxItems: 50
+                  description: 'Every file in the order the page lists them; an empty list removes them all (the files stay in the library).'
+                  items: {type: string, format: uuid}
+                updated_at: {type: string, format: date-time, description: 'The updated_at you last read; when sent, a later change by someone else is 409 `changed_elsewhere`.'}
+      responses:
+        '200':
+          description: The translation with its files
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleTranslation'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413':
+          description: 'Error code `too_large`: one file is over 25 MiB, or the files come to more than 100 MiB; nothing changed.'
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/kb/articles/{id}/translations/{locale}/restore:
     parameters:
       - {$ref: '#/components/parameters/ID'}
@@ -11710,7 +11785,7 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticleTranslation:
       type: object
-      required: [article_id, locale, title, slug, status, published_at, outdated, outdated_at, created_at, updated_at, in_trash, last_change, url, body_md, seo_title, seo_description, has_source_html, deleted_at, language_visible, original]
+      required: [article_id, locale, title, slug, status, published_at, outdated, outdated_at, created_at, updated_at, in_trash, last_change, url, body_md, seo_title, seo_description, has_source_html, deleted_at, language_visible, original, attachments]
       properties:
         article_id: {type: string, format: uuid}
         locale: {type: string}
@@ -11735,6 +11810,10 @@ components:
         deleted_at: {type: [string, 'null'], format: date-time}
         language_visible: {type: boolean, description: Whether the help center shows this language to customers.}
         original: {$ref: '#/components/schemas/KBTranslationOriginal'}
+        attachments:
+          type: array
+          description: 'The files it lists under its text for download, in order.'
+          items: {$ref: '#/components/schemas/KBAttachment'}
         missing_media:
           type: array
           items: {type: string, format: uuid}
@@ -11820,7 +11899,7 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments]
       properties:
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
         id: {type: string, format: uuid}
@@ -11855,6 +11934,10 @@ components:
           type: array
           description: Its versions in the help center's other languages (also those in the trash), without their text.
           items: {$ref: '#/components/schemas/KBTranslationSummary'}
+        attachments:
+          type: array
+          description: 'The files the help center lists under its text for download, in order (PUT /api/v1/kb/articles/{id}/attachments).'
+          items: {$ref: '#/components/schemas/KBAttachment'}
         deleted_at: {type: [string, 'null'], format: date-time, description: Set while the article is in the trash.}
         ai_exclusion:
           description: Null while AI may read the article (when it is published); set while it is excluded from AI.
@@ -11868,7 +11951,7 @@ components:
     KBArticleDraft:
       type: object
       description: 'The unpublished changes of a published article: every field as it will be once published.'
-      required: [title, slug, body_md, seo_title, seo_description, collection_id, collection_ids, show_contents, created_at, updated_at, updated_by]
+      required: [title, slug, body_md, seo_title, seo_description, collection_id, collection_ids, show_contents, attachments, created_at, updated_at, updated_by]
       properties:
         title: {type: string}
         slug: {type: string}
@@ -11878,6 +11961,10 @@ components:
         collection_id: {type: string, format: uuid, description: Its home collection once published.}
         collection_ids: {type: array, minItems: 1, items: {type: string, format: uuid}, description: 'Every collection it will be listed in, its home first.'}
         show_contents: {type: boolean, description: 'Whether the help center will list its headings as On this page once published.'}
+        attachments:
+          type: array
+          description: 'The files it will list once published, in order.'
+          items: {$ref: '#/components/schemas/KBAttachment'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time, description: 'When the draft was saved last. To save, publish or discard it, send the article''s updated_at.'}
         updated_by:
@@ -11885,6 +11972,16 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/SavedReplyPerson'}
+    KBAttachment:
+      type: object
+      description: A file of the media library an article or translation lists for download.
+      required: [id, name, content_type, size, url]
+      properties:
+        id: {type: string, format: uuid, description: The media library item.}
+        name: {type: string, description: 'The name it downloads as, with its extension.'}
+        content_type: {type: string}
+        size: {type: integer, description: Bytes.}
+        url: {type: string, description: '/api/v1/kb/media/<id> for the team; the help center serves it at /files/<id>/<name> while a published article lists it.'}
     TrashedKBArticle:
       type: object
       required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, deleted_at, deleted_by, purges_at]
