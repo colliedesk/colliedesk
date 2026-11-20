@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -101,7 +100,7 @@ func renderArticleWith(body, base string, videos []domain.PublicKBVideo) (templa
 // questions (questionList) from the same parse, so a page is parsed once.
 func renderArticlePage(body, base, lang string, videos []domain.PublicKBVideo) (rendered, error) {
 	var out bytes.Buffer
-	context := parser.NewContext(parser.WithIDs(&headingIDs{used: map[string]bool{}, next: map[string]int{}}))
+	context := parser.NewContext(parser.WithIDs(newHeadingIDs()))
 	context.Set(baseKey, base)
 	library := publicLibrary(base, videos)
 	context.Set(libraryKey, library)
@@ -543,53 +542,4 @@ func deepMarker(line []byte) int {
 		}
 		i = marker + 1
 	}
-}
-
-// headingIDs names headings as goldmark does ("Reset password" is reset-password, the next one
-// reset-password-1, …) so anchors keep working, but remembers the next free suffix of each name:
-// goldmark tries every suffix from 1 again, which took 24 s for 25,000 headings of one name.
-type headingIDs struct {
-	used map[string]bool
-	next map[string]int
-}
-
-func (ids *headingIDs) Generate(value []byte, kind ast.NodeKind) []byte {
-	value = util.TrimRightSpace(util.TrimLeftSpace(value))
-	var name []byte
-	for i := 0; i < len(value); {
-		char := value[i]
-		size := util.UTF8Len(char)
-		i += int(size)
-		switch {
-		case size != 1:
-		case util.IsAlphaNumeric(char):
-			if 'A' <= char && char <= 'Z' {
-				char += 'a' - 'A'
-			}
-			name = append(name, char)
-		case util.IsSpace(char) || char == '-' || char == '_':
-			name = append(name, '-')
-		}
-	}
-	if len(name) == 0 {
-		name = []byte("id")
-		if kind == ast.KindHeading {
-			name = []byte("heading")
-		}
-	}
-	base := string(name)
-	if !ids.used[base] {
-		ids.used[base] = true
-		return name
-	}
-	for suffix := max(ids.next[base], 1); ; suffix++ {
-		if id := base + "-" + strconv.Itoa(suffix); !ids.used[id] {
-			ids.used[id], ids.next[base] = true, suffix+1
-			return []byte(id)
-		}
-	}
-}
-
-func (ids *headingIDs) Put(value []byte) {
-	ids.used[string(value)] = true
 }

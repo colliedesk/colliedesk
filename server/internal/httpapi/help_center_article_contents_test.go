@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -102,4 +103,27 @@ func TestTheThemePreviewOfAnArticleListsItsContents(t *testing.T) {
 	kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Long guide", "status": "published", "body_md": fourSections})
 	article := preview(t, api, admin, "article", map[string]any{}, http.StatusOK)
 	wantHTML(t, "article preview", article.HTML, []string{`aria-labelledby="contents-title"`, `<a href="#four">Four</a>`}, nil)
+}
+
+// TestAHeadingNamedMainLinksToItself: a heading "Main" is not given the id of the page's <main>, so
+// the contents link and the skip link each lead where they say, and no id shows twice on the page.
+func TestAHeadingNamedMainLinksToItself(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Main Desk", "admin@main-heading.example.com")
+	slug := workspaceSlug(t, api, admin)
+	enableHelpCenter(t, api, admin, "Main help", true)
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
+	var article contentsArticleView
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Layout guide", "status": "published",
+		"body_md": "## Main\n\na\n\n## Results\n\nb\n\n## Topics\n\nc"}, admin, http.StatusCreated, &article)
+	page := visit(site, fmt.Sprintf("/help/%s/a/%d-%s", slug, article.Number, article.Slug), "192.0.2.140")
+	wantPage(t, page, http.StatusOK, []string{`<h2 id="main-1">Main</h2>`, `<a href="#main-1">Main</a>`, `<main id="main"`, `href="#main"`}, []string{`<h2 id="main">`})
+	seen := map[string]bool{}
+	for _, match := range regexp.MustCompile(`\sid="([^"]*)"`).FindAllStringSubmatch(page.Body.String(), -1) {
+		if seen[match[1]] {
+			t.Errorf("id %q shows twice on the page", match[1])
+		}
+		seen[match[1]] = true
+	}
 }
