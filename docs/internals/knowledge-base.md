@@ -194,7 +194,6 @@ The public help center is in `help-center.md`.
   needs `:update` only; publishing them needs `:publish` ([Drafts](#drafts)).
 - **Locked workspaces get 402 on every KB route.** None is in `lockedAllowed`; the export still runs.
 
-<<<<<<< HEAD
 ## Drafts
 
 Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
@@ -243,7 +242,6 @@ Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
   (no separate draft tool, the tool list is near its budget), and `kb_article_draft_publish` /
   `kb_article_draft_discard` act on it. Translations still write their live row until #694 gives them
   the same flow on this table.
-=======
 ## Votes
 
 Migration `20261120073704-kb-article-votes`; code `helpcenter/votes.go` (form, cookie, redirect),
@@ -284,7 +282,6 @@ MCP `catalog-kb-votes.go`, export `store/export-kb-votes.go`, web `features/kb/a
   refetch, never a stale page under a new tag.
 - **Export.** `kb-article-vote-resets.ndjson`, then `kb-article-votes.ndjson` with closed votes too:
   after a reset the export is the only way to read them. `voter` is exported hex.
->>>>>>> origin/main
 
 ## Translations
 

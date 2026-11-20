@@ -863,7 +863,6 @@ Articles and collections:
   `PATCH /api/v1/kb/articles`, and on `colliedesk_kb_article_create` and `colliedesk_kb_article_update`.
 - Keep an article away from AI: `colliedesk_kb_article_ai_exclude` and `colliedesk_kb_article_ai_include`,
   with `kb_articles:update`.
-<<<<<<< HEAD
 - Unpublished changes: `colliedesk_kb_article_update` (or `PATCH /api/v1/kb/articles/{id}`) on a
   published article saves them, with `kb_articles:update`. `colliedesk_kb_article_get` answers the
   published article with its `draft`; `has_draft` marks it in every list, and `has_draft=true` on
@@ -873,13 +872,11 @@ Articles and collections:
   `colliedesk_kb_article_draft_discard` (`DELETE /api/v1/kb/articles/{id}/draft`) drops them. Both take
   the article's `updated_at` as you read it: saving the unpublished changes moves it, so changes saved
   after you read them are never published or dropped unseen.
-=======
 - [Readers' votes](#votes-from-readers): `colliedesk_kb_article_votes_get` or
   `GET /api/v1/kb/articles/{id}/votes` reads the count, each vote with its line, and the earlier counts
   (`kb_articles:read`). `colliedesk_kb_article_votes_reset` or `POST /api/v1/kb/articles/{id}/votes/reset`
   resets them (`kb_articles:update`); a repeat of the same press, or a reset with nothing counted, stores
   no second reset. The reset names the token that made it.
->>>>>>> origin/main
 - Link an article in a reply: every article an agent reads or finds carries its public address in `url`
   (also in the API). An agent links an article the same way a person does: the title and the address on
   two lines, from a search with `status` published while the help center is on.

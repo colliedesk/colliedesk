@@ -119,13 +119,10 @@ var routeAccess = map[string]TokenAccess{
 	"POST /api/v1/kb/articles/{id}/versions/{version}/restore":                       need(auth.PermKBArticlesUpdate),
 	"POST /api/v1/kb/articles/{id}/ai-exclusion":                                     need(auth.PermKBArticlesUpdate),
 	"DELETE /api/v1/kb/articles/{id}/ai-exclusion":                                   need(auth.PermKBArticlesUpdate),
-<<<<<<< HEAD
 	"POST /api/v1/kb/articles/{id}/draft/publish":                                    need(auth.PermKBArticlesPublish),
 	"DELETE /api/v1/kb/articles/{id}/draft":                                          need(auth.PermKBArticlesUpdate),
-=======
 	"GET /api/v1/kb/articles/{id}/votes":                                             need(auth.PermKBArticlesRead),
 	"POST /api/v1/kb/articles/{id}/votes/reset":                                      need(auth.PermKBArticlesUpdate),
->>>>>>> origin/main
 	"GET /api/v1/kb/translations":                                                    need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/translations/trash":                                              need(auth.PermKBArticlesRead),
 	"POST /api/v1/kb/articles/{id}/translations":                                     need(auth.PermKBArticlesCreate),

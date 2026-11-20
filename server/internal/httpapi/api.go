@@ -635,13 +635,10 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/kb/articles/{id}/versions/{version}/restore", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionSession},
 		{http.MethodDelete, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionSession},
-<<<<<<< HEAD
 		{http.MethodPost, "/api/v1/kb/articles/{id}/draft/publish", auth.PermissionSession},
 		{http.MethodDelete, "/api/v1/kb/articles/{id}/draft", auth.PermissionSession},
-=======
 		{http.MethodGet, "/api/v1/kb/articles/{id}/votes", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/articles/{id}/votes/reset", auth.PermissionSession},
->>>>>>> origin/main
 		{http.MethodPost, "/api/v1/kb/images", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/images/{id}", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/media", auth.PermissionSession},

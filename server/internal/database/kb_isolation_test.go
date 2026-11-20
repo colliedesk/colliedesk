@@ -36,11 +36,7 @@ func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name stri
 	}
 }
 
-<<<<<<< HEAD
-var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_article_collections", "kb_article_drafts", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "help_centers"}
-=======
-var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_article_collections", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "kb_article_vote_resets", "kb_article_votes", "kb_article_vote_versions", "help_centers"}
->>>>>>> origin/main
+var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_article_collections", "kb_article_drafts", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "kb_article_vote_resets", "kb_article_votes", "kb_article_vote_versions", "help_centers"}
 
 func TestKnowledgeBaseTablesAreScopedByRowLevelSecurity(t *testing.T) {
 	pool := testPool(t)

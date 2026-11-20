@@ -180,13 +180,9 @@ var routesReachingOutside = map[string]string{
 	"PUT /api/v1/kb/collections/{id}/translations/{locale}":                          "public site",
 	"DELETE /api/v1/kb/collections/{id}/translations/{locale}":                       "public site",
 	"POST /api/v1/kb/articles":                                                       "may publish",
-<<<<<<< HEAD
 	"PATCH /api/v1/kb/articles/{id}":                                                 "may publish or unpublish",
 	"POST /api/v1/kb/articles/{id}/draft/publish":                                    "public site",
-=======
-	"PATCH /api/v1/kb/articles/{id}":                                                 "may change a published article",
 	"POST /api/v1/kb/articles/{id}/votes/reset":                                      "the count a published article shows",
->>>>>>> origin/main
 	"DELETE /api/v1/kb/articles/{id}":                                                "may unpublish",
 	"POST /api/v1/kb/articles/{id}/restore":                                          "may republish",
 	"POST /api/v1/kb/articles/{id}/translations":                                     "may publish",
