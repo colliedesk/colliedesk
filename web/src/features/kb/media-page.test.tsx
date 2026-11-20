@@ -266,11 +266,11 @@ test('a video goes up in the parts the server asks for, resumes from the offset 
   };
   const stored: string[] = [];
   const queue = new UploadQueue((stored_) => stored.push(stored_.id), send);
-  const refused = queue.add([new File([new Uint8Array(20)], 'tour.mp4', { type: 'video/mp4' }), new File([new Uint8Array(4)], 'shot.png', { type: 'image/png' }), new File(['x'], 'notes.txt', { type: 'text/plain' })]);
-  expect(refused).toEqual(['notes.txt']);
-  // The text file is a failed row of its own; nothing is sent for it.
-  await waitFor(() => expect(queue.rows().filter((row) => row.kind !== 'file').every((row) => row.state === 'done')).toBe(true));
-  expect(queue.rows()[2]).toMatchObject({ name: 'notes.txt', state: 'failed', permanent: true });
+  const refused = queue.add([new File([new Uint8Array(20)], 'tour.mp4', { type: 'video/mp4' }), new File([new Uint8Array(4)], 'shot.png', { type: 'image/png' }), new File(['x'], 'setup.exe', { type: 'application/x-msdownload' })]);
+  expect(refused).toEqual(['setup.exe']);
+  // The program is a failed row of its own; nothing is sent for it.
+  await waitFor(() => expect(queue.rows().filter((row) => row.kind !== 'refused').every((row) => row.state === 'done')).toBe(true));
+  expect(queue.rows()[2]).toMatchObject({ name: 'setup.exe', state: 'failed', permanent: true });
   expect(parts).toEqual(['0+8/20', '8+8/20', '16+4/20']);
   expect(calls.find((call) => call.path === '/api/v1/kb/media-uploads')?.body).toEqual({ size: 20, name: 'tour', keep: true });
   const image = calls.find((call) => call.path === '/api/v1/kb/images');
@@ -379,13 +379,13 @@ test('a file that cannot go up opens the tray with why, instead of a full bar; D
   // With nothing open, the panel says what it is for, so opening an item never moves the grid.
   expect(await screen.findByText(/Select an image or video to see its alt text/)).toBeInTheDocument();
   const input = document.querySelector('input[type="file"][multiple]') as HTMLInputElement;
-  fireEvent.change(input, { target: { files: [new File(['x'], 'release-notes.txt', { type: 'text/plain' })] } });
+  fireEvent.change(input, { target: { files: [new File(['x'], 'release-notes.html', { type: 'text/html' })] } });
   const tray = await screen.findByRole('region', { name: 'Uploads' });
   expect(tray).toHaveTextContent('1 not uploaded');
-  expect(within(tray).getByRole('alert')).toHaveTextContent('Not an image or video (PNG, JPEG, GIF, WebP, MP4, WebM).');
+  expect(within(tray).getByRole('alert')).toHaveTextContent('Not a type the library holds. Images: PNG, JPEG, GIF, WebP. Videos: MP4, WebM. Files: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ODT, ODS, ODP, CSV, TXT, RTF, ZIP, 7Z, TAR.GZ.');
   expect(within(tray).queryByRole('progressbar')).not.toBeInTheDocument();
   expect(within(tray).getByRole('button', { name: 'Collapse uploads' })).toHaveAttribute('aria-expanded', 'true');
-  fireEvent.click(within(tray).getByRole('button', { name: 'Dismiss release-notes.txt' }));
+  fireEvent.click(within(tray).getByRole('button', { name: 'Dismiss release-notes.html' }));
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Uploads' })).not.toBeInTheDocument());
 });
 

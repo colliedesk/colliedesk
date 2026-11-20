@@ -1,4 +1,5 @@
 import { formatBytes } from '../../lib/format-bytes';
+import { fileExtensions } from './kb-file-types';
 
 // Strings of the media library pages, in the knowledge base chunk.
 const plural = (count: number, one: string, many: string) => `${count.toLocaleString('en')} ${count === 1 ? one : many}`;
@@ -72,8 +73,8 @@ export const mediaMessages = {
   resume: 'Resume',
   cancel: 'Cancel',
   clearFinished: 'Clear finished',
-  notMediaRow: 'Not an image or video (PNG, JPEG, GIF, WebP, MP4, WebM).',
-  overLimit: (size: number, limit: number, kind: 'image' | 'video') => `${formatBytes(size)} is over the ${formatBytes(limit)} ${kind} limit. Not uploaded.`,
+  notMediaRow: `Not a type the library holds. Images: PNG, JPEG, GIF, WebP. Videos: MP4, WebM. Files: ${fileExtensions.map((extension) => extension.toUpperCase()).join(', ')}.`,
+  overLimit: (size: number, limit: number, kind: 'image' | 'video' | 'file') => `${formatBytes(size)} is over the ${formatBytes(limit)} ${kind} limit. Not uploaded.`,
   dismiss: 'Dismiss',
   dismissName: (name: string) => `Dismiss ${name}`,
   uploadFailed: 'The upload failed. Resume to try again from where it stopped.',

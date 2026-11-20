@@ -321,7 +321,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     accept: (files) => {
       const problems: string[] = [];
       const accepted = files.filter((file) => {
-        const problem = fileProblem(file);
+        // A file an article lists goes under the article, not into its text.
+        const problem = kindOf(file) === 'file' ? 'type' : fileProblem(file);
         if (problem === 'type') problems.push(kbMessages.imageType(file.name));
         if (problem === 'size') problems.push(kindOf(file) === 'video' ? kbMessages.videoTooLarge(file.name) : kbMessages.imageTooLarge(file.name));
         return !problem;

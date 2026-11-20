@@ -6,10 +6,11 @@ import type { KBMedia, PartSender } from './media-api';
 import { mediaMessages } from './media-messages';
 import { reason } from './kb-tree';
 import { addPoster, framePoster } from './video-poster';
+import { isAttachableName, maxFileBytes } from './kb-file-types';
 import type { PosterCapture } from './video-poster';
 
 // The uploads a library page sends: each file a row with its progress. An image goes in one request; a
-// video in parts of the size the server names, so a lost connection or a pause resumes from the bytes
+// video or a file an article lists in parts of the size the server names, so a lost connection or a pause resumes from the bytes
 // the server holds (GET /kb/media-uploads/{id} says where).
 
 export type UploadState = 'waiting' | 'sending' | 'paused' | 'done' | 'failed' | 'cancelled';
@@ -18,8 +19,8 @@ export interface UploadRow {
   key: number;
   name: string;
   size: number;
-  // file: neither an image nor a video, refused before anything is sent.
-  kind: 'image' | 'video' | 'file';
+  // refused: a type the library does not hold, refused before anything is sent.
+  kind: 'image' | 'video' | 'file' | 'refused';
   state: UploadState;
   sent: number;
   // bytesPerSecond is measured over the current part, for the time left.
@@ -35,25 +36,27 @@ export interface UploadRow {
 export const imageTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 export const videoTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
 
-// kindOf names what a file is by its type, or by its extension when the browser gives none.
-export function kindOf(file: File): 'image' | 'video' | undefined {
+// kindOf names what a file is by its type, or by its extension when the browser gives none. A file is one
+// an article lists for download (kb-file-types.ts), judged by its name.
+export function kindOf(file: File): 'image' | 'video' | 'file' | undefined {
   if (imageTypes.includes(file.type)) return 'image';
   if (videoTypes.includes(file.type)) return 'video';
   const extension = file.name.toLowerCase().split('.').pop() ?? '';
   if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension)) return 'image';
   if (['mp4', 'm4v', 'mov', 'webm'].includes(extension)) return 'video';
-  return undefined;
+  return isAttachableName(file.name) ? 'file' : undefined;
 }
 
-// The limits the server checks (server/internal/domain: MaxKBImageBytes, MaxKBVideoBytes).
+// The limits the server checks (server/internal/domain: MaxKBImageBytes, MaxKBVideoBytes, MaxKBFileBytes).
 export const maxImageBytes = 5 << 20;
 export const maxVideoBytes = 200 << 20;
+const limits = { image: maxImageBytes, video: maxVideoBytes, file: maxFileBytes };
 
 // fileProblem says what about a file the server would refuse, before a byte is sent: its type or its size.
 export function fileProblem(file: File): 'type' | 'size' | undefined {
   const kind = kindOf(file);
   if (!kind) return 'type';
-  return file.size > (kind === 'image' ? maxImageBytes : maxVideoBytes) ? 'size' : undefined;
+  return file.size > limits[kind] ? 'size' : undefined;
 }
 
 // The name the library shows: the file name without its extension.
@@ -85,7 +88,7 @@ export class UploadQueue {
     for (const listener of this.listeners) listener();
   }
 
-  // add queues files and reports the names it refused (not an image or a video). A refused file, or one over
+  // add queues files and reports the names it refused (a type the library does not hold). A refused file, or one over
   // its limit, is a failed row that says why: it is in the list with the others, and nothing is sent for it.
   add(files: File[]): string[] {
     const refused: string[] = [];
@@ -93,9 +96,9 @@ export class UploadQueue {
       const kind = kindOf(file);
       const problem = fileProblem(file);
       if (!kind) refused.push(file.name);
-      const row: UploadRow = { key: this.next++, name: file.name, size: file.size, kind: kind ?? 'file', state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false };
+      const row: UploadRow = { key: this.next++, name: file.name, size: file.size, kind: kind ?? 'refused', state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false };
       if (problem) Object.assign(row, { state: 'failed', permanent: true, problem: problem === 'type' ? mediaMessages.notMediaRow
-        : mediaMessages.overLimit(file.size, kind === 'image' ? maxImageBytes : maxVideoBytes, kind ?? 'image') });
+        : mediaMessages.overLimit(file.size, limits[kind ?? 'image'], kind ?? 'image') });
       this.jobs.push({ file, session: {}, row });
     }
     this.changed();
@@ -105,8 +108,8 @@ export class UploadQueue {
 
   // resumeUpload goes on with an upload this page did not start (another tab, a page that closed): the
   // person chooses the same file again, and the parts go from the bytes the server holds.
-  resumeUpload(file: File, uploadId: string, name = file.name) {
-    this.jobs.push({ file, session: { id: uploadId }, row: { key: this.next++, name, size: file.size, kind: 'video', state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false } });
+  resumeUpload(file: File, uploadId: string, name = file.name, kind: 'video' | 'file' = 'video') {
+    this.jobs.push({ file, session: { id: uploadId }, row: { key: this.next++, name, size: file.size, kind, state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false } });
     this.changed();
     void this.run();
   }
@@ -209,7 +212,7 @@ export class UploadQueue {
 
   private async video(job: Job, signal: AbortSignal): Promise<KBMedia | undefined> {
     const { row, session } = job;
-    return uploadVideo(job.file, { keep: true, signal, send: this.send, session, onProgress: (sent, bytesPerSecond) => {
+    return uploadVideo(job.file, { keep: true, kind: job.row.kind === 'file' ? 'file' : 'video', signal, send: this.send, session, onProgress: (sent, bytesPerSecond) => {
         row.sent = sent;
         // 0 after a part: keep the speed the part was sent at, for the time left.
         if (bytesPerSecond > 0) row.bytesPerSecond = bytesPerSecond;
@@ -221,6 +224,8 @@ export class UploadQueue {
 export interface VideoUpload {
   // keep marks an upload made in the library; one pasted into an article is kept by the article.
   keep: boolean;
+  // file: one an article lists, stored under its full name; a video goes under the name without its extension.
+  kind?: 'video' | 'file';
   signal: AbortSignal;
   send?: PartSender;
   // session holds the server's upload id across a pause, so a resume goes on from the bytes it has.
@@ -229,12 +234,13 @@ export interface VideoUpload {
   onDuplicate?: () => void;
 }
 
-// uploadVideo sends a video in the parts the server names, from the offset it holds, then completes the
+// uploadVideo sends a video, or a file an article lists, in the parts the server names, from the offset it holds, then completes the
 // upload; undefined when aborted (a pause or a cancel).
 export async function uploadVideo(file: File, options: VideoUpload): Promise<KBMedia | undefined> {
   const { signal, send = sendPart, session = {}, onProgress = () => undefined } = options;
   if (!session.id) {
-    const started = await mediaApi.startUpload({ size: file.size, name: baseName(file.name), keep: options.keep });
+    const started = await mediaApi.startUpload(options.kind === 'file' ? { kind: 'file', size: file.size, name: file.name.slice(0, 200), keep: options.keep }
+      : { size: file.size, name: baseName(file.name), keep: options.keep });
     session.id = started.id;
   }
   const id = session.id;

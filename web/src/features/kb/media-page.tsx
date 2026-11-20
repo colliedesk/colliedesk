@@ -21,6 +21,7 @@ import { baseName, useUploadQueue } from './media-uploads';
 import { can } from '../../lib/can';
 import type { UploadQueue, UploadRow } from './media-uploads';
 import { useHolds } from '../../lib/permissions-context';
+import { fileAccept } from './kb-file-types';
 
 export interface MediaSearch {
   q?: string;
@@ -32,7 +33,7 @@ export interface MediaSearch {
 export type MediaView = 'library' | 'unused' | 'trash';
 
 const viewPath = { library: '/knowledge/media', unused: '/knowledge/media/unused', trash: '/knowledge/media/trash' } as const;
-const accept = 'image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime,.mov';
+const accept = `image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime,.mov,${fileAccept}`;
 
 // Every change to the library can move items between the pages, so all of them are read again.
 function useRefreshMedia() {

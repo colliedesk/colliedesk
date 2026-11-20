@@ -17,26 +17,53 @@ const send: PartSender = async (_id, part) => ({ status: 200, body: { ...upload,
 // A file reports the size it is given without holding the bytes.
 const sized = (name: string, type: string, size: number) => { const file = new File(['x'], name, { type }); Object.defineProperty(file, 'size', { value: size }); return file; };
 
-test('a file that is not an image or a video, or is over its limit, is a failed row that says why, and nothing is sent for it', async () => {
+const refusedType = 'Not a type the library holds. Images: PNG, JPEG, GIF, WebP. Videos: MP4, WebM. Files: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ODT, ODS, ODP, CSV, TXT, RTF, ZIP, 7Z, TAR.GZ.';
+
+test('a file of a refused type, or one over its limit, is a failed row that says why, and nothing is sent for it', async () => {
   const calls = serve({});
   const queue = new UploadQueue(() => undefined, send, async () => undefined);
-  const refused = queue.add([sized('notes.txt', 'text/plain', 5), sized('huge.png', 'image/png', 6 * 1024 * 1024), sized('long.mp4', 'video/mp4', 230 * 1024 * 1024)]);
-  expect(refused).toEqual(['notes.txt']);
+  const refused = queue.add([sized('setup.exe', 'application/x-msdownload', 5), sized('huge.png', 'image/png', 6 * 1024 * 1024),
+    sized('long.mp4', 'video/mp4', 230 * 1024 * 1024), sized('manual.pdf', 'application/pdf', 26 * 1024 * 1024), sized('page.html', 'text/html', 5)]);
+  expect(refused).toEqual(['setup.exe', 'page.html']);
   expect(queue.rows().map((row) => [row.name, row.state, row.permanent, row.problem])).toEqual([
-    ['notes.txt', 'failed', true, 'Not an image or video (PNG, JPEG, GIF, WebP, MP4, WebM).'],
+    ['setup.exe', 'failed', true, refusedType],
     ['huge.png', 'failed', true, '6.0 MiB is over the 5.0 MiB image limit. Not uploaded.'],
     ['long.mp4', 'failed', true, '230.0 MiB is over the 200.0 MiB video limit. Not uploaded.'],
+    ['manual.pdf', 'failed', true, '26.0 MiB is over the 25.0 MiB file limit. Not uploaded.'],
+    ['page.html', 'failed', true, refusedType],
   ]);
   expect(calls).toHaveLength(0);
   queue.dismiss(queue.rows()[1]!.key);
-  expect(queue.rows().map((row) => row.name)).toEqual(['notes.txt', 'long.mp4']);
+  expect(queue.rows().map((row) => row.name)).toEqual(['setup.exe', 'long.mp4', 'manual.pdf', 'page.html']);
 });
 
 test('fileProblem names the type or the size a file breaks, the same limits as the server', () => {
   expect(fileProblem(sized('a.png', 'image/png', 5 * 1024 * 1024))).toBeUndefined();
   expect(fileProblem(sized('a.png', 'image/png', 5 * 1024 * 1024 + 1))).toBe('size');
   expect(fileProblem(sized('a.mov', '', 10))).toBeUndefined();
-  expect(fileProblem(sized('a.pdf', 'application/pdf', 10))).toBe('type');
+  expect(fileProblem(sized('a.pdf', 'application/pdf', 25 * 1024 * 1024))).toBeUndefined();
+  expect(fileProblem(sized('a.pdf', 'application/pdf', 25 * 1024 * 1024 + 1))).toBe('size');
+  expect(fileProblem(sized('backup.tar.gz', 'application/gzip', 10))).toBeUndefined();
+  expect(fileProblem(sized('a.svg', 'image/svg+xml', 10))).toBe('type');
+  expect(fileProblem(sized('run.sh', '', 10))).toBe('type');
+});
+
+test('a PDF goes to the library as a file in parts, under its full name, and no poster is drawn for it', async () => {
+  const pdf = stored(3, { kind: 'file', content_type: 'application/pdf', name: 'Warranty form.pdf', width: null, height: null, duration_ms: null, codecs: [] });
+  const fileUpload = { ...upload, kind: 'file', name: 'Warranty form.pdf' };
+  const calls = serve({
+    'POST /api/v1/kb/media-uploads': () => json(201, fileUpload),
+    [`GET /api/v1/kb/media-uploads/${id(7)}`]: () => json(200, fileUpload),
+    [`POST /api/v1/kb/media-uploads/${id(7)}/complete`]: () => json(201, pdf),
+  });
+  const heard: string[] = [];
+  let drawn = 0;
+  const queue = new UploadQueue((item) => heard.push(item.name), send, async () => { drawn++; return undefined; });
+  expect(queue.add([new File([new Uint8Array(8)], 'Warranty form.pdf', { type: 'application/pdf' })])).toEqual([]);
+  await waitFor(() => expect(queue.rows()[0]).toMatchObject({ kind: 'file', state: 'done', sent: 8 }));
+  expect(calls.find((call) => call.path === '/api/v1/kb/media-uploads')?.body).toEqual({ kind: 'file', size: 8, name: 'Warranty form.pdf', keep: true });
+  expect(heard).toEqual(['Warranty form.pdf']);
+  expect(drawn).toBe(0);
 });
 
 test('a video stored without a poster gets one drawn from its file, and a frame that cannot be drawn leaves the upload done', async () => {
