@@ -151,7 +151,9 @@ trusted_proxies=…` must not revert itself). While one runs the console and app
 (`ErrTrialPending`); the shell (`set`, `reset`, `apply`, `restore`) and an import at start end it instead
 (`trial.superseded`), because the shell is the way back when a trial locks operators out. Every process calls `RevertExpiredTrial` on each reload and before it serves; the
 store's advisory lock lets exactly one write the `trial-auto-revert` version. The evidence the band shows
-(distinct client addresses, cloud sign-ins) is counted in memory per process, only while a trial runs.
+(distinct client addresses, cloud sign-ins) is counted in memory per process, only while a trial runs. Once
+its time is up the band reads the status again at once and every 2 seconds until it goes, so a revert shows
+within seconds of the next reload, not on the console's 30-second read.
 
 ## Feature switches
 

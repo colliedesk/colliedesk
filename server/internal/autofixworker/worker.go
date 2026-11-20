@@ -214,7 +214,7 @@ func (w *Worker) dispatch(ctx context.Context, workspaceID string, work store.Fi
 		}
 		return w.Cursor.Store.StopFixChecks(ctx, workspaceID, work.ID)
 	}
-	return w.Cursor.Store.ScheduleFixCheck(ctx, workspaceID, work.ID, w.Cursor.now().Add(firstPolls))
+	return w.Cursor.Store.ScheduleFixCheck(ctx, workspaceID, work.ID, w.Cursor.now().Add(w.Cursor.firstReads()))
 }
 
 // suspended reports whether the repository is unreachable only because its installation is suspended
@@ -279,10 +279,10 @@ func (w *Worker) vendorError(ctx context.Context, workspaceID string, work store
 }
 
 // pollEvery is how long until a sent fix's run is read again.
-func pollEvery(since time.Duration) time.Duration {
+func (c *Cursor) pollEvery(since time.Duration) time.Duration {
 	switch {
 	case since < 5*time.Minute:
-		return firstPolls
+		return c.firstReads()
 	case since < 30*time.Minute:
 		return middlePolls
 	}
@@ -325,7 +325,7 @@ func (w *Worker) poll(ctx context.Context, workspaceID string, work store.FixWor
 	if work.DispatchStartedAt != nil {
 		since = w.Cursor.now().Sub(*work.DispatchStartedAt)
 	}
-	return w.Cursor.Store.ScheduleFixCheck(ctx, workspaceID, work.ID, w.Cursor.now().Add(pollEvery(since)))
+	return w.Cursor.Store.ScheduleFixCheck(ctx, workspaceID, work.ID, w.Cursor.now().Add(w.Cursor.pollEvery(since)))
 }
 
 // observe turns a run into the observation it is (no state when there is nothing to say) and says

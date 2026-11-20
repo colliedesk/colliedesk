@@ -39,6 +39,7 @@ import { MentionsPane, useMarkMentionsRead } from './mentions-pane';
 import { mentionMessages } from './mention-messages';
 import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { usePhone } from '../../lib/use-phone';
+import { restartQuery } from '../../lib/restart-query';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -418,8 +419,8 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     defaultMailbox={defaultMailbox} replyMailbox={selected && (!repliesVia || repliesVia.type === 'email') ? emailChannel.data : undefined}
     outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} rowChannelLabel={rowChannelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice?.conversationId === selected?.id ? draftNotice?.text : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
-    conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
-    failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
+    conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()} onRetryTimeline={() => void restartQuery(client, ['messages', openID])}
+    failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void restartQuery(client, ['conversations', query])}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
     onSpam={(ids, value) => spam.mutateAsync({ ids, spam: value })}
     canManage={can(me.data, 'ai_settings:update')} canManageChannels={can(me.data, 'channels:update')}
