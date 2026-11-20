@@ -137,14 +137,16 @@ func kbMediaPurgeSpec() Spec {
 
 const kbMediaReplacementSchema = `{"type":"object","required":["replacement_id","from_media_id","to_media_id","article_ids","undone"],"properties":{"replacement_id":{"type":"string"},` +
 	`"from_media_id":{"type":"string"},"to_media_id":{"type":"string"},"article_ids":{"type":"array","items":{"type":"string"}},` +
-	`"translations":{"type":"array","items":{"type":"object","properties":{"article_id":{"type":"string"},"locale":{"type":"string"}}}},"undone":{"type":"boolean"}}}`
+	`"translations":{"type":"array","items":{"type":"object","properties":{"article_id":{"type":"string"},"locale":{"type":"string"}}}},"undone":{"type":"boolean"},"in_place":{"type":"boolean"}}}`
 
 func kbMediaReplaceSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_media_replace",
-		Title: "Replace an image or video in every article that shows it",
+		Title: "Replace an image, video or file in every article that uses it",
 		Description: `Put another library item (with_media_id: an image for an image, a video for a video) in the place of media_id in every live article whose current text or a translation shows it. ` +
-			`Each such article gets a new version; published ones change on the help center at once. Undo it with colliedesk_kb_media_replace_undo and the replacement_id.`,
+			`Each such article gets a new version; published ones change on the help center at once. ` +
+			`A file is replaced in place (in_place true): it keeps its id and address and takes the bytes and name of with_media_id, a file no article lists, which goes to the trash holding the earlier version. ` +
+			`Undo it with colliedesk_kb_media_replace_undo and the replacement_id.`,
 
 		REST: []string{"POST /api/v1/kb/media/{id}/replace"},
 		Input: `{"type":"object","additionalProperties":false,"required":["media_id","with_media_id"],"properties":{` + kbMediaIDProperty + `,` +
@@ -157,8 +159,8 @@ func kbMediaReplaceSpec() Spec {
 func kbMediaReplaceUndoSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_media_replace_undo",
-		Title: "Undo a replacement of an image or video",
-		Description: `Put the replaced item back in the articles a replacement changed, where they still show its replacement, as new versions. Undoing twice changes nothing more; ` +
+		Title: "Undo a replacement of an image, video or file",
+		Description: `Put the replaced item back in the articles a replacement changed, where they still show its replacement, as new versions; a file replaced in place gets its earlier bytes back. Undoing twice changes nothing more; ` +
 			`it is refused when the replaced item was deleted for good.`,
 		Idempotent: true,
 		REST:       []string{"POST /api/v1/kb/media-replacements/{id}/undo"},
