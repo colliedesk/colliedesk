@@ -561,9 +561,17 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		return
 	}
 	// The number finds the article; any other slug, an old one included, or a query moves to the
-	// current address.
-	if match[2] != article.Slug || request.URL.RawQuery != "" {
-		moveTo(response, request, v.root+ArticlePath(article.Number, article.Slug)+suffix)
+	// current address. ?voted= after a vote is the one query kept: it shows the box's next step.
+	voted := ""
+	if !asMarkdown {
+		voted = voteState(request)
+	}
+	if match[2] != article.Slug || request.URL.RawQuery != "" && voted == "" {
+		kept := ""
+		if voted != "" {
+			kept = "?voted=" + voted
+		}
+		moveTo(response, request, v.root+ArticlePath(article.Number, article.Slug)+suffix+kept)
 		return
 	}
 	if asMarkdown {
@@ -575,8 +583,12 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		s.writeError(response, err)
 		return
 	}
-	if plain {
-		// The next visit may get the rendered page under the same ETag.
+	if voted != "" {
+		data.Votes.State = voted
+	}
+	if plain || voted != "" {
+		// The next visit may get the rendered page under the same ETag; a page after a vote is one
+		// reader's.
 		response.Header().Del("ETag")
 		response.Header().Set("Cache-Control", "no-store")
 	}

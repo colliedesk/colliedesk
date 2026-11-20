@@ -133,6 +133,8 @@ func (s *Site) sampleArticle(v view) (page, error) {
 	}
 	data := s.page(v, sampleTitle, []link{{Name: "Home", URL: v.home}})
 	data.Heading, data.Body = sampleTitle, body
+	// The vote question shows how it looks; with no address to post to, it has no buttons.
+	data.Votes = &voteBox{T: voteTextFor(v.locale()), MaxMissing: domain.MaxKBVoteMissingChars}
 	now := time.Now().UTC()
 	data.Updated, data.UpdatedISO = now.Format("2 Jan 2006"), now.Format(time.RFC3339)
 	return data, nil

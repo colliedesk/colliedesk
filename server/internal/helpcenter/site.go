@@ -258,11 +258,10 @@ func (s *Site) movedTo(request *http.Request, at address, site domain.HelpCenter
 func (s *Site) serve(response http.ResponseWriter, request *http.Request, at address) {
 	slug, base, sub := at.slug, at.base, at.sub
 	route := s.channelRoute(request, sub)
-	if route == nil && request.Method != http.MethodGet && request.Method != http.MethodHead {
-		response.Header().Set("Allow", "GET, HEAD")
-		securityHeaders(response.Header())
-		response.Header().Set("Cache-Control", "no-store")
-		http.Error(response, "Method not allowed", http.StatusMethodNotAllowed)
+	// The one form the help center's own pages post: a vote on an article.
+	vote := request.Method == http.MethodPost && votePath.MatchString(sub)
+	if route == nil && !vote && request.Method != http.MethodGet && request.Method != http.MethodHead {
+		notAllowed(response)
 		return
 	}
 	if sub == stylePath+s.pages.styleName || base == pathPrefix+"_" && sub == "/"+s.pages.styleName {
@@ -274,7 +273,8 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		return
 	}
 	if s.config.Allow != nil {
-		if allowed, wait := s.config.Allow(request, sub == "/search"); !allowed {
+		// A vote writes, so it is charged like a search: to the smaller limiter as well.
+		if allowed, wait := s.config.Allow(request, sub == "/search" || vote); !allowed {
 			s.writeBusy(response, wait, base)
 			return
 		}
@@ -331,7 +331,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	if _, rest, _, ok := view.splitLanguage(sub); ok && languagePage(rest) {
 		pageSub = rest
 	}
-	if s.config.Additions != nil && (pageSub == "/" || pageSub == "" || pageSub == "/search" || strings.HasPrefix(pageSub, "/c/") || strings.HasPrefix(pageSub, "/a/")) {
+	if s.config.Additions != nil && !vote && (pageSub == "/" || pageSub == "" || pageSub == "/search" || strings.HasPrefix(pageSub, "/c/") || strings.HasPrefix(pageSub, "/a/")) {
 		additions, err := s.config.Additions(ctx, reached)
 		if err != nil {
 			s.writeError(response, err)
@@ -358,6 +358,15 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		return
 	} else if _, rest, segment, _ := view.splitLanguage(sub); len(view.site.Languages) > 0 && strings.EqualFold(segment, view.site.Locale) && rest == "" {
 		moveTo(response, request, view.home+query(request))
+		return
+	}
+	if vote {
+		// votePath lets in /<segment>/a/...; only an article of a language customers see takes the vote.
+		if article, ok := strings.CutPrefix(sub, "/a/"); ok {
+			s.vote(response, request, view, strings.TrimSuffix(article, votePathSuffix))
+			return
+		}
+		notAllowed(response)
 		return
 	}
 	switch {
@@ -406,6 +415,14 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		}
 		s.writeSiteNotFound(response, view)
 	}
+}
+
+// notAllowed answers a write the help center does not take.
+func notAllowed(response http.ResponseWriter) {
+	response.Header().Set("Allow", "GET, HEAD")
+	securityHeaders(response.Header())
+	response.Header().Set("Cache-Control", "no-store")
+	http.Error(response, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
 // query is the request's query with its "?", or "".

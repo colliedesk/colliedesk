@@ -2,11 +2,14 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/textmask"
 )
 
 // importedThumb reads a count an import stored in source_meta m under key: a number, else 0, never
@@ -40,4 +43,51 @@ func publicKBVoteCount(ctx context.Context, tx pgx.Tx, workspaceID, articleID st
 	current, imported, err := kbVoteCounts(ctx, tx, workspaceID, articleID)
 	helpful := current.Helpful + imported.Helpful
 	return domain.KBVoteCount{Helpful: helpful, Total: helpful + current.NotHelpful + imported.NotHelpful}, err
+}
+
+// bumpKBVotes tells cached article pages of the workspace's help center that a count changed. The
+// knowledge base's content_version stays: no article changed.
+const bumpKBVotes = `UPDATE help_centers SET votes_version=votes_version+1 WHERE workspace_id=$1`
+
+// VoteKBArticle records the vote of one reader (voter, the SHA-256 of their id) on the published article
+// number of workspaceID: a second vote replaces the first. A "No" may carry missing, the reader's
+// "What was missing?" line, kept masked (textmask) and cut to MaxKBVoteMissingChars; an empty one keeps
+// the line the vote had. A "Yes" has none. domain.ErrKBArticleNotFound when no such article is shown.
+func (s *Store) VoteKBArticle(ctx context.Context, workspaceID string, number int64, voter []byte, helpful bool, missing string) error {
+	missing = maskedKBVoteLine(missing)
+	if helpful {
+		missing = ""
+	}
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		var articleID string
+		// FOR SHARE: a reset (FOR UPDATE) of the article waits for the vote, so it counts it or closes it.
+		err := tx.QueryRow(ctx, `SELECT a.id::text FROM kb_articles a WHERE `+publishedKBArticle+` AND a.number=$2 FOR SHARE OF a`, workspaceID, number).Scan(&articleID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return struct{}{}, domain.ErrKBArticleNotFound
+		}
+		if err != nil {
+			return struct{}{}, fmt.Errorf("find article to vote on: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO kb_article_votes (workspace_id, article_id, voter, helpful, missing) VALUES ($1, $2, $3, $4, NULLIF($5, ''))
+			ON CONFLICT (workspace_id, article_id, voter) WHERE reset_id IS NULL DO UPDATE SET helpful=EXCLUDED.helpful,
+				missing=CASE WHEN EXCLUDED.helpful THEN NULL ELSE COALESCE(EXCLUDED.missing, kb_article_votes.missing) END, updated_at=now()`,
+			workspaceID, articleID, voter, helpful, missing); err != nil {
+			return struct{}{}, fmt.Errorf("record article vote: %w", err)
+		}
+		if _, err := tx.Exec(ctx, bumpKBVotes, workspaceID); err != nil {
+			return struct{}{}, fmt.Errorf("bump votes version: %w", err)
+		}
+		return struct{}{}, nil
+	})
+	return err
+}
+
+// maskedKBVoteLine is a reader's line as it is kept: masked whole, then cut to its longest length, so a
+// cut never leaves part of an address or number behind.
+func maskedKBVoteLine(line string) string {
+	line = strings.TrimSpace(textmask.Mask(line))
+	if runes := []rune(line); len(runes) > domain.MaxKBVoteMissingChars {
+		line = strings.TrimSpace(string(runes[:domain.MaxKBVoteMissingChars]))
+	}
+	return line
 }

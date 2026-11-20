@@ -184,7 +184,8 @@ func TestHelpCenterThemePreviewOfAnEmptyKnowledgeBase(t *testing.T) {
 	home := preview(t, api, admin, "home", map[string]any{}, http.StatusOK)
 	wantHTML(t, "empty home", home.HTML, []string{previewCSP, "Nothing is published here yet.", `<meta name="color-scheme" content="light dark">`}, []string{"--accent:#"})
 	article := preview(t, api, admin, "article", map[string]any{}, http.StatusOK)
-	wantHTML(t, "sample article", article.HTML, []string{previewCSP, "<h1>An example article</h1>"}, []string{"<script"})
+	// The vote question shows how it looks; a preview has no address to post a vote to.
+	wantHTML(t, "sample article", article.HTML, []string{previewCSP, "<h1>An example article</h1>", "Was this article helpful?"}, []string{"<script", `class="helpful-form"`})
 }
 
 func TestHelpCenterThemePreviewRefusesAWrongShape(t *testing.T) {
