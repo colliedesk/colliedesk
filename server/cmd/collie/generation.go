@@ -28,6 +28,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
+	"github.com/colliedesk/colliedesk/server/internal/kbreviewmail"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/mentionmail"
 	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
@@ -218,6 +219,11 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		mentions := mentionmail.Sender{Store: channelStore, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,
 			Origin: origin, HelpCenterDomain: helpCenterDomain}
 		g.Go(func(ctx context.Context) { mentions.Run(ctx, 15*time.Second) })
+		// A reviewer of a knowledge base text is emailed when asked, and its author when it is decided
+		// (docs/user/knowledge-base.md).
+		reviews := kbreviewmail.Sender{Store: channelStore, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,
+			Origin: origin, HelpCenterDomain: helpCenterDomain}
+		g.Go(func(ctx context.Context) { reviews.Run(ctx, 15*time.Second) })
 	}
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
 	// A connected Gmail inbox is read for new mail once the operator turned reading on (google.read_mailbox)

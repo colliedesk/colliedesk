@@ -193,4 +193,9 @@ const (
 	// sending by a stopped server, for the mention email sender. Only workspace ids and mention ids leave
 	// the transaction; each email is then claimed, read, sent and settled in its own workspace.
 	PrivilegeMentionEmailClaim Privilege = "mention-email-claim"
+	// PrivilegeKBReviewEmailClaim lists the knowledge base review emails of every workspace (to a reviewer,
+	// or to the author once decided) that are queued, or left sending by a stopped server. Only workspace,
+	// review and agent ids leave the transaction; each email is then claimed, read, sent and settled in its
+	// own workspace.
+	PrivilegeKBReviewEmailClaim Privilege = "kb-review-email-claim"
 )
