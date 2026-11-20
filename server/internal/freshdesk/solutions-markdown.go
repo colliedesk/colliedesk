@@ -49,6 +49,9 @@ func articleMarkdown(markup string) (string, []string, error) {
 	nonce := make([]byte, 8)
 	_, _ = rand.Read(nonce)
 	mark := "colliedeskplayer" + hex.EncodeToString(nonce) + "n"
+	// A callout card's marker goes through the converter as a word of its own too.
+	var calloutMarkers []string
+	calloutMark := "colliedeskcallout" + hex.EncodeToString(nonce) + "n"
 	var dropped []string
 	note := func(what string) {
 		if !slices.Contains(dropped, what) {
@@ -71,6 +74,19 @@ func articleMarkdown(markup string) (string, []string, error) {
 				node.InsertBefore(marker, child)
 				node.RemoveChild(child)
 				players = append(players, snippet)
+				child = next
+				continue
+			}
+			if kind, ok := freshdeskCallout(child); ok {
+				marker := ""
+				if kind != "" {
+					marker = calloutMark + strconv.Itoa(len(calloutMarkers)) + "x"
+					calloutMarkers = append(calloutMarkers, kind)
+				}
+				quote := calloutQuote(child, marker)
+				node.InsertBefore(quote, child)
+				node.RemoveChild(child)
+				walk(quote)
 				child = next
 				continue
 			}
@@ -117,6 +133,9 @@ func articleMarkdown(markup string) (string, []string, error) {
 	if htmlTag.MatchString(markdown) {
 		// Raw HTML in Markdown is never rendered (the help center and the editor's preview skip it).
 		note("HTML the converter could not turn into Markdown")
+	}
+	for i, kind := range calloutMarkers {
+		markdown = placeCalloutMarker(markdown, calloutMark+strconv.Itoa(i)+"x", kind)
 	}
 	for i, snippet := range players {
 		markdown = strings.Replace(markdown, mark+strconv.Itoa(i)+"x", snippet, 1)

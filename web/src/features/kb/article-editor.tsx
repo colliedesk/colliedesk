@@ -52,10 +52,13 @@ interface Draft {
   extras: string[];
   seo_title: string;
   seo_description: string;
+  // show_contents lists the article's headings as On this page, in every language.
+  show_contents: boolean;
 }
 
 const draftOf = (article: KBArticle): Draft => ({ title: article.title, slug: article.slug, body: article.body_md, collection_id: article.collection_id,
-  extras: article.collection_ids.slice(1), seo_title: article.seo_title, seo_description: article.seo_description });
+  extras: article.collection_ids.slice(1), seo_title: article.seo_title, seo_description: article.seo_description,
+  show_contents: article.show_contents });
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((id, at) => id === b[at]);
 // listChange is how a save places the article: nothing when it stays, collection_id for a move that leaves the
 // other collections as the server keeps them, else collection_ids with the home first.
@@ -71,6 +74,12 @@ const seoMessages = {
   seoDescription: 'Meta description',
   seoHelp: 'What search engines show for this article.',
   seoTip: 'Left empty, the title and the start of the text are used.',
+};
+// contentsMessages are the On this page switch's strings, kept with the editor's chunk like seoMessages.
+const contentsMessages = {
+  heading: 'On this page',
+  show: 'Show On this page',
+  help: 'Lists the headings of an article with 3 or more.',
 };
 // seoValue is a search field as the server stores it: on one line, runs of spaces as one, trimmed.
 const seoValue = (text: string) => text.trim().split(/\s+/).filter(Boolean).join(' ');
@@ -133,7 +142,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // changes, those (editable). Every save, restore and delete sends base's updated_at.
   const [raw, setBase] = useState(article);
   const base = useMemo(() => raw && editable(raw), [raw]);
-  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(editable(article)) : { title: '', slug: '', body: '', collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '' }));
+  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(editable(article)) : { title: '', slug: '', body: '', collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '', show_contents: true }));
   const wide = useSyncExternalStore(subscribeWide, isWide);
   const [chosen, setMode] = useState<ViewMode>(() => (isWide() && (!article || characters(article.body_md) <= splitLimit) ? 'split' : 'edit'));
   const mode: ViewMode = chosen === 'split' && !wide ? 'edit' : chosen;
@@ -154,7 +163,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     // Compared as save() sends them: title and address name trimmed, and an emptied address name is not
     // a change (the server keeps the old one), so a form is never dirty with nothing to send.
     ? form.title.trim() !== base.title || (form.slug.trim() !== '' && form.slug.trim() !== base.slug) || !sameBody(form.body, base) || Object.keys(listChange(form, base)).length > 0
-      || seoValue(form.seo_title) !== base.seo_title || seoValue(form.seo_description) !== base.seo_description
+      || seoValue(form.seo_title) !== base.seo_title || seoValue(form.seo_description) !== base.seo_description || form.show_contents !== base.show_contents
     : form.title.trim() !== '' || form.body.trim() !== '');
   const dirty = isDirty(draft);
   // bodyNow reads the editor at once: it tells the page of typing a moment after it stops.
@@ -195,7 +204,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       if (!current) {
         const value = { ...(sent.extras.length > 0 ? { collection_ids: [sent.collection_id, ...sent.extras] } : { collection_id: sent.collection_id }), title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft',
           ...(seoValue(sent.seo_title) ? { seo_title: seoValue(sent.seo_title) } : {}),
-          ...(seoValue(sent.seo_description) ? { seo_description: seoValue(sent.seo_description) } : {}) } as const;
+          ...(seoValue(sent.seo_description) ? { seo_description: seoValue(sent.seo_description) } : {}),
+          ...(sent.show_contents ? {} : { show_contents: false }) } as const;
         const created = await createArticle.run(value);
         client.setQueryData(['kb-article', created.id], created);
         void refresh();
@@ -211,6 +221,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         ...(status && status !== current.status ? { status } : {}),
         ...(seoValue(sent.seo_title) !== current.seo_title ? { seo_title: seoValue(sent.seo_title) } : {}),
         ...(seoValue(sent.seo_description) !== current.seo_description ? { seo_description: seoValue(sent.seo_description) } : {}),
+        ...(sent.show_contents !== current.show_contents ? { show_contents: sent.show_contents } : {}),
       };
       // Nothing changed (Ctrl+S on a saved article): there is nothing to ask the server.
       if (Object.keys(change).length === 0) return;
@@ -538,6 +549,12 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           <textarea id={`${id}-seo-description`} rows={3} value={draft.seo_description} aria-describedby={`${id}-search-help ${id}-search-tip ${id}-seo-description-count`}
             aria-invalid={seoDescriptionLength > maxSEODescription || undefined} onChange={(event) => set({ seo_description: event.target.value })} />
           <small id={`${id}-seo-description-count`} className={seoDescriptionLength > maxSEODescription ? 'error-copy' : 'kb-hint'}>{kbMessages.characters(seoDescriptionLength, maxSEODescription)}</small></div>
+      </section>
+      <section className="kb-side-box" aria-labelledby={`${id}-contents`}>
+        <h3 id={`${id}-contents`}>{contentsMessages.heading}</h3>
+        <label className="check-row"><input type="checkbox" checked={draft.show_contents} aria-describedby={`${id}-contents-help`}
+          onChange={(event) => set({ show_contents: event.target.checked })} /><span>{contentsMessages.show}</span></label>
+        <small id={`${id}-contents-help`} className="kb-hint">{contentsMessages.help}</small>
       </section>
     </>
   );

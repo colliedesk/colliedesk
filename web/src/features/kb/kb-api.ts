@@ -49,7 +49,7 @@ const draftSchema = z.object({
   collection_ids: z.array(z.string().uuid()).min(1), created_at: z.string().datetime(), updated_at: z.string().datetime(), updated_by: personSchema.nullable(),
 }) satisfies z.ZodType<Generated<'KBArticleDraft'>>;
 export const kbArticleSchema = z.object({
-  ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), has_source_html: z.boolean(), deleted_at: nullableDate,
+  ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
   ai_exclusion: z.object({ at: z.string().datetime(), by: personSchema.nullable() }).nullable(),
   // Only when one article is read: the AI reply drafts this month that used it.
   ai_drafts_this_month: z.number().int().optional(),
@@ -89,7 +89,7 @@ const trashedArticleSchema = z.object({
   ...summaryFields, deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBArticle'>>;
 const versionSchema = z.object({
-  ...changeFields, title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), status: statusSchema, collection_id: z.string().uuid().nullable(),
+  ...changeFields, title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), status: statusSchema, collection_id: z.string().uuid().nullable(),
 }) satisfies z.ZodType<Generated<'KBArticleVersion'>>;
 const imageSchema = z.object({
   id: z.string().uuid(), content_type: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']), size: z.number().int(), sha256: z.string(),

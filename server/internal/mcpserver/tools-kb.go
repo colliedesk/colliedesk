@@ -77,6 +77,7 @@ type restKBArticle struct {
 	BodyMD        string                `json:"body_md"`
 	SEOTitle      string                `json:"seo_title"`
 	SEODesc       string                `json:"seo_description"`
+	ShowContents  bool                  `json:"show_contents"`
 	HasSourceHTML bool                  `json:"has_source_html"`
 	Translations  []restKBTranslation   `json:"translations"`
 	DeletedAt     *string               `json:"deleted_at"`
@@ -145,6 +146,7 @@ type kbArticleOut struct {
 	LastChange    *savedReplyChangeOut  `json:"last_change"`
 	URL           string                `json:"url"`
 	TeamText      kbTeamText            `json:"team_text"`
+	ShowContents  bool                  `json:"show_contents"`
 	HasDraft      bool                  `json:"has_draft"`
 	Draft         *kbArticleDraftOut    `json:"draft"`
 	InTrash       bool                  `json:"in_trash"`
@@ -170,7 +172,7 @@ type kbAIExclusionOut struct {
 func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
-		InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}}
+		ShowContents: article.ShowContents, InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, kbTranslationRow(translation))
 	}
@@ -410,7 +412,7 @@ func kbArticleUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	change := kbArticleFields(arguments, "article_id")
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: title, body, slug, collection_id, collection_ids, status, seo_title or seo_description."}
+		return nil, &toolError{"Give something to change: title, body, slug, collection_id, collection_ids, status, seo_title, seo_description or show_contents."}
 	}
 	c.forArticle(args.ID)
 	var updated restKBArticle

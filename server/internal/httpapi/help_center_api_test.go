@@ -243,7 +243,7 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 	enableHelpCenter(t, api, admin, "", true)
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Tricky <b>title</b>", "status": "published",
-		"body_md": "<script>alert(1)</script>\n\n[x](javascript:alert(1))\n\n<img src=x onerror=alert(1)>\n\n![a](https://tracker.example/pixel.gif)\n\n<iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw\" onload=\"alert(1)\"></iframe>"})
+		"body_md": "<script>alert(1)</script>\n\n[x](javascript:alert(1))\n\n<img src=x onerror=alert(1)>\n\n![a](https://tracker.example/pixel.gif)\n\n<iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw\" onload=\"alert(1)\"></iframe>\n\n```go\nfunc main() {}\n```"})
 	base := "/help/" + slug
 	page := visit(site, base, "192.0.2.40")
 	logo := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
@@ -271,6 +271,10 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 			}
 			if strings.Contains(path, "/a/") && !strings.Contains(body, `<iframe src="https://www.youtube-nocookie.com/embed/jnqxac9ivrw" title="youtube video" allow="encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`) {
 				t.Errorf("themed=%v %s shows no sandboxed player:\n%s", themed, path, body)
+			}
+			// Code is coloured by classes in the site's style sheet, so the CSP above needs no change.
+			if strings.Contains(path, "/a/") && !strings.Contains(body, `<pre><code class="language-go"><span class="kd">func</span>`) {
+				t.Errorf("themed=%v %s shows no highlighted code:\n%s", themed, path, body)
 			}
 			sheets := stylesheets(body)
 			if len(sheets) == 0 {

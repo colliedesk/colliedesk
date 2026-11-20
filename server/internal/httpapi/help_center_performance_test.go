@@ -178,6 +178,19 @@ func TestHelpCenterHostileArticlesLatencyBudget(t *testing.T) {
 		"open images":    strings.Repeat("![](", 20000),
 		"emphasis":       strings.Repeat("*a", 50000),
 		"strong":         strings.Repeat("**a", 33333),
+		// Code blocks: a language name chroma does not know made it scan every lexer (3 to 15 ms a
+		// block), and some lexers take seconds on a few kilobytes of crafted code.
+		"unknown languages":      strings.Repeat("```x\n```\n", 11000),
+		"long unknown languages": strings.Repeat("```"+strings.Repeat("q", 32)+"\n```\n", 2400),
+		"many short blocks":      strings.Repeat("```go\na\n```\n", 8000),
+		"long known blocks":      strings.Repeat("```yaml\n"+strings.Repeat("key: value # note\n", 444)+"```\n", 12),
+		"c newlines":             strings.Repeat("```c\n"+strings.Repeat("\n", 7999)+"```\n", 12),
+		"java newlines":          strings.Repeat("```java\n"+strings.Repeat("\n", 7999)+"```\n", 12),
+		"yaml colons":            strings.Repeat("```yaml\n"+strings.Repeat(":", 8000)+"\n```\n", 12),
+		"json slashes":           strings.Repeat("```json\n"+strings.Repeat("/", 8000)+"\n```\n", 12),
+		"many answers":           "## a?\n\n" + strings.Repeat("b\n\n", 33000) + "## c?\n\nd",
+		"empty headings":         strings.Repeat("##\n", 33000),
+		"escaped answers":        "## a?\n\n" + strings.Repeat("\\*&amp;\n\n", 11000) + "## c?\n\nd",
 	}
 	for name, body := range bodies {
 		article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": name, "body_md": body, "status": "published"})
@@ -190,6 +203,11 @@ func TestHelpCenterHostileArticlesLatencyBudget(t *testing.T) {
 		t.Logf("help center hostile %s cold=%s", name, cold)
 		if cold > inboxLatencyBudget || strings.Contains(first, `class="plain-note"`) {
 			t.Errorf("help center hostile %s rendered cold in %s (budget %s)", name, cold, inboxLatencyBudget)
+		}
+		// Colouring multiplies a block's HTML by up to 18; the article's limit on coloured code keeps
+		// this page of 96,000 characters of YAML under 400,000 bytes (all of it coloured is 1.7 MB).
+		if name == "long known blocks" && len(first) > 400_000 {
+			t.Errorf("help center hostile %s page is %d bytes, over 400,000", name, len(first))
 		}
 		// 20 visits each, not 50, since this gate shares its CI runner with every other latency gate.
 		p95 := helpCenterPercentile(t, site, path, 20)

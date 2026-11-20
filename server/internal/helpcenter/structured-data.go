@@ -1,7 +1,10 @@
 package helpcenter
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
+	"html"
 	"html/template"
 	"net/url"
 	"strings"
@@ -10,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/yuin/goldmark/ast"
+	goldhtml "github.com/yuin/goldmark/renderer/html"
 )
 
 // Structured data (schema.org JSON-LD) for search engines and AI assistants: a BreadcrumbList on every
@@ -137,7 +141,9 @@ func questionList(document ast.Node, source []byte) []faqItem {
 	return items
 }
 
-// plainText is the words of a block as excerpt reads them: code and raw HTML left out.
+// plainText is the words of a block as a reader sees them: entities and backslash escapes resolved
+// as goldmark renders the text ("&amp;" is "&", "\\*" is "*"), code spans as written, code blocks and
+// raw HTML left out.
 func plainText(block ast.Node, source []byte) string {
 	var words strings.Builder
 	_ = ast.Walk(block, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -149,7 +155,12 @@ func plainText(block ast.Node, source []byte) string {
 		}
 		switch node := node.(type) {
 		case *ast.Text:
-			words.Write(node.Segment.Value(source))
+			value := node.Segment.Value(source)
+			if _, code := node.Parent().(*ast.CodeSpan); code || !bytes.ContainsAny(value, `&\`) {
+				words.Write(value)
+			} else {
+				words.WriteString(resolvedText(value))
+			}
 			if node.SoftLineBreak() || node.HardLineBreak() {
 				words.WriteByte(' ')
 			}
@@ -159,4 +170,14 @@ func plainText(block ast.Node, source []byte) string {
 		return ast.WalkContinue, nil
 	})
 	return words.String()
+}
+
+// resolvedText is text with its entities and backslash escapes resolved once, as goldmark's HTML
+// writer resolves them ("\\&amp;" stays "&amp;"), and not escaped for HTML.
+func resolvedText(value []byte) string {
+	var escaped bytes.Buffer
+	out := bufio.NewWriterSize(&escaped, 64)
+	goldhtml.DefaultWriter.Write(out, value)
+	_ = out.Flush()
+	return html.UnescapeString(escaped.String())
 }

@@ -256,4 +256,13 @@ export function insertBlock(view: EditorView, text: string, select?: [number, nu
 }
 
 export const tableTemplate = '| Column | Column |\n| --- | --- |\n| Text | Text |';
-export const codeBlockTemplate = '```\ncode\n```';
+// codeBlock is a fenced block in that language (none: plain text), with the range of its code to select.
+export function codeBlock(language: string): [string, [number, number]] {
+  return [`\`\`\`${language}\ncode\n\`\`\``, [language.length + 4, language.length + 8]];
+}
+
+// callout is a callout in GitHub's alert syntax, with the range of its words to select.
+export function callout(type: string): [string, [number, number]] {
+  const marker = `> [!${type.toUpperCase()}]\n> `;
+  return [`${marker}Text`, [marker.length, marker.length + 4]];
+}

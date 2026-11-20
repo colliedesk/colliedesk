@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { callouts } from './callouts';
 import { closes, fragment, hidesWhatFollows } from './kb-html';
 import type { HtmlNode } from './kb-html';
 import { kbMessages } from './kb-messages';
@@ -30,7 +31,7 @@ function hiddenText() {
   return (tree: Tree) => visit(tree);
 }
 
-const plugins = [remarkGfm, hiddenText];
+const plugins = [remarkGfm, hiddenText, callouts];
 
 interface Tree {
   type: string;

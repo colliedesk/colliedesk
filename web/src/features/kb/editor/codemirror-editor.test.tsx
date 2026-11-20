@@ -133,7 +133,7 @@ test('the block select offers Text, Heading 2 and Heading 3; a stored Heading 1 
 test('Insert video takes a YouTube or Vimeo link and puts its player in a block of its own; a link it cannot use says why', async () => {
   const { handle, text } = await make('Intro');
   // One Insert menu: the library, an upload, or a video site link, each said what it does.
-  const open = () => { fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' })); fireEvent.click(screen.getByRole('menuitem', { name: /^YouTube or Vimeo link/ })); };
+  const open = () => { fireEvent.click(screen.getByRole('button', { name: 'Insert image, video or callout' })); fireEvent.click(screen.getByRole('menuitem', { name: /^YouTube or Vimeo link/ })); };
   open();
   expect(screen.getByRole('dialog', { name: 'YouTube or Vimeo link' })).toBeInTheDocument();
   const link = screen.getByRole('textbox', { name: 'YouTube or Vimeo link' });
@@ -171,7 +171,7 @@ test('the library picker takes several items in the order they are picked, with 
   render(<QueryClientProvider client={new QueryClient()}><CodeMirrorEditor initial="Intro" uploads={never} label="Text" describedBy="help" invalid={false} mode="edit"
     onChange={() => undefined} onReady={(ready) => { handle = ready; }} /></QueryClientProvider>);
   await waitFor(() => expect(handle).toBeDefined());
-  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image, video or callout' }));
   fireEvent.click(screen.getByRole('menuitem', { name: /^From the media library/ }));
   const picker = screen.getByRole('dialog', { name: 'Insert from the media library' });
   // The grid is one Tab stop: arrows move, Space picks.
@@ -215,7 +215,7 @@ test('an image without alt text waits in the picker until it gets one, which is 
   render(<QueryClientProvider client={new QueryClient()}><CodeMirrorEditor initial="Intro" uploads={never} label="Text" describedBy="help" invalid={false} mode="edit"
     onChange={() => undefined} onReady={(ready) => { handle = ready; }} /></QueryClientProvider>);
   await waitFor(() => expect(handle).toBeDefined());
-  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image, video or callout' }));
   fireEvent.click(screen.getByRole('menuitem', { name: /^From the media library/ }));
   const picker = screen.getByRole('dialog', { name: 'Insert from the media library' });
   fireEvent.click(await within(picker).findByRole('option', { name: /^Invoices, image/ }));
@@ -249,7 +249,7 @@ test('alt text from the picker still goes in when the item was saved since witho
   render(<QueryClientProvider client={new QueryClient()}><CodeMirrorEditor initial="Intro" uploads={never} label="Text" describedBy="help" invalid={false} mode="edit"
     onChange={() => undefined} onReady={(ready) => { handle = ready; }} /></QueryClientProvider>);
   await waitFor(() => expect(handle).toBeDefined());
-  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image, video or callout' }));
   fireEvent.click(screen.getByRole('menuitem', { name: /^From the media library/ }));
   const picker = screen.getByRole('dialog', { name: 'Insert from the media library' });
   fireEvent.click(await within(picker).findByRole('option', { name: /^Plans, image/ }));
@@ -355,7 +355,7 @@ test('in a column too narrow for every tool (a tablet held upright), the toolbar
   act(() => report(500));
   expect(within(toolbar).queryByRole('button', { name: /^Find and replace/ })).not.toBeInTheDocument();
   expect(within(toolbar).getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual(
-    ['Insert image or video', expect.stringMatching(/^Bold/), expect.stringMatching(/^Italic/), expect.stringMatching(/^Link/), 'More formatting']);
+    ['Insert image, video or callout', expect.stringMatching(/^Bold/), expect.stringMatching(/^Italic/), expect.stringMatching(/^Link/), 'More formatting']);
   fireEvent.click(within(toolbar).getByRole('button', { name: 'More formatting' }));
   expect(screen.getByRole('menuitem', { name: 'Find and replace' })).toBeInTheDocument();
   // The same blocks as the select of a wide toolbar: the title is the page's only Heading 1.
@@ -365,7 +365,7 @@ test('in a column too narrow for every tool (a tablet held upright), the toolbar
 
 test('the video link dialog says which links work in one line, and where YouTube videos play from in a tip', async () => {
   await make('Steps');
-  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image, video or callout' }));
   fireEvent.click(screen.getByRole('menuitem', { name: /^YouTube or Vimeo link/ }));
   const dialog = screen.getByRole('dialog', { name: 'YouTube or Vimeo link' });
   expect(dialog).toHaveTextContent('A watch page, a short link or a Share link.');
@@ -382,7 +382,7 @@ test('the picker says what Insert waits for in one line, and why alt text matter
   render(<QueryClientProvider client={new QueryClient()}><CodeMirrorEditor initial="Intro" uploads={never} label="Text" describedBy="help" invalid={false} mode="edit"
     onChange={() => undefined} onReady={(ready) => { handle = ready; }} /></QueryClientProvider>);
   await waitFor(() => expect(handle).toBeDefined());
-  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image, video or callout' }));
   fireEvent.click(screen.getByRole('menuitem', { name: /^From the media library/ }));
   const picker = screen.getByRole('dialog', { name: 'Insert from the media library' });
   fireEvent.click(await within(picker).findByRole('option', { name: /^Invoices, image/ }));
@@ -393,7 +393,7 @@ test('the picker says what Insert waits for in one line, and why alt text matter
 
 test('the video link field, while a refusal shows in place of the help, describes itself only with ids that are on the page', async () => {
   await make('Intro');
-  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image, video or callout' }));
   fireEvent.click(screen.getByRole('menuitem', { name: /^YouTube or Vimeo link/ }));
   const link = screen.getByRole('textbox', { name: 'YouTube or Vimeo link' });
   fireEvent.change(link, { target: { value: 'https://evil.example/watch' } });

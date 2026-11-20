@@ -5,6 +5,12 @@
 <h1>{{.Heading}}</h1>
 <p class="meta">{{.T.Updated}} <time datetime="{{.UpdatedISO}}">{{.Updated}}</time>{{if .CollectionName}} {{.T.In}} <a href="{{.Collection}}">{{.CollectionName}}</a>{{end}}</p>
 </header>
+{{- if .Contents}}
+<nav class="contents contents-top" aria-labelledby="contents-title">
+<h2 id="contents-title" class="section-label">{{.T.OnThisPage}}</h2>
+{{template "contents" .Contents}}
+</nav>
+{{- end}}
 <div class="prose">
 {{.Body}}
 </div>
@@ -36,11 +42,21 @@
 </section>
 {{- end}}
 </article>
+{{- if or .Contents .Neighbours}}
+<aside class="rail{{if not .Neighbours}} rail-contents-only{{end}}" aria-labelledby="{{if .Neighbours}}rail-title{{else}}rail-contents-title{{end}}">
+{{- if .Contents}}
+<nav class="contents contents-rail" aria-labelledby="rail-contents-title">
+<h2 id="rail-contents-title" class="section-label">{{.T.OnThisPage}}</h2>
+{{template "contents" .Contents}}
+</nav>
+{{- end}}
 {{- if .Neighbours}}
-<aside class="rail" aria-labelledby="rail-title">
 <h2 id="rail-title" class="section-label">{{.RailLabel}}</h2>
 <ul class="index index-rail">{{range .Neighbours}}<li>{{if .Current}}<a href="{{.URL}}" aria-current="page">{{.Title}}</a>{{else}}<a href="{{.URL}}">{{.Title}}</a>{{end}}</li>{{end}}</ul>
+{{- end}}
 </aside>
 {{- end}}
 </div>
 {{end}}
+
+{{define "contents"}}<ul class="contents-list">{{range .}}<li{{if eq .Level 3}} class="contents-sub"{{end}}><a href="#{{.ID}}">{{.Text}}</a></li>{{end}}</ul>{{end}}

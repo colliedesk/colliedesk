@@ -456,14 +456,16 @@ type KBArticle struct {
 	CollectionID string `json:"collection_id"`
 	// CollectionIDs are every collection the article is listed in, CollectionID (its home) first, also
 	// collections in the trash.
-	CollectionIDs    []string        `json:"collection_ids"`
-	Position         int             `json:"position"`
-	Number           int64           `json:"number"`
-	Title            string          `json:"title"`
-	Slug             string          `json:"slug"`
-	BodyMD           string          `json:"body_md"`
-	SEOTitle         string          `json:"seo_title"`
-	SEODescription   string          `json:"seo_description"`
+	CollectionIDs  []string `json:"collection_ids"`
+	Position       int      `json:"position"`
+	Number         int64    `json:"number"`
+	Title          string   `json:"title"`
+	Slug           string   `json:"slug"`
+	BodyMD         string   `json:"body_md"`
+	SEOTitle       string   `json:"seo_title"`
+	SEODescription string   `json:"seo_description"`
+	// ShowContents tells whether the article's page lists its headings.
+	ShowContents     bool            `json:"show_contents"`
 	Status           string          `json:"status"`
 	PublishedAt      *time.Time      `json:"published_at"`
 	AuthorAgentID    *string         `json:"author_agent_id"`
@@ -490,6 +492,7 @@ type KBArticleVersion struct {
 	BodyMD              string    `json:"body_md"`
 	SEOTitle            string    `json:"seo_title"`
 	SEODescription      string    `json:"seo_description"`
+	ShowContents        bool      `json:"show_contents"`
 	Status              string    `json:"status"`
 	CollectionID        *string   `json:"collection_id"`
 	ChangedByAgentID    *string   `json:"changed_by_agent_id"`
