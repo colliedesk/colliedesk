@@ -92,6 +92,9 @@ func (s *Service) insertWorkspaceTx(ctx context.Context, tx pgx.Tx, slug, name, 
 	if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),'admin') RETURNING id::text`, workspace.ID, email).Scan(&agentID); err != nil {
 		return domain.Workspace{}, "", false, fmt.Errorf("create admin agent: %w", err)
 	}
+	if _, err := tx.Exec(ctx, `SELECT kb_seed_starter_templates($1)`, workspace.ID); err != nil {
+		return domain.Workspace{}, "", false, fmt.Errorf("add starter article templates: %w", err)
+	}
 	if err := milestones.Record(ctx, tx, workspace.ID, milestones.SignedUp, createdAt, signedUp); err != nil {
 		return domain.Workspace{}, "", false, err
 	}

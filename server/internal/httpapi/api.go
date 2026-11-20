@@ -867,6 +867,16 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/mentions", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/mentions/read", auth.PermissionSession},
 		{http.MethodPatch, "/api/v1/agents/me/mention-email", auth.PermissionSession},
+		// Knowledge base article templates: never public; a new article copies one once.
+		{http.MethodGet, "/api/v1/kb/templates", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/templates", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/templates/trash", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/templates/{id}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/kb/templates/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/templates/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/templates/{id}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/templates/{id}/versions", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/templates/{id}/versions/{version}/restore", auth.PermissionSession},
 	}
 }
 

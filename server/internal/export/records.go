@@ -423,17 +423,19 @@ type SavedReplyVersion struct {
 // KBCollection is a knowledge base collection, also in the trash. SourceMeta is what an import read
 // that has no column of its own.
 type KBCollection struct {
-	ID               string          `json:"id"`
-	ParentID         *string         `json:"parent_id"`
-	Name             string          `json:"name"`
-	Slug             string          `json:"slug"`
-	Description      string          `json:"description"`
-	Position         int             `json:"position"`
-	SourceMeta       json.RawMessage `json:"source_meta"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
-	DeletedAt        *time.Time      `json:"deleted_at"`
-	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+	ID          string  `json:"id"`
+	ParentID    *string `json:"parent_id"`
+	Name        string  `json:"name"`
+	Slug        string  `json:"slug"`
+	Description string  `json:"description"`
+	Position    int     `json:"position"`
+	// DefaultTemplateID is the template every new article in the collection starts from.
+	DefaultTemplateID *string         `json:"default_template_id"`
+	SourceMeta        json.RawMessage `json:"source_meta"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	DeletedAt         *time.Time      `json:"deleted_at"`
+	DeletedByAgentID  *string         `json:"deleted_by_agent_id"`
 	// Translations are its name and description in the help center's other languages; source_meta is
 	// set while a name is as an import wrote it.
 	Translations []KBCollectionTranslation `json:"translations"`
@@ -1293,6 +1295,8 @@ type Sink interface {
 	SavedReply(SavedReply) error
 	SavedReplyVersion(SavedReplyVersion) error
 	SavedView(SavedView) error
+	KBTemplate(KBTemplate) error
+	KBTemplateVersion(KBTemplateVersion) error
 	KBCollection(KBCollection) error
 	KBArticle(KBArticle) error
 	KBArticleVersion(KBArticleVersion) error

@@ -19,6 +19,12 @@ import (
 const kbMediaInUse = `EXISTS(SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
 	WHERE l.workspace_id=m.workspace_id AND l.media_id=m.id AND l.current AND a.deleted_at IS NULL)`
 
+// kbMediaNamedByTemplate is true for a library item, on rows aliased m, whose id the text of a template
+// outside the trash holds: an article made from the template will show it, so it is in use, and it
+// stays private until such an article is published.
+const kbMediaNamedByTemplate = `EXISTS(SELECT 1 FROM kb_templates t WHERE t.workspace_id=m.workspace_id AND t.deleted_at IS NULL
+	AND strpos(t.body, m.id::text) > 0)`
+
 // kbMediaCursor is where a page of the library ends: the sort key of its last item and its id.
 type kbMediaCursor struct {
 	Key string `json:"k"`
@@ -70,9 +76,9 @@ func (s *Store) ListKBMedia(ctx context.Context, workspaceID string, filter doma
 	}
 	switch filter.Usage {
 	case "in_use":
-		where += ` AND (` + kbMediaInUse + ` OR ` + kbMediaNamedByHelpCenter + `)`
+		where += ` AND (` + kbMediaInUse + ` OR ` + kbMediaNamedByHelpCenter + ` OR ` + kbMediaNamedByTemplate + `)`
 	case "unused":
-		where += ` AND NOT ` + kbMediaInUse + ` AND NOT ` + kbMediaNamedByHelpCenter
+		where += ` AND NOT ` + kbMediaInUse + ` AND NOT ` + kbMediaNamedByHelpCenter + ` AND NOT ` + kbMediaNamedByTemplate
 	case "missing_alt":
 		where += ` AND m.alt=''`
 	}

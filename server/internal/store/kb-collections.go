@@ -55,14 +55,14 @@ func kbSavepoint[T any](ctx context.Context, tx pgx.Tx, write func(pgx.Tx) (T, e
 }
 
 const kbCollectionColumns = `c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,
-	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.created_at,c.updated_at,
+	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.default_template_id::text,c.created_at,c.updated_at,
 	COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'imported',t.source_meta IS NOT NULL,
 		'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY t.locale)
 		FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id),'[]'::jsonb)`
 
 func kbCollectionTargets(collection *domain.KBCollection) []any {
 	return []any{&collection.ID, &collection.ParentID, &collection.Name, &collection.Slug, &collection.Description, &collection.Position,
-		&collection.ArticleCount, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations}
+		&collection.ArticleCount, &collection.DefaultTemplateID, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations}
 }
 
 func scanKBCollection(row pgx.Row) (domain.KBCollection, error) {
@@ -125,6 +125,8 @@ type KBCollectionInput struct {
 	Name, Slug, Description string
 	ParentID                *string
 	Position                int
+	// DefaultTemplateID is the template new articles in it start from; nil for none.
+	DefaultTemplateID *string
 }
 
 func cleanKBCollection(input *KBCollectionInput) error {
@@ -207,12 +209,15 @@ func (s *Store) CreateKBCollection(ctx context.Context, workspaceID string, acto
 		if err := admitKBCollection(ctx, tx, workspaceID, input.ParentID); err != nil {
 			return domain.KBCollection{}, err
 		}
+		if err := checkKBDefaultTemplate(ctx, tx, workspaceID, input.DefaultTemplateID); err != nil {
+			return domain.KBCollection{}, err
+		}
 		collection, err := kbSavepoint(ctx, tx, func(sub pgx.Tx) (domain.KBCollection, error) {
 			var id string
 			// Without a position it goes after its siblings once they were ordered by hand.
-			if err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,position)
-				VALUES($1,$2,$3,$4,$5,COALESCE(NULLIF($6,0),`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`)) RETURNING id::text`,
-				workspaceID, input.ParentID, input.Name, input.Slug, input.Description, input.Position).Scan(&id); err != nil {
+			if err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,position,default_template_id)
+				VALUES($1,$2,$3,$4,$5,COALESCE(NULLIF($6,0),`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`),$7) RETURNING id::text`,
+				workspaceID, input.ParentID, input.Name, input.Slug, input.Description, input.Position, input.DefaultTemplateID).Scan(&id); err != nil {
 				return domain.KBCollection{}, err
 			}
 			return readKBCollection(ctx, sub, workspaceID, id)
@@ -257,6 +262,9 @@ type KBCollectionChange struct {
 	Position                *int
 	MoveParent              bool
 	Parent                  *string
+	// SetDefaultTemplate set changes the default template to DefaultTemplateID (nil: none).
+	SetDefaultTemplate bool
+	DefaultTemplateID  *string
 }
 
 // UpdateKBCollection changes a live collection. seen is the updated_at the client read.
@@ -293,6 +301,11 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 		if err := kbLiveAndCurrent(ctx, tx, `kb_collections`, workspaceID, id, seen, domain.ErrKBCollectionNotFound); err != nil {
 			return domain.KBCollection{}, err
 		}
+		if change.SetDefaultTemplate {
+			if err := checkKBDefaultTemplate(ctx, tx, workspaceID, change.DefaultTemplateID); err != nil {
+				return domain.KBCollection{}, err
+			}
+		}
 		if change.MoveParent && change.Parent != nil {
 			subtree, height, err := kbSubtree(ctx, tx, workspaceID, id)
 			if err != nil {
@@ -312,8 +325,10 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 		collection, err := kbSavepoint(ctx, tx, func(sub pgx.Tx) (domain.KBCollection, error) {
 			if _, err := sub.Exec(ctx, `UPDATE kb_collections SET name=COALESCE($3,name), slug=COALESCE($4,slug), description=COALESCE($5,description),
 				position=CASE WHEN $6::int IS NOT NULL THEN $6 WHEN $7 AND $8::uuid IS DISTINCT FROM parent_id THEN `+kbCollectionEnd(`$8::uuid`, `$2::uuid`)+` ELSE position END,
-				parent_id=CASE WHEN $7 THEN $8::uuid ELSE parent_id END, updated_at=clock_timestamp()
-				WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Name, change.Slug, change.Description, change.Position, change.MoveParent, change.Parent); err != nil {
+				parent_id=CASE WHEN $7 THEN $8::uuid ELSE parent_id END,
+				default_template_id=CASE WHEN $9 THEN $10::uuid ELSE default_template_id END, updated_at=clock_timestamp()
+				WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Name, change.Slug, change.Description, change.Position, change.MoveParent, change.Parent,
+				change.SetDefaultTemplate, change.DefaultTemplateID); err != nil {
 				return domain.KBCollection{}, err
 			}
 			return readKBCollection(ctx, sub, workspaceID, id)
@@ -437,7 +452,8 @@ func (s *Store) UndeleteKBCollection(ctx context.Context, workspaceID string, ac
 var kbErrors = []error{domain.ErrKBArticleNotFound, domain.ErrKBArticleVersionNotFound, domain.ErrKBCollectionNotFound, domain.ErrKBImageNotFound, domain.ErrKBMediaNotFound, domain.ErrKBMediaBatchNotFound, domain.ErrKBMediaUploadNotFound, domain.ErrKBMediaUploadLimit, domain.ErrKBMediaUploadIncomplete,
 	domain.ErrKBChanged, domain.ErrKBDuplicateSlug, domain.ErrKBCollectionNotEmpty, domain.ErrKBParentInTrash, domain.ErrKBCollectionInTrash,
 	domain.ErrKBArticleLimit, domain.ErrKBCollectionLimit, domain.ErrKBMediaLimit,
-	domain.ErrKBTranslationNotFound, domain.ErrKBTranslationExists, domain.ErrKBTranslationVersionNotFound, domain.ErrKBLanguageNotListed, domain.ErrKBDraftNotFound}
+	domain.ErrKBTranslationNotFound, domain.ErrKBTranslationExists, domain.ErrKBTranslationVersionNotFound, domain.ErrKBLanguageNotListed, domain.ErrKBDraftNotFound,
+	domain.ErrKBTemplateNotFound, domain.ErrKBTemplateInTrash}
 
 func kbError(what string, err error) error {
 	if err == nil {

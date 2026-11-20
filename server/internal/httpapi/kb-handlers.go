@@ -56,6 +56,10 @@ func writeKBError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "not_found", "The translation has no version with that number.")
 	case errors.Is(err, domain.ErrKBTranslationExists):
 		writeError(response, http.StatusConflict, "translation_exists", "The article already has a translation in this language, perhaps in the trash. Change that one (PATCH), or restore it from the trash.")
+	case errors.Is(err, domain.ErrKBTemplateInTrash):
+		writeError(response, http.StatusConflict, "template_in_trash", "The "+domain.ErrKBTemplateInTrash.Error()+". GET /api/v1/kb/templates lists the others; POST /api/v1/kb/templates/{id}/restore undeletes it.")
+	case errors.Is(err, domain.ErrKBTemplateNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "The template was not found. GET /api/v1/kb/templates lists them.")
 	case errors.Is(err, domain.ErrKBLanguageNotListed):
 		writeError(response, http.StatusBadRequest, "language_not_listed", "This language is not one of the help center's languages (or it is the primary language, the article's own). Add it with PUT /api/v1/help-center/languages first.")
 	default:
@@ -110,9 +114,10 @@ func (a *API) createKBCollection(response http.ResponseWriter, request *http.Req
 		Description string  `json:"description"`
 		ParentID    *string `json:"parent_id"`
 		Position    int     `json:"position"`
+		Template    *string `json:"default_template_id"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A collection needs a name; slug, description, parent_id and position are optional.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "A collection needs a name; slug, description, parent_id, position and default_template_id are optional.")
 		return
 	}
 	if input.Slug != nil && *input.Slug == "" {
@@ -128,9 +133,13 @@ func (a *API) createKBCollection(response http.ResponseWriter, request *http.Req
 	if input.ParentID != nil {
 		parent = *input.ParentID
 	}
-	a.createOnce(response, request, createKBCollectionOperation, []string{input.Name, slug, input.Description, parent, strconv.Itoa(input.Position)}, func(ctx context.Context) (any, error) {
+	template := ""
+	if input.Template != nil {
+		template = *input.Template
+	}
+	a.createOnce(response, request, createKBCollectionOperation, []string{input.Name, slug, input.Description, parent, strconv.Itoa(input.Position), template}, func(ctx context.Context) (any, error) {
 		collection, err := a.store.CreateKBCollection(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
-			store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position})
+			store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position, DefaultTemplateID: input.Template})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered
@@ -151,6 +160,7 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 		Description *string         `json:"description"`
 		Position    *int            `json:"position"`
 		ParentID    json.RawMessage `json:"parent_id"`
+		Template    json.RawMessage `json:"default_template_id"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and what to change.")
@@ -166,6 +176,17 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 				return
 			}
 			change.Parent = &parent
+		}
+	}
+	if input.Template != nil {
+		change.SetDefaultTemplate = true
+		if string(input.Template) != "null" {
+			var template string
+			if err := json.Unmarshal(input.Template, &template); err != nil {
+				writeError(response, http.StatusBadRequest, "invalid_request", "default_template_id is a template id, or null for none.")
+				return
+			}
+			change.DefaultTemplateID = &template
 		}
 	}
 	who := principal(request)
@@ -454,10 +475,23 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 		SEOTitle      string    `json:"seo_title"`
 		SEODesc       string    `json:"seo_description"`
 		ShowContents  *bool     `json:"show_contents"`
+		TemplateID    *string   `json:"template_id"`
 	}
-	if err := decodeJSON(request, &input); err != nil || input.BodyMD == nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "An article needs a collection_id, a title and body_md; slug and status are optional.")
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "An article needs a collection_id and a title; body_md or template_id, slug and status are optional.")
 		return
+	}
+	if input.BodyMD != nil && input.TemplateID != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send body_md or template_id, not both: a template gives the article its text.")
+		return
+	}
+	fromCollection := input.BodyMD == nil && input.TemplateID == nil
+	body, templateID := "", ""
+	if input.BodyMD != nil {
+		body = *input.BodyMD
+	}
+	if input.TemplateID != nil {
+		templateID = *input.TemplateID
 	}
 	if input.Slug != nil && *input.Slug == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Leave slug out to make one from the title.")
@@ -487,10 +521,10 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 	if input.Status == "published" && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, *input.BodyMD, input.Status, input.SEOTitle, input.SEODesc, showContentsKey(input.ShowContents)}, func(ctx context.Context) (any, error) {
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, body, templateID, strconv.FormatBool(fromCollection), input.Status, input.SEOTitle, input.SEODesc, showContentsKey(input.ShowContents)}, func(ctx context.Context) (any, error) {
 		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
-			store.KBArticleInput{CollectionID: input.CollectionID, ExtraCollectionIDs: extraIDs, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status,
-				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents})
+			store.KBArticleInput{CollectionID: input.CollectionID, ExtraCollectionIDs: extraIDs, Title: input.Title, Slug: slug, BodyMD: body, Status: input.Status,
+				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, TemplateID: templateID, BodyFromCollection: fromCollection})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered

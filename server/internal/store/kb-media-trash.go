@@ -172,7 +172,7 @@ func (s *Store) TrashUnusedKBMedia(ctx context.Context, workspaceID string, acto
 	}
 	out, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (answer, error) {
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.deleted_at IS NULL AND m.created_at<$2
-				AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` ORDER BY m.id LIMIT `+strconv.Itoa(domain.MaxKBMediaUnusedBatch)+` FOR UPDATE OF m SKIP LOCKED`,
+				AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` AND NOT `+kbMediaNamedByTemplate+` ORDER BY m.id LIMIT `+strconv.Itoa(domain.MaxKBMediaUnusedBatch)+` FOR UPDATE OF m SKIP LOCKED`,
 			workspaceID, before, includeKept)
 		if err != nil {
 			return answer{}, err
@@ -213,7 +213,7 @@ func (s *Store) TrashUnusedKBMedia(ctx context.Context, workspaceID string, acto
 func (s *Store) UnusedKBMediaIDs(ctx context.Context, workspaceID string, includeKept bool, before time.Time, limit int) ([]string, error) {
 	ids, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]string, error) {
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.deleted_at IS NULL AND m.created_at<$2
-			AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` ORDER BY m.size DESC, m.id LIMIT $4`, workspaceID, before, includeKept, limit)
+			AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` AND NOT `+kbMediaNamedByTemplate+` ORDER BY m.size DESC, m.id LIMIT $4`, workspaceID, before, includeKept, limit)
 		if err != nil {
 			return nil, err
 		}
