@@ -10,6 +10,16 @@ trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 cat >"$BIN/docker" <<'STUB'
 #!/bin/sh
 set -eu
+# The installer reads the PostgreSQL major of the data volume; STUB_PG_VERSION is what PG_VERSION holds.
+if [ "${1:-}" = compose ]; then
+  case "$*" in
+    *PG_VERSION*)
+      [ "${STUB_MODE:-ok}" != probe-fails ] || exit 1
+      printf '%s\n' "${STUB_PG_VERSION:-none}"
+      exit
+      ;;
+  esac
+fi
 if [ "${1:-}" = compose ] && [ "${2:-}" = version ]; then
   [ "${STUB_MODE:-ok}" != no-compose ]
   exit
@@ -97,6 +107,9 @@ printf '%s' "$output" | grep -Fx 'Operator console (one-time link): http://local
 grep -F 'OPERATOR_ORIGIN: ${OPERATOR_ORIGIN:-}' "$fresh/compose.yaml" >/dev/null
 grep -q '^OPERATOR_ORIGIN=' "$fresh/.env" && { printf '%s\n' 'OPERATOR_ORIGIN written without --operator-origin' >&2; exit 1; }
 grep -F "image: \${COLLIE_DESK_IMAGE}" "$fresh/compose.yaml" >/dev/null
+# A fresh install runs PostgreSQL 19, pinned by digest, with its data where 17 kept it.
+grep -Ex '    image: postgres:19\.[0-9]+-bookworm@sha256:[0-9a-f]{64}' "$fresh/compose.yaml" >/dev/null
+grep -Fx '      PGDATA: /var/lib/postgresql/data' "$fresh/compose.yaml" >/dev/null
 # Fresh installs: superuser only for initdb, a non-superuser owner, and a separate request login.
 grep -Fx 'POSTGRES_USER=postgres' "$fresh/.env" >/dev/null
 grep -E '^DATABASE_URL=postgres://colliedesk:[0-9a-f]{64}@postgres:5432/colliedesk\?sslmode=disable$' "$fresh/.env" >/dev/null
@@ -159,7 +172,7 @@ printf '%s\n' 'POSTGRES_PASSWORD=pg' 'APP_ORIGIN=https://desk.example.com' 'SMTP
   'INTERNAL_SIGNUP_EMAILS=@example.com' 'SMTP_PORT=' 'APP_SECRET=old' >"$upgrade/.env"
 touch "$upgrade/.initialized"
 rm -f "$STUB_LOG" "$STUB_LOG.stdin"
-sh "$ROOT/install.sh" --dir "$upgrade" --name Desk --email admin@example.com </dev/null >/dev/null
+STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$upgrade" --name Desk --email admin@example.com </dev/null >/dev/null
 grep -Fx '# the older compose file' "$upgrade/compose.yaml.bak" >/dev/null
 grep -F 'compose run --rm -T server' "$STUB_LOG" >/dev/null
 grep -F 'collie config import --stdin --only-missing --by installer' "$STUB_LOG" >/dev/null
@@ -196,7 +209,7 @@ mkdir -p "$failing"
 printf '%s\n' 'name: colliedesk' '# still the older one' >"$failing/compose.yaml"
 printf '%s\n' 'POSTGRES_PASSWORD=pg' 'SMTP_HOST=smtp.example.net' >"$failing/.env"
 touch "$failing/.initialized"
-expect_failure 'Importing the settings from .env failed' env STUB_MODE=import-fails sh "$ROOT/install.sh" --dir "$failing" --name Desk --email admin@example.com
+expect_failure 'Importing the settings from .env failed' env STUB_MODE=import-fails STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$failing" --name Desk --email admin@example.com
 grep -Fx '# still the older one' "$failing/compose.yaml" >/dev/null
 [ ! -f "$failing/compose.yaml.bak" ]
 
@@ -205,10 +218,53 @@ ops=$TMP/ops
 sh "$ROOT/install.sh" --dir "$ops" --name Desk --email admin@example.com --operator-origin https://ops.example.com </dev/null >/dev/null
 grep -Fx 'OPERATOR_ORIGIN=https://ops.example.com' "$ops/.env" >/dev/null
 # Running the installer again prints no new operator link.
-again=$(sh "$ROOT/install.sh" --dir "$ops" --name Desk --email admin@example.com </dev/null)
+again=$(STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$ops" --name Desk --email admin@example.com </dev/null)
 if printf '%s' "$again" | grep -F 'Operator console' >/dev/null; then
   printf '%s\n' 'a second run printed another operator link' >&2
   exit 1
 fi
+
+# A rerun keeps the PostgreSQL major the data volume holds: the installer never changes it by itself.
+kept=$TMP/kept
+mkdir -p "$kept"
+sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null >/dev/null
+output=$(STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null 2>&1)
+grep -Fx '    image: postgres:17-bookworm' "$kept/compose.yaml" >/dev/null || { printf 'a rerun on PostgreSQL 17 data changed the image:\n%s\n' "$(grep 'image: postgres' "$kept/compose.yaml")" >&2; exit 1; }
+grep -Fx '      PGDATA: /var/lib/postgresql/data' "$kept/compose.yaml" >/dev/null
+printf '%s' "$output" | grep -F 'PostgreSQL 17' | grep -F 'docs/self-host/upgrade.md#postgresql-versions' >/dev/null ||
+  { printf 'the rerun did not say it kept PostgreSQL 17 and where to read about upgrading:\n%s\n' "$output" >&2; exit 1; }
+# The compose file lost (or never written) on an initialized install: the major still comes from the volume.
+rm "$kept/compose.yaml" "$kept/compose.yaml.bak"
+STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
+grep -Fx '    image: postgres:17-bookworm' "$kept/compose.yaml" >/dev/null
+# Data already on 19 stays on the pinned 19 image, with no notice.
+output=$(STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null 2>&1)
+grep -Ex '    image: postgres:19\.[0-9]+-bookworm@sha256:[0-9a-f]{64}' "$kept/compose.yaml" >/dev/null
+if printf '%s' "$output" | grep -F 'upgrade.md#postgresql-versions' >/dev/null; then
+  printf '%s\n' 'the installer printed the PostgreSQL notice on 19 data' >&2
+  exit 1
+fi
+cp "$kept/compose.yaml" "$TMP/kept.compose"
+# A major this installer does not run, an initialized install whose volume holds no data, and a volume
+# it cannot read stop the installer before it changes the compose file.
+rm -f "$kept/compose.yaml.bak"
+expect_failure 'PostgreSQL 12' env STUB_PG_VERSION=12 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com
+expect_failure 'holds no PostgreSQL data' env STUB_PG_VERSION=none sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com
+expect_failure 'could not read the PostgreSQL version' env STUB_MODE=probe-fails sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com
+cmp -s "$kept/compose.yaml" "$TMP/kept.compose" || { printf '%s\n' 'a refused rerun changed compose.yaml' >&2; exit 1; }
+[ ! -e "$kept/compose.yaml.bak" ] && [ ! -e "$kept/compose.yaml.next" ] || { printf '%s\n' 'a refused rerun left a compose file beside compose.yaml' >&2; exit 1; }
+# The bundled database written by hand without its port is still the bundled one.
+handmade=$TMP/handmade
+mkdir -p "$handmade"
+printf '%s\n' 'POSTGRES_PASSWORD=pg' 'DATABASE_URL=postgres://colliedesk:pw@postgres/colliedesk?sslmode=disable' >"$handmade/.env"
+touch "$handmade/.initialized"
+expect_failure 'holds no PostgreSQL data' env STUB_PG_VERSION=none sh "$ROOT/install.sh" --dir "$handmade" --name Desk --email admin@example.com
+# An install on an external database has nothing in the bundled volume to keep.
+external=$TMP/external
+mkdir -p "$external"
+printf '%s\n' 'POSTGRES_PASSWORD=pg' 'DATABASE_URL=postgres://desk:pw@db.example.net:5432/desk' >"$external/.env"
+touch "$external/.initialized"
+sh "$ROOT/install.sh" --dir "$external" --name Desk --email admin@example.com </dev/null >/dev/null
+grep -Ex '    image: postgres:19\.[0-9]+-bookworm@sha256:[0-9a-f]{64}' "$external/compose.yaml" >/dev/null
 
 printf '%s\n' 'install tests passed'
