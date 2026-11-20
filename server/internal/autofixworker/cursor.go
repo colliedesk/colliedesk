@@ -25,6 +25,9 @@ type Cursor struct {
 	Base       string
 	HTTPClient *http.Client
 	Now        func() time.Time
+	// FirstReads is how soon a sent run is read again during its first five minutes (firstPolls when
+	// zero). Only end-to-end builds shorten it.
+	FirstReads time.Duration
 	budget     budget
 	// listed is when each workspace last listed its repositories at Cursor, which allows that once a
 	// minute.
@@ -61,6 +64,13 @@ func (c *Cursor) now() time.Time {
 		return c.Now().UTC()
 	}
 	return time.Now().UTC()
+}
+
+func (c *Cursor) firstReads() time.Duration {
+	if c.FirstReads > 0 {
+		return c.FirstReads
+	}
+	return firstPolls
 }
 
 func (c *Cursor) client(key string) cursor.Client {

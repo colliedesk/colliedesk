@@ -29,7 +29,8 @@ func main() {
 	mux.Handle("/", fake)
 	// The steps every agent created from now on follows, one per read of its run:
 	// [{"status": "RUNNING"}, {"status": "FINISHED", "branch": "…", "pr_url": "https://github.com/o/r/pull/7"}].
-	mux.HandleFunc("POST /stand-in/script", decoded(func(in []struct {
+	// No steps keep a run CREATING. With ?agent=bc-…, the steps of that agent, from its next read on.
+	mux.HandleFunc("POST /stand-in/script", decoded(func(request *http.Request, in []struct {
 		Status string `json:"status"`
 		Result string `json:"result"`
 		Branch string `json:"branch"`
@@ -38,6 +39,10 @@ func main() {
 		steps := make([]cursortest.Step, 0, len(in))
 		for _, step := range in {
 			steps = append(steps, cursortest.Step{Status: step.Status, Result: step.Result, Branch: step.Branch, PRURL: step.PRURL})
+		}
+		if agent := request.URL.Query().Get("agent"); agent != "" {
+			fake.ScriptAgent(agent, steps...)
+			return
 		}
 		fake.Script(steps...)
 	}))
@@ -98,14 +103,14 @@ func main() {
 }
 
 // decoded answers 204 after handing the JSON body to apply, 400 when it does not decode.
-func decoded[T any](apply func(T)) http.HandlerFunc {
+func decoded[T any](apply func(*http.Request, T)) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
 		var in T
 		if err := json.NewDecoder(io.LimitReader(request.Body, 1<<20)).Decode(&in); err != nil {
 			http.Error(response, "bad JSON: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		apply(in)
+		apply(request, in)
 		response.WriteHeader(http.StatusNoContent)
 	}
 }

@@ -45,6 +45,10 @@ var githubBaseURL = ""
 // cursorBaseURL replaces Cursor's API with a local stand-in (cursortest); only end-to-end builds set it.
 var cursorBaseURL = ""
 
+// cursorReadEvery, when set, is how often the Autofix worker looks for due fixes and how soon a sent
+// Cursor run is read again; only end-to-end builds set it, so a journey does not wait 15 seconds a read.
+var cursorReadEvery time.Duration
+
 // microsoftBaseURL replaces Microsoft's sign-in and Graph addresses with a local stand-in; only
 // end-to-end builds set it.
 var microsoftBaseURL = ""
@@ -100,7 +104,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	carry.Hot = hot
 	p := &process{pool: pool, requestPool: requestPool, db: db, origin: origin, storage: storage, carry: carry, configStore: configStore,
 		importKeys: importjobs.NewKeys(configStore.Keys()),
-		cursor:     &autofixworker.Cursor{Store: store.NewWithDB(db).WithSealKeys(configStore.Keys()), Base: cursorBaseURL}}
+		cursor:     &autofixworker.Cursor{Store: store.NewWithDB(db).WithSealKeys(configStore.Keys()), Base: cursorBaseURL, FirstReads: cursorReadEvery}}
 	p.operatorOrigin, err = operatorOrigin(origin)
 	if err != nil {
 		slog.Error("the operator console stays at APP_ORIGIN/operator/", "error", err)
