@@ -135,6 +135,20 @@ layouts, in the background of the CI `image` job and in the release.
   `compose.yaml` that serves complete data: the old major before the switch, 19 after it. The next
   run reads `compose.yaml`, not the state file, to choose between finishing on 19 and putting the
   install back.
+- **After the switch, never point away from 19 or remove its volume.** Once `compose.yaml` names 19
+  the server may have written there, and the 19 volume may be the only copy of those writes. A
+  failure or a signal after the switch leaves `compose.yaml` on 19 and names the two ways on (run
+  again, `--rollback`). The new volume is removed only while `compose.postgres-19.yaml` still exists,
+  which proves `compose.yaml` never named it.
+- **The rollback is resumable.** It records `rolling_back` before it edits `compose.yaml`. Until
+  PostgreSQL runs on the old volume, a stop puts `compose.yaml` back on 19; after that, the server
+  may have written to the old volume, so a stop leaves `compose.yaml` on the old major and the next
+  `--rollback` finishes it. An upgrade refuses while a rollback is unfinished.
+- **The compose files keep their mode.** `umask 077` protects the dump; the script copies
+  `compose.yaml` with `cp -p` before each edit, so the install's mode (often 664) survives.
+- **No lock against two runs at once.** The script is run by hand by one operator on one host; two
+  concurrent runs would also fight over the same containers, which a lock file cannot prevent across
+  a reboot. Not worth the stale-lock failure mode.
 - **The exit handlers ignore signals and write errors.** A closed SSH session sends SIGHUP, and then
   every write to the terminal fails; the handler that puts the install back must still run to its
   end, so it ignores HUP, INT, TERM and PIPE and its messages swallow write errors. The test runs a

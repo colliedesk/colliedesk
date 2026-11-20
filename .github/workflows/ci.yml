@@ -468,7 +468,7 @@ jobs:
           BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
         run: sh .github/scripts/ci-background.sh start compose-smoke sh tests/compose-smoke.sh
       # upgrade-postgres.sh moves an install of v1.0.1 (PostgreSQL 17) to 19 and back, for both database
-      # login layouts at once (about 120 seconds each); the image job still ends before the e2e shards.
+      # login layouts at once (about 130 to 145 seconds each); the image job still ends before the e2e shards.
       - name: Start the PostgreSQL 19 upgrade tests in the background
         run: |
           sh .github/scripts/ci-background.sh start upgrade-postgres-owner sh tests/upgrade-postgres-test.sh owner colliedesk:ci
@@ -509,7 +509,7 @@ jobs:
       - name: upgrade-postgres.sh moves PostgreSQL 17 to 19 and back without losing a row or a file
         env:
           # Five Docker checks share the runner here; each of these waits counts from its own start.
-          CI_BACKGROUND_TIMEOUT: '180'
+          CI_BACKGROUND_TIMEOUT: '240'
         run: |
           sh .github/scripts/ci-background.sh wait upgrade-postgres-owner
           sh .github/scripts/ci-background.sh wait upgrade-postgres-superuser

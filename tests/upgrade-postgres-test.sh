@@ -4,11 +4,15 @@
 # file and serving each workspace its own inbox, survives an installer rerun and a restart on 19,
 # and goes back to 17 with --rollback, data as it was. A failure in the middle leaves the install
 # on 17 and serving, even with its terminal gone; a run killed in the restore leaves compose.yaml on
-# 17, so a plain docker compose up serves the data as it was; a run killed after the restore is
-# finished by the next run, and one that cannot finish on 19 goes back to 17, keeping the 19
-# volume. The refusals (external database, already upgraded, unknown state, too little disk, an
-# environment PGDATA cannot be added to, a rollback whose old volume is gone) change nothing and
-# print no password. Needs Docker with Compose v2 and curl.
+# 17, so a plain docker compose up serves the data as it was. Once compose.yaml names 19 the server
+# may write there, so nothing points it away again by itself: a run killed, hung up or unable to
+# start on 19 leaves compose.yaml and the volume on 19 for the next run to finish or --rollback to
+# undo, and a run after the operator put the old compose file back keeps the 19 volume. A hangup
+# in a rollback after 17 started leaves compose.yaml on 17 for --rollback to finish. The compose
+# files keep the mode the install gave them. The refusals (external database, already upgraded,
+# unknown state, unfinished rollback, too little disk, an environment PGDATA cannot be added to, a
+# rollback whose old volume is gone) change nothing and print no password. Needs Docker with
+# Compose v2 and curl.
 #   sh tests/upgrade-postgres-test.sh LAYOUT IMAGE
 # LAYOUT is the database login layout of the install:
 #   owner      POSTGRES_USER=postgres, the server logs in as the colliedesk owner role (install.sh
@@ -126,6 +130,7 @@ postgres_password=$(secret)
 dc up -d --wait postgres >/dev/null 2>&1 || fail 'postgres did not start'
 [ "$(pg_major)" = 17 ] || fail "the $BASE_TAG install does not run PostgreSQL 17"
 old_volume=$(data_volume)
+compose_mode=$(mode "$TMP/compose.yaml")
 
 # The fixture: every migration of this checkout in order, as the owner and with the setting
 # `collie migrate` uses, each followed by its fixture file, in one psql session.
@@ -274,6 +279,9 @@ upgraded() {
     [ "$(mode "$file")" = 600 ] || fail "${file#"$TMP"/} is readable by others (mode $(mode "$file"))"
   done
   [ "$(mode "$dump_dir")" = 700 ] || fail "${dump_dir#"$TMP"/} is open to others (mode $(mode "$dump_dir"))"
+  for file in "$TMP/compose.yaml" "$TMP/compose.yaml.before-postgres-19"; do
+    [ "$(mode "$file")" = "$compose_mode" ] || fail "${file#"$TMP"/} has mode $(mode "$file"), want $compose_mode as the install had"
+  done
   server_running || fail 'the server is not running after the upgrade'
   same_data 'after the upgrade' before
   check_inbox acme owner@acme.example
@@ -299,6 +307,7 @@ rolled_back() {
   [ "$(data_volume)" = "$old_volume" ] || fail 'PostgreSQL 17 does not run on its old volume after the rollback'
   [ -n "$(volume_for postgres19-data)" ] || fail 'the rollback removed the PostgreSQL 19 volume'
   [ ! -e "$TMP/compose.yaml.before-rollback" ] || fail 'the rollback left compose.yaml.before-rollback'
+  [ "$(mode "$TMP/compose.yaml")" = "$compose_mode" ] || fail "the rollback left compose.yaml with mode $(mode "$TMP/compose.yaml"), want $compose_mode"
   [ "$(state state)" = rolled_back ] || fail "the state file says $(state state), want rolled_back"
   server_running || fail 'the server is not running after the rollback'
   same_data 'after the rollback' before
@@ -327,8 +336,9 @@ rerun_installer() {
 
 if [ "$LAYOUT" = owner ]; then
   cp "$TMP/compose.yaml" "$TMP/compose.base"
-  # An install that never becomes healthy once compose.yaml names PostgreSQL 19: the run points it
-  # back at 17 and its old volume, serving, and keeps the restored 19 volume.
+  # An install that never becomes healthy once compose.yaml names PostgreSQL 19. The server may have
+  # written on 19 by then, so the run leaves compose.yaml on 19 and the 19 volume in place, and
+  # says how to go on; --rollback from there goes back to 17 with the data as it was.
   cat >"$TMP/docker" <<EOF
 #!/bin/sh
 if [ "\$*" = 'compose up -d --wait' ] && grep -q postgres19-data compose.yaml; then exit 1; fi
@@ -336,16 +346,18 @@ exec "$DOCKER" "\$@"
 EOF
   chmod 755 "$TMP/docker"
   if (cd "$TMP" && DOCKER="$TMP/docker" sh "$ROOT/upgrade-postgres.sh" >"$TMP/upgrade.out" 2>&1); then fail 'upgrade-postgres.sh succeeded with an install that never became healthy on 19'; fi
-  no_secret_printed 'going back from 19'
-  [ "$(state state)" = failed ] || { cat "$TMP/upgrade.out" >&2; fail "a run that could not finish left the state $(state state), want failed"; }
-  [ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] && grep -qx '      - postgres-data:/var/lib/postgresql/data' "$TMP/compose.yaml" ||
-    fail 'a run that could not finish on 19 did not put the install back on PostgreSQL 17 and its old volume'
-  [ -n "$(volume_for postgres19-data)" ] || fail 'a run that could not finish on 19 removed the restored PostgreSQL 19 volume'
-  server_running || fail 'a run that could not finish on 19 left the server stopped'
-  same_data 'after a run that could not finish on 19' before
-  step 'could not finish on 19: back on PostgreSQL 17, the restored 19 volume kept'
+  no_secret_printed 'stopping on 19'
+  [ "$(state state)" = started ] || { cat "$TMP/upgrade.out" >&2; fail "a run that could not finish on 19 left the state $(state state), want started"; }
+  grep -qx '      - postgres19-data:/var/lib/postgresql/data' "$TMP/compose.yaml" ||
+    { cat "$TMP/upgrade.out" >&2; fail 'a run that could not finish on 19 pointed compose.yaml away from the volume the server may have written'; }
+  [ -n "$(volume_for postgres19-data)" ] || fail 'a run that could not finish on 19 removed the PostgreSQL 19 volume'
+  grep -q -- '--rollback' "$TMP/upgrade.out" || { cat "$TMP/upgrade.out" >&2; fail 'a run that could not finish on 19 did not say how to go on'; }
+  step 'could not finish on 19: compose.yaml and the volume stay on 19'
+  rolled_back
   "$DOCKER" volume rm "$(volume_for postgres19-data)" >/dev/null
   cp "$TMP/compose.base" "$TMP/compose.yaml"
+  # The rollback check signed in (a pairing link and a session): the next upgrade carries them.
+  baseline before
 
   # The upgrade straight on the compose file of $BASE_TAG, killed for good once the restore is done
   # and compose.yaml names PostgreSQL 19: the next run finishes it.
@@ -358,6 +370,21 @@ EOF
   if (cd "$TMP" && DOCKER="$TMP/docker" sh "$ROOT/upgrade-postgres.sh" >"$TMP/upgrade.out" 2>&1); then fail 'upgrade-postgres.sh outlived kill -9'; fi
   [ "$(state state)" = started ] || { cat "$TMP/upgrade.out" >&2; fail "a killed upgrade left the state $(state state), want started"; }
   grep -qx '      - postgres19-data:/var/lib/postgresql/data' "$TMP/compose.yaml" || fail 'the upgrade was killed before compose.yaml named PostgreSQL 19'
+  # The operator puts the compose file of before the upgrade back by hand: the next run serves 17 and
+  # keeps the 19 volume, which the server may have written.
+  cp "$TMP/compose.yaml" "$TMP/compose.on19"
+  cp "$TMP/.postgres-upgrade" "$TMP/state.on19"
+  mv "$TMP/compose.yaml.before-postgres-19" "$TMP/compose.yaml"
+  if upgrade; then cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh upgraded over a PostgreSQL 19 volume the server may have written'; fi
+  no_secret_printed 'keeping the 19 volume'
+  [ -n "$(volume_for postgres19-data)" ] || { cat "$TMP/upgrade.out" >&2; fail 'a run after the old compose file was put back removed the PostgreSQL 19 volume'; }
+  [ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] && server_running ||
+    fail 'a run after the old compose file was put back does not serve PostgreSQL 17 from its old volume'
+  step 'old compose file put back after the switch: serving 17, the 19 volume kept'
+  # Back to where the killed run left the install.
+  mv "$TMP/compose.on19" "$TMP/compose.yaml"
+  cp "$TMP/compose.base" "$TMP/compose.yaml.before-postgres-19"
+  mv "$TMP/state.on19" "$TMP/.postgres-upgrade"
   upgrade || { cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh did not finish an upgrade killed after the restore'; }
   upgraded "$TMP/compose.base" on19
   refused 'an install already on PostgreSQL 19' '--rollback'
@@ -445,9 +472,46 @@ EOF
   same_data 'after a killed upgrade and a plain start' before
   step 'killed in the restore: a plain start serves PostgreSQL 17, nothing lost'
 
-  upgrade || { cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh failed after a killed run'; }
+  # The run after the killed one undoes it and upgrades, and gets a hangup (the SSH session closed)
+  # while the install starts on 19: the server may have written on 19, so compose.yaml and the volume
+  # stay on 19 and the next run finishes the upgrade.
+  cat >"$TMP/docker" <<EOF
+#!/bin/sh
+if [ "\$*" = 'compose up -d --wait' ] && grep -q postgres19-data compose.yaml && [ ! -e "$TMP/hup-once" ]; then
+  : >"$TMP/hup-once"; kill -HUP \$PPID
+fi
+exec "$DOCKER" "\$@"
+EOF
+  chmod 755 "$TMP/docker"
+  if (cd "$TMP" && DOCKER="$TMP/docker" sh "$ROOT/upgrade-postgres.sh" >"$TMP/upgrade.out" 2>&1); then fail 'upgrade-postgres.sh ignored a hangup'; fi
+  [ -e "$TMP/hup-once" ] || { cat "$TMP/upgrade.out" >&2; fail 'the hangup after the switch never ran'; }
   grep -q 'did not finish' "$TMP/upgrade.out" || { cat "$TMP/upgrade.out" >&2; fail 'the run after a killed one did not say it undid it'; }
+  no_secret_printed 'hangup on 19'
+  [ "$(state state)" = started ] || { cat "$TMP/upgrade.out" >&2; fail "a hangup after the switch left the state $(state state), want started"; }
+  grep -qx '      - postgres19-data:/var/lib/postgresql/data' "$TMP/compose.yaml" ||
+    { cat "$TMP/upgrade.out" >&2; fail 'a hangup after the switch pointed compose.yaml away from the volume the server may have written'; }
+  [ -n "$(volume_for postgres19-data)" ] || fail 'a hangup after the switch removed the PostgreSQL 19 volume'
+  step 'hangup after the switch: compose.yaml and the volume stay on 19'
+  upgrade || { cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh did not finish an upgrade cut off by a hangup'; }
   upgraded "$TMP/compose.installer"
+
+  # A hangup while the install starts on 17 again in a rollback: the server may have written on 17,
+  # so compose.yaml stays on 17 and --rollback, run again, finishes.
+  cat >"$TMP/docker" <<EOF
+#!/bin/sh
+if [ "\$*" = 'compose up -d --wait' ] && grep -qx '      - postgres-data:/var/lib/postgresql/data' compose.yaml && [ ! -e "$TMP/hup-rollback" ]; then
+  : >"$TMP/hup-rollback"; kill -HUP \$PPID
+fi
+exec "$DOCKER" "\$@"
+EOF
+  if (cd "$TMP" && DOCKER="$TMP/docker" sh "$ROOT/upgrade-postgres.sh" --rollback >"$TMP/upgrade.out" 2>&1); then fail 'upgrade-postgres.sh --rollback ignored a hangup'; fi
+  [ -e "$TMP/hup-rollback" ] || { cat "$TMP/upgrade.out" >&2; fail 'the hangup in the rollback never ran'; }
+  no_secret_printed 'hangup in the rollback'
+  grep -qx '      - postgres-data:/var/lib/postgresql/data' "$TMP/compose.yaml" ||
+    { cat "$TMP/upgrade.out" >&2; fail 'a hangup in the rollback pointed compose.yaml back at 19 after the server started on 17'; }
+  [ "$(state state)" = rolling_back ] || { cat "$TMP/upgrade.out" >&2; fail "a hangup in the rollback left the state $(state state), want rolling_back"; }
+  refused 'an upgrade while a rollback is unfinished' '--rollback'
+  step 'hangup in the rollback: compose.yaml stays on 17'
   rolled_back gone
 fi
 step 'passed'

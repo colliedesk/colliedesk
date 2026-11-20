@@ -125,8 +125,8 @@ sh upgrade-postgres.sh
 ```
 
 It stops the server and dumps the roles and the database to `postgres-upgrade-<date>/`. It starts
-PostgreSQL 19 from the pinned image on a new volume, `<project>_postgres19-data` (`<project>` is the
-install folder's name by default), through a copy of `compose.yaml` named `compose.postgres-19.yaml`,
+PostgreSQL 19 from the pinned image on a new volume, `colliedesk_postgres19-data` (the installer's
+`compose.yaml` names the project `colliedesk`; another project name replaces that prefix), through a copy of `compose.yaml` named `compose.postgres-19.yaml`,
 restores the dump there and analyzes it. Only then does it point `compose.yaml` at the new image and
 volume, keeping the old file as `compose.yaml.before-postgres-19`, and start Colliedesk. Colliedesk
 is down from the dump until it is healthy on 19; the script prints how long. It needs free disk space
@@ -135,18 +135,22 @@ moves: other databases on the same server stay in the old volume, and the script
 
 - **The upgrade does not change the old volume.** It only dumps from it, so your PostgreSQL 16, 17
   or 18 data stays as it was when the server stopped.
-- **A failure puts the install back.** Until the restore is complete, `compose.yaml` still names the
-  old major: a failure there removes the half-made volume and starts the install on its old major,
-  and even after a run that was killed, `docker compose up -d` serves the old data. If Colliedesk
-  does not become healthy on 19 after the switch, the script puts `compose.yaml` back and starts the
-  old major; it keeps the 19 volume then and says so: remove it before you run the script again.
-- **A run that was cut off** (a reboot, a lost SSH session) is put back by the next run, or finished
-  on 19 when its restore was complete.
+- **A failure before the switch puts the install back.** Until the restore is complete,
+  `compose.yaml` still names the old major: a failure there removes the half-made volume and starts
+  the install on its old major, and even after a run that was killed, `docker compose up -d` serves
+  the old data.
+- **After the switch nothing points `compose.yaml` away from 19.** Colliedesk may have written to
+  the 19 volume by then. If it does not become healthy on 19, or the run is cut off (a reboot, a lost
+  SSH session), `compose.yaml` stays on 19 and the script says how to go on: run it again to finish
+  on 19, or run `--rollback` to go back. A run cut off before the switch is put back by the next run.
+- **A 19 volume Colliedesk may have run on is never removed by the script.** It may hold the only
+  copy of what was written on 19. If you put `compose.yaml.before-postgres-19` back by hand after the
+  switch, the next run serves the old major and keeps that volume.
 - **It refuses what it cannot do safely** and changes nothing: an external database (a
   `DATABASE_URL` that does not name the bundled `postgres` service), a `compose.yaml` that does not
   give the postgres service one image and one data volume, an `environment:` list the `PGDATA` line
   cannot be added to, a major older than 16, an existing `postgres19-data` volume, too little disk
-  space. It never prints a password.
+  space, a rollback that has not finished. It never prints a password.
 
 To go back to the major and the volume you had before:
 
@@ -154,16 +158,19 @@ To go back to the major and the volume you had before:
 sh upgrade-postgres.sh --rollback
 ```
 
-The data is then as it was when the upgrade started. Writes made on PostgreSQL 19 since then are not
-in it; they stay in the volume `<project>_postgres19-data`, which is kept. Remove that volume
-(`docker volume rm`) only when you no longer need it. Remove the old volume (`docker volume rm`) and
+The data is then as it was when the server stopped for the upgrade. Writes made on PostgreSQL 19
+since then are not in it; they stay in the volume `colliedesk_postgres19-data`, which is kept. A
+rollback that was cut off leaves `compose.yaml` on the old major, or as it was on 19 if the server had
+not started on the old volume yet; run `sh upgrade-postgres.sh --rollback` again to finish it. Before
+you remove the 19 volume (`docker volume rm`), make sure nothing in it is missing from the old major:
+it holds every write made while the install ran on 19. Remove the old volume (`docker volume rm`) and
 the dump directory (`rm -r`) once the install has run on 19 long enough for you to trust it. The
 rollback refuses, changing nothing, when the old volume is gone.
 
 Every pull request and every release runs this on an install of v1.0.1 (PostgreSQL 17) filled with
 the upgrade fixture, for both database login layouts the installer has made: upgrade, installer
 rerun, restart, a failed upgrade, a run killed in the restore, a run killed after it, one that cannot
-start on 19, rollback. No row or file may change.
+start on 19, a hangup after the switch and one in the rollback, rollback. No row or file may change.
 
 ## Settings move into the database
 
