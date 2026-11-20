@@ -215,6 +215,10 @@ jobs:
       # The channels journeys read the From line of a reply in Mailpit.
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
+      # Ubuntu 24.04's gcc differs from ubuntu-latest's, where main's Go cache is built, and gcc's version is
+      # part of runtime/cgo's cache key: with cgo on, 107 of 484 packages compiled again here (run
+      # 44719216506). The release image builds without cgo too.
+      CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start test services in the background
@@ -265,15 +269,11 @@ jobs:
       # tests run them from (web/e2e/support/cli.ts): the test servers then start this commit's
       # binaries, embedded app included, without linking. The tests wait for it, so it starts
       # first and the checks below yield the cores to it (nice).
-      - name: Probe which packages the restored cache misses
+      # How many packages the restored cache misses. When main's cache fits this job: cmd/collie itself
+      # and the packages this commit changed, with what imports them.
+      - name: Count the Go packages the cache misses
         working-directory: server
-        run: |
-          gcc --version | head -1
-          for t in "" e2e; do
-            go list -tags "$t" -deps -f '{{if .Stale}}{{.ImportPath}}: {{.StaleReason}}{{end}}' ./cmd/collie > "$RUNNER_TEMP/stale.txt"
-            echo "tags=$t stale=$(wc -l < "$RUNNER_TEMP/stale.txt") of $(go list -tags "$t" -deps ./cmd/collie | wc -l)"
-            grep -v 'stale dependency' "$RUNNER_TEMP/stale.txt" | head -20
-          done
+        run: echo "stale=$(go list -tags e2e -deps -f '{{if .Stale}}x{{end}}' ./cmd/collie | grep -c x || true)"
       - name: Build the app and compile the test servers in the background
         run: |
           sh .github/scripts/ci-background.sh start app sh -c \
@@ -344,6 +344,10 @@ jobs:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
+      # Ubuntu 24.04's gcc differs from ubuntu-latest's, where main's Go cache is built, and gcc's version is
+      # part of runtime/cgo's cache key: with cgo on, 107 of 484 packages compiled again here (run
+      # 44719216506). The release image builds without cgo too.
+      CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start test services in the background

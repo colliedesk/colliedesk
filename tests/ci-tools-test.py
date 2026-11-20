@@ -912,13 +912,27 @@ class PrebuiltTestServers(unittest.TestCase):
         self.assertIn('binaryPath(tags)', self.config)
         self.assertIn('export function binaryPath(', self.cli)
 
-    def test_main_caches_the_packages_the_e2e_tag_changes(self):
+    def test_the_test_servers_build_without_cgo(self):
+        # These jobs run on Ubuntu 24.04 and main's cache is built on ubuntu-latest. gcc's version is
+        # part of runtime/cgo's cache key, so with cgo on, 107 of 484 packages compiled again in each
+        # e2e shard (run 44719216506). The release image builds with CGO_ENABLED=0 as well.
+        jobs = {name: '\n'.join(body) for name, body in workflow_jobs(ROOT / '.github/workflows/ci.yml')}
+        for job in ('e2e', 'onboarding'):
+            env = re.search(r'\n    env:\n((?:      .*\n|\s*\n)*?)    steps:', jobs[job] + '\n')
+            self.assertIsNotNone(env, job)
+            self.assertRegex(env.group(1), r"(?m)^      CGO_ENABLED: '0'$", job)
+
+    def test_main_caches_both_test_servers_built_without_cgo(self):
         # internal/freshdesk has an e2e file, so httpapi, mcpserver and importjobs compile again under
         # the tag; `go test -c` alone left them to every e2e shard (2.1 of 3.7 seconds of its build).
+        # CGO_ENABLED=0 selects other files in net and os/user, so their importers need entries too.
         cache = (ROOT / '.github/workflows/go-cache.yml').read_text()
-        build = cache.find('go build -tags e2e -o /dev/null ./cmd/collie')
-        self.assertGreaterEqual(build, 0)
-        self.assertLess(build, cache.find('Save the Go build cache'))
+        save = cache.find('Save the Go build cache')
+        for build in ('CGO_ENABLED=0 go build -tags e2e -o /dev/null ./cmd/collie',
+                      'CGO_ENABLED=0 go build -o /dev/null ./cmd/collie'):
+            at = cache.find(build)
+            self.assertGreaterEqual(at, 0, build)
+            self.assertLess(at, save, build)
 
 
 class BundleBudget(unittest.TestCase):

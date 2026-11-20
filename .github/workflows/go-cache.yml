@@ -53,12 +53,13 @@ jobs:
       - name: Compile every test binary
         working-directory: server
         run: go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
-      # The e2e servers build cmd/collie with -tags e2e. internal/freshdesk has an e2e file, so its
-      # importers (httpapi, mcpserver, importjobs) compile again under the tag; cached here, an e2e
-      # shard compiles only what its commit changed before it links.
-      - name: Compile the e2e test server's packages
+      # The e2e servers build cmd/collie with and without -tags e2e. internal/freshdesk has an e2e file, so
+      # its importers (httpapi, mcpserver, importjobs) compile again under the tag. The e2e jobs build
+      # with CGO_ENABLED=0, which selects other files in net and os/user: their importers need entries
+      # of their own. Cached here, an e2e shard compiles only what its commit changed before it links.
+      - name: Compile the e2e test servers' packages
         working-directory: server
-        run: go build -tags e2e -o /dev/null ./cmd/collie
+        run: CGO_ENABLED=0 go build -tags e2e -o /dev/null ./cmd/collie && CGO_ENABLED=0 go build -o /dev/null ./cmd/collie
       - name: Save the Go build cache for later runs
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
