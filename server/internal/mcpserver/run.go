@@ -19,7 +19,9 @@ type handler func(c *call, arguments map[string]any) (any, error)
 
 // register adds the tool to the server with the validation, the bearer hand-over and the error
 // mapping that every tool shares.
-func register(server *mcp.Server, spec Spec, rest *restClient, funnel httpapi.FunnelRecorder) {
+// output is the schema the tool list carries, which may name another tool for a shared shape
+// (advertisedOutputs); spec.Output stays the full schema the tests check results against.
+func register(server *mcp.Server, spec Spec, output json.RawMessage, rest *restClient, funnel httpapi.FunnelRecorder) {
 	var schema jsonschema.Schema
 	if err := json.Unmarshal([]byte(spec.Input), &schema); err != nil {
 		panic(fmt.Errorf("tool %s: input schema: %w", spec.Name, err))
@@ -37,7 +39,7 @@ func register(server *mcp.Server, spec Spec, rest *restClient, funnel httpapi.Fu
 	annotations := &mcp.ToolAnnotations{Title: spec.Title, ReadOnlyHint: spec.ReadOnly(), IdempotentHint: spec.Idempotent,
 		DestructiveHint: &destructive, OpenWorldHint: &openWorld}
 	tool := &mcp.Tool{Name: spec.Name, Title: spec.Title, Description: spec.Description, Annotations: annotations,
-		InputSchema: json.RawMessage(spec.Input), OutputSchema: json.RawMessage(spec.Output)}
+		InputSchema: json.RawMessage(spec.Input), OutputSchema: output}
 	server.AddTool(tool, func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return execute(ctx, request, spec, resolved, rest, funnel), nil
 	})

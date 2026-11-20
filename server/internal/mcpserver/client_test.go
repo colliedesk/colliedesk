@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 )
 
 type bearer struct{ token string }
@@ -60,7 +62,9 @@ func (e *env) ok(session *mcp.ClientSession, tool string, args map[string]any) m
 	return out
 }
 
-// requireMatchesOutputSchema checks the result against the output schema the server advertises.
+// requireMatchesOutputSchema checks that the tool is listed and that the result matches the tool's
+// full output schema. The listed schema may name another tool for a shared shape instead of spelling it
+// out, so the full one is the stricter check.
 func (e *env) requireMatchesOutputSchema(session *mcp.ClientSession, tool string, out map[string]any) {
 	e.t.Helper()
 	listed, err := session.ListTools(context.Background(), nil)
@@ -71,22 +75,23 @@ func (e *env) requireMatchesOutputSchema(session *mcp.ClientSession, tool string
 		if advertised.Name != tool {
 			continue
 		}
-		encoded, err := json.Marshal(advertised.OutputSchema)
-		if err != nil {
-			e.t.Fatal(err)
+		for _, spec := range mcpserver.Catalog() {
+			if spec.Name != tool {
+				continue
+			}
+			var schema jsonschema.Schema
+			if err := json.Unmarshal([]byte(spec.Output), &schema); err != nil {
+				e.t.Fatal(err)
+			}
+			resolved, err := schema.Resolve(nil)
+			if err != nil {
+				e.t.Fatalf("%s: output schema does not resolve: %v", tool, err)
+			}
+			if err := resolved.Validate(out); err != nil {
+				e.t.Errorf("%s: result does not match its output schema: %v\n%v", tool, err, out)
+			}
+			return
 		}
-		var schema jsonschema.Schema
-		if err := json.Unmarshal(encoded, &schema); err != nil {
-			e.t.Fatal(err)
-		}
-		resolved, err := schema.Resolve(nil)
-		if err != nil {
-			e.t.Fatalf("%s: output schema does not resolve: %v", tool, err)
-		}
-		if err := resolved.Validate(out); err != nil {
-			e.t.Errorf("%s: result does not match its output schema: %v\n%v", tool, err, out)
-		}
-		return
 	}
 	e.t.Fatalf("%s is not listed", tool)
 }
