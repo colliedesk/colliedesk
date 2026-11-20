@@ -711,6 +711,9 @@ func changeKBArticleLocked(ctx context.Context, tx pgx.Tx, workspaceID string, a
 	if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, kind, restoredFrom); err != nil {
 		return domain.KBArticle{}, err
 	}
+	if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id); err != nil {
+		return domain.KBArticle{}, err
+	}
 	article, err := readKBArticle(ctx, tx, workspaceID, id)
 	if err != nil {
 		return domain.KBArticle{}, err

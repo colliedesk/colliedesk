@@ -49,6 +49,17 @@ func (s *Store) DecideKBReview(ctx context.Context, workspaceID string, actor Ac
 		if err := mayDecideKBReview(review, actor, decision); err != nil {
 			return review, err
 		}
+		if decision.State != domain.KBReviewWithdrawn {
+			// A reviewer who wrote part of the text since was taken off the review; this holds for one
+			// who edited it some other way too, as an import.
+			authors, err := kbTextAuthors(ctx, tx, workspaceID, review.ArticleID, []string{actor.AgentID})
+			if err != nil {
+				return review, err
+			}
+			if len(authors) > 0 {
+				return review, domain.ErrKBOwnReview
+			}
+		}
 		if err := addKBReviewVersion(ctx, tx, workspaceID, review.ArticleID, actor, kind); err != nil {
 			return review, err
 		}

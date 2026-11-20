@@ -30,6 +30,7 @@ type kbReviewView struct {
 		Label string `json:"label"`
 	} `json:"decided_by_token"`
 	SupersedesReviewID *string `json:"supersedes_review_id"`
+	DecisionNote       string  `json:"decision_note"`
 }
 
 // kbApprovalCollection is a collection that needs an approved version before an article in it is

@@ -79,12 +79,29 @@ type KBReview struct {
 
 // KBContent is what a review approves: the fields the help center shows and where it lists the text.
 type KBContent struct {
-	Title          string
-	Slug           string
-	BodyMD         string
-	SEOTitle       string
-	SEODescription string
-	CollectionIDs  []string
+	Title          string   `json:"title"`
+	Slug           string   `json:"slug"`
+	BodyMD         string   `json:"body_md"`
+	SEOTitle       string   `json:"seo_title"`
+	SEODescription string   `json:"seo_description"`
+	CollectionIDs  []string `json:"collection_ids"`
+}
+
+// KBReviewDetail is a review with the text it is about: Proposed is the text waiting to be published
+// now (the reviewed one while Current), Live what the help center shows (nil while nothing is
+// published), and Diff the lines of the body from Live to Proposed.
+type KBReviewDetail struct {
+	KBReview
+	Live     *KBContent `json:"live"`
+	Proposed KBContent  `json:"proposed"`
+	Diff     []DiffLine `json:"diff"`
+}
+
+// KBReviewFilter narrows a list of reviews: a state, a reviewer's agent id, an article.
+type KBReviewFilter struct {
+	State      string
+	ReviewerID string
+	ArticleID  string
 }
 
 // Hash is the content hash of c: sha256 over a JSON array of its fields, the collections sorted, so no

@@ -102,6 +102,9 @@ func recordKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, ac
 	if _, err := linkKBMedia(ctx, tx, workspaceID, id); err != nil {
 		return domain.KBArticle{}, err
 	}
+	if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id); err != nil {
+		return domain.KBArticle{}, err
+	}
 	return readKBArticle(ctx, tx, workspaceID, id)
 }
 
@@ -275,7 +278,7 @@ func (s *Store) PublishKBArticleDraft(ctx context.Context, workspaceID string, a
 
 // DiscardKBArticleDraft deletes the draft of an article; the live article and its versions stay as
 // they are. seen is the article's concurrency token, kbArticleToken.
-func (s *Store) DiscardKBArticleDraft(ctx context.Context, workspaceID string, id string, seen time.Time) (domain.KBArticle, error) {
+func (s *Store) DiscardKBArticleDraft(ctx context.Context, workspaceID string, actor Actor, id string, seen time.Time) (domain.KBArticle, error) {
 	if !savedReplyID.MatchString(id) {
 		return domain.KBArticle{}, domain.ErrKBArticleNotFound
 	}
@@ -291,6 +294,9 @@ func (s *Store) DiscardKBArticleDraft(ctx context.Context, workspaceID string, i
 			return domain.KBArticle{}, fmt.Errorf("discard knowledge base article draft: %w", err)
 		}
 		if _, err := linkKBMedia(ctx, tx, workspaceID, id); err != nil {
+			return domain.KBArticle{}, err
+		}
+		if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id); err != nil {
 			return domain.KBArticle{}, err
 		}
 		return readKBArticle(ctx, tx, workspaceID, id)

@@ -80,7 +80,7 @@ type KBCollection struct {
 	// inherit (the workspace setting), on or off.
 	RequireApproval string    `json:"require_approval"`
 	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 	// Translations are its name and description in the help center's other languages.
 	Translations []KBCollectionTranslation `json:"translations"`
 }

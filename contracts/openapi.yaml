@@ -7178,6 +7178,23 @@ paths:
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles/{id}/reviews:
     parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listKBArticleReviews
+      x-permission: kb_articles:read
+      description: >
+        The reviews of an article, newest first (at most 200): who sent each, who was asked, what they
+        decided, and whether its text is still the current one. state narrows them. GET
+        /api/v1/kb/reviews/{id} reads one with its line diff.
+      parameters:
+        - {name: state, in: query, schema: {type: string, enum: [open, approved, changes_requested, withdrawn, superseded]}}
+      responses:
+        '200':
+          description: The article's reviews
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReviewList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
     post:
       operationId: requestKBReview
       x-permission: kb_articles:update
@@ -7238,6 +7255,100 @@ paths:
       responses:
         '200':
           description: The decided review
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/reviews:
+    get:
+      operationId: listKBReviews
+      x-permission: kb_articles:read
+      description: >
+        The workspace's reviews, newest first (at most 200). state=open&reviewer=me lists the texts
+        waiting for your decision (for an agent token, its maker's); reviewer also takes an agent id.
+      parameters:
+        - {name: state, in: query, schema: {type: string, enum: [open, approved, changes_requested, withdrawn, superseded]}}
+        - {name: reviewer, in: query, description: 'me, or the agent id of a reviewer.', schema: {type: string}}
+      responses:
+        '200':
+          description: Reviews
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReviewList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/kb/reviews/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBReview
+      x-permission: kb_articles:read
+      description: >
+        One review with the text it is about: proposed (the text waiting to be published; the reviewed
+        one while current is true), live (what the help center shows; null while the article is not
+        published) and diff, the lines of the body from live to proposed. A reviewer who reads it is
+        marked as having seen it.
+      responses:
+        '200':
+          description: The review and its text
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReviewDetail'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/reviews/{id}/request-changes:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: requestKBReviewChanges
+      x-permission: kb_articles:publish
+      description: >
+        Close an open review asking the author to change the text; note says what, in one line. The same
+        people may decide as for an approval (403 `not_reviewer` otherwise). A repeat with the same
+        Idempotency-Key answers what the first one got.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: {type: string, minLength: 1, maxLength: 500, description: What to change.}
+      responses:
+        '200':
+          description: The decided review
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/reviews/{id}/withdraw:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: withdrawKBReview
+      x-permission: kb_articles:update
+      description: >
+        Close an open review that is no longer wanted. The person who sent it may withdraw it, or anyone
+        who may publish (403 `not_reviewer` otherwise). Send the text for review again with POST
+        /api/v1/kb/articles/{id}/reviews. A repeat with the same Idempotency-Key answers what the first
+        one got.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: {type: string, maxLength: 500, description: An optional line saying why.}
+      responses:
+        '200':
+          description: The withdrawn review
           content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -11782,6 +11893,41 @@ components:
         decision_note: {type: string, description: 'The one line the reviewer wrote: what to change, for changes_requested.'}
         supersedes_review_id: {type: [string, 'null'], format: uuid, description: The review an edit closed when it opened this one.}
         created_at: {type: string, format: date-time}
+    KBReviewList:
+      type: object
+      required: [reviews]
+      properties:
+        reviews: {type: array, items: {$ref: '#/components/schemas/KBReview'}}
+    KBReviewContent:
+      type: object
+      description: 'A text as the help center shows it: the fields an approval covers.'
+      required: [title, slug, body_md, seo_title, seo_description, collection_ids]
+      properties:
+        title: {type: string}
+        slug: {type: string}
+        body_md: {type: string}
+        seo_title: {type: string}
+        seo_description: {type: string}
+        collection_ids: {type: array, items: {type: string, format: uuid}}
+    KBDiffLine:
+      type: object
+      required: [change, text]
+      properties:
+        change: {type: string, enum: [same, removed, added], description: 'In a changed run the removed lines come first, then the added ones.'}
+        text: {type: string}
+    KBReviewDetail:
+      allOf:
+        - {$ref: '#/components/schemas/KBReview'}
+        - type: object
+          required: [live, proposed, diff]
+          properties:
+            live:
+              description: What the help center shows now; null while the article is not published.
+              oneOf:
+                - {type: 'null'}
+                - {$ref: '#/components/schemas/KBReviewContent'}
+            proposed: {$ref: '#/components/schemas/KBReviewContent'}
+            diff: {type: array, items: {$ref: '#/components/schemas/KBDiffLine'}}
     SavedReplyPerson:
       type: object
       required: [agent_id, name]

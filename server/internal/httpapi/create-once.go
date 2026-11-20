@@ -45,6 +45,8 @@ const (
 	resetKBVotesOperation                = "kb_votes_reset"
 	createKBReviewOperation              = "kb_review"
 	approveKBReviewOperation             = "kb_review_approve"
+	requestKBReviewChangesOperation      = "kb_review_changes"
+	withdrawKBReviewOperation            = "kb_review_withdraw"
 )
 
 // shownOnce is a create's answer that holds a secret shown once (an invite link, a token): the first

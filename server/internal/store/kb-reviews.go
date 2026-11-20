@@ -42,7 +42,7 @@ func (s *Store) RequestKBReview(ctx context.Context, workspaceID string, actor A
 		if article.Status == domain.KBPublished && article.Draft == nil {
 			return domain.KBReview{}, domain.ErrKBNothingToReview
 		}
-		if err := checkKBReviewers(ctx, tx, workspaceID, reviewers); err != nil {
+		if err := checkKBReviewers(ctx, tx, workspaceID, articleID, reviewers); err != nil {
 			return domain.KBReview{}, err
 		}
 		var open bool
@@ -87,8 +87,9 @@ func checkKBReviewRequest(actor Actor, request KBReviewRequest) (string, []strin
 	return note, reviewers, nil
 }
 
-// checkKBReviewers refuses a reviewer who is not an active member allowed to publish.
-func checkKBReviewers(ctx context.Context, tx pgx.Tx, workspaceID string, reviewers []string) error {
+// checkKBReviewers refuses a reviewer who is not an active member allowed to publish, or who wrote part
+// of the text.
+func checkKBReviewers(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, reviewers []string) error {
 	rows, err := tx.Query(ctx, `SELECT a.id::text FROM agents a WHERE a.workspace_id=$1 AND a.id=ANY($2::uuid[]) AND a.deactivated_at IS NULL AND `+HoldsPermission("$3"),
 		workspaceID, reviewers, kbPublishPermission)
 	if err != nil {
@@ -102,6 +103,13 @@ func checkKBReviewers(ctx context.Context, tx pgx.Tx, workspaceID string, review
 		if !slices.Contains(allowed, id) {
 			return &domain.InvalidKBError{Message: "Reviewer " + id + " is not an active teammate who may publish (" + kbPublishPermission + "): only they can approve a text. GET /api/v1/agents lists the team."}
 		}
+	}
+	authors, err := kbTextAuthors(ctx, tx, workspaceID, articleID, reviewers)
+	if err != nil {
+		return err
+	}
+	if len(authors) > 0 {
+		return &domain.InvalidKBError{Message: "Reviewer " + authors[0] + " changed this text since it was last published, and an author never reviews their own text: name a teammate who did not."}
 	}
 	return nil
 }
