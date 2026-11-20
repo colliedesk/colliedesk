@@ -5,6 +5,7 @@ import { dayGroup, formatDate, formatListTime, formatShortDate, zoneSuffix } fro
 import { useMinuteNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
+import { LoadingStatus } from '../../ui/loading-status';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { ownRef } from './conversation-ref';
 import { helpTipPart } from './help-tip-part';
@@ -96,7 +97,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
   const shift = useRef(false);
   return (
     <div className="conversation-scroll" aria-busy={refreshing} ref={scroll} onKeyDown={onListKey} data-selecting={selecting || undefined}>
-      {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
+      {loading && items.length === 0 && <LoadingStatus onRetry={onRetry} />}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>

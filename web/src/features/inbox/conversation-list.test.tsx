@@ -63,6 +63,15 @@ test('the first load shows a loading status, never "No conversations" or the get
   expect(screen.queryByRole('region', { name: /get started/i })).not.toBeInTheDocument();
 });
 
+test('a first load still waiting after 5 seconds says the connection is slow, and Try again restarts it', () => {
+  const onRetry = vi.fn();
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} loading onRetry={onRetry} />);
+  act(() => { vi.advanceTimersByTime(5_000); });
+  expect(screen.getByRole('status')).toHaveTextContent('Still loading. Your connection to Colliedesk is slow.');
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(onRetry).toHaveBeenCalledTimes(1);
+});
+
 test('a refetch keeps the previous rows, marks the list busy and shows no loading status', () => {
   vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
   render(<ConversationList items={[row('2026-10-15T09:05:00Z')]} timezone="UTC" page={1} hasNextPage={false} refreshing />);

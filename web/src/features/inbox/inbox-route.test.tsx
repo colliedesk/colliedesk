@@ -393,6 +393,57 @@ test('opening a conversation shows the loading status in its timeline until the 
   expect(within(screen.getByRole('region', { name: /timeline/i })).getByRole('status')).toHaveTextContent('Loading workspace…');
 });
 
+// A stalled connection: the first list request never answers. Try again must send a new one, not join that one.
+test('a conversation list still loading after 5 seconds offers Try again, which aborts the stuck request and sends a new one', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
+    api.conversations.mockReset();
+    api.conversations.mockReturnValueOnce(new Promise(() => {}));
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(1));
+    act(() => { vi.advanceTimersByTime(5_000); });
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    await screen.findByRole('button', { name: /alpha conversation/i });
+    expect(api.conversations).toHaveBeenCalledTimes(2);
+    expect((api.conversations.mock.calls[0][1] as AbortSignal).aborted).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a timeline still loading after 5 seconds offers Try again, which asks for the messages again', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+    api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent') });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockReturnValueOnce(new Promise(() => {}));
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    await screen.findByRole('button', { name: /alpha conversation/i });
+    await waitFor(() => expect(api.messages).toHaveBeenCalledTimes(1));
+    act(() => { vi.advanceTimersByTime(5_000); });
+    const timeline = screen.getByRole('region', { name: /timeline/i });
+    fireEvent.click(await within(timeline).findByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(api.messages).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(timeline).queryByRole('status')).not.toBeInTheDocument());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('a bulk status change sends the selected ids, then reloads the list and reports the result', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');

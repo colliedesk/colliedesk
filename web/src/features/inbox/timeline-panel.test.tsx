@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, expect, test, vi } from 'vitest';
 import type { Conversation, Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
@@ -99,6 +99,20 @@ test('names the agent token that wrote a message and leaves a person\'s message 
 test('shows the loading status while the selected conversation timeline loads, not an empty timeline', () => {
   render(<TimelinePanel items={[]} timezone="UTC" loading />);
   expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
+});
+
+test('a timeline still loading after 5 seconds says the connection is slow, and Try again restarts it', () => {
+  vi.useFakeTimers();
+  try {
+    const onRetryTimeline = vi.fn();
+    render(<TimelinePanel items={[]} timezone="UTC" loading onRetryTimeline={onRetryTimeline} />);
+    act(() => { vi.advanceTimersByTime(5_000); });
+    expect(screen.getByRole('status')).toHaveTextContent('Still loading. Your connection to Colliedesk is slow.');
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetryTimeline).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('shows no loading status once the timeline has loaded', () => {
