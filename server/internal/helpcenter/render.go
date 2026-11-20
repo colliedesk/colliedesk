@@ -20,7 +20,7 @@ import (
 
 // renderVersion changes when rendering changes, so a cached article is never served as an older
 // renderer wrote it.
-const renderVersion = "3"
+const renderVersion = "4"
 
 // renderWait is how long a visitor waits for an article to render before getting its text as it
 // is. Articles render in 1–20 ms, so only a text built to be slow reaches it.
@@ -35,6 +35,8 @@ type rendered struct {
 	description string
 	// faq is the article's questions when it is a list of questions (questionList).
 	faq []faqItem
+	// contents is the article's headings when it has enough for a list of them (contentsOf).
+	contents []contentsItem
 	// plain is a page that shows the text as written because rendering took too long; it must not
 	// be cached by the visitor's browser under the page's ETag.
 	plain bool
@@ -44,6 +46,9 @@ func (r rendered) size() int {
 	size := len(r.body) + len(r.description)
 	for _, item := range r.faq {
 		size += len(item.question) + len(item.answer)
+	}
+	for _, item := range r.contents {
+		size += len(item.ID) + len(item.Text)
 	}
 	return size
 }
@@ -59,7 +64,7 @@ func (r rendered) size() int {
 //   - A visitor waits at most wait, then gets the text escaped as it is; the render goes on and
 //     keeps its page for the next visitor.
 type renders struct {
-	render func(body, base string, videos []domain.PublicKBVideo) (rendered, error)
+	render func(body, base, lang string, videos []domain.PublicKBVideo) (rendered, error)
 	slots  chan struct{}
 	wait   time.Duration
 	limit  int
@@ -84,25 +89,26 @@ type flight struct {
 	ok   bool
 }
 
-func newRenders(render func(body, base string, videos []domain.PublicKBVideo) (rendered, error), slots int, wait time.Duration, limit int) *renders {
+func newRenders(render func(body, base, lang string, videos []domain.PublicKBVideo) (rendered, error), slots int, wait time.Duration, limit int) *renders {
 	return &renders{render: render, slots: make(chan struct{}, slots), wait: wait, limit: limit,
 		order: list.New(), pages: map[string]*list.Element{}, flights: map[string]*flight{}, busy: map[string]chan struct{}{}}
 }
 
 // defaultRenders renders with renderArticle, a quarter of the processors at once (at least two).
 func defaultRenders() *renders {
-	return newRenders(func(body, base string, videos []domain.PublicKBVideo) (rendered, error) {
-		page, faq, err := renderArticlePage(body, base, videos)
+	return newRenders(func(body, base, lang string, videos []domain.PublicKBVideo) (rendered, error) {
+		page, err := renderArticlePage(body, base, lang, videos)
 		if err != nil {
 			return rendered{}, err
 		}
-		return rendered{body: page, description: excerpt(body, descriptionChars), faq: faq}, nil
+		page.description = excerpt(body, descriptionChars)
+		return page, nil
 	}, max(2, runtime.GOMAXPROCS(0)/4), renderWait, renderCacheBytes)
 }
 
-func renderKey(workspaceID string, number int64, base, body string, videos []domain.PublicKBVideo) string {
+func renderKey(workspaceID string, number int64, base, lang, body string, videos []domain.PublicKBVideo) string {
 	key := sha256.New()
-	key.Write([]byte(renderVersion + "\x00" + workspaceID + "\x00" + strconv.FormatInt(number, 10) + "\x00" + base + "\x00" + body))
+	key.Write([]byte(renderVersion + "\x00" + workspaceID + "\x00" + strconv.FormatInt(number, 10) + "\x00" + base + "\x00" + lang + "\x00" + body))
 	// A new poster or a video gone to the trash is a new page, though the text is the same.
 	for _, video := range videos {
 		fmt.Fprintf(key, "\x00%s %d %d %s", video.ID, video.Width, video.Height, video.PosterVersion)
@@ -110,10 +116,11 @@ func renderKey(workspaceID string, number int64, base, body string, videos []dom
 	return hex.EncodeToString(key.Sum(nil))
 }
 
-// article returns the page of an article: rendered, or its text escaped as it is when rendering
-// would keep the visitor waiting. videos are the library videos the text may show.
-func (r *renders) article(workspaceID string, number int64, base, body string, videos ...domain.PublicKBVideo) rendered {
-	key := renderKey(workspaceID, number, base, body, videos)
+// article returns the page of an article in the help center words of lang (textKey): rendered, or its
+// text escaped as it is when rendering would keep the visitor waiting. videos are the library videos
+// the text may show.
+func (r *renders) article(workspaceID string, number int64, base, lang, body string, videos ...domain.PublicKBVideo) rendered {
+	key := renderKey(workspaceID, number, base, lang, body, videos)
 	deadline := time.NewTimer(r.wait)
 	defer deadline.Stop()
 	for {
@@ -150,7 +157,7 @@ func (r *renders) article(workspaceID string, number int64, base, body string, v
 			return plainPage(body)
 		}
 		go func() {
-			page, err := r.render(body, base, videos)
+			page, err := r.render(body, base, lang, videos)
 			<-r.slots
 			if err != nil {
 				log.Printf("help center: render an article of workspace %s: %v", workspaceID, err)

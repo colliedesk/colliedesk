@@ -49,6 +49,27 @@
       "text": "Use <script>alert(1)</script> carefully",
       "paragraphs": 1,
       "iframes": 0
+    },
+    {
+      "name": "a callout names its type before its words",
+      "markdown": "> [!WARNING]\n> Deleting a workspace cannot be undone.",
+      "text": "Warning Deleting a workspace cannot be undone.",
+      "paragraphs": 2,
+      "iframes": 0
+    },
+    {
+      "name": "a callout marker in any case, followed by a list",
+      "markdown": "> [!tip]\n> Press / to search.\n>\n> - Then Enter",
+      "text": "Tip Press / to search. Then Enter",
+      "paragraphs": 2,
+      "iframes": 0
+    },
+    {
+      "name": "an unknown type stays a quote",
+      "markdown": "> [!DANGER]\n> Unknown type.",
+      "text": "[!DANGER] Unknown type.",
+      "paragraphs": 1,
+      "iframes": 0
     }
   ]
 }

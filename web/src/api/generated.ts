@@ -7655,6 +7655,8 @@ export interface components {
             seo_title?: string;
             /** @description The meta description search engines show; empty uses the start of the text (160 characters). */
             seo_description?: string;
+            /** @description Left out, it is on. The help center lists its H2 and H3 headings as On this page when it has 3 or more; false turns the list off for the article in every language. A version restore leaves it as it is. */
+            show_contents?: boolean;
         };
         /**
          * @description published: on the public help center while it is on. draft: only agents see it.
@@ -7938,6 +7940,8 @@ export interface components {
             seo_title: string;
             /** @description The meta description search engines show; empty uses the start of the text (160 characters). */
             seo_description: string;
+            /** @description The help center lists its H2 and H3 headings as On this page when it has 3 or more; false turns the list off for the article in every language. A version restore leaves it as it is. */
+            show_contents: boolean;
             /** @description An import kept the original HTML; it is in the workspace export and is never shown on the help center. */
             has_source_html: boolean;
             /** @description Its versions in the help center's other languages (also those in the trash), without their text. */
@@ -8007,6 +8011,7 @@ export interface components {
             body_md: string;
             seo_title: string;
             seo_description: string;
+            show_contents: boolean;
             status: components["schemas"]["KBArticleStatus"];
             /**
              * Format: uuid
@@ -19454,6 +19459,8 @@ export interface operations {
                     seo_title?: string;
                     /** @description The meta description search engines show; empty uses the start of the text (160 characters). */
                     seo_description?: string;
+                    /** @description The help center lists its H2 and H3 headings as On this page when it has 3 or more; false turns the list off for the article in every language. A version restore leaves it as it is. */
+                    show_contents?: boolean;
                 };
             };
         };

@@ -326,7 +326,20 @@ span.kb-article-open { opacity: 0.35; }
 .kb-html-warning { border: 1px solid var(--note-line); border-radius: var(--radius-sm); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
 .kb-preview blockquote { margin-inline: 0; border-left: 3px solid var(--line-strong); padding-left: var(--space-4); color: var(--text-2); }
 .kb-preview pre { overflow-x: auto; border-radius: var(--radius); background: var(--surface-2); padding: var(--space-3); }
-.kb-preview pre code { background: none; padding: 0; }
+.kb-preview pre code { background: none; padding: 0; user-select: all; -webkit-user-select: all; }
+/* Callouts in the help center's colors (server/internal/helpcenter/static/site.css). */
+.kb-preview .callout { --callout: #0969da; border: 1px solid var(--line); border-left: 4px solid var(--callout); border-radius: 0 var(--radius) var(--radius) 0; padding: var(--space-3) var(--space-4); }
+.kb-preview .callout > * + * { margin-top: var(--space-2); }
+.kb-preview .callout-label { font-weight: 600; color: var(--callout); }
+.kb-preview .callout-tip { --callout: #1a7f37; }
+.kb-preview .callout-important { --callout: #8250df; }
+.kb-preview .callout-warning { --callout: #9a6700; }
+.kb-preview .callout-caution { --callout: #cf222e; }
+:root[data-theme="dark"] .kb-preview .callout-note { --callout: #4493f8; }
+:root[data-theme="dark"] .kb-preview .callout-tip { --callout: #3fb950; }
+:root[data-theme="dark"] .kb-preview .callout-important { --callout: #ab7df8; }
+:root[data-theme="dark"] .kb-preview .callout-warning { --callout: #d29922; }
+:root[data-theme="dark"] .kb-preview .callout-caution { --callout: #f85149; }
 .kb-preview code { background: var(--surface-2); }
 .kb-preview table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--fs-ui); }
 .kb-preview th, .kb-preview td { border: 1px solid var(--line-strong); padding: var(--space-1) var(--space-3); text-align: left; }

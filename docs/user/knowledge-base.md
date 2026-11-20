@@ -101,10 +101,10 @@ the end of a published article's row opens its public page.
    shown, except a [YouTube or Vimeo video](#videos).
    - The toolbar sets the block (**Text**, **Heading 2**, **Heading 3**; the title is the article's
      Heading 1, so the text starts at Heading 2, and a `#` line written before still shows as **Heading 1**)
-     and adds bold, italic, a link, numbered and bulleted lists, a quote and a table; **Insert image or
-     video** adds an [image](#images) or a [video](#videos); **Link to article** links
+     and adds bold, italic, a link, numbered and bulleted lists, a quote and a table; **Insert image, video
+     or callout** adds an [image](#images), a [video](#videos) or a [callout](#callouts); **Link to article** links
      [another article](#link-another-article-from-the-editor); **⋯** (More formatting) holds
-     strikethrough, code, a checklist, a code block, a divider and redo. On a phone, and in an editor
+     strikethrough, code, a checklist, a [code block](#code-blocks), a divider and redo. On a phone, and in an editor
      narrower than 720 pixels, the toolbar keeps **Insert**, bold,
      italic and link, and the rest, **Link to article** included, is under **⋯**. With the keyboard, Tab reaches the toolbar and the
      arrow keys move along it.
@@ -133,6 +133,51 @@ spaces.
 text is never cut: the counter turns red and saving waits until you shorten it, or split it into
 two articles.
 
+### Callouts
+
+A callout sets a short passage apart: a note, a tip, something important, a warning or a caution.
+**Insert image, video or callout** adds one (**Note callout**, **Tip callout**, **Important callout**,
+**Warning callout**, **Caution callout**), with its words selected so you can type over them. It is
+written in GitHub's alert syntax, a quote whose first line is only the type:
+
+```markdown
+> [!WARNING]
+> Deleting a workspace cannot be undone.
+```
+
+The types are `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]`, in capitals or not.
+The preview and the help center show each type with its own icon, colour and label; the label is in the
+page's language, and screen readers read it before the words. Any other first line, or a type
+followed by more words on the same line, stays a plain quote. A callout counts only at the top level
+of the text, not inside a list or another quote.
+
+### Code blocks
+
+**⋯ → Code block** asks for the code's language (`go`, `python`, `shell`, `json` and so on) and writes it
+after the opening fence:
+
+````markdown
+```go
+fmt.Println("hello")
+```
+````
+
+The help center colours a code block that names a language it knows, in the light and in the dark
+theme. The colours are worked out on the server and are part of the page's style, so the page still
+runs no script. A block with no language or a language it does not know stays plain text. An article
+colours its code blocks in order up to 10,000 characters of code in all: a block that would go past
+that stays plain, and so do the blocks after very slow code. The editor's preview shows code blocks plain. On the help center, one click selects
+all the code in a block, ready to copy.
+
+### On this page
+
+An article with 3 or more Heading 2 and Heading 3 headings lists them under **On this page**, each
+linking to its heading (the first 50, in a very long article). In a wide window the list is beside the text; on a phone it is above it. It is
+part of the page, so it needs no script. To turn it off for an article, clear **Show On this page**
+under **On this page** on the article page (on a phone, under **Details**). The switch is the
+article's, so it applies to every language, and it is in the [export](export.md). Restoring an older
+version leaves it as it is.
+
 ### Link another article from the editor
 
 To point from one article to another, select **Link to article** in the toolbar (under **⋯** in a narrow
@@ -151,13 +196,13 @@ a path, and on a [custom domain](#custom-domain) alike. `Ctrl+Z` takes the link 
 
 ### Images
 
-Paste an image into the text, drag it in, or select **Insert image or video → Upload from this
+Paste an image into the text, drag it in, or select **Insert image, video or callout → Upload from this
 device**. Colliedesk uploads it and writes an image line, `![name](…)`, on a line of its own after the
 paragraph, list or table you are in;
 while it uploads, a box says so and nothing is added to the text. A video pasted, dropped or chosen
 the same way goes up in parts, the box shows how much has gone, and it goes in as a
 `<video controls preload="metadata" src="…"></video>` line; leaving the page cancels a
-video still uploading. **Insert image or video → From the media library** opens the library in a
+video still uploading. **Insert image, video or callout → From the media library** opens the library in a
 dialog: search it, pick one or more images and videos (they go in in the order you picked them, each a
 block of its own), and check each one's alt text (a video's title). An image without alt text in the
 library asks for it, and **Insert** waits until it has one; what you type is saved to the library
@@ -246,7 +291,7 @@ the preview or on the help center; the preview says so. Download it and paste it
 
 ### Videos
 
-An article can show a YouTube or Vimeo video. Select **Insert image or video → YouTube or Vimeo
+An article can show a YouTube or Vimeo video. Select **Insert image, video or callout → YouTube or Vimeo
 link**, paste the video's link (a watch page, a `youtu.be` short link, a Vimeo page, or a player
 address), and press Enter: the player goes in a block of its own after the one the cursor is in. A
 YouTube link's start time (`?t=1m5s`) is kept. A link the help center cannot show is refused, with
@@ -686,7 +731,7 @@ to serve on the domain again.
 - The home page lists the top-level collections, each with its first articles and the collections
   inside it. A collection page lists those collections, each with its first articles, and its own
   articles in their [order](#order), 50 a page. An article page lists the other articles of its
-  collection beside the text.
+  collection beside the text, and its headings under [On this page](#on-this-page).
 - **Search** works like the search in the editor: whole words and the start of words in titles and
   text, and any part of a title. It shows the best 25 matches.
 - Images you added to an article are shown while a published article uses them. An image from

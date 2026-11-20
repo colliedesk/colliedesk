@@ -91,6 +91,9 @@ portals, choose the one whose articles stay published with `--help-center-portal
 are in the report under `knowledge_base.portals`); without it, all articles of those categories are
 drafts.
 
+A Freshdesk callout card becomes a [callout](knowledge-base.md#callouts): Note and Info as Note, Tip
+and Idea as Tip, Warning as Warning. A card of another type becomes a plain quote.
+
 Markdown cannot hold everything HTML can. A YouTube or Vimeo video embedded in an article is kept and
 plays on the help center (see [Videos](knowledge-base.md#videos)). Other embedded video and iframes,
 forms and scripts are left out of the article, a table cell that spans several columns is repeated in each, and a table whose cells hold

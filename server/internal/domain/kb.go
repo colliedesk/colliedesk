@@ -251,11 +251,14 @@ type KBArticle struct {
 	BodyMD string `json:"body_md"`
 	// SEOTitle and SEODescription are what search engines show; empty uses the title and the start
 	// of the text.
-	SEOTitle       string                 `json:"seo_title"`
-	SEODescription string                 `json:"seo_description"`
-	HasSourceHTML  bool                   `json:"has_source_html"`
-	Translations   []KBTranslationSummary `json:"translations"`
-	DeletedAt      *time.Time             `json:"deleted_at"`
+	SEOTitle       string `json:"seo_title"`
+	SEODescription string `json:"seo_description"`
+	// ShowContents lists the article's headings ("On this page") on its help center page, in every
+	// language, when it has three or more.
+	ShowContents  bool                   `json:"show_contents"`
+	HasSourceHTML bool                   `json:"has_source_html"`
+	Translations  []KBTranslationSummary `json:"translations"`
+	DeletedAt     *time.Time             `json:"deleted_at"`
 	// AIExclusion is set while AI may not read the article, in any language.
 	AIExclusion *KBAIExclusion `json:"ai_exclusion"`
 	// MissingMedia is set only in the answer to a save: media ids the text names that the library
@@ -288,6 +291,7 @@ type KBArticleVersion struct {
 	BodyMD         string  `json:"body_md"`
 	SEOTitle       string  `json:"seo_title"`
 	SEODescription string  `json:"seo_description"`
+	ShowContents   bool    `json:"show_contents"`
 	Status         string  `json:"status"`
 	CollectionID   *string `json:"collection_id"`
 }
@@ -493,8 +497,10 @@ type PublicKBArticle struct {
 	Excerpt      string
 	// SEOTitle and SEODescription are read with the article page only; empty uses the defaults.
 	SEOTitle, SEODescription string
-	PublishedAt              *time.Time
-	UpdatedAt                time.Time
+	// ShowContents is the article's switch for listing its headings, read with the article page only.
+	ShowContents bool
+	PublishedAt  *time.Time
+	UpdatedAt    time.Time
 	// Videos are the library videos the text may show, read with the article page only.
 	Videos []PublicKBVideo
 	// Locale is the language read ("" the primary one); Alternates, read with the article page only,
