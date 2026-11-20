@@ -742,8 +742,8 @@ class RunnerConcurrency(unittest.TestCase):
         self.assertEqual(runners(ROOT / '.github/workflows/codeql.yml'), 3)
 
     def test_jobs_behind_pr_verified_count_and_push_only_jobs_do_not(self):
-        # 8 Go shards, web, 2 e2e shards, 2 onboarding, image, roadmap, 3 CodeQL; not pr-verified,
-        # and not osv-scan, which starts when roadmap ends.
+        # 7 Go shards, 2 web shards, 2 e2e shards, 2 onboarding, image, roadmap, 3 CodeQL; not
+        # pr-verified, and not osv-scan, which starts when roadmap ends.
         self.assertEqual(runners(ROOT / '.github/workflows/ci.yml'), 18)
 
 
@@ -807,7 +807,7 @@ class GoBuildCache(unittest.TestCase):
         condition = ' '.join(line.strip() for line in
                              re.search(r'if: >-\n((?:          .*\n)+)', step).group(1).splitlines())
         self.assertIn("github.event_name == 'pull_request'", condition)
-        # One shard uploads, a latency shard (6, 7 and 8 of 8).
+        # One shard uploads, a latency shard (5, 6 and 7 of 7).
         self.assertIn('matrix.shard == 7', condition)
         self.assertIn("!startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', "
                       "runner.os, steps.go.outputs.go-version, hashFiles('go.sum')))", condition)
@@ -815,7 +815,7 @@ class GoBuildCache(unittest.TestCase):
         self.assertIn('id: go-cache', go)
         self.assertRegex(go, r"latency-shards 3\b")
         self.assertIn("SHARDS: ${{ strategy.job-total }}", go)
-        self.assertRegex(go, r'shard: \[1, 2, 3, 4, 5, 6, 7, 8\]')
+        self.assertRegex(go, r'shard: \[1, 2, 3, 4, 5, 6, 7\]')
 
     def test_setup_go_saves_no_cache_of_its_own_outside_codeql(self):
         # setup-go saves its own cache unless told not to: only CodeQL, whose setup-go- entries the Go
@@ -826,6 +826,16 @@ class GoBuildCache(unittest.TestCase):
                 for step in re.findall(r'uses: actions/setup-go@\S+.*?(?=\n      - |\Z)', text, re.S):
                     if path.name != 'codeql.yml':
                         self.assertIn('cache: false', step, f'{path.name} {name}')
+
+
+class WebShards(unittest.TestCase):
+    """Vitest filled the web job: 152 to 243 seconds on three workers. Two jobs each run half the
+    files (Vitest's --shard splits them by a hash of the path), and neither cancels the other."""
+
+    def test_the_web_job_runs_one_vitest_shard_per_matrix_entry(self):
+        web = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['web'])
+        self.assertRegex(web, r'strategy:\n\s+fail-fast: false\n\s+matrix:\n\s+shard: \[1, 2\]')
+        self.assertIn('run: corepack pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }}', web)
 
 
 class BundleBudget(unittest.TestCase):

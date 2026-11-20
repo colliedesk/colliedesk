@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -102,7 +102,7 @@ jobs:
           if [ -n "$(gofmt -l . ../docs)" ]; then gofmt -l . ../docs; echo 'gofmt: format the files above' >&2; exit 1; fi
           go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
-          # Five regular shards of three go test processes each, and three latency shards that run their
+          # Four regular shards of three go test processes each, and three latency shards that run their
           # gates as one process (about 240 seconds of gates in all, runs of 2026-11-20), then regular
           # tests if their gates end early. Each test weighs its time in CI (go-test-timings.json);
           # go-test-shard.py says how a shard's time is estimated, go-test-timings.py how to refresh it.
@@ -150,6 +150,14 @@ jobs:
   web:
     needs: pr-verified
     if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
+    # Two jobs, each running half the test files (Vitest's --shard, by a hash of the path): one job ran
+    # all 236 in 152 to 243 seconds, and each file's jsdom environment and setup took 40% of its workers'
+    # time (run 44698890999).
+    # A Go shard fewer keeps the runner count (RunnerConcurrency in tests/ci-tools-test.py).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -167,7 +175,7 @@ jobs:
         # of the same commit: Vitest is this job's long pole. It keeps its default of one worker fewer
         # than the runner's 4 CPUs: with four, the knowledge base page's lazy chunk missed its wait in
         # app.test.tsx (run 44705059381), and the suite took 148 seconds against 152 to 243 with three.
-        run: corepack pnpm test
+        run: corepack pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
   # The browser tests outside onboarding, in shards: one job ran them in 48 of its 117 seconds
   # (run 39902604105) and set the end of the whole run. Each shard runs whole test files, which
   # e2e-shard.py balances by their measured time (.github/e2e-test-timings.json): Playwright's own
