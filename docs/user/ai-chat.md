@@ -70,4 +70,5 @@ are in the [export](export.md) (`ai-chat-sessions.ndjson`).
 
 A chat is kept in the customer's browser for 30 days with one cookie that only works for your help
 center; **New chat** starts over. When the chat is on, the chat page and article pages load a small
-script of the help center; off, the help center has no script and no cookie.
+script of the help center; off, the help center has no script, and its only cookie is the one a reader
+gets by voting on an article ([Readers' votes](knowledge-base.md#readers-votes)).

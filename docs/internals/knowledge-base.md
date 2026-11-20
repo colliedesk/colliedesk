@@ -192,6 +192,36 @@ The public help center is in `help-center.md`.
   `help_center:update`. A call without the permission is 403 `permission_missing`.
 - **Locked workspaces get 402 on every KB route.** None is in `lockedAllowed`; the export still runs.
 
+## Votes
+
+Migration `20261120073704-kb-article-votes`; code `helpcenter/votes.go` (form, cookie, redirect),
+`helpcenter/vote-text.go` (words per language), `store/kb-votes.go`, `httpapi/kb-vote-handlers.go`,
+MCP `catalog-kb-votes.go`, export `store/export-kb-votes.go`, web `features/kb/article-votes.tsx`.
+
+- **No script.** The box is two forms that `POST <article>/vote` and get a 303 to
+  `?voted=yes|no|sent#helpful`; the CSP is unchanged. The POST must carry an `Origin` equal to the help
+  center's own (`AddressOrigin`), so another site cannot vote for a reader. A vote is charged to the
+  search limiter (it writes), and bots get no other check.
+- **One vote per reader and article.** The reader is a random 32-byte id in a first-party, HttpOnly,
+  SameSite=Lax cookie (`__Host-cd_reader` on a host of its own, `__Secure-cd_reader_<slug>` with the
+  `/help/<slug>` path, no prefix on plain http), kept 365 days. Only `sha256("reader\x00" + cookie)` is
+  stored, in `voter`; the unique index is on (workspace, article, voter) where `reset_id IS NULL`, so a
+  second vote updates the first. `contact_id` is for the signed-in reader, who does not exist yet (#290).
+- **Masking before storage.** `missing` goes through `textmask.Mask` (emails, runs of 6+ digits), then
+  is cut to `domain.MaxKBVoteMissingChars` (500). The raw line is never stored or logged.
+- **Count = own votes + imported thumbs.** Freshdesk's `thumbs_up`/`thumbs_down` in `source_meta` of
+  the article and its translations count only while the article has no reset: a reset is a fresh start,
+  and imported thumbs cannot be closed one by one.
+- **Reset closes, never deletes.** It inserts a `kb_article_vote_resets` row with the counts the page
+  showed and sets `reset_id` on the current votes. The table is append-only for the app role (UPDATE and
+  DELETE revoked; `TestArticleVoteResetsAreAppendOnlyForTheAppRole`); rows go only by cascade when the
+  article is purged. A reset with nothing counted stores nothing, and the idempotency key makes a double
+  press one reset. A trashed article keeps its votes to read and cannot be reset.
+- **Cache.** A vote bumps `help_centers.votes_version`, which is part of the article page ETag
+  (`articleTag`), so the count is never a stale 304.
+- **Export.** `kb-article-vote-resets.ndjson`, then `kb-article-votes.ndjson` with closed votes too:
+  after a reset the export is the only way to read them. `voter` is exported hex.
+
 ## Translations
 
 Migration `20261105100000-kb-translations`; code `store/kb-translations.go`, `httpapi/kb-translation-handlers.go`,
