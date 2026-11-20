@@ -614,7 +614,7 @@ test('the On this page switch is on for an article, and turning it off is a chan
   open({ articleId: ids.article });
   const box = await screen.findByRole('checkbox', { name: 'Show On this page' });
   expect(box).toBeChecked();
-  expect(box).toHaveAccessibleDescription('Lists the headings when the article has 3 or more, in every language.');
+  expect(box).toHaveAccessibleDescription('Lists the headings of an article with 3 or more.');
   fireEvent.click(box);
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));

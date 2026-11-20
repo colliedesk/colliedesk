@@ -118,7 +118,7 @@ export const kbMessages = {
   },
   videoLink: 'YouTube or Vimeo link',
   codeLanguage: 'Language',
-  codeLanguageHelp: 'The help center colours the code in it. Leave it empty for plain text.',
+  codeLanguageHelp: 'The help center colours it. Empty leaves it plain.',
   codeLanguageInvalid: 'A language is one word, such as bash, go or json.',
   videoLinkHelp: 'A watch page, a short link or a Share link.',
   videoLinkTip: 'YouTube videos play from youtube-nocookie.com.',

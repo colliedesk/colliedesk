@@ -77,7 +77,7 @@ const seoMessages = {
 const contentsMessages = {
   heading: 'On this page',
   show: 'Show On this page',
-  help: 'Lists the headings when the article has 3 or more, in every language.',
+  help: 'Lists the headings of an article with 3 or more.',
 };
 // seoValue is a search field as the server stores it: on one line, runs of spaces as one, trimmed.
 const seoValue = (text: string) => text.trim().split(/\s+/).filter(Boolean).join(' ');
