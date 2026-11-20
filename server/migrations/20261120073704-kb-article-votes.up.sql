@@ -16,14 +16,12 @@ CREATE TABLE kb_article_vote_resets (
     reset_by_agent_id uuid,
     token_id uuid,
     token_label text,
-    agent_request_id uuid,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (workspace_id, id),
     CHECK ((token_id IS NULL) OR (token_label IS NOT NULL)),
     FOREIGN KEY (workspace_id, article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
     FOREIGN KEY (workspace_id, reset_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (reset_by_agent_id),
-    FOREIGN KEY (workspace_id, token_id) REFERENCES sessions(workspace_id, id) ON DELETE SET NULL (token_id),
-    FOREIGN KEY (workspace_id, agent_request_id) REFERENCES agent_requests(workspace_id, id) ON DELETE SET NULL (agent_request_id)
+    FOREIGN KEY (workspace_id, token_id) REFERENCES sessions(workspace_id, id) ON DELETE SET NULL (token_id)
 );
 CREATE INDEX kb_article_vote_resets_article_idx ON kb_article_vote_resets(workspace_id, article_id, created_at);
 

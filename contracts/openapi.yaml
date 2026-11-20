@@ -6897,6 +6897,46 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/articles/{id}/votes:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBArticleVotes
+      x-permission: kb_articles:read
+      description: >
+        What readers of the public help center answered to "Was this article helpful?": the counts the
+        article's page shows (votes imported from Freshdesk included until the first reset), the newest
+        200 current votes with each "What was missing?" line (masked: no email address, no run of 6 or
+        more digits) and who voted (a signed-in contact, or null for an anonymous reader), and every
+        reset, newest first, with the counts it cleared. An article in the trash keeps its votes.
+      responses:
+        '200':
+          description: The article's votes
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleVotes'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/articles/{id}/votes/reset:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: resetKBArticleVotes
+      x-permission: kb_articles:update
+      description: >
+        Start the article's count again from 0, for example after rewriting it. The counts the page
+        showed, imported votes included, are kept as a reset in `resets` (who and when), and the
+        current votes and their lines stop counting; nothing is deleted. Readers can vote again at once.
+        With nothing counted it stores no reset and answers the votes unchanged. Not for an article in
+        the trash. A repeat with the same Idempotency-Key answers what the first one got; the key with
+        another article is refused with 422, code `idempotency_key_reused`.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: The article's votes after the reset
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleVotes'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles/{id}/versions:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -11796,6 +11836,69 @@ components:
         seo_description: {type: string}
         status: {$ref: '#/components/schemas/KBArticleStatus'}
         collection_id: {type: [string, 'null'], format: uuid, description: Null once that collection was deleted for good.}
+    KBVoteTally:
+      type: object
+      required: [helpful, not_helpful]
+      properties:
+        helpful: {type: integer, minimum: 0}
+        not_helpful: {type: integer, minimum: 0}
+    KBArticleVotes:
+      type: object
+      required: [article_id, helpful, not_helpful, imported, votes, resets]
+      properties:
+        article_id: {type: string, format: uuid}
+        helpful: {type: integer, minimum: 0, description: 'Readers who answered Yes; the page says "helpful out of helpful + not_helpful found this helpful".'}
+        not_helpful: {type: integer, minimum: 0}
+        imported:
+          description: The part of the counts an import brought in (Freshdesk thumbs); zero after the first reset.
+          allOf: [{$ref: '#/components/schemas/KBVoteTally'}]
+        votes:
+          type: array
+          description: The newest 200 votes since the last reset, newest change first.
+          items: {$ref: '#/components/schemas/KBArticleVote'}
+        resets:
+          type: array
+          description: Every reset, newest first.
+          items: {$ref: '#/components/schemas/KBArticleVoteReset'}
+    KBArticleVote:
+      type: object
+      required: [helpful, missing, contact, created_at, updated_at]
+      properties:
+        helpful: {type: boolean}
+        missing: {type: [string, 'null'], maxLength: 500, description: 'The reader''s "What was missing?" line after a No, masked; null when they left none.'}
+        contact:
+          description: The signed-in contact who voted; null for a reader the help center does not know.
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, name]
+              properties:
+                id: {type: string, format: uuid}
+                name: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time, description: When the reader last changed their vote.}
+    KBArticleVoteReset:
+      type: object
+      required: [id, helpful, not_helpful, reset_by, token, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        helpful: {type: integer, minimum: 0, description: What the page counted just before the reset.}
+        not_helpful: {type: integer, minimum: 0}
+        reset_by:
+          description: The person who reset the votes; null once they were removed.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        token:
+          description: The agent token that reset them; null when a person did it in the web app.
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, label]
+              properties:
+                id: {type: [string, 'null'], format: uuid}
+                label: {type: string}
+        created_at: {type: string, format: date-time}
     KBMedia:
       type: object
       required: [id, kind, content_type, size, sha256, url, name, alt, width, height, duration_ms, codecs, thumbnail_url, poster_url, kept, deleted_at, created_at, updated_at]

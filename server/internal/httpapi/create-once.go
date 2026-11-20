@@ -38,6 +38,7 @@ const (
 	undoMessageMoveOperation             = "message_move_undo"
 	intakeEvaluationOperation            = "intake_evaluation"
 	allowOAuthOperation                  = "oauth_allow"
+	resetKBVotesOperation                = "kb_votes_reset"
 )
 
 // shownOnce is a create's answer that holds a secret shown once (an invite link, a token): the first

@@ -4024,6 +4024,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/articles/{id}/votes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description What readers of the public help center answered to "Was this article helpful?": the counts the article's page shows (votes imported from Freshdesk included until the first reset), the newest 200 current votes with each "What was missing?" line (masked: no email address, no run of 6 or more digits) and who voted (a signed-in contact, or null for an anonymous reader), and every reset, newest first, with the counts it cleared. An article in the trash keeps its votes. */
+        get: operations["getKBArticleVotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/votes/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Start the article's count again from 0, for example after rewriting it. The counts the page showed, imported votes included, are kept as a reset in `resets` (who and when), and the current votes and their lines stop counting; nothing is deleted. Readers can vote again at once. With nothing counted it stores no reset and answers the votes unchanged. Not for an article in the trash. A repeat with the same Idempotency-Key answers what the first one got; the key with another article is refused with 422, code `idempotency_key_reused`. */
+        post: operations["resetKBArticleVotes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/{id}/versions": {
         parameters: {
             query?: never;
@@ -7975,6 +8013,58 @@ export interface components {
              * @description Null once that collection was deleted for good.
              */
             collection_id: string | null;
+        };
+        KBVoteTally: {
+            helpful: number;
+            not_helpful: number;
+        };
+        KBArticleVotes: {
+            /** Format: uuid */
+            article_id: string;
+            /** @description Readers who answered Yes; the page says "helpful out of helpful + not_helpful found this helpful". */
+            helpful: number;
+            not_helpful: number;
+            /** @description The part of the counts an import brought in (Freshdesk thumbs); zero after the first reset. */
+            imported: components["schemas"]["KBVoteTally"];
+            /** @description The newest 200 votes since the last reset, newest change first. */
+            votes: components["schemas"]["KBArticleVote"][];
+            /** @description Every reset, newest first. */
+            resets: components["schemas"]["KBArticleVoteReset"][];
+        };
+        KBArticleVote: {
+            helpful: boolean;
+            /** @description The reader's "What was missing?" line after a No, masked; null when they left none. */
+            missing: string | null;
+            /** @description The signed-in contact who voted; null for a reader the help center does not know. */
+            contact: null | {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When the reader last changed their vote.
+             */
+            updated_at: string;
+        };
+        KBArticleVoteReset: {
+            /** Format: uuid */
+            id: string;
+            /** @description What the page counted just before the reset. */
+            helpful: number;
+            not_helpful: number;
+            /** @description The person who reset the votes; null once they were removed. */
+            reset_by: null | components["schemas"]["SavedReplyPerson"];
+            /** @description The agent token that reset them; null when a person did it in the web app. */
+            token: null | {
+                /** Format: uuid */
+                id: string | null;
+                label: string;
+            };
+            /** Format: date-time */
+            created_at: string;
         };
         KBMedia: {
             /** Format: uuid */
@@ -19471,6 +19561,60 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getKBArticleVotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article's votes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleVotes"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    resetKBArticleVotes: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article's votes after the reset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleVotes"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listKBArticleVersions: {

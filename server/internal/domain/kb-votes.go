@@ -48,11 +48,10 @@ type KBVoteContact struct {
 // KBArticleVoteReset is one reset of an article's votes: the counts the page showed just before it,
 // and who reset them.
 type KBArticleVoteReset struct {
-	ID             string            `json:"id"`
-	Helpful        int               `json:"helpful"`
-	NotHelpful     int               `json:"not_helpful"`
-	ResetBy        *SavedReplyPerson `json:"reset_by"`
-	Token          *SavedReplyToken  `json:"token"`
-	AgentRequestID *string           `json:"agent_request_id"`
-	CreatedAt      time.Time         `json:"created_at"`
+	ID         string            `json:"id"`
+	Helpful    int               `json:"helpful"`
+	NotHelpful int               `json:"not_helpful"`
+	ResetBy    *SavedReplyPerson `json:"reset_by"`
+	Token      *SavedReplyToken  `json:"token"`
+	CreatedAt  time.Time         `json:"created_at"`
 }
