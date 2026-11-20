@@ -10,7 +10,7 @@ import (
 )
 
 // seedKB gives the workspace two collections, an article listed in both with a version, a translation, an image linked
-// to the article, and help center settings, each named after the workspace.
+// to the article, a closed vote with its reset, and help center settings, each named after the workspace.
 func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name string) {
 	t.Helper()
 	sha := fmt.Sprintf("%064x", len(name))
@@ -25,14 +25,16 @@ func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name stri
 		l AS (INSERT INTO kb_article_media(workspace_id,article_id,media_id,current) SELECT $1,a.id,i.id,true FROM a,i RETURNING 1),
 		b AS (INSERT INTO kb_media_batches(workspace_id,action,media_ids) SELECT $1,'trash',ARRAY[i.id] FROM i RETURNING 1),
 		r AS (INSERT INTO kb_media_replacements(workspace_id,from_media_id,to_media_id) SELECT $1,i.id,gen_random_uuid() FROM i RETURNING 1),
-		u AS (INSERT INTO kb_media_uploads(workspace_id,size,expires_at) VALUES($1,100,now()+interval '1 day') RETURNING 1)
+		u AS (INSERT INTO kb_media_uploads(workspace_id,size,expires_at) VALUES($1,100,now()+interval '1 day') RETURNING 1),
+		vr AS (INSERT INTO kb_article_vote_resets(workspace_id,article_id,helpful,not_helpful) SELECT $1,id,1,0 FROM a RETURNING id,article_id),
+		vo AS (INSERT INTO kb_article_votes(workspace_id,article_id,voter,helpful,reset_id) SELECT $1,article_id,sha256($2::bytea),true,id FROM vr RETURNING 1)
 		INSERT INTO help_centers(workspace_id,title) VALUES($1,$2)`, workspaceID, name, sha)
 	if err != nil {
 		t.Fatalf("seed knowledge base of %s: %v", name, err)
 	}
 }
 
-var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_article_collections", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "help_centers"}
+var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_article_collections", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "kb_article_vote_resets", "kb_article_votes", "help_centers"}
 
 func TestKnowledgeBaseTablesAreScopedByRowLevelSecurity(t *testing.T) {
 	pool := testPool(t)
@@ -117,6 +119,30 @@ func TestKnowledgeBaseVersionsAreAppendOnlyForTheAppRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{`UPDATE kb_article_versions SET title='rewritten'`, `DELETE FROM kb_article_versions`} {
+		err := db.InWorkspace(ctx, ids.a, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, statement)
+			return err
+		})
+		if err == nil {
+			t.Errorf("%s ran as the app role", statement)
+		}
+	}
+}
+
+// A reset keeps the counts an article's page showed before it; the app role adds one and never changes
+// or deletes it, so the earlier counts stay readable.
+func TestArticleVoteResetsAreAppendOnlyForTheAppRole(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	ids := seedTwoWorkspaces(t, pool)
+	db := New(pool)
+	if err := db.InWorkspace(ctx, ids.a, func(tx pgx.Tx) error { seedKB(t, ctx, tx, ids.a, "Alpha"); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{`UPDATE kb_article_vote_resets SET helpful=0`, `DELETE FROM kb_article_vote_resets`} {
 		err := db.InWorkspace(ctx, ids.a, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, statement)
 			return err
