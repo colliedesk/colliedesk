@@ -94,6 +94,24 @@ docker compose exec -T server /app/collie pair --workspace <slug> --email <your 
 
 Every `exec` and `run` here has `-T` (no terminal), so the commands also work from a script.
 
+## PostgreSQL versions
+
+A new install runs PostgreSQL 19, the release Colliedesk Cloud runs. PostgreSQL cannot open a data
+directory that another major version wrote, so the installer reads the version of the database
+volume before it writes `compose.yaml` and keeps that major:
+
+- a volume made by PostgreSQL 16, 17 or 18 stays on it. The installer says so and changes nothing
+  else. Colliedesk supports every major from 16, and every migration is checked on 16 and 17, so
+  you do not need to act;
+- a volume made by a version older than 16, or newer than 19, stops the installer before it changes
+  `compose.yaml`;
+- an install that was set up before but whose volume is empty stops the installer too: it never
+  starts an empty database in place of yours. Restore the volume or the backup
+  ([roll back](#roll-back)) and run it again.
+
+The installer does not move a database to a new major. That is a dump and a restore into a new
+volume. An install on an [external database](database.md) runs whatever version that server runs.
+
 ## Settings move into the database
 
 From the release that keeps settings in the database (see [settings](environment-variables.md#settings)),
