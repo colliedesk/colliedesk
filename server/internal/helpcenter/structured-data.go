@@ -2,6 +2,7 @@ package helpcenter
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"html"
 	"html/template"
@@ -142,33 +143,41 @@ func questionList(document ast.Node, source []byte) []faqItem {
 
 // plainText is the words of a block as a reader sees them: entities and backslash escapes resolved
 // as goldmark renders the text ("&amp;" is "&", "\\*" is "*"), code spans as written, code blocks and
-// raw HTML left out. The words go through goldmark's HTML writer and are unescaped once at the end,
-// so a reference is resolved once, as on the page ("\\&amp;" stays "&amp;").
+// raw HTML left out.
 func plainText(block ast.Node, source []byte) string {
-	var escaped strings.Builder
-	words := bufio.NewWriter(&escaped)
+	var words strings.Builder
 	_ = ast.Walk(block, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			if node.Type() == ast.TypeBlock {
-				_ = words.WriteByte(' ')
+				words.WriteByte(' ')
 			}
 			return ast.WalkContinue, nil
 		}
 		switch node := node.(type) {
 		case *ast.Text:
-			if _, code := node.Parent().(*ast.CodeSpan); code {
-				goldhtml.DefaultWriter.RawWrite(words, node.Segment.Value(source))
+			value := node.Segment.Value(source)
+			if _, code := node.Parent().(*ast.CodeSpan); code || !bytes.ContainsAny(value, `&\`) {
+				words.Write(value)
 			} else {
-				goldhtml.DefaultWriter.Write(words, node.Segment.Value(source))
+				words.WriteString(resolvedText(value))
 			}
 			if node.SoftLineBreak() || node.HardLineBreak() {
-				_ = words.WriteByte(' ')
+				words.WriteByte(' ')
 			}
 		case *ast.CodeBlock, *ast.FencedCodeBlock, *ast.HTMLBlock, *ast.RawHTML:
 			return ast.WalkSkipChildren, nil
 		}
 		return ast.WalkContinue, nil
 	})
-	_ = words.Flush()
+	return words.String()
+}
+
+// resolvedText is text with its entities and backslash escapes resolved once, as goldmark's HTML
+// writer resolves them ("\\&amp;" stays "&amp;"), and not escaped for HTML.
+func resolvedText(value []byte) string {
+	var escaped bytes.Buffer
+	out := bufio.NewWriterSize(&escaped, 64)
+	goldhtml.DefaultWriter.Write(out, value)
+	_ = out.Flush()
 	return html.UnescapeString(escaped.String())
 }

@@ -188,6 +188,9 @@ func TestHelpCenterHostileArticlesLatencyBudget(t *testing.T) {
 		"java newlines":          strings.Repeat("```java\n"+strings.Repeat("\n", 7999)+"```\n", 12),
 		"yaml colons":            strings.Repeat("```yaml\n"+strings.Repeat(":", 8000)+"\n```\n", 12),
 		"json slashes":           strings.Repeat("```json\n"+strings.Repeat("/", 8000)+"\n```\n", 12),
+		"many answers":           "## a?\n\n" + strings.Repeat("b\n\n", 33000) + "## c?\n\nd",
+		"empty headings":         strings.Repeat("##\n", 33000),
+		"escaped answers":        "## a?\n\n" + strings.Repeat("\\*&amp;\n\n", 11000) + "## c?\n\nd",
 	}
 	for name, body := range bodies {
 		article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": name, "body_md": body, "status": "published"})
