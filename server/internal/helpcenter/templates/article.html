@@ -8,6 +8,33 @@
 <div class="prose">
 {{.Body}}
 </div>
+{{- with .Votes}}
+<section class="helpful" id="helpful" aria-labelledby="helpful-title">
+<h2 id="helpful-title" class="helpful-title">{{.T.Question}}</h2>
+{{- if eq .State "yes"}}
+<p class="helpful-thanks" role="status">{{.T.Thanks}}</p>
+{{- else if eq .State "no"}}
+<p class="helpful-thanks" role="status">{{.T.Thanks}}</p>
+<form class="helpful-missing" method="post" action="{{.Action}}">
+<input type="hidden" name="helpful" value="no">
+<label for="helpful-missing">{{.T.Missing}}</label>
+<textarea id="helpful-missing" name="missing" rows="3" maxlength="{{.MaxMissing}}" aria-describedby="helpful-hint"></textarea>
+<p class="helpful-hint" id="helpful-hint">{{.T.MissingHint}}</p>
+<button type="submit">{{.T.Send}}</button>
+</form>
+{{- else if eq .State "sent"}}
+<p class="helpful-thanks" role="status">{{.T.Sent}}</p>
+{{- else if .Action}}
+<form class="helpful-form" method="post" action="{{.Action}}">
+<button type="submit" name="helpful" value="yes">{{.T.Yes}}</button>
+<button type="submit" name="helpful" value="no">{{.T.No}}</button>
+</form>
+{{- end}}
+{{- if .Count}}
+<p class="helpful-count">{{.Count}}</p>
+{{- end}}
+</section>
+{{- end}}
 </article>
 {{- if .Neighbours}}
 <aside class="rail" aria-labelledby="rail-title">

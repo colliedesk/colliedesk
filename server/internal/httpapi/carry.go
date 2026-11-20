@@ -22,6 +22,7 @@ type Carry struct {
 	cursorCalls, problemReports         *webFormLimiter
 	testMessages, migrationRequests     *webFormLimiter
 	helpCenterPages, helpCenterSearches *webFormLimiter
+	helpCenterVotes                     *webFormLimiter
 	helpCenterHostLookups               *webFormLimiter
 	channelFileLookups                  *webFormLimiter
 	certificateNotes                    *webFormLimiter
@@ -70,6 +71,7 @@ func NewCarry(config Config) *Carry {
 		testMessages:      newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
 		migrationRequests: newWindowLimiter(migrationRequestsPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages:   newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
+		helpCenterVotes:       newWebFormLimiter(helpCenterVotesPerAddress, webFormMaxKeys),
 		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
 		channelFileLookups: newWebFormLimiter(channelFileLookupsPerAddress, webFormMaxKeys),
 		operatorSignIns:    newWindowLimiter(operatorSignInsPerMinute, webFormMaxKeys, time.Minute),

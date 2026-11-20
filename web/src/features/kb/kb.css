@@ -978,6 +978,7 @@ span.kb-article-open { opacity: 0.35; }
   .kb-article-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
   .kb-article-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
 }
+<<<<<<< HEAD
 
 /* Unpublished changes of a published article: the bar over the editor and Compare with published. */
 .kb-draft-bar { display: grid; gap: var(--space-2); }
@@ -988,3 +989,13 @@ span.kb-article-open { opacity: 0.35; }
 .kb-diff li[data-change="added"] { border-left-color: var(--ok); background: var(--ok-soft); }
 .kb-diff-label { margin-right: var(--space-2); color: var(--text-2); font-family: var(--font-sans); font-weight: 600; text-decoration: none; }
 .kb-article-status .kb-changes-mark { color: var(--text-1); font-weight: 500; }
+=======
+.kb-vote-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); }
+.kb-vote-list li { display: grid; gap: 2px; }
+.kb-vote-line { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+.kb-vote-answer { font-weight: 600; color: var(--text-2); }
+.kb-vote-missing { color: var(--text-2); overflow-wrap: anywhere; }
+.kb-vote-history { display: grid; gap: 4px; }
+.kb-vote-history h4 { color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
+.kb-vote-history ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+>>>>>>> origin/main

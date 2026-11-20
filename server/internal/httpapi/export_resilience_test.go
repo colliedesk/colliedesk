@@ -219,6 +219,8 @@ func (s idleSink) KBArticleTranslationVersion(export.KBArticleTranslationVersion
 func (s idleSink) KBArticleDraft(export.KBArticleDraft) error                           { return nil }
 func (s idleSink) KBImage(export.KBImage) error                                         { return nil }
 func (s idleSink) KBMediaReplacement(export.KBMediaReplacement) error                   { return nil }
+func (s idleSink) KBArticleVoteReset(export.KBArticleVoteReset) error                   { return nil }
+func (s idleSink) KBArticleVote(export.KBArticleVote) error                             { return nil }
 func (s idleSink) KBVideo(export.KBVideo) error                                         { return nil }
 func (s idleSink) HelpCenter(export.HelpCenter) error                                   { return nil }
 func (s idleSink) AgentRequest(export.AgentRequest) error                               { return nil }

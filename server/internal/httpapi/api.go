@@ -233,8 +233,10 @@ type API struct {
 	// webForms limits the public web form per client address and workspace.
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
-	// helpCenterPages and helpCenterSearches count each client address's help center pages and searches.
+	// helpCenterPages, helpCenterSearches and helpCenterVotes count each client address's help center
+	// pages, searches and votes.
 	helpCenterPages, helpCenterSearches *webFormLimiter
+	helpCenterVotes                     *webFormLimiter
 	helpCenter                          *helpcenter.Site
 	// liveChecks bounds the DNS checks the reverse proxy's certificate question starts.
 	liveChecks *helpcenter.LiveChecks
@@ -388,7 +390,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
 		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports, oauth: carry.oauth,
-		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
+		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches, helpCenterVotes: carry.helpCenterVotes,
 		helpCenterHostLookups: carry.helpCenterHostLookups, channelFileLookups: carry.channelFileLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, refusedLinks: carry.refusedLinks, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
@@ -633,8 +635,13 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/kb/articles/{id}/versions/{version}/restore", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionSession},
 		{http.MethodDelete, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionSession},
+<<<<<<< HEAD
 		{http.MethodPost, "/api/v1/kb/articles/{id}/draft/publish", auth.PermissionSession},
 		{http.MethodDelete, "/api/v1/kb/articles/{id}/draft", auth.PermissionSession},
+=======
+		{http.MethodGet, "/api/v1/kb/articles/{id}/votes", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/votes/reset", auth.PermissionSession},
+>>>>>>> origin/main
 		{http.MethodPost, "/api/v1/kb/images", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/images/{id}", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/media", auth.PermissionSession},

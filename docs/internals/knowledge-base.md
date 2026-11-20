@@ -194,6 +194,7 @@ The public help center is in `help-center.md`.
   needs `:update` only; publishing them needs `:publish` ([Drafts](#drafts)).
 - **Locked workspaces get 402 on every KB route.** None is in `lockedAllowed`; the export still runs.
 
+<<<<<<< HEAD
 ## Drafts
 
 Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
@@ -242,6 +243,48 @@ Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
   (no separate draft tool, the tool list is near its budget), and `kb_article_draft_publish` /
   `kb_article_draft_discard` act on it. Translations still write their live row until #694 gives them
   the same flow on this table.
+=======
+## Votes
+
+Migration `20261120073704-kb-article-votes`; code `helpcenter/votes.go` (form, cookie, redirect),
+`helpcenter/vote-text.go` (words per language), `store/kb-votes.go`, `httpapi/kb-vote-handlers.go`,
+MCP `catalog-kb-votes.go`, export `store/export-kb-votes.go`, web `features/kb/article-votes.tsx`.
+
+- **No script.** The box is two forms that `POST <article>/vote` and get a 303 to
+  `?voted=yes|no|sent#helpful`; the CSP is unchanged. The POST must carry an `Origin` equal to the help
+  center's own (`AddressOrigin`), so another site cannot vote for a reader. Once the origin passes, a
+  vote is charged to its own limiter (20 a minute per address, `helpCenterVotesPerAddress`), apart from
+  the search limiter, so searching never blocks voting and a foreign form costs nothing.
+- **At most 10 new readers per article, address and day.** A new reader is one with no current vote on
+  the article; past 10 from one address (IPv4 /32, IPv6 /64, `config.Client`) in 24 hours, the vote gets
+  the same 303 and thanks but writes nothing, so a bot clearing its cookie learns nothing. A reader
+  already counted still changes their vote. Only `HMAC-SHA256(kb_vote_address_key, bucket)` is stored,
+  in `address`; the raw address never is. The key is a server secret (`ServerSecret`), not in the
+  export. The check runs under the article's row lock in `kb_article_vote_versions`, so two votes at
+  once cannot both pass it.
+- **One vote per reader and article.** The reader is a random 32-byte id in a first-party, HttpOnly,
+  SameSite=Lax cookie (`__Host-cd_reader` on a host of its own, `__Secure-cd_reader_<slug>` with the
+  `/help/<slug>` path, no prefix on plain http), kept 365 days. Only `sha256("reader\x00" + cookie)` is
+  stored, in `voter`; the unique index is on (workspace, article, voter) where `reset_id IS NULL`, so a
+  second vote updates the first. Every reader is anonymous: there is no contact column until readers
+  can sign in (#290).
+- **Masking before storage.** `missing` goes through `textmask.Mask` (emails, runs of 6+ digits), then
+  is cut to `domain.MaxKBVoteMissingChars` (500). The raw line is never stored or logged.
+- **Count = own votes + imported thumbs.** Freshdesk's `thumbs_up`/`thumbs_down` in `source_meta` of
+  the article and its published, non-deleted translations count only while the article has no reset: a reset is a fresh start,
+  and imported thumbs cannot be closed one by one.
+- **Reset closes, never deletes.** It inserts a `kb_article_vote_resets` row with the counts the page
+  showed and sets `reset_id` on the current votes. The table is append-only for the app role (UPDATE and
+  DELETE revoked; `TestArticleVoteResetsAreAppendOnlyForTheAppRole`); rows go only by cascade when the
+  article is purged. A reset with nothing counted stores nothing, and the idempotency key makes a double
+  press one reset. A trashed article keeps its votes to read and cannot be reset.
+- **Cache.** A vote or reset bumps the article's row in `kb_article_vote_versions`, which is part of
+  that article's page ETag (`articleTag`): its count is never a stale 304, and other articles keep
+  theirs. The page reads the version before the article, so a count newer than the tag only costs a
+  refetch, never a stale page under a new tag.
+- **Export.** `kb-article-vote-resets.ndjson`, then `kb-article-votes.ndjson` with closed votes too:
+  after a reset the export is the only way to read them. `voter` is exported hex.
+>>>>>>> origin/main
 
 ## Translations
 

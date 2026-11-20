@@ -174,8 +174,13 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/kb/articles/{id}/versions/{version}/restore":    {"/api/v1/kb/articles/" + kb.versionArticleID + "/versions/1/restore", map[string]any{"updated_at": kb.versionArticleSeen}, admin, 200, ""},
 		"POST /api/v1/kb/articles/{id}/ai-exclusion":                  {"/api/v1/kb/articles/" + kb.articleID + "/ai-exclusion", nil, admin, 200, ""},
 		"DELETE /api/v1/kb/articles/{id}/ai-exclusion":                {"/api/v1/kb/articles/" + kb.versionArticleID + "/ai-exclusion", nil, admin, 200, ""},
+<<<<<<< HEAD
 		"POST /api/v1/kb/articles/{id}/draft/publish":                 {"/api/v1/kb/articles/" + kb.publishDraftID + "/draft/publish", map[string]any{"updated_at": kb.publishDraftSeen}, admin, 200, ""},
 		"DELETE /api/v1/kb/articles/{id}/draft":                       {"/api/v1/kb/articles/" + kb.discardDraftID + "/draft?updated_at=" + url.QueryEscape(kb.discardDraftSeen), nil, admin, 200, ""},
+=======
+		"GET /api/v1/kb/articles/{id}/votes":                          {path: "/api/v1/kb/articles/" + kb.articleID + "/votes", token: admin, status: 200},
+		"POST /api/v1/kb/articles/{id}/votes/reset":                   {path: "/api/v1/kb/articles/" + kb.articleID + "/votes/reset", token: admin, status: 200},
+>>>>>>> origin/main
 		"POST /api/v1/kb/images":                                      {path: kbImagesPath, token: admin, status: 201},
 		"GET /api/v1/kb/images/{id}":                                  {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},
 		"GET /api/v1/kb/media":                                        {path: "/api/v1/kb/media?usage=unused&sort=largest", token: admin, status: 200},

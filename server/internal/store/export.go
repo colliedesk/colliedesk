@@ -845,6 +845,9 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	if err := rowsError("export knowledge base media replacements", rows); err != nil {
 		return err
 	}
+	if err := exportKBVotes(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 
 	var center export.HelpCenter
 	// The custom domain's token is never exported: it is a credential of this server's check.

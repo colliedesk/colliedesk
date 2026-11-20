@@ -125,7 +125,7 @@ func (a *API) openHelpChat(kit channels.HelpCenterKit, response http.ResponseWri
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("X-Content-Type-Options", "nosniff")
 	if write {
-		if origin := request.Header.Get("Origin"); origin == "" || !strings.EqualFold(origin, helpCenterOrigin(at.Address)) {
+		if origin := request.Header.Get("Origin"); origin == "" || !strings.EqualFold(origin, helpcenter.AddressOrigin(at.Address)) {
 			writeError(response, http.StatusForbidden, "csrf_rejected", "This request did not come from the help center's own page.")
 			return nil, false
 		}
@@ -151,15 +151,6 @@ func (a *API) openHelpChat(kit channels.HelpCenterKit, response http.ResponseWri
 	}
 	return &helpChat{response: response, request: request, at: at, kit: kit, channel: channel, surface: surface,
 		widget: request.URL.Query().Get("surface") == ai.SurfaceWidget, lang: lang}, true
-}
-
-// helpCenterOrigin is scheme://host[:port] of a help center address.
-func helpCenterOrigin(address string) string {
-	parsed, err := url.Parse(address)
-	if err != nil {
-		return ""
-	}
-	return parsed.Scheme + "://" + parsed.Host
 }
 
 // cookie is the chat's cookie of this help center and channel: on a host of its own __Host- with
