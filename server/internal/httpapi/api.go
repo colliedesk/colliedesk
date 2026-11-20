@@ -870,6 +870,16 @@ func Routes() []Route {
 		// Files an article or translation lists for download under its text.
 		{http.MethodPut, "/api/v1/kb/articles/{id}/attachments", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/kb/articles/{id}/translations/{locale}/attachments", auth.PermissionSession},
+		// Knowledge base article templates: never public; a new article copies one once.
+		{http.MethodGet, "/api/v1/kb/templates", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/templates", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/templates/trash", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/templates/{id}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/kb/templates/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/templates/{id}", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/templates/{id}/restore", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/templates/{id}/versions", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/kb/templates/{id}/versions/{version}/restore", auth.PermissionSession},
 	}
 }
 

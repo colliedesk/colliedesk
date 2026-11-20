@@ -21,9 +21,9 @@ const collectionFields = {
   id: z.string().uuid(), parent_id: z.string().uuid().nullable(), name: z.string(), slug: z.string(), description: z.string(),
   position: z.number().int(), article_count: z.number().int(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 };
-export const kbCollectionSchema = z.object({ ...collectionFields, translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
+export const kbCollectionSchema = z.object({ ...collectionFields, default_template_id: z.string().uuid().nullable(), translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
 const trashedCollectionSchema = z.object({
-  ...collectionFields, translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
+  ...collectionFields, default_template_id: z.string().uuid().nullable().optional(), translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBCollection'>>;
 const translationChangeSchema = z.object({
   ...changeFields, kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'mark_current', 'mark_outdated']),

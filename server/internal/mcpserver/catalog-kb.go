@@ -57,11 +57,13 @@ const (
 
 	kbArticleOutput = `{"type":"object","required":["article"],"properties":{"article":` + kbArticleSchema + `}}`
 
-	kbCollectionSchema = `{"type":"object","required":["id","parent_id","name","slug","description","position","article_count","updated_at"],"properties":{` +
-		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
+	kbCollectionSchema = `{"type":"object","required":["id","parent_id","name","slug","description","position","article_count","updated_at","default_template_id"],"properties":{` +
+		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"default_template_id":{"type":["string","null"],"description":"The template every new article in it starts from (colliedesk_kb_templates_list); null: they start empty."},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
 		`"position":{"type":"integer"},"article_count":{"type":"integer"},"updated_at":{"type":"string"},"deleted_at":{"type":"string"},"deleted_by":{"type":["string","null"]},"purges_at":{"type":"string"},` +
 		`"translations":{"type":"array","description":"Its name and description in the help center's other languages (colliedesk_kb_collection_translation_set).","items":{"type":"object","properties":{` +
 		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}}}}`
+
+	kbDefaultTemplateProperty = `"default_template_id":{"type":["string","null"],` + uuid + `,"description":"A template from colliedesk_kb_templates_list that every new article in it starts from; null clears it. Deleting the template clears it too."}`
 
 	kbCollectionOutput = `{"type":"object","required":["collection"],"properties":{"collection":` + kbCollectionSchema + `}}`
 
@@ -100,11 +102,11 @@ func kbCollectionCreateSpec() Spec {
 		Name:  "colliedesk_kb_collection_create",
 		Title: "Create a knowledge base collection",
 		Description: `Add a collection, at the top or under parent_id (at most three levels deep). Without slug one is made from the name; a slug is unique among the collections of one parent. ` +
-			`A workspace holds at most 1,000 collections, the trash included. Delete it with colliedesk_kb_collection_delete to undo.`,
+			`default_template_id makes every new article in it start from that template. A workspace holds at most 1,000 collections, the trash included. Delete it with colliedesk_kb_collection_delete to undo.`,
 
 		REST: []string{"POST /api/v1/kb/collections"},
 		Input: `{"type":"object","additionalProperties":false,"required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,` +
-			`"description":{"type":"string","maxLength":2000},"parent_id":{"type":"string",` + uuid + `},"position":{"type":"integer","minimum":0,"maximum":1000000,` +
+			`"description":{"type":"string","maxLength":2000},"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,"position":{"type":"integer","minimum":0,"maximum":1000000,` +
 			`"description":"Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand (colliedesk_kb_order_set), else by name."}}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionCreate,
@@ -115,13 +117,13 @@ func kbCollectionUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_collection_update",
 		Title: "Change a knowledge base collection",
-		Description: `Rename a collection, change its slug, description or position, or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
+		Description: `Rename a collection, change its slug, description, position or default template, or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
 			`A move that would nest it more than three levels deep, or under itself, is refused.`,
 
 		REST: []string{"PATCH /api/v1/kb/collections/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["collection_id","updated_at"],"properties":{` + kbCollectionIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,"description":{"type":"string","maxLength":2000},"position":{"type":"integer","minimum":0,"maximum":1000000},` +
-			`"parent_id":{"type":"string",` + uuid + `},"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
+			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionUpdate,
 	}
@@ -190,15 +192,17 @@ func kbArticleCreateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_create",
 		Title: "Write a knowledge base article",
-		Description: `Write an article in Markdown in a collection (collection_id), or listed in several (collection_ids, its home first). It is a draft unless status is published; a published article is on the public help center while that is on. ` +
+		Description: `Write an article in Markdown in a collection (collection_id), or listed in several (collection_ids, its home first). ` +
+			`Give body, or template_id to start from a template's text; with neither it starts from its collection's default template, or empty. Later changes to the template never change the article. It is a draft unless status is published; a published article is on the public help center while that is on. ` +
 			`seo_title and seo_description are what search engines show; left out, the title and the start of the text are used. ` +
 			`An article with 3 or more H2 and H3 headings lists them as On this page; show_contents false turns that off. ` +
 			`The text holds at most 100,000 characters and is never cut. Put images in with colliedesk_kb_image_upload and link them as ![text](url). ` +
 			`Delete it with colliedesk_kb_article_delete to undo.` + "\n\n" + kbTextNotice,
 
 		REST: []string{"POST /api/v1/kb/articles"},
-		Input: `{"type":"object","additionalProperties":false,"required":["title","body"],"properties":{` + kbCollectionIDProperty + `,` + kbCollectionIDsProperty + `,` +
-			`"title":{"type":"string","minLength":1,"maxLength":300},"body":{"type":"string","maxLength":100000,"description":"` + kbBodyDescription + `"},` + kbSlugProperty + `,` +
+		Input: `{"type":"object","additionalProperties":false,"required":["title"],"properties":{` + kbCollectionIDProperty + `,` + kbCollectionIDsProperty + `,` +
+			`"title":{"type":"string","minLength":1,"maxLength":300},"body":{"type":"string","maxLength":100000,"description":"` + kbBodyDescription + `"},` +
+			`"template_id":{"type":"string",` + uuid + `,"description":"Instead of body: start from this template's text (colliedesk_kb_templates_list)."},` + kbSlugProperty + `,` +
 			`"status":{"type":"string","enum":["draft","published"],"default":"draft"},` + kbSEOProperties + `,` + kbShowContentsProperty + `}}`,
 		Output: kbArticleOutput,
 		run:    kbArticleCreate,

@@ -66,15 +66,18 @@ type KBArticleChange = SavedReplyChange
 
 // KBCollection groups articles; ParentID nests it, at most MaxKBDepth levels deep.
 type KBCollection struct {
-	ID           string    `json:"id"`
-	ParentID     *string   `json:"parent_id"`
-	Name         string    `json:"name"`
-	Slug         string    `json:"slug"`
-	Description  string    `json:"description"`
-	Position     int       `json:"position"`
-	ArticleCount int       `json:"article_count"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           string  `json:"id"`
+	ParentID     *string `json:"parent_id"`
+	Name         string  `json:"name"`
+	Slug         string  `json:"slug"`
+	Description  string  `json:"description"`
+	Position     int     `json:"position"`
+	ArticleCount int     `json:"article_count"`
+	// DefaultTemplateID is the template every new article in it starts from; trashing that template
+	// clears it.
+	DefaultTemplateID *string   `json:"default_template_id"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 	// Translations are its name and description in the help center's other languages.
 	Translations []KBCollectionTranslation `json:"translations"`
 }

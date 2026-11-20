@@ -38,6 +38,8 @@ export interface EditorHandle {
   // replace changes the first place the text holds find into by (an image's alt text, set from the page); false
   // when the text no longer holds it.
   replace(find: string, by: string): boolean;
+  // insert puts a block of Markdown (a template's text) at the cursor, on lines of its own.
+  insert(markdown: string): void;
 }
 
 export type ViewMode = 'edit' | 'split' | 'preview';
@@ -169,6 +171,12 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
         view.dispatch({ changes: { from: at, to: at + find.length, insert: by }, userEvent: 'input.alt' });
         emit(view);
         return true;
+      },
+      insert: (markdown) => {
+        // The block's own trailing line ends are dropped: insertBlock sets the blank lines around it.
+        insertBlock(view, markdown.replace(/\n+$/, ''));
+        view.focus();
+        emit(view);
       },
     });
     return () => {

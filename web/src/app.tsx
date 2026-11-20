@@ -311,10 +311,14 @@ const newArticleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/new',
   loader: pageChunk(kbPart),
-  validateSearch: (search: Record<string, unknown>): { collection?: string } => (typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
+  // template is the template picked in New article, or none for a blank article.
+  validateSearch: (search: Record<string, unknown>): { collection?: string; template?: string } => ({
+    ...(typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
+    ...(typeof search.template === 'string' && search.template !== '' ? { template: search.template } : {}),
+  }),
   component: function NewArticle() {
-    const { collection } = newArticleRoute.useSearch();
-    return <Part part={kbPart} failed={kbFailed} render={({ ArticleRoute }) => <ArticleRoute collectionId={collection} />} />;
+    const { collection, template } = newArticleRoute.useSearch();
+    return <Part part={kbPart} failed={kbFailed} render={({ ArticleRoute }) => <ArticleRoute collectionId={collection} templateId={template} />} />;
   },
 });
 const articleRoute = createRoute({
@@ -340,6 +344,13 @@ const languagesRoute = createRoute({
     const search = languagesRoute.useSearch();
     return <Part part={kbPart} failed={kbFailed} render={({ LanguagesRoute }) => <LanguagesRoute search={search} />} />;
   },
+});
+// The article templates: the text a new article starts with.
+const templatesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/templates',
+  loader: pageChunk(kbPart),
+  component: () => <Part part={kbPart} failed={kbFailed} render={({ TemplatesRoute }) => <TemplatesRoute />} />,
 });
 // One language of an article, beside the original; it also starts a translation.
 // The help center's own settings, beside the articles it publishes; they were a section of Settings.
@@ -654,7 +665,7 @@ const trialOfferRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, tagsRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, templatesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, tagsRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 // Every router Link loads its page ahead when the pointer or the focus reaches it (plain links: lib/in-app-links.ts).
 export const router = createRouter({ routeTree, context: {}, defaultPreload: 'intent' });
 

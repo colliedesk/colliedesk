@@ -6465,6 +6465,227 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/templates:
+    get:
+      operationId: listKBTemplates
+      x-permission: kb_articles:read
+      description: >
+        The article templates of the workspace outside the trash, ordered by name ignoring case, with
+        their text: Markdown a team starts new articles from. A new workspace starts with three
+        (How-to, Troubleshooting, FAQ); they are ordinary templates. A template is never public: no
+        help center page, search, sitemap or help chat reads it.
+      responses:
+        '200':
+          description: Article templates
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBTemplate'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createKBTemplate
+      x-permission: kb_articles:update
+      description: >
+        Needs `kb_articles:update`. The name is unique among the templates outside the trash, ignoring
+        case (409 `duplicate_name`). The description is one line. A workspace holds at most 200,
+        counting the ones in the trash (409 `kb_template_limit`). The new template has version 1 in its
+        history.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KBTemplateInput'}
+      responses:
+        '201':
+          description: Created template
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBTemplate'}}}
+        '200':
+          description: The template an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBTemplate'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/templates/trash:
+    get:
+      operationId: listTrashedKBTemplates
+      x-permission: kb_articles:read
+      description: >
+        Templates deleted in the last 30 days, most recently deleted first, in pages. Each can be
+        taken back with `POST /api/v1/kb/templates/{id}/restore` until `purges_at`; after that it is
+        deleted for good with its history. Articles made from it keep their text.
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
+      responses:
+        '200':
+          description: Templates in the trash
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/TrashedKBTemplate'}}
+                  next_cursor: {type: [string, 'null'], description: Null on the last page.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/kb/templates/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBTemplate
+      x-permission: kb_articles:read
+      description: One template outside the trash with its text. A template in the trash is 404.
+      responses:
+        '200':
+          description: The template
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBTemplate'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateKBTemplate
+      x-permission: kb_articles:update
+      description: >
+        Change the name, the description, the text or several. Needs `kb_articles:update`. Send back
+        the `updated_at` you read; when the template was saved since, nothing changes and the answer is
+        409 `changed_elsewhere`. A taken name is 409 `duplicate_name`. Every edit adds a version to the
+        history. Articles made from the template keep their text. A template in the trash is 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+                name: {type: string, minLength: 1, maxLength: 200}
+                description: {type: string, maxLength: 300}
+                body: {type: string, minLength: 1, maxLength: 100000}
+      responses:
+        '200':
+          description: Updated template
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBTemplate'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteKBTemplate
+      x-permission: kb_articles:update
+      description: >
+        Move the template to the trash: it leaves the New article menu and can be taken back for 30
+        days with `POST /api/v1/kb/templates/{id}/restore`. A collection that had it as its default
+        template has none afterwards. Send the `updated_at` you read (409 `changed_elsewhere` when it
+        was saved since).
+      parameters:
+        - {name: updated_at, in: query, required: true, schema: {type: string, format: date-time}}
+      responses:
+        '204': {description: Template moved to the trash}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/templates/{id}/restore:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: restoreKBTemplate
+      x-permission: kb_articles:update
+      description: >
+        Take a template out of the trash, as it was when deleted. Send the `updated_at` of the trashed
+        template as you read it (409 `changed_elsewhere` when it changed since). 404 when it is not in
+        the trash. 409 `duplicate_name` when another template took its name meanwhile (rename that one
+        first). A collection default it had is not set again.
+        A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Restored template
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBTemplate'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/templates/{id}/versions:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listKBTemplateVersions
+      x-permission: kb_articles:read
+      description: >
+        The versions of a template, newest first, in pages: who made each, through which agent token,
+        and the name, description and text it had. A template in the trash keeps its history. Restoring
+        a version adds a new one; nothing in the history is rewritten.
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: before_version, in: query, description: Only versions older than this one (the next_before_version of the previous page)., schema: {type: integer, minimum: 1}}
+      responses:
+        '200':
+          description: Versions of the template
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_before_version]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBTemplateVersion'}}
+                  next_before_version: {type: [integer, 'null'], description: Null on the last page.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/templates/{id}/versions/{version}/restore:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: version, in: path, required: true, schema: {type: integer, minimum: 1}}
+    post:
+      operationId: restoreKBTemplateVersion
+      x-permission: kb_articles:update
+      description: >
+        Make an earlier version the current one: its name, description and text become a new version.
+        Send back the `updated_at` you read (409 `changed_elsewhere` when the template was saved since).
+        409 `duplicate_name` when another template has that name now. A template in the trash is 404:
+        take it out of the trash first.
+        A repeat with the same Idempotency-Key answers the first restore again (200) and adds no version.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Template with the restored text
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBTemplate'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/collections:
     get:
       operationId: listKBCollections
@@ -6557,6 +6778,7 @@ paths:
                 description: {type: string, maxLength: 2000}
                 parent_id: {type: [string, 'null'], format: uuid}
                 position: {type: integer, minimum: 0, maximum: 1000000}
+                default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in it starts from; null clears it. A template in the trash is 409 template_in_trash.'}
       responses:
         '200':
           description: Updated collection
@@ -6729,7 +6951,9 @@ paths:
         title. The text holds at most 100,000 characters and is never cut; a workspace holds at most
         2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by
         hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by
-        title. At most 64 KiB of JSON.
+        title. At most 64 KiB of JSON. With `template_id` the server copies the template's text (see
+        `GET /api/v1/kb/templates`); without `body_md` or `template_id` the article starts from the
+        collection's `default_template_id` when it has one, else empty.
       parameters:
         - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
@@ -6747,6 +6971,7 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles/trash:
@@ -11618,6 +11843,72 @@ components:
         created_at: {type: string, format: date-time}
         title: {type: string, description: The title after this change.}
         body: {type: string, description: The text after this change.}
+    KBTemplateInput:
+      type: object
+      required: [name, body]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 300, description: 'One line that says when to use it; shown in the New article menu.'}
+        body: {type: string, minLength: 1, maxLength: 100000, description: The Markdown a new article starts with.}
+    KBTemplate:
+      type: object
+      required: [id, name, description, body, created_at, updated_at, last_change]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        body: {type: string, description: The Markdown a new article starts with.}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_change:
+          description: The latest version of the template.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyChange'}
+    TrashedKBTemplate:
+      type: object
+      required: [id, name, description, body, created_at, updated_at, last_change, deleted_at, deleted_by, purges_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        body: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_change:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyChange'}
+        deleted_at: {type: string, format: date-time}
+        deleted_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        purges_at: {type: string, format: date-time, description: When the template and its history are deleted for good (30 days after deleted_at).}
+    KBTemplateVersion:
+      type: object
+      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, name, description, body]
+      properties:
+        version: {type: integer, minimum: 1}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete]}
+        restored_from_version: {type: [integer, 'null']}
+        changed_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        token:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, label]
+              properties:
+                id: {type: [string, 'null'], format: uuid}
+                label: {type: string}
+        agent_request_id: {type: [string, 'null'], format: uuid, description: Always null for a template.}
+        created_at: {type: string, format: date-time}
+        name: {type: string, description: The name after this change.}
+        description: {type: string, description: The description after this change.}
+        body: {type: string, description: The text after this change.}
     KBCollectionInput:
       type: object
       required: [name]
@@ -11627,9 +11918,10 @@ components:
         description: {type: string, maxLength: 2000}
         parent_id: {type: [string, 'null'], format: uuid}
         position: {type: integer, minimum: 0, maximum: 1000000, description: 'Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand, else 0 (by name).'}
+        default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in this collection starts from; null for none. A template in the trash is 409 template_in_trash; trashing the template sets this to null.'}
     KBCollection:
       type: object
-      required: [id, parent_id, name, slug, description, position, article_count, created_at, updated_at, translations]
+      required: [id, parent_id, name, slug, description, position, default_template_id, article_count, created_at, updated_at, translations]
       properties:
         translations: {type: array, description: Its name and description in the help center's other languages., items: {$ref: '#/components/schemas/KBCollectionTranslation'}}
         id: {type: string, format: uuid}
@@ -11638,6 +11930,7 @@ components:
         slug: {type: string}
         description: {type: string}
         position: {type: integer}
+        default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in it starts from; null for none.'}
         article_count: {type: integer, description: 'Articles directly in this collection and outside the trash, drafts included.'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -11652,6 +11945,7 @@ components:
         slug: {type: string}
         description: {type: string}
         position: {type: integer}
+        default_template_id: {type: [string, 'null'], format: uuid}
         article_count: {type: integer}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -11663,14 +11957,15 @@ components:
         purges_at: {type: string, format: date-time, description: When it is deleted for good (30 days after deleted_at).}
     KBArticleInput:
       type: object
-      required: [title, body_md]
-      description: 'Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids.'
+      required: [title]
+      description: 'Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids. Send body_md or template_id, not both; with neither the text is empty.'
       properties:
         collection_id: {type: string, format: uuid, description: 'Its home collection.'}
         collection_ids: {type: array, minItems: 1, maxItems: 1000, items: {type: string, format: uuid}, description: 'Every collection the article is listed in, its home first. The home sets the breadcrumb, the place among siblings and collection_id; the help center lists the article in each of these collections, always at its one address /a/<number>-<slug>, which adding or removing a collection never changes. A collection of another workspace, in the trash or named twice is refused.'}
         title: {type: string, minLength: 1, maxLength: 300}
         slug: {type: string, minLength: 1, maxLength: 120, description: 'Lowercase letters, digits and hyphens in any script; made from the title when left out.'}
         body_md: {type: string, maxLength: 100000, description: 'The text in Markdown. Of raw HTML the help center shows only a YouTube or Vimeo player, an <iframe> whose src is https://www.youtube.com/embed/<id>, https://www.youtube-nocookie.com/embed/<id> or https://player.vimeo.com/video/<id>; anything else is left out when shown and kept as written.'}
+        template_id: {type: string, format: uuid, description: 'A template of the workspace whose text the article starts with, copied once: editing the template later never changes the article. A template in the trash is 409 template_in_trash; one of another workspace is 404.'}
         status: {type: string, enum: [draft, published], default: draft}
         seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
         seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}

@@ -3817,6 +3817,120 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The article templates of the workspace outside the trash, ordered by name ignoring case, with their text: Markdown a team starts new articles from. A new workspace starts with three (How-to, Troubleshooting, FAQ); they are ordinary templates. A template is never public: no help center page, search, sitemap or help chat reads it. */
+        get: operations["listKBTemplates"];
+        put?: never;
+        /** @description Needs `kb_articles:update`. The name is unique among the templates outside the trash, ignoring case (409 `duplicate_name`). The description is one line. A workspace holds at most 200, counting the ones in the trash (409 `kb_template_limit`). The new template has version 1 in its history. */
+        post: operations["createKBTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/templates/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Templates deleted in the last 30 days, most recently deleted first, in pages. Each can be taken back with `POST /api/v1/kb/templates/{id}/restore` until `purges_at`; after that it is deleted for good with its history. Articles made from it keep their text. */
+        get: operations["listTrashedKBTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description One template outside the trash with its text. A template in the trash is 404. */
+        get: operations["getKBTemplate"];
+        put?: never;
+        post?: never;
+        /** @description Move the template to the trash: it leaves the New article menu and can be taken back for 30 days with `POST /api/v1/kb/templates/{id}/restore`. A collection that had it as its default template has none afterwards. Send the `updated_at` you read (409 `changed_elsewhere` when it was saved since). */
+        delete: operations["deleteKBTemplate"];
+        options?: never;
+        head?: never;
+        /** @description Change the name, the description, the text or several. Needs `kb_articles:update`. Send back the `updated_at` you read; when the template was saved since, nothing changes and the answer is 409 `changed_elsewhere`. A taken name is 409 `duplicate_name`. Every edit adds a version to the history. Articles made from the template keep their text. A template in the trash is 404. */
+        patch: operations["updateKBTemplate"];
+        trace?: never;
+    };
+    "/api/v1/kb/templates/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Take a template out of the trash, as it was when deleted. Send the `updated_at` of the trashed template as you read it (409 `changed_elsewhere` when it changed since). 404 when it is not in the trash. 409 `duplicate_name` when another template took its name meanwhile (rename that one first). A collection default it had is not set again. A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing. */
+        post: operations["restoreKBTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/templates/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The versions of a template, newest first, in pages: who made each, through which agent token, and the name, description and text it had. A template in the trash keeps its history. Restoring a version adds a new one; nothing in the history is rewritten. */
+        get: operations["listKBTemplateVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/templates/{id}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Make an earlier version the current one: its name, description and text become a new version. Send back the `updated_at` you read (409 `changed_elsewhere` when the template was saved since). 409 `duplicate_name` when another template has that name now. A template in the trash is 404: take it out of the trash first. A repeat with the same Idempotency-Key answers the first restore again (200) and adds no version. */
+        post: operations["restoreKBTemplateVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/collections": {
         parameters: {
             query?: never;
@@ -3939,7 +4053,7 @@ export interface paths {
         /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's order (collections in their order, a collection's own articles before those of its collections, and in each collection by `position`, then title, then number). `sort` is `manual` with `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
         get: operations["listKBArticles"];
         put?: never;
-        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. At most 64 KiB of JSON. */
+        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. At most 64 KiB of JSON. With `template_id` the server copies the template's text (see `GET /api/v1/kb/templates`); without `body_md` or `template_id` the article starts from the collection's `default_template_id` when it has one, else empty. */
         post: operations["createKBArticle"];
         delete?: never;
         options?: never;
@@ -7660,6 +7774,72 @@ export interface components {
             /** @description The text after this change. */
             body: string;
         };
+        KBTemplateInput: {
+            name: string;
+            /** @description One line that says when to use it; shown in the New article menu. */
+            description?: string;
+            /** @description The Markdown a new article starts with. */
+            body: string;
+        };
+        KBTemplate: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            /** @description The Markdown a new article starts with. */
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description The latest version of the template. */
+            last_change: null | components["schemas"]["SavedReplyChange"];
+        };
+        TrashedKBTemplate: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            body: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            last_change: null | components["schemas"]["SavedReplyChange"];
+            /** Format: date-time */
+            deleted_at: string;
+            deleted_by: null | components["schemas"]["SavedReplyPerson"];
+            /**
+             * Format: date-time
+             * @description When the template and its history are deleted for good (30 days after deleted_at).
+             */
+            purges_at: string;
+        };
+        KBTemplateVersion: {
+            version: number;
+            /** @enum {string} */
+            kind: "create" | "edit" | "delete" | "restore" | "undelete";
+            restored_from_version: number | null;
+            changed_by: null | components["schemas"]["SavedReplyPerson"];
+            token: null | {
+                /** Format: uuid */
+                id: string | null;
+                label: string;
+            };
+            /**
+             * Format: uuid
+             * @description Always null for a template.
+             */
+            agent_request_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @description The name after this change. */
+            name: string;
+            /** @description The description after this change. */
+            description: string;
+            /** @description The text after this change. */
+            body: string;
+        };
         KBCollectionInput: {
             name: string;
             /** @description Lowercase letters, digits and hyphens in any script; made from the name when left out. */
@@ -7669,6 +7849,11 @@ export interface components {
             parent_id?: string | null;
             /** @description Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand, else 0 (by name). */
             position?: number;
+            /**
+             * Format: uuid
+             * @description The template every new article in this collection starts from; null for none. A template in the trash is 409 template_in_trash; trashing the template sets this to null.
+             */
+            default_template_id?: string | null;
         };
         KBCollection: {
             /** @description Its name and description in the help center's other languages. */
@@ -7681,6 +7866,11 @@ export interface components {
             slug: string;
             description: string;
             position: number;
+            /**
+             * Format: uuid
+             * @description The template every new article in it starts from; null for none.
+             */
+            default_template_id: string | null;
             /** @description Articles directly in this collection and outside the trash, drafts included. */
             article_count: number;
             /** Format: date-time */
@@ -7698,6 +7888,8 @@ export interface components {
             slug: string;
             description: string;
             position: number;
+            /** Format: uuid */
+            default_template_id?: string | null;
             article_count: number;
             /** Format: date-time */
             created_at: string;
@@ -7712,7 +7904,7 @@ export interface components {
              */
             purges_at: string;
         };
-        /** @description Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids. */
+        /** @description Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids. Send body_md or template_id, not both; with neither the text is empty. */
         KBArticleInput: {
             /**
              * Format: uuid
@@ -7725,7 +7917,12 @@ export interface components {
             /** @description Lowercase letters, digits and hyphens in any script; made from the title when left out. */
             slug?: string;
             /** @description The text in Markdown. Of raw HTML the help center shows only a YouTube or Vimeo player, an <iframe> whose src is https://www.youtube.com/embed/<id>, https://www.youtube-nocookie.com/embed/<id> or https://player.vimeo.com/video/<id>; anything else is left out when shown and kept as written. */
-            body_md: string;
+            body_md?: string;
+            /**
+             * Format: uuid
+             * @description A template of the workspace whose text the article starts with, copied once: editing the template later never changes the article. A template in the trash is 409 template_in_trash; one of another workspace is 404.
+             */
+            template_id?: string;
             /**
              * @default draft
              * @enum {string}
@@ -19152,6 +19349,298 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    listKBTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Article templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBTemplate"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createKBTemplate: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KBTemplateInput"];
+            };
+        };
+        responses: {
+            /** @description The template an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBTemplate"];
+                };
+            };
+            /** @description Created template */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBTemplate"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    listTrashedKBTemplates: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description The next_cursor of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Templates in the trash */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TrashedKBTemplate"][];
+                        /** @description Null on the last page. */
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getKBTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBTemplate"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteKBTemplate: {
+        parameters: {
+            query: {
+                updated_at: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Template moved to the trash */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateKBTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                    name?: string;
+                    description?: string;
+                    body?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBTemplate"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreKBTemplate: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Restored template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBTemplate"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    listKBTemplateVersions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Only versions older than this one (the next_before_version of the previous page). */
+                before_version?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Versions of the template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBTemplateVersion"][];
+                        /** @description Null on the last page. */
+                        next_before_version: number | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    restoreKBTemplateVersion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Template with the restored text */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBTemplate"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
     listKBCollections: {
         parameters: {
             query?: never;
@@ -19286,6 +19775,11 @@ export interface operations {
                     /** Format: uuid */
                     parent_id?: string | null;
                     position?: number;
+                    /**
+                     * Format: uuid
+                     * @description The template every new article in it starts from; null clears it. A template in the trash is 409 template_in_trash.
+                     */
+                    default_template_id?: string | null;
                 };
             };
         };
@@ -19504,6 +19998,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["IdempotencyKeyReused"];
         };

@@ -33,6 +33,8 @@ export default function FakeEditor({ initial, uploads, label, describedBy, inval
         emit();
         return true;
       },
+      // The fake has no cursor: a block goes at the end, after a blank line.
+      insert: (markdown) => { put(`${text.current}${text.current ? '\n\n' : ''}${markdown}`); emit(); },
     });
     return () => window.clearTimeout(timer.current);
     // Made once, as the real editor is.

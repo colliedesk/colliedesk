@@ -466,6 +466,12 @@ type KBArticleInput struct {
 	SEOTitle, SEODescription string
 	// ShowContents turns the article's list of headings on its page on or off; nil leaves it on.
 	ShowContents *bool
+	// TemplateID copies that template's body as BodyMD, which is then empty. The article keeps the
+	// copy: editing the template later never changes it.
+	TemplateID string
+	// BodyFromCollection starts the article from its home collection's default template, if it has
+	// one; BodyMD is then empty.
+	BodyFromCollection bool
 }
 
 // CreateKBArticle adds an article with the next number of the workspace and its first version.
@@ -504,6 +510,9 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 		}
 		extras, err := checkKBExtraCollections(ctx, tx, workspaceID, input.CollectionID, input.ExtraCollectionIDs)
 		if err != nil {
+			return domain.KBArticle{}, err
+		}
+		if input.BodyMD, err = kbArticleStartingBody(ctx, tx, workspaceID, input); err != nil {
 			return domain.KBArticle{}, err
 		}
 		var id string

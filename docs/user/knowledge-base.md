@@ -425,6 +425,57 @@ the status filter **Unpublished changes** keeps only those.
 - A [translation](#translations) of a published article still goes live when you save it
   ([#694](https://github.com/colliedesk/colliedesk/issues/694)).
 
+## Templates
+
+A template is the text a new article starts with, for example the headings of a how-to. Select
+**Templates** at the top of the knowledge base to see them. A new workspace has three: **How-to**,
+**Troubleshooting** and **FAQ**. Edit or delete them like your own; a starter you delete never comes back.
+
+To start an article from a template:
+
+1. Select **New article**. While the workspace has templates, it opens a menu: **Blank**, then the
+   templates, and **Manage templates**. In a collection with a
+   [default template](#default-template-of-a-collection), that one comes first, marked
+   **Default for this collection**.
+2. Select a template. The editor opens with its text and an empty **Title**.
+3. Type the title and save.
+
+The article gets a copy of the text. Editing or deleting the template later never changes an article
+made from it.
+
+**Insert template**, next to **Write**, **Side by side** and **Preview**, adds a template's text where
+the cursor is, in an article you are already writing. It is not offered in **Preview**.
+
+### Manage templates
+
+- **New template** asks for a **Name** (unique, ignoring case), **When to use it** (the line the
+  **New article** menu shows) and the **Text (Markdown)**.
+- **Edit** changes them. Every save is a version: **History** lists each one with who made it and
+  through which AI agent token, and **Restore version N** makes an older one current again, as a new
+  version.
+- **Delete** moves a template to **Template trash** for 30 days; **Restore** there brings it back with
+  its history. A template in the trash cannot start an article: an article opened from it meanwhile
+  starts blank and says so.
+
+### Default template of a collection
+
+**Edit** a collection and choose its **Default template**: every new article in that collection starts
+from it, and **Blank** in the menu still starts one empty. Deleting the template sets the collection
+back to **None (blank)**. The **Default template** field shows only while the workspace has templates.
+
+### What stays private
+
+Templates never appear on the help center, in its search or to its visitors. An image or video that
+only a template names stays private until an article that uses it is published; the
+[media library](#media-library) counts it as in use, so it is not listed as unused. The
+[export](export.md) includes every template with its history.
+
+A workspace holds at most 200 templates, counting the ones in the trash. A name holds 200 characters,
+**When to use it** 300 and the text 100,000.
+
+Moving from Freshdesk: Freshdesk does not offer its article templates through its API, so
+`collie import freshdesk` brings none. Add the ones you need under **Templates**.
+
 ## History
 
 **⋯ → Version history** on an article lists every version, newest first: who made it (and through which AI
@@ -921,6 +972,7 @@ unpublished or deleted, or while the help center is off.
 ## Limits
 
 - 2,000 articles per workspace, counting the trash, and 1,000 collections.
+- 200 [templates](#templates) per workspace, counting the trash; 100,000 characters per template text.
 - 100,000 characters per article text, 300 per title; never cut.
 - Images: PNG, JPEG, GIF and WebP, 5 MB each, at most 8,192 pixels on a side and 40 megapixels.
 - 10,000 images and videos in the media library per workspace, counting its trash; videos up to
@@ -940,8 +992,9 @@ token. Without the permission the call is refused and names what is missing
 
 | To | Needs |
 |---|---|
-| Read, search, history, trash | `kb_articles:read`, `kb_media:read`, `help_center:read` |
+| Read, search, history, trash, templates | `kb_articles:read`, `kb_media:read`, `help_center:read` |
 | Write a draft, save or discard unpublished changes, order, restore a version | `kb_articles:create`, `kb_articles:update` |
+| Add, edit, delete and restore templates | `kb_articles:update` |
 | Delete and restore from the trash | `kb_articles:delete` |
 | Anything that changes the public help center (publish, publish changes, unpublish or trash a published article, a published collection) | `kb_articles:publish` as well |
 | Upload, name, replace, trash images, videos and files | `kb_media:create`, `kb_media:update`, `kb_media:delete` |
@@ -980,6 +1033,20 @@ Articles and collections:
 - Link an article in a reply: every article an agent reads or finds carries its public address in `url`
   (also in the API). An agent links an article the same way a person does: the title and the address on
   two lines, from a search with `status` published while the help center is on.
+
+[Templates](#templates):
+
+- `colliedesk_kb_templates_list` (`GET /api/v1/kb/templates`; `trash` true, or
+  `GET /api/v1/kb/templates/trash`, for the trash) and `colliedesk_kb_template_get` read them with
+  `kb_articles:read`. `colliedesk_kb_template_create`, `_update`, `_delete`, `_undelete`, `_history` and
+  `_version_restore` (`POST`, `PATCH` and `DELETE /api/v1/kb/templates/{id}`, `/{id}/restore`,
+  `/{id}/versions`, `/{id}/versions/{version}/restore`) need `kb_articles:update`.
+- `template_id` on `colliedesk_kb_article_create` (or `POST /api/v1/kb/articles`) starts an article
+  from a template instead of `body` (`body_md` in the API); with neither, it starts from its collection's default template.
+  A template in the trash is refused with 409 `template_in_trash`.
+- `default_template_id` on `colliedesk_kb_collection_create` and `colliedesk_kb_collection_update` (and
+  their routes) sets a collection's default template; null clears it.
+- Writing an article from a template takes two calls: list the templates, create the article.
 
 Images and videos:
 

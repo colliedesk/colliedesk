@@ -643,7 +643,10 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 // exportKB writes the whole knowledge base: collections and articles in the trash too, every version,
 // translation and image, and the help center settings. Articles carry the original HTML an import kept.
 func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,c.source_meta,c.created_at,c.updated_at,c.deleted_at,c.deleted_by_agent_id::text,
+	if err := exportKBTemplates(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,c.default_template_id::text,c.source_meta,c.created_at,c.updated_at,c.deleted_at,c.deleted_by_agent_id::text,
 			COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'source_meta',t.source_meta,
 				'created_at',to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
 				ORDER BY t.locale) FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id), '[]'::jsonb)
@@ -654,7 +657,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBCollection
 		var meta []byte
-		if err := rows.Scan(&record.ID, &record.ParentID, &record.Name, &record.Slug, &record.Description, &record.Position, &meta,
+		if err := rows.Scan(&record.ID, &record.ParentID, &record.Name, &record.Slug, &record.Description, &record.Position, &record.DefaultTemplateID, &meta,
 			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID, &record.Translations); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base collections: %w", err)

@@ -10,18 +10,19 @@ import (
 )
 
 type restKBCollection struct {
-	ID           string             `json:"id"`
-	ParentID     *string            `json:"parent_id"`
-	Name         string             `json:"name"`
-	Slug         string             `json:"slug"`
-	Description  string             `json:"description"`
-	Position     int                `json:"position"`
-	ArticleCount int                `json:"article_count"`
-	UpdatedAt    string             `json:"updated_at"`
-	DeletedAt    string             `json:"deleted_at,omitempty"`
-	DeletedBy    *restPerson        `json:"deleted_by"`
-	PurgesAt     string             `json:"purges_at,omitempty"`
-	Translations []kbCollectionName `json:"translations"`
+	ID                string             `json:"id"`
+	ParentID          *string            `json:"parent_id"`
+	DefaultTemplateID *string            `json:"default_template_id"`
+	Name              string             `json:"name"`
+	Slug              string             `json:"slug"`
+	Description       string             `json:"description"`
+	Position          int                `json:"position"`
+	ArticleCount      int                `json:"article_count"`
+	UpdatedAt         string             `json:"updated_at"`
+	DeletedAt         string             `json:"deleted_at,omitempty"`
+	DeletedBy         *restPerson        `json:"deleted_by"`
+	PurgesAt          string             `json:"purges_at,omitempty"`
+	Translations      []kbCollectionName `json:"translations"`
 }
 
 // kbCollectionName is a collection's name and description in another language.
@@ -33,22 +34,23 @@ type kbCollectionName struct {
 }
 
 type kbCollectionOut struct {
-	ID           string             `json:"id"`
-	ParentID     *string            `json:"parent_id"`
-	Name         string             `json:"name"`
-	Slug         string             `json:"slug"`
-	Description  string             `json:"description"`
-	Position     int                `json:"position"`
-	ArticleCount int                `json:"article_count"`
-	UpdatedAt    string             `json:"updated_at"`
-	DeletedAt    string             `json:"deleted_at,omitempty"`
-	DeletedBy    *string            `json:"deleted_by,omitempty"`
-	PurgesAt     string             `json:"purges_at,omitempty"`
-	Translations []kbCollectionName `json:"translations"`
+	ID                string             `json:"id"`
+	ParentID          *string            `json:"parent_id"`
+	DefaultTemplateID *string            `json:"default_template_id"`
+	Name              string             `json:"name"`
+	Slug              string             `json:"slug"`
+	Description       string             `json:"description"`
+	Position          int                `json:"position"`
+	ArticleCount      int                `json:"article_count"`
+	UpdatedAt         string             `json:"updated_at"`
+	DeletedAt         string             `json:"deleted_at,omitempty"`
+	DeletedBy         *string            `json:"deleted_by,omitempty"`
+	PurgesAt          string             `json:"purges_at,omitempty"`
+	Translations      []kbCollectionName `json:"translations"`
 }
 
 func kbCollectionView(collection restKBCollection) kbCollectionOut {
-	out := kbCollectionOut{ID: collection.ID, ParentID: collection.ParentID, Name: collection.Name, Slug: collection.Slug, Description: collection.Description,
+	out := kbCollectionOut{ID: collection.ID, ParentID: collection.ParentID, DefaultTemplateID: collection.DefaultTemplateID, Name: collection.Name, Slug: collection.Slug, Description: collection.Description,
 		Position: collection.Position, ArticleCount: collection.ArticleCount, UpdatedAt: collection.UpdatedAt, DeletedAt: collection.DeletedAt, PurgesAt: collection.PurgesAt,
 		Translations: collection.Translations}
 	if out.Translations == nil {
@@ -255,7 +257,7 @@ func kbCollectionUpdate(c *call, arguments map[string]any) (any, error) {
 		change["parent_id"] = nil
 	}
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: name, slug, description, position, parent_id or move_to_top."}
+		return nil, &toolError{"Give something to change: name, slug, description, position, parent_id, move_to_top or default_template_id."}
 	}
 	c.forCollection(args.ID)
 	var updated restKBCollection
@@ -398,6 +400,13 @@ func containsString(values []string, value string) bool {
 }
 
 func kbArticleCreate(c *call, arguments map[string]any) (any, error) {
+	_, withBody := arguments["body"]
+	if templateID, withTemplate := arguments["template_id"].(string); withTemplate {
+		if withBody {
+			return nil, &toolError{"Give body or template_id, not both: template_id starts the article from that template's text."}
+		}
+		c.notFound = "No template " + templateID + " in this workspace, or no collection you named. List the templates with colliedesk_kb_templates_list and the collections with colliedesk_kb_collections_list."
+	}
 	var created restKBArticle
 	if err := c.send(http.MethodPost, "/api/v1/kb/articles", kbArticleFields(arguments), &created); err != nil {
 		return nil, err

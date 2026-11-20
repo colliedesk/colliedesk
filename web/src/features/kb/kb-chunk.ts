@@ -2,10 +2,12 @@
 // One chunk with its own styles, loaded when one of them opens (kb-part.tsx).
 import './kb.css';
 import './kb-settings.css';
+import './kb-templates.css';
 
 export { KnowledgeRoute } from './knowledge-page';
 export { ArticleRoute } from './article-editor';
 export { LanguagesRoute } from './languages-page';
+export { TemplatesRoute } from './templates-page';
 export { TranslationRoute } from './translation-editor';
 export { MediaRoute } from './media-page';
 // The library picker, for the help center's logo and icon in Settings.
