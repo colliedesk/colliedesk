@@ -882,16 +882,22 @@ func (a *API) getHelpCenter(response http.ResponseWriter, request *http.Request)
 
 func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Enabled *bool   `json:"enabled"`
-		Title   *string `json:"title"`
-		Locale  *string `json:"locale"`
+		Enabled         *bool   `json:"enabled"`
+		Title           *string `json:"title"`
+		Locale          *string `json:"locale"`
+		RequireApproval *bool   `json:"require_approval"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil || input.Title == nil || input.Locale == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send enabled, title and locale.")
 		return
 	}
 	who := principal(request)
-	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID, *input.Enabled, *input.Title, *input.Locale)
+	// Turning approval off lets a draft reach the help center unreviewed, so it is a publish decision.
+	if input.RequireApproval != nil && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, nil) {
+		return
+	}
+	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID,
+		store.HelpCenterChange{Enabled: *input.Enabled, Title: *input.Title, Locale: *input.Locale, RequireApproval: input.RequireApproval})
 	if err != nil {
 		writeKBError(response, err)
 		return

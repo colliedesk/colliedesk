@@ -70,6 +70,10 @@ func TestATranslationThatNeedsApprovalPublishesOnlyTheApprovedText(t *testing.T)
 	if code := errorCode(t, response); code != "approval_required" {
 		t.Fatalf("editing the live translation: code=%s", code)
 	}
+	// A translation has no draft beside its live text: the refusal says how to get a change reviewed.
+	if body := response.Body.String(); !strings.Contains(body, "status draft") || !strings.Contains(body, "/translations/{locale}/reviews") {
+		t.Fatalf("refusal of a live translation edit does not say how to review it: %s", body)
+	}
 	kbCall(t, api, http.MethodPatch, kbTranslationPath(article.ID, "fr"), map[string]any{"updated_at": published.UpdatedAt, "outdated": true}, admin, http.StatusOK, nil)
 
 	var versions struct {

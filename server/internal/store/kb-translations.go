@@ -417,10 +417,9 @@ func (s *Store) UndeleteKBTranslation(ctx context.Context, workspaceID string, a
 			WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`, workspaceID, articleID, locale); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
+		// Out of the trash comes the text that was there, as the article's undelete does: nothing new
+		// to approve.
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleUndeleted, nil); err != nil {
-			return domain.KBArticleTranslation{}, err
-		}
-		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, kbPublishState{}); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
 		return readKBTranslation(ctx, tx, workspaceID, articleID, locale)

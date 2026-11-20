@@ -460,7 +460,7 @@ var kbErrors = []error{domain.ErrKBArticleNotFound, domain.ErrKBArticleVersionNo
 	domain.ErrKBArticleLimit, domain.ErrKBCollectionLimit, domain.ErrKBMediaLimit,
 	domain.ErrKBTranslationNotFound, domain.ErrKBTranslationExists, domain.ErrKBTranslationVersionNotFound, domain.ErrKBLanguageNotListed, domain.ErrKBDraftNotFound,
 	domain.ErrKBTemplateNotFound, domain.ErrKBTemplateInTrash,
-	domain.ErrKBApprovalRequired, domain.ErrKBReviewNotFound, domain.ErrKBNothingToReview, domain.ErrKBReviewClosed, domain.ErrKBReviewOpen, domain.ErrKBNotAReviewer, domain.ErrKBOwnReview}
+	domain.ErrKBApprovalRequired, domain.ErrKBTranslationApprovalRequired, domain.ErrKBReviewNotFound, domain.ErrKBNothingToReview, domain.ErrKBReviewClosed, domain.ErrKBReviewOpen, domain.ErrKBNotAReviewer, domain.ErrKBOwnReview}
 
 func kbError(what string, err error) error {
 	if err == nil {

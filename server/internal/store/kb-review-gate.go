@@ -36,6 +36,9 @@ func checkKBApproval(ctx context.Context, tx pgx.Tx, workspaceID, articleID stri
 		AND state='approved' AND content_hash=$4)`, workspaceID, articleID, locale, hash).Scan(&approved); err != nil {
 		return fmt.Errorf("read knowledge base approval: %w", err)
 	}
+	if !approved && locale != nil {
+		return domain.ErrKBTranslationApprovalRequired
+	}
 	if !approved {
 		return domain.ErrKBApprovalRequired
 	}

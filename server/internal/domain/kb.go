@@ -308,11 +308,14 @@ type KBArticleVersion struct {
 
 // HelpCenter is the public help center's settings. UpdatedAt is nil until the first write.
 type HelpCenter struct {
-	Enabled        bool       `json:"enabled"`
-	Title          string     `json:"title"`
-	Locale         string     `json:"locale"`
-	ContentVersion int64      `json:"content_version"`
-	UpdatedAt      *time.Time `json:"updated_at"`
+	Enabled bool   `json:"enabled"`
+	Title   string `json:"title"`
+	Locale  string `json:"locale"`
+	// RequireApproval makes an article need an approved version to be published, in every
+	// collection that inherits the setting.
+	RequireApproval bool       `json:"require_approval"`
+	ContentVersion  int64      `json:"content_version"`
+	UpdatedAt       *time.Time `json:"updated_at"`
 	// URL is the public address; the API sets it, the store leaves it empty.
 	URL string `json:"url"`
 }

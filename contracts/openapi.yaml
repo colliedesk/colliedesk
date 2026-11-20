@@ -8409,6 +8409,8 @@ paths:
         Turn the public help center on or off, and set its title and language (a BCP 47 tag such as
         `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off
         line at once; turning it on again publishes the articles marked published.
+        `require_approval` makes publishing need an approved review in every collection that inherits
+        it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes).
       requestBody:
         required: true
         content:
@@ -12727,13 +12729,20 @@ components:
         enabled: {type: boolean}
         title: {type: string, maxLength: 200, description: Shown at the top of every page; empty uses the workspace name.}
         locale: {type: string, minLength: 2, maxLength: 35, description: 'BCP 47 language tag of the pages, such as en or pt-BR.'}
+        require_approval:
+          type: boolean
+          description: >-
+            Whether an article needs a teammate's approval of its exact text before it is published, in
+            every collection whose `require_approval` is `inherit`. Left out, it stays as it is. Sending it
+            needs kb_articles:publish too.
     HelpCenter:
       type: object
-      required: [enabled, title, locale, content_version, updated_at, url]
+      required: [enabled, title, locale, require_approval, content_version, updated_at, url]
       properties:
         enabled: {type: boolean}
         title: {type: string}
         locale: {type: string}
+        require_approval: {type: boolean, description: 'Articles in collections that inherit the setting need an approved version to be published (POST /api/v1/kb/articles/{id}/reviews).'}
         content_version: {type: integer, minimum: 0}
         updated_at: {type: [string, 'null'], format: date-time, description: Null until the knowledge base or its settings were first changed.}
         url:
