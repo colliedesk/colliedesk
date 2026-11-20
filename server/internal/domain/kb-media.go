@@ -125,7 +125,7 @@ type KBMediaSummary struct {
 	KeptBytes int64 `json:"kept_bytes"`
 }
 
-// KBMediaFilter selects library items. Kind is empty, image or video; Usage is empty, in_use,
+// KBMediaFilter selects library items. Kind is empty, image, video or file; Usage is empty, in_use,
 // unused or missing_alt; Sort is newest (default), oldest, name or largest.
 type KBMediaFilter struct {
 	Kind, Query, Usage, Sort, Cursor string

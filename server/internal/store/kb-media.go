@@ -15,8 +15,8 @@ import (
 )
 
 // kbMediaInUse is true for an item, aliased m, that the current text of a live article (or one of its
-// translations) names: the library's "in use".
-const kbMediaInUse = `EXISTS(SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+// translations) names, or that a live article lists as a file: the library's "in use".
+const kbMediaInUse = `EXISTS(SELECT 1 FROM ` + kbMediaUses + ` l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
 	WHERE l.workspace_id=m.workspace_id AND l.media_id=m.id AND l.current AND a.deleted_at IS NULL)`
 
 // kbMediaCursor is where a page of the library ends: the sort key of its last item and its id.
@@ -150,10 +150,10 @@ func addKBMediaUsage(ctx context.Context, tx pgx.Tx, workspaceID string, items [
 		ids[i] = item.ID
 	}
 	rows, err := tx.Query(ctx, `SELECT l.media_id::text,
-			count(*) FILTER (WHERE l.current AND a.deleted_at IS NULL),
-			count(*) FILTER (WHERE l.current AND a.deleted_at IS NOT NULL),
-			count(*) FILTER (WHERE NOT l.current)
-		FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+			count(DISTINCT a.id) FILTER (WHERE l.current AND a.deleted_at IS NULL),
+			count(DISTINCT a.id) FILTER (WHERE l.current AND a.deleted_at IS NOT NULL),
+			count(DISTINCT a.id) FILTER (WHERE NOT l.current)
+		FROM `+kbMediaUses+` l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
 		WHERE l.workspace_id=$1 AND l.media_id=ANY($2::uuid[]) GROUP BY l.media_id`, workspaceID, ids)
 	if err != nil {
 		return err
@@ -207,9 +207,10 @@ func (s *Store) GetKBMediaDetails(ctx context.Context, workspaceID, id string) (
 		if err := addKBMediaUsage(ctx, tx, workspaceID, items); err != nil {
 			return domain.KBMediaDetails{}, err
 		}
-		rows, err := tx.Query(ctx, `SELECT a.id::text,a.number,a.title,a.status,a.deleted_at IS NOT NULL,l.current
-			FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
-			WHERE l.workspace_id=$1 AND l.media_id=$2 ORDER BY a.deleted_at IS NOT NULL, NOT l.current, a.number`, workspaceID, id)
+		rows, err := tx.Query(ctx, `SELECT a.id::text,a.number,a.title,a.status,a.deleted_at IS NOT NULL,bool_or(l.current)
+			FROM `+kbMediaUses+` l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+			WHERE l.workspace_id=$1 AND l.media_id=$2 GROUP BY a.id
+			ORDER BY a.deleted_at IS NOT NULL, NOT bool_or(l.current), a.number`, workspaceID, id)
 		if err != nil {
 			return domain.KBMediaDetails{}, err
 		}

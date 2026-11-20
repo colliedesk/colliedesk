@@ -7453,13 +7453,13 @@ paths:
       description: >
         The media library outside its trash, 60 items a page unless `limit` says otherwise, newest
         first unless `sort` says otherwise, each with its usage. `usage=unused` lists what no live
-        article's current text names (articles in the trash and older versions do not count as use);
+        article's current text names or lists as a file (articles in the trash and older versions do not count as use);
         its first page adds `summary`, the count and bytes of every unused item the filter selects,
         kept items apart. `q` matches the name or alt text.
       parameters:
-        - {name: kind, in: query, schema: {type: string, enum: [image, video]}}
+        - {name: kind, in: query, schema: {type: string, enum: [image, video, file]}}
         - {name: q, in: query, schema: {type: string, maxLength: 200}}
-        - {name: usage, in: query, description: 'in_use: a live article shows it, or the help center as its logo or favicon; unused: neither.', schema: {type: string, enum: [in_use, unused, missing_alt]}}
+        - {name: usage, in: query, description: 'in_use: a live article shows it or lists it as a file, or the help center as its logo or favicon; unused: neither.', schema: {type: string, enum: [in_use, unused, missing_alt]}}
         - {name: sort, in: query, schema: {type: string, enum: [newest, oldest, name, largest], default: newest}}
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 60}}
