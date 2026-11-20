@@ -305,7 +305,7 @@ function Library({ search, go, onChanged, onUpload, tray }: { search: MediaSearc
           <span id="media-search-hint" className="sr-only">{mediaMessages.searchHint}</span>
           <fieldset className="segmented">
             <legend className="sr-only">{mediaMessages.kind}</legend>
-            {([[undefined, mediaMessages.anyKind], ['image', mediaMessages.images], ['video', mediaMessages.videos]] as const).map(([value, label]) => (
+            {([[undefined, mediaMessages.anyKind], ['image', mediaMessages.images], ['video', mediaMessages.videos], ['file', mediaMessages.files]] as const).map(([value, label]) => (
               <label key={label}><input type="radio" name="media-kind" checked={search.kind === value} onChange={() => go('library', { kind: value })} />{label}</label>
             ))}
           </fieldset>

@@ -42,24 +42,26 @@ const summaryFields = {
   has_draft: z.boolean(),
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
+// A file listed under an article or translation, in the order the reader sees.
+const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
 // The unpublished changes of a published article: what publishing them puts live. Its updated_at is the
 // version every save, publish, discard, restore or delete sends while it exists.
 const draftSchema = z.object({
   title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), collection_id: z.string().uuid(),
-  collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
-  updated_by: personSchema.nullable(),
+  collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
+  updated_at: z.string().datetime(), updated_by: personSchema.nullable(),
 }) satisfies z.ZodType<Generated<'KBArticleDraft'>>;
 export const kbArticleSchema = z.object({
   ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
   ai_exclusion: z.object({ at: z.string().datetime(), by: personSchema.nullable() }).nullable(),
   // Only when one article is read: the AI reply drafts this month that used it.
   ai_drafts_this_month: z.number().int().optional(),
-  translations: z.array(translationSummarySchema),
+  translations: z.array(translationSummarySchema), attachments: z.array(attachmentSchema),
   draft: draftSchema.nullable(),
 }) satisfies z.ZodType<Generated<'KBArticle'>>;
 export const kbTranslationSchema = z.object({
   ...translationSummaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), has_source_html: z.boolean(), deleted_at: nullableDate,
-  language_visible: z.boolean(), missing_media: z.array(z.string().uuid()).optional(),
+  language_visible: z.boolean(), missing_media: z.array(z.string().uuid()).optional(), attachments: z.array(attachmentSchema),
   original: z.object({
     id: z.string().uuid(), number: z.number().int(), locale: z.string(), title: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(),
     status: statusSchema, collection_id: z.string().uuid(), collection_name: z.string(), version: z.number().int(), updated_at: z.string().datetime(),

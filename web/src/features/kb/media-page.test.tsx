@@ -56,6 +56,20 @@ test('the library shows images and videos, a video with its length, and leads to
   expect(calls.some((call) => call.path === '/api/v1/kb/media' && call.search.get('usage') === 'unused' && call.search.get('sort') === 'largest')).toBe(true);
 });
 
+test('the library lists a file with its type and size, and the Files filter shows only files', async () => {
+  const pdf = item(6, { kind: 'file', content_type: 'application/pdf', url: `/api/v1/kb/media/${id(6)}`, name: 'Warranty form.pdf', size: 40_960,
+    width: null, height: null, thumbnail_url: null });
+  serve({ ...base, 'GET /api/v1/kb/media': () => json(200, { items: [item(1), pdf], next_cursor: null }) });
+  open();
+  const grid = await screen.findByRole('list', { name: 'Library items' });
+  const card = await within(grid).findByRole('button', { name: 'Warranty form.pdf, file, 40.0 KiB, In 1 article' });
+  // A file has no alt text to miss: its card says its size and its type.
+  expect(card).toHaveTextContent('40.0 KiB · PDF');
+  expect(card).not.toHaveTextContent('No alt');
+  fireEvent.click(screen.getByRole('radio', { name: 'Files' }));
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { kind: 'file' }, replace: false });
+});
+
 test('the library sorts newest first, by name or largest first; an old address with sort=oldest still lists oldest first and shows it', async () => {
   const calls = serve(base);
   const show = open();

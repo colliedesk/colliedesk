@@ -9,9 +9,15 @@ import type { Generated, JsonResponse } from '../../api/schemas';
 const usageSchema = z.object({
   articles: z.number().int(), trashed_articles: z.number().int(), older_versions: z.number().int(), help_center: z.array(z.enum(['logo', 'favicon'])),
 }) satisfies z.ZodType<Generated<'KBMediaUsage'>>;
+// The types of a file an article lists (PDF, Office, OpenDocument, text, archives).
+const fileTypes = ['application/pdf', 'application/msword', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.spreadsheet', 'application/vnd.oasis.opendocument.presentation', 'text/csv', 'text/plain', 'application/rtf',
+  'application/zip', 'application/x-7z-compressed', 'application/gzip'] as const;
 export const kbMediaSchema = z.object({
-  id: z.string().uuid(), kind: z.enum(['image', 'video']),
-  content_type: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4', 'video/webm']), size: z.number().int(), sha256: z.string(),
+  id: z.string().uuid(), kind: z.enum(['image', 'video', 'file']),
+  content_type: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', ...fileTypes]), size: z.number().int(), sha256: z.string(),
   url: z.string(), name: z.string(), alt: z.string(), width: z.number().int().nullable(), height: z.number().int().nullable(),
   duration_ms: z.number().int().nullable(), codecs: z.array(z.string()), thumbnail_url: z.string().nullable(), poster_url: z.string().nullable(),
   kept: z.boolean(), deleted_at: z.string().datetime().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
@@ -32,10 +38,10 @@ const trashUnusedSchema = z.object({ trashed: z.number().int(), more: z.boolean(
 const replacementSchema = z.object({
   id: z.string().uuid(), from_media_id: z.string().uuid(), to_media_id: z.string().uuid(), article_ids: z.array(z.string().uuid()),
   translations: z.array(z.object({ article_id: z.string().uuid(), locale: z.string() })), skipped_article_ids: z.array(z.string().uuid()),
-  created_at: z.string().datetime(), undone_at: z.string().datetime().nullable(),
+  in_place: z.boolean(), created_at: z.string().datetime(), undone_at: z.string().datetime().nullable(),
 }) satisfies z.ZodType<Generated<'KBMediaReplacement'>>;
 const uploadSchema = z.object({
-  id: z.string().uuid(), kind: z.literal('video'), name: z.string(), size: z.number().int(), offset: z.number().int(), part_size: z.number().int(),
+  id: z.string().uuid(), kind: z.enum(['video', 'file']), name: z.string(), size: z.number().int(), offset: z.number().int(), part_size: z.number().int(),
   expires_at: z.string().datetime(), media_id: z.string().uuid().nullable(),
   created_by: z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }).nullable(), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'KBMediaUpload'>>;

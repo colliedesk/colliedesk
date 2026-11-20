@@ -20,6 +20,7 @@ export const mediaMessages = {
   anyKind: 'All',
   images: 'Images',
   videos: 'Videos',
+  files: 'Files',
   usage: 'Use',
   anyUsage: 'All',
   inUse: 'In use',
@@ -38,7 +39,7 @@ export const mediaMessages = {
   empty: 'No images or videos yet. Upload one, or paste one into an article.',
   noMatches: 'Nothing in the library matches.',
   unnamed: 'Unnamed',
-  kindName: (kind: 'image' | 'video') => (kind === 'video' ? 'video' : 'image'),
+  kindName: (kind: 'image' | 'video' | 'file') => kind,
   duration: (ms: number) => {
     const seconds = Math.round(ms / 1000);
     const hours = Math.floor(seconds / 3600);
@@ -192,7 +193,7 @@ export const mediaMessages = {
   copied: 'Copied.',
   download: 'Download',
   replace: 'Replace…',
-  replaceHeading: (kind: 'image' | 'video') => `Replace with another ${kind}`,
+  replaceHeading: (kind: 'image' | 'video' | 'file') => `Replace with another ${kind}`,
   replaceHelp: 'Every article that shows this gets the other one.',
   replaceTip: 'Each article gets a new version; undo puts it back.',
   replaceLabel: 'replacing',
