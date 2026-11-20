@@ -23,9 +23,14 @@ export function announcement(left: number): string {
   return pm.trialLeftSpoken(Math.min(...reached));
 }
 
+// How often a strip whose time is up asks for the status again: the server reverts an expired trial on its
+// next reload (every 5 seconds), and the band goes once the status has no trial.
+const timeUpEvery = 2_000;
+
 // TrialStrip is the band under the server band while a trial change runs (D12): what is tried, the time left,
 // what this process saw, and the two ways out. Confirming from this page proves the console still works.
-export default function TrialStrip({ trial, totp, onDecided }: { trial: Trial; totp: boolean; onDecided: () => void }) {
+// onTimeUp asks the console to read the status when the time is up, and again until the strip goes.
+export default function TrialStrip({ trial, totp, onDecided, onTimeUp }: { trial: Trial; totp: boolean; onDecided: () => void; onTimeUp?: () => void }) {
   const ends = Date.parse(trial.expires_at);
   const [left, setLeft] = useState(() => Math.round((ends - Date.now()) / 1000));
   const [deciding, setDeciding] = useState<'confirm' | 'revert' | null>(null);
@@ -33,6 +38,13 @@ export default function TrialStrip({ trial, totp, onDecided }: { trial: Trial; t
     const timer = window.setInterval(() => setLeft(Math.round((ends - Date.now()) / 1000)), 1000);
     return () => window.clearInterval(timer);
   }, [ends]);
+  const timeUp = left <= 0;
+  useEffect(() => {
+    if (!timeUp || !onTimeUp) return undefined;
+    onTimeUp();
+    const timer = window.setInterval(onTimeUp, timeUpEvery);
+    return () => window.clearInterval(timer);
+  }, [timeUp, onTimeUp]);
   const evidence = trial.evidence;
   const cloud = trial.keys.some((key) => key.startsWith('cloud_auth.') || key === 'clerk.publishable_key');
   const proxies = trial.keys.includes('trusted_proxies');

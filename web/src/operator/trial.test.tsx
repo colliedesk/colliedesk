@@ -44,3 +44,21 @@ test('one client address for everyone warns before keeping the trial', () => {
   act(() => { screen.getByRole('button', { name: 'Confirm v43' }).click(); });
   expect(screen.getByRole('alert')).toHaveTextContent('one client address for everyone');
 });
+
+// The console reads its status every 30 seconds; a trial that runs out between two reads would leave the band
+// at 0:00. When the time is up the strip asks for the status at once, and again every 2 seconds until the
+// server has reverted it and the band is gone.
+test('time up asks for the status at once and again until the band goes', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  const timeUp = vi.fn();
+  render(<TrialStrip trial={trial(3_000)} totp onDecided={() => {}} onTimeUp={timeUp} />);
+  act(() => { vi.advanceTimersByTime(2_000); });
+  expect(timeUp).not.toHaveBeenCalled();
+  act(() => { vi.advanceTimersByTime(1_000); });
+  expect(timeUp).toHaveBeenCalledTimes(1);
+  act(() => { vi.advanceTimersByTime(2_000); });
+  expect(timeUp).toHaveBeenCalledTimes(2);
+  act(() => { vi.advanceTimersByTime(4_000); });
+  expect(timeUp).toHaveBeenCalledTimes(4);
+});
