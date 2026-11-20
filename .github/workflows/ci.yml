@@ -209,9 +209,10 @@ jobs:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
       # The arguments of every shard's run, and of the check that the shards cover them.
       E2E_ARGS: --project=chromium --grep-invert @onboarding --fully-parallel --workers=3
-      # How e2e-shard.py splits the files: 3 workers ran 2.4 to 2.7 tests at once, and the last
-      # shard's tests started a median 17 seconds after the first's (8 runs, 2026-11-19).
-      E2E_SPLIT: --timings ../.github/e2e-test-timings.json --parallel 2.5 --last-shard-delay 17
+      # How e2e-shard.py splits the files: 3 workers ran 2.6 to 2.9 tests at once, and both shards
+      # started their tests within 1 second of each other once their builds hit main's cache (run
+      # 44722352815).
+      E2E_SPLIT: --timings ../.github/e2e-test-timings.json --parallel 2.75 --last-shard-delay 0
       # The channels journeys read the From line of a reply in Mailpit.
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
