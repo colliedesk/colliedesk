@@ -233,6 +233,8 @@ grep -Fx '    image: postgres:17-bookworm' "$kept/compose.yaml" >/dev/null || { 
 grep -Fx '      PGDATA: /var/lib/postgresql/data' "$kept/compose.yaml" >/dev/null
 printf '%s' "$output" | grep -F 'PostgreSQL 17' | grep -F 'docs/self-host/upgrade.md#postgresql-versions' >/dev/null ||
   { printf 'the rerun did not say it kept PostgreSQL 17 and where to read about upgrading:\n%s\n' "$output" >&2; exit 1; }
+printf '%s' "$output" | grep -F 'PostgreSQL 17' | grep -F 'upgrade-postgres.sh' >/dev/null ||
+  { printf 'the rerun on PostgreSQL 17 did not name the script that moves it to 19:\n%s\n' "$output" >&2; exit 1; }
 # The compose file lost (or never written) on an initialized install: the major still comes from the volume.
 rm "$kept/compose.yaml" "$kept/compose.yaml.bak"
 STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
@@ -242,6 +244,21 @@ output=$(STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$kept" --name Desk --em
 grep -Ex '    image: postgres:19\.[0-9]+-bookworm@sha256:[0-9a-f]{64}' "$kept/compose.yaml" >/dev/null
 if printf '%s' "$output" | grep -F 'upgrade.md#postgresql-versions' >/dev/null; then
   printf '%s\n' 'the installer printed the PostgreSQL notice on 19 data' >&2
+  exit 1
+fi
+# An install upgraded by upgrade-postgres.sh keeps 19 in the volume postgres19-data: a rerun keeps
+# that volume, or PostgreSQL 19 would start on the volume the older major wrote.
+moved=$TMP/moved
+mkdir -p "$moved"
+cp "$kept/.env" "$kept/.initialized" "$moved/"
+sed 's#^      - postgres-data:/var/lib/postgresql/data$#      - postgres19-data:/var/lib/postgresql/data#; s#^  postgres-data:$#  postgres19-data:#' \
+  "$kept/compose.yaml" >"$moved/compose.yaml"
+grep -Fx '  postgres19-data:' "$moved/compose.yaml" >/dev/null
+STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
+grep -Fx '      - postgres19-data:/var/lib/postgresql/data' "$moved/compose.yaml" >/dev/null
+grep -Fx '  postgres19-data:' "$moved/compose.yaml" >/dev/null
+if grep -F 'postgres-data:' "$moved/compose.yaml" | grep -v postgres19-data >/dev/null; then
+  printf '%s\n' 'the installer put back the volume postgres-data on an install upgraded to 19' >&2
   exit 1
 fi
 cp "$kept/compose.yaml" "$TMP/kept.compose"

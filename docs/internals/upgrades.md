@@ -116,3 +116,20 @@ Between the steps a row can still be unfilled. Self-host keeps the old server ru
 runs `collie migrate && exec collie serve` in one container, so no new server reads the table between the
 steps. The readers tolerate an unfilled row anyway (COALESCE; a code names only numbered conversations),
 held by `TestAConversationNotNumberedYetReadsListsAndExports`.
+
+## A new PostgreSQL major
+
+`upgrade-postgres.sh` moves a bundled 16, 17 or 18 database to 19 by dump and restore into a new
+volume (`postgres19-data`), never `pg_upgrade`: the old volume stays untouched, so `--rollback` is
+only a compose edit back to the old image and volume. `tests/upgrade-postgres-test.sh` runs it on an
+install made by the v1.0.1 installer (PostgreSQL 17, no `PGDATA` line), for both database login
+layouts, in the background of the CI `image` job and in the release.
+
+- **Compare data only while the server is stopped.** The server writes on its own (AI indexing,
+  inbound and outbox retries, snapshots, the settings import), so a snapshot of a running install
+  differs from the next one for no fault of the upgrade. The test stops the server, compares,
+  takes the next baseline in the same stop and starts it again; each `up --wait` costs about 3 s.
+- **The installer keeps the volume key it finds.** A rerun after the upgrade must keep
+  `postgres19-data`, or PostgreSQL 19 starts on the volume 17 wrote. `tests/install-test.sh` holds it.
+- **No `start_interval` in the healthchecks.** It would shorten each start, but Compose refuses it on
+  Docker Engine before 25, such as Debian 12's `docker.io` (20.10).

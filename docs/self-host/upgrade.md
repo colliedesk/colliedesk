@@ -110,7 +110,49 @@ volume before it writes `compose.yaml` and keeps that major:
   ([roll back](#roll-back)) and run it again.
 
 The installer does not move a database to a new major. That is a dump and a restore into a new
-volume. An install on an [external database](database.md) runs whatever version that server runs.
+volume, and `upgrade-postgres.sh` does it for the bundled database. An install on an
+[external database](database.md) runs whatever version that server runs: upgrade that server the
+way its provider says.
+
+### Move the bundled database to PostgreSQL 19
+
+You do not have to move: 16, 17 and 18 stay supported. To move, run `upgrade-postgres.sh` of the
+newest release in the install directory. `<tag>` is that release, for example `v1.1.0`:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/colliedesk/colliedesk/<tag>/upgrade-postgres.sh
+sh upgrade-postgres.sh
+```
+
+It stops the server, dumps the roles and the database to `postgres-upgrade-<date>/`, points
+`compose.yaml` at the PostgreSQL 19 image and a new volume `postgres19-data`, restores the dump there
+and starts Colliedesk again. The server is down from the dump to the end of the restore; the script
+prints how long. It needs free disk space for twice the database, and it checks that before it stops
+anything.
+
+- **The old volume is never written.** Your PostgreSQL 16, 17 or 18 data stays as it was when the
+  server stopped.
+- **A failure puts the install back.** If the upgrade stops before Colliedesk serves on 19, the
+  script puts `compose.yaml` back, removes the half-made volume and starts the install on its old
+  major. A run that was cut off (a reboot, a lost SSH session) is undone by the next run.
+- **It refuses what it cannot do safely** and changes nothing: an external database, a
+  `compose.yaml` that does not give the postgres service one image and one data volume, a major
+  older than 16, too little disk space.
+
+To go back to the major and the volume you had before:
+
+```sh
+sh upgrade-postgres.sh --rollback
+```
+
+The data is then as it was when the upgrade started. Writes made on PostgreSQL 19 since then are not
+in it; they stay in the volume `postgres19-data`, which is kept. Remove that volume
+(`docker volume rm`) only when you no longer need it. Remove the old volume and the dump directory
+the same way, once the install has run on 19 long enough for you to trust it.
+
+Every pull request and every release runs this on an install of v1.0.1 (PostgreSQL 17) filled with
+the upgrade fixture, for both database login layouts the installer has made: upgrade, installer
+rerun, restart, a failed upgrade, rollback. No row or file may change.
 
 ## Settings move into the database
 
