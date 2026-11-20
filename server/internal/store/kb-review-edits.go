@@ -37,18 +37,23 @@ func kbTextAuthors(ctx context.Context, tx pgx.Tx, workspaceID, articleID string
 // person who made the edit, and keeps who sent it. A published article without a draft, a published
 // translation, or one in the trash, has nothing left to review.
 func settleKBReviewAfterEdit(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, articleID string, locale *string) error {
+	pending, newHash, err := kbPendingText(ctx, tx, workspaceID, articleID, locale)
+	if err != nil {
+		return err
+	}
+	// An approval counts for the Approved list while its text is the one waiting to be published.
+	if _, err := tx.Exec(ctx, `UPDATE kb_reviews SET approves_pending=($4 AND content_hash=$5) WHERE workspace_id=$1 AND article_id=$2 AND locale IS NOT DISTINCT FROM $3
+		AND state='approved' AND approves_pending IS DISTINCT FROM ($4 AND content_hash=$5)`, workspaceID, articleID, locale, pending, newHash); err != nil {
+		return fmt.Errorf("settle knowledge base approvals: %w", err)
+	}
 	var reviewID, hash string
-	err := tx.QueryRow(ctx, `SELECT id::text,content_hash FROM kb_reviews WHERE workspace_id=$1 AND article_id=$2 AND locale IS NOT DISTINCT FROM $3 AND state='open' FOR UPDATE`,
+	err = tx.QueryRow(ctx, `SELECT id::text,content_hash FROM kb_reviews WHERE workspace_id=$1 AND article_id=$2 AND locale IS NOT DISTINCT FROM $3 AND state='open' FOR UPDATE`,
 		workspaceID, articleID, locale).Scan(&reviewID, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("read open knowledge base review: %w", err)
-	}
-	pending, newHash, err := kbPendingText(ctx, tx, workspaceID, articleID, locale)
-	if err != nil {
-		return err
 	}
 	if pending && newHash == hash {
 		return nil

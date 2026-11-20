@@ -6909,6 +6909,52 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/publish:
+    post:
+      operationId: publishKBArticles
+      x-permission: kb_articles:publish
+      description: >
+        Publish several articles at once: a draft goes on the help center, a published article's
+        unpublished changes replace its live text (as POST /api/v1/kb/articles/{id}/draft/publish).
+        Each id is answered on its own in `results`, in the order sent: the published article, or the
+        error that one call would have given; an article in a collection that needs approval without
+        an approval of its current text is 409 `approval_required` and stays as it is, and one with
+        nothing unpublished is 409 `nothing_to_publish`. At most 50 ids. A repeat with the same
+        Idempotency-Key answers what the first one got.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [article_ids]
+              properties:
+                article_ids: {type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: {type: string}}
+      responses:
+        '200':
+          description: One result per article id
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id]
+                      properties:
+                        id: {type: string}
+                        article: {$ref: '#/components/schemas/KBArticle'}
+                        error: {$ref: '#/components/schemas/BulkItemError'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles:
     get:
       operationId: listKBArticles
@@ -6928,6 +6974,13 @@ paths:
         - {name: status, in: query, schema: {type: string, enum: [draft, published]}}
         - {name: collection_id, in: query, description: Only the articles directly in this collection., schema: {type: string, format: uuid}}
         - {name: has_draft, in: query, description: 'true: only the published articles with unpublished changes (has_draft).', schema: {type: boolean}}
+        - name: state
+          in: query
+          description: >-
+            in_review: only the articles whose unpublished text waits for a reviewer. approved: only the
+            ones whose unpublished text a reviewer approved as it is now, ready to publish
+            (POST /api/v1/kb/articles/publish). Translations are left out.
+          schema: {type: string, enum: [in_review, approved]}
         - {name: sort, in: query, description: The order without `q`; ignored with `q`., schema: {type: string, enum: [recent, manual]}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
@@ -7284,6 +7337,51 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/reviews/approve:
+    post:
+      operationId: approveKBReviews
+      x-permission: kb_articles:publish
+      description: >
+        Approve several open reviews at once, as POST /api/v1/kb/reviews/{id}/approve does each one
+        (the same rules: only a named reviewer, never the sender or their tokens). Each id is answered
+        on its own in `results`, in the order sent: the decided review, or the error that one call would
+        have given (`not_found`, `not_reviewer`, `review_state`). At most 50 ids. A repeat with the same
+        Idempotency-Key answers what the first one got.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [review_ids]
+              properties:
+                review_ids: {type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: {type: string}}
+                note: {type: string, maxLength: 500, description: An optional line to each author.}
+      responses:
+        '200':
+          description: One result per review id
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id]
+                      properties:
+                        id: {type: string}
+                        review: {$ref: '#/components/schemas/KBReview'}
+                        error: {$ref: '#/components/schemas/BulkItemError'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/reviews/{id}/approve:
@@ -14977,6 +15075,13 @@ components:
         previous_trial_ends_at: {type: string, format: date-time}
         trial_ends_at: {type: string, format: date-time, description: 'The trial end now.'}
         extended: {type: boolean, description: 'False when the trial already ended later than 14 days from now and was kept.'}
+    BulkItemError:
+      type: object
+      description: Why one item of a bulk request was not done; the same code and message a call for that item alone answers.
+      required: [code, message]
+      properties:
+        code: {type: string}
+        message: {type: string}
     Error:
       type: object
       required: [error]

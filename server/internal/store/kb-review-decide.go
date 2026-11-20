@@ -64,7 +64,7 @@ func (s *Store) DecideKBReview(ctx context.Context, workspaceID string, actor Ac
 			return review, err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE kb_reviews r SET state=$3,decision_note=$4,decided_by_agent_id=$5,decided_by_token_id=t.id,decided_by_token_label=t.label,
-				decided_at=clock_timestamp(),author_email=CASE WHEN $3<>'withdrawn' AND r.requested_by_agent_id IS NOT NULL THEN 'queued' ELSE 'none' END
+				decided_at=clock_timestamp(),approves_pending=($3='approved'),author_email=CASE WHEN $3<>'withdrawn' AND r.requested_by_agent_id IS NOT NULL THEN 'queued' ELSE 'none' END
 			FROM (SELECT 1) one LEFT JOIN sessions t ON t.workspace_id=$1 AND t.id=$6
 			WHERE r.workspace_id=$1 AND r.id=$2`, workspaceID, reviewID, decision.State, note, optionalID(actor.AgentID), optionalID(actor.TokenID)); err != nil {
 			return review, fmt.Errorf("decide knowledge base review: %w", err)

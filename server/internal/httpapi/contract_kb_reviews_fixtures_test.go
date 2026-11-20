@@ -14,6 +14,8 @@ type contractKBReviews struct {
 	approveID        string
 	changesID        string
 	withdrawID       string
+	bulkApproveID    string
+	bulkPublishID    string
 }
 
 func seedContractKBReviews(t *testing.T, api http.Handler, admin, agent, collectionID string) contractKBReviews {
@@ -30,6 +32,8 @@ func seedContractKBReviews(t *testing.T, api http.Handler, admin, agent, collect
 	reviews.reviewedArticle, reviews.approveID = review("Contract article to approve")
 	_, reviews.changesID = review("Contract article to change")
 	_, reviews.withdrawID = review("Contract article to withdraw")
+	_, reviews.bulkApproveID = review("Contract article to approve in bulk")
+	reviews.bulkPublishID = kbArticle(t, api, admin, map[string]any{"collection_id": collectionID, "title": "Contract article to publish in bulk", "body_md": "x"}).ID
 	return reviews
 }
 
@@ -46,5 +50,7 @@ func kbReviewContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/kb/articles/{id}/translations/{locale}/reviews": {"/api/v1/kb/articles/" + reviews.translatedID + "/translations/fr/reviews",
 			map[string]any{"reviewer_ids": []string{f.agentID}}, admin, 201, ""},
 		"GET /api/v1/kb/articles/{id}/translations/{locale}/reviews": {"/api/v1/kb/articles/" + reviews.translatedID + "/translations/fr/reviews", nil, admin, 200, ""},
+		"POST /api/v1/kb/reviews/approve":                            {"/api/v1/kb/reviews/approve", map[string]any{"review_ids": []string{reviews.bulkApproveID}}, admin, 200, ""},
+		"POST /api/v1/kb/articles/publish":                           {"/api/v1/kb/articles/publish", map[string]any{"article_ids": []string{reviews.bulkPublishID}}, admin, 200, ""},
 	}
 }

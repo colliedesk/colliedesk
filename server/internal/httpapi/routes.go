@@ -26,6 +26,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listKBArticleVersions, a.restoreKBArticleVersion, a.excludeKBArticleFromAI, a.includeKBArticleInAI, a.publishKBArticleDraft, a.discardKBArticleDraft,
 		a.getKBArticleVotes, a.resetKBArticleVotes, a.requestKBReview, a.approveKBReview,
 		a.listKBArticleReviews, a.listKBReviews, a.getKBReview, a.requestKBReviewChanges, a.withdrawKBReview,
+		a.approveKBReviews, a.publishKBArticles,
 		a.requestKBTranslationReview, a.listKBTranslationReviews, a.uploadKBImage, a.getKBImage,
 		a.listKBMedia, a.updateKBMedia,
 		a.listTrashedKBMedia, a.trashKBMedia, a.trashUnusedKBMedia, a.restoreKBMediaBatch, a.purgeKBMedia, a.trashOneKBMedia, a.restoreKBMedia, a.replaceKBMedia, a.undoKBMediaReplacement,

@@ -47,6 +47,8 @@ const (
 	approveKBReviewOperation             = "kb_review_approve"
 	requestKBReviewChangesOperation      = "kb_review_changes"
 	withdrawKBReviewOperation            = "kb_review_withdraw"
+	approveKBReviewsOperation            = "kb_reviews_approve"
+	publishKBArticlesOperation           = "kb_articles_publish"
 )
 
 // shownOnce is a create's answer that holds a secret shown once (an invite link, a token): the first

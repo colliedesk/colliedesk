@@ -33,6 +33,9 @@ CREATE TABLE kb_reviews (
     decided_at timestamptz,
     decision_note text NOT NULL DEFAULT '' CHECK (char_length(decision_note) <= 500 AND strpos(decision_note, E'\n') = 0),
     supersedes_review_id uuid,
+    -- An approved review whose text is still the one waiting to be published: the Approved list. An
+    -- edit, a publish or a discard sets it false; an edit back to the approved text sets it true again.
+    approves_pending boolean NOT NULL DEFAULT false,
     -- The email that tells the author the review was decided.
     author_email text NOT NULL DEFAULT 'none' CHECK (author_email IN ('none', 'queued', 'sending', 'sent', 'rejected', 'off')),
     author_email_claimed_at timestamptz,
@@ -49,6 +52,7 @@ CREATE TABLE kb_reviews (
 );
 CREATE UNIQUE INDEX kb_reviews_open_idx ON kb_reviews(workspace_id, article_id, COALESCE(locale, '')) WHERE state = 'open';
 CREATE INDEX kb_reviews_article_idx ON kb_reviews(workspace_id, article_id, created_at DESC);
+CREATE INDEX kb_reviews_approved_idx ON kb_reviews(workspace_id, article_id) WHERE approves_pending;
 CREATE INDEX kb_reviews_author_email_idx ON kb_reviews(created_at) WHERE author_email IN ('queued', 'sending');
 
 -- The people asked to review. Each gets an email (email) and sees the review in their Reviews list.

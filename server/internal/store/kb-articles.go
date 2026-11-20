@@ -127,7 +127,16 @@ type KBArticleFilter struct {
 	Cursor                            string
 	// HasDraft keeps only the articles with unpublished changes.
 	HasDraft bool
+	// ReviewState keeps only the articles whose own unpublished text waits for a reviewer
+	// (KBInReview) or was approved as it is now (KBApproved).
+	ReviewState string
 }
+
+// The review states of an article's unpublished text an article list narrows to.
+const (
+	KBInReview = "in_review"
+	KBApproved = "approved"
+)
 
 // likePattern escapes the wildcards of ILIKE so the text matches as typed.
 var likePattern = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
@@ -168,6 +177,12 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 	}
 	if filter.HasDraft {
 		where += ` AND ` + kbHasDraft
+	}
+	switch filter.ReviewState {
+	case KBInReview:
+		where += ` AND EXISTS (SELECT 1 FROM kb_reviews r WHERE r.workspace_id=a.workspace_id AND r.article_id=a.id AND r.locale IS NULL AND r.state='open')`
+	case KBApproved:
+		where += ` AND EXISTS (SELECT 1 FROM kb_reviews r WHERE r.workspace_id=a.workspace_id AND r.article_id=a.id AND r.locale IS NULL AND r.approves_pending)`
 	}
 	sort := filter.Sort
 	if sort == "" && filter.CollectionID != "" {

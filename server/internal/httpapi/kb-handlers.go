@@ -293,7 +293,11 @@ func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request
 	}
 	query := request.URL.Query()
 	filter := store.KBArticleFilter{Query: query.Get("q"), Status: query.Get("status"), CollectionID: query.Get("collection_id"), Sort: query.Get("sort"),
-		Limit: limit, Cursor: query.Get("cursor")}
+		Limit: limit, Cursor: query.Get("cursor"), ReviewState: query.Get("state")}
+	if filter.ReviewState != "" && filter.ReviewState != store.KBInReview && filter.ReviewState != store.KBApproved {
+		writeError(response, http.StatusBadRequest, "invalid_request", "state is in_review or approved.")
+		return
+	}
 	switch query.Get("has_draft") {
 	case "", "false":
 	case "true":
