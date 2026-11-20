@@ -12,9 +12,9 @@ const path = `/api/v1/kb/articles/${ids.article}/votes`;
 const votes = {
   article_id: ids.article, helpful: 13, not_helpful: 4, imported: { helpful: 12, not_helpful: 3 },
   votes: [
-    { helpful: false, missing: 'The screenshot shows the old menu, write to [email removed]', contact: { id: '99999999-9999-4999-8999-999999999999', name: 'Jane Doe' },
+    { helpful: false, missing: 'The screenshot shows the old menu, write to [email removed]',
       created_at: '2026-11-18T09:00:00Z', updated_at: '2026-11-19T09:00:00Z' },
-    { helpful: true, missing: null, contact: null, created_at: '2026-11-17T09:00:00Z', updated_at: '2026-11-17T09:00:00Z' },
+    { helpful: true, missing: null, created_at: '2026-11-17T09:00:00Z', updated_at: '2026-11-17T09:00:00Z' },
   ],
   resets: [],
 };
@@ -37,12 +37,11 @@ test('the team reads the count the page shows, each reader\'s vote with what was
   expect(await within(box).findByText('13 out of 17 found this helpful')).toBeInTheDocument();
   expect(within(box).getByText('Includes 12 out of 15 from Freshdesk.')).toBeInTheDocument();
   const rows = within(box).getAllByRole('listitem');
-  expect(rows[0]).toHaveTextContent('Jane Doe');
-  expect(rows[0]).toHaveTextContent('No');
+  // Every reader is anonymous: a row names nobody.
+  expect(rows[0]).toHaveTextContent(/^NoNov 19, 2026/);
   expect(rows[0]).toHaveTextContent('Nov 19, 2026');
   expect(rows[0]).toHaveTextContent('The screenshot shows the old menu, write to [email removed]');
-  expect(rows[1]).toHaveTextContent('Anonymous reader');
-  expect(rows[1]).toHaveTextContent('Yes');
+  expect(rows[1]).toHaveTextContent(/^YesNov 17, 2026$/);
 });
 
 test('a reset asks first, starts the count from 0, and the earlier count stays readable', async () => {

@@ -233,8 +233,10 @@ type API struct {
 	// webForms limits the public web form per client address and workspace.
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
-	// helpCenterPages and helpCenterSearches count each client address's help center pages and searches.
+	// helpCenterPages, helpCenterSearches and helpCenterVotes count each client address's help center
+	// pages, searches and votes.
 	helpCenterPages, helpCenterSearches *webFormLimiter
+	helpCenterVotes                     *webFormLimiter
 	helpCenter                          *helpcenter.Site
 	// liveChecks bounds the DNS checks the reverse proxy's certificate question starts.
 	liveChecks *helpcenter.LiveChecks
@@ -388,7 +390,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
 		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports, oauth: carry.oauth,
-		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
+		testMessages: carry.testMessages, migrationRequests: carry.migrationRequests, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches, helpCenterVotes: carry.helpCenterVotes,
 		helpCenterHostLookups: carry.helpCenterHostLookups, channelFileLookups: carry.channelFileLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, refusedLinks: carry.refusedLinks, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),

@@ -3,8 +3,10 @@ package httpapi_test
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -21,9 +23,6 @@ type kbVotesView struct {
 	Votes []struct {
 		Helpful bool    `json:"helpful"`
 		Missing *string `json:"missing"`
-		Contact *struct {
-			Name string `json:"name"`
-		} `json:"contact"`
 	} `json:"votes"`
 	Resets []struct {
 		Helpful    int `json:"helpful"`
@@ -62,8 +61,19 @@ func TestTheTeamReadsAnArticlesVotesAndAResetKeepsTheEarlierCounts(t *testing.T)
 	}
 	if len(votes.Votes) != 2 || !votes.Votes[0].Helpful || votes.Votes[0].Missing != nil || votes.Votes[1].Helpful ||
 		votes.Votes[1].Missing == nil || *votes.Votes[1].Missing != "Where is the annual plan? Mail me at [email removed]" ||
-		votes.Votes[0].Contact != nil || votes.Votes[1].Contact != nil || len(votes.Resets) != 0 {
-		t.Fatalf("votes = %+v, want the Yes, then the anonymous No with its masked line, no reset", votes)
+		len(votes.Resets) != 0 {
+		t.Fatalf("votes = %+v, want the Yes, then the No with its masked line, no reset", votes)
+	}
+	// A reader of the help center is never known by name: a vote says only what they answered and when.
+	var fields struct {
+		Votes []map[string]any `json:"votes"`
+	}
+	kbCall(t, api, http.MethodGet, path, nil, admin, http.StatusOK, &fields)
+	for _, vote := range fields.Votes {
+		keys := slices.Sorted(maps.Keys(vote))
+		if !slices.Equal(keys, []string{"created_at", "helpful", "missing", "updated_at"}) {
+			t.Fatalf("a vote has fields %v, want created_at, helpful, missing, updated_at", keys)
+		}
 	}
 
 	read := issueToken(t, api, admin, "Reader", "read").Token

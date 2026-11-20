@@ -43,8 +43,10 @@ func TestTheExportKeepsEveryVoteAndResetOfAnArticle(t *testing.T) {
 	hash := regexp.MustCompile(`^[0-9a-f]{64}$`)
 	closed := 0
 	for _, vote := range votes {
-		if vote["article_id"] != article.ID || !hash.MatchString(fmt.Sprint(vote["voter"])) || vote["contact_id"] != nil {
-			t.Fatalf("vote = %+v, want this article, a hex voter id, no contact", vote)
+		_, contact := vote["contact_id"]
+		_, address := vote["address"]
+		if vote["article_id"] != article.ID || !hash.MatchString(fmt.Sprint(vote["voter"])) || contact || address {
+			t.Fatalf("vote = %+v, want this article, a hex voter id, and neither a contact nor the address hash", vote)
 		}
 		if vote["reset_id"] == resets[0]["id"] {
 			closed++

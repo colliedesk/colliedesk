@@ -1,6 +1,7 @@
 package helpcenter
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -59,10 +60,10 @@ func voteBoxOf(v view, article domain.PublicKBArticle) *voteBox {
 	return box
 }
 
-// articleTag is the ETag of an article's page in view v: the view's and the votes' version, since the
-// page shows the counts and a vote changes no content version.
-func (v view) articleTag() string {
-	sum := sha256.Sum256([]byte(v.etag + "\x00" + strconv.FormatInt(v.site.VotesVersion, 10)))
+// articleTag is the ETag of an article's page in view v: the view's and the article's votes version
+// (votes), since the page shows the counts and a vote changes no content version.
+func (v view) articleTag(votes int64) string {
+	sum := sha256.Sum256([]byte(v.etag + "\x00" + strconv.FormatInt(votes, 10)))
 	return `"` + hex.EncodeToString(sum[:12]) + `"`
 }
 
@@ -90,7 +91,8 @@ func AddressOrigin(address string) string {
 
 // vote records a reader's vote on the article at address (<number>[-<slug>]) and moves them back to
 // the article with ?voted=, a 303 the browser follows with a GET. A form from any other origin is
-// refused: the browser sends Origin with every POST.
+// refused: the browser sends Origin with every POST. Only a vote that passes that check costs its
+// client address one of the votes it may post a minute (Config.AllowVote).
 func (s *Site) vote(response http.ResponseWriter, request *http.Request, v view, address string) {
 	header := response.Header()
 	securityHeaders(header)
@@ -98,6 +100,12 @@ func (s *Site) vote(response http.ResponseWriter, request *http.Request, v view,
 	if origin := request.Header.Get("Origin"); origin == "" || !strings.EqualFold(origin, AddressOrigin(v.address)) {
 		http.Error(response, "Forbidden", http.StatusForbidden)
 		return
+	}
+	if s.config.AllowVote != nil {
+		if allowed, wait := s.config.AllowVote(request); !allowed {
+			s.writeBusy(response, wait, v.base)
+			return
+		}
 	}
 	match := articleAddress.FindStringSubmatch(address)
 	if match == nil {
@@ -126,7 +134,7 @@ func (s *Site) vote(response http.ResponseWriter, request *http.Request, v view,
 	missing := request.PostForm.Get("missing")
 	cookie := s.readerCookie(request, v)
 	voter := sha256.Sum256([]byte("reader\x00" + cookie.Value))
-	err = s.config.Store.VoteKBArticle(request.Context(), v.site.WorkspaceID, number, voter[:], helpful, missing)
+	err = s.config.Store.VoteKBArticle(request.Context(), v.site.WorkspaceID, number, voter[:], s.voteAddress(request), helpful, missing)
 	if errors.Is(err, domain.ErrKBArticleNotFound) {
 		s.writeSiteNotFound(response, v)
 		return
@@ -145,6 +153,14 @@ func (s *Site) vote(response http.ResponseWriter, request *http.Request, v view,
 	}
 	// The slug as posted: the article's page moves an old one to the current address, keeping ?voted=.
 	http.Redirect(response, request, v.root+ArticlePath(number, match[2])+"?voted="+state+"#helpful", http.StatusSeeOther)
+}
+
+// voteAddress is what a vote keeps of the address it came from (an IPv4 address, an IPv6 /64, as
+// Config.Client names it): an HMAC-SHA256 under Config.VoteKey, never the address itself.
+func (s *Site) voteAddress(request *http.Request) []byte {
+	mac := hmac.New(sha256.New, s.config.VoteKey)
+	mac.Write([]byte(s.client(request)))
+	return mac.Sum(nil)
 }
 
 // readerCookie is the first-party cookie a reader's votes are counted by, with the id the request

@@ -83,6 +83,11 @@ type Config struct {
 	// Allow reports whether the client of request may load one more page (or run one more search),
 	// and how long to wait when not. Nil allows everything.
 	Allow func(request *http.Request, search bool) (bool, time.Duration)
+	// AllowVote reports whether the client of request may post one more vote, and how long to wait
+	// when not. Nil allows everything.
+	AllowVote func(request *http.Request) (bool, time.Duration)
+	// VoteKey keys the hash of the address a vote keeps (votes.go).
+	VoteKey []byte
 	// AllowLookup reports whether the client of request may make the server look up one more host
 	// name it does not know (a privileged query), and how long to wait when not. Nil allows everything.
 	AllowLookup func(request *http.Request) (bool, time.Duration)
@@ -273,8 +278,8 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		return
 	}
 	if s.config.Allow != nil {
-		// A vote writes, so it is charged like a search: to the smaller limiter as well.
-		if allowed, wait := s.config.Allow(request, sub == "/search" || vote); !allowed {
+		// A vote is charged to its own limiter once its origin passes (votes.go).
+		if allowed, wait := s.config.Allow(request, sub == "/search"); !allowed {
 			s.writeBusy(response, wait, base)
 			return
 		}

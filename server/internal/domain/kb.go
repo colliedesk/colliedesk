@@ -452,10 +452,7 @@ type HelpCenterSite struct {
 	Title          string
 	Locale         string
 	ContentVersion int64
-	// VotesVersion grows with every vote and reset of its articles' votes: a page that shows the
-	// counts is stale once it moves.
-	VotesVersion int64
-	Trial        bool
+	Trial          bool
 	// Theme is the brand the pages show. A logo or favicon that is no longer an image of the library
 	// outside its trash is left out (nil), so a page never links an image it cannot serve.
 	Theme HelpCenterTheme

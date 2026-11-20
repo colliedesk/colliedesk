@@ -68,3 +68,20 @@ func TestAnAgentReadsAnArticlesVotesAndResetsThemWithItsPermission(t *testing.T)
 	}
 	e.fails(read, "colliedesk_kb_article_votes_get", map[string]any{"article_id": "00000000-0000-4000-8000-000000000000"})
 }
+
+func TestATokenWithoutKBArticlesReadIsRefusedTheVotes(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("KB Votes Refused", "admin@kb-votes-refused.example.com")
+	send := e.connect(w.send, "")
+	e.ok(e.connect(w.adminTier, ""), "colliedesk_help_center_update", map[string]any{"enabled": true, "title": "Help", "locale": "en"})
+	collection := at(t, e.ok(send, "colliedesk_kb_collection_create", map[string]any{"name": "Billing"}), "collection", "id").(string)
+	created := e.ok(send, "colliedesk_kb_article_create", map[string]any{"collection_id": collection, "title": "Refund rules", "body": "Within five days.", "status": "published"})
+	articleID, address := at(t, created, "article", "id").(string), at(t, created, "article", "url").(string)
+	e.vote(address, url.Values{"helpful": {"no"}, "missing": {"The refund form is gone"}}, "192.0.2.73")
+
+	inbox := e.connect(e.token(w.admin, "inbox only", "", []string{"conversations:read", "messages:read"}), "")
+	message := e.refused(inbox, "colliedesk_kb_article_votes_get", map[string]any{"article_id": articleID})
+	if !strings.Contains(message, "kb_articles:read") || strings.Contains(message, "The refund form is gone") {
+		t.Fatalf("refusal = %q, want it to name kb_articles:read and show no vote", message)
+	}
+}

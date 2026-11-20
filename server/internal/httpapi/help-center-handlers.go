@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -16,6 +17,11 @@ const (
 	// helpCenterSearchesPerAddress is how many help center searches one client address may run per
 	// minute, across every workspace. A search reads every article of the workspace.
 	helpCenterSearchesPerAddress = 30
+	// helpCenterVotesPerAddress is how many votes one client address may post per minute, across every
+	// workspace: a reader votes once or twice, a script that sends more slows down.
+	helpCenterVotesPerAddress = 20
+	// helpCenterVoteKeyName names the server secret that keys the address hash a vote keeps.
+	helpCenterVoteKeyName = "kb_vote_address_key"
 	// helpCenterHostLookupsPerAddress is how many host names the server does not know one client
 	// address may make it look up per minute; each is a privileged query, and a random Host header
 	// is free to send.
@@ -25,6 +31,7 @@ const (
 func (a *API) newHelpCenter() *helpcenter.Site {
 	return helpcenter.New(helpcenter.Config{Store: a.store, Objects: a.config.Attachments, Origin: a.config.Origin,
 		Domain: a.config.HelpCenterDomain, Version: a.config.Version, Allow: a.allowHelpCenter, AllowLookup: a.allowHelpCenterHostLookup,
+		AllowVote: a.allowHelpCenterVote, VoteKey: a.helpCenterVoteKey(),
 		Client:        func(request *http.Request) string { return clientAddress(request, a.config.TrustedProxies) },
 		ChannelRoutes: a.channelHelpCenterRoutes(), Additions: a.channelHelpCenterAdditions()})
 }
@@ -40,6 +47,24 @@ func (a *API) allowHelpCenter(request *http.Request, search bool) (bool, time.Du
 		return a.helpCenterSearches.allow(client, now)
 	}
 	return true, 0
+}
+
+// allowHelpCenterVote charges a vote whose origin passed to its client address.
+func (a *API) allowHelpCenterVote(request *http.Request) (bool, time.Duration) {
+	return a.helpCenterVotes.allow(clientAddress(request, a.config.TrustedProxies), a.now())
+}
+
+// helpCenterVoteKey loads the key of the address hashes votes keep from the database, where the first
+// process to start stored it: every replica, deploy and restart hashes an address alike, so the readers
+// one address adds to an article are counted across them. Without it the server stops, with the reason.
+func (a *API) helpCenterVoteKey() []byte {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	key, err := a.store.ServerSecret(ctx, helpCenterVoteKeyName)
+	if err != nil {
+		panic(fmt.Sprintf("cannot read the vote address key from the database (run `collie migrate` first?): %v", err))
+	}
+	return key
 }
 
 // allowHelpCenterHostLookup charges a lookup of a host name the server does not know to the request's

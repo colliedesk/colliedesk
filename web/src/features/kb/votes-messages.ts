@@ -9,7 +9,6 @@ export const votesMessages = {
   imported: (helpful: number, total: number) => `Includes ${helpful} out of ${total} from Freshdesk.`,
   yes: 'Yes',
   no: 'No',
-  anonymous: 'Anonymous reader',
   readers: 'Votes, newest change first',
   showAll: (count: number) => `Show all ${count}`,
   reset: 'Reset votes',

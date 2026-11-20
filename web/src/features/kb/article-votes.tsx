@@ -40,10 +40,9 @@ export function ArticleVotesBox({ articleId, title, timezone, headingId }: Artic
           <p className="kb-hint">{m.imported(data.imported.helpful, data.imported.helpful + data.imported.not_helpful)}</p>}
         {rows.length > 0 && <ul className="kb-vote-list" aria-label={m.readers}>
           {rows.map((vote, at) => (
-            <li key={`${vote.contact?.id ?? 'anonymous'}-${vote.updated_at}-${at}`}>
+            <li key={`${vote.updated_at}-${at}`}>
               <span className="kb-vote-line">
                 <span className="kb-vote-answer" data-helpful={vote.helpful}>{vote.helpful ? m.yes : m.no}</span>
-                <span>{vote.contact?.name ?? m.anonymous}</span>
                 <span className="kb-hint">{formatDay(vote.updated_at, timezone)}</span>
               </span>
               {vote.missing && <q className="kb-vote-missing">{vote.missing}</q>}

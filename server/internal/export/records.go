@@ -639,7 +639,6 @@ type KBArticleVote struct {
 	ID        string    `json:"id"`
 	ArticleID string    `json:"article_id"`
 	Voter     string    `json:"voter"`
-	ContactID *string   `json:"contact_id"`
 	Helpful   bool      `json:"helpful"`
 	Missing   *string   `json:"missing"`
 	ResetID   *string   `json:"reset_id"`

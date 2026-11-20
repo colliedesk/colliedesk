@@ -42,12 +42,15 @@ func (s *Store) ResetKBArticleVotes(ctx context.Context, workspaceID string, act
 		return domain.KBArticleVotes{}, domain.ErrKBArticleNotFound
 	}
 	votes, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticleVotes, error) {
-		// FOR UPDATE waits for votes in flight (they hold FOR SHARE), so each is counted here or after.
-		err := tx.QueryRow(ctx, `SELECT id::text FROM kb_articles WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE`, workspaceID, id).Scan(&id)
+		err := tx.QueryRow(ctx, `SELECT id::text FROM kb_articles WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL`, workspaceID, id).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.KBArticleVotes{}, domain.ErrKBArticleNotFound
 		}
 		if err != nil {
+			return domain.KBArticleVotes{}, err
+		}
+		// Votes in flight finish first, so each is counted here or after.
+		if err := lockKBVotes(ctx, tx, workspaceID, id); err != nil {
 			return domain.KBArticleVotes{}, err
 		}
 		current, imported, err := kbVoteCounts(ctx, tx, workspaceID, id)
@@ -67,8 +70,8 @@ func (s *Store) ResetKBArticleVotes(ctx context.Context, workspaceID string, act
 		if _, err := tx.Exec(ctx, `UPDATE kb_article_votes SET reset_id=$3 WHERE workspace_id=$1 AND article_id=$2 AND reset_id IS NULL`, workspaceID, id, resetID); err != nil {
 			return domain.KBArticleVotes{}, fmt.Errorf("close reset votes: %w", err)
 		}
-		if _, err := tx.Exec(ctx, bumpKBVotes, workspaceID); err != nil {
-			return domain.KBArticleVotes{}, fmt.Errorf("bump votes version: %w", err)
+		if err := bumpKBVotes(ctx, tx, workspaceID, id); err != nil {
+			return domain.KBArticleVotes{}, err
 		}
 		return readKBArticleVotes(ctx, tx, workspaceID, id)
 	})
@@ -82,20 +85,15 @@ func readKBArticleVotes(ctx context.Context, tx pgx.Tx, workspaceID, id string) 
 		return domain.KBArticleVotes{}, err
 	}
 	out := domain.KBArticleVotes{ArticleID: id, Helpful: current.Helpful + imported.Helpful, NotHelpful: current.NotHelpful + imported.NotHelpful, Imported: imported}
-	rows, err := tx.Query(ctx, `SELECT v.helpful, v.missing, c.id::text, COALESCE(NULLIF(c.name, ''), c.email), v.created_at, v.updated_at
-		FROM kb_article_votes v LEFT JOIN contacts c ON c.workspace_id=v.workspace_id AND c.id=v.contact_id
+	rows, err := tx.Query(ctx, `SELECT v.helpful, v.missing, v.created_at, v.updated_at FROM kb_article_votes v
 		WHERE v.workspace_id=$1 AND v.article_id=$2 AND v.reset_id IS NULL ORDER BY v.updated_at DESC, v.id LIMIT $3`, workspaceID, id, kbVotesListed)
 	if err != nil {
 		return out, fmt.Errorf("list article votes: %w", err)
 	}
 	if out.Votes, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.KBArticleVote, error) {
 		var vote domain.KBArticleVote
-		var contactID, contactName *string
-		if err := row.Scan(&vote.Helpful, &vote.Missing, &contactID, &contactName, &vote.CreatedAt, &vote.UpdatedAt); err != nil {
+		if err := row.Scan(&vote.Helpful, &vote.Missing, &vote.CreatedAt, &vote.UpdatedAt); err != nil {
 			return vote, err
-		}
-		if contactID != nil && contactName != nil {
-			vote.Contact = &domain.KBVoteContact{ID: *contactID, Name: *contactName}
 		}
 		vote.CreatedAt, vote.UpdatedAt = domain.UTC(vote.CreatedAt), domain.UTC(vote.UpdatedAt)
 		return vote, nil

@@ -7,7 +7,7 @@ import type { Generated } from '../../api/schemas';
 
 const tallySchema = z.object({ helpful: z.number().int(), not_helpful: z.number().int() }) satisfies z.ZodType<Generated<'KBVoteTally'>>;
 const voteSchema = z.object({
-  helpful: z.boolean(), missing: z.string().nullable(), contact: z.object({ id: z.string().uuid(), name: z.string() }).nullable(),
+  helpful: z.boolean(), missing: z.string().nullable(),
   created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'KBArticleVote'>>;
 const resetSchema = z.object({

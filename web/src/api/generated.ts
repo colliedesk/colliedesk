@@ -4033,7 +4033,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description What readers of the public help center answered to "Was this article helpful?": the counts the article's page shows (votes imported from Freshdesk included until the first reset), the newest 200 current votes with each "What was missing?" line (masked: no email address, no run of 6 or more digits) and who voted (a signed-in contact, or null for an anonymous reader), and every reset, newest first, with the counts it cleared. An article in the trash keeps its votes. */
+        /** @description What readers of the public help center answered to "Was this article helpful?": the counts the article's page shows (votes imported from Freshdesk included until the first reset), the newest 200 current votes with each "What was missing?" line (masked: no email address, no run of 6 or more digits), and every reset, newest first, with the counts it cleared. Every reader is anonymous. An article in the trash keeps its votes. */
         get: operations["getKBArticleVotes"];
         put?: never;
         post?: never;
@@ -8031,16 +8031,11 @@ export interface components {
             /** @description Every reset, newest first. */
             resets: components["schemas"]["KBArticleVoteReset"][];
         };
+        /** @description One anonymous reader's current vote. */
         KBArticleVote: {
             helpful: boolean;
             /** @description The reader's "What was missing?" line after a No, masked; null when they left none. */
             missing: string | null;
-            /** @description The signed-in contact who voted; null for a reader the help center does not know. */
-            contact: null | {
-                /** Format: uuid */
-                id: string;
-                name: string;
-            };
             /** Format: date-time */
             created_at: string;
             /**

@@ -29,20 +29,13 @@ type KBVoteTally struct {
 	NotHelpful int `json:"not_helpful"`
 }
 
-// KBArticleVote is one reader's current vote. Contact names a signed-in reader; nil is a reader the
-// help center does not know. Missing is the masked "What was missing?" line of a "No", or nil.
+// KBArticleVote is one reader's current vote: every reader is anonymous, known only by a cookie the
+// help center set. Missing is the masked "What was missing?" line of a "No", or nil.
 type KBArticleVote struct {
-	Helpful   bool           `json:"helpful"`
-	Missing   *string        `json:"missing"`
-	Contact   *KBVoteContact `json:"contact"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-}
-
-// KBVoteContact is the signed-in reader who voted.
-type KBVoteContact struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	Helpful   bool      `json:"helpful"`
+	Missing   *string   `json:"missing"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // KBArticleVoteReset is one reset of an article's votes: the counts the page showed just before it,

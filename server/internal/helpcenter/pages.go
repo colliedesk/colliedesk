@@ -532,7 +532,12 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		return
 	}
 	// A query names no other article: the address without it is the canonical one, checked below.
-	if request.URL.RawQuery == "" && fresh(response, request, v.articleTag()) {
+	votes, err := s.config.Store.KBArticleVotesVersion(request.Context(), v.site.WorkspaceID, number)
+	if err != nil {
+		s.writeError(response, err)
+		return
+	}
+	if request.URL.RawQuery == "" && fresh(response, request, v.articleTag(votes)) {
 		return
 	}
 	article, err := s.config.Store.HelpCenterArticleIn(request.Context(), v.site.WorkspaceID, number, v.lang)

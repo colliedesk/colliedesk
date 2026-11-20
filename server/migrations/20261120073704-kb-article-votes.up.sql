@@ -1,6 +1,6 @@
 -- "Was this article helpful?" on the public help center (docs/internals/knowledge-base.md, "Votes").
--- One vote per reader and article: the reader is a signed-in contact, or else a first-party cookie
--- id; only its SHA-256 is kept (voter). A second vote changes the first. A "No" may carry one line,
+-- One vote per reader and article: the reader is a first-party cookie id, of which only the SHA-256 is
+-- kept (voter). A second vote changes the first. A "No" may carry one line,
 -- "What was missing?", stored masked (no email, no run of 6+ digits).
 --
 -- A reset by the team closes the current votes (reset_id) and keeps, append-only, the counts the page
@@ -30,8 +30,9 @@ CREATE TABLE kb_article_votes (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     article_id uuid NOT NULL,
     voter bytea NOT NULL CHECK (octet_length(voter) = 32),
-    -- The signed-in contact who voted; null for a reader the help center does not know.
-    contact_id uuid,
+    -- HMAC-SHA256 of the address the vote came from (an IPv4 address, an IPv6 /64), keyed with a server
+    -- secret: it bounds the new readers one address adds to an article in a day, and never shows.
+    address bytea NOT NULL CHECK (octet_length(address) = 32),
     helpful boolean NOT NULL,
     -- "What was missing?", masked; only a "No" has one.
     missing text CHECK (char_length(missing) BETWEEN 1 AND 500),
@@ -40,15 +41,22 @@ CREATE TABLE kb_article_votes (
     updated_at timestamptz NOT NULL DEFAULT now(),
     CHECK (missing IS NULL OR NOT helpful),
     FOREIGN KEY (workspace_id, article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, contact_id) REFERENCES contacts(workspace_id, id) ON DELETE SET NULL (contact_id),
     FOREIGN KEY (workspace_id, reset_id) REFERENCES kb_article_vote_resets(workspace_id, id) ON DELETE CASCADE
 );
 CREATE UNIQUE INDEX kb_article_votes_voter_idx ON kb_article_votes(workspace_id, article_id, voter) WHERE reset_id IS NULL;
 CREATE INDEX kb_article_votes_article_idx ON kb_article_votes(workspace_id, article_id, updated_at DESC);
+CREATE INDEX kb_article_votes_address_idx ON kb_article_votes(workspace_id, article_id, address, created_at);
 
--- Grows with every vote and reset, so a cached article page knows its count is stale without the
--- knowledge base's content_version moving.
-ALTER TABLE help_centers ADD COLUMN votes_version bigint NOT NULL DEFAULT 0 CHECK (votes_version >= 0);
+-- One row per article that has had a vote: version grows with every vote and reset of that article, so
+-- its cached page knows the count is stale while other articles' pages and the knowledge base's
+-- content_version stay. Votes and resets of the article lock this row, one at a time.
+CREATE TABLE kb_article_vote_versions (
+    workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    article_id uuid NOT NULL,
+    version bigint NOT NULL DEFAULT 0 CHECK (version >= 0),
+    PRIMARY KEY (workspace_id, article_id),
+    FOREIGN KEY (workspace_id, article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE
+);
 
 DO $$
 DECLARE
@@ -60,7 +68,7 @@ BEGIN
     IF app_role IS NULL THEN
         RAISE EXCEPTION 'row-level security is not set up in this schema';
     END IF;
-    FOREACH table_name IN ARRAY ARRAY['kb_article_vote_resets', 'kb_article_votes'] LOOP
+    FOREACH table_name IN ARRAY ARRAY['kb_article_vote_resets', 'kb_article_votes', 'kb_article_vote_versions'] LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', table_name);
         EXECUTE format($policy$CREATE POLICY workspace_isolation ON %2$I FOR ALL TO %1$I
