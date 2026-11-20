@@ -23,6 +23,7 @@ type restKBCollection struct {
 	DeletedBy         *restPerson        `json:"deleted_by"`
 	PurgesAt          string             `json:"purges_at,omitempty"`
 	Translations      []kbCollectionName `json:"translations"`
+	RequireApproval   string             `json:"require_approval"`
 }
 
 // kbCollectionName is a collection's name and description in another language.
@@ -47,12 +48,13 @@ type kbCollectionOut struct {
 	DeletedBy         *string            `json:"deleted_by,omitempty"`
 	PurgesAt          string             `json:"purges_at,omitempty"`
 	Translations      []kbCollectionName `json:"translations"`
+	RequireApproval   string             `json:"require_approval"`
 }
 
 func kbCollectionView(collection restKBCollection) kbCollectionOut {
 	out := kbCollectionOut{ID: collection.ID, ParentID: collection.ParentID, DefaultTemplateID: collection.DefaultTemplateID, Name: collection.Name, Slug: collection.Slug, Description: collection.Description,
 		Position: collection.Position, ArticleCount: collection.ArticleCount, UpdatedAt: collection.UpdatedAt, DeletedAt: collection.DeletedAt, PurgesAt: collection.PurgesAt,
-		Translations: collection.Translations}
+		Translations: collection.Translations, RequireApproval: collection.RequireApproval}
 	if out.Translations == nil {
 		out.Translations = []kbCollectionName{}
 	}
@@ -255,7 +257,7 @@ func kbCollectionUpdate(c *call, arguments map[string]any) (any, error) {
 		change["parent_id"] = nil
 	}
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: name, slug, description, position, parent_id, move_to_top or default_template_id."}
+		return nil, &toolError{"Give something to change: name, slug, description, position, parent_id, move_to_top, default_template_id or require_approval."}
 	}
 	c.forCollection(args.ID)
 	var updated restKBCollection
@@ -320,6 +322,7 @@ func kbArticlesSearch(c *call, arguments map[string]any) (any, error) {
 		CollectionID string `json:"collection_id"`
 		Sort         string `json:"sort"`
 		HasDraft     bool   `json:"has_draft"`
+		State        string `json:"state"`
 		Limit        int    `json:"limit"`
 		Cursor       string `json:"cursor"`
 	}](arguments)
@@ -327,7 +330,7 @@ func kbArticlesSearch(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	query := url.Values{}
-	for key, value := range map[string]string{"q": args.Query, "status": args.Status, "collection_id": args.CollectionID, "sort": args.Sort, "cursor": args.Cursor} {
+	for key, value := range map[string]string{"q": args.Query, "status": args.Status, "collection_id": args.CollectionID, "sort": args.Sort, "cursor": args.Cursor, "state": args.State} {
 		if value != "" {
 			query.Set(key, value)
 		}

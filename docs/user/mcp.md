@@ -179,6 +179,13 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_article_draft_discard` | Drops the unpublished changes of a published article | `kb_articles:update` |
 | `colliedesk_kb_article_votes_get` | Reads an article's "Was this article helpful?" counts, each reader's vote and what they said was missing | `kb_articles:read` |
 | `colliedesk_kb_article_votes_reset` | Starts an article's helpful count again from 0; the earlier counts stay under resets. Cannot be undone | `kb_articles:update` |
+| `colliedesk_kb_article_send_for_review` | Saves an article's or translation's text and asks teammates who may publish to approve it | `kb_articles:update` |
+| `colliedesk_kb_reviews_list` | Lists the reviews waiting for you, or the reviews of one article | `kb_articles:read` |
+| `colliedesk_kb_review_get` | Reads a review with the text proposed, what is live and the line diff between them | `kb_articles:read` |
+| `colliedesk_kb_review_approve` | Approves text you were asked to review, one or several; nobody approves their own text | `kb_articles:publish` |
+| `colliedesk_kb_review_request_changes` | Sends text back to its author with a one-line note | `kb_articles:publish` |
+| `colliedesk_kb_review_withdraw` | Takes back a review you sent | `kb_articles:update` |
+| `colliedesk_kb_articles_publish` | Publishes several articles at once, each answered on its own; text that needs an approval is refused without one | `kb_articles:publish` |
 | `colliedesk_kb_image_upload` | Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one | `kb_media:create` |
 | `colliedesk_kb_image_get` | Shows a knowledge base image to the model | `kb_media:read` |
 | `colliedesk_kb_media_list` | Lists the media library: what no article uses (with the space it takes) and images missing alt text | `kb_media:read` |
