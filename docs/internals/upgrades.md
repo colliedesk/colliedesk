@@ -156,7 +156,26 @@ layouts, in the background of the CI `image` job and in the release.
   Compose takes `COMPOSE_PROJECT_NAME` from the shell or `.env` over `name:`, and in another project
   it would start an empty database beside the install. A run that finds an upgrade or rollback under
   way, or done, compares `docker compose config`'s `name` with the recorded one and refuses a
-  difference.
+  difference. A first run has nothing recorded, so it requires the project to own volumes already:
+  a project without any is not where the install ran.
+- **The postgres service is read from `compose.yaml` alone.** The script parses and edits only that
+  file, while Compose also merges `compose.override.yaml` and `COMPOSE_FILE`. A run refuses when the
+  merged postgres service differs from the one `compose.yaml` gives (`docker compose -f compose.yaml
+  config` ignores both), since the volume it would dump or start is then not the one it parsed.
+- **Missing volumes are refused, not created.** Compose creates a named volume that does not exist,
+  so a finish whose 19 volume was removed would start an empty 19 and the server on it, and an
+  upgrade whose old volume is gone would dump an empty 17. Both check the volume exists first.
+- **Finish only on the cluster the restore wrote.** After the restore the script records
+  `system_identifier` from `pg_control_system()` in the state file. A finish starts PostgreSQL first
+  and compares it, with the major and the volume key; a hand edit after the switch (another `PGDATA`)
+  gives a fresh cluster with another identifier, and the script stops PostgreSQL and starts nothing.
+  It leaves `compose.yaml` as the operator edited it, since the server may have written there.
+- **Only the server's writes are fenced.** The dump starts after the server stops; the bundled
+  compose file runs only postgres and server. Another program writing to the database directly is
+  the operator's to stop first; its writes after the dump are not carried.
+- **pg_restore output goes to a file.** Its errors can quote rows, so stderr of `pg_restore` and
+  `vacuumdb` goes to `restore.log` in the dump directory (mode 600 under `umask 077`), and the
+  message names it.
 - **An undo that cannot list the volumes stops.** Without the list the half-made 19 volume cannot
   be found, so `compose.postgres-19.yaml` and the state `started` stay: the next run still knows the
   volume as one no server ran on and removes it.

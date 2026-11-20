@@ -71,24 +71,26 @@ major() { query postgres 'SHOW server_version_num;' | cut -c1-2; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # The state of an upgrade, one key=value per line, rewritten whole each time.
-state='' prior='' from_major='' old_image='' old_key='' project='' dump_dir='' started_at='' finished_at=''
+state='' prior='' from_major='' old_image='' old_key='' project='' dump_dir='' cluster='' started_at='' finished_at=''
 load_state() {
-  for key in state prior from_major old_image old_key project dump_dir started_at finished_at; do
+  for key in state prior from_major old_image old_key project dump_dir cluster started_at finished_at; do
     # shellcheck disable=SC2034 # read by the eval below
     value=$(sed -n "s/^$key=//p" "$STATE_FILE" | tail -n 1)
     eval "$key=\$value"
   done
 }
 save_state() {
-  for key in state prior from_major old_image old_key project dump_dir started_at finished_at; do
+  for key in state prior from_major old_image old_key project dump_dir cluster started_at finished_at; do
     eval "printf '%s=%s\n' $key \"\$$key\""
   done >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
 }
 
-# The postgres service as compose.yaml writes it: its image and the volume key of its data.
-postgres_block() {
-  awk '/^  postgres:$/ { b = 1; next } b && (/^  [^ ]/ || /^[^ ]/) { b = 0 } b' compose.yaml
-}
+# The postgres service of a compose file read from stdin; postgres_block: as compose.yaml writes it,
+# with its image and the volume key of its data.
+postgres_service() { awk '/^  postgres:$/ { b = 1; next } b && (/^  [^ ]/ || /^[^ ]/) { b = 0 } b'; }
+postgres_block() { postgres_service <compose.yaml; }
+# The identity of the PostgreSQL cluster: initdb gives each one its own.
+CLUSTER='SELECT system_identifier FROM pg_control_system();'
 file_image() { postgres_block | sed -n 's/^    image: //p'; }
 file_key() { postgres_block | sed -n "s#^      - \([A-Za-z0-9_.-]*\):$DATA\$#\1#p"; }
 # Whether the postgres environment is a KEY: value mapping, where a PGDATA line can go.
@@ -151,11 +153,21 @@ undo() {
   fi
 }
 # finish: the install serving on PostgreSQL 19 from compose.yaml, which names it; state done.
+# PostgreSQL starts first, and the server only on the cluster the restore wrote: an edit that makes
+# docker compose start another one (PGDATA moved, the volume replaced) stops here with nothing
+# started, so no server writes to an empty database.
+foreign=''
 finish() {
   say 'Starting Colliedesk...'
+  start_postgres || { warn "PostgreSQL $NEW_MAJOR did not start; run docker compose logs postgres for details"; return 1; }
+  if ! { [ "$(major)" = "$NEW_MAJOR" ] && [ "$(volume_key "$(running_volume)")" = "$NEW_KEY" ] &&
+    [ -n "$cluster" ] && [ "$(query postgres "$CLUSTER")" = "$cluster" ]; }; then
+    foreign=1
+    compose stop postgres >/dev/null 2>&1
+    warn "the PostgreSQL that docker compose starts from compose.yaml is not the PostgreSQL $NEW_MAJOR database the restore wrote in the volume $NEW_KEY: an edit of the postgres service (PGDATA, the volume) changes it. Nothing was started."
+    return 1
+  fi
   start_all || { warn 'the install did not become healthy on PostgreSQL 19; run docker compose logs for details'; return 1; }
-  [ "$(major)" = "$NEW_MAJOR" ] && [ "$(volume_key "$(running_volume)")" = "$NEW_KEY" ] ||
-    { warn "PostgreSQL $NEW_MAJOR does not run on the volume $NEW_KEY"; return 1; }
   state='done' finished_at=$(now)
   save_state || return 1
   trap - EXIT HUP INT TERM
@@ -175,7 +187,9 @@ on_exit() {
   trap '' HUP INT TERM PIPE
   if [ "$state" = started ]; then
     [ "$status" != 0 ] || status=1
-    if [ "$(file_key)" = "$NEW_KEY" ]; then
+    if [ -n "$foreign" ]; then
+      warn "compose.yaml names PostgreSQL $NEW_MAJOR. Undo the edit of the postgres service, then run sh upgrade-postgres.sh again to finish, or sh upgrade-postgres.sh --rollback to go back to PostgreSQL $from_major."
+    elif [ "$(file_key)" = "$NEW_KEY" ]; then
       cf=''
       compose up -d >/dev/null 2>&1
       warn "the upgrade stopped after the restore into PostgreSQL $NEW_MAJOR was complete; compose.yaml names it. Run sh upgrade-postgres.sh again to finish, or sh upgrade-postgres.sh --rollback to go back to PostgreSQL $from_major."
@@ -192,16 +206,24 @@ arm() {
 }
 
 if [ -f "$STATE_FILE" ]; then load_state; fi
-# The volumes of an upgrade belong to the compose project it ran in. Run in another one
+# The volumes of an install belong to the compose project it runs in. Run in another one
 # (COMPOSE_PROJECT_NAME in the shell or in .env), docker compose would start an empty database
-# beside the install.
-case $state in
-  'done' | started | rolling_back)
-    name=$(compose config 2>/dev/null | sed -n '1s/^name: //p')
-    [ "$name" = "$project" ] ||
-      fail "docker compose works on the project '${name:-unknown}' here, but this upgrade ran in '$project': COMPOSE_PROJECT_NAME in the shell or in .env differs. Run it again with COMPOSE_PROJECT_NAME=$project. Nothing was changed."
-    ;;
-esac
+# beside the install and upgrade that. The project is the one of the recorded upgrade, or, for a
+# first one, a project that has volumes.
+name=$(compose config 2>/dev/null | sed -n '1s/^name: //p')
+if [ -n "$project" ]; then
+  [ "$name" = "$project" ] ||
+    fail "docker compose works on the project '${name:-unknown}' here, but the upgrade in $STATE_FILE ran in '$project': COMPOSE_PROJECT_NAME in the shell or in .env differs. Run it again with COMPOSE_PROJECT_NAME=$project. Nothing was changed."
+else
+  [ -n "$name" ] && [ -n "$("$DOCKER" volume ls -q --filter "label=com.docker.compose.project=$name")" ] ||
+    fail "docker compose works on the project '${name:-unknown}' here, which has no volumes, so no install ran in it. If COMPOSE_PROJECT_NAME in the shell or in .env changed since the install, run this again with the project the install was made in. Nothing was changed."
+  project=$name
+fi
+# The upgrade reads the postgres service from compose.yaml alone, and PostgreSQL 19 first runs from a
+# copy of it. Another compose file that changes the service could make docker compose start another
+# cluster than the one restored.
+[ "$(compose config 2>/dev/null | postgres_service)" = "$("$DOCKER" compose -f compose.yaml config 2>/dev/null | postgres_service)" ] ||
+  fail "another compose file (compose.override.yaml, or COMPOSE_FILE in the shell or in .env) changes the postgres service, and this script reads it from compose.yaml alone. Move the change into compose.yaml or remove it, then run this again. Nothing was changed."
 
 # --rollback: compose.yaml back on the old major and volume. The current file is edited, not the copy
 # restored, so an installer run since the upgrade keeps what it changed. While it runs the state is
@@ -290,7 +312,10 @@ case $state in
   started)
     say "An upgrade started at $started_at did not finish."
     if [ "$(file_key)" = "$NEW_KEY" ]; then
-      # compose.yaml is switched only after the restore: the data is on 19, so finish.
+      # compose.yaml is switched only after the restore: the data is on 19, so finish. Without its
+      # volume docker compose would start an empty database there.
+      [ -n "$(volume_for "$NEW_KEY")" ] ||
+        fail "compose.yaml names the volume $NEW_KEY of the restored PostgreSQL $NEW_MAJOR database, but it is gone, so finishing would start an empty database. Nothing was changed: see docs/self-host/upgrade.md#postgresql-versions."
       say "The restore into PostgreSQL $NEW_MAJOR was complete; finishing it..."
       arm
       # The server may run on another database (a compose file put back by hand): it stops before
@@ -324,6 +349,8 @@ case $db in '' | *[!A-Za-z0-9_]*) fail 'cannot read the database name from DATAB
 old_image=$(file_image) old_key=$(file_key)
 [ "$(printf '%s\n' "$old_image" | grep -c .)" = 1 ] && [ "$(printf '%s\n' "$old_key" | grep -c .)" = 1 ] ||
   fail "compose.yaml does not give the postgres service one image line and one volume at $DATA. Upgrade by hand: docs/self-host/upgrade.md#postgresql-versions"
+[ -n "$(volume_for "$old_key")" ] ||
+  fail "the project $project has no volume $old_key, which compose.yaml names for the PostgreSQL data, so there is no database to move. Nothing was changed."
 pgdata=1
 if postgres_block | grep '^      PGDATA:' >/dev/null; then pgdata=''; fi
 [ -z "$pgdata" ] || env_is_map ||
@@ -385,8 +412,15 @@ if grep 'ERROR' "$dump_dir/roles.log" | grep -qv 'role "[^"]*" already exists'; 
   fail 'loading the roles into PostgreSQL 19 failed (above)'
 fi
 say "Restoring the database $db..."
-compose exec -T postgres sh -c 'exec pg_restore -U "$POSTGRES_USER" -d "$1" --exit-on-error' sh "$db" <"$dump_dir/$db.dump"
-compose exec -T postgres sh -c 'exec vacuumdb -U "$POSTGRES_USER" --analyze-only --quiet "$1"' sh "$db"
+# pg_restore and vacuumdb quote the rows and statements they fail on: that goes to a file of the dump,
+# for the operator only, not to the terminal.
+compose exec -T postgres sh -c 'exec pg_restore -U "$POSTGRES_USER" -d "$1" --exit-on-error' sh "$db" <"$dump_dir/$db.dump" 2>"$dump_dir/restore.log" ||
+  fail "restoring the database $db into PostgreSQL $NEW_MAJOR failed: $dump_dir/restore.log says why"
+compose exec -T postgres sh -c 'exec vacuumdb -U "$POSTGRES_USER" --analyze-only --quiet "$1"' sh "$db" 2>>"$dump_dir/restore.log" ||
+  fail "analyzing the database $db on PostgreSQL $NEW_MAJOR failed: $dump_dir/restore.log says why"
+# The cluster the restore wrote: the server starts only on it.
+cluster=$(query postgres "$CLUSTER")
+save_state
 
 # The switch: from here compose.yaml names 19, and a run cut off is finished, not undone.
 cp -p compose.yaml "$BACKUP.tmp"

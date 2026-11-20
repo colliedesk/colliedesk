@@ -12,10 +12,13 @@
 # in a rollback after 17 started leaves compose.yaml on 17 for --rollback to finish; a rollback
 # killed before it changed compose.yaml starts over, and one that cannot put compose.yaml back on 19
 # leaves it on 17 with nothing started and the rollback unfinished. The compose
-# files keep the mode the install gave them. The refusals (external database, already upgraded,
+# files keep the mode the install gave them, and what pg_restore writes to stderr goes to
+# restore.log, not the terminal. A finish whose PostgreSQL 19 is not the cluster the restore wrote
+# (PGDATA edited) stops it and starts nothing. The refusals (external database, already upgraded,
 # unknown state, unfinished rollback, too little disk, an environment PGDATA cannot be added to, a
-# rollback whose old volume is gone, a rollback in another compose project, a compose.yaml naming
-# neither volume of the upgrade) change nothing and print no password. Needs Docker with
+# rollback whose old volume is gone, a finish whose 19 volume is gone, a first run or a rollback in
+# another compose project, another compose file changing the postgres service, a compose.yaml
+# naming neither volume of the upgrade) change nothing and print no password. Needs Docker with
 # Compose v2 and curl.
 #   sh tests/upgrade-postgres-test.sh LAYOUT IMAGE
 # LAYOUT is the database login layout of the install:
@@ -364,8 +367,18 @@ EOF
   [ -n "$(volume_for postgres19-data)" ] || fail 'a run that could not finish on 19 removed the PostgreSQL 19 volume'
   grep -q -- '--rollback' "$TMP/upgrade.out" || { cat "$TMP/upgrade.out" >&2; fail 'a run that could not finish on 19 did not say how to go on'; }
   step 'could not finish on 19: compose.yaml and the volume stay on 19'
+  cp "$TMP/compose.yaml" "$TMP/compose.first19"
+  cp "$TMP/.postgres-upgrade" "$TMP/state.first19"
   rolled_back
   "$DOCKER" volume rm "$(volume_for postgres19-data)" >/dev/null
+  # The 19 volume removed while compose.yaml still names it: finishing would start an empty
+  # database, so the run refuses and makes no volume.
+  cp "$TMP/.postgres-upgrade" "$TMP/state.rolled"
+  mv "$TMP/compose.first19" "$TMP/compose.yaml"
+  mv "$TMP/state.first19" "$TMP/.postgres-upgrade"
+  refused 'finishing an upgrade whose PostgreSQL 19 volume is gone' 'postgres19-data'
+  [ -z "$(volume_for postgres19-data)" ] || fail 'finishing an upgrade whose PostgreSQL 19 volume is gone made an empty one'
+  mv "$TMP/state.rolled" "$TMP/.postgres-upgrade"
   cp "$TMP/compose.base" "$TMP/compose.yaml"
   # The rollback check signed in (a pairing link and a session): the next upgrade carries them.
   baseline before
@@ -447,6 +460,18 @@ EOF
   grep -q -- '--rollback again' "$TMP/upgrade.out" || { cat "$TMP/upgrade.out" >&2; fail 'a rollback that could not put compose.yaml back did not say how to go on'; }
   step 'rollback restarted, compose.yaml with no way back: stays on 17, nothing started'
   rolled_back
+  # An upgrade in another compose project would upgrade an empty database made there: refused,
+  # with the state of an earlier upgrade and without one.
+  script_project=$COMPOSE_PROJECT_NAME-other
+  refused 'an upgrade in another compose project' 'COMPOSE_PROJECT_NAME'
+  mv "$TMP/.postgres-upgrade" "$TMP/state.kept"
+  refused 'a first upgrade in another compose project' 'COMPOSE_PROJECT_NAME'
+  mv "$TMP/state.kept" "$TMP/.postgres-upgrade"
+  script_project=''
+  [ -z "$("$DOCKER" ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME-other")" ] &&
+    [ -z "$("$DOCKER" volume ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME-other")" ] ||
+    fail 'an upgrade in another compose project made containers or volumes there'
+  step 'upgrade in another compose project: refused, nothing made there'
 else
   # The installer of this checkout first: it keeps 17 and writes the PGDATA line.
   rerun_installer before
@@ -508,14 +533,20 @@ EOF
   # The undo of a failed restore cannot list the volumes (the Docker daemon stops answering): it keeps
   # compose.postgres-19.yaml and the state started, so the next run still knows the 19 volume as the
   # half-made one it may remove.
+  # pg_restore quotes the rows and statements it fails on: they go to a file of the dump, not the
+  # terminal.
+  sentinel=$(secret)
   cat >"$TMP/docker" <<EOF
 #!/bin/sh
-case "\$*" in *pg_restore*' --exit-on-error'*) echo 'injected pg_restore failure' >&2; exit 1 ;; esac
+case "\$*" in *pg_restore*' --exit-on-error'*) echo 'injected pg_restore failure $sentinel' >&2; exit 1 ;; esac
 if [ "\$1 \$2" = 'volume ls' ] && [ -e compose.postgres-19.yaml ]; then echo 'injected volume ls failure' >&2; exit 1; fi
 exec "$DOCKER" "\$@"
 EOF
   if (cd "$TMP" && DOCKER="$TMP/docker" sh "$ROOT/upgrade-postgres.sh" >"$TMP/upgrade.out" 2>&1); then fail 'upgrade-postgres.sh succeeded with a failing restore'; fi
   no_secret_printed 'an undo with no volume list'
+  if grep -qF "$sentinel" "$TMP/upgrade.out"; then fail 'upgrade-postgres.sh printed what pg_restore wrote to stderr'; fi
+  grep -qF "$sentinel" "$TMP/$(state dump_dir)/restore.log" || { cat "$TMP/upgrade.out" >&2; fail 'the stderr of pg_restore is not in restore.log of the dump'; }
+  grep -qF 'restore.log' "$TMP/upgrade.out" || fail 'a failed restore did not name restore.log'
   [ "$(state state)" = started ] || { cat "$TMP/upgrade.out" >&2; fail "an undo that could not list the volumes left the state $(state state), want started"; }
   [ -e "$TMP/compose.postgres-19.yaml" ] || fail 'an undo that could not list the volumes removed compose.postgres-19.yaml'
   [ -n "$(volume_for postgres19-data)" ] || fail 'the half-made PostgreSQL 19 volume is gone, though the undo could not list it'
@@ -567,6 +598,25 @@ EOF
   [ "$(state state)" = started ] || fail "a compose file naming neither volume left the state $(state state), want started"
   [ -z "$(volume_for postgres-other)" ] || fail 'a compose file naming neither volume of the upgrade got its volume made'
   mv "$TMP/compose.on19" "$TMP/compose.yaml"
+  # compose.override.yaml moving PGDATA: docker compose would start an empty cluster beside the
+  # restored one, so the run refuses before it starts anything.
+  printf 'services:\n  postgres:\n    environment:\n      PGDATA: /var/lib/postgresql/data/moved\n' >"$TMP/compose.override.yaml"
+  refused 'another compose file changing the postgres service' 'compose.override.yaml'
+  [ "$(state state)" = started ] || fail "another compose file changing postgres left the state $(state state), want started"
+  rm "$TMP/compose.override.yaml"
+  # compose.yaml itself edited to move PGDATA: PostgreSQL 19 starts on its volume, but an empty cluster
+  # made beside the restored one. The run tells the clusters apart, starts nothing and stays started.
+  cp "$TMP/compose.yaml" "$TMP/compose.on19"
+  sed 's#^      PGDATA: /var/lib/postgresql/data$#      PGDATA: /var/lib/postgresql/data/moved#' "$TMP/compose.on19" >"$TMP/compose.yaml"
+  if upgrade; then cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh finished on a PostgreSQL 19 cluster the restore did not write'; fi
+  grep -qF 'not the PostgreSQL 19 database the restore wrote' "$TMP/upgrade.out" ||
+    { cat "$TMP/upgrade.out" >&2; fail 'a cluster the restore did not write was not named as such'; }
+  no_secret_printed 'a cluster the restore did not write'
+  if server_running; then fail 'upgrade-postgres.sh started the server on a cluster the restore did not write'; fi
+  [ "$(state state)" = started ] || fail "a cluster the restore did not write left the state $(state state), want started"
+  mv "$TMP/compose.on19" "$TMP/compose.yaml"
+  "$DOCKER" run --rm -v "$(volume_for postgres19-data):/data" --entrypoint rm "$(sed -n 's/^    image: \(postgres:.*\)/\1/p' "$TMP/compose.yaml")" -rf /data/moved
+  step 'a cluster the restore did not write: refused, nothing started'
   upgrade || { cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh did not finish an upgrade cut off by a hangup'; }
   upgraded "$TMP/compose.installer"
 

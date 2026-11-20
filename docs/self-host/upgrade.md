@@ -151,9 +151,19 @@ moves: other databases on the same server stay in the old volume, and the script
   give the postgres service one image and one data volume, an `environment:` list the `PGDATA` line
   cannot be added to, a major older than 16, an existing `postgres19-data` volume, too little disk
   space, a rollback that has not finished, a `compose.yaml` whose postgres data volume is neither
-  the old one nor `postgres19-data`, and a run in another compose project than the upgrade's (a
-  different `COMPOSE_PROJECT_NAME` in the shell or in `.env`; the message names the one to use). It
-  never prints a password.
+  the old one nor `postgres19-data`, a run in another compose project than the upgrade's or the
+  install's (a different `COMPOSE_PROJECT_NAME` in the shell or in `.env`; the message names the one
+  to use), another compose file that changes the postgres service (`compose.override.yaml`, or
+  `COMPOSE_FILE`), an old data volume that is gone, and a finish whose `postgres19-data` volume is
+  gone. It never prints a password: what `pg_restore` and `vacuumdb` report goes to `restore.log` in
+  the dump directory, and the message names that file.
+- **It finishes only on the database it restored.** It records the identity of the PostgreSQL 19
+  cluster it wrote. If `compose.yaml` was edited after the switch so that PostgreSQL 19 starts
+  another cluster (a changed `PGDATA`, for example), it stops PostgreSQL, starts nothing and asks
+  you to undo the edit.
+- **Only Colliedesk's own writes are carried.** The dump is taken after the server stops. Another
+  program that writes to the database itself, outside Colliedesk, must be stopped first, or what it
+  writes after the dump stays in the old volume.
 
 To go back to the major and the volume you had before:
 
@@ -177,7 +187,8 @@ the upgrade fixture, for both database login layouts the installer has made: upg
 rerun, restart, a failed upgrade (also one whose undo cannot list the volumes), a run killed in the
 restore, a run killed after it, one that cannot start on 19, a hangup after the switch and one in the
 rollback, a rollback killed before it changed `compose.yaml` and one that cannot put it back,
-rollback, and the refusals. No row or file may change.
+a finish on a cluster the restore did not write, rollback, and the refusals. No row or file may
+change.
 
 ## Settings move into the database
 
