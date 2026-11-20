@@ -1,20 +1,30 @@
 package helpcenter
 
 import (
+	"bufio"
 	"bytes"
+	"strings"
+	"time"
 
 	"github.com/alecthomas/chroma/v2"
-	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/renderer"
 	goldhtml "github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/util"
 )
 
-// highlightLimit is the longest code block coloured; a longer one shows as plain text. Lexing takes
-// about 5 ms per KB for Go or JavaScript, so a block at the limit renders in about 40 ms, and an
-// article with many keeps renderWait as its bound.
-const highlightLimit = 8_000
+// highlightLimit is the most code an article colours, in characters: blocks are coloured in order
+// while their total fits, and one that would pass it shows as plain text. Lexing takes up to about
+// 3 ms per KB for the common languages, and colouring multiplies a block's HTML by up to 18, so the
+// limit bounds both the render (about 30 ms, which highlightTime also caps) and the page (about
+// 180 KB more).
+const highlightLimit = 10_000
+
+// highlightTime is the most time an article's lexing takes, counted from its first coloured block.
+// Some lexers are quadratic on crafted code (8,000 newlines in C or Java, colons in YAML take
+// seconds), so the block lexing when it runs out and every later block show as plain text. A var so
+// a test can spend it.
+var highlightTime = 30 * time.Millisecond
 
 // codeHTML writes a fenced code block as goldmark does, with the code of a language chroma knows
 // split into spans of token classes (chroma's short names: kd, s, c, …) that site.css colours. Only
@@ -44,37 +54,74 @@ func renderFencedCode(w util.BufWriter, source []byte, node ast.Node, entering b
 		line := lines.At(i)
 		code.Write(line.Value(source))
 	}
-	if !highlight(w, string(language), code.String()) {
+	colored := false
+	if page, ok := w.(*pageWriter); ok {
+		colored = page.code.highlight(w, string(language), code.String())
+	}
+	if !colored {
 		goldhtml.DefaultWriter.RawWrite(w, code.Bytes())
 	}
 	_, _ = w.WriteString("</code></pre>\n")
 	return ast.WalkSkipChildren, nil
 }
 
-// highlight writes code as token spans, or nothing and false when it is not coloured: no language,
-// one chroma does not know, or code over highlightLimit.
-func highlight(w util.BufWriter, language, code string) bool {
-	if language == "" || len(code) > highlightLimit {
+// codeBudget is what an article has left for colouring code: characters and lexing time.
+type codeBudget struct {
+	used  int
+	until time.Time // zero until the first block is lexed
+	spent bool
+}
+
+// highlight writes code as token spans, or nothing and false when it is not coloured: a language
+// not in codeLexers, code that passes the article's limit, or lexing that runs out of its time.
+func (budget *codeBudget) highlight(w util.BufWriter, language, code string) bool {
+	lexer := codeLexers()[strings.ToLower(language)]
+	if lexer == nil || budget.spent || budget.used+len(code) > highlightLimit {
 		return false
 	}
-	lexer := lexers.Get(language)
-	if lexer == nil {
-		return false
+	budget.used += len(code)
+	if budget.until.IsZero() {
+		budget.until = time.Now().Add(highlightTime)
 	}
-	tokens, err := chroma.Coalesce(lexer).Tokenise(nil, code)
+	tokens, err := lexer.Tokenise(nil, code)
 	if err != nil {
 		return false
 	}
-	for _, token := range tokens.Tokens() {
-		class := tokenClass(token.Type)
-		if class != "" {
-			_, _ = w.WriteString(`<span class="` + class + `">`)
+	// The raw tokens, not chroma.Coalesce's: one Coalesce call can lex many tokens, so the time is
+	// checked per token. Adjacent tokens of one class are merged into a span here instead.
+	var spans bytes.Buffer
+	out := bufio.NewWriter(&spans)
+	class, run := "", strings.Builder{}
+	flush := func() {
+		if run.Len() == 0 {
+			return
 		}
-		goldhtml.DefaultWriter.RawWrite(w, []byte(token.Value))
 		if class != "" {
-			_, _ = w.WriteString("</span>")
+			out.WriteString(`<span class="` + class + `">`)
 		}
+		goldhtml.DefaultWriter.RawWrite(out, []byte(run.String()))
+		if class != "" {
+			out.WriteString("</span>")
+		}
+		run.Reset()
 	}
+	for token := tokens(); token != chroma.EOF; token = tokens() {
+		if !time.Now().Before(budget.until) {
+			budget.spent = true
+			return false
+		}
+		if token.Value == "" {
+			continue
+		}
+		if next := tokenClass(token.Type); next != class {
+			flush()
+			class = next
+		}
+		run.WriteString(token.Value)
+	}
+	flush()
+	_ = out.Flush()
+	_, _ = w.Write(spans.Bytes())
 	return true
 }
 
