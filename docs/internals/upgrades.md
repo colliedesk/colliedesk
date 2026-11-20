@@ -167,8 +167,8 @@ layouts, in the background of the CI `image` job and in the release.
   upgrade whose old volume is gone would dump an empty 17. Both check the volume exists first.
 - **Start the server only on a known cluster.** The script records `system_identifier` from
   `pg_control_system()` in the state file: `old_cluster` before the dump, `cluster` after the
-  restore. Every place that starts the server (a finish, a rollback, the exit handlers) starts
-  PostgreSQL first and compares it, with the major and the volume key; a hand edit (another `PGDATA`)
+  restore. Every place that starts the server (a finish, a rollback, the undo of a cut-off run, the
+  exit handlers) stops a server started by hand, starts PostgreSQL first and compares it, with the major and the volume key; a hand edit (another `PGDATA`)
   gives a fresh cluster with another identifier, and the script stops PostgreSQL and starts nothing.
   A finish leaves `compose.yaml` as the operator edited it, since the server may have written there;
   a rollback that meets another cluster puts `compose.yaml` back as it was, on 19.

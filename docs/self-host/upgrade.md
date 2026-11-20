@@ -160,7 +160,8 @@ moves: other databases on the same server stay in the old volume, and the script
 - **It starts Colliedesk only on the database it restored, or on the one it left.** It records the
   identity of the old cluster before the dump and of the PostgreSQL 19 cluster after the restore.
   If `compose.yaml` was edited so that PostgreSQL starts another cluster (a changed `PGDATA`, for
-  example), a finish or a rollback stops PostgreSQL, starts nothing and asks you to undo the edit;
+  example), a finish, a rollback or the undo of a cut-off run stops PostgreSQL, starts nothing and
+  asks you to undo the edit;
   a rollback also puts `compose.yaml` back as it was.
 - **Only Colliedesk's own writes are carried.** The dump is taken after the server stops. Another
   program that writes to the database itself, outside Colliedesk, must be stopped first, or what it
@@ -189,6 +190,7 @@ rerun, restart, a failed upgrade (also one whose undo cannot list the volumes), 
 restore, a run killed after it, one that cannot start on 19, a hangup after the switch and one in the
 rollback, a rollback killed before it changed `compose.yaml` and one that cannot put it back,
 a finish on a cluster the restore did not write, a rollback to a cluster that is not the old one,
+an undo of a cut-off run onto a cluster that is not the old one,
 rollback, and the refusals. No row or file may
 change.
 

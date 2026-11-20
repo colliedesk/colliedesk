@@ -130,10 +130,12 @@ is_cluster() {
   [ -n "$3" ] && [ "$(major)" = "$1" ] && [ "$(volume_key "$(running_volume)")" = "$2" ] &&
     [ "$(query postgres "$CLUSTER")" = "$3" ]
 }
-# start_if MAJOR KEY ID: PostgreSQL started, then the install only on that cluster; otherwise
-# PostgreSQL is stopped and nothing runs.
+# start_if MAJOR KEY ID: PostgreSQL started, then the install only on that cluster. Status 2: it
+# is another cluster, so PostgreSQL is stopped and nothing runs; 1: something did not start.
 start_if() {
-  if start_postgres && is_cluster "$1" "$2" "$3"; then start_all; else compose stop postgres >/dev/null 2>&1; return 1; fi
+  start_postgres || return 1
+  is_cluster "$1" "$2" "$3" || { compose stop postgres >/dev/null 2>&1; return 2; }
+  start_all
 }
 
 # undo: the install serving on compose.yaml, which names the old major and volume. The new volume
@@ -147,7 +149,13 @@ undo() {
     warn "compose.yaml keeps the PostgreSQL data in '$key', neither $old_key (PostgreSQL $from_major) nor $NEW_KEY (PostgreSQL $NEW_MAJOR), so it is not the install this upgrade left. Nothing was changed."
     return 1
   }
-  start_all || return 1
+  # A server started by hand since the cut-off run stops before PostgreSQL changes under it.
+  compose rm -sf server >/dev/null 2>&1
+  start_if "$from_major" "$old_key" "$old_cluster" || {
+    [ $? != 2 ] ||
+      warn "the PostgreSQL that docker compose starts from compose.yaml is not the PostgreSQL $from_major database of before the upgrade: an edit of the postgres service (PGDATA, the volume) changes it. Nothing was started. Undo the edit, then run sh upgrade-postgres.sh again."
+    return 1
+  }
   # Without the list the half-made volume cannot be told apart: $STAGE and the state stay, so the
   # next run still removes it.
   new=$(volume_for "$NEW_KEY") || return 1
@@ -201,7 +209,7 @@ on_exit() {
       warn "compose.yaml names PostgreSQL $NEW_MAJOR. Undo the edit of the postgres service first; then run sh upgrade-postgres.sh again to finish, or sh upgrade-postgres.sh --rollback to go back to PostgreSQL $from_major."
     elif [ "$(file_key)" = "$NEW_KEY" ]; then
       cf=''
-      start_if "$NEW_MAJOR" "$NEW_KEY" "$cluster" ||
+      start_if "$NEW_MAJOR" "$NEW_KEY" "$cluster" || [ $? != 2 ] ||
         warn "the PostgreSQL that docker compose starts from compose.yaml is not the PostgreSQL $NEW_MAJOR database the restore wrote; nothing was started. Undo the edit of the postgres service first."
       warn "the upgrade stopped after the restore into PostgreSQL $NEW_MAJOR was complete; compose.yaml names it. Run sh upgrade-postgres.sh again to finish, or sh upgrade-postgres.sh --rollback to go back to PostgreSQL $from_major."
     else
@@ -274,7 +282,8 @@ if [ "$ROLLBACK" = true ]; then
           if [ "$(file_key)" = "$NEW_KEY" ]; then
             state=$prior
             save_state
-            if start_if "$NEW_MAJOR" "$NEW_KEY" "$cluster"; then
+            start_if "$NEW_MAJOR" "$NEW_KEY" "$cluster"
+            if [ $? != 2 ]; then
               warn "the rollback failed; compose.yaml is as it was, on PostgreSQL $NEW_MAJOR."
             else
               warn "the rollback failed; compose.yaml is as it was, on PostgreSQL $NEW_MAJOR, but the PostgreSQL it starts is not the database the restore wrote, so nothing was started. Undo the edit of the postgres service (PGDATA, the volume), then run docker compose up -d."
@@ -286,7 +295,7 @@ if [ "$ROLLBACK" = true ]; then
           fi
           ;;
         resume)
-          start_if "$from_major" "$old_key" "$old_cluster" ||
+          start_if "$from_major" "$old_key" "$old_cluster" || [ $? != 2 ] ||
             warn "the PostgreSQL that docker compose starts from compose.yaml is not the PostgreSQL $from_major database of before the upgrade; nothing was started. Undo the edit of the postgres service first."
           warn "the rollback did not finish. compose.yaml names PostgreSQL $from_major and the server may have written to the volume $old_key: run sh upgrade-postgres.sh --rollback again to finish it."
           ;;

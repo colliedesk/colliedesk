@@ -2,25 +2,25 @@
 # Test of upgrade-postgres.sh: an install laid out by install.sh of v1.0.1 (bundled PostgreSQL 17,
 # no PGDATA line), filled with the upgrade fixture, moves to PostgreSQL 19 keeping every row and
 # file and serving each workspace its own inbox, survives an installer rerun and a restart on 19,
-# and goes back to 17 with --rollback, data as it was. A failure in the middle leaves the install on
-# 17 and serving, even with its terminal gone; a run killed in the restore leaves compose.yaml on
-# 17, so a plain docker compose up serves the data as it was, and an undo that cannot list the
+# and goes back to 17 with --rollback, data as it was. A failure in the middle leaves the install
+# on 17 and serving, even with its terminal gone; a run killed in the restore leaves compose.yaml
+# on 17, so a plain docker compose up serves the data as it was, and an undo that cannot list the
 # volumes keeps the half-made one known to the next run. Once compose.yaml names 19 the server may
 # write there, so nothing points it away again by itself: a run killed, hung up or unable to start
 # on 19 leaves compose.yaml and the volume on 19 for the next run to finish or --rollback to undo,
 # and a run after the operator put the old compose file back keeps the 19 volume. A hangup in a
 # rollback after 17 started leaves compose.yaml on 17 for --rollback to finish; a rollback killed
-# before it changed compose.yaml starts over, and one that cannot put compose.yaml back on 19 leaves
-# it on 17 with nothing started and the rollback unfinished. The compose files keep the mode the
-# install gave them, and what pg_restore writes to stderr goes to restore.log, not the terminal. A
-# finish whose PostgreSQL 19 is not the cluster the restore wrote (PGDATA edited) stops it and
-# starts nothing, and so does a rollback whose PostgreSQL 17 is not the cluster of before the
-# upgrade, which puts compose.yaml back as it was. The refusals (external database, already
-# upgraded, unknown state, unfinished rollback, too little disk, an environment PGDATA cannot be
-# added to, a rollback whose old volume is gone, a finish whose 19 volume is gone, a first run or a
-# rollback in another compose project, another compose file changing the postgres service, a
-# compose.yaml naming neither volume of the upgrade) change nothing and print no password. Needs
-# Docker with Compose v2 and curl.
+# before it changed compose.yaml starts over, and one that cannot put compose.yaml back on 19
+# leaves it on 17 with nothing started and the rollback unfinished. The compose files keep the
+# mode the install gave them, and what pg_restore writes to stderr goes to restore.log, not the
+# terminal. A finish whose PostgreSQL 19 is not the cluster the restore wrote (PGDATA edited)
+# stops it and starts nothing, and so does a rollback whose PostgreSQL 17 is not the cluster of
+# before the upgrade, which puts compose.yaml back as it was, and the undo of a killed run onto
+# such a cluster. The refusals (external database, already upgraded, unknown state, unfinished
+# rollback, too little disk, an environment PGDATA cannot be added to, a rollback whose old volume
+# is gone, a finish whose 19 volume is gone, a first run or a rollback in another compose project,
+# another compose file changing the postgres service, a compose.yaml naming neither volume of the
+# upgrade) change nothing and print no password. Needs Docker with Compose v2 and curl.
 #   sh tests/upgrade-postgres-test.sh LAYOUT IMAGE
 # LAYOUT is the database login layout of the install:
 #   owner      POSTGRES_USER=postgres, the server logs in as the colliedesk owner role (install.sh
@@ -367,6 +367,7 @@ EOF
     { cat "$TMP/upgrade.out" >&2; fail 'a run that could not finish on 19 pointed compose.yaml away from the volume the server may have written'; }
   [ -n "$(volume_for postgres19-data)" ] || fail 'a run that could not finish on 19 removed the PostgreSQL 19 volume'
   grep -q -- '--rollback' "$TMP/upgrade.out" || { cat "$TMP/upgrade.out" >&2; fail 'a run that could not finish on 19 did not say how to go on'; }
+  if grep -qF 'Undo the edit' "$TMP/upgrade.out"; then cat "$TMP/upgrade.out" >&2; fail 'a run that could not finish on 19 blamed an edit of the postgres service that nobody made'; fi
   step 'could not finish on 19: compose.yaml and the volume stay on 19'
   cp "$TMP/compose.yaml" "$TMP/compose.first19"
   cp "$TMP/.postgres-upgrade" "$TMP/state.first19"
@@ -570,6 +571,22 @@ EOF
     fail 'after an upgrade killed in the restore, a plain docker compose up does not serve PostgreSQL 17 from its old volume'
   same_data 'after a killed upgrade and a plain start' before
   step 'killed in the restore: a plain start serves PostgreSQL 17, nothing lost'
+
+  # The run after the killed one, with PGDATA moved in compose.yaml since: PostgreSQL 17 would start
+  # an empty cluster on the old volume. The undo tells it from the cluster of before the upgrade and
+  # starts nothing, so the next upgrade never dumps an empty database.
+  cp "$TMP/compose.yaml" "$TMP/compose.on17"
+  sed 's#^      PGDATA: /var/lib/postgresql/data$#      PGDATA: /var/lib/postgresql/data/moved#' "$TMP/compose.on17" >"$TMP/compose.yaml"
+  if upgrade; then cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh undid a killed upgrade onto a PostgreSQL 17 cluster that is not the one of before the upgrade'; fi
+  grep -qF 'not the PostgreSQL 17 database of before the upgrade' "$TMP/upgrade.out" ||
+    { cat "$TMP/upgrade.out" >&2; fail 'an undo onto another cluster did not name it as such'; }
+  no_secret_printed 'an undo onto another cluster'
+  if server_running; then fail 'an undo onto another cluster started the server'; fi
+  [ "$(state state)" = started ] || fail "an undo onto another cluster left the state $(state state), want started"
+  mv "$TMP/compose.on17" "$TMP/compose.yaml"
+  "$DOCKER" run --rm -v "$old_volume:/data" --entrypoint rm "$(sed -n 's/^    image: \(postgres:.*\)/\1/p' "$TMP/compose.yaml")" -rf /data/moved
+  dc up -d --wait >/dev/null 2>&1 || fail 'the install did not start on PostgreSQL 17 after an undo onto another cluster'
+  step 'an undo onto another cluster: refused, nothing started'
 
   # The run after the killed one undoes it and upgrades, and gets a hangup (the SSH session closed)
   # while the install starts on 19: the server may have written on 19, so compose.yaml and the volume
