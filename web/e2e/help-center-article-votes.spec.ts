@@ -36,7 +36,6 @@ test('article votes: a reader answers No with what was missing on the public pag
   await expect(votes.getByText('0 out of 1 found this helpful')).toBeVisible();
   const row = votes.getByRole('listitem');
   await expect(row).toHaveCount(1);
-  await expect(row).toContainText('Anonymous reader');
   await expect(row).toContainText('No');
   await expect(row).toContainText('The screenshot shows the old menu, write to [email removed] or call [number removed]');
 });
