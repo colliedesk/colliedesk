@@ -71,16 +71,16 @@ major() { query postgres 'SHOW server_version_num;' | cut -c1-2; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # The state of an upgrade, one key=value per line, rewritten whole each time.
-state='' prior='' from_major='' old_image='' old_key='' project='' dump_dir='' cluster='' started_at='' finished_at=''
+state='' prior='' from_major='' old_image='' old_key='' old_cluster='' project='' dump_dir='' cluster='' started_at='' finished_at=''
 load_state() {
-  for key in state prior from_major old_image old_key project dump_dir cluster started_at finished_at; do
+  for key in state prior from_major old_image old_key old_cluster project dump_dir cluster started_at finished_at; do
     # shellcheck disable=SC2034 # read by the eval below
     value=$(sed -n "s/^$key=//p" "$STATE_FILE" | tail -n 1)
     eval "$key=\$value"
   done
 }
 save_state() {
-  for key in state prior from_major old_image old_key project dump_dir cluster started_at finished_at; do
+  for key in state prior from_major old_image old_key old_cluster project dump_dir cluster started_at finished_at; do
     eval "printf '%s=%s\n' $key \"\$$key\""
   done >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
 }
@@ -124,6 +124,17 @@ volume_for() {
 }
 start_postgres() { compose up -d --wait postgres >/dev/null 2>&1; }
 start_all() { compose up -d --wait >/dev/null 2>&1; }
+# is_cluster MAJOR KEY ID: the running PostgreSQL is MAJOR on the volume KEY, and its cluster is ID
+# (pg_control_system). An edit that moves PGDATA starts an empty cluster on the same volume.
+is_cluster() {
+  [ -n "$3" ] && [ "$(major)" = "$1" ] && [ "$(volume_key "$(running_volume)")" = "$2" ] &&
+    [ "$(query postgres "$CLUSTER")" = "$3" ]
+}
+# start_if MAJOR KEY ID: PostgreSQL started, then the install only on that cluster; otherwise
+# PostgreSQL is stopped and nothing runs.
+start_if() {
+  if start_postgres && is_cluster "$1" "$2" "$3"; then start_all; else compose stop postgres >/dev/null 2>&1; return 1; fi
+}
 
 # undo: the install serving on compose.yaml, which names the old major and volume. The new volume
 # is removed only while $STAGE is there: compose.yaml has never named it (the switch moves $STAGE
@@ -160,8 +171,7 @@ foreign=''
 finish() {
   say 'Starting Colliedesk...'
   start_postgres || { warn "PostgreSQL $NEW_MAJOR did not start; run docker compose logs postgres for details"; return 1; }
-  if ! { [ "$(major)" = "$NEW_MAJOR" ] && [ "$(volume_key "$(running_volume)")" = "$NEW_KEY" ] &&
-    [ -n "$cluster" ] && [ "$(query postgres "$CLUSTER")" = "$cluster" ]; }; then
+  if ! is_cluster "$NEW_MAJOR" "$NEW_KEY" "$cluster"; then
     foreign=1
     compose stop postgres >/dev/null 2>&1
     warn "the PostgreSQL that docker compose starts from compose.yaml is not the PostgreSQL $NEW_MAJOR database the restore wrote in the volume $NEW_KEY: an edit of the postgres service (PGDATA, the volume) changes it. Nothing was started."
@@ -188,10 +198,11 @@ on_exit() {
   if [ "$state" = started ]; then
     [ "$status" != 0 ] || status=1
     if [ -n "$foreign" ]; then
-      warn "compose.yaml names PostgreSQL $NEW_MAJOR. Undo the edit of the postgres service, then run sh upgrade-postgres.sh again to finish, or sh upgrade-postgres.sh --rollback to go back to PostgreSQL $from_major."
+      warn "compose.yaml names PostgreSQL $NEW_MAJOR. Undo the edit of the postgres service first; then run sh upgrade-postgres.sh again to finish, or sh upgrade-postgres.sh --rollback to go back to PostgreSQL $from_major."
     elif [ "$(file_key)" = "$NEW_KEY" ]; then
       cf=''
-      compose up -d >/dev/null 2>&1
+      start_if "$NEW_MAJOR" "$NEW_KEY" "$cluster" ||
+        warn "the PostgreSQL that docker compose starts from compose.yaml is not the PostgreSQL $NEW_MAJOR database the restore wrote; nothing was started. Undo the edit of the postgres service first."
       warn "the upgrade stopped after the restore into PostgreSQL $NEW_MAJOR was complete; compose.yaml names it. Run sh upgrade-postgres.sh again to finish, or sh upgrade-postgres.sh --rollback to go back to PostgreSQL $from_major."
     else
       warn "the upgrade did not finish; putting the install back on PostgreSQL $from_major."
@@ -263,8 +274,11 @@ if [ "$ROLLBACK" = true ]; then
           if [ "$(file_key)" = "$NEW_KEY" ]; then
             state=$prior
             save_state
-            compose up -d >/dev/null 2>&1
-            warn "the rollback failed; compose.yaml is as it was, on PostgreSQL $NEW_MAJOR."
+            if start_if "$NEW_MAJOR" "$NEW_KEY" "$cluster"; then
+              warn "the rollback failed; compose.yaml is as it was, on PostgreSQL $NEW_MAJOR."
+            else
+              warn "the rollback failed; compose.yaml is as it was, on PostgreSQL $NEW_MAJOR, but the PostgreSQL it starts is not the database the restore wrote, so nothing was started. Undo the edit of the postgres service (PGDATA, the volume), then run docker compose up -d."
+            fi
           else
             # Not back on 19: the state stays rolling_back and nothing starts, so no server runs on
             # the old volume under a state that says it is on 19.
@@ -272,7 +286,8 @@ if [ "$ROLLBACK" = true ]; then
           fi
           ;;
         resume)
-          compose up -d >/dev/null 2>&1
+          start_if "$from_major" "$old_key" "$old_cluster" ||
+            warn "the PostgreSQL that docker compose starts from compose.yaml is not the PostgreSQL $from_major database of before the upgrade; nothing was started. Undo the edit of the postgres service first."
           warn "the rollback did not finish. compose.yaml names PostgreSQL $from_major and the server may have written to the volume $old_key: run sh upgrade-postgres.sh --rollback again to finish it."
           ;;
       esac
@@ -294,8 +309,10 @@ if [ "$ROLLBACK" = true ]; then
     say "A rollback did not finish; finishing it on PostgreSQL $from_major..."
   fi
   start_postgres || fail "PostgreSQL $from_major did not start; run docker compose logs postgres for details"
-  [ "$(major)" = "$from_major" ] && [ "$(volume_key "$(running_volume)")" = "$old_key" ] ||
-    fail "PostgreSQL $from_major did not come back on the volume $old_key"
+  is_cluster "$from_major" "$old_key" "$old_cluster" || {
+    compose stop postgres >/dev/null 2>&1
+    fail "the PostgreSQL that docker compose starts on the volume $old_key is not the PostgreSQL $from_major database of before the upgrade: an edit of the postgres service (PGDATA, the volume) changes it. Undo the edit, then run sh upgrade-postgres.sh --rollback again."
+  }
   phase=resume
   start_all || fail 'the install did not become healthy on its old database; run docker compose ps for details'
   state=rolled_back finished_at=$(now)
@@ -360,7 +377,7 @@ project=$("$DOCKER" inspect -f '{{index .Config.Labels "com.docker.compose.proje
 running_key=$(volume_key "$(running_volume)")
 [ "$(running_image)" = "$old_image" ] && [ "$running_key" = "$old_key" ] ||
   fail "postgres runs $(running_image) on the volume $running_key, but compose.yaml names $old_image and $old_key: another compose file changes them. Upgrade by hand: docs/self-host/upgrade.md#postgresql-versions"
-from_major=$(major)
+from_major=$(major) old_cluster=$(query postgres "$CLUSTER")
 case $from_major in
   "$NEW_MAJOR") say "PostgreSQL is already $NEW_MAJOR; nothing to do."; exit 0 ;;
   16 | 17 | 18) ;;

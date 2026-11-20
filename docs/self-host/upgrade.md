@@ -157,10 +157,11 @@ moves: other databases on the same server stay in the old volume, and the script
   `COMPOSE_FILE`), an old data volume that is gone, and a finish whose `postgres19-data` volume is
   gone. It never prints a password: what `pg_restore` and `vacuumdb` report goes to `restore.log` in
   the dump directory, and the message names that file.
-- **It finishes only on the database it restored.** It records the identity of the PostgreSQL 19
-  cluster it wrote. If `compose.yaml` was edited after the switch so that PostgreSQL 19 starts
-  another cluster (a changed `PGDATA`, for example), it stops PostgreSQL, starts nothing and asks
-  you to undo the edit.
+- **It starts Colliedesk only on the database it restored, or on the one it left.** It records the
+  identity of the old cluster before the dump and of the PostgreSQL 19 cluster after the restore.
+  If `compose.yaml` was edited so that PostgreSQL starts another cluster (a changed `PGDATA`, for
+  example), a finish or a rollback stops PostgreSQL, starts nothing and asks you to undo the edit;
+  a rollback also puts `compose.yaml` back as it was.
 - **Only Colliedesk's own writes are carried.** The dump is taken after the server stops. Another
   program that writes to the database itself, outside Colliedesk, must be stopped first, or what it
   writes after the dump stays in the old volume.
@@ -187,7 +188,8 @@ the upgrade fixture, for both database login layouts the installer has made: upg
 rerun, restart, a failed upgrade (also one whose undo cannot list the volumes), a run killed in the
 restore, a run killed after it, one that cannot start on 19, a hangup after the switch and one in the
 rollback, a rollback killed before it changed `compose.yaml` and one that cannot put it back,
-a finish on a cluster the restore did not write, rollback, and the refusals. No row or file may
+a finish on a cluster the restore did not write, a rollback to a cluster that is not the old one,
+rollback, and the refusals. No row or file may
 change.
 
 ## Settings move into the database
