@@ -1,20 +1,20 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { NotAnAgentError } from '../../api/cloud-signup';
 import { clerkAppearance, clerkFrontendHost, narrowViewport } from './clerk-appearance';
 import { CloudSignIn } from './cloud-sign-in';
 import { answerSignupQuestions } from './test-signup-answers';
 
-const clerk = vi.hoisted(() => ({ getToken: vi.fn(), signOut: vi.fn(), signedIn: true, signInProps: vi.fn() }));
+const clerk = vi.hoisted(() => ({ getToken: vi.fn(), signOut: vi.fn(), signedIn: true, loaded: true, signInProps: vi.fn() }));
 
 vi.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
   SignIn: (props: Record<string, unknown>) => { clerk.signInProps(props); return <div>Clerk widget</div>; },
-  useAuth: () => ({ getToken: clerk.getToken, isLoaded: true, isSignedIn: clerk.signedIn }),
+  useAuth: () => ({ getToken: clerk.getToken, isLoaded: clerk.loaded, isSignedIn: clerk.signedIn }),
   useClerk: () => ({ signOut: clerk.signOut }),
 }));
 
-beforeEach(() => { vi.clearAllMocks(); clerk.signedIn = true; });
+beforeEach(() => { vi.clearAllMocks(); clerk.signedIn = true; clerk.loaded = true; });
 
 test('offers a retry when Clerk cannot provide a session token', async () => {
   clerk.getToken.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce('session-token');
@@ -172,4 +172,30 @@ test('the Clerk host to warm up is read from the publishable key, and a malforme
 	expect(clerkFrontendHost('pk_live_Y2xlcmsuY29sbGllZGVzay5jb20k')).toBe('clerk.colliedesk.com');
 	expect(clerkFrontendHost('pk_test_not-base64!')).toBeUndefined();
 	expect(clerkFrontendHost('')).toBeUndefined();
+});
+
+// Clerk's script, then its form, arrive after the page: until the form is drawn, grey blocks in its shape
+// hold the panel, so nothing jumps when it comes and a person sees where the form will be.
+test('while Clerk loads, grey blocks in the shape of its form hold the panel and the wait is named for screen readers', () => {
+  clerk.loaded = false;
+  clerk.signedIn = false;
+  const { container } = render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Loading sign in…');
+  expect(screen.getByRole('status')).toHaveClass('sr-only');
+  expect(container.querySelector('[aria-hidden="true"] .signin-skeleton')).not.toBeNull();
+  expect(screen.queryByText('Clerk widget')).not.toBeInTheDocument();
+});
+
+test('once Clerk has loaded, the blocks stay until its form is drawn, then give way to it', async () => {
+  clerk.signedIn = false;
+  render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} />);
+  expect(screen.getByText('Clerk widget')).not.toBeVisible();
+  expect(screen.getByRole('status')).toHaveTextContent('Loading sign in…');
+
+  const button = document.createElement('button');
+  button.className = 'cl-formButtonPrimary';
+  act(() => { screen.getByText('Clerk widget').append(button); });
+
+  await waitFor(() => expect(screen.getByText('Clerk widget')).toBeVisible());
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });

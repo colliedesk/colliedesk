@@ -1,0 +1,11 @@
+/* Grey blocks that hold a page's layout while it loads (ui/skeleton.tsx, ui/loading-status.tsx). */
+@keyframes skeleton-pulse { 50% { opacity: 0.4; } }
+/* The visually hidden status (.sr-only) is absolutely placed: keep it inside the shape. */
+.loading-shape { position: relative; }
+/* One line of text: as tall as the line box it stands in for, with a bar the height of the letters. flow-root keeps
+   the bar's margin inside the line, so the line is no taller in a plain span than in a flex row. */
+.skeleton-line { display: flow-root; min-width: 0; height: 1.25em; height: 1lh; }
+.skeleton-line::before, .skeleton-dot { content: ''; display: block; border-radius: var(--radius-sm); background: var(--surface-2); animation: skeleton-pulse 1.4s var(--ease) infinite; }
+.skeleton-line::before { height: 0.75em; margin-top: 0.25em; margin-top: calc((1lh - 0.75em) / 2); }
+.skeleton-dot { flex: none; border-radius: var(--radius-full); }
+@media (prefers-reduced-motion: reduce) { .skeleton-line::before, .skeleton-dot { animation: none; } }

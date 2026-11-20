@@ -296,3 +296,14 @@ test('a plain trial sign-up still asks the three questions and refuses to go on 
   expect(await screen.findByRole('alert')).toHaveTextContent('Answer each question to continue.');
   expect(calls('/api/v1/auth/cloud/signup')).toHaveLength(0);
 });
+
+test('while the hand-off signs in, the page holds the sign-in card and names the wait for screen readers', async () => {
+  serve({ signedIn: false, config: config(true, 'https://app.example.com') });
+  const answer = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url: string) => url.split('?')[0] === '/api/v1/auth/redeem' ? new Promise(() => undefined) : answer(url));
+  open('/sign-in?next=%2Fsettings#handoff=one-time');
+  const status = await screen.findByRole('status');
+  expect(status).toHaveTextContent('Loading sign in…');
+  expect(status).toHaveClass('sr-only');
+  expect(status.closest('.redeem-panel')).not.toBeNull();
+});
