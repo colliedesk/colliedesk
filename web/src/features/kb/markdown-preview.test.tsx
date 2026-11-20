@@ -13,3 +13,36 @@ describe('the preview shows an article as the help center does', () => {
     expect(container.querySelectorAll('iframe')).toHaveLength(c.iframes);
   });
 });
+
+// GitHub's alert syntax shows as the help center shows it: a box a screen reader announces as a note,
+// with the type named first (server/internal/helpcenter/callout_test.go).
+describe('the preview shows callouts', () => {
+  it.each([
+    ['NOTE', 'note', 'Note'],
+    ['TIP', 'tip', 'Tip'],
+    ['IMPORTANT', 'important', 'Important'],
+    ['WARNING', 'warning', 'Warning'],
+    ['CAUTION', 'caution', 'Caution'],
+    ['note', 'note', 'Note'],
+  ])('[!%s]', (marker, type, label) => {
+    const { container } = render(<MarkdownPreview text={`> [!${marker}]\n> Deleting a workspace cannot be undone.`} />);
+    const callout = container.querySelector('aside');
+    expect(callout?.className).toBe(`callout callout-${type}`);
+    expect(callout?.getAttribute('role')).toBe('note');
+    expect([...(callout?.querySelectorAll('p') ?? [])].map((p) => [p.className, p.textContent])).toEqual([
+      ['callout-label', label],
+      ['', 'Deleting a workspace cannot be undone.'],
+    ]);
+    expect(container.querySelector('blockquote')).toBeNull();
+  });
+
+  it.each([
+    ['an unknown type', '> [!DANGER]\n> Unknown type.'],
+    ['words after the marker', '> [!NOTE] same line\n> text.'],
+    ['a marker inside a list', '> - [!NOTE]\n>   inside a list item'],
+  ])('%s stays a quote', (_name, text) => {
+    const { container } = render(<MarkdownPreview text={text} />);
+    expect(container.querySelector('aside')).toBeNull();
+    expect(container.querySelector('blockquote')).not.toBeNull();
+  });
+});

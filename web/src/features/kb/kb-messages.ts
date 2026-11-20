@@ -142,6 +142,9 @@ export const kbMessages = {
   pickerKeysInsert: 'insert',
   pickerSaveFailed: 'The alt text could not be saved to the library, so nothing was inserted. Try again.',
   nothingToPreview: 'Nothing to preview yet.',
+  // The help center's English labels (server/internal/helpcenter/ui-text.go); a page in another
+  // language names the type in its own words.
+  calloutLabels: { note: 'Note', tip: 'Tip', important: 'Important', warning: 'Warning', caution: 'Caution' },
   htmlLeftOut: (what: string) => `Left out of the article: ${what}. Articles show YouTube and Vimeo players and no other HTML; your saved text keeps it as written.`,
   videoLinkNotHttps: 'Paste the whole link, starting with https://.',
   videoLinkOtherSite: (host: string) => `${host} is not a video site articles can show: paste a YouTube or Vimeo link.`,

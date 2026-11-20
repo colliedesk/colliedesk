@@ -31,9 +31,9 @@ var markdown = goldmark.New(
 		// Alignment as an attribute: a style attribute would be refused by the page's CSP.
 		extension.NewTable(extension.WithTableCellAlignMethod(extension.TableCellAlignAttribute)),
 		extension.Strikethrough, linkify{}, extension.TaskList, extension.Footnote),
-	goldmark.WithParserOptions(parser.WithAutoHeadingID(), parser.WithASTTransformers(util.Prioritized(publicLinks{}, 100), util.Prioritized(hiddenText{}, 200))),
+	goldmark.WithParserOptions(parser.WithAutoHeadingID(), parser.WithASTTransformers(util.Prioritized(publicLinks{}, 100), util.Prioritized(hiddenText{}, 200), util.Prioritized(callouts{}, 300))),
 	// Below the default renderers' 1000, so these functions replace theirs.
-	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(rawHTML{}, 100))),
+	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(rawHTML{}, 100), util.Prioritized(calloutHTML{}, 100))),
 )
 
 // linkify is goldmark's Linkify (bare URLs, www. addresses and e-mail addresses become links), asked
@@ -73,7 +73,7 @@ var emailAddress = regexp.MustCompile("^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A
 
 // plain parses text for excerpts, leaving out what the page hides (hiddenText).
 var plain = goldmark.New(goldmark.WithExtensions(extension.Strikethrough, extension.Table),
-	goldmark.WithParserOptions(parser.WithASTTransformers(util.Prioritized(hiddenText{}, 200))))
+	goldmark.WithParserOptions(parser.WithASTTransformers(util.Prioritized(hiddenText{}, 200), util.Prioritized(callouts{}, 300))))
 
 // baseKey carries the help center's base path to publicLinks; libraryKey the page's library to
 // hiddenText, which must leave out what rawHTML will.
@@ -92,35 +92,37 @@ func renderArticle(body, base string) (template.HTML, error) {
 // renderArticleWith is renderArticle for a text whose library videos are videos: each plays from the
 // help center at base, with its poster and size; any other <video> is left out.
 func renderArticleWith(body, base string, videos []domain.PublicKBVideo) (template.HTML, error) {
-	page, _, err := renderArticlePage(body, base, videos)
-	return page, err
+	page, err := renderArticlePage(body, base, "en", videos)
+	return page.body, err
 }
 
-// renderArticlePage is renderArticleWith that also reads the text as a list of questions
-// (questionList) from the same parse, so a page is parsed once.
-func renderArticlePage(body, base string, videos []domain.PublicKBVideo) (template.HTML, []faqItem, error) {
+// renderArticlePage is renderArticleWith for a page in the language lang (the help center's words
+// inside the text, such as a callout's label, are in it) that also reads the text as a list of
+// questions (questionList) from the same parse, so a page is parsed once.
+func renderArticlePage(body, base, lang string, videos []domain.PublicKBVideo) (rendered, error) {
 	var out bytes.Buffer
 	context := parser.NewContext(parser.WithIDs(&headingIDs{used: map[string]bool{}, next: map[string]int{}}))
 	context.Set(baseKey, base)
 	library := publicLibrary(base, videos)
 	context.Set(libraryKey, library)
 	// The node renderers are shared by every render; the writer carries this page's library to them.
-	writer := &pageWriter{Writer: bufio.NewWriter(&out), library: library}
+	writer := &pageWriter{Writer: bufio.NewWriter(&out), library: library, text: textFor(lang)}
 	source := tame([]byte(body))
 	document := markdown.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 	if err := markdown.Renderer().Render(writer, source, document); err != nil {
-		return "", nil, err
+		return rendered{}, err
 	}
 	if err := writer.Flush(); err != nil {
-		return "", nil, err
+		return rendered{}, err
 	}
-	return template.HTML(out.String()), questionList(document, source), nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
+	return rendered{body: template.HTML(out.String()), faq: questionList(document, source)}, nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
 }
 
 // pageWriter is the buffered writer goldmark renders a page into, with the library of that page.
 type pageWriter struct {
 	*bufio.Writer
 	library kbhtml.Library
+	text    uiText
 }
 
 func libraryOf(writer util.BufWriter) kbhtml.Library {
@@ -128,6 +130,14 @@ func libraryOf(writer util.BufWriter) kbhtml.Library {
 		return page.library
 	}
 	return publicLibrary("", nil)
+}
+
+// textOf is the help center's words in the language of the page being rendered.
+func textOf(writer util.BufWriter) uiText {
+	if page, ok := writer.(*pageWriter); ok {
+		return page.text
+	}
+	return uiTexts["en"]
 }
 
 // publicLibrary finds the videos of a page at base: the help center's own addresses, the poster's

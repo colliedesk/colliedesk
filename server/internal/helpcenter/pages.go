@@ -599,7 +599,7 @@ func (s *Site) articlePage(ctx context.Context, v view, article domain.PublicKBA
 // articleOf is the page of article in the tree t, beside neighbours, the first articles of its
 // collection. plain is true when it shows the text as written because rendering took too long.
 func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbours []domain.PublicKBArticle) (data page, plain bool) {
-	rendered := s.renders.article(v.site.WorkspaceID, article.Number, v.base, article.BodyMD, article.Videos...)
+	rendered := s.renders.article(v.site.WorkspaceID, article.Number, v.base, textKey(v.locale()), article.BodyMD, article.Videos...)
 	collection := t.byID[article.CollectionID]
 	data = s.page(v, article.Title, v.crumbs(collection))
 	data.Heading, data.Body = article.Title, rendered.body
