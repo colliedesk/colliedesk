@@ -623,6 +623,32 @@ type KBMediaReplacement struct {
 	UndoneByAgentID   *string         `json:"undone_by_agent_id"`
 }
 
+// KBArticleVoteReset is one press of "Reset votes" on an article: the counts the page showed until then,
+// imported votes included, and who reset them (a person, or an AI agent through a token).
+type KBArticleVoteReset struct {
+	ID             string    `json:"id"`
+	ArticleID      string    `json:"article_id"`
+	Helpful        int       `json:"helpful"`
+	NotHelpful     int       `json:"not_helpful"`
+	ResetByAgentID *string   `json:"reset_by_agent_id"`
+	TokenID        *string   `json:"token_id"`
+	TokenLabel     *string   `json:"token_label"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// KBArticleVote is one reader's answer to "Was this article helpful?". Voter is the hex SHA-256 the
+// server keeps of the reader's cookie, never the cookie; ResetID names the reset that closed the vote.
+type KBArticleVote struct {
+	ID        string    `json:"id"`
+	ArticleID string    `json:"article_id"`
+	Voter     string    `json:"voter"`
+	Helpful   bool      `json:"helpful"`
+	Missing   *string   `json:"missing"`
+	ResetID   *string   `json:"reset_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // HelpCenter is the public help center's settings, its theme and the knowledge base counters. A null
 // theme field is the default look; the logo and favicon are kb-images.ndjson ids.
 type HelpCenter struct {
@@ -1275,6 +1301,8 @@ type Sink interface {
 	KBImage(KBImage) error
 	KBVideo(KBVideo) error
 	KBMediaReplacement(KBMediaReplacement) error
+	KBArticleVoteReset(KBArticleVoteReset) error
+	KBArticleVote(KBArticleVote) error
 	HelpCenter(HelpCenter) error
 	AgentRequest(AgentRequest) error
 	ImportJob(ImportJob) error

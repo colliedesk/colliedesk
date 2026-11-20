@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -102,9 +102,9 @@ jobs:
           if [ -n "$(gofmt -l . ../docs)" ]; then gofmt -l . ../docs; echo 'gofmt: format the files above' >&2; exit 1; fi
           go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
-          # Five regular shards of three go test processes each, and three latency shards that run their
-          # gates as one process (about 100 seconds of gates in run 39903507509), then regular tests if
-          # their gates end early. Each test weighs its time in CI (go-test-timings.json);
+          # Four regular shards of three go test processes each, and three latency shards that run their
+          # gates as one process (about 240 seconds of gates in all, runs of 2026-11-20), then regular
+          # tests if their gates end early. Each test weighs its time in CI (go-test-timings.json);
           # go-test-shard.py says how a shard's time is estimated, go-test-timings.py how to refresh it.
           python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 --latency-shards 3 --parallel 2.7 --process-seconds 11 --timings ../.github/go-test-timings.json < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
       - name: Wait for test services
@@ -134,6 +134,12 @@ jobs:
           done < "$RUNNER_TEMP/go-test-patterns.txt"
           for pid in "${pids[@]}"; do wait "$pid" || status=1; done
           exit "$status"
+      # Once, after the tests of a regular shard: ending at 131 to 171 seconds, the Go jobs had time to
+      # spare before the e2e shards, and the latency shards time their gates alone.
+      - name: go vet passes and the migrations are valid
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        working-directory: server
+        run: go vet ./... ../docs/... && go run ./cmd/migration-check --repo=..
       # go-cache.yml saves main's entry on every push. A pull request whose go.sum main has not cached
       # yet (a new module) saves once, on its own ref, so its next runs skip compiling that module
       # (the Anthropic SDK: about 23 seconds per job). Only shard 7 uploads, so one job pays for it.
@@ -150,6 +156,14 @@ jobs:
   web:
     needs: pr-verified
     if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
+    # Two jobs, each running half the test files (Vitest's --shard, by a hash of the path): one job ran
+    # all 236 in 152 to 243 seconds, and each file's jsdom environment and setup took 40% of its workers'
+    # time (run 44698890999).
+    # A Go shard fewer keeps the runner count (RunnerConcurrency in tests/ci-tools-test.py).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -163,9 +177,16 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
       - name: Unit tests
         working-directory: web
-        # The type check runs in the e2e job, and the bundle budget after the e2e job's own Vite build
-        # of the same commit: Vitest is this job's long pole.
-        run: corepack pnpm test
+        # The bundle budget runs after the e2e job's own Vite build of the same commit. It keeps its default of one worker fewer
+        # than the runner's 4 CPUs: with four, the knowledge base page's lazy chunk missed its wait in
+        # app.test.tsx (run 44705059381), and the suite took 148 seconds against 152 to 243 with three.
+        run: corepack pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+      # Once, after the shard with less test time (Vitest's split by path hash is fixed), and not
+      # beside Vitest: it would take cores from its workers.
+      - name: The web app type-checks and matches the API contract
+        if: ${{ !cancelled() && matrix.shard == strategy.job-total }}
+        working-directory: web
+        run: corepack pnpm typecheck
   # The browser tests outside onboarding, in shards: one job ran them in 48 of its 117 seconds
   # (run 39902604105) and set the end of the whole run. Each shard runs whole test files, which
   # e2e-shard.py balances by their measured time (.github/e2e-test-timings.json): Playwright's own
@@ -188,12 +209,17 @@ jobs:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
       # The arguments of every shard's run, and of the check that the shards cover them.
       E2E_ARGS: --project=chromium --grep-invert @onboarding --fully-parallel --workers=3
-      # How e2e-shard.py splits the files: 3 workers ran 2.4 to 2.7 tests at once, and the last
-      # shard's tests started a median 17 seconds after the first's (8 runs, 2026-11-19).
-      E2E_SPLIT: --timings ../.github/e2e-test-timings.json --parallel 2.5 --last-shard-delay 17
+      # How e2e-shard.py splits the files: 3 workers ran 2.6 to 2.9 tests at once, and both shards
+      # started their tests within 1 second of each other once their builds hit main's cache (run
+      # 44722352815).
+      E2E_SPLIT: --timings ../.github/e2e-test-timings.json --parallel 2.75 --last-shard-delay 0
       # The channels journeys read the From line of a reply in Mailpit.
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
+      # Ubuntu 24.04's gcc differs from ubuntu-latest's, where main's Go cache is built, and gcc's version is
+      # part of runtime/cgo's cache key: with cgo on, `go list` reported 107 of 484 packages stale here (run
+      # 44719216506). The release image builds without cgo too.
+      CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start test services in the background
@@ -240,13 +266,19 @@ jobs:
       - name: Install frozen dependencies
         working-directory: web
         run: corepack pnpm install --frozen-lockfile
-      # The Vite build and the servers' compile also run while Chromium installs: the test servers'
-      # `go run` then finds this commit's packages, embedded app included, in the Go cache. The
-      # tests wait for it, so it starts first and the checks below yield the cores to it (nice).
+      # The Vite build and the servers' link also run while Chromium installs, to the paths the
+      # tests run them from (web/e2e/support/cli.ts): the test servers then start this commit's
+      # binaries, embedded app included, without linking. The tests wait for it, so it starts
+      # first and the checks below yield the cores to it (nice).
+      # How many packages the restored cache misses. When main's cache fits this job: cmd/collie itself
+      # and the packages this commit changed, with what imports them.
+      - name: Count the Go packages the cache misses
+        working-directory: server
+        run: echo "stale=$(go list -tags e2e -deps -f '{{if .Stale}}x{{end}}' ./cmd/collie | grep -c x || true)"
       - name: Build the app and compile the test servers in the background
         run: |
           sh .github/scripts/ci-background.sh start app sh -c \
-            'cd web && corepack pnpm exec vite build && corepack pnpm exec vite build -c vite.operator.config.ts && cd ../server && go build -tags e2e -o /dev/null ./cmd/collie && go build -o /dev/null ./cmd/collie'
+            'cd web && corepack pnpm exec vite build && corepack pnpm exec vite build -c vite.operator.config.ts && cd ../server && go build -tags e2e -o ../.cache/e2e/colliedesk-e2e ./cmd/collie && go build -o ../.cache/e2e/colliedesk ./cmd/collie'
       - name: Pick this shard's test files in the background
         working-directory: web
         env:
@@ -256,16 +288,8 @@ jobs:
           # shellcheck disable=SC2016
           sh ../.github/scripts/ci-background.sh start split nice -n 10 bash -c \
             'set -o pipefail; corepack pnpm exec playwright test $E2E_ARGS --list --reporter=json | python3 ../.github/scripts/e2e-shard.py "$SHARD" "$SHARDS" $E2E_SPLIT > "$RUNNER_TEMP/e2e-files"'
-      # The API drift and TypeScript checks of the web app, go vet and migration validation run here,
-      # in the background while Chromium installs and the database starts: this job finished at 56
-      # seconds, while each of them made the job it ran in end later (the web job, the Go shards).
-      # They run once, on the last shard, as does the check that the shards cover every test.
-      - name: Start the type check, go vet and migration validation in the background
-        if: matrix.shard == strategy.job-total
-        run: |
-          (cd web && sh ../.github/scripts/ci-background.sh start typecheck nice -n 10 corepack pnpm typecheck)
-          (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... ../docs/... && go run ./cmd/migration-check --repo=..')
-      # In the foreground it took 10 seconds before Chromium could install (run 39904636025).
+      # Once, on the last shard. In the foreground it took 10 seconds before Chromium could install
+      # (run 39904636025).
       - name: Start the check that the shards run every end-to-end test exactly once
         if: matrix.shard == strategy.job-total
         working-directory: web
@@ -296,12 +320,6 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: web
         run: corepack pnpm bundle:check
-      - name: The web app type-checks and matches the API contract
-        if: ${{ !cancelled() && matrix.shard == strategy.job-total }}
-        run: sh .github/scripts/ci-background.sh wait typecheck
-      - name: go vet passes and the migrations are valid
-        if: ${{ !cancelled() && matrix.shard == strategy.job-total }}
-        run: sh .github/scripts/ci-background.sh wait vet
       - name: The shards run every end-to-end test exactly once
         if: ${{ !cancelled() && matrix.shard == strategy.job-total }}
         run: sh .github/scripts/ci-background.sh wait shards
@@ -327,6 +345,10 @@ jobs:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
+      # Ubuntu 24.04's gcc differs from ubuntu-latest's, where main's Go cache is built, and gcc's version is
+      # part of runtime/cgo's cache key: with cgo on, `go list` reported 107 of 484 packages stale here (run
+      # 44719216506). The release image builds without cgo too.
+      CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start test services in the background

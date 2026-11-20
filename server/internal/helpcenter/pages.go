@@ -135,6 +135,8 @@ type page struct {
 	Neighbours                 []articleLink
 	// Contents are the article's headings, listed above its text and in the rail.
 	Contents []contentsItem
+	// Votes is the article's "Was this article helpful?" box (votes.go).
+	Votes *voteBox
 
 	Searched bool
 	Results  []searchResult
@@ -532,7 +534,12 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		return
 	}
 	// A query names no other article: the address without it is the canonical one, checked below.
-	if request.URL.RawQuery == "" && fresh(response, request, v.etag) {
+	votes, err := s.config.Store.KBArticleVotesVersion(request.Context(), v.site.WorkspaceID, number)
+	if err != nil {
+		s.writeError(response, err)
+		return
+	}
+	if request.URL.RawQuery == "" && fresh(response, request, v.articleTag(votes)) {
 		return
 	}
 	article, err := s.config.Store.HelpCenterArticleIn(request.Context(), v.site.WorkspaceID, number, v.lang)
@@ -561,9 +568,17 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		return
 	}
 	// The number finds the article; any other slug, an old one included, or a query moves to the
-	// current address.
-	if match[2] != article.Slug || request.URL.RawQuery != "" {
-		moveTo(response, request, v.root+ArticlePath(article.Number, article.Slug)+suffix)
+	// current address. ?voted= after a vote is the one query kept: it shows the box's next step.
+	voted := ""
+	if !asMarkdown {
+		voted = voteState(request)
+	}
+	if match[2] != article.Slug || request.URL.RawQuery != "" && voted == "" {
+		kept := ""
+		if voted != "" {
+			kept = "?voted=" + voted
+		}
+		moveTo(response, request, v.root+ArticlePath(article.Number, article.Slug)+suffix+kept)
 		return
 	}
 	if asMarkdown {
@@ -575,8 +590,12 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		s.writeError(response, err)
 		return
 	}
-	if plain {
-		// The next visit may get the rendered page under the same ETag.
+	if voted != "" {
+		data.Votes.State = voted
+	}
+	if plain || voted != "" {
+		// The next visit may get the rendered page under the same ETag; a page after a vote is one
+		// reader's.
 		response.Header().Del("ETag")
 		response.Header().Set("Cache-Control", "no-store")
 	}
@@ -631,6 +650,7 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 		data.RailLabel = fmt.Sprintf(v.text.InCollection, collection.Name)
 	}
 	data.Neighbours = v.articleLinks(neighbours, article.Number)
+	data.Votes = voteBoxOf(v, article)
 	paths := pagePaths{}
 	for lang, slug := range article.Alternates {
 		paths[lang] = ArticlePath(article.Number, slug)

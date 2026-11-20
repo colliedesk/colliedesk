@@ -248,14 +248,18 @@ func (s *Site) llms(response http.ResponseWriter, request *http.Request, v view)
 // apiMediaPath matches the API path an article links its images and videos by.
 var apiMediaPath = regexp.MustCompile(regexp.QuoteMeta(strings.TrimSuffix(domain.KBImagePath, "images/")) + `(images|media)/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
 
+// helpCenterLink is a Markdown link to an article or collection written relative to the help center (/a/…, /c/…).
+var helpCenterLink = regexp.MustCompile(`\]\((/[ac]/[^/)\s])`)
+
 // htmlComment is a note in the text that its page never shows.
 var htmlComment = regexp.MustCompile(`(?s)<!--.*?-->`)
 
-// articleMarkdown is the article as written, under its title, with its images and videos on the help
-// center's address and without the notes its page hides; the canonical address is its page.
+// articleMarkdown is the article as written, under its title, with its images, videos and links to other
+// articles on the help center's address and without the notes its page hides; the canonical address is its page.
 func (s *Site) articleMarkdown(response http.ResponseWriter, request *http.Request, v view, article domain.PublicKBArticle) {
 	text := htmlComment.ReplaceAllString(article.BodyMD, "")
 	text = apiMediaPath.ReplaceAllString(text, v.address+"/$1/$2")
+	text = helpCenterLink.ReplaceAllString(text, "]("+v.address+"$1")
 	body := "# " + strings.TrimSpace(strings.NewReplacer("\n", " ", "\r", " ").Replace(article.Title)) + "\n\n" + strings.TrimSpace(text) + "\n"
 	response.Header().Set("Link", "<"+v.rootAddress+ArticlePath(article.Number, article.Slug)+`>; rel="canonical"`)
 	s.writeFile(response, request, v, "text/markdown; charset=utf-8", []byte(body))

@@ -12,15 +12,17 @@ INTERVAL=${CI_SERVICES_INTERVAL:-1}
 STATE=${CI_SERVICES_DIR:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/ci-services}
 
 # Postgres is pinned to the minor version Colliedesk Cloud runs, so the latency gates measure what
-# production does: 17.12 makes AI retrieval about six times slower than 17.11 on the same rows.
+# production does: 17.12 made AI retrieval about six times slower than 17.11 on the same rows.
+# PGDATA stays on the tmpfs (the image's default moved to /var/lib/postgresql/19/docker). PostgreSQL 19
+# changed how the lock table is sized: its release notes double a setting to keep the same capacity.
 run_service() {
   case "$1" in
     postgres)
       "$DOCKER" run -d --name ci-postgres -p 5432:5432 \
-        --tmpfs /var/lib/postgresql/data:rw,size=2g \
+        --tmpfs /var/lib/postgresql/data:rw,size=2g -e PGDATA=/var/lib/postgresql/data \
         -e POSTGRES_DB=colliedesk_test -e POSTGRES_USER=colliedesk -e POSTGRES_PASSWORD=colliedesk \
-        postgres:17.11-bookworm \
-        postgres -c max_locks_per_transaction=256 ;;
+        postgres:19.0-bookworm \
+        postgres -c max_locks_per_transaction=512 ;;
     mailpit) "$DOCKER" run -d --name ci-mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.27 ;;
   esac
 }

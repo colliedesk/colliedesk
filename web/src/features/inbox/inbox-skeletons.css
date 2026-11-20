@@ -1,0 +1,4 @@
+/* A customer message's header holds its Move menu, which sets the header's height: the control size for a finger,
+   28 px for a mouse (message-moves.css). The grey header keeps that height, so the text below it does not move. */
+.loading-shape .message-meta { min-height: var(--control); }
+@media (pointer: fine) and (min-width: 30.01rem) { .loading-shape .message-meta { min-height: 28px; } }

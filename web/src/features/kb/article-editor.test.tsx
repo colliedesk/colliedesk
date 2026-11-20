@@ -32,7 +32,9 @@ function open(props: { articleId?: string; collectionId?: string }) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ArticleRoute {...props} /></QueryClientProvider>);
 }
 
-const base = { 'GET /api/v1/auth/me': () => json(200, me), 'GET /api/v1/kb/collections': () => json(200, { items: collections }) };
+const noVotes = { article_id: ids.article, helpful: 0, not_helpful: 0, imported: { helpful: 0, not_helpful: 0 }, votes: [], resets: [] };
+const base = { 'GET /api/v1/auth/me': () => json(200, me), 'GET /api/v1/kb/collections': () => json(200, { items: collections }),
+  [`GET /api/v1/kb/articles/${ids.article}/votes`]: () => json(200, noVotes) };
 
 test('a new article is saved as a draft in the collection it was started from, then opens as itself', async () => {
   const calls = serve({ ...base, 'POST /api/v1/kb/articles': () => json(201, article({ title: 'Reset your password', body_md: '# Steps' })) });

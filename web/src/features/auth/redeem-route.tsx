@@ -12,6 +12,7 @@ import { readCheckoutIntent } from '../settings/checkout-intent';
 import { readPlanIntent } from '../settings/plan-intent';
 import { preconnectClerk } from './clerk-appearance';
 import { InvitePage, LinkPageLoading } from './invite-page';
+import { SignInLoading } from './sign-in-loading';
 import { RedeemPage } from './redeem-page';
 
 const loadCloudSignIn = () => import('./cloud-sign-in');
@@ -103,7 +104,7 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   return <RedeemPage token={token} cloudEnabled={cloudEnabled} hostedCloud={hostedCloud} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
     buying={buying} trial={trial} signedOut={signedOut && cloudEnabled} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
     onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}
-    cloudSignIn={cloudEnabled && <Suspense fallback={<p>{messages.loadingCloudSignIn}</p>}>
+    cloudSignIn={cloudEnabled && <Suspense fallback={<SignInLoading />}>
       <CloudSignIn key={workspaceSlug ?? 'default'} publishableKey={cloudConfig.publishable_key ?? ''} onSessionToken={exchange}
         onSignUp={config.data?.signup.enabled && !findWorkspaceAt ? signUp : undefined} findWorkspaceAt={findWorkspaceAt} buying={buying !== undefined} optionalQuestions={buying !== undefined || planIntent !== undefined} endSession={signedOut} />
     </Suspense>} />;

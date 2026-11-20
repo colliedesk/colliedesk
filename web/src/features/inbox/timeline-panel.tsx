@@ -20,6 +20,8 @@ import { useMinuteNow } from '../../lib/use-now';
 import { TimeEntriesSection } from './time-entries-section';
 import { AutofixStrip } from '../autofix/autofix-slot';
 import { useHolds } from '../../lib/permissions-context';
+import { LoadingStatus } from '../../ui/loading-status';
+import { TimelineSkeleton } from './inbox-skeletons';
 
 interface TimelinePanelProps {
   conversation?: Conversation;
@@ -33,6 +35,8 @@ interface TimelinePanelProps {
   // The ticket an address names could not be loaded: say so, and offer to try again.
   loadFailed?: boolean;
   onRetryLoad?: () => void;
+  // Sends the messages request again when it is slow to arrive.
+  onRetryTimeline?: () => void;
   // With no conversation open, nothing loading and nothing failed: the one line the pane shows instead.
   emptyText?: string;
   timezone: string;
@@ -119,7 +123,7 @@ function SpamButton({ spam, onSpam }: { spam: boolean; onSpam: (spam: boolean) =
     {spam ? <BanIcon /> : <RotateCcwIcon />}<span className={spam ? 'spam-button-label' : undefined}>{spam ? messages.spam : messages.notSpam}</span></button>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, emptyText, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, onRetryTimeline, emptyText, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
   // A role that reads conversations but not their messages is told so instead of waiting for them.
   const readsMessages = useHolds()('messages:read');
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
@@ -180,7 +184,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           {!conversation && loadFailed && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>
             <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}
           {conversation && !readsMessages && <p className="empty-copy">{messages.messagesClosed}</p>}
-          {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
+          {loading && items.length === 0 && <LoadingStatus key={conversation?.id} onRetry={onRetryTimeline} shape={<TimelineSkeleton />} />}
           {before}
           {items.map((item, index) => <Fragment key={item.id}>{index === eventAt && event}<MessageItem item={item} timezone={timezone} currentAgentId={currentAgentId} onRetryDelivery={onRetryDelivery} channelName={conversation?.channel_ref?.name}
             approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} label={messageLabel?.(item)} menu={messageMenu?.(item)} note={messageNote?.(item)} onOpenMedia={openMedia} />

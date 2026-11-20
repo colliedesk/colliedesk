@@ -102,9 +102,11 @@ the end of a published article's row opens its public page.
    - The toolbar sets the block (**Text**, **Heading 2**, **Heading 3**; the title is the article's
      Heading 1, so the text starts at Heading 2, and a `#` line written before still shows as **Heading 1**)
      and adds bold, italic, a link, numbered and bulleted lists, a quote and a table; **Insert image, video
-     or callout** adds an [image](#images), a [video](#videos) or a [callout](#callouts); **⋯** (More formatting) holds
-     strikethrough, code, a checklist, a [code block](#code-blocks), a divider and redo. On a phone the toolbar keeps **Insert**, bold,
-     italic and link, and the rest is under **⋯**. With the keyboard, Tab reaches the toolbar and the
+     or callout** adds an [image](#images), a [video](#videos) or a [callout](#callouts); **Link to article** links
+     [another article](#link-another-article-from-the-editor); **⋯** (More formatting) holds
+     strikethrough, code, a checklist, a [code block](#code-blocks), a divider and redo. On a phone, and in an editor
+     narrower than 720 pixels, the toolbar keeps **Insert**, bold,
+     italic and link, and the rest, **Link to article** included, is under **⋯**. With the keyboard, Tab reaches the toolbar and the
      arrow keys move along it.
    - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
      `Ctrl+F` find and replace (`Cmd` on a Mac).
@@ -175,6 +177,22 @@ part of the page, so it needs no script. To turn it off for an article, clear **
 under **On this page** on the article page (on a phone, under **Details**). The switch is the
 article's, so it applies to every language, and it is in the [export](export.md). Restoring an older
 version leaves it as it is.
+
+### Link another article from the editor
+
+To point from one article to another, select **Link to article** in the toolbar (under **⋯** in a narrow
+editor) and choose the article. It is the same list as **Articles** in the reply box: the published
+articles in the help center's [order](#order), with a search, `Enter` or a click to pick and `Esc` to close.
+The article you are editing is not in it, and the list is empty while the help center is off.
+
+- With text selected, the selection becomes the link text: `to reset it` becomes
+  `[to reset it](/a/7-reset-your-password)`.
+- With nothing selected, the article's title is the link text, where the cursor is. Signs such as `*`
+  or `_` in a title show as written.
+
+The address is relative to the help center (`/a/7-reset-your-password`, with no host). The help center
+adds its own address in front when it shows the page, so the link works on the workspace address, under
+a path, and on a [custom domain](#custom-domain) alike. `Ctrl+Z` takes the link back out.
 
 ### Images
 
@@ -356,6 +374,30 @@ agent token, or an agent request approved before requests were removed), when, a
 collection). **Restore version N** makes that version's title, address name and text current again,
 as a new version; the status and collection stay as they are, so a restore never publishes or moves
 an article by surprise. Save or undo your own changes first.
+
+## Votes from readers
+
+**Readers' votes** on an article (on the right; on a phone, under the text) shows what readers of the
+public page answered to **Was this article helpful?**:
+
+- The count the page shows, such as "13 out of 17 found this helpful". Votes imported from
+  Freshdesk count toward it, and the box says how many of them there are.
+- Each reader's vote, newest change first: **Yes** or **No**, the day, and what they said was missing.
+  Readers are anonymous. The first five are shown;
+  **Show all** lists the rest.
+- **Earlier counts**: the count before each reset, with who reset it.
+
+One reader has one vote per article: voting again changes it. One visitor address adds at most 10
+new readers to an article a day; past that the page still thanks the reader but the vote is not
+counted. For this check each vote keeps a keyed hash of the address, never the address itself. Emails and numbers of 6 digits or more
+in what a reader writes are replaced with "[email removed]" and "[number removed]" before anything is
+stored, and the line is cut to 500 characters.
+
+**Reset votes** (with the right to edit articles, `kb_articles:update`) starts the count again from 0,
+for instance after you rewrite the article. It asks first. The current votes and their lines stop
+counting and leave the list; nothing is deleted. **Earlier counts** keeps the count the page showed,
+and the [export](export.md) keeps every vote and reset. After a reset the Freshdesk votes no longer
+count. A reset cannot be undone.
 
 ## Keep an article away from AI
 
@@ -697,6 +739,10 @@ to serve on the domain again.
 - Raw HTML in the text is not shown, except [YouTube and Vimeo videos](#videos), and links work only
   for `http`, `https`, `mailto` and `tel`. A video's site sees the reader's address when the video
   loads, as with any embedded video.
+- Every article ends with **Was this article helpful?** and **Yes** / **No**, with the count so far
+  ("12 out of 15 found this helpful", votes imported from Freshdesk included). After **No** the reader
+  can say **What was missing?** in one line. Both are plain forms that work without script. The words
+  are in the article's language (English for a language without them). See [Readers' votes](#votes-from-readers).
 
 Every page carries structured data for search engines (schema.org JSON-LD, which runs nothing): a
 breadcrumb trail, and on an article page an `Article` with its title, description and dates. An article
@@ -704,9 +750,11 @@ written as a list of questions also carries a `FAQPage`: it has at least two hea
 level, every one of them ends with `?`, and each is followed by its answer before the next one. Text
 before the first question is an introduction and is left out.
 
-Pages have no scripts, no cookies and no tracking (with the [help chat](help-chat.md) on, article pages
-and the chat page load the chat's one script from the help center itself, and the chat keeps one cookie
-once a customer asks), follow the visitor's light or dark setting, and
+Pages have no scripts, no cookies and no tracking, with two exceptions: a reader who votes gets one
+cookie of the help center's own (`cd_reader`, kept a year, never read by script), so a second vote
+changes the first; with the [help chat](help-chat.md) on, article pages and the chat page load the
+chat's one script from the help center itself, and the chat keeps one cookie once a customer asks.
+Pages follow the visitor's light or dark setting, and
 fit a phone. The page labels (Search, Home and so on) are in English; the help center's language
 marks your articles' language for browsers and search engines.
 
@@ -772,8 +820,8 @@ Then press **Verify** in Search Console or Bing.
 
 ### Limits
 
-- One visitor address can load 600 pages and run 30 searches a minute; past that the page asks to
-  wait a minute.
+- One visitor address can load 600 pages, run 30 searches and vote 20 times a minute; past that the
+  page asks to wait a minute.
 - During a Colliedesk Cloud **trial**, pages ask search engines not to index them. A paid plan lifts
   this.
 - A **locked** workspace (trial over, nothing paid) has no help center: its addresses say "This page
@@ -850,6 +898,11 @@ Articles and collections:
   `PATCH /api/v1/kb/articles`, and on `colliedesk_kb_article_create` and `colliedesk_kb_article_update`.
 - Keep an article away from AI: `colliedesk_kb_article_ai_exclude` and `colliedesk_kb_article_ai_include`,
   with `kb_articles:update`.
+- [Readers' votes](#votes-from-readers): `colliedesk_kb_article_votes_get` or
+  `GET /api/v1/kb/articles/{id}/votes` reads the count, each vote with its line, and the earlier counts
+  (`kb_articles:read`). `colliedesk_kb_article_votes_reset` or `POST /api/v1/kb/articles/{id}/votes/reset`
+  resets them (`kb_articles:update`); a repeat of the same press, or a reset with nothing counted, stores
+  no second reset. The reset names the token that made it.
 - Link an article in a reply: every article an agent reads or finds carries its public address in `url`
   (also in the API). An agent links an article the same way a person does: the title and the address on
   two lines, from a search with `status` published while the help center is on.

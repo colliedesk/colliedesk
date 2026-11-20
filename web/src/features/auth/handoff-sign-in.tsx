@@ -4,6 +4,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import { planIntentFromNext, rememberPlanIntent } from '../settings/plan-intent';
 import { messages } from '../../messages';
+import { LinkPageLoading } from './invite-page';
 
 // HandoffSignIn finishes the move from APP_ORIGIN to this workspace's host: the one-time token from the
 // address's fragment (which no server saw) becomes this host's session, and the page named by next
@@ -23,7 +24,7 @@ export function HandoffSignIn({ token, next }: { token: string; next?: string })
       await navigate({ href: path, replace: true });
     }).catch(() => setFailed(true));
   }, [client, navigate, next, token]);
-  if (!failed) return <p>{messages.loadingCloudSignIn}</p>;
+  if (!failed) return <LinkPageLoading label={messages.loadingCloudSignIn} />;
   return <main className="redeem-page"><section className="redeem-panel">
     <p role="alert" className="error-copy">{messages.handoffFailed}</p>
     <Link to="/sign-in">{messages.cloudSignInTitle}</Link>
