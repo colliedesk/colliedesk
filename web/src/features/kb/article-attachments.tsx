@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { DragEvent, MutableRefObject } from 'react';
 import { formatBytes } from '../../lib/format-bytes';
+import { HelpTip } from '../../ui/help-tip';
 import { attachmentMessages as m } from './attachment-messages';
 import { Icon } from './editor/icons';
 import type { KBAttachment } from './kb-api';
@@ -129,7 +130,7 @@ export function ArticleAttachments({ files, onSet, saveFirst = m.saveFirst, note
             event.target.value = '';
           }} /></label>}
       </div>
-      <p className="kb-hint">{onSet ? (dragging ? m.dropHere : m.hint) : saveFirst}</p>
+      <p className="kb-hint">{onSet ? (dragging ? m.dropHere : <>{m.hint} <HelpTip label={m.heading} text={m.hintTip} /></>) : saveFirst}</p>
       {note && files.length === 0 && <p className="muted-copy">{note}</p>}
       {files.length > 0 && <ul className="kb-attachment-list">
         {files.map((file) => (

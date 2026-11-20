@@ -4,13 +4,15 @@ import { fileExtensions, maxArticleFileBytes, maxFileBytes } from './kb-file-typ
 // Strings of the Attachments strip under an article's or translation's text, in the knowledge base chunk.
 export const attachmentMessages = {
   heading: 'Attachments',
-  hint: 'Listed under the text for readers to download. Drop, paste or choose files: up to 25 MiB each, 100 MiB in all.',
+  hint: 'Drop, paste or choose files for readers to download.',
+  // The how and the limits, behind the hint's HelpTip.
+  hintTip: 'Readers download them under the text. Up to 25 MiB each and 100 MiB in all.',
   choose: 'Choose files',
   dropHere: 'Drop to attach',
   saveFirst: 'Save the article to attach files.',
   saveTranslationFirst: 'Save the translation to attach files.',
   // A translation that lists none shows the article's files on the help center.
-  articleFiles: 'With no files of its own, this translation lists the article\'s files.',
+  articleFiles: 'Lists the article\'s files until it has its own.',
   remove: (name: string) => `Remove ${name}`,
   removeTip: 'Remove from this list. The media library keeps the file.',
   removed: (name: string) => `${name} removed. It stays in the media library.`,

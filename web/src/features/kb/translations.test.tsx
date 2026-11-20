@@ -313,7 +313,7 @@ test('a translation lists files of its own: one chosen goes on its list at once,
   });
   show(<TranslationRoute articleId={ids.article} locale="fr" />);
   const strip = await screen.findByRole('region', { name: 'Attachments' });
-  expect(within(strip).getByText('With no files of its own, this translation lists the article\'s files.')).toBeInTheDocument();
+  expect(within(strip).getByText('Lists the article\'s files until it has its own.')).toBeInTheDocument();
   fireEvent.change(within(strip).getByLabelText('Choose files'), { target: { files: [new File([new Uint8Array(12)], 'Garantie.pdf', { type: 'application/pdf' })] } });
   expect(await within(strip).findByRole('link', { name: 'Garantie.pdf' })).toHaveAttribute('href', `/api/v1/kb/media/${fileId}`);
   expect(calls.filter((call) => call.method === 'PUT').map((call) => call.body)).toEqual([{ media_ids: [fileId], updated_at: '2026-10-02T00:00:00Z' }]);
