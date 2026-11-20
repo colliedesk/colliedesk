@@ -206,3 +206,36 @@ on again. Anything that workspace wrote after the backup is gone.
 The repository's `compose.yaml` runs the binary directly instead of a shell. Put
 `--entrypoint sh` before `server` and `-c` after it in the `docker compose run` commands above.
 `restore-workspace.sh` needs the installer's layout.
+
+### PostgreSQL 19 in a clone
+
+The repository's `compose.yaml` runs PostgreSQL 19. PostgreSQL cannot open a data directory written
+by an older major version, so a clone whose `postgres-data` volume comes from PostgreSQL 17 stops
+with `database files are incompatible with server` after `git pull`. If the data in the clone is
+disposable, remove the volume (`docker compose down -v`, which also removes the attachments) and
+start again. To keep it, save it **before** you pull, while the old `compose.yaml` still runs 17:
+
+```sh
+docker compose stop server
+docker compose exec -T postgres pg_dumpall -U colliedesk --roles-only >roles.sql
+docker compose exec -T postgres pg_dump -U colliedesk --format=custom colliedesk >colliedesk.dump
+docker compose exec -T postgres pg_restore --list <colliedesk.dump >/dev/null
+```
+
+`pg_dump` does not save roles, and the database grants to the roles that row-level security uses,
+so `roles.sql` is needed too. Then remove only the database volume (`docker volume ls` shows its
+name, `<folder>_postgres-data` by default), pull, and load both files into the new database:
+
+```sh
+docker compose down
+docker volume rm colliedesk_postgres-data
+git pull
+docker compose up -d --wait postgres
+docker compose exec -T postgres psql -U colliedesk -d postgres -q <roles.sql
+docker compose exec -T postgres pg_restore -U colliedesk -d colliedesk --exit-on-error <colliedesk.dump
+docker compose up -d
+```
+
+`psql` reports that the role `colliedesk` already exists; that line is expected. Any other error, or
+`pg_restore` ending with an error, means the database is not complete: keep the two files and do not
+delete them until the clone works. The `colliedesk_test` database is rebuilt empty by the tests.
