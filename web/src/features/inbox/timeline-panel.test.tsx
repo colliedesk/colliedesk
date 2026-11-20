@@ -101,6 +101,12 @@ test('shows the loading status while the selected conversation timeline loads, n
   expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
 });
 
+test('a loading timeline draws grey messages and names the wait for screen readers', () => {
+  const { container } = render(<TimelinePanel items={[]} timezone="UTC" loading />);
+  expect(screen.getByRole('status')).toHaveClass('sr-only');
+  expect(container.querySelectorAll('[aria-busy="true"] [aria-hidden="true"] .message').length).toBeGreaterThanOrEqual(2);
+});
+
 test('a timeline still loading after 5 seconds says the connection is slow, and Try again restarts it', () => {
   vi.useFakeTimers();
   try {
