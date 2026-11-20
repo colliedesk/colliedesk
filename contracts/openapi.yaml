@@ -11860,7 +11860,7 @@ components:
     KBArticleDraft:
       type: object
       description: 'The unpublished changes of a published article: every field as it will be once published.'
-      required: [title, slug, body_md, seo_title, seo_description, collection_id, collection_ids, created_at, updated_at, updated_by]
+      required: [title, slug, body_md, seo_title, seo_description, collection_id, collection_ids, show_contents, created_at, updated_at, updated_by]
       properties:
         title: {type: string}
         slug: {type: string}
@@ -11869,6 +11869,7 @@ components:
         seo_description: {type: string}
         collection_id: {type: string, format: uuid, description: Its home collection once published.}
         collection_ids: {type: array, minItems: 1, items: {type: string, format: uuid}, description: 'Every collection it will be listed in, its home first.'}
+        show_contents: {type: boolean, description: 'Whether the help center will list its headings as On this page once published.'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time, description: 'When the draft was saved last. To save, publish or discard it, send the article''s updated_at.'}
         updated_by:

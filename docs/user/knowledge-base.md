@@ -175,8 +175,9 @@ An article with 3 or more Heading 2 and Heading 3 headings lists them under **On
 linking to its heading (the first 50, in a very long article). In a wide window the list is beside the text; on a phone it is above it. It is
 part of the page, so it needs no script. To turn it off for an article, clear **Show On this page**
 under **On this page** on the article page (on a phone, under **Details**). The switch is the
-article's, so it applies to every language, and it is in the [export](export.md). Restoring an older
-version leaves it as it is.
+article's, so it applies to every language, and it is in the [export](export.md). On a published
+article, changing it is one of the [unpublished changes](#unpublished-changes): the help center keeps
+the list as it is until you publish them. Restoring an older version leaves it as it is.
 
 ### Link another article from the editor
 

@@ -8017,6 +8017,8 @@ export interface components {
             collection_id: string;
             /** @description Every collection it will be listed in, its home first. */
             collection_ids: string[];
+            /** @description Whether the help center will list its headings as On this page once published. */
+            show_contents: boolean;
             /** Format: date-time */
             created_at: string;
             /**

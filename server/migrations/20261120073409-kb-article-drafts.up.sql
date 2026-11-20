@@ -5,7 +5,8 @@
 --
 -- locale NULL is the article's own text; otherwise the row is the draft of that translation. A draft
 -- row exists only while its article or translation is published: a draft article is edited in place.
--- collection_id and extra_collection_ids NULL mean "keep where it is listed now".
+-- collection_id and extra_collection_ids NULL mean "keep where it is listed now"; show_contents NULL
+-- keeps the article's on-this-page switch as it is.
 --
 -- No existing row changes and no draft is created: every article and translation stays as it was.
 CREATE TABLE kb_article_drafts (
@@ -20,10 +21,11 @@ CREATE TABLE kb_article_drafts (
     seo_description text NOT NULL DEFAULT '' CHECK (char_length(seo_description) <= 320),
     collection_id uuid,
     extra_collection_ids uuid[],
+    show_contents boolean,
     updated_by_agent_id uuid,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    CHECK (locale IS NULL OR (collection_id IS NULL AND extra_collection_ids IS NULL)),
+    CHECK (locale IS NULL OR (collection_id IS NULL AND extra_collection_ids IS NULL AND show_contents IS NULL)),
     FOREIGN KEY (workspace_id, article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
     FOREIGN KEY (workspace_id, article_id, locale) REFERENCES kb_article_translations(workspace_id, article_id, locale) ON DELETE CASCADE,
     FOREIGN KEY (workspace_id, collection_id) REFERENCES kb_collections(workspace_id, id) ON DELETE SET NULL (collection_id),

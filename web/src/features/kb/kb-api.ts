@@ -46,7 +46,8 @@ const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBA
 // version every save, publish, discard, restore or delete sends while it exists.
 const draftSchema = z.object({
   title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), collection_id: z.string().uuid(),
-  collection_ids: z.array(z.string().uuid()).min(1), created_at: z.string().datetime(), updated_at: z.string().datetime(), updated_by: personSchema.nullable(),
+  collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  updated_by: personSchema.nullable(),
 }) satisfies z.ZodType<Generated<'KBArticleDraft'>>;
 export const kbArticleSchema = z.object({
   ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,

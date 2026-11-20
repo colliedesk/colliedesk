@@ -4,7 +4,7 @@ import "time"
 
 // KBArticleDraft is the unpublished changes of a published article (Locale nil) or of a published
 // translation. CollectionID and ExtraCollectionIDs nil mean the draft keeps the article where it is
-// listed now.
+// listed now; ShowContents nil keeps its on-this-page switch.
 type KBArticleDraft struct {
 	ArticleID          string    `json:"article_id"`
 	Locale             *string   `json:"locale"`
@@ -15,6 +15,7 @@ type KBArticleDraft struct {
 	SEODescription     string    `json:"seo_description"`
 	CollectionID       *string   `json:"collection_id"`
 	ExtraCollectionIDs []string  `json:"extra_collection_ids"`
+	ShowContents       *bool     `json:"show_contents"`
 	UpdatedByAgentID   *string   `json:"updated_by_agent_id"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`

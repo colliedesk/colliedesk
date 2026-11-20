@@ -14,6 +14,7 @@ type restKBDraft struct {
 	SEODescription string      `json:"seo_description"`
 	CollectionID   string      `json:"collection_id"`
 	CollectionIDs  []string    `json:"collection_ids"`
+	ShowContents   bool        `json:"show_contents"`
 	UpdatedAt      string      `json:"updated_at"`
 	UpdatedBy      *restPerson `json:"updated_by"`
 }
@@ -23,6 +24,7 @@ type kbArticleDraftOut struct {
 	TeamText      kbTeamText `json:"team_text"`
 	Slug          string     `json:"slug"`
 	CollectionIDs []string   `json:"collection_ids"`
+	ShowContents  bool       `json:"show_contents"`
 	UpdatedBy     *string    `json:"updated_by"`
 }
 
@@ -38,7 +40,7 @@ func (out *kbArticleOut) withDraft(article restKBArticle) {
 		ids = []string{draft.CollectionID}
 	}
 	out.Draft = &kbArticleDraftOut{TeamText: kbTeamText{draft.Title, draft.BodyMD, draft.SEOTitle, draft.SEODescription},
-		Slug: draft.Slug, CollectionIDs: ids}
+		Slug: draft.Slug, CollectionIDs: ids, ShowContents: draft.ShowContents}
 	if draft.UpdatedBy != nil {
 		out.Draft.UpdatedBy = &draft.UpdatedBy.Name
 	}

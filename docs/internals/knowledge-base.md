@@ -200,11 +200,12 @@ Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
 `catalog-kb-drafts.go`, web `article-draft.tsx` and `line-diff.ts`. Issue #673.
 
 - **One row of unpublished changes per published item.** `kb_article_drafts` holds the full text
-  (title, slug, body, SEO fields, collections) of the next version. `locale` is NULL for the article's
+  (title, slug, body, SEO fields, collections, On this page switch) of the next version. `locale` is NULL for the article's
   own text and a language for a translation; two partial unique indexes (per article where `locale IS
   NULL`, per article and locale otherwise) keep one row each. One table with a locale beat a
-  `translation_id` column: one index shape, one export file, one cascade. `collection_id` and
-  `extra_collection_ids` NULL mean "keep where it is". A row exists only while its item is published:
+  `translation_id` column: one index shape, one export file, one cascade. `collection_id`,
+  `extra_collection_ids` and `show_contents` NULL mean "keep as it is"; a translation row has none of
+  them, since the article holds its collections and its On this page switch. A row exists only while its item is published:
   a never-published article is still written directly, and unpublishing folds the row into the
   article and deletes it.
 - **Save never touches the live row.** `PATCH` on a published article upserts the row (based on the

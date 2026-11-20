@@ -36,7 +36,7 @@ export const editable = (article: KBArticle): KBArticle => {
   const draft = article.draft;
   if (!draft) return article;
   return { ...article, title: draft.title, slug: draft.slug, body_md: draft.body_md, seo_title: draft.seo_title, seo_description: draft.seo_description,
-    collection_id: draft.collection_id, collection_ids: draft.collection_ids };
+    collection_id: draft.collection_id, collection_ids: draft.collection_ids, show_contents: draft.show_contents };
 };
 
 interface DraftBarProps {

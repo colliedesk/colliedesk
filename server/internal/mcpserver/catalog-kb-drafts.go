@@ -5,8 +5,8 @@ package mcpserver
 
 const (
 	// kbArticleDraftSchema is the draft on an article's answer, null without one.
-	kbArticleDraftSchema = `{"type":["object","null"],"description":"Unpublished changes: what colliedesk_kb_article_draft_publish puts live; team_text stays the live text.",` +
-		`"properties":{"team_text":` + kbTeamTextSchema + `,"slug":{"type":"string"},"collection_ids":{"type":"array","items":{"type":"string"}},"updated_by":{"type":["string","null"]}}}`
+	kbArticleDraftSchema = `{"type":["object","null"],"description":"Unpublished changes, shaped like the article; colliedesk_kb_article_draft_publish puts them live.",` +
+		`"properties":{"team_text":{"type":"object"},"slug":{"type":"string"},"collection_ids":{"type":"array"},"show_contents":{"type":"boolean"},"updated_by":{"type":["string","null"]}}}`
 	// kbArticleDraftResultOutput is the article after a publish or a discard, without its text: read it
 	// with colliedesk_kb_article_get.
 	kbArticleDraftResultOutput = `{"type":"object","required":["article"],"properties":{"article":` + kbArticleRowSchema + `}}`

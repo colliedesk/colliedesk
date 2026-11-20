@@ -38,8 +38,9 @@ func TestAnAgentChangesAPublishedArticleWithoutTouchingTheLivePage(t *testing.T)
 	if at(t, saved, "article", "updated_at") == live {
 		t.Fatalf("updated_at after a draft save is still the live one: %v", saved)
 	}
-	again := e.ok(session, "colliedesk_kb_article_update", map[string]any{"article_id": articleID, "updated_at": at(t, saved, "article", "updated_at"), "title": "Refunds policy"})
-	if at(t, again, "article", "team_text", "title") != "Refunds" || at(t, again, "article", "draft", "team_text", "title") != "Refunds policy" ||
+	again := e.ok(session, "colliedesk_kb_article_update", map[string]any{"article_id": articleID, "updated_at": at(t, saved, "article", "updated_at"), "title": "Refunds policy",
+		"show_contents": false})
+	if at(t, again, "article", "team_text", "title") != "Refunds" || at(t, again, "article", "show_contents") != true || at(t, again, "article", "draft", "show_contents") != false || at(t, again, "article", "draft", "team_text", "title") != "Refunds policy" ||
 		at(t, again, "article", "draft", "team_text", "body") != "Within 30 days." {
 		t.Fatalf("second save = %v", again)
 	}
@@ -57,7 +58,7 @@ func TestAnAgentChangesAPublishedArticleWithoutTouchingTheLivePage(t *testing.T)
 	if at(t, published, "article", "team_text", "title") != "Refunds policy" || at(t, published, "article", "has_draft") != false {
 		t.Fatalf("published = %v", published)
 	}
-	if live := e.ok(session, "colliedesk_kb_article_get", map[string]any{"article_id": articleID}); at(t, live, "article", "team_text", "body") != "Within 30 days." ||
+	if live := e.ok(session, "colliedesk_kb_article_get", map[string]any{"article_id": articleID}); at(t, live, "article", "team_text", "body") != "Within 30 days." || at(t, live, "article", "show_contents") != false ||
 		at(t, live, "article", "draft") != nil || at(t, live, "article", "updated_at") != at(t, published, "article", "updated_at") {
 		t.Fatalf("article after publish = %v", live)
 	}

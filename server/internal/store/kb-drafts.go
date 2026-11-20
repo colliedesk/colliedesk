@@ -68,17 +68,18 @@ func saveKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 	}
 	// Without new extras, a new home is no longer one of the draft's other collections.
 	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_drafts(workspace_id,article_id,title,slug,body_md,seo_title,seo_description,collection_id,extra_collection_ids,
-			updated_by_agent_id,created_at,updated_at)
+			show_contents,updated_by_agent_id,created_at,updated_at)
 		SELECT a.workspace_id,a.id,COALESCE($3,d.title,a.title),COALESCE($4,d.slug,a.slug),COALESCE($5,d.body_md,a.body_md),
 			COALESCE($6,d.seo_title,a.seo_title),COALESCE($7,d.seo_description,a.seo_description),COALESCE($8::uuid,d.collection_id),
-			CASE WHEN $9 THEN $10::uuid[] ELSE array_remove(d.extra_collection_ids,$8::uuid) END,$11,clock_timestamp(),clock_timestamp()
+			CASE WHEN $9 THEN $10::uuid[] ELSE array_remove(d.extra_collection_ids,$8::uuid) END,COALESCE($12,d.show_contents),$11,clock_timestamp(),clock_timestamp()
 		FROM kb_articles a LEFT JOIN kb_article_drafts d ON d.workspace_id=a.workspace_id AND d.article_id=a.id AND d.locale IS NULL
 		WHERE a.workspace_id=$1 AND a.id=$2
 		ON CONFLICT (workspace_id,article_id) WHERE locale IS NULL DO UPDATE SET title=EXCLUDED.title, slug=EXCLUDED.slug, body_md=EXCLUDED.body_md,
 			seo_title=EXCLUDED.seo_title, seo_description=EXCLUDED.seo_description, collection_id=EXCLUDED.collection_id,
-			extra_collection_ids=EXCLUDED.extra_collection_ids, updated_by_agent_id=EXCLUDED.updated_by_agent_id, updated_at=EXCLUDED.updated_at`,
+			extra_collection_ids=EXCLUDED.extra_collection_ids, show_contents=EXCLUDED.show_contents, updated_by_agent_id=EXCLUDED.updated_by_agent_id,
+			updated_at=EXCLUDED.updated_at`,
 		workspaceID, id, change.Title, change.Slug, change.BodyMD, change.SEOTitle, change.SEODescription, change.CollectionID,
-		change.ExtraCollectionIDs != nil, extras, optionalID(actor.AgentID)); err != nil {
+		change.ExtraCollectionIDs != nil, extras, optionalID(actor.AgentID), change.ShowContents); err != nil {
 		return domain.KBArticle{}, fmt.Errorf("save knowledge base article draft: %w", err)
 	}
 	return recordKBArticleDraft(ctx, tx, workspaceID, actor, id)
@@ -88,9 +89,10 @@ func saveKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 // links the media the draft names and returns the article.
 func recordKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id string) (domain.KBArticle, error) {
 	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,title,slug,body_md,seo_title,seo_description,status,collection_id,
-			changed_by_agent_id,token_id,token_label,agent_request_id,created_at)
+			show_contents,changed_by_agent_id,token_id,token_label,agent_request_id,created_at)
 		SELECT a.workspace_id,a.id,COALESCE((SELECT max(version) FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2),0)+1,
-			$3,d.title,d.slug,d.body_md,d.seo_title,d.seo_description,a.status,COALESCE(d.collection_id,a.collection_id),$4,t.id,t.label,$6,clock_timestamp()
+			$3,d.title,d.slug,d.body_md,d.seo_title,d.seo_description,a.status,COALESCE(d.collection_id,a.collection_id),
+			COALESCE(d.show_contents,a.show_contents),$4,t.id,t.label,$6,clock_timestamp()
 		FROM kb_articles a JOIN kb_article_drafts d ON d.workspace_id=a.workspace_id AND d.article_id=a.id AND d.locale IS NULL
 		LEFT JOIN sessions t ON t.workspace_id=a.workspace_id AND t.id=$5
 		WHERE a.workspace_id=$1 AND a.id=$2`,
@@ -109,11 +111,13 @@ func recordKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, ac
 func foldKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID, id string, change KBArticleChange) (KBArticleChange, error) {
 	var title, slug, body, seoTitle, seoDescription string
 	var home *string
+	var showContents *bool
 	var extras []string
 	var keepExtras bool
 	err := tx.QueryRow(ctx, `DELETE FROM kb_article_drafts WHERE workspace_id=$1 AND article_id=$2 AND locale IS NULL
-		RETURNING title,slug,body_md,seo_title,seo_description,collection_id::text,COALESCE(extra_collection_ids::text[],'{}'),extra_collection_ids IS NULL`,
-		workspaceID, id).Scan(&title, &slug, &body, &seoTitle, &seoDescription, &home, &extras, &keepExtras)
+		RETURNING title,slug,body_md,seo_title,seo_description,collection_id::text,show_contents,COALESCE(extra_collection_ids::text[],'{}'),
+			extra_collection_ids IS NULL`,
+		workspaceID, id).Scan(&title, &slug, &body, &seoTitle, &seoDescription, &home, &showContents, &extras, &keepExtras)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return change, nil
 	}
@@ -131,6 +135,9 @@ func foldKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 	}
 	if change.CollectionID == nil {
 		change.CollectionID = home
+	}
+	if change.ShowContents == nil {
+		change.ShowContents = showContents
 	}
 	if change.ExtraCollectionIDs != nil || keepExtras {
 		return change, nil
@@ -165,7 +172,7 @@ func publishKBArticleChange(ctx context.Context, tx pgx.Tx, workspaceID, id stri
 }
 
 // restoreKBArticleDraft makes the title, slug, text and search fields of version the draft of a
-// published article; where the draft lists the article stays.
+// published article; where the draft lists the article and its contents switch stay.
 func restoreKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id string, version int) (domain.KBArticle, error) {
 	tag, err := tx.Exec(ctx, `INSERT INTO kb_article_drafts(workspace_id,article_id,title,slug,body_md,seo_title,seo_description,updated_by_agent_id,created_at,updated_at)
 		SELECT v.workspace_id,v.article_id,v.title,v.slug,v.body_md,v.seo_title,v.seo_description,$4,clock_timestamp(),clock_timestamp()
@@ -191,11 +198,11 @@ func readKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, arti
 	var keepExtras bool
 	var agentID, agentName *string
 	err := tx.QueryRow(ctx, `SELECT d.title,d.slug,d.body_md,d.seo_title,d.seo_description,COALESCE(d.collection_id,a.collection_id)::text,
-			COALESCE(d.extra_collection_ids::text[],'{}'),d.extra_collection_ids IS NULL,d.created_at,d.updated_at,d.updated_by_agent_id::text,COALESCE(NULLIF(p.display_name,''),p.email)
+			COALESCE(d.show_contents,a.show_contents),COALESCE(d.extra_collection_ids::text[],'{}'),d.extra_collection_ids IS NULL,d.created_at,d.updated_at,d.updated_by_agent_id::text,COALESCE(NULLIF(p.display_name,''),p.email)
 		FROM kb_article_drafts d JOIN kb_articles a ON a.workspace_id=d.workspace_id AND a.id=d.article_id
 		LEFT JOIN agents p ON p.workspace_id=d.workspace_id AND p.id=d.updated_by_agent_id
 		WHERE d.workspace_id=$1 AND d.article_id=$2 AND d.locale IS NULL`, workspaceID, article.ID).Scan(&draft.Title, &draft.Slug, &draft.BodyMD,
-		&draft.SEOTitle, &draft.SEODescription, &draft.CollectionID, &extras, &keepExtras, &draft.CreatedAt, &draft.UpdatedAt, &agentID, &agentName)
+		&draft.SEOTitle, &draft.SEODescription, &draft.CollectionID, &draft.ShowContents, &extras, &keepExtras, &draft.CreatedAt, &draft.UpdatedAt, &agentID, &agentName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
