@@ -540,6 +540,9 @@ type KBArticleChange struct {
 	SEOTitle, SEODescription                  *string
 	ShowContents                              *bool
 	ExtraCollectionIDs                        *[]string
+	// Autosave records no version: an editor saving while the person types changes only the title
+	// and the text, and the next save records them.
+	Autosave bool
 }
 
 // UpdateKBArticle changes a live article and records the version. seen is the updated_at the client read.
@@ -599,7 +602,11 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 		if status == domain.KBPublished && (change.Status == nil || *change.Status == domain.KBPublished) {
 			return saveKBArticleDraft(ctx, tx, workspaceID, actor, id, change)
 		}
-		return changeKBArticleLocked(ctx, tx, workspaceID, actor, id, domain.KBArticleEdited, nil, func(tx pgx.Tx) error {
+		kind := domain.KBArticleEdited
+		if change.Autosave {
+			kind = ""
+		}
+		return changeKBArticleLocked(ctx, tx, workspaceID, actor, id, kind, nil, func(tx pgx.Tx) error {
 			return publishKBArticleChange(ctx, tx, workspaceID, id, change)
 		})
 	})
@@ -694,7 +701,9 @@ func (s *Store) changeKBArticle(ctx context.Context, workspaceID string, actor A
 	return article, kbError("change knowledge base article", err)
 }
 
-// changeKBArticleLocked runs write on an article locked by lockKBArticle and records the version of kind.
+// changeKBArticleLocked runs write on an article locked by lockKBArticle and records the version of
+// kind. An autosave (kind "") of an article not on the help center records no version and leaves the
+// help center version as it is; it still links the media the text names.
 func changeKBArticleLocked(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id, kind string, restoredFrom *int, write func(pgx.Tx) error) (domain.KBArticle, error) {
 	var wasTitle, wasBody string
 	if err := tx.QueryRow(ctx, `SELECT title, body_md FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&wasTitle, &wasBody); err != nil {
@@ -707,7 +716,11 @@ func changeKBArticleLocked(ctx context.Context, tx pgx.Tx, workspaceID string, a
 	if err := markKBTranslationsOutdated(ctx, tx, workspaceID, id, wasTitle, wasBody); err != nil {
 		return domain.KBArticle{}, err
 	}
-	if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, kind, restoredFrom); err != nil {
+	if kind == "" {
+		if _, err := linkKBMedia(ctx, tx, workspaceID, id); err != nil {
+			return domain.KBArticle{}, err
+		}
+	} else if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, kind, restoredFrom); err != nil {
 		return domain.KBArticle{}, err
 	}
 	return readKBArticle(ctx, tx, workspaceID, id)

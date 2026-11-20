@@ -554,10 +554,15 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		SEOTitle      *string    `json:"seo_title"`
 		SEODesc       *string    `json:"seo_description"`
 		ShowContents  *bool      `json:"show_contents"`
+		Autosave      bool       `json:"autosave"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
 		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.CollectionIDs == nil && input.Status == nil && input.SEOTitle == nil && input.SEODesc == nil && input.ShowContents == nil) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title, seo_description or show_contents.")
+		return
+	}
+	if input.Autosave && (input.Slug != nil || input.CollectionID != nil || input.CollectionIDs != nil || input.Status != nil || input.SEOTitle != nil || input.SEODesc != nil || input.ShowContents != nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "An autosave changes only title and body_md; save the other fields without autosave.")
 		return
 	}
 	homeCollection, extras, problem := kbArticleCollections(input.CollectionID, input.CollectionIDs)
@@ -580,7 +585,7 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 	}
 	article, err := a.store.UpdateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt,
 		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: homeCollection, ExtraCollectionIDs: extras, Status: input.Status,
-			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents})
+			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, Autosave: input.Autosave})
 	if err != nil {
 		writeKBError(response, err)
 		return

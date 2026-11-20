@@ -4095,7 +4095,7 @@ export interface paths {
         delete: operations["deleteKBArticle"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, collection (or the collections it is listed in), status (publish or unpublish), search title or meta description. On a draft article the change is made at once. On a published article it is saved as unpublished changes (`draft`, a version of kind `draft`): the help center, its search, sitemap.xml, llms.txt and AI keep the published text until `POST /api/v1/kb/articles/{id}/draft/publish`, and saving again changes the same draft. `status: draft` on a published article unpublishes it, with its unpublished changes, and needs `kb_articles:publish`. Send back the article's `updated_at` you read (saving its unpublished changes moves it too); when it was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
+        /** @description Change the title, slug, text, collection (or the collections it is listed in), status (publish or unpublish), search title or meta description. On a draft article the change is made at once. On a published article it is saved as unpublished changes (`draft`, a version of kind `draft`): the help center, its search, sitemap.xml, llms.txt and AI keep the published text until `POST /api/v1/kb/articles/{id}/draft/publish`, and saving again changes the same draft. `status: draft` on a published article unpublishes it, with its unpublished changes, and needs `kb_articles:publish`. Send back the article's `updated_at` you read (saving its unpublished changes moves it too); when it was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history, except an autosave (`autosave: true`). An article in the trash is 404. At most 64 KiB of JSON. */
         patch: operations["updateKBArticle"];
         trace?: never;
     };
@@ -20119,6 +20119,8 @@ export interface operations {
                     seo_description?: string;
                     /** @description The help center lists its H2 and H3 headings as On this page when it has 3 or more; false turns the list off for the article in every language. A version restore leaves it as it is. */
                     show_contents?: boolean;
+                    /** @description An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400. */
+                    autosave?: boolean;
                 };
             };
         };
