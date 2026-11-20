@@ -24,7 +24,7 @@ func TestUndoingAMediaReplacementPutsBackThePublishedTextNotTheDraft(t *testing.
 	if len(done.ArticleIDs) != 1 || done.ArticleIDs[0] != article.ID {
 		t.Fatalf("replacement = %+v", done)
 	}
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, map[string]any{"updated_at": kbSeen(saved), "body_md": "Draft text, edited"}, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, map[string]any{"updated_at": kbGetArticle(t, api, admin, article.ID).UpdatedAt, "body_md": "Draft text, edited"}, admin, http.StatusOK, nil)
 
 	var undone struct {
 		Skipped []string `json:"skipped_article_ids"`

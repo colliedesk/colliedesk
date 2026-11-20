@@ -16,8 +16,9 @@ const base = { 'GET /api/v1/auth/me': () => json(200, me), 'GET /api/v1/kb/colle
 // live is a published article; its help center page shows "Choose Security.".
 const live = (fields: Record<string, unknown> = {}) => article({ status: 'published', published_at: '2026-10-02T00:00:00Z', body_md: 'Open **Settings**.\nChoose Security.',
   updated_at: '2026-10-02T00:00:00Z', has_draft: false, draft: null, ...fields });
-// changed is the same article with unpublished changes saved on 3 October.
-const changed = (fields: Record<string, unknown> = {}) => live({ has_draft: true, draft: {
+// changed is the same article with unpublished changes saved on 3 October; the article's updated_at,
+// the token every write sends, moves with them.
+const changed = (fields: Record<string, unknown> = {}, articleFields: Record<string, unknown> = {}) => live({ has_draft: true, updated_at: '2026-10-03T00:00:00Z', ...articleFields, draft: {
   title: 'Reset a password', slug: 'reset-your-password', body_md: 'Open **Settings**.\nChoose Password.', seo_title: '', seo_description: '', collection_id: ids.setup,
   collection_ids: [ids.setup], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: { agent_id: null, name: 'Ada' }, ...fields } });
 
@@ -27,7 +28,7 @@ function open() {
 
 test('a published article with unpublished changes opens on them, says so, and a save sends the version of the changes', async () => {
   const calls = serve({ ...base, [`GET ${path}`]: () => json(200, changed()),
-    [`PATCH ${path}`]: () => json(200, changed({ body_md: 'Open **Settings**.\nChoose Password now.', updated_at: '2026-10-04T00:00:00Z' })) });
+    [`PATCH ${path}`]: () => json(200, changed({ body_md: 'Open **Settings**.\nChoose Password now.', updated_at: '2026-10-04T00:00:00Z' }, { updated_at: '2026-10-04T00:00:00Z' })) });
   open();
   const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   expect(text).toHaveValue('Open **Settings**.\nChoose Password.');
@@ -42,6 +43,17 @@ test('a published article with unpublished changes opens on them, says so, and a
   await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
   expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-03T00:00:00Z', body_md: 'Open **Settings**.\nChoose Password now.' });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Publish changes' })).toBeEnabled());
+});
+
+test('an article taken out of the trash with its changes saves with the article\'s updated_at, not the older one of the changes', async () => {
+  const calls = serve({ ...base, [`GET ${path}`]: () => json(200, changed({}, { updated_at: '2026-10-04T00:00:00Z' })),
+    [`PATCH ${path}`]: () => json(200, changed({ body_md: 'Open **Settings**.\nChoose Password now.', updated_at: '2026-10-05T00:00:00Z' }, { updated_at: '2026-10-05T00:00:00Z' })) });
+  open();
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Open **Settings**.\nChoose Password now.' } });
+  await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
+  expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-04T00:00:00Z', body_md: 'Open **Settings**.\nChoose Password now.' });
 });
 
 test('saving a published article without changes yet starts them: the state says so and Publish changes appears', async () => {

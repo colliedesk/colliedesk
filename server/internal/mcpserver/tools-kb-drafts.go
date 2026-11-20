@@ -26,8 +26,7 @@ type kbArticleDraftOut struct {
 	UpdatedBy     *string    `json:"updated_by"`
 }
 
-// withDraft adds an article's draft to its view and makes updated_at the one to send back: the
-// draft's while there is one, since every change then goes to the draft.
+// withDraft adds an article's draft to its view. updated_at stays the article's, the one every change sends back.
 func (out *kbArticleOut) withDraft(article restKBArticle) {
 	out.HasDraft = article.HasDraft
 	draft := article.Draft
@@ -43,7 +42,6 @@ func (out *kbArticleOut) withDraft(article restKBArticle) {
 	if draft.UpdatedBy != nil {
 		out.Draft.UpdatedBy = &draft.UpdatedBy.Name
 	}
-	out.UpdatedAt = draft.UpdatedAt
 }
 
 // forArticleDraft words a 404 of a draft call: the article is not in this workspace, or it has no draft.

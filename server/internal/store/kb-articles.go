@@ -21,7 +21,7 @@ const kbArticleChangeColumns = `v.version,v.kind,v.restored_from_version,v.chang
 
 // kbArticleSelect reads articles a with their newest version; extra columns follow the change columns.
 func kbArticleSelect(extra, join string) string {
-	return `SELECT a.id::text,a.number,a.collection_id::text,a.position,a.title,a.slug,a.status,a.published_at,a.author_agent_id::text,a.created_at,a.updated_at,` + kbHasDraft + `,` +
+	return `SELECT a.id::text,a.number,a.collection_id::text,a.position,a.title,a.slug,a.status,a.published_at,a.author_agent_id::text,a.created_at,` + kbArticleToken + `,` + kbHasDraft + `,` +
 		kbArticleChangeColumns + extra + `
 	FROM kb_articles a
 	LEFT JOIN LATERAL (SELECT * FROM kb_article_versions x WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id ORDER BY x.version DESC LIMIT 1) v ON true
@@ -723,8 +723,16 @@ func (s *Store) UndeleteKBArticle(ctx context.Context, workspaceID string, actor
 		if err := lockKB(ctx, tx, workspaceID); err != nil {
 			return domain.KBArticle{}, err
 		}
-		if err := kbTrashedAndCurrent(ctx, tx, `kb_articles`, workspaceID, id, seen, domain.ErrKBArticleNotFound); err != nil {
+		var token time.Time
+		err := tx.QueryRow(ctx, `SELECT `+kbArticleToken+` FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2 AND a.deleted_at IS NOT NULL FOR UPDATE OF a`, workspaceID, id).Scan(&token)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.KBArticle{}, domain.ErrKBArticleNotFound
+		}
+		if err != nil {
 			return domain.KBArticle{}, err
+		}
+		if !token.Equal(seen) {
+			return domain.KBArticle{}, domain.ErrKBChanged
 		}
 		var collectionLive bool
 		// Share lock as in checkKBCollection.

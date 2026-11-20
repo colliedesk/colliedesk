@@ -64,12 +64,11 @@ func (r *run) rewriteFreshdeskLinks(ctx context.Context) error {
 	// the import. A translation has its own history: unchanged while its own newest version is the
 	// import's (one with no version at all predates versions and is the import's), whatever happened to
 	// the article.
-	newestIsImport := `COALESCE((SELECT v.kind='import' FROM kb_article_versions v WHERE v.workspace_id=a.workspace_id AND v.article_id=a.id
-		ORDER BY v.version DESC LIMIT 1), false)`
+	importedLast := store.KBImportedLastSQL("a")
 	translationIsImport := `COALESCE((SELECT v.kind='import' FROM kb_article_translation_versions v WHERE v.workspace_id=t.workspace_id AND v.article_id=t.article_id
 		AND v.locale=t.locale ORDER BY v.version DESC LIMIT 1), true)`
 	for _, item := range []struct{ entity, sql string }{
-		{entityKBArticle, `SELECT i.source_id, a.id::text, '', a.body_md, ` + newestIsImport + `
+		{entityKBArticle, `SELECT i.source_id, a.id::text, '', a.body_md, ` + importedLast + `
 			FROM import_items i JOIN kb_articles a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
 			WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_article' AND a.deleted_at IS NULL AND strpos(lower(a.body_md), '/support') > 0
 			ORDER BY length(i.source_id), i.source_id`},

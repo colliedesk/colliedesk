@@ -31,11 +31,8 @@ type kbDraftedArticle struct {
 	Draft    *kbDraftView `json:"draft"`
 }
 
-// kbSeen is the updated_at a change to the article sends back: its draft's when it has one.
+// kbSeen is the updated_at a change to the article sends back, its draft or not.
 func kbSeen(article kbDraftedArticle) string {
-	if article.Draft != nil {
-		return article.Draft.UpdatedAt
-	}
 	return article.UpdatedAt
 }
 
@@ -95,8 +92,8 @@ func TestSavingAPublishedArticleKeepsTheHelpCenterOnThePublishedText(t *testing.
 	var saved kbDraftedArticle
 	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+live.ID, map[string]any{"updated_at": live.UpdatedAt,
 		"title": "Change your password", "slug": "change-your-password", "body_md": "Press the marigold button."}, admin, http.StatusOK, &saved)
-	if saved.Title != "Reset your password" || saved.BodyMD != "Press the pinecone button." || saved.UpdatedAt != live.UpdatedAt {
-		t.Fatalf("the live article changed: %+v", saved.kbArticleView)
+	if saved.Title != "Reset your password" || saved.BodyMD != "Press the pinecone button." || saved.UpdatedAt == live.UpdatedAt {
+		t.Fatalf("the live article changed, or the updated_at to send back did not move: %+v", saved.kbArticleView)
 	}
 	if !saved.HasDraft || saved.Draft == nil || saved.Draft.Title != "Change your password" || saved.Draft.Slug != "change-your-password" ||
 		saved.Draft.BodyMD != "Press the marigold button." || saved.Draft.CollectionID != collection.ID || saved.Draft.UpdatedBy == nil {

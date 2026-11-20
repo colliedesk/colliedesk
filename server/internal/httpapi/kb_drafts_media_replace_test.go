@@ -41,3 +41,24 @@ func TestReplacingAMediaItemAlsoReplacesItInUnpublishedChanges(t *testing.T) {
 		t.Fatalf("draft-only article after the undo: published %q, draft %+v", got.BodyMD, got.Draft)
 	}
 }
+
+// An item that only the unpublished changes of a published article name is not on its live page, so
+// replacing it needs no kb_articles:publish. One the live text shows still does.
+func TestReplacingAnItemOnlyUnpublishedChangesNameNeedsNoPublish(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	admin := createSession(t, api, service, "KB Draft Replace Gate", "admin@kb-draft-replace-gate.example.com")
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Docs"})
+	drafted := uploadKBMedia(t, api, admin, pngImage(172), nil)
+	live := uploadKBMedia(t, api, admin, pngImage(173), nil)
+	to := uploadKBMedia(t, api, admin, pngImage(174), nil)
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Gate", "status": "published", "body_md": "Live ![l](" + live.URL + ")"})
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, map[string]any{"updated_at": article.UpdatedAt, "body_md": "Draft ![d](" + drafted.URL + ")"}, admin, http.StatusOK, nil)
+	editor := customToken(t, api, admin, "Editor", "kb_articles:read", "kb_articles:update", "kb_media:read", "kb_media:update")
+
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/"+drafted.ID+"/replace", map[string]any{"with_media_id": to.ID}, editor, http.StatusOK, nil)
+	got := kbGetArticle(t, api, admin, article.ID)
+	if got.BodyMD != "Live ![l]("+live.URL+")" || got.Draft == nil || got.Draft.BodyMD != "Draft ![d]("+to.URL+")" {
+		t.Fatalf("published %q, draft %+v; want the live text alone and the draft on the new item", got.BodyMD, got.Draft)
+	}
+	refused(t, api, http.MethodPost, "/api/v1/kb/media/"+live.ID+"/replace", map[string]any{"with_media_id": to.ID}, editor, "kb_articles:publish")
+}

@@ -100,7 +100,7 @@ func TestRestoringAVersionOfAPublishedArticleWritesTheDraft(t *testing.T) {
 
 	var restored kbDraftedArticle
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+live.ID+"/versions/1/restore", map[string]any{"updated_at": published.UpdatedAt}, admin, http.StatusOK, &restored)
-	if restored.Title != "Refunds policy" || restored.BodyMD != "Within 30 days." || restored.UpdatedAt != published.UpdatedAt ||
+	if restored.Title != "Refunds policy" || restored.BodyMD != "Within 30 days." || restored.UpdatedAt == published.UpdatedAt ||
 		restored.Draft == nil || restored.Draft.Title != "Refunds" || restored.Draft.BodyMD != "Within 14 days." {
 		t.Fatalf("restored = %+v draft=%+v", restored.kbArticleView, restored.Draft)
 	}

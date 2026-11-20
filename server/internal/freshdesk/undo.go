@@ -307,8 +307,8 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 	return result, orphans, nil
 }
 
-// undoKnowledgeBase removes the imported articles nobody changed in Colliedesk since (their newest
-// version is the import; updated_at cannot tell, an article carries Freshdesk's timestamps), then the
+// undoKnowledgeBase removes the imported articles nobody changed in Colliedesk since (the import wrote
+// them last, store.KBImportedLastSQL; updated_at cannot tell, an article carries Freshdesk's timestamps), then the
 // imported collections left with no article and no collection, then the images the import added that
 // no article links and nobody kept in the library. It returns the storage keys of the images removed
 // and of their thumbnails.
@@ -318,7 +318,7 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 		AND w.locale=t.locale ORDER BY w.version DESC LIMIT 1), 'import') <> 'import'`
 	rows, err := tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN kb_articles a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_article'
-			AND ((SELECT v.kind FROM kb_article_versions v WHERE v.workspace_id=a.workspace_id AND v.article_id=a.id ORDER BY v.version DESC LIMIT 1) <> 'import'
+			AND (NOT `+store.KBImportedLastSQL("a")+`
 				OR EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND `+translationChanged+`))
 		ORDER BY length(i.source_id),i.source_id`, workspaceID, source)
 	if err != nil {

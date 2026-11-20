@@ -14,8 +14,12 @@ import (
 // kbHasDraft is true for an article a with unpublished changes to its own text.
 const kbHasDraft = `EXISTS(SELECT 1 FROM kb_article_drafts d WHERE d.workspace_id=a.workspace_id AND d.article_id=a.id AND d.locale IS NULL)`
 
-// lockKBArticle locks a live article and checks seen against its concurrency token: the draft's
-// updated_at while it has one, else the article's. It returns the status and whether a draft exists.
+// kbArticleToken is the concurrency token of article a that every read shows and every write checks:
+// the later of its own updated_at and its draft's. Saving a draft moves it without touching the
+// article's updated_at, which the help center shows; trashing or restoring the article moves it too.
+const kbArticleToken = `GREATEST(a.updated_at,(SELECT d.updated_at FROM kb_article_drafts d WHERE d.workspace_id=a.workspace_id AND d.article_id=a.id AND d.locale IS NULL))`
+
+// lockKBArticle locks a live article and checks seen against its concurrency token, kbArticleToken. It returns the status and whether a draft exists.
 func lockKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string, seen time.Time) (string, bool, error) {
 	var status string
 	var updatedAt time.Time
@@ -29,7 +33,7 @@ func lockKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string, seen 
 	if err != nil {
 		return "", false, err
 	}
-	if draftAt != nil {
+	if draftAt != nil && draftAt.After(updatedAt) {
 		updatedAt = *draftAt
 	}
 	if !updatedAt.Equal(seen) {
@@ -244,6 +248,17 @@ func (s *Store) PublishKBArticleDraft(ctx context.Context, workspaceID string, a
 		if !hasDraft {
 			return domain.KBArticle{}, domain.ErrKBDraftNotFound
 		}
+		// A draft that moves the article to a collection trashed since is refused as a conflict: the
+		// request names no collection, so the request is not what is wrong. Share lock as in
+		// checkKBCollection.
+		var homeTrashed bool
+		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT c.deleted_at IS NOT NULL FROM kb_article_drafts d JOIN kb_collections c ON c.workspace_id=d.workspace_id AND c.id=d.collection_id
+			WHERE d.workspace_id=$1 AND d.article_id=$2 AND d.locale IS NULL FOR SHARE OF c), false)`, workspaceID, id).Scan(&homeTrashed); err != nil {
+			return domain.KBArticle{}, err
+		}
+		if homeTrashed {
+			return domain.KBArticle{}, domain.ErrKBCollectionInTrash
+		}
 		return changeKBArticleLocked(ctx, tx, workspaceID, actor, id, domain.KBArticleEdited, nil, func(tx pgx.Tx) error {
 			return publishKBArticleChange(ctx, tx, workspaceID, id, KBArticleChange{})
 		})
@@ -252,7 +267,7 @@ func (s *Store) PublishKBArticleDraft(ctx context.Context, workspaceID string, a
 }
 
 // DiscardKBArticleDraft deletes the draft of an article; the live article and its versions stay as
-// they are. seen is the draft's updated_at.
+// they are. seen is the article's concurrency token, kbArticleToken.
 func (s *Store) DiscardKBArticleDraft(ctx context.Context, workspaceID string, id string, seen time.Time) (domain.KBArticle, error) {
 	if !savedReplyID.MatchString(id) {
 		return domain.KBArticle{}, domain.ErrKBArticleNotFound

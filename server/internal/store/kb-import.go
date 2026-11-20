@@ -119,14 +119,23 @@ const (
 	KBGone = "gone"
 )
 
-// KBArticleImportedLast tells whether an article exists and whether its newest version is an import.
+// KBImportedLastSQL is the SQL condition that the import wrote the article aliased a last: its newest
+// version that is not a draft save is an import, and it has no unpublished changes. Draft saves are
+// skipped so that discarded changes leave the article as the import wrote it.
+func KBImportedLastSQL(a string) string {
+	return `(COALESCE((SELECT v.kind FROM kb_article_versions v WHERE v.workspace_id=` + a + `.workspace_id AND v.article_id=` + a + `.id
+		AND v.kind<>'` + domain.KBArticleDrafted + `' ORDER BY v.version DESC LIMIT 1), '')='` + domain.KBArticleImported + `'
+		AND NOT EXISTS (SELECT 1 FROM kb_article_drafts d WHERE d.workspace_id=` + a + `.workspace_id AND d.article_id=` + a + `.id AND d.locale IS NULL))`
+}
+
+// KBArticleImportedLast tells whether an article exists and whether the import wrote it last
+// (KBImportedLastSQL).
 func KBArticleImportedLast(ctx context.Context, tx pgx.Tx, workspaceID, id string) (exists, imported bool, err error) {
-	var kind string
-	err = tx.QueryRow(ctx, `SELECT kind FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2 ORDER BY version DESC LIMIT 1`, workspaceID, id).Scan(&kind)
+	err = tx.QueryRow(ctx, `SELECT `+KBImportedLastSQL("a")+` FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, id).Scan(&imported)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, false, nil
 	}
-	return err == nil, kind == domain.KBArticleImported, err
+	return err == nil, imported, err
 }
 
 // ReimportKBArticle writes the source's newer article over an imported one, as a new version of

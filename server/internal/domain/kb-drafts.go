@@ -13,7 +13,7 @@ const KBArticleDrafted = "draft"
 var ErrKBDraftNotFound = errors.New("knowledge base draft not found")
 
 // KBArticleDraft is the unpublished changes of a published article: every field as it will be once
-// published. UpdatedAt is the concurrency token of every write to the article while the draft exists.
+// published. UpdatedAt is when the draft was saved last; the article's UpdatedAt is the token to send back.
 type KBArticleDraft struct {
 	Title          string            `json:"title"`
 	Slug           string            `json:"slug"`
@@ -28,12 +28,13 @@ type KBArticleDraft struct {
 }
 
 // AsDrafted is the article as it will be once its draft is published; without a draft it is the article.
+// UpdatedAt stays the article's: the token every write checks.
 func (a KBArticle) AsDrafted() KBArticle {
 	if a.Draft == nil {
 		return a
 	}
 	draft := *a.Draft
 	a.Title, a.Slug, a.BodyMD, a.SEOTitle, a.SEODescription = draft.Title, draft.Slug, draft.BodyMD, draft.SEOTitle, draft.SEODescription
-	a.CollectionID, a.CollectionIDs, a.UpdatedAt = draft.CollectionID, draft.CollectionIDs, draft.UpdatedAt
+	a.CollectionID, a.CollectionIDs = draft.CollectionID, draft.CollectionIDs
 	return a
 }

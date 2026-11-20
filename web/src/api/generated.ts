@@ -3977,11 +3977,11 @@ export interface paths {
         get: operations["getKBArticle"];
         put?: never;
         post?: never;
-        /** @description Move the article to the trash: it leaves the list and the help center, and can be restored for 30 days, with its unpublished changes. Send the `updated_at` you read, the draft's when there is one (409 `changed_elsewhere`). */
+        /** @description Move the article to the trash: it leaves the list and the help center, and can be restored for 30 days, with its unpublished changes. Send the article's `updated_at` you read (409 `changed_elsewhere`). */
         delete: operations["deleteKBArticle"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, collection (or the collections it is listed in), status (publish or unpublish), search title or meta description. On a draft article the change is made at once. On a published article it is saved as unpublished changes (`draft`, a version of kind `draft`): the help center, its search, sitemap.xml, llms.txt and AI keep the published text until `POST /api/v1/kb/articles/{id}/draft/publish`, and saving again changes the same draft. `status: draft` on a published article unpublishes it, with its unpublished changes, and needs `kb_articles:publish`. Send back the `updated_at` you read, the draft's when there is one; when it was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
+        /** @description Change the title, slug, text, collection (or the collections it is listed in), status (publish or unpublish), search title or meta description. On a draft article the change is made at once. On a published article it is saved as unpublished changes (`draft`, a version of kind `draft`): the help center, its search, sitemap.xml, llms.txt and AI keep the published text until `POST /api/v1/kb/articles/{id}/draft/publish`, and saving again changes the same draft. `status: draft` on a published article unpublishes it, with its unpublished changes, and needs `kb_articles:publish`. Send back the article's `updated_at` you read (saving its unpublished changes moves it too); when it was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
         patch: operations["updateKBArticle"];
         trace?: never;
     };
@@ -4055,7 +4055,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Make the title, slug and text of an earlier version current again, as a new version; the status and collection stay as they are now, and nothing in the history is rewritten. On a published article they become its unpublished changes (`draft`), to publish with `POST /api/v1/kb/articles/{id}/draft/publish`. Send back the `updated_at` you read, the draft's when there is one (409 `changed_elsewhere`). An article in the trash is 404. */
+        /** @description Make the title, slug and text of an earlier version current again, as a new version; the status and collection stay as they are now, and nothing in the history is rewritten. On a published article they become its unpublished changes (`draft`), to publish with `POST /api/v1/kb/articles/{id}/draft/publish`. Send back the article's `updated_at` you read (409 `changed_elsewhere`). An article in the trash is 404. */
         post: operations["restoreKBArticleVersion"];
         delete?: never;
         options?: never;
@@ -4075,7 +4075,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Throw away the unpublished changes of a published article. The published article and its history stay as they are; the versions that saved the draft stay in the history and can be restored. Send the draft's `updated_at` (409 `changed_elsewhere`). 404 when the article has no unpublished changes. */
+        /** @description Throw away the unpublished changes of a published article. The published article and its history stay as they are; the versions that saved the draft stay in the history and can be restored. Send the article's `updated_at` (409 `changed_elsewhere`). 404 when the article has no unpublished changes. */
         delete: operations["discardKBArticleDraft"];
         options?: never;
         head?: never;
@@ -4093,7 +4093,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Put the unpublished changes of a published article on the help center: they become the article (a version of kind `edit`), the draft is gone, and translations are marked outdated when the title or text changed. Send the draft's `updated_at` (409 `changed_elsewhere`). 404 when the article has no unpublished changes; 409 `collection_in_trash` when the draft moves it to a collection in the trash. A repeat with the same Idempotency-Key answers the first publish again (200) and changes nothing. */
+        /** @description Put the unpublished changes of a published article on the help center: they become the article (a version of kind `edit`), the draft is gone, and translations are marked outdated when the title or text changed. Send the article's `updated_at` (409 `changed_elsewhere`). 404 when the article has no unpublished changes; 409 `collection_in_trash` when the draft moves it to a collection in the trash. A repeat with the same Idempotency-Key answers the first publish again (200) and changes nothing. */
         post: operations["publishKBArticleDraft"];
         delete?: never;
         options?: never;
@@ -7723,7 +7723,10 @@ export interface components {
             author_agent_id: string | null;
             /** Format: date-time */
             created_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Send it back to change the article or its unpublished changes; saving them moves it too.
+             */
             updated_at: string;
             last_change: null | components["schemas"]["KBArticleChange"];
             /**
@@ -7796,7 +7799,7 @@ export interface components {
             /** Format: uuid */
             collection_id: string;
             collection_name: string;
-            /** @description The article's newest version. */
+            /** @description The version of the article's live text; a save of its unpublished changes does not count. */
             version: number;
             /** Format: date-time */
             updated_at: string;
@@ -7976,7 +7979,7 @@ export interface components {
             created_at: string;
             /**
              * Format: date-time
-             * @description Send it back to save, publish or discard the draft.
+             * @description When the draft was saved last. To save, publish or discard it, send the article's updated_at.
              */
             updated_at: string;
             /** @description Who saved it last; null when that person was removed. */

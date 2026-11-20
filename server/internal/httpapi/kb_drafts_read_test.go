@@ -109,3 +109,19 @@ func TestARepeatedPublishWithTheSameKeyPublishesOnce(t *testing.T) {
 		t.Errorf("versions = %s, want edit, draft, create", got)
 	}
 }
+
+// A translation shows the article it translates as the help center does: the live text, and the
+// version of that text, not a later save of unpublished changes.
+func TestATranslationShowsTheVersionOfTheLiveTextItTranslates(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "KB Draft Original", "admin@kb-draft-original.example.com")
+	kbCall(t, api, http.MethodPut, "/api/v1/help-center/languages", map[string]any{"languages": []map[string]any{{"locale": "fr", "visible": false}}}, admin, http.StatusOK, nil)
+	live, _ := kbDraftedFixture(t, api, admin)
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+live.ID+"/translations", map[string]any{"locale": "fr", "title": "Remboursements", "body_md": "Sous 14 jours."}, admin, http.StatusCreated, nil)
+
+	var translation kbTranslationView
+	kbCall(t, api, http.MethodGet, kbTranslationPath(live.ID, "fr"), nil, admin, http.StatusOK, &translation)
+	if translation.Original.BodyMD != "Within 14 days." || translation.Original.Version != 1 {
+		t.Fatalf("original = %+v, want the live text at version 1", translation.Original)
+	}
+}

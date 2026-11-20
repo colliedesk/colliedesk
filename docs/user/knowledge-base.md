@@ -840,8 +840,8 @@ Articles and collections:
   unpublished changes as one article. `colliedesk_kb_article_draft_publish`
   (`POST /api/v1/kb/articles/{id}/draft/publish`, with `kb_articles:publish`) puts them live and
   `colliedesk_kb_article_draft_discard` (`DELETE /api/v1/kb/articles/{id}/draft`) drops them. Both take
-  the `updated_at` of the unpublished changes, so changes saved after you read them are never published
-  or dropped unseen.
+  the article's `updated_at` as you read it: saving the unpublished changes moves it, so changes saved
+  after you read them are never published or dropped unseen.
 - Link an article in a reply: every article an agent reads or finds carries its public address in `url`
   (also in the API). An agent links an article the same way a person does: the title and the address on
   two lines, from a search with `status` published while the help center is on.

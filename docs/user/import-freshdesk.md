@@ -107,9 +107,9 @@ library (counting its trash and every image the import would bring in), or an ar
 100,000 characters once converted. A text is never cut. `--dry-run` lists what does not fit.
 
 Running the import again updates an article that changed in Freshdesk, unless your team changed it in
-Colliedesk since (saving [unpublished changes](knowledge-base.md#unpublished-changes) counts): then your
+Colliedesk since, or it has [unpublished changes](knowledge-base.md#unpublished-changes): then your
 version stays, published text and unpublished changes alike, and the report lists the article under
-`kb_article_changed_in_both`. If an article is no longer public in Freshdesk (its folder became
+`kb_article_changed_in_both`. Unpublished changes you discarded do not count. If an article is no longer public in Freshdesk (its folder became
 private, or its category left the portal), the next run makes it a draft again, unless your team
 changed it since: then it stays published and the report warns (`kb_article_published_but_not_public`).
 When only a folder or a portal changes the other way, the article stays a draft; publish it in
@@ -117,8 +117,8 @@ Colliedesk. The same goes for each translation: a newer Freshdesk translation re
 changed in Colliedesk, and the report lists the others under `kb_translation_changed_in_both`. An
 article whose text changed in Freshdesk while its translation did not gets that translation marked
 **Outdated**. `import undo` removes the imported articles and collections, but keeps an
-article your team edited, restored or deleted since, or one of whose translations your team changed
-or added, and the collections that hold it or your own articles. From an article that stays, undo
+article your team edited, restored or deleted since, one with unpublished changes, or one of whose
+translations your team changed or added, and the collections that hold it or your own articles. From an article that stays, undo
 removes the translations only the import wrote; it also removes the collection names the import
 wrote (not one a person set) and the languages it added that hold nothing any more. An imported image someone kept in the media library stays too, and undo says how many. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
 may lack the right), the status is `UNVERIFIED`.

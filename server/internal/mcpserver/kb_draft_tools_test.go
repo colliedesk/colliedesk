@@ -34,7 +34,7 @@ func TestAnAgentChangesAPublishedArticleWithoutTouchingTheLivePage(t *testing.T)
 		at(t, saved, "article", "draft", "team_text", "body") != "Within 30 days." || at(t, saved, "article", "draft", "updated_by") != "admin@kb-draft-tools.example.com" {
 		t.Fatalf("saved = %v", saved)
 	}
-	// The updated_at an answer gives is the one to send back, the draft's while there is one.
+	// The updated_at an answer gives is the one to send back; a draft save moves it.
 	if at(t, saved, "article", "updated_at") == live {
 		t.Fatalf("updated_at after a draft save is still the live one: %v", saved)
 	}

@@ -214,10 +214,10 @@ Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
   article in one transaction, records an `edit` version, marks translations outdated as an edit does,
   deletes the row and bumps the help center. Discard (`DELETE …/draft`) deletes the row and relinks
   media; versions stay.
-- **The concurrency token is the draft's `updated_at`** while a row exists, else the article's. Every
-  writer (save, publish, discard, restore) checks the same value, so a publish never puts live text
-  its caller has not read. The web editor overlays the draft on the article (`editable()`) and sends
-  that token.
+- **One concurrency token per article** (`kbArticleToken`): the later of the article's and the draft's
+  `updated_at`. Every read (get, list, search, trash, `?version=draft`) shows it as `updated_at`, and
+  every writer (save, publish, discard, restore, delete, undelete) checks it, so a publish never puts
+  live text its caller has not read and a client never has to tell the two apart.
 - **Public reads see only live rows.** Help center pages, `.md`, search, `llms.txt`, sitemap and the
   help chat read `kb_articles` and `kb_article_translations`, never the drafts; the chat cites the
   newest non-`draft` version. Image and video serving checks the live text and published translations
@@ -231,9 +231,10 @@ Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
   replaced item back. The undo puts the old text back only while the draft still holds the replaced
   text; otherwise the article is listed as skipped. The undo's "previous version" of an article skips
   `draft` versions, so it restores the live text.
-- **A Freshdesk rerun leaves an article with a draft alone**, live text and draft: its newest version
-  is a person's `draft` save, not an import (`KBArticleImportedLast`), the same rule as any Colliedesk
-  edit; the report lists it under `kb_article_changed_in_both`.
+- **A Freshdesk rerun leaves an article with a draft alone**, live text and draft, and lists it under
+  `kb_article_changed_in_both`. `KBImportedLastSQL` (rerun, undo, link rewrite) skips `draft`
+  versions and checks for a draft row instead, so a discarded draft leaves the article the import's
+  again: nothing of the person's work is lost by taking the next Freshdesk change.
 - **No slug uniqueness check** on a draft: the address carries the number, and article slugs are not
   unique today.
 - **Export** writes `kb-article-drafts.ndjson`; the versions file carries the `draft` kind.
