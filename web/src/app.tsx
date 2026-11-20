@@ -266,10 +266,11 @@ const knowledgeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge',
   loader: pageChunk(kbPart),
-  validateSearch: (search: Record<string, unknown>): { collection?: string; q?: string; status?: 'draft' | 'published' } => ({
+  validateSearch: (search: Record<string, unknown>): { collection?: string; q?: string; status?: 'draft' | 'published'; has_draft?: 'true' } => ({
     ...(typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
     ...(typeof search.q === 'string' && search.q !== '' ? { q: search.q } : {}),
     ...(search.status === 'draft' || search.status === 'published' ? { status: search.status } : {}),
+    ...(search.has_draft === 'true' || search.has_draft === true ? { has_draft: 'true' as const } : {}),
   }),
   component: function Knowledge() {
     const search = knowledgeRoute.useSearch();

@@ -31,7 +31,13 @@ export interface KnowledgeSearch {
   collection?: string;
   q?: string;
   status?: KBArticleStatus;
+  // has_draft keeps the published articles with unpublished changes.
+  has_draft?: 'true';
 }
+
+// The status filter: each choice sets both status and has_draft, so one choice never keeps the other's.
+const statusChoices = [[{ status: undefined, has_draft: undefined }, kbMessages.anyStatus], [{ status: 'published', has_draft: undefined }, kbMessages.publishedFilter],
+  [{ status: 'draft', has_draft: undefined }, kbMessages.drafts], [{ status: undefined, has_draft: 'true' }, kbMessages.unpublishedChanges]] as const;
 
 
 // Every write can change the counts in the tree, the list and the trash, so all three are read again.
@@ -51,7 +57,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const tree = useMemo(() => buildTree(collections.data?.items ?? []), [collections.data]);
   const nodes = useMemo(() => flatten(tree), [tree]);
   const selected = search.collection ? nodes.find((node) => node.collection.id === search.collection) : undefined;
-  const filter = { q: search.q, status: search.status, collection_id: search.collection };
+  const filter = { q: search.q, status: search.status, collection_id: search.collection, has_draft: search.has_draft };
   const articles = useInfiniteQuery({
     queryKey: ['kb-articles', filter],
     queryFn: ({ pageParam, signal }) => kbApi.articles({ ...filter, cursor: pageParam }, signal),
@@ -69,6 +75,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
     const params = new URLSearchParams();
     if (search.q) params.set('q', search.q);
     if (search.status) params.set('status', search.status);
+    if (search.has_draft) params.set('has_draft', search.has_draft);
     if (collection) params.set('collection', collection.id);
     return `/knowledge${params.size > 0 ? `?${params}` : ''}`;
   };
@@ -125,7 +132,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   // shown after its move leaves the focus on the list's heading.
   const focusHeading = () => document.getElementById('kb-articles-heading')?.focus();
   const moves = useOrderMoves(refresh, focusHeading);
-  const ordered = selected && !search.q && !search.status ? selected : undefined;
+  const ordered = selected && !search.q && !search.status && !search.has_draft ? selected : undefined;
   const articleIds = items.map((article) => article.id);
   const parent = selected ? nodes.find((node) => node.collection.id === selected.collection.parent_id) : undefined;
   const siblings = selected ? parent?.children ?? tree : [];
@@ -213,8 +220,9 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             <span id="kb-search-hint" className="sr-only">{kbMessages.searchHint}</span>
             <fieldset className="segmented">
               <legend className="sr-only">{kbMessages.statusFilter}</legend>
-              {([[undefined, kbMessages.anyStatus], ['published', kbMessages.publishedFilter], ['draft', kbMessages.drafts]] as const).map(([value, label]) => (
-                <label key={label}><input type="radio" name="kb-status" checked={search.status === value} onChange={() => setSearch({ status: value })} />{label}</label>
+              {statusChoices.map(([choice, label]) => (
+                <label key={label}><input type="radio" name="kb-status" checked={search.status === choice.status && search.has_draft === choice.has_draft}
+                  onChange={() => setSearch(choice)} />{label}</label>
               ))}
             </fieldset>
           </div>
@@ -314,6 +322,7 @@ function ArticleRow({ article, collection, timezone, isPublic, order }: ArticleR
         <span className="kb-article-status">
           <span className="kb-dot-status" data-status={article.status}>{published ? kbMessages.published : kbMessages.draft}</span>
           <small>{published ? (isPublic === false ? kbMessages.notPublic : isPublic ? kbMessages.public : '') : kbMessages.agentsOnly}</small>
+          {article.has_draft && <small className="kb-changes-mark">{kbMessages.unpublishedChanges}</small>}
         </span>
         <span className="kb-article-when"><time dateTime={article.updated_at}>{formatDate(article.updated_at, timezone)}</time>
           {change && <small>{savedReplyChangeText(change)}</small>}</span>

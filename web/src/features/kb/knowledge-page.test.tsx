@@ -309,3 +309,22 @@ test('restoring a collection whose parent is in the trash shows the server\'s re
   fireEvent.click(await within(panel).findByRole('button', { name: 'Restore Billing' }));
   expect(await within(panel).findByRole('alert')).toHaveTextContent('The parent collection is in the trash; restore it first.');
 });
+
+test('a published article with unpublished changes says so in the list, and the list can keep only those', async () => {
+  const changed = { ...summary(1, 'Reset your password', 'published'), has_draft: true };
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles': () => json(200, { items: [changed, summary(2, 'Add a teammate', 'published')], next_cursor: null }) });
+  const show = open({ collection: ids.setup });
+  expect(await screen.findByRole('link', { name: /Reset your password/ })).toHaveTextContent('Unpublished changes');
+  expect(screen.getByRole('link', { name: /Add a teammate/ })).not.toHaveTextContent('Unpublished changes');
+  const filter = screen.getByRole('group', { name: 'Status' });
+  fireEvent.click(within(filter).getByRole('radio', { name: 'Unpublished changes' }));
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge', search: { collection: ids.setup, status: undefined, has_draft: 'true' }, replace: false });
+  show({ collection: ids.setup, has_draft: 'true' });
+  await waitFor(() => expect(calls.some((call) => call.path === '/api/v1/kb/articles' && call.search.get('has_draft') === 'true')).toBe(true));
+  expect(within(filter).getByRole('radio', { name: 'Unpublished changes' })).toBeChecked();
+  expect(within(filter).getByRole('radio', { name: 'Published' })).not.toBeChecked();
+  // A filtered list is not the whole order: no buttons to move rows.
+  expect(screen.queryByRole('button', { name: /^Move Reset your password/ })).not.toBeInTheDocument();
+  fireEvent.click(within(filter).getByRole('radio', { name: 'Published' }));
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge', search: { collection: ids.setup, status: 'published', has_draft: undefined }, replace: false });
+});
