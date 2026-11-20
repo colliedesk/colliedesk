@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { EditorState, Prec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder } from '@codemirror/view';
@@ -9,6 +9,8 @@ import { HelpTip } from '../../../ui/help-tip';
 import { kbMessages } from '../kb-messages';
 import { activeOf, codeBlockTemplate, inlineCode, insertBlock, insertLink, sameActive, setHeading, tableTemplate, toggleLines, toggleMark } from './commands';
 import type { Active, Block, LineKind } from './commands';
+import { insertArticleLink } from './article-link';
+import { ArticleLinkPicker } from '../article-link-picker';
 import { Icon } from './icons';
 import type { IconName } from './icons';
 import { markdownHighlight, markdownLanguage } from './theme';
@@ -45,6 +47,8 @@ export interface CodeMirrorEditorProps {
   describedBy: string;
   invalid: boolean;
   mode: ViewMode;
+  // The article being edited, left out of the list a link to an article is picked from.
+  articleId?: string;
   // preview is shown beside the text (split) or instead of it (preview).
   preview?: ReactNode;
   onChange: (markdown: string) => void;
@@ -71,7 +75,7 @@ const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator
 // (line endings aside: CodeMirror writes \n for \r\n and \r, and the page does not count that as a change).
 // CodeMirror 6 with the bare @lezer/markdown GFM parser for highlighting (not @codemirror/lang-markdown, which
 // brings the HTML, CSS and JavaScript languages along), history and search.
-export default function CodeMirrorEditor({ initial, uploads, label, describedBy, invalid, mode, preview, onChange, onReady }: CodeMirrorEditorProps) {
+export default function CodeMirrorEditor({ initial, uploads, label, describedBy, invalid, mode, articleId, preview, onChange, onReady }: CodeMirrorEditorProps) {
   const id = useId();
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
@@ -81,6 +85,10 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const [video, setVideo] = useState<{ error: string } | undefined>();
   // picking is the media library picker, open or not.
   const [picking, setPicking] = useState(false);
+  // linkAt is where the list of articles to link to opens, measured from the bar's left edge: under the button
+  // that opened it. Undefined while the list is closed.
+  const [linkAt, setLinkAt] = useState<number>();
+  const bar = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<Active>();
   // rover is the toolbar button that is the Tab stop; when it is disabled (Undo with nothing to undo), the first
   // button is, so the toolbar never loses its stop.
@@ -203,6 +211,11 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   };
 
   const editing = mode !== 'preview' && !!active;
+  // A phone's toolbar keeps Link to article under More formatting, so the list opens under that button.
+  const openLinking = () => {
+    const trigger = bar.current?.querySelector(`[data-tool="${compact ? 'more' : 'article'}"]`);
+    setLinkAt(trigger && bar.current ? trigger.getBoundingClientRect().left - bar.current.getBoundingClientRect().left : 0);
+  };
   // The Tab stop falls back to Bold when its button is disabled (Undo with nothing to undo) or not in this layout
   // (a phone's toolbar has Insert, Bold, Italic, Link and More only).
   const onPhone = ['insert', 'bold', 'italic', 'link', 'more'];
@@ -224,7 +237,8 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
       item(t.table, 'table', (view) => insertBlock(view, tableTemplate, [2, 8]))] : []),
     { ...item(t.strike, 'strike', (view) => toggleMark(view, '~~')), separated: compact }, item(t.code, 'code', inlineCode), item(t.task, 'task', line('task')),
     item(t.codeBlock, 'codeBlock', (view) => insertBlock(view, codeBlockTemplate, [4, 8])), item(t.hr, 'hr', (view) => insertBlock(view, '---')),
-    ...(compact ? [{ ...item(t.search, 'search', openSearchPanel), separated: true }, item(t.undo, 'undo', undo, !active?.canUndo)] : []),
+    ...(compact ? [{ label: t.articleLink, icon: 'article' as const, disabled: !editing, onSelect: openLinking, separated: true }] : []),
+    ...(compact ? [item(t.search, 'search', openSearchPanel), item(t.undo, 'undo', undo, !active?.canUndo)] : []),
     item(t.redo, 'redo', redo, !active?.canRedo),
   ];
   const insert: MenuItem[] = [
@@ -237,38 +251,45 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     trigger={<><Icon name="image" /><span>{t.insertMenu}</span><span className="md-insert-long">{t.insertMenuMore}</span><Icon name="chevronDown" /></>} />;
   return (
     <div ref={shell} className="md-shell" data-mode={mode} data-compact={compact ? 'true' : undefined}>
-      <div className="md-toolbar" role="toolbar" aria-label={kbMessages.formatting} onKeyDown={onToolbarKey}>
-        {compact && insertMenu}
-        {!compact && <>
-          <label className="sr-only" htmlFor={`${id}-block`}>{kbMessages.blockType}</label>
-          <select id={`${id}-block`} className="md-block" value={active?.block ?? 'paragraph'} disabled={!editing}
-            onChange={(event) => act((view) => setHeading(view, event.target.value as Block))}>
-            <option value="paragraph">{t.paragraph}</option>
-            {/* The article page shows the title as its h1, so the text offers no Heading 1; a stored one still shows here. */}
-            {active?.block === 'h1' && <option value="h1">{t.h1}</option>}
-            <option value="h2">{t.h2}</option>
-            <option value="h3">{t.h3}</option>
-          </select>
-          <span className="md-sep" aria-hidden="true" />
-        </>}
-        {compact && <span className="md-grow" />}
-        {tool('bold', t.bold, `${mod}B`, (view) => toggleMark(view, '**'), active?.strong)}
-        {tool('italic', t.italic, `${mod}I`, (view) => toggleMark(view, '*'), active?.emphasis)}
-        {tool('link', t.link, `${mod}K`, insertLink, active?.link)}
-        {!compact && <>
-          <span className="md-sep" aria-hidden="true" />
-          {tool('ordered', t.ordered, '', line('ordered'), active?.ordered)}
-          {tool('bullet', t.bullet, '', line('bullet'), active?.bullet)}
-          {tool('quote', t.quote, '', line('quote'), active?.quote)}
-          {tool('table', t.table, '', (view) => insertBlock(view, tableTemplate, [2, 8]))}
-          <span className="md-sep" aria-hidden="true" />
-          {insertMenu}
-          <span className="md-grow" />
-          {tool('search', t.search, `${mod}F`, openSearchPanel)}
-          {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
-        </>}
-        <KBMenu label={t.moreFormatting} title={t.moreFormatting} items={more} grid className="md-more" buttonClassName="md-tool" tool="more" tabIndex={stop === 'more' ? 0 : -1}
-          disabled={!editing} trigger={<Icon name="more" />} />
+      {/* The bar holds the toolbar and the article list that opens over the text just under it. */}
+      <div ref={bar} className="md-bar" style={linkAt === undefined ? undefined : { '--link-at': `${linkAt}px` } as CSSProperties}>
+        <div className="md-toolbar" role="toolbar" aria-label={kbMessages.formatting} onKeyDown={onToolbarKey}>
+          {compact && insertMenu}
+          {!compact && <>
+            <label className="sr-only" htmlFor={`${id}-block`}>{kbMessages.blockType}</label>
+            <select id={`${id}-block`} className="md-block" value={active?.block ?? 'paragraph'} disabled={!editing}
+              onChange={(event) => act((view) => setHeading(view, event.target.value as Block))}>
+              <option value="paragraph">{t.paragraph}</option>
+              {/* The article page shows the title as its h1, so the text offers no Heading 1; a stored one still shows here. */}
+              {active?.block === 'h1' && <option value="h1">{t.h1}</option>}
+              <option value="h2">{t.h2}</option>
+              <option value="h3">{t.h3}</option>
+            </select>
+            <span className="md-sep" aria-hidden="true" />
+          </>}
+          {compact && <span className="md-grow" />}
+          {tool('bold', t.bold, `${mod}B`, (view) => toggleMark(view, '**'), active?.strong)}
+          {tool('italic', t.italic, `${mod}I`, (view) => toggleMark(view, '*'), active?.emphasis)}
+          {tool('link', t.link, `${mod}K`, insertLink, active?.link)}
+          {!compact && tool('article', t.articleLink, '', openLinking)}
+          {!compact && <>
+            <span className="md-sep" aria-hidden="true" />
+            {tool('ordered', t.ordered, '', line('ordered'), active?.ordered)}
+            {tool('bullet', t.bullet, '', line('bullet'), active?.bullet)}
+            {tool('quote', t.quote, '', line('quote'), active?.quote)}
+            {tool('table', t.table, '', (view) => insertBlock(view, tableTemplate, [2, 8]))}
+            <span className="md-sep" aria-hidden="true" />
+            {insertMenu}
+            <span className="md-grow" />
+            {tool('search', t.search, `${mod}F`, openSearchPanel)}
+            {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
+          </>}
+          <KBMenu label={t.moreFormatting} title={t.moreFormatting} items={more} grid className="md-more" buttonClassName="md-tool" tool="more" tabIndex={stop === 'more' ? 0 : -1}
+            disabled={!editing} trigger={<Icon name="more" />} />
+        </div>
+        {linkAt !== undefined && editing && <ArticleLinkPicker exclude={articleId}
+          onPick={(article) => { setLinkAt(undefined); act((view) => insertArticleLink(view, article)); }}
+          onClose={(restoreFocus) => { setLinkAt(undefined); if (restoreFocus) viewRef.current?.focus(); }} />}
       </div>
       {picking && editing && <MediaPicker onClose={() => { setPicking(false); viewRef.current?.focus(); }}
         onUpload={() => { setPicking(false); fileInput.current?.click(); }}

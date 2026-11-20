@@ -578,7 +578,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
               <Part part={editorPart} failed={<div className="kb-editor-loading"><PartUnavailable /></div>} render={({ default: Editor }) => {
                 madeWith.current ??= draft.body;
                 return <Editor initial={madeWith.current} uploads={imageHooks} label={kbMessages.body} describedBy={`${id}-help ${id}-count`} invalid={tooLong} mode={mode}
-                  preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} library={library} />} onChange={(text) => set({ body: text })} onReady={onReady} />;
+                  preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} library={library} />} articleId={article?.id} onChange={(text) => set({ body: text })} onReady={onReady} />;
               }} />
               {!handle && <p role="status" className="kb-editor-loading kb-hint">{kbMessages.loadingEditor}</p>}
             </div>
