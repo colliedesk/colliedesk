@@ -11,6 +11,13 @@ requests. This file keeps the first release.
 
 ## Unreleased
 
+**Self-hosting: move the bundled database to PostgreSQL 19.** A new install runs PostgreSQL 19; an
+install made before keeps the major its volume holds (16, 17 or 18). `upgrade-postgres.sh` dumps the
+old volume, restores it into a new `postgres19-data` volume, switches `compose.yaml` and starts
+Colliedesk; the old volume is kept and `sh upgrade-postgres.sh --rollback` goes back to it. An external
+database still needs PostgreSQL 16 or newer. See
+[move the bundled database to PostgreSQL 19](docs/self-host/upgrade.md#move-the-bundled-database-to-postgresql-19).
+
 **Workspace host names: each workspace's desk runs on its own host.** With `HELP_CENTER_DOMAIN`
 (for example `example.com`), the team works at `https://<slug>.example.com`: the app, its API and MCP
 run there, and the help center moves to `https://<slug>.example.com/help` (its old addresses on that
