@@ -120,8 +120,8 @@ held by `TestAConversationNotNumberedYetReadsListsAndExports`.
 ## A new PostgreSQL major
 
 `upgrade-postgres.sh` moves a bundled 16, 17 or 18 database to 19 by dump and restore into a new
-volume (`postgres19-data`), never `pg_upgrade`: the old volume stays untouched, so `--rollback` is
-only a compose edit back to the old image and volume. `tests/upgrade-postgres-test.sh` runs it on an
+volume (`postgres19-data`), never `pg_upgrade`: the upgrade only dumps from the old volume, so
+`--rollback` is only a compose edit back to the old image and volume. `tests/upgrade-postgres-test.sh` runs it on an
 install made by the v1.0.1 installer (PostgreSQL 17, no `PGDATA` line), for both database login
 layouts, in the background of the CI `image` job and in the release.
 
@@ -129,6 +129,16 @@ layouts, in the background of the CI `image` job and in the release.
   inbound and outbox retries, snapshots, the settings import), so a snapshot of a running install
   differs from the next one for no fault of the upgrade. The test stops the server, compares,
   takes the next baseline in the same stop and starts it again; each `up --wait` costs about 3 s.
+- **`compose.yaml` switches last.** PostgreSQL 19 runs from a staging copy,
+  `compose.postgres-19.yaml`, until the restore and the analyze are done; only then is
+  `compose.yaml` replaced, with `mv`, so it is never half written. A run killed at any point leaves a
+  `compose.yaml` that serves complete data: the old major before the switch, 19 after it. The next
+  run reads `compose.yaml`, not the state file, to choose between finishing on 19 and putting the
+  install back.
+- **The exit handlers ignore signals and write errors.** A closed SSH session sends SIGHUP, and then
+  every write to the terminal fails; the handler that puts the install back must still run to its
+  end, so it ignores HUP, INT, TERM and PIPE and its messages swallow write errors. The test runs a
+  failed upgrade with stderr on `/dev/full`.
 - **The installer keeps the volume key it finds.** A rerun after the upgrade must keep
   `postgres19-data`, or PostgreSQL 19 starts on the volume 17 wrote. `tests/install-test.sh` holds it.
 - **No `start_interval` in the healthchecks.** It would shorten each start, but Compose refuses it on
