@@ -87,7 +87,10 @@ else
     fail "cannot read install.sh of $previous_tag; set PREVIOUS_INSTALL_SH"
 fi
 # From 1.0.0 install.sh writes compose.yaml.next and then moves it over compose.yaml.
-sed -n "/^cat >\"\$TARGET_DIR\/compose\.yaml\(\.next\)\{0,1\}\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
+# A release that picks the PostgreSQL image at run time writes @POSTGRES_IMAGE@ and sets it for a fresh install.
+previous_postgres=$(sed -n 's/^POSTGRES_IMAGE=//p' "$TMP/install.sh" | head -n 1)
+sed -n "/^cat >\"\$TARGET_DIR\/compose\.yaml\(\.next\)\{0,1\}\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' |
+  sed "s|@POSTGRES_IMAGE@|$previous_postgres|" >"$TMP/compose.yaml"
 mkdir -p "$TMP/initdb"
 sed -n "/^cat >\"\$TARGET_DIR\/initdb\/10-colliedesk-owner.sh\" <<'INITDB'$/,/^INITDB$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/initdb/10-colliedesk-owner.sh"
 chmod 755 "$TMP/initdb/10-colliedesk-owner.sh"
@@ -380,6 +383,9 @@ fi
 step 'running the new installer again on the upgraded install'
 cp "$TMP/compose.yaml" "$TMP/compose.previous"
 touch "$TMP/.initialized"
+# PostgreSQL cannot open data another major wrote, so the installer must keep the major the volume holds.
+pg_major() { echo 'SHOW server_version_num;' | psql_as postgres postgres -At | cut -c1-2; }
+major_before=$(pg_major)
 echo 'INTERNAL_SIGNUP_EMAILS=@upgrade.example' >>"$TMP/.env"
 echo 'SMTP_HOST=smtp.changed.invalid' >>"$TMP/.env"
 rerun=$(COLLIE_DESK_IMAGE=$CANDIDATE sh "$ROOT/install.sh" --dir "$TMP" --name 'Upgrade Desk' --email owner@acme.example </dev/null 2>&1) ||
@@ -393,6 +399,9 @@ else
   cmp -s "$TMP/compose.previous" "$TMP/compose.yaml.bak" || fail 'the installer did not keep the compose file it replaced as compose.yaml.bak'
 fi
 if grep -q 'SMTP_HOST' "$TMP/compose.yaml"; then fail 'the new compose file still passes SMTP_HOST'; fi
+[ "$(pg_major)" = "$major_before" ] || fail "the installer moved the database off PostgreSQL $major_before"
+grep -Eq "^    image: postgres:${major_before}[.-]" "$TMP/compose.yaml" ||
+  fail "the new compose file does not run PostgreSQL $major_before, the major of the database volume"
 [ "$(dc exec -T server /app/collie config get internal_signup.emails 2>/dev/null)" = 'internal_signup.emails=@upgrade.example' ] ||
   fail 'the installer did not import INTERNAL_SIGNUP_EMAILS from .env'
 [ "$(dc exec -T server /app/collie config get smtp.host 2>/dev/null)" = 'smtp.host=smtp.invalid' ] ||

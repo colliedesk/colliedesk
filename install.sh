@@ -6,6 +6,8 @@ set -eu
 main() {
 
 DOCKER=${DOCKER:-docker}
+# What a fresh install runs: the PostgreSQL release Colliedesk Cloud runs, pinned by digest.
+POSTGRES_IMAGE=postgres:19.0-bookworm@sha256:f4859caf96de494e38efa69ed703b08a5bbd9605e152e604f2daec8841c87c41
 OPENSSL=${OPENSSL:-openssl}
 SLEEP=${SLEEP:-sleep}
 TARGET_DIR=./colliedesk
@@ -146,8 +148,10 @@ name: colliedesk
 
 services:
   postgres:
-    image: postgres:17-bookworm
+    image: @POSTGRES_IMAGE@
     environment:
+      # Where PostgreSQL 17 kept its data (19's image moved it), so the volume's path never depends on the major.
+      PGDATA: /var/lib/postgresql/data
       POSTGRES_DB: colliedesk
       POSTGRES_USER: ${POSTGRES_USER:-colliedesk}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -204,6 +208,46 @@ volumes:
   postgres-data:
   attachments-data:
 COMPOSE
+# PostgreSQL cannot open data written by another major, so the image follows the data volume: a fresh
+# install gets 19, a volume made by 16, 17 or 18 keeps that major (docs/self-host/upgrade.md#postgresql-versions).
+# PG_VERSION is read with the compose file that runs the install today, or with this run's when there is none.
+cd "$TARGET_DIR"
+render_compose() { sed "s|@POSTGRES_IMAGE@|$1|" compose.yaml.next >"$2"; }
+refuse() { rm -f compose.yaml.next compose.yaml.probe compose.yaml.tmp; fail "$1"; }
+# The probe reads the compose setup docker compose up reads (overrides included) when there is one.
+probe() {
+  if [ -f compose.yaml.probe ]; then "$DOCKER" compose -f compose.yaml.probe "$@"; else "$DOCKER" compose "$@"; fi
+}
+rm -f compose.yaml.probe
+if ! grep -q '^  postgres:' compose.yaml 2>/dev/null; then render_compose "$POSTGRES_IMAGE" compose.yaml.probe; fi
+PG_MAJOR=$(probe run --rm --no-deps -T --entrypoint sh postgres -c \
+  'if [ -f /var/lib/postgresql/data/PG_VERSION ]; then cat /var/lib/postgresql/data/PG_VERSION; else echo none; fi' </dev/null) ||
+  refuse "could not read the PostgreSQL version of the database volume. Run docker compose ps in $TARGET_DIR for details."
+rm -f compose.yaml.probe
+# An install on an external database does not use the bundled volume: its DATABASE_URL names a host
+# other than the bundled service postgres.
+DB_URL=$(sed -n 's/^DATABASE_URL=//p' .env | tail -n 1)
+DB_HOST=${DB_URL#*://}
+DB_HOST=${DB_HOST%%[/?]*}
+DB_HOST=${DB_HOST##*@}
+DB_HOST=${DB_HOST%%:*}
+case $DB_URL:$DB_HOST in : | *:postgres) BUNDLED=1 ;; *) BUNDLED= ;; esac
+case $PG_MAJOR in
+  none)
+    if [ -n "$BUNDLED" ] && [ -f .initialized ]; then
+      refuse 'the database volume holds no PostgreSQL data, but this install was set up before. Restore the volume or the backup (docs/self-host/upgrade.md#roll-back) before running the installer again.'
+    fi
+    PG_IMAGE=$POSTGRES_IMAGE ;;
+  19) PG_IMAGE=$POSTGRES_IMAGE ;;
+  16 | 17 | 18)
+    PG_IMAGE=postgres:$PG_MAJOR-bookworm
+    [ -z "$BUNDLED" ] || printf 'Your database stays on PostgreSQL %s, which Colliedesk supports: https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/upgrade.md#postgresql-versions\n' "$PG_MAJOR" >&2 ;;
+  *) refuse "the database volume holds PostgreSQL $PG_MAJOR, which this installer does not run (16 to 19). compose.yaml was not changed." ;;
+esac
+render_compose "$PG_IMAGE" compose.yaml.tmp
+mv compose.yaml.tmp compose.yaml.next
+cd - >/dev/null
+
 # The compose file this run replaces stays next to it, so the older image can run again with it.
 REPLACED=
 if [ -f "$TARGET_DIR/compose.yaml" ] && ! cmp -s "$TARGET_DIR/compose.yaml" "$TARGET_DIR/compose.yaml.next"; then
