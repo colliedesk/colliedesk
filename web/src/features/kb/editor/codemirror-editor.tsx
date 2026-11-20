@@ -7,11 +7,13 @@ import { defaultKeymap, history, historyKeymap, redo, undo } from '@codemirror/c
 import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
 import { HelpTip } from '../../../ui/help-tip';
 import { kbMessages } from '../kb-messages';
-import { activeOf, codeBlockTemplate, inlineCode, insertBlock, insertLink, sameActive, setHeading, tableTemplate, toggleLines, toggleMark } from './commands';
+import { activeOf, callout, codeBlock, inlineCode, insertBlock, insertLink, sameActive, setHeading, tableTemplate, toggleLines, toggleMark } from './commands';
 import type { Active, Block, LineKind } from './commands';
 import { Icon } from './icons';
 import type { IconName } from './icons';
 import { markdownHighlight, markdownLanguage } from './theme';
+import { CodeBlockDialog } from './code-block-dialog';
+import { calloutTypes } from '../callouts';
 import { embedSnippet, parseVideoLink } from '../video-link';
 import { startUpload, uploadEvents, uploads as uploadField, uploadsPending } from './upload';
 import { MediaPicker } from '../media-picker';
@@ -81,6 +83,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const [video, setVideo] = useState<{ error: string } | undefined>();
   // picking is the media library picker, open or not.
   const [picking, setPicking] = useState(false);
+  const [coding, setCoding] = useState(false);
   const [active, setActive] = useState<Active>();
   // rover is the toolbar button that is the Tab stop; when it is disabled (Undo with nothing to undo), the first
   // button is, so the toolbar never loses its stop.
@@ -223,7 +226,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
       { ...item(t.ordered, 'ordered', line('ordered')), separated: true }, item(t.bullet, 'bullet', line('bullet')), item(t.quote, 'quote', line('quote')),
       item(t.table, 'table', (view) => insertBlock(view, tableTemplate, [2, 8]))] : []),
     { ...item(t.strike, 'strike', (view) => toggleMark(view, '~~')), separated: compact }, item(t.code, 'code', inlineCode), item(t.task, 'task', line('task')),
-    item(t.codeBlock, 'codeBlock', (view) => insertBlock(view, codeBlockTemplate, [4, 8])), item(t.hr, 'hr', (view) => insertBlock(view, '---')),
+    { label: t.codeBlock, icon: 'codeBlock', disabled: !editing, onSelect: () => setCoding(true) }, item(t.hr, 'hr', (view) => insertBlock(view, '---')),
     ...(compact ? [{ ...item(t.search, 'search', openSearchPanel), separated: true }, item(t.undo, 'undo', undo, !active?.canUndo)] : []),
     item(t.redo, 'redo', redo, !active?.canRedo),
   ];
@@ -231,6 +234,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     { label: t.fromLibrary, hint: t.fromLibraryHint, icon: 'library', disabled: !editing, onSelect: () => setPicking(true) },
     { label: t.fromDevice, hint: t.fromDeviceHint, icon: 'upload', disabled: !editing, onSelect: () => fileInput.current?.click() },
     { label: t.videoLink, hint: t.videoLinkHint, icon: 'video', disabled: !editing, onSelect: () => setVideo({ error: '' }) },
+    ...calloutTypes.map((type, at) => ({ ...item(t.callouts[type], 'info', (view) => insertBlock(view, ...callout(type))), separated: at === 0 })),
   ];
   const insertMenu = <KBMenu label={t.insertMenuLong} title={t.insertMenuLong} align="start" describe items={insert} className="md-insert" buttonClassName="md-insert-button"
     tool="insert" tabIndex={stop === 'insert' ? 0 : -1} disabled={!editing}
@@ -273,6 +277,8 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
       {picking && editing && <MediaPicker onClose={() => { setPicking(false); viewRef.current?.focus(); }}
         onUpload={() => { setPicking(false); fileInput.current?.click(); }}
         onInsert={(items) => { setPicking(false); act((view) => insertBlock(view, items.map(embedFor).join('\n\n'))); }} />}
+      {coding && editing && <CodeBlockDialog onClose={() => { setCoding(false); viewRef.current?.focus(); }}
+        onInsert={(language) => { setCoding(false); act((view) => insertBlock(view, ...codeBlock(language))); }} />}
       {video && editing && <KBDialog title={t.videoLink} closeLabel={kbMessages.close} returnFocus={false} onClose={closeVideo} footer={<>
         <button type="button" onClick={closeVideo}>{kbMessages.cancel}</button>
         <button type="button" className="primary-action" onClick={insertVideo}>{kbMessages.insert}</button>

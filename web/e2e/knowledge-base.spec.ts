@@ -137,7 +137,7 @@ test('knowledge base: Insert video puts a YouTube player in the article, which t
   await page.getByRole('tab', { name: 'Write' }).click();
   await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
   await page.keyboard.press('ControlOrMeta+End');
-  await page.getByRole('button', { name: 'Insert image or video' }).click();
+  await page.getByRole('button', { name: 'Insert image, video or callout' }).click();
   await page.getByRole('menuitem', { name: /^YouTube or Vimeo link/ }).click();
   const link = page.getByRole('textbox', { name: 'YouTube or Vimeo link' });
   await expect(link).toBeFocused();
@@ -194,7 +194,7 @@ test('knowledge base: a WebM uploaded in the media library plays in a published 
   await page.getByRole('tab', { name: 'Write' }).click();
   await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
   await page.keyboard.press('ControlOrMeta+End');
-  await page.getByRole('button', { name: 'Insert image or video' }).click();
+  await page.getByRole('button', { name: 'Insert image, video or callout' }).click();
   await page.getByRole('menuitem', { name: /^From the media library/ }).click();
   const picker = page.getByRole('dialog', { name: 'Insert from the media library' });
   await picker.getByRole('option', { name: /^Product tour, video,/ }).click();
