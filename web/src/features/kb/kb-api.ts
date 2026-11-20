@@ -116,6 +116,7 @@ export type TrashedKBCollection = z.infer<typeof trashedCollectionSchema>;
 export type KBArticleSummary = z.infer<typeof summarySchema>;
 export type KBArticle = z.infer<typeof kbArticleSchema>;
 export type KBArticleDraft = z.infer<typeof draftSchema>;
+export type KBAttachment = z.infer<typeof attachmentSchema>;
 export type TrashedKBArticle = z.infer<typeof trashedArticleSchema>;
 export type KBArticleVersion = z.infer<typeof versionSchema>;
 export type KBArticlePage = z.infer<typeof articlePageSchema>;
@@ -133,7 +134,8 @@ export type KBLanguageState = 'missing' | 'outdated' | 'translated';
 
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
   | 'restoreKBArticleVersion' | 'putHelpCenter' | 'setKBOrder' | 'putHelpCenterLanguages' | 'createKBTranslation' | 'updateKBTranslation' | 'restoreKBTranslation'
-  | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation' | 'publishKBArticleDraft';
+  | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation' | 'publishKBArticleDraft'
+  | 'setKBArticleAttachments' | 'setKBTranslationAttachments';
 const json = <O extends Operation>(value: RequestBody<O>): string => JSON.stringify(value);
 
 // The calls that answer 204 carry no body.
@@ -185,6 +187,9 @@ export const kbApi = {
   versions: (id: string, beforeVersion?: number) => request(`/api/v1/kb/articles/${id}/versions${before(beforeVersion)}`, versionPageSchema),
   restoreVersion: (id: string, version: number, updatedAt: string) => request(`/api/v1/kb/articles/${id}/versions/${version}/restore`, kbArticleSchema,
     { method: 'POST', body: json<'restoreKBArticleVersion'>({ updated_at: updatedAt }) }),
+  // The files listed under the article, in order; on a published article they go into its draft.
+  setAttachments: (id: string, mediaIds: string[], updatedAt: string) => request(`/api/v1/kb/articles/${id}/attachments`, kbArticleSchema,
+    { method: 'PUT', body: json<'setKBArticleAttachments'>({ media_ids: mediaIds, updated_at: updatedAt }) }),
   // The body is the image itself; its own type replaces the JSON one request() sets.
   uploadImage: (file: Blob) => request('/api/v1/kb/images', imageSchema, { method: 'POST', body: file, headers: { 'Content-Type': file.type } }),
   // The lists name everything directly under parent_id, first to last; a stale pair is a ConflictError
@@ -214,6 +219,9 @@ export const kbApi = {
     translationVersionPageSchema),
   restoreTranslationVersion: (id: string, locale: string, version: number, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/versions/${version}/restore`,
     kbTranslationSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'restoreKBTranslationVersion'>({ updated_at: updatedAt }) }),
+  // A translation's own files apply at once; with none, the help center lists the article's.
+  setTranslationAttachments: (id: string, locale: string, mediaIds: string[], updatedAt: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/attachments`,
+    kbTranslationSchema, { method: 'PUT', body: json<'setKBTranslationAttachments'>({ media_ids: mediaIds, updated_at: updatedAt }) }),
   nameCollection: (id: string, locale: string, value: RequestBody<'putKBCollectionTranslation'>) => request(`/api/v1/kb/collections/${id}/translations/${encodeURIComponent(locale)}`,
     kbCollectionSchema, { method: 'PUT', body: json<'putKBCollectionTranslation'>(value) }),
   unnameCollection: (id: string, locale: string) => request(`/api/v1/kb/collections/${id}/translations/${encodeURIComponent(locale)}`, kbCollectionSchema, { method: 'DELETE' }),

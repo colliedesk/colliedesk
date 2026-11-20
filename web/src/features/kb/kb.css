@@ -1011,3 +1011,19 @@ span.kb-article-open { opacity: 0.35; }
 .kb-vote-history { display: grid; gap: 4px; }
 .kb-vote-history h4 { color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
 .kb-vote-history ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+
+/* Attachments: the files listed under an article's or translation's text. A file dragged over the strip outlines it. */
+.kb-attachments { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px dashed var(--line-control); border-radius: var(--radius); background: var(--surface-1); }
+.kb-attachments[data-dragging] { border-color: var(--accent); background: var(--accent-soft); }
+.kb-attachments-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.kb-attachments-head h2 { margin: 0; font-size: var(--fs-ui); }
+.kb-attachments-choose { cursor: pointer; }
+.kb-attachments-choose:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.kb-attachments p { margin: 0; }
+.kb-attachment-list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.kb-attachment-list li { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); min-height: var(--touch); }
+.kb-attachment-list .media-file-glyph { height: 2rem; font-size: 0.625rem; }
+.kb-attachment-list .media-file-glyph svg { width: 20px; height: 20px; }
+.kb-attachment-text { display: grid; min-width: 0; }
+.kb-attachment-text a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-attachment-text small { color: var(--text-3); font-size: var(--fs-label); }

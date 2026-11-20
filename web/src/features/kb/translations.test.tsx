@@ -12,6 +12,16 @@ import { article, change, ids, json, me, refusal, serve } from './kb.test.fixtur
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }));
 afterEach(() => { navigate.mockReset(); vi.unstubAllGlobals(); });
+// A file's parts go through XMLHttpRequest (for the progress); here they land at once.
+vi.mock('./media-api', async (original) => ({
+  ...(await original<typeof import('./media-api')>()),
+  sendPart: async (_id: string, part: Blob, first: number, size: number, onSent: (bytes: number) => void) => {
+    onSent(part.size);
+    return { status: 200, body: { ...upload, size, offset: first + part.size }, offset: String(first + part.size) };
+  },
+}));
+const upload = { id: '77777777-0000-4000-8000-000000000031', kind: 'file', name: 'Garantie.pdf', size: 12, offset: 0, part_size: 8,
+  expires_at: '2026-10-22T00:00:00Z', media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
 
 function show(node: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -284,4 +294,30 @@ test('deleting a translation says it can be restored for 30 days and the article
   const dialog = screen.getByRole('alertdialog');
   expect(dialog).toHaveTextContent('Goes to the trash for 30 days; the article stays.');
   expect(within(dialog).getByRole('button', { name: 'About the trash' })).toHaveAccessibleDescription('It leaves the help center at once.');
+});
+
+test('a translation lists files of its own: one chosen goes on its list at once, and the next save sends the new version', async () => {
+  const fileId = '77777777-0000-4000-8000-000000000032';
+  const garantie = { id: fileId, name: 'Garantie.pdf', content_type: 'application/pdf', size: 12, url: `/api/v1/kb/media/${fileId}` };
+  const calls = serve({
+    'GET /api/v1/auth/me': () => json(200, me),
+    'GET /api/v1/help-center/languages': () => json(200, languages(true)),
+    [`GET /api/v1/kb/articles/${ids.article}`]: () => json(200, article({ translations: [translation()] })),
+    [`GET /api/v1/kb/articles/${ids.article}/translations/fr`]: () => json(200, translation()),
+    'POST /api/v1/kb/media-uploads': () => json(201, upload), [`GET /api/v1/kb/media-uploads/${upload.id}`]: () => json(200, upload),
+    [`POST /api/v1/kb/media-uploads/${upload.id}/complete`]: () => json(201, { id: fileId, kind: 'file', content_type: 'application/pdf', size: 12, sha256: 'b'.repeat(64),
+      url: `/api/v1/kb/media/${fileId}`, name: 'Garantie.pdf', alt: '', width: null, height: null, duration_ms: null, codecs: [], thumbnail_url: null, poster_url: null,
+      kept: true, deleted_at: null, created_at: '2026-10-21T00:00:00Z', updated_at: '2026-10-21T00:00:00Z' }),
+    [`PUT /api/v1/kb/articles/${ids.article}/translations/fr/attachments`]: () => json(200, translation({ attachments: [garantie], updated_at: '2026-10-05T00:00:00Z' })),
+    [`PATCH /api/v1/kb/articles/${ids.article}/translations/fr`]: () => json(200, translation({ attachments: [garantie], body_md: 'Ouvrez.', updated_at: '2026-10-06T00:00:00Z' })),
+  });
+  show(<TranslationRoute articleId={ids.article} locale="fr" />);
+  const strip = await screen.findByRole('region', { name: 'Attachments' });
+  expect(within(strip).getByText('With no files of its own, this translation lists the article\'s files.')).toBeInTheDocument();
+  fireEvent.change(within(strip).getByLabelText('Choose files'), { target: { files: [new File([new Uint8Array(12)], 'Garantie.pdf', { type: 'application/pdf' })] } });
+  expect(await within(strip).findByRole('link', { name: 'Garantie.pdf' })).toHaveAttribute('href', `/api/v1/kb/media/${fileId}`);
+  expect(calls.filter((call) => call.method === 'PUT').map((call) => call.body)).toEqual([{ media_ids: [fileId], updated_at: '2026-10-02T00:00:00Z' }]);
+  fireEvent.change(screen.getByRole('textbox', { name: 'Text' }), { target: { value: 'Ouvrez.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-05T00:00:00Z', body_md: 'Ouvrez.' }));
 });
