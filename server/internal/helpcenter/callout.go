@@ -22,7 +22,7 @@ var calloutAttribute = []byte("data-callout")
 
 // callouts turns GitHub's alert syntax into callouts: a quote at the top of the article whose first
 // line is only `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`, in any case. The
-// editor preview (web/src/kb/callouts.ts) applies the same rule.
+// editor preview (web/src/features/kb/callouts.ts) applies the same rule.
 type callouts struct{}
 
 func (callouts) Transform(document *ast.Document, reader text.Reader, _ parser.Context) {

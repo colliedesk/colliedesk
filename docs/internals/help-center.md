@@ -481,6 +481,26 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   ids repeat across accounts (`TestOldFreshdeskAddressesStayInTheirWorkspace`). Two accounts imported
   into one workspace with the same id: a row whose target is public now (or a collection outside the
   trash) wins, then the newest row, so a newer account's draft never hides the older one's page.
+- **Callouts are GitHub's alert syntax, decided on the AST.** A quote at the top level whose first
+  line is only `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` becomes an `<aside
+  class="callout callout-…" role="note">` whose first child is the type's label in the page's language,
+  so a screen reader reads the type first. The marker is taken out of the tree, so excerpts and the
+  description read only the words. The preview (`web/src/features/kb/callouts.ts`) applies the same rule. The
+  colours are a fixed palette per type, not the brand colour: one brand colour cannot tell five types
+  apart. The Freshdesk import turns `<pre class="fd-callout fd-callout--TYPE">` into the same syntax
+  (note and info → NOTE, tip and idea → TIP, warning → WARNING, any other type a plain quote); left to
+  the converter, the `<pre>` would be a code block.
+- **Code is coloured with classes, never inline styles.** chroma splits a fenced block whose language
+  it knows into spans with its short token classes, and `site.css` colours them for light and dark.
+  Its HTML formatter's inline styles would be refused by `style-src 'self'`, so the CSP did not change.
+  A block over `highlightLimit` (8,000 characters) stays plain: lexing costs about 5 ms per KB. The
+  editor preview does not colour code; it would add a highlighter to the editor's chunk.
+- **On this page is built from the rendered headings.** `contentsOf` lists the H2 and H3 headings at
+  the top level of the text with the ids `headingIDs` gave them, so every item links to a heading
+  that exists; fewer than 3 give no list. `show_contents` is a column of the article, not of a
+  translation, so one switch covers every language. It is kept in each version and exported, but a
+  version restore leaves it as it is: a restore brings back words, not page settings. A rendering
+  change raises `renderVersion`, so no cached page is served in the old shape.
 
 ## Traps
 

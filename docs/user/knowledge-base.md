@@ -131,6 +131,50 @@ spaces.
 text is never cut: the counter turns red and saving waits until you shorten it, or split it into
 two articles.
 
+### Callouts
+
+A callout sets a short passage apart: a note, a tip, something important, a warning or a caution.
+**Insert image, video or callout** adds one (**Note callout**, **Tip callout**, **Important callout**,
+**Warning callout**, **Caution callout**), with its words selected so you can type over them. It is
+written in GitHub's alert syntax, a quote whose first line is only the type:
+
+```markdown
+> [!WARNING]
+> Deleting a workspace cannot be undone.
+```
+
+The types are `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]`, in capitals or not.
+The preview and the help center show each type with its own icon, colour and label; the label is in the
+page's language, and screen readers read it before the words. Any other first line, or a type
+followed by more words on the same line, stays a plain quote. A callout counts only at the top level
+of the text, not inside a list or another quote.
+
+### Code blocks
+
+**⋯ → Code block** asks for the code's language (`go`, `python`, `shell`, `json` and so on) and writes it
+after the opening fence:
+
+````markdown
+```go
+fmt.Println("hello")
+```
+````
+
+The help center colours a code block that names a language it knows, in the light and in the dark
+theme. The colours are worked out on the server and are part of the page's style, so the page still
+runs no script. A block with no language, a language it does not know, or more than 8,000 characters
+stays plain text. The editor's preview shows code blocks plain. On the help center, one click selects
+all the code in a block, ready to copy.
+
+### On this page
+
+An article with 3 or more Heading 2 and Heading 3 headings lists them under **On this page**, each
+linking to its heading. In a wide window the list is beside the text; on a phone it is above it. It is
+part of the page, so it needs no script. To turn it off for an article, clear **Show On this page**
+under **On this page** on the article page (on a phone, under **Details**). The switch is the
+article's, so it applies to every language, and it is in the [export](export.md). Restoring an older
+version leaves it as it is.
+
 ### Images
 
 Paste an image into the text, drag it in, or select **Insert image, video or callout → Upload from this
@@ -644,7 +688,7 @@ to serve on the domain again.
 - The home page lists the top-level collections, each with its first articles and the collections
   inside it. A collection page lists those collections, each with its first articles, and its own
   articles in their [order](#order), 50 a page. An article page lists the other articles of its
-  collection beside the text.
+  collection beside the text, and its headings under [On this page](#on-this-page).
 - **Search** works like the search in the editor: whole words and the start of words in titles and
   text, and any part of a title. It shows the best 25 matches.
 - Images you added to an article are shown while a published article uses them. An image from
