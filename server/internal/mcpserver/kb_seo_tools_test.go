@@ -18,7 +18,9 @@ func TestKBArticleSearchFieldsThroughMCP(t *testing.T) {
 	}
 	updated := e.ok(session, "colliedesk_kb_article_update", map[string]any{"article_id": at(t, created, "article", "id"), "updated_at": at(t, created, "article", "updated_at"),
 		"seo_title": ""})
-	if at(t, updated, "article", "team_text", "seo_title") != "" || at(t, updated, "article", "team_text", "seo_description") != "Choose a new password in two steps." {
+	// The article is published, so the change waits in its draft.
+	if at(t, updated, "article", "draft", "team_text", "seo_title") != "" || at(t, updated, "article", "draft", "team_text", "seo_description") != "Choose a new password in two steps." ||
+		at(t, updated, "article", "team_text", "seo_title") != "Reset an Acme password" {
 		t.Fatalf("update = %v", updated)
 	}
 }

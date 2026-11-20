@@ -35,8 +35,9 @@ func TestAnAgentTranslatesAnArticleMarksItUpToDateAndUndoesEveryStep(t *testing.
 		at(t, created, "translation", "original", "collection") != "Billing" || at(t, created, "translation", "last_change", "via_token") != "test admin" {
 		t.Fatalf("created = %v", created)
 	}
-	// The article changes; its translation is outdated, and one read shows both texts.
-	e.ok(session, "colliedesk_kb_article_update", map[string]any{"article_id": articleID, "updated_at": at(t, article, "article", "updated_at"), "body": "Open **Billing**, then Pay."})
+	// The article changes and the change is published; its translation is outdated, and one read shows both texts.
+	saved := e.ok(session, "colliedesk_kb_article_update", map[string]any{"article_id": articleID, "updated_at": at(t, article, "article", "updated_at"), "body": "Open **Billing**, then Pay."})
+	e.ok(session, "colliedesk_kb_article_draft_publish", map[string]any{"article_id": articleID, "updated_at": at(t, saved, "article", "updated_at")})
 	read := e.ok(session, "colliedesk_kb_translation_get", map[string]any{"article_id": articleID, "locale": "fr"})
 	if at(t, read, "translation", "outdated") != true || at(t, read, "translation", "original", "team_text", "body") != "Open **Billing**, then Pay." {
 		t.Fatalf("read = %v", read)

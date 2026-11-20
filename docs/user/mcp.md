@@ -167,6 +167,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_article_version_restore` | Makes the text of an earlier version current again, as a new version | `kb_articles:update` |
 | `colliedesk_kb_article_ai_exclude` | Keeps an article away from reply drafts and triage suggestions, in every language; its text does not change | `kb_articles:update` |
 | `colliedesk_kb_article_ai_include` | Lets AI read an excluded article again | `kb_articles:update` |
+| `colliedesk_kb_article_draft_publish` | Puts the unpublished changes of a published article on the help center | `kb_articles:publish` |
+| `colliedesk_kb_article_draft_discard` | Drops the unpublished changes of a published article | `kb_articles:update` |
 | `colliedesk_kb_image_upload` | Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one | `kb_media:create` |
 | `colliedesk_kb_image_get` | Shows a knowledge base image to the model | `kb_media:read` |
 | `colliedesk_kb_media_list` | Lists the media library: what no article uses (with the space it takes) and images missing alt text | `kb_media:read` |
