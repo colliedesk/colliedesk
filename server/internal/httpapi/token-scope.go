@@ -130,6 +130,8 @@ var routeAccess = map[string]TokenAccess{
 	"GET /api/v1/kb/reviews/{id}":                                                    need(auth.PermKBArticlesRead),
 	"POST /api/v1/kb/reviews/{id}/request-changes":                                   need(auth.PermKBArticlesPublish),
 	"POST /api/v1/kb/reviews/{id}/withdraw":                                          need(auth.PermKBArticlesUpdate),
+	"POST /api/v1/kb/articles/{id}/translations/{locale}/reviews":                    need(auth.PermKBArticlesUpdate),
+	"GET /api/v1/kb/articles/{id}/translations/{locale}/reviews":                     need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/translations":                                                    need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/translations/trash":                                              need(auth.PermKBArticlesRead),
 	"POST /api/v1/kb/articles/{id}/translations":                                     need(auth.PermKBArticlesCreate),

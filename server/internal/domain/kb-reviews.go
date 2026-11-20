@@ -102,6 +102,8 @@ type KBReviewFilter struct {
 	State      string
 	ReviewerID string
 	ArticleID  string
+	// Locale narrows an article's reviews to those of its translation; nil keeps the article's own.
+	Locale *string
 }
 
 // Hash is the content hash of c: sha256 over a JSON array of its fields, the collections sorted, so no

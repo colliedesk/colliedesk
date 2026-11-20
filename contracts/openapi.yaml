@@ -7231,6 +7231,61 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/{id}/translations/{locale}/reviews:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: locale, in: path, required: true, schema: {type: string, minLength: 2, maxLength: 35}}
+    get:
+      operationId: listKBTranslationReviews
+      x-permission: kb_articles:read
+      description: >
+        The reviews of one translation of an article, newest first (at most 200). state narrows them.
+        GET /api/v1/kb/reviews/{id} reads one with its line diff.
+      parameters:
+        - {name: state, in: query, schema: {type: string, enum: [open, approved, changes_requested, withdrawn, superseded]}}
+      responses:
+        '200':
+          description: The translation's reviews
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReviewList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: requestKBTranslationReview
+      x-permission: kb_articles:update
+      description: >
+        Send a draft translation for review to 1 to 10 teammates who may publish (kb_articles:publish;
+        GET /api/v1/agents), never yourself. Where a collection of the article requires approval, the
+        translation is published (PATCH status published) only once one of them approves this exact
+        text, and an edit of a published translation there needs a new approval. A translation that
+        is already published has nothing to review (409 `review_state`); an open review is 409
+        `review_state` too. A repeat with the same Idempotency-Key answers the first review.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reviewer_ids]
+              properties:
+                reviewer_ids: {type: array, minItems: 1, maxItems: 10, items: {type: string, format: uuid}}
+                note: {type: string, maxLength: 500, description: One line to the reviewers.}
+      responses:
+        '201':
+          description: The open review
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '200':
+          description: The review a repeat of the same request opened
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/reviews/{id}/approve:
     parameters: [{$ref: '#/components/parameters/ID'}]
     post:

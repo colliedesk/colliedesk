@@ -13,6 +13,16 @@ import (
 
 // requestKBReview sends the article's unpublished text for review to teammates who may publish.
 func (a *API) requestKBReview(response http.ResponseWriter, request *http.Request) {
+	a.sendKBReview(response, request, nil)
+}
+
+// requestKBTranslationReview sends a draft translation for review to teammates who may publish.
+func (a *API) requestKBTranslationReview(response http.ResponseWriter, request *http.Request) {
+	locale := request.PathValue("locale")
+	a.sendKBReview(response, request, &locale)
+}
+
+func (a *API) sendKBReview(response http.ResponseWriter, request *http.Request, locale *string) {
 	var input struct {
 		ReviewerIDs []string `json:"reviewer_ids"`
 		Note        string   `json:"note"`
@@ -22,9 +32,11 @@ func (a *API) requestKBReview(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	articleID := request.PathValue("id")
-	a.createOnce(response, request, createKBReviewOperation, append([]string{articleID, input.Note}, input.ReviewerIDs...), func(ctx context.Context) (any, error) {
+	key := []string{articleID, request.PathValue("locale"), input.Note}
+	a.createOnce(response, request, createKBReviewOperation, append(key, input.ReviewerIDs...), func(ctx context.Context) (any, error) {
 		who := principal(request)
-		review, err := a.store.RequestKBReview(ctx, who.Workspace.ID, savedReplyActor(ctx, who), articleID, store.KBReviewRequest{ReviewerIDs: input.ReviewerIDs, Note: input.Note})
+		review, err := a.store.RequestKBReview(ctx, who.Workspace.ID, savedReplyActor(ctx, who), articleID,
+			store.KBReviewRequest{ReviewerIDs: input.ReviewerIDs, Note: input.Note, Locale: locale})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered

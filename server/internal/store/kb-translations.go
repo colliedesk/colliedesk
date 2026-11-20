@@ -268,6 +268,9 @@ func (s *Store) CreateKBTranslation(ctx context.Context, workspaceID string, act
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, input.Locale, actor, domain.KBArticleCreated, nil); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
+		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, input.Locale, kbPublishState{}); err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
 		return readKBTranslation(ctx, tx, workspaceID, articleID, input.Locale)
 	})
 	return item, kbError("create knowledge base translation", err)
@@ -294,6 +297,10 @@ func (s *Store) UpdateKBTranslation(ctx context.Context, workspaceID string, act
 		if err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
+		was, err := translationPublishState(ctx, tx, workspaceID, articleID, locale)
+		if err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
 		if change.Status != nil && *change.Status == domain.KBPublished && before.Status != domain.KBPublished {
 			// A translation in a language the help center no longer lists stays a draft.
 			if err := checkKBLanguage(ctx, tx, workspaceID, locale); err != nil {
@@ -317,6 +324,9 @@ func (s *Store) UpdateKBTranslation(ctx context.Context, workspaceID string, act
 			}
 		}
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, kind, nil); err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
+		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, was); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
 		return readKBTranslation(ctx, tx, workspaceID, articleID, locale)
@@ -374,7 +384,10 @@ func (s *Store) DeleteKBTranslation(ctx context.Context, workspaceID string, act
 			WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`, workspaceID, articleID, locale, s.now(), optionalID(actor.AgentID)); err != nil {
 			return struct{}{}, err
 		}
-		return struct{}{}, addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleDeleted, nil)
+		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleDeleted, nil); err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, kbPublishState{})
 	})
 	return kbError("delete knowledge base translation", err)
 }
@@ -405,6 +418,9 @@ func (s *Store) UndeleteKBTranslation(ctx context.Context, workspaceID string, a
 			return domain.KBArticleTranslation{}, err
 		}
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleUndeleted, nil); err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
+		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, kbPublishState{}); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
 		return readKBTranslation(ctx, tx, workspaceID, articleID, locale)
@@ -525,6 +541,10 @@ func (s *Store) RestoreKBTranslationVersion(ctx context.Context, workspaceID str
 		if _, err := lockLiveKBTranslation(ctx, tx, workspaceID, articleID, locale, seen); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
+		was, err := translationPublishState(ctx, tx, workspaceID, articleID, locale)
+		if err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
 		tag, err := tx.Exec(ctx, `UPDATE kb_article_translations t SET title=v.title, slug=v.slug, body_md=v.body_md, seo_title=v.seo_title, seo_description=v.seo_description,
 				updated_at=clock_timestamp() FROM kb_article_translation_versions v
 			WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3 AND v.workspace_id=t.workspace_id AND v.article_id=t.article_id AND v.locale=t.locale AND v.version=$4`,
@@ -536,6 +556,9 @@ func (s *Store) RestoreKBTranslationVersion(ctx context.Context, workspaceID str
 			return domain.KBArticleTranslation{}, domain.ErrKBTranslationVersionNotFound
 		}
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleRestored, &version); err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
+		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, was); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
 		return readKBTranslation(ctx, tx, workspaceID, articleID, locale)

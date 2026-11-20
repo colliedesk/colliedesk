@@ -43,9 +43,23 @@ func (s *Store) ListKBReviews(ctx context.Context, workspaceID string, filter do
 		}
 		add(id.clause, id.value)
 	}
+	if filter.ArticleID != "" {
+		// One article's list holds its own reviews, or those of the translation filter.Locale names.
+		if filter.Locale != nil {
+			if err := translationKey(filter.ArticleID, *filter.Locale); err != nil {
+				return nil, err
+			}
+		}
+		add(`AND r.locale IS NOT DISTINCT FROM %s::text `, filter.Locale)
+	}
 	reviews, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.KBReview, error) {
 		if filter.ArticleID != "" {
 			if _, err := readKBArticle(ctx, tx, workspaceID, filter.ArticleID); err != nil {
+				return nil, err
+			}
+		}
+		if filter.Locale != nil {
+			if _, err := readKBTranslation(ctx, tx, workspaceID, filter.ArticleID, *filter.Locale); err != nil {
 				return nil, err
 			}
 		}
@@ -71,15 +85,14 @@ func (s *Store) GetKBReview(ctx context.Context, workspaceID string, actor Actor
 		if err != nil {
 			return domain.KBReviewDetail{}, err
 		}
-		article, err := readKBArticle(ctx, tx, workspaceID, review.ArticleID)
+		proposed, current, err := reviewedKBText(ctx, tx, workspaceID, review)
 		if err != nil {
 			return domain.KBReviewDetail{}, err
 		}
-		detail := domain.KBReviewDetail{KBReview: review, Proposed: article.AsDrafted().Content()}
+		detail := domain.KBReviewDetail{KBReview: review, Proposed: proposed, Live: current}
 		live := ""
-		if article.Status == domain.KBPublished {
-			content := article.Content()
-			detail.Live, live = &content, content.BodyMD
+		if current != nil {
+			live = current.BodyMD
 		}
 		detail.Diff = domain.LineDiff(live, detail.Proposed.BodyMD)
 		return detail, nil

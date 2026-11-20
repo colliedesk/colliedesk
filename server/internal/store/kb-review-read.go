@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -110,12 +111,12 @@ func readKBReviewers(ctx context.Context, tx pgx.Tx, workspaceID, reviewID strin
 	return reviewers, nil
 }
 
-// kbPendingHash is the hash of the text a review of the article (locale nil) would be about now: its
-// draft over the article. An article in the trash has none.
+// kbPendingHash is the hash of the text a review of the article (locale nil) or its translation would
+// be about now: the article's draft over it, or the translation's text. A deleted translation has none.
 func kbPendingHash(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, locale *string) (string, error) {
-	article, err := readKBArticle(ctx, tx, workspaceID, articleID)
-	if err != nil {
-		return "", err
+	_, hash, err := kbPendingText(ctx, tx, workspaceID, articleID, locale)
+	if errors.Is(err, domain.ErrKBTranslationNotFound) {
+		return "", nil
 	}
-	return article.AsDrafted().Content().Hash(), nil
+	return hash, err
 }

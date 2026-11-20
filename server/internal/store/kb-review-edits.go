@@ -14,10 +14,13 @@ import (
 const kbTextChangeKinds = `('` + domain.KBArticleCreated + `','` + domain.KBArticleEdited + `','` + domain.KBArticleRestored + `','` +
 	domain.KBArticleDrafted + `','` + domain.KBArticleImported + `','` + domain.KBArticleMediaReplaced + `')`
 
-// kbTextAuthors returns those of people who wrote part of the article's unpublished text: a version of
-// a kbTextChangeKinds kind they made (themselves or through a token) after the last version that put
-// the text on the help center. They never review it.
-func kbTextAuthors(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, people []string) ([]string, error) {
+// kbTextAuthors returns those of people who wrote part of the unpublished text of the article (locale
+// nil) or its translation: a version of a kbTextChangeKinds kind they made (themselves or through a
+// token) after the last version that put the text on the help center. They never review it.
+func kbTextAuthors(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, locale *string, people []string) ([]string, error) {
+	if locale != nil {
+		return kbTranslationTextAuthors(ctx, tx, workspaceID, articleID, *locale, people)
+	}
 	rows, err := tx.Query(ctx, `SELECT DISTINCT v.changed_by_agent_id::text FROM kb_article_versions v WHERE v.workspace_id=$1 AND v.article_id=$2
 		AND v.changed_by_agent_id=ANY($3::uuid[]) AND v.kind IN `+kbTextChangeKinds+` AND v.version > COALESCE((SELECT max(p.version) FROM kb_article_versions p
 			WHERE p.workspace_id=$1 AND p.article_id=$2 AND p.status='published' AND `+kbTextVersion("p.")+`),0)`,
@@ -28,26 +31,25 @@ func kbTextAuthors(ctx context.Context, tx pgx.Tx, workspaceID, articleID string
 	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
-// settleKBReviewAfterEdit runs after every write of an article's text. An open review of a text that
-// is no longer the pending one is superseded; while there is still something to review, a new review
-// of the new text opens for the same reviewers, except the person who made the edit, and keeps who
-// sent it. A published article without a draft, or one in the trash, has nothing left to review.
-func settleKBReviewAfterEdit(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, articleID string) error {
+// settleKBReviewAfterEdit runs after every write of the text of an article (locale nil) or of its
+// translation. An open review of a text that is no longer the pending one is superseded; while there
+// is still something to review, a new review of the new text opens for the same reviewers, except the
+// person who made the edit, and keeps who sent it. A published article without a draft, a published
+// translation, or one in the trash, has nothing left to review.
+func settleKBReviewAfterEdit(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, articleID string, locale *string) error {
 	var reviewID, hash string
-	err := tx.QueryRow(ctx, `SELECT id::text,content_hash FROM kb_reviews WHERE workspace_id=$1 AND article_id=$2 AND locale IS NULL AND state='open' FOR UPDATE`,
-		workspaceID, articleID).Scan(&reviewID, &hash)
+	err := tx.QueryRow(ctx, `SELECT id::text,content_hash FROM kb_reviews WHERE workspace_id=$1 AND article_id=$2 AND locale IS NOT DISTINCT FROM $3 AND state='open' FOR UPDATE`,
+		workspaceID, articleID, locale).Scan(&reviewID, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("read open knowledge base review: %w", err)
 	}
-	article, err := readKBArticle(ctx, tx, workspaceID, articleID)
+	pending, newHash, err := kbPendingText(ctx, tx, workspaceID, articleID, locale)
 	if err != nil {
 		return err
 	}
-	pending := article.DeletedAt == nil && (article.Status != domain.KBPublished || article.Draft != nil)
-	newHash := article.AsDrafted().Content().Hash()
 	if pending && newHash == hash {
 		return nil
 	}

@@ -19,13 +19,21 @@ const kbPublishPermission = "kb_articles:publish"
 type KBReviewRequest struct {
 	ReviewerIDs []string
 	Note        string
+	// Locale names the translation to review; nil reviews the article.
+	Locale *string
 }
 
 // RequestKBReview sends the article's unpublished text (its draft, or the article itself while it is
-// not published) for review to people who may publish. The review holds the hash of that text.
+// not published), or a translation that is a draft, for review to people who may publish. The review
+// holds the hash of that text.
 func (s *Store) RequestKBReview(ctx context.Context, workspaceID string, actor Actor, articleID string, request KBReviewRequest) (domain.KBReview, error) {
 	if !savedReplyID.MatchString(articleID) {
 		return domain.KBReview{}, domain.ErrKBArticleNotFound
+	}
+	if request.Locale != nil {
+		if err := translationKey(articleID, *request.Locale); err != nil {
+			return domain.KBReview{}, err
+		}
 	}
 	note, reviewers, err := checkKBReviewRequest(actor, request)
 	if err != nil {
@@ -35,29 +43,29 @@ func (s *Store) RequestKBReview(ctx context.Context, workspaceID string, actor A
 		if _, _, err := lockKBArticleForReview(ctx, tx, workspaceID, articleID); err != nil {
 			return domain.KBReview{}, err
 		}
-		article, err := readKBArticle(ctx, tx, workspaceID, articleID)
+		pending, hash, err := kbPendingText(ctx, tx, workspaceID, articleID, request.Locale)
 		if err != nil {
 			return domain.KBReview{}, err
 		}
-		if article.Status == domain.KBPublished && article.Draft == nil {
+		if !pending {
 			return domain.KBReview{}, domain.ErrKBNothingToReview
 		}
-		if err := checkKBReviewers(ctx, tx, workspaceID, articleID, reviewers); err != nil {
+		if err := checkKBReviewers(ctx, tx, workspaceID, articleID, request.Locale, reviewers); err != nil {
 			return domain.KBReview{}, err
 		}
 		var open bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM kb_reviews WHERE workspace_id=$1 AND article_id=$2 AND locale IS NULL AND state='open')`,
-			workspaceID, articleID).Scan(&open); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM kb_reviews WHERE workspace_id=$1 AND article_id=$2 AND locale IS NOT DISTINCT FROM $3 AND state='open')`,
+			workspaceID, articleID, request.Locale).Scan(&open); err != nil {
 			return domain.KBReview{}, err
 		}
 		if open {
 			return domain.KBReview{}, domain.ErrKBReviewOpen
 		}
-		id, err := insertKBReview(ctx, tx, workspaceID, actor, articleID, nil, article.AsDrafted().Content().Hash(), note, nil, reviewers)
+		id, err := insertKBReview(ctx, tx, workspaceID, actor, articleID, request.Locale, hash, note, nil, reviewers)
 		if err != nil {
 			return domain.KBReview{}, err
 		}
-		if err := addKBReviewVersion(ctx, tx, workspaceID, articleID, actor, domain.KBReviewRequested); err != nil {
+		if err := addKBReviewVersion(ctx, tx, workspaceID, articleID, request.Locale, actor, domain.KBReviewRequested); err != nil {
 			return domain.KBReview{}, err
 		}
 		return readKBReview(ctx, tx, workspaceID, id)
@@ -89,7 +97,7 @@ func checkKBReviewRequest(actor Actor, request KBReviewRequest) (string, []strin
 
 // checkKBReviewers refuses a reviewer who is not an active member allowed to publish, or who wrote part
 // of the text.
-func checkKBReviewers(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, reviewers []string) error {
+func checkKBReviewers(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, locale *string, reviewers []string) error {
 	rows, err := tx.Query(ctx, `SELECT a.id::text FROM agents a WHERE a.workspace_id=$1 AND a.id=ANY($2::uuid[]) AND a.deactivated_at IS NULL AND `+HoldsPermission("$3"),
 		workspaceID, reviewers, kbPublishPermission)
 	if err != nil {
@@ -104,7 +112,7 @@ func checkKBReviewers(ctx context.Context, tx pgx.Tx, workspaceID, articleID str
 			return &domain.InvalidKBError{Message: "Reviewer " + id + " is not an active teammate who may publish (" + kbPublishPermission + "): only they can approve a text. GET /api/v1/agents lists the team."}
 		}
 	}
-	authors, err := kbTextAuthors(ctx, tx, workspaceID, articleID, reviewers)
+	authors, err := kbTextAuthors(ctx, tx, workspaceID, articleID, locale, reviewers)
 	if err != nil {
 		return err
 	}
@@ -140,10 +148,13 @@ func insertKBReview(ctx context.Context, tx pgx.Tx, workspaceID string, actor Ac
 	return id, nil
 }
 
-// addKBReviewVersion records a review event in the article's history with the text it is about: the
-// draft over the live article. It changes no text, so it leaves the help center and the article's
-// updated_at alone.
-func addKBReviewVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, actor Actor, kind string) error {
+// addKBReviewVersion records a review event in the history of the article (locale nil) or of its
+// translation, with the text it is about: the draft over the live article, or the translation. It
+// changes no text, so it leaves the help center and updated_at alone.
+func addKBReviewVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, locale *string, actor Actor, kind string) error {
+	if locale != nil {
+		return recordKBTranslationVersion(ctx, tx, workspaceID, articleID, *locale, actor, kind, nil)
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,title,slug,body_md,seo_title,seo_description,status,collection_id,
 			show_contents,changed_by_agent_id,token_id,token_label,created_at)
 		SELECT a.workspace_id,a.id,COALESCE((SELECT max(version) FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2),0)+1,

@@ -10,6 +10,7 @@ import (
 type contractKBReviews struct {
 	requestArticleID string
 	reviewedArticle  string
+	translatedID     string
 	approveID        string
 	changesID        string
 	withdrawID       string
@@ -20,6 +21,8 @@ func seedContractKBReviews(t *testing.T, api http.Handler, admin, agent, collect
 	var reviews contractKBReviews
 	adminID := agentID(t, api, admin)
 	reviews.requestArticleID = kbArticle(t, api, admin, map[string]any{"collection_id": collectionID, "title": "Contract article to review", "body_md": "x"}).ID
+	reviews.translatedID = kbArticle(t, api, admin, map[string]any{"collection_id": collectionID, "title": "Contract translation to review", "body_md": "x", "status": "published"}).ID
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+reviews.translatedID+"/translations", map[string]any{"locale": "fr", "title": "Traduction", "body_md": "x"}, admin, http.StatusCreated, nil)
 	review := func(title string) (string, string) {
 		article := kbArticle(t, api, agent, map[string]any{"collection_id": collectionID, "title": title, "body_md": "x"})
 		return article.ID, kbRequestReview(t, api, agent, article.ID, adminID).ID
@@ -40,5 +43,8 @@ func kbReviewContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/kb/reviews/{id}/approve":         {"/api/v1/kb/reviews/" + reviews.approveID + "/approve", map[string]any{"note": "Looks right"}, admin, 200, ""},
 		"POST /api/v1/kb/reviews/{id}/request-changes": {"/api/v1/kb/reviews/" + reviews.changesID + "/request-changes", map[string]any{"note": "Name the plan"}, admin, 200, ""},
 		"POST /api/v1/kb/reviews/{id}/withdraw":        {"/api/v1/kb/reviews/" + reviews.withdrawID + "/withdraw", map[string]any{}, admin, 200, ""},
+		"POST /api/v1/kb/articles/{id}/translations/{locale}/reviews": {"/api/v1/kb/articles/" + reviews.translatedID + "/translations/fr/reviews",
+			map[string]any{"reviewer_ids": []string{f.agentID}}, admin, 201, ""},
+		"GET /api/v1/kb/articles/{id}/translations/{locale}/reviews": {"/api/v1/kb/articles/" + reviews.translatedID + "/translations/fr/reviews", nil, admin, 200, ""},
 	}
 }

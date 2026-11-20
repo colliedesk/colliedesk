@@ -11,6 +11,12 @@ func (a *API) listKBArticleReviews(response http.ResponseWriter, request *http.R
 	a.writeKBReviews(response, request, domain.KBReviewFilter{ArticleID: request.PathValue("id"), State: request.URL.Query().Get("state")})
 }
 
+// listKBTranslationReviews lists the reviews of one translation, newest first.
+func (a *API) listKBTranslationReviews(response http.ResponseWriter, request *http.Request) {
+	locale := request.PathValue("locale")
+	a.writeKBReviews(response, request, domain.KBReviewFilter{ArticleID: request.PathValue("id"), Locale: &locale, State: request.URL.Query().Get("state")})
+}
+
 // listKBReviews lists the workspace's reviews: state narrows them, reviewer=me to the ones the caller
 // was asked to review (for a token, the person who made it).
 func (a *API) listKBReviews(response http.ResponseWriter, request *http.Request) {

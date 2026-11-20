@@ -102,7 +102,7 @@ func recordKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, ac
 	if _, err := linkKBMedia(ctx, tx, workspaceID, id); err != nil {
 		return domain.KBArticle{}, err
 	}
-	if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id); err != nil {
+	if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id, nil); err != nil {
 		return domain.KBArticle{}, err
 	}
 	return readKBArticle(ctx, tx, workspaceID, id)
@@ -296,7 +296,7 @@ func (s *Store) DiscardKBArticleDraft(ctx context.Context, workspaceID string, a
 		if _, err := linkKBMedia(ctx, tx, workspaceID, id); err != nil {
 			return domain.KBArticle{}, err
 		}
-		if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id); err != nil {
+		if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id, nil); err != nil {
 			return domain.KBArticle{}, err
 		}
 		return readKBArticle(ctx, tx, workspaceID, id)
