@@ -1,7 +1,9 @@
 package helpcenter
 
 import (
+	"bufio"
 	"encoding/json"
+	"html"
 	"html/template"
 	"net/url"
 	"strings"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/yuin/goldmark/ast"
+	goldhtml "github.com/yuin/goldmark/renderer/html"
 )
 
 // Structured data (schema.org JSON-LD) for search engines and AI assistants: a BreadcrumbList on every
@@ -137,26 +140,35 @@ func questionList(document ast.Node, source []byte) []faqItem {
 	return items
 }
 
-// plainText is the words of a block as excerpt reads them: code and raw HTML left out.
+// plainText is the words of a block as a reader sees them: entities and backslash escapes resolved
+// as goldmark renders the text ("&amp;" is "&", "\\*" is "*"), code spans as written, code blocks and
+// raw HTML left out. The words go through goldmark's HTML writer and are unescaped once at the end,
+// so a reference is resolved once, as on the page ("\\&amp;" stays "&amp;").
 func plainText(block ast.Node, source []byte) string {
-	var words strings.Builder
+	var escaped strings.Builder
+	words := bufio.NewWriter(&escaped)
 	_ = ast.Walk(block, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			if node.Type() == ast.TypeBlock {
-				words.WriteByte(' ')
+				_ = words.WriteByte(' ')
 			}
 			return ast.WalkContinue, nil
 		}
 		switch node := node.(type) {
 		case *ast.Text:
-			words.Write(node.Segment.Value(source))
+			if _, code := node.Parent().(*ast.CodeSpan); code {
+				goldhtml.DefaultWriter.RawWrite(words, node.Segment.Value(source))
+			} else {
+				goldhtml.DefaultWriter.Write(words, node.Segment.Value(source))
+			}
 			if node.SoftLineBreak() || node.HardLineBreak() {
-				words.WriteByte(' ')
+				_ = words.WriteByte(' ')
 			}
 		case *ast.CodeBlock, *ast.FencedCodeBlock, *ast.HTMLBlock, *ast.RawHTML:
 			return ast.WalkSkipChildren, nil
 		}
 		return ast.WalkContinue, nil
 	})
-	return words.String()
+	_ = words.Flush()
+	return html.UnescapeString(escaped.String())
 }

@@ -62,3 +62,29 @@ func TestALongContentsListStopsAtFiftyItems(t *testing.T) {
 		t.Errorf("items run from %q to %q, want a to a-49", first.ID, last.ID)
 	}
 }
+
+// TestAContentsItemShowsTheHeadingsWordsNotItsMarkdown: an entity or an escaped character shows as
+// the reader sees it in the heading; code keeps its backslash, as the heading shows it.
+func TestAContentsItemShowsTheHeadingsWordsNotItsMarkdown(t *testing.T) {
+	page, err := renderArticlePage("## Tom &amp; Jerry\n\n## Use \\*stars\\*\n\n## Use `a\\*b`\n\n## Caf&#233;", "/help/acme", "en", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, item := range page.contents {
+		got = append(got, item.Text)
+	}
+	want := []string{"Tom & Jerry", "Use *stars*", `Use a\*b`, "Café"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("contents %q, want %q", got, want)
+	}
+	// A list of questions reads its words the same way: an escaped "?" still ends a question.
+	faq, err := renderArticlePage("## Pay &amp; cancel\\?\n\nYes \\*now\\*.\n\n## Caf&#233;?\n\nNo &lt;b&gt;.", "/help/acme", "en", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFAQ := []faqItem{{question: "Pay & cancel?", answer: "Yes *now*."}, {question: "Café?", answer: "No <b>."}}
+	if !reflect.DeepEqual(faq.faq, wantFAQ) {
+		t.Errorf("faq %q, want %q", faq.faq, wantFAQ)
+	}
+}

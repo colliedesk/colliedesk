@@ -127,3 +127,20 @@ func TestAHeadingNamedMainLinksToItself(t *testing.T) {
 		seen[match[1]] = true
 	}
 }
+
+// TestAContentsLinkShowsTheHeadingsWords: an entity or an escaped character in a heading shows in its
+// contents link and in the page's description as it does in the heading, escaped once in the page.
+func TestAContentsLinkShowsTheHeadingsWords(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Words Desk", "admin@contents-words.example.com")
+	slug := workspaceSlug(t, api, admin)
+	enableHelpCenter(t, api, admin, "Words help", true)
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
+	var article contentsArticleView
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Words guide", "status": "published",
+		"body_md": "## Tom &amp; Jerry\n\na\n\n## Use \\*stars\\*\n\nb\n\n## Three\n\nc"}, admin, http.StatusCreated, &article)
+	page := visit(site, fmt.Sprintf("/help/%s/a/%d-%s", slug, article.Number, article.Slug), "192.0.2.141")
+	wantPage(t, page, http.StatusOK, []string{`">Tom &amp; Jerry</a>`, `">Use *stars*</a>`,
+		`<meta name="description" content="Tom &amp; Jerry a Use *stars* b Three c">`}, []string{`&amp;amp;`, `\\*`})
+}
