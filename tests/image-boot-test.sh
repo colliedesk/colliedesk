@@ -8,6 +8,10 @@ set -eu
 IMAGE=${1:?usage: image-boot-test.sh IMAGE EXPECTED_VERSION}
 EXPECTED_VERSION=${2:?usage: image-boot-test.sh IMAGE EXPECTED_VERSION}
 DOCKER=${DOCKER:-docker}
+ROOT=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
+# The PostgreSQL install.sh gives a new install, pinned by digest.
+POSTGRES_IMAGE=$(sed -n 's/^POSTGRES_IMAGE=//p' "$ROOT/install.sh")
+[ -n "$POSTGRES_IMAGE" ] || { echo "install.sh sets no POSTGRES_IMAGE" >&2; exit 1; }
 NAME=colliedesk-boot-$$
 PASSWORD=boot-test-password
 
@@ -32,7 +36,7 @@ fi
 "$DOCKER" network create "$NAME" >/dev/null
 "$DOCKER" run -d --name "$NAME-postgres" --network "$NAME" --network-alias postgres \
   -e POSTGRES_DB=colliedesk -e POSTGRES_USER=colliedesk -e POSTGRES_PASSWORD="$PASSWORD" \
-  postgres:17-bookworm >/dev/null
+  "$POSTGRES_IMAGE" >/dev/null
 
 # Over TCP: during init the entrypoint runs a socket-only server that is about to restart.
 attempt=0
