@@ -141,7 +141,6 @@ func TestKBChangesThatReachTheHelpCenterNeedPublish(t *testing.T) {
 	}{
 		{"create a published article", http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Now", "body_md": "Out", "status": "published"}},
 		{"publish a draft", http.MethodPatch, "/api/v1/kb/articles/" + draft.ID, map[string]any{"updated_at": articleSeen(t, api, admin, draft.ID), "status": "published"}},
-		{"edit a published article", http.MethodPatch, "/api/v1/kb/articles/" + live.ID, map[string]any{"updated_at": live.UpdatedAt, "title": "Changed"}},
 		{"trash a published article", http.MethodDelete, "/api/v1/kb/articles/" + live.ID + "?updated_at=" + url.QueryEscape(live.UpdatedAt), nil},
 		{"reorder a collection", http.MethodPut, "/api/v1/kb/order", kbOrderBody(collection.ID, []string{}, []string{live.ID, draft.ID})},
 		{"rename a collection", http.MethodPatch, "/api/v1/kb/collections/" + collection.ID, map[string]any{"updated_at": collection.UpdatedAt, "name": "Renamed"}},
@@ -157,7 +156,21 @@ func TestKBChangesThatReachTheHelpCenterNeedPublish(t *testing.T) {
 	if after.Title != "Live" || !strings.Contains(after.BodyMD, image.ID) {
 		t.Errorf("a refused call changed the published article: %+v", after)
 	}
-	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+live.ID, map[string]any{"updated_at": live.UpdatedAt, "title": "Changed"}, publisher, http.StatusOK, nil)
+	// The writer's change to a published article waits in a draft; only a publisher makes it live.
+	var saved kbDraftedArticle
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+live.ID, map[string]any{"updated_at": live.UpdatedAt, "title": "Changed"}, writer, http.StatusOK, &saved)
+	if saved.Title != "Live" || saved.Draft == nil || saved.Draft.Title != "Changed" {
+		t.Fatalf("writer's edit of a published article = %+v draft=%+v", saved.kbArticleView, saved.Draft)
+	}
+	refused := request(t, api, http.MethodPost, "/api/v1/kb/articles/"+live.ID+"/draft/publish", map[string]any{"updated_at": saved.Draft.UpdatedAt}, writer, nil)
+	if missing, names, _ := permissionMissing(t, refused); !missing || !slices.Contains(names, "kb_articles:publish") {
+		t.Errorf("publish the draft without publish: status=%d body=%s, want 403 permission_missing kb_articles:publish", refused.Code, refused.Body.String())
+	}
+	var published kbArticleView
+	kbPublishDraft(t, api, publisher, live.ID, saved.Draft.UpdatedAt, &published)
+	if published.Title != "Changed" {
+		t.Fatalf("publisher's publish = %+v", published)
+	}
 }
 
 // Accepting or undoing a triage suggestion changes the conversation: it needs conversations:update.

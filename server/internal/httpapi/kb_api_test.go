@@ -141,10 +141,16 @@ func TestKnowledgeBaseArticlesHaveStableNumbersVersionsAndATrash(t *testing.T) {
 	if stale.Code != http.StatusConflict || errorCode(t, stale) != "changed_elsewhere" {
 		t.Fatalf("stale edit status=%d body=%s", stale.Code, stale.Body.String())
 	}
-	var restored kbArticleView
+	// Restoring a version of a published article puts it in the draft; publishing the draft makes it live.
+	var restored kbDraftedArticle
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+first.ID+"/versions/1/restore", map[string]any{"updated_at": edited.UpdatedAt}, admin, http.StatusOK, &restored)
-	if restored.BodyMD != "Open **Settings**." || restored.Status != "published" || restored.LastChange.Kind != "restore" || *restored.LastChange.RestoredFromVersion != 1 {
-		t.Fatalf("restored version = %+v", restored)
+	if restored.BodyMD != "Open **Settings**, then *Password*." || restored.Draft == nil || restored.Draft.BodyMD != "Open **Settings**." {
+		t.Fatalf("restored version = %+v draft=%+v", restored.kbArticleView, restored.Draft)
+	}
+	var republished kbArticleView
+	kbPublishDraft(t, api, admin, first.ID, restored.Draft.UpdatedAt, &republished)
+	if republished.BodyMD != "Open **Settings**." || republished.Status != "published" || republished.LastChange.Kind != "edit" {
+		t.Fatalf("published restore = %+v", republished)
 	}
 	var versions struct {
 		Items []struct {
@@ -155,7 +161,7 @@ func TestKnowledgeBaseArticlesHaveStableNumbersVersionsAndATrash(t *testing.T) {
 		NextBeforeVersion *int `json:"next_before_version"`
 	}
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+first.ID+"/versions?limit=2", nil, agent, http.StatusOK, &versions)
-	if len(versions.Items) != 2 || versions.Items[0].Kind != "restore" || versions.Items[1].Status != "published" || versions.NextBeforeVersion == nil || *versions.NextBeforeVersion != 2 {
+	if len(versions.Items) != 2 || versions.Items[0].Kind != "edit" || versions.Items[1].Kind != "draft" || versions.NextBeforeVersion == nil || *versions.NextBeforeVersion != 3 {
 		t.Fatalf("versions = %+v", versions)
 	}
 
@@ -164,7 +170,7 @@ func TestKnowledgeBaseArticlesHaveStableNumbersVersionsAndATrash(t *testing.T) {
 	if full.Code != http.StatusConflict || errorCode(t, full) != "collection_not_empty" {
 		t.Fatalf("delete full collection status=%d body=%s", full.Code, full.Body.String())
 	}
-	for _, article := range []kbArticleView{restored, second} {
+	for _, article := range []kbArticleView{republished, second} {
 		kbCall(t, api, http.MethodDelete, "/api/v1/kb/articles/"+article.ID+"?updated_at="+url.QueryEscape(article.UpdatedAt), nil, agent, http.StatusNoContent, nil)
 	}
 	kbCall(t, api, http.MethodDelete, "/api/v1/kb/collections/"+bottom.ID+"?updated_at="+url.QueryEscape(bottom.UpdatedAt), nil, agent, http.StatusNoContent, nil)

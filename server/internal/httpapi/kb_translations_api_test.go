@@ -136,9 +136,13 @@ func TestKnowledgeBaseTranslationsHaveTheirOwnTextStatusHistoryTrashAndOutdatedF
 		t.Fatalf("missing in fr = %s", got)
 	}
 
-	// The article's own words change: its translation is outdated.
-	var edited kbArticleView
+	// The article's own words change: its translation is outdated once the change is published.
+	var edited kbDraftedArticle
 	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, map[string]any{"updated_at": read.UpdatedAt, "body_md": "Open Settings, then Security."}, admin, http.StatusOK, &edited)
+	if got := kbLanguageTitles(t, api, admin, "fr", "outdated"); got != "" {
+		t.Fatalf("outdated in fr before the change is published = %s", got)
+	}
+	kbPublishDraft(t, api, admin, article.ID, edited.Draft.UpdatedAt, nil)
 	if got := kbLanguageTitles(t, api, admin, "fr", "outdated"); got != "Reset your password" {
 		t.Fatalf("outdated in fr = %s", got)
 	}
