@@ -314,10 +314,20 @@ It runs in the normal Go suite and in CI (about 11 seconds, most of it seeding).
 
 A client that loads every tool pays the whole tool list in its context on each session, before any
 work. `TestToolsListStaysWithinItsBudget` (package `mcpserver`) lists the tools through the real `/mcp`
-endpoint and holds the JSON at or below 600,000 bytes. On 2026-11-12 it was 574,966 bytes for 246
-tools (about 144,000 tokens), and 305,002 bytes without the output schemas: the output schemas are the
-first place to cut. Clients with tool search (Claude Code) load a tool only when it is needed; others
-load all of it.
+endpoint and holds the JSON at or below 600,000 bytes. Clients with tool search (Claude Code) load a
+tool only when it is needed; others load all of it.
+
+Output schemas are most of the list, and many tools return the same shape (an article, a fix attempt,
+an import). A shape of 500 bytes or more, as compact JSON, is spelled out in one tool only
+(`advertisedOutputs` in `output_shapes.go`): a `_get` tool where one returns it, else a read tool, else
+the shortest name. Every other tool carries the shape's `type` and the description "Same shape as
+`field` in tool's output.". Two tests in `output_shapes_test.go` hold this:
+`TestNoOutputShapeIsSpelledOutInTwoTools` fails when a shape of that size is listed twice, and
+`TestASharedOutputShapeNamesTheToolThatSpellsItOut` follows each reference and requires the full shape
+there. Results are still checked against the full schema of each tool (`Spec.Output`), so a new tool
+writes its full output schema as before and the list stays small by itself. On 2026-11-12 the list was
+574,966 bytes for 246 tools; on 2026-11-20 it was 599,776 bytes for 254 tools before shared shapes and
+431,992 bytes after.
 
 When a new tool does not fit, shorten output schemas and descriptions or merge tools. When that is not
 enough, split the list into toolsets a client chooses, with the daily inbox tools as the default. Do

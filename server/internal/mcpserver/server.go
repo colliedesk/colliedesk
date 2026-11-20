@@ -86,10 +86,10 @@ func New(config Config) http.Handler {
 		&mcp.ServerOptions{Instructions: instructions})
 	rest := &restClient{api: config.API}
 	docSections() // build the guide index now, so a bad embed stops the server at start
-	for _, spec := range Catalog() {
-		if !spec.Operator {
-			register(server, spec, rest, config.Funnel)
-		}
+	specs := listedSpecs(false)
+	outputs := advertisedOutputs(specs)
+	for _, spec := range specs {
+		register(server, spec, outputs[spec.Name], rest, config.Funnel)
 	}
 	// A bearer token is required, so DNS rebinding cannot ride on a browser's ambient credentials. The
 	// SDK's loopback Host check would refuse the public host name that a reverse proxy on the same
@@ -107,10 +107,10 @@ func NewOperator(config Config) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "colliedesk-operator", Title: "Colliedesk operator", Version: config.Version},
 		&mcp.ServerOptions{Instructions: operatorInstructions})
 	rest := &restClient{api: config.API}
-	for _, spec := range Catalog() {
-		if spec.Operator {
-			register(server, spec, rest, nil)
-		}
+	specs := listedSpecs(true)
+	outputs := advertisedOutputs(specs)
+	for _, spec := range specs {
+		register(server, spec, outputs[spec.Name], rest, nil)
 	}
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true})
@@ -275,4 +275,15 @@ func writeJSONError(response http.ResponseWriter, status int, code, message stri
 	response.Header().Set("Cache-Control", "no-store")
 	response.WriteHeader(status)
 	_ = json.NewEncoder(response).Encode(map[string]any{"error": map[string]string{"code": code, "message": message}})
+}
+
+// listedSpecs returns the catalog's operator tools or its workspace tools, the ones one endpoint lists.
+func listedSpecs(operator bool) []Spec {
+	var specs []Spec
+	for _, spec := range Catalog() {
+		if spec.Operator == operator {
+			specs = append(specs, spec)
+		}
+	}
+	return specs
 }
