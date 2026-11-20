@@ -107,7 +107,8 @@ library (counting its trash and every image the import would bring in), or an ar
 100,000 characters once converted. A text is never cut. `--dry-run` lists what does not fit.
 
 Running the import again updates an article that changed in Freshdesk, unless your team changed it in
-Colliedesk since: then your version stays and the report lists the article under
+Colliedesk since (saving [unpublished changes](knowledge-base.md#unpublished-changes) counts): then your
+version stays, published text and unpublished changes alike, and the report lists the article under
 `kb_article_changed_in_both`. If an article is no longer public in Freshdesk (its folder became
 private, or its category left the portal), the next run makes it a draft again, unless your team
 changed it since: then it stays published and the report warns (`kb_article_published_but_not_public`).

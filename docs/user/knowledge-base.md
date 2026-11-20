@@ -282,7 +282,9 @@ the help center does, and leaves out (and names) one the library does not have.
 
 An article shows **Draft** or **Published**. **Publish** puts a draft on the help center and
 **Unpublish** (in **⋯**) takes it back off; both are versions, so neither is final. **Save** keeps an
-article's status. **⋯ → Delete article…** asks first, then moves the article to the [trash](#trash).
+article's status: on a published article it saves [unpublished changes](#unpublished-changes), and the
+help center keeps the published text. **⋯ → Delete article…** asks first, then moves the article to the
+[trash](#trash).
 
 Each article has a number that never changes. Its help center address ends in
 `/a/<number>-<address name>`, and the article page shows it under **Address name**. You can change the
@@ -294,9 +296,8 @@ Under **Search engines** on the article page, **Search title** (up to 120 charac
 Google and other search engines show, and **Meta description** (up to 320) the text under it. Left
 empty, the article's title (followed by the help center's title) and the first 160 characters of its
 text are used. Line breaks and repeated spaces become one space. Both are part of the article's
-history and of the [export](export.md). Changing them on a published
-article changes the help center, so it needs `kb_articles:publish` as well as `kb_articles:update`;
-without it the save is refused and names the permission.
+history and of the [export](export.md). On a published article they are part of its
+[unpublished changes](#unpublished-changes) until you publish them.
 
 If a teammate (or an AI agent) saved the article after you opened it, your save is refused and
 nothing is overwritten. Your text stays on screen and you choose: **Save mine over theirs** (theirs
@@ -304,13 +305,40 @@ stays in the history) or **Discard mine and show theirs**.
 
 Leaving the page with unsaved changes asks first.
 
+### Unpublished changes
+
+Editing a published article never changes its help center page by surprise. **Save** keeps your
+changes apart from the published article, and the article shows **Published · Unpublished changes**.
+The help center, its search, `llms.txt`, the sitemap, the `.md` copy and the help chat keep the
+published text until someone publishes the changes. An image that only the unpublished changes show
+stays off the help center until then.
+
+1. Edit the article and select **Save**. The bar **Unpublished changes** says who saved them.
+2. Select **Preview** to read the text as it will look.
+3. Select **Compare with published** to see each changed line: what is removed and what is added.
+4. Select **Publish changes** to put them on the help center. It needs `kb_articles:publish`.
+5. Or select **Discard draft**. The published article and its history stay as they are.
+
+An article has one set of unpublished changes; every save adds to it, and each save is a version in
+the [history](#history). In the article list, published articles with unpublished changes say so, and
+the status filter **Unpublished changes** keeps only those.
+
+- **Unpublish** an article with unpublished changes: the changes become the text of the draft article.
+- **Delete** it: the unpublished changes go to the trash with it and come back when you restore it.
+- A [media replacement](#media-library) also replaces the item in unpublished changes, and its undo puts
+  it back there.
+- A [translation](#translations) of a published article still goes live when you save it
+  ([#694](https://github.com/colliedesk/colliedesk/issues/694)).
+
 ## History
 
 **⋯ → Version history** on an article lists every version, newest first: who made it (and through which AI
 agent token, or an agent request approved before requests were removed), when, and what changed (title, address name, text, status,
 collection). **Restore version N** makes that version's title, address name and text current again,
 as a new version; the status and collection stay as they are, so a restore never publishes or moves
-an article by surprise. Save or undo your own changes first.
+an article by surprise. On a published article the restored version becomes its
+[unpublished changes](#unpublished-changes); the help center keeps the published text until you publish
+them. Save or undo your own changes first.
 
 ## Keep an article away from AI
 
@@ -784,9 +812,9 @@ token. Without the permission the call is refused and names what is missing
 | To | Needs |
 |---|---|
 | Read, search, history, trash | `kb_articles:read`, `kb_media:read`, `help_center:read` |
-| Write a draft, order, restore a version | `kb_articles:create`, `kb_articles:update` |
+| Write a draft, save or discard unpublished changes, order, restore a version | `kb_articles:create`, `kb_articles:update` |
 | Delete and restore from the trash | `kb_articles:delete` |
-| Anything that changes the public help center (publish, edit or trash a published article, a published collection) | `kb_articles:publish` as well |
+| Anything that changes the public help center (publish, publish changes, unpublish or trash a published article, a published collection) | `kb_articles:publish` as well |
 | Upload, name, replace, trash images and videos | `kb_media:create`, `kb_media:update`, `kb_media:delete` |
 | Turn the help center on or off, add or order its languages | `help_center:update` |
 | Show or hide a language | `help_center:update` and `kb_articles:publish` |
@@ -805,6 +833,15 @@ Articles and collections:
   `PATCH /api/v1/kb/articles`, and on `colliedesk_kb_article_create` and `colliedesk_kb_article_update`.
 - Keep an article away from AI: `colliedesk_kb_article_ai_exclude` and `colliedesk_kb_article_ai_include`,
   with `kb_articles:update`.
+- Unpublished changes: `colliedesk_kb_article_update` (or `PATCH /api/v1/kb/articles/{id}`) on a
+  published article saves them, with `kb_articles:update`. `colliedesk_kb_article_get` answers the
+  published article with its `draft`; `has_draft` marks it in every list, and `has_draft=true` on
+  `GET /api/v1/kb/articles` keeps only those. `GET /api/v1/kb/articles/{id}?version=draft` answers the
+  unpublished changes as one article. `colliedesk_kb_article_draft_publish`
+  (`POST /api/v1/kb/articles/{id}/draft/publish`, with `kb_articles:publish`) puts them live and
+  `colliedesk_kb_article_draft_discard` (`DELETE /api/v1/kb/articles/{id}/draft`) drops them. Both take
+  the `updated_at` of the unpublished changes, so changes saved after you read them are never published
+  or dropped unseen.
 - Link an article in a reply: every article an agent reads or finds carries its public address in `url`
   (also in the API). An agent links an article the same way a person does: the title and the address on
   two lines, from a search with `status` published while the help center is on.
