@@ -626,6 +626,7 @@ type KBMediaReplacement struct {
 	CreatedAt         time.Time       `json:"created_at"`
 	UndoneAt          *time.Time      `json:"undone_at"`
 	UndoneByAgentID   *string         `json:"undone_by_agent_id"`
+	InPlace           bool            `json:"in_place"`
 }
 
 // KBArticleVoteReset is one press of "Reset votes" on an article: the counts the page showed until then,
@@ -1311,6 +1312,8 @@ type Sink interface {
 	KBArticleDraft(KBArticleDraft) error
 	KBImage(KBImage) error
 	KBVideo(KBVideo) error
+	KBFile(KBFile) error
+	KBArticleAttachment(KBArticleAttachment) error
 	KBMediaReplacement(KBMediaReplacement) error
 	KBArticleVoteReset(KBArticleVoteReset) error
 	KBArticleVote(KBArticleVote) error

@@ -230,8 +230,8 @@ The column on the right of the editor lists the images of the article that have 
 
 ### Media library
 
-**Knowledge → Media** shows every image and video of the workspace, newest first, with a search by
-name or alt text, a choice of images or videos, of what is in use, not used or missing alt text
+**Knowledge → Media** shows every image, video and [file](#attach-files) of the workspace, newest first, with a search by
+name or alt text, a choice of images, videos or files, of what is in use, not used or missing alt text
 (on a phone, under **Filter**), and a sort: newest first, name, or largest first (what frees the most
 storage). A link with `sort=oldest` still lists oldest first. A card shows only what
 needs your attention: **No alt** on an image without alt text, **Not used**, and a pin on a kept item.
@@ -341,6 +341,37 @@ it was public, as with images: unpublishing or moving it to the trash stops new 
 already made, so keep a video that must stay private out of published articles. Upload videos in the [media
 library](#media-library) or from the editor (above). **Preview** shows a video with its poster, as
 the help center does, and leaves out (and names) one the library does not have.
+
+### Attach files
+
+An article can offer files to download under its text: a warranty form, a price list, a manual. The
+**Attachments** strip under the editor takes them: drop files on it, paste them, or **Choose files**.
+Each goes up with a bar of its progress and shows its type and size. Move a file up or down to set
+the order readers see, or remove it from the list; the file stays in the [media library](#media-library).
+On a published article the list is part of its [unpublished changes](#unpublished-changes) until
+**Publish changes**; a translation has a list of its own, which changes at once.
+
+- Accepted: PDF; Word, Excel and PowerPoint (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`);
+  OpenDocument (`odt`, `ods`, `odp`); CSV, TXT and RTF; ZIP, 7z and `tar.gz`. The type is judged from
+  the file's first bytes and its name, so a program renamed `.pdf` is refused. Programs, scripts,
+  HTML and SVG are refused, and the message lists the accepted types.
+- 25 MiB per file and 100 MiB for the files of one article (or translation), at most 50 files.
+  A file over a limit, or of a refused type, says why in the strip before anything is sent.
+- Files count toward your plan's storage, and the same file uploaded twice is stored once.
+- The text of a PDF, TXT or CSV file (its first 200 KiB) is read for search: the help center's search
+  and AI answers find an article by a word that is only in its file. Other types are found by name.
+
+On the help center the files are listed under the article as **Downloads**, each with its name, type
+and size. A file downloads from `/files/<id>/<name>` on the help center's address, always as a
+download (never opened in the browser), and only while a published article or translation lists it;
+otherwise the address says "This page does not exist". The article's Markdown copy and `llms.txt`
+list the files too.
+
+To change a file everywhere it is listed, open it in the media library and **Replace…** it with the
+new version from your computer. It keeps its address, so every link to it (in an article, an email,
+a bookmark) downloads the new version; Undo puts the earlier one back. A file a published article
+lists needs the permission to publish to be replaced, and a file an article lists cannot go to the
+trash: remove it from the article first.
 
 ### Publish, unpublish, edit
 
@@ -888,6 +919,8 @@ to serve on the domain again.
   collection beside the text, and its headings under [On this page](#on-this-page).
 - **Search** works like the search in the editor: whole words and the start of words in titles and
   text, and any part of a title. It shows the best 25 matches.
+- Search also finds words in the text of an article's [files](#attach-files) (PDF, TXT, CSV).
+- Files listed under an article are offered for download below its text, while a published article lists them.
 - Images you added to an article are shown while a published article uses them. An image from
   another site is shown as a link to it: the help center loads nothing from other sites.
 - Raw HTML in the text is not shown, except [YouTube and Vimeo videos](#videos), and links work only
@@ -945,9 +978,9 @@ address, never the app's address or another workspace's:
   article with the date it last changed; with other languages shown, also each of their pages, every
   page with its versions in the other languages.
 - `llms.txt` lists the published articles by collection, for AI assistants, each with a link to its
-  Markdown.
+  Markdown and its files.
 - Every article's address followed by `.md` (`/a/12-reset-your-password.md`) is the article as
-  Markdown, with its images on the help center's address.
+  Markdown, with its images and its files on the help center's address.
 
 During a Colliedesk Cloud **trial**, `robots.txt` asks every crawler to stay away, and `sitemap.xml`
 and `llms.txt` list nothing. A paid plan lifts this at once.
@@ -1018,6 +1051,8 @@ unpublished or deleted, or while the help center is off.
 - Images: PNG, JPEG, GIF and WebP, 5 MB each, at most 8,192 pixels on a side and 40 megapixels.
 - 10,000 images and videos in the media library per workspace, counting its trash; videos up to
   200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
+- Files: 25 MiB each and 100 MiB per article or translation, at most 50 under one; the text read for
+  search stops at 200 KiB.
 - Collections go three levels deep.
 - Search does not find a part in the middle of a word, nor words in text written without spaces.
 - 40 languages besides the primary one; one translation per article and language.
@@ -1038,7 +1073,8 @@ token. Without the permission the call is refused and names what is missing
 | Anything that changes the public help center (publish, publish changes, unpublish or trash a published article, a published collection) | `kb_articles:publish` as well |
 | Send a text for review, withdraw your own review | `kb_articles:update` |
 | Approve, request changes, withdraw anyone's review, set whether publishing needs approval | `kb_articles:publish` |
-| Upload, name, replace, trash images and videos | `kb_media:create`, `kb_media:update`, `kb_media:delete` |
+| Upload, name, replace, trash images, videos and files | `kb_media:create`, `kb_media:update`, `kb_media:delete` |
+| Set the files listed under an article or translation | `kb_articles:update` (and `kb_articles:publish` for a published translation) |
 | Turn the help center on or off, add or order its languages | `help_center:update` |
 | Show or hide a language | `help_center:update` and `kb_articles:publish` |
 | Set its theme, search console tokens and custom domain | `help_center:update` and `kb_articles:publish` |
@@ -1116,6 +1152,12 @@ Images and videos:
   `colliedesk_kb_media_trash` and `colliedesk_kb_media_undelete` move them to the trash or back, and
   `colliedesk_kb_media_replace` replaces one in every article, with the `kb_media:*` permissions above.
   Deleting forever (`colliedesk_kb_media_purge`) needs `kb_media:purge`.
+- Files: `colliedesk_kb_file_upload` stores a file of up to 5 MiB; a larger one (up to 25 MiB) goes up
+  in parts with `colliedesk_kb_video_upload_start` and `kind` `file` (`POST /api/v1/kb/media-uploads`
+  with `kind=file`). `colliedesk_kb_article_attachments_set` (`PUT /api/v1/kb/articles/{id}/attachments`,
+  or `…/translations/{locale}/attachments` with `locale`) sets the list in order; `[]` empties it.
+  `colliedesk_kb_media_list` with `kind` `file` lists files with the articles that list them, and
+  `colliedesk_kb_media_replace` replaces one in place with a file no article lists yet.
 - Videos: an agent uploads a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`)
   and sets its poster (`colliedesk_kb_video_poster_set`) with `kb_media:create` and `kb_media:update`.
 

@@ -8,13 +8,14 @@ import { KBDialog, usePhone } from './kb-ui';
 import { HelpTip } from '../../ui/help-tip';
 import { mediaApi, updateFields } from './media-api';
 import type { KBMedia, KBMediaDetails } from './media-api';
-import { embedFor, mediaName } from './media-grid';
+import { FileGlyph, embedFor, mediaName } from './media-grid';
+import { FileReplace } from './media-file-replace';
 import { mediaMessages } from './media-messages';
 import { reason } from './kb-tree';
 import { posterFrom } from './video-poster';
 
 // MediaDetail is the panel of one library item: its preview, what can be done to it, then three tabs
-// (Details: name, alt text or a video's title, kept; Used in: the articles; File: the facts and a video's
+// (Details: name, alt text or a video's title (a file has neither), kept; Used in: the articles; File: the facts and a video's
 // poster) and Save at its foot. Each tab fits the panel, so nothing in it is reached by scrolling. Without
 // an item it says what it is for: the column stays, and opening an item never moves the grid. On a phone
 // it is a sheet over the grid, which keeps its place.
@@ -67,6 +68,7 @@ type Tab = 'details' | 'used' | 'file';
 function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetails; onChanged: () => void; onNotice: Notify; onTrashed: () => void }) {
   const id = useId();
   const video = item.kind === 'video';
+  const file = item.kind === 'file';
   const player = useRef<HTMLVideoElement>(null);
   const [tab, setTab] = useState<Tab>('details');
   const [name, setName] = useState(item.name);
@@ -112,7 +114,7 @@ function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDet
     <form className="media-detail-body" onSubmit={(event) => void save(event)}>
       <div className="media-detail-main">
         <div className="media-detail-preview">
-          {video
+          {file ? <FileGlyph name={item.name} /> : video
             ? <video ref={player} controls preload="metadata" src={item.url} poster={item.poster_url ?? undefined} />
             : <img src={item.url} alt={item.alt} />}
         </div>
@@ -127,11 +129,11 @@ function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDet
           <label className="field">{mediaMessages.nameLabel}
             <input value={name} maxLength={200} onChange={(event) => { setName(event.target.value); setState({}); }} />
           </label>
-          <label className="field">{video ? mediaMessages.titleLabel : mediaMessages.altLabel}
+          {!file && <><label className="field">{video ? mediaMessages.titleLabel : mediaMessages.altLabel}
             <textarea value={alt} maxLength={500} rows={2} aria-describedby={video ? `${id}-alt-help` : `${id}-alt-help ${id}-alt-tip`} onChange={(event) => { setAlt(event.target.value); setState({}); }} />
           </label>
           <p className="kb-hint"><span id={`${id}-alt-help`}>{video ? mediaMessages.titleHelp : mediaMessages.altHelp}</span>
-            {!video && <>{' '}<HelpTip label={mediaMessages.altLabel} text={mediaMessages.altTip} id={`${id}-alt-tip`} /></>}</p>
+            {!video && <>{' '}<HelpTip label={mediaMessages.altLabel} text={mediaMessages.altTip} id={`${id}-alt-tip`} /></>}</p></>}
           <label className="media-keep">
             <input type="checkbox" checked={kept} aria-describedby={live === 0 ? `${id}-keep-help ${id}-keep-tip` : `${id}-keep-help`} onChange={(event) => { setKept(event.target.checked); setState({}); }} />
             <span>{mediaMessages.keep}</span>
@@ -251,9 +253,14 @@ function Actions({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetail
   return (
     <div className="media-actions">
       <div className="media-action-row">
-        <button type="button" aria-label={mediaMessages.copyEmbed} title={mediaMessages.copyEmbed} onClick={() => void navigator.clipboard.writeText(embedFor(item)).then(() => onNotice({ text: mediaMessages.copied }))}><Icon name="copy" />{mediaMessages.embed}</button>
+        {item.kind !== 'file' && <button type="button" aria-label={mediaMessages.copyEmbed} title={mediaMessages.copyEmbed} onClick={() => void navigator.clipboard.writeText(embedFor(item)).then(() => onNotice({ text: mediaMessages.copied }))}><Icon name="copy" />{mediaMessages.embed}</button>}
         <a className="button-link" href={`/api/v1/kb/media/${item.id}?download=1`} download><Icon name="download" />{mediaMessages.download}</a>
-        <button type="button" aria-haspopup="dialog" onClick={() => setReplacing(true)}><Icon name="replace" />{mediaMessages.replace}</button>
+        {item.kind === 'file'
+          ? <FileReplace item={item} onProblem={setProblem} onReplaced={(done) => {
+            onNotice({ text: mediaMessages.replacedFile, undo: () => void undoReplace(done.id) });
+            onChanged();
+          }} />
+          : <button type="button" aria-haspopup="dialog" onClick={() => setReplacing(true)}><Icon name="replace" />{mediaMessages.replace}</button>}
         <button type="button" className="danger-action media-trash-button" aria-label={mediaMessages.moveToTrash} data-tip={mediaMessages.moveToTrash} onClick={() => void trash()}><Icon name="trash" /></button>
       </div>
       {problem && <div role="alert" className="error-copy media-problem">

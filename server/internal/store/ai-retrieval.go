@@ -594,7 +594,8 @@ func (r *aiDocRows) insert(ctx context.Context, tx pgx.Tx, workspaceID string) e
 	return err
 }
 
-// buildAIArticles replaces the rows of the articles: one per language of each that AI may read.
+// buildAIArticles replaces the rows of the articles: one per language of each that AI may read, its
+// text followed by the text of the files its page lists.
 func buildAIArticles(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -611,20 +612,32 @@ func buildAIArticles(ctx context.Context, tx pgx.Tx, workspaceID string, ids []s
 	if err != nil {
 		return err
 	}
-	var docs aiDocRows
-	for rows.Next() {
-		var article string
-		var locale *string
-		var title, body string
-		var updated time.Time
-		if err := rows.Scan(&article, &locale, &title, &body, &updated); err != nil {
-			rows.Close()
-			return err
-		}
-		docs.add(&article, locale, nil, title, body, updated)
+	type source struct {
+		article     string
+		locale      *string
+		title, body string
+		updated     time.Time
 	}
-	if err := rows.Err(); err != nil {
+	sources, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (source, error) {
+		var s source
+		err := row.Scan(&s.article, &s.locale, &s.title, &s.body, &s.updated)
+		return s, err
+	})
+	if err != nil {
 		return err
+	}
+	// Each language reads the files its page lists after its own text.
+	files, err := readKBListedFiles(ctx, tx, workspaceID, ids)
+	if err != nil {
+		return err
+	}
+	var docs aiDocRows
+	for _, s := range sources {
+		locale := ""
+		if s.locale != nil {
+			locale = *s.locale
+		}
+		docs.add(&s.article, s.locale, nil, s.title, s.body+kbFilesText(s.title, files.shown(s.article, locale)), s.updated)
 	}
 	return docs.insert(ctx, tx, workspaceID)
 }

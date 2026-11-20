@@ -82,7 +82,8 @@ func readKBTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID, l
 	}
 	original.UpdatedAt = domain.UTC(original.UpdatedAt)
 	item.KBTranslationSummary, item.DeletedAt, item.Original = summary, domain.UTCOptional(item.DeletedAt), original
-	return item, nil
+	item.Attachments, err = readKBAttachments(ctx, tx, workspaceID, articleID, &locale)
+	return item, err
 }
 
 // translationKey refuses an id or locale that cannot name a translation.

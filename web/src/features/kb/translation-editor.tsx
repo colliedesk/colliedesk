@@ -1,11 +1,13 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ChangedElsewhereError } from '../../api/client';
 import { useCreateAction } from '../../api/use-create';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
+import { ArticleAttachments } from './article-attachments';
+import { attachmentMessages } from './attachment-messages';
 import { ArticleReviewBox, useTextApproval } from './article-review';
 import { kbApi } from './kb-api';
-import type { KBArticle, KBArticleStatus, KBTranslation, KBTranslationVersion } from './kb-api';
+import type { KBArticle, KBArticleStatus, KBAttachment, KBTranslation, KBTranslationVersion } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { KBDialog, KBMenu } from './kb-ui';
 import { HelpTip } from '../../ui/help-tip';
@@ -105,6 +107,17 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
   }, [latest, translation, dirty]);
   // saved makes the server's answer the version being edited; show also puts its text in the form.
   const saved = (answer: KBTranslation) => setTranslation(answer);
+  // The translation's own files are saved at once, as the article's are: typed text stays in the form, and the
+  // next save sends the updated_at this answer gave.
+  const translationNow = useRef(translation);
+  translationNow.current = translation;
+  const setAttachments = async (mediaIds: string[]): Promise<KBAttachment[]> => {
+    const answer = await kbApi.setTranslationAttachments(articleId, locale, mediaIds, translationNow.current!.updated_at);
+    translationNow.current = answer;
+    saved(answer);
+    client.setQueryData(['kb-translation', articleId, locale], answer);
+    return answer.attachments;
+  };
   const show = (answer: KBTranslation) => {
     setTranslation(answer);
     setDraft(draftOf(answer));
@@ -255,6 +268,8 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
                   onChange={(event) => set({ body_md: event.target.value })} /></div>
               : <div className="kb-translation-scroll"><MarkdownPreview text={draft.body_md} /></div>}
           </div>
+          <ArticleAttachments files={translation?.attachments ?? []} onSet={translation && !inTrash ? setAttachments : undefined}
+            saveFirst={attachmentMessages.saveTranslationFirst} note={attachmentMessages.articleFiles} />
           <details className="kb-translation-more">
             <summary>{kbMessages.details}</summary>
             <div className="field"><label htmlFor={`${id}-slug`}>{t.slug}</label>

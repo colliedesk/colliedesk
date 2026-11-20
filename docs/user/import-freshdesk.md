@@ -79,6 +79,7 @@ The whole knowledge base is imported on every run, whatever `--since` says:
 | A folder nested deeper | A third-level collection named after its folders, for example `Advanced / Deep`, listed under the warning `kb_folder_flattened` |
 | Article | Article in Markdown with its title, original created and updated dates, and the author when a Colliedesk agent has the same email |
 | Article images hosted by Freshdesk | Stored by Colliedesk in the knowledge base media library, named after the file in the image address, with the alt text of the image (at most 500 characters); the article points at the stored copy. Their bytes stay as Freshdesk served them |
+| Files attached to an article or a translation | [Files](knowledge-base.md#attach-files) in the knowledge base media library, listed under the article (or translation) in the same order. A file over 25 MB, of a type Colliedesk does not accept, or past 100 MB per article fails, and the report gives the file name and the reason |
 | Translations | [Translations](knowledge-base.md#translations) of the same article, with their status (published in Freshdesk stays published, everything else is a draft), search title and description. Tags stay in the export (`source_meta`) |
 | Category and folder names in other languages | The collection's [names in other languages](knowledge-base.md#collection-names) |
 | Supported languages | The help center's [languages](knowledge-base.md#languages): those your Freshdesk portal shows (`portal_languages`) are shown, the others hidden. The Freshdesk primary language becomes the help center's while it has no languages or articles of its own; otherwise it stays and the report warns `kb_primary_language_differs`. `import undo` gives back the primary language the help center had, unless someone changed it since (undo then says it kept it) |
@@ -102,11 +103,14 @@ articles under the warning `kb_article_markup_dropped`. The original HTML stays 
 is in the export.
 
 An image Freshdesk no longer has stays a link and is listed. An image that fails to download for
-another reason makes the status `FAILED`; run the import again.
+another reason makes the status `FAILED`; run the import again. A file that cannot come over (too
+large, a refused type, a failed download) also makes the status `FAILED`: the report lists it under
+**Knowledge base files** with its reason, and the article keeps the other files. Save that file
+from Freshdesk, or convert it to an accepted type and attach it in Colliedesk.
 
 The import refuses, before it writes anything, a knowledge base that does not fit: more than 2,000
 articles in the workspace (articles in the trash count), 1,000 collections or 10,000 images in the media
-library (counting its trash and every image the import would bring in), or an article longer than
+library (counting its trash and every image and file the import would bring in), or an article longer than
 100,000 characters once converted. A text is never cut. `--dry-run` lists what does not fit.
 
 Running the import again updates an article that changed in Freshdesk, unless your team changed it in
@@ -123,7 +127,7 @@ article whose text changed in Freshdesk while its translation did not gets that 
 article your team edited, restored or deleted since, one with unpublished changes, or one of whose
 translations your team changed or added, and the collections that hold it or your own articles. From an article that stays, undo
 removes the translations only the import wrote; it also removes the collection names the import
-wrote (not one a person set) and the languages it added that hold nothing any more. An imported image someone kept in the media library stays too, and undo says how many. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
+wrote (not one a person set) and the languages it added that hold nothing any more. An imported image someone kept in the media library stays too, and undo says how many. Undo removes the imported files no article lists any more, but keeps a file someone kept in the media library or replaced, and says how many. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
 may lack the right), the status is `UNVERIFIED`.
 
 ### Old help center links

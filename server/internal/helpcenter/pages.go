@@ -137,6 +137,8 @@ type page struct {
 	Contents []contentsItem
 	// Votes is the article's "Was this article helpful?" box (votes.go).
 	Votes *voteBox
+	// Files are the files the article lists for download under its text (files.go).
+	Files []fileLink
 
 	Searched bool
 	Results  []searchResult
@@ -651,6 +653,9 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 	}
 	data.Neighbours = v.articleLinks(neighbours, article.Number)
 	data.Votes = voteBoxOf(v, article)
+	if len(article.Attachments) > 0 {
+		data.Files = v.fileLinks(article.Attachments)
+	}
 	paths := pagePaths{}
 	for lang, slug := range article.Alternates {
 		paths[lang] = ArticlePath(article.Number, slug)

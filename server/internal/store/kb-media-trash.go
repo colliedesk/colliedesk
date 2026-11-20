@@ -410,12 +410,12 @@ func (s *Store) ListTrashedKBMedia(ctx context.Context, workspaceID, cursor stri
 	return out, next, nil
 }
 
-// KBMediaInUseArticles lists the live articles whose current text names the item, for a refusal to
-// trash it.
+// KBMediaInUseArticles lists the live articles whose current text names the item or that list it as a
+// file, for a refusal to trash it.
 func (s *Store) KBMediaInUseArticles(ctx context.Context, workspaceID, id string) ([]domain.KBMediaArticle, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.KBMediaArticle, error) {
-		rows, err := tx.Query(ctx, `SELECT a.id::text,a.number,a.title,a.status,false,true
-			FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+		rows, err := tx.Query(ctx, `SELECT DISTINCT a.id::text,a.number,a.title,a.status,false,true
+			FROM `+kbMediaUses+` l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
 			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND a.deleted_at IS NULL ORDER BY a.number`, workspaceID, id)
 		if err != nil {
 			return nil, err

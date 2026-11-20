@@ -106,8 +106,8 @@ func (r *run) kbLimitProblems(ctx context.Context) ([]string, error) {
 			}
 		}
 	}
-	// Images the ledger does not hold yet, at most one item each in the media library (the same bytes
-	// give one item, so the import may take fewer).
+	// Images and files the ledger does not hold yet, at most one item each in the media library (the
+	// same bytes give one item, so the import may take fewer).
 	newImages := 0
 	countImages := func(prefix, markup string) error {
 		for _, ref := range r.inlineImages(markup) {
@@ -119,13 +119,31 @@ func (r *run) kbLimitProblems(ctx context.Context) ([]string, error) {
 		}
 		return nil
 	}
+	countFiles := func(prefix string, files []fdAttachment) error {
+		for _, file := range files {
+			if entry, found, err := r.ledger.get(ctx, entityKBFile, prefix+":"+strconv.FormatInt(file.ID, 10)); err != nil {
+				return err
+			} else if !found || entry.Status != ledgerDone {
+				newImages++
+			}
+		}
+		return nil
+	}
 	for _, article := range kb.articles {
-		if err := countImages(strconv.FormatInt(article.ID, 10), article.Description); err != nil {
+		prefix := strconv.FormatInt(article.ID, 10)
+		if err := countImages(prefix, article.Description); err != nil {
+			return nil, err
+		}
+		if err := countFiles(prefix, article.Attachments); err != nil {
 			return nil, err
 		}
 	}
 	for _, translation := range kb.translations {
-		if err := countImages(strconv.FormatInt(translation.ID, 10)+":"+translation.language, translation.Description); err != nil {
+		prefix := strconv.FormatInt(translation.ID, 10) + ":" + translation.language
+		if err := countImages(prefix, translation.Description); err != nil {
+			return nil, err
+		}
+		if err := countFiles(prefix, translation.Attachments); err != nil {
 			return nil, err
 		}
 	}
@@ -141,7 +159,7 @@ func (r *run) kbLimitProblems(ctx context.Context) ([]string, error) {
 		add("the workspace holds %d knowledge base articles (the trash counts) and the import adds %d, over the limit of %d", articles, newArticles, domain.MaxKBArticles)
 	}
 	if media+newImages > domain.MaxKBMedia {
-		add("the workspace holds %d images and videos in its knowledge base media library (the trash counts) and the import may add %d, over the limit of %d", media, newImages, domain.MaxKBMedia)
+		add("the workspace holds %d images, videos and files in its knowledge base media library (the trash counts) and the import may add %d, over the limit of %d", media, newImages, domain.MaxKBMedia)
 	}
 	if collections+newCollections > domain.MaxKBCollections {
 		add("the workspace holds %d knowledge base collections (the trash counts) and the import adds %d, over the limit of %d", collections, newCollections, domain.MaxKBCollections)
@@ -164,8 +182,8 @@ func (r *run) checkKBText(title, markup string) error {
 	return domain.CheckKBBody(body)
 }
 
-// sizeKnowledgeBase adds up the bytes of the article images a run would store: every image the
-// ledger does not hold, read once (Freshdesk reports no size).
+// sizeKnowledgeBase adds up the bytes of the article images and files a run would store: every one
+// the ledger does not hold. An image is read once (Freshdesk reports no size); a file has its size.
 func (r *run) sizeKnowledgeBase(ctx context.Context) (int64, error) {
 	if r.kb == nil {
 		return 0, nil
@@ -186,13 +204,31 @@ func (r *run) sizeKnowledgeBase(ctx context.Context) (int64, error) {
 		}
 		return nil
 	}
+	sizeFiles := func(prefix string, files []fdAttachment) error {
+		for _, file := range files {
+			if entry, found, err := r.ledger.get(ctx, entityKBFile, prefix+":"+strconv.FormatInt(file.ID, 10)); err != nil {
+				return err
+			} else if (!found || entry.Status != ledgerDone) && file.reportedSize() <= domain.MaxKBFileBytes {
+				needed += file.reportedSize()
+			}
+		}
+		return nil
+	}
 	for _, article := range r.kb.articles {
-		if err := size(strconv.FormatInt(article.ID, 10), article.Description); err != nil {
+		prefix := strconv.FormatInt(article.ID, 10)
+		if err := size(prefix, article.Description); err != nil {
+			return 0, err
+		}
+		if err := sizeFiles(prefix, article.Attachments); err != nil {
 			return 0, err
 		}
 	}
 	for _, translation := range r.kb.translations {
-		if err := size(strconv.FormatInt(translation.ID, 10)+":"+translation.language, translation.Description); err != nil {
+		prefix := strconv.FormatInt(translation.ID, 10) + ":" + translation.language
+		if err := size(prefix, translation.Description); err != nil {
+			return 0, err
+		}
+		if err := sizeFiles(prefix, translation.Attachments); err != nil {
 			return 0, err
 		}
 	}
@@ -262,7 +298,7 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 		}
 	}
 	var articleKeys, translationKeys []string
-	images := 0
+	images, files := 0, 0
 	for _, article := range kb.articles {
 		key := strconv.FormatInt(article.ID, 10)
 		articleKeys = append(articleKeys, key)
@@ -272,10 +308,12 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 			count.Drafts[reason] = append(count.Drafts[reason], key)
 		}
 		images += len(r.inlineImages(article.Description))
+		files += len(article.Attachments)
 	}
 	for _, translation := range kb.translations {
 		translationKeys = append(translationKeys, strconv.FormatInt(translation.ID, 10)+":"+translation.language)
 		images += len(r.inlineImages(translation.Description))
+		files += len(translation.Attachments)
 	}
 	var nameKeys []string
 	for key, languages := range kb.names {
@@ -292,7 +330,7 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	count.Collections.Source = len(collectionKeys[entityKBCategory]) + len(collectionKeys[entityKBFolder])
 	count.Articles.Source, count.Translations.Source = len(articleKeys), len(translationKeys)
 	if r.opts.DryRun {
-		count.Images.Source = images
+		count.Images.Source, count.Files.Source = images, files
 	} else if err := r.countKBLedger(ctx, report, &count, collectionKeys, articleKeys, translationKeys, nameKeys); err != nil {
 		return err
 	}
@@ -313,10 +351,11 @@ func (r *run) countKBLedger(ctx context.Context, report *Report, count *Knowledg
 	return r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT entity,source_id,status,error FROM import_items WHERE workspace_id=$1 AND source=$2 AND (
 				(entity=$3 AND source_id=ANY($4)) OR (entity=$5 AND source_id=ANY($6)) OR (entity=$7 AND source_id=ANY($8))
-				OR (entity=$9 AND source_id=ANY($10)) OR (entity=$11 AND split_part(source_id,':',1)=ANY($8)) OR (entity=$12 AND source_id=ANY($13)))
+				OR (entity=$9 AND source_id=ANY($10)) OR (entity=$11 AND split_part(source_id,':',1)=ANY($8)) OR (entity=$12 AND source_id=ANY($13))
+				OR (entity=$14 AND split_part(source_id,':',1)=ANY($8)))
 			ORDER BY entity,length(source_id),source_id`, r.workspaceID, r.ledger.source,
 			entityKBCategory, collections[entityKBCategory], entityKBFolder, collections[entityKBFolder], entityKBArticle, articles,
-			entityKBTranslation, translations, entityKBImage, entityKBCollectionName, names)
+			entityKBTranslation, translations, entityKBImage, entityKBCollectionName, names, entityKBFile)
 		if err != nil {
 			return fmt.Errorf("reconcile knowledge base: %w", err)
 		}
@@ -335,6 +374,9 @@ func (r *run) countKBLedger(ctx context.Context, report *Report, count *Knowledg
 				addStatus(&count.Translations, status)
 			case entityKBCollectionName:
 				addStatus(&count.CollectionNames, status)
+			case entityKBFile:
+				count.Files.Source++
+				addStatus(&count.Files, status)
 			case entityKBImage:
 				count.Images.Source++
 				addStatus(&count.Images.EntityCount, status)

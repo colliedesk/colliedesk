@@ -878,6 +878,9 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/mentions", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/mentions/read", auth.PermissionSession},
 		{http.MethodPatch, "/api/v1/agents/me/mention-email", auth.PermissionSession},
+		// Files an article or translation lists for download under its text.
+		{http.MethodPut, "/api/v1/kb/articles/{id}/attachments", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/kb/articles/{id}/translations/{locale}/attachments", auth.PermissionSession},
 		// Knowledge base article templates: never public; a new article copies one once.
 		{http.MethodGet, "/api/v1/kb/templates", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/templates", auth.PermissionSession},

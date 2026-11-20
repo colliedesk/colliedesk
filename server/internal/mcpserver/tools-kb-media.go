@@ -286,11 +286,12 @@ type restKBMediaReplacement struct {
 	ArticleIDs   []string         `json:"article_ids"`
 	Translations []map[string]any `json:"translations"`
 	UndoneAt     *string          `json:"undone_at"`
+	InPlace      bool             `json:"in_place"`
 }
 
 func kbMediaReplacementView(replacement restKBMediaReplacement) map[string]any {
 	return map[string]any{"replacement_id": replacement.ID, "from_media_id": replacement.From, "to_media_id": replacement.To,
-		"article_ids": replacement.ArticleIDs, "translations": replacement.Translations, "undone": replacement.UndoneAt != nil}
+		"article_ids": replacement.ArticleIDs, "translations": replacement.Translations, "undone": replacement.UndoneAt != nil, "in_place": replacement.InPlace}
 }
 
 func kbMediaReplace(c *call, arguments map[string]any) (any, error) {

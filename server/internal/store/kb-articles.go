@@ -99,6 +99,9 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 	if article.Draft, err = readKBArticleDraft(ctx, tx, workspaceID, article); err != nil {
 		return article, err
 	}
+	if err := fillKBArticleAttachments(ctx, tx, workspaceID, &article); err != nil {
+		return article, err
+	}
 	article.Translations, err = listKBArticleTranslations(ctx, tx, workspaceID, id)
 	return article, err
 }

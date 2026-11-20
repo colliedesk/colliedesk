@@ -36,9 +36,11 @@ type UndoResult struct {
 	// KBArticles, KBCollections and KBImages count the knowledge base rows removed. KeptKBArticles are
 	// the Freshdesk ids of imported articles changed in Colliedesk since (an edit, a restore, a delete);
 	// they stay, with the collections that hold them.
-	KBArticles     int      `json:"kb_articles"`
-	KBCollections  int      `json:"kb_collections"`
-	KBImages       int      `json:"kb_images"`
+	KBArticles    int `json:"kb_articles"`
+	KBCollections int `json:"kb_collections"`
+	KBImages      int `json:"kb_images"`
+	// KBFiles counts the files of the media library the import brought for articles' lists and removed.
+	KBFiles        int      `json:"kb_files"`
 	KeptKBArticles []string `json:"kept_kb_articles"`
 	// KBTranslations counts the imported translations removed from articles that stay; KBCollectionNames
 	// the collection names in other languages; KBLanguages the help center languages the import added
@@ -56,6 +58,9 @@ type UndoResult struct {
 	// KeptKBImages counts imported images no article shows any more that stay because a person kept
 	// them in the media library.
 	KeptKBImages int `json:"kept_kb_images"`
+	// KeptKBFiles counts imported files no article lists any more that stay because a person kept them
+	// in the media library or replaced their bytes.
+	KeptKBFiles int `json:"kept_kb_files"`
 }
 
 // targetExists tells whether the Colliedesk row a ledger row points at still exists.
@@ -81,6 +86,7 @@ const targetExists = `CASE i.entity
 	WHEN 'kb_primary_language' THEN EXISTS(SELECT 1 FROM help_centers x WHERE x.workspace_id=i.workspace_id AND x.locale=i.source_id)
 	WHEN 'kb_language' THEN EXISTS(SELECT 1 FROM help_center_languages x WHERE x.workspace_id=i.workspace_id AND x.locale=i.source_id)
 	WHEN 'kb_image' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
+	WHEN 'kb_file' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'chat' THEN EXISTS(SELECT 1 FROM channel_threads x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'chat_item' THEN EXISTS(SELECT 1 FROM channel_thread_items x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	ELSE false END`
@@ -97,8 +103,8 @@ func (u UndoResult) Markdown() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Freshdesk import undone\n\n- Source: %s\n- Conversations removed: %d\n- Contacts removed: %d\n- Tags removed: %d\n- Saved replies removed: %d\n- Stored files removed: %d\n",
 		u.Source, u.Conversations, u.Contacts, u.Tags, u.SavedReplies, u.Files)
-	fmt.Fprintf(&b, "- Knowledge base removed: %d articles, %d collections, %d images, %d translations of kept articles, %d collection names, %d languages\n",
-		u.KBArticles, u.KBCollections, u.KBImages, u.KBTranslations, u.KBCollectionNames, u.KBLanguages)
+	fmt.Fprintf(&b, "- Knowledge base removed: %d articles, %d collections, %d images, %d files, %d translations of kept articles, %d collection names, %d languages\n",
+		u.KBArticles, u.KBCollections, u.KBImages, u.KBFiles, u.KBTranslations, u.KBCollectionNames, u.KBLanguages)
 	kept := []struct {
 		what string
 		ids  []string
@@ -121,6 +127,9 @@ func (u UndoResult) Markdown() string {
 	}
 	if u.KeptKBImages > 0 {
 		fmt.Fprintf(&b, "- Images kept because a person kept them in the media library: %d\n", u.KeptKBImages)
+	}
+	if u.KeptKBFiles > 0 {
+		fmt.Fprintf(&b, "- Files kept because a person kept them in the media library or replaced them: %d\n", u.KeptKBFiles)
 	}
 	return b.String()
 }
@@ -392,6 +401,11 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 	}); err != nil {
 		return nil, fmt.Errorf("undo knowledge base images: %w", err)
 	}
+	fileKeys, err := undoKBFiles(ctx, tx, workspaceID, source, result)
+	if err != nil {
+		return nil, err
+	}
+	keys = append(keys, fileKeys...)
 	// The languages the import added go once nothing is written in them.
 	tag, err = tx.Exec(ctx, `DELETE FROM help_center_languages l USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_language'
 		AND (i.meta->>'created')::boolean AND l.workspace_id=i.workspace_id AND l.locale=i.source_id
@@ -427,7 +441,7 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 			result.KeptKBPrimaryLanguage = current
 		}
 	}
-	if result.KBArticles+result.KBCollections+result.KBImages+result.KBTranslations+result.KBCollectionNames+result.KBLanguages > 0 {
+	if result.KBArticles+result.KBCollections+result.KBImages+result.KBFiles+result.KBTranslations+result.KBCollectionNames+result.KBLanguages > 0 {
 		// A help center page cached under the old content version is stale now.
 		if _, err := tx.Exec(ctx, `UPDATE help_centers SET content_version=content_version+1, updated_at=clock_timestamp() WHERE workspace_id=$1`, workspaceID); err != nil {
 			return nil, fmt.Errorf("bump knowledge base version: %w", err)

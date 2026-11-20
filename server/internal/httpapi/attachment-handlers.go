@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -45,26 +44,5 @@ func contentDisposition(filename string) string {
 		}
 		return r
 	}, filename)
-	return `attachment; filename="` + fallback + `"; filename*=UTF-8''` + encodeAttrChars(filename)
-}
-
-// encodeAttrChars percent-encodes every byte that is not an RFC 5987 attr-char.
-func encodeAttrChars(value string) string {
-	var b strings.Builder
-	for _, c := range []byte(value) {
-		if isAttrChar(c) {
-			b.WriteByte(c)
-			continue
-		}
-		fmt.Fprintf(&b, "%%%02X", c)
-	}
-	return b.String()
-}
-
-func isAttrChar(c byte) bool {
-	switch {
-	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
-		return true
-	}
-	return strings.IndexByte("!#$&+-.^_`|~", c) >= 0
+	return `attachment; filename="` + fallback + `"; filename*=UTF-8''` + attachments.EncodeFilename(filename)
 }

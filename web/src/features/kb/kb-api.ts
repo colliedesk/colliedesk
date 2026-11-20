@@ -46,24 +46,26 @@ const summaryFields = {
   has_draft: z.boolean(),
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
+// A file listed under an article or translation, in the order the reader sees.
+const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
 // The unpublished changes of a published article: what publishing them puts live. Its updated_at is the
 // version every save, publish, discard, restore or delete sends while it exists.
 const draftSchema = z.object({
   title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), collection_id: z.string().uuid(),
-  collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
-  updated_by: personSchema.nullable(),
+  collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
+  updated_at: z.string().datetime(), updated_by: personSchema.nullable(),
 }) satisfies z.ZodType<Generated<'KBArticleDraft'>>;
 export const kbArticleSchema = z.object({
   ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
   ai_exclusion: z.object({ at: z.string().datetime(), by: personSchema.nullable() }).nullable(),
   // Only when one article is read: the AI reply drafts this month that used it.
   ai_drafts_this_month: z.number().int().optional(),
-  translations: z.array(translationSummarySchema),
+  translations: z.array(translationSummarySchema), attachments: z.array(attachmentSchema),
   draft: draftSchema.nullable(),
 }) satisfies z.ZodType<Generated<'KBArticle'>>;
 export const kbTranslationSchema = z.object({
   ...translationSummaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), has_source_html: z.boolean(), deleted_at: nullableDate,
-  language_visible: z.boolean(), missing_media: z.array(z.string().uuid()).optional(),
+  language_visible: z.boolean(), missing_media: z.array(z.string().uuid()).optional(), attachments: z.array(attachmentSchema),
   original: z.object({
     id: z.string().uuid(), number: z.number().int(), locale: z.string(), title: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(),
     status: statusSchema, collection_id: z.string().uuid(), collection_name: z.string(), version: z.number().int(), updated_at: z.string().datetime(),
@@ -118,6 +120,7 @@ export type TrashedKBCollection = z.infer<typeof trashedCollectionSchema>;
 export type KBArticleSummary = z.infer<typeof summarySchema>;
 export type KBArticle = z.infer<typeof kbArticleSchema>;
 export type KBArticleDraft = z.infer<typeof draftSchema>;
+export type KBAttachment = z.infer<typeof attachmentSchema>;
 export type TrashedKBArticle = z.infer<typeof trashedArticleSchema>;
 export type KBArticleVersion = z.infer<typeof versionSchema>;
 export type KBArticlePage = z.infer<typeof articlePageSchema>;
@@ -136,7 +139,8 @@ export type KBLanguageState = 'missing' | 'outdated' | 'translated';
 
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
   | 'restoreKBArticleVersion' | 'putHelpCenter' | 'setKBOrder' | 'putHelpCenterLanguages' | 'createKBTranslation' | 'updateKBTranslation' | 'restoreKBTranslation'
-  | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation' | 'publishKBArticleDraft';
+  | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation' | 'publishKBArticleDraft'
+  | 'setKBArticleAttachments' | 'setKBTranslationAttachments';
 const json = <O extends Operation>(value: RequestBody<O>): string => JSON.stringify(value);
 
 // The calls that answer 204 carry no body.
@@ -189,6 +193,9 @@ export const kbApi = {
   versions: (id: string, beforeVersion?: number) => request(`/api/v1/kb/articles/${id}/versions${before(beforeVersion)}`, versionPageSchema),
   restoreVersion: (id: string, version: number, updatedAt: string) => request(`/api/v1/kb/articles/${id}/versions/${version}/restore`, kbArticleSchema,
     { method: 'POST', body: json<'restoreKBArticleVersion'>({ updated_at: updatedAt }) }),
+  // The files listed under the article, in order; on a published article they go into its draft.
+  setAttachments: (id: string, mediaIds: string[], updatedAt: string) => request(`/api/v1/kb/articles/${id}/attachments`, kbArticleSchema,
+    { method: 'PUT', body: json<'setKBArticleAttachments'>({ media_ids: mediaIds, updated_at: updatedAt }) }),
   // The body is the image itself; its own type replaces the JSON one request() sets.
   uploadImage: (file: Blob) => request('/api/v1/kb/images', imageSchema, { method: 'POST', body: file, headers: { 'Content-Type': file.type } }),
   // The lists name everything directly under parent_id, first to last; a stale pair is a ConflictError
@@ -218,6 +225,9 @@ export const kbApi = {
     translationVersionPageSchema),
   restoreTranslationVersion: (id: string, locale: string, version: number, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/versions/${version}/restore`,
     kbTranslationSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'restoreKBTranslationVersion'>({ updated_at: updatedAt }) }),
+  // A translation's own files apply at once; with none, the help center lists the article's.
+  setTranslationAttachments: (id: string, locale: string, mediaIds: string[], updatedAt: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/attachments`,
+    kbTranslationSchema, { method: 'PUT', body: json<'setKBTranslationAttachments'>({ media_ids: mediaIds, updated_at: updatedAt }) }),
   nameCollection: (id: string, locale: string, value: RequestBody<'putKBCollectionTranslation'>) => request(`/api/v1/kb/collections/${id}/translations/${encodeURIComponent(locale)}`,
     kbCollectionSchema, { method: 'PUT', body: json<'putKBCollectionTranslation'>(value) }),
   unnameCollection: (id: string, locale: string) => request(`/api/v1/kb/collections/${id}/translations/${encodeURIComponent(locale)}`, kbCollectionSchema, { method: 'DELETE' }),
