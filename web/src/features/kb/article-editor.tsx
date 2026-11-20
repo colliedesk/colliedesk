@@ -12,11 +12,12 @@ import { SavedReplyHistory } from '../settings/saved-reply-panels';
 import { ArticleTranslationsBox } from './article-translations';
 import { ArticleVotesBox } from './article-votes';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
+import { ArticleAttachments } from './article-attachments';
 import { ArticleDraftBar, draftMessages, editable } from './article-draft';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
 import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
-import type { KBArticle, KBArticleStatus, KBArticleVersion } from './kb-api';
+import type { KBArticle, KBArticleStatus, KBArticleVersion, KBAttachment } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { CollectionsField, withHome } from './collections-field';
 import { buildTree, flatten, reason } from './kb-tree';
@@ -326,9 +327,14 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     window.addEventListener('pageshow', back);
     return () => { window.removeEventListener('pagehide', leave); window.removeEventListener('pageshow', back); leave(); };
   }, []);
+  // The Attachments strip takes the files pasted or dropped into the text: an article lists them under it.
+  const attachIn = useRef<(files: File[]) => void>(undefined);
   const imageHooks = useMemo<UploadHooks>(() => ({
-    accept: (files) => {
+    accept: (all) => {
       const problems: string[] = [];
+      const listed = all.filter((file) => kindOf(file) === 'file');
+      if (listed.length > 0) attachIn.current?.(listed);
+      const files = all.filter((file) => kindOf(file) !== 'file');
       const accepted = files.filter((file) => {
         const problem = fileProblem(file);
         if (problem === 'type') problems.push(kbMessages.imageType(file.name));
@@ -430,6 +436,19 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     show(restored);
     client.setQueryData(['kb-article', restored.id], restored);
     void refresh();
+  };
+
+  // The list of files is saved on its own, at once: text typed meanwhile stays in the form, and the next save
+  // sends the updated_at this answer gave. Two lists saved one after another read the newest article here.
+  const rawNow = useRef(raw);
+  rawNow.current = raw;
+  const setAttachments = async (mediaIds: string[]): Promise<KBAttachment[]> => {
+    const changed = await kbApi.setAttachments(rawNow.current!.id, mediaIds, editable(rawNow.current!).updated_at);
+    rawNow.current = changed;
+    setBase(changed);
+    client.setQueryData(['kb-article', changed.id], changed);
+    void refresh();
+    return editable(changed).attachments;
   };
 
   // Excluding from AI or including again changes neither the text nor updated_at, so an edit in progress stays.
@@ -642,6 +661,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
               {!handle && <p role="status" className="kb-editor-loading kb-hint">{kbMessages.loadingEditor}</p>}
             </div>
           </div>
+          <ArticleAttachments files={base?.attachments ?? []} onSet={base ? setAttachments : undefined} incoming={attachIn} />
         </div>
         {!phone && <aside className="kb-editor-side" aria-label={kbMessages.articleSettings}>{details}</aside>}
       </form>

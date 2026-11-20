@@ -7,25 +7,27 @@ import (
 
 // restKBDraft is the unpublished changes of a published article, as the API answers them.
 type restKBDraft struct {
-	Title          string      `json:"title"`
-	Slug           string      `json:"slug"`
-	BodyMD         string      `json:"body_md"`
-	SEOTitle       string      `json:"seo_title"`
-	SEODescription string      `json:"seo_description"`
-	CollectionID   string      `json:"collection_id"`
-	CollectionIDs  []string    `json:"collection_ids"`
-	ShowContents   bool        `json:"show_contents"`
-	UpdatedAt      string      `json:"updated_at"`
-	UpdatedBy      *restPerson `json:"updated_by"`
+	Title          string             `json:"title"`
+	Slug           string             `json:"slug"`
+	BodyMD         string             `json:"body_md"`
+	SEOTitle       string             `json:"seo_title"`
+	SEODescription string             `json:"seo_description"`
+	CollectionID   string             `json:"collection_id"`
+	CollectionIDs  []string           `json:"collection_ids"`
+	ShowContents   bool               `json:"show_contents"`
+	UpdatedAt      string             `json:"updated_at"`
+	UpdatedBy      *restPerson        `json:"updated_by"`
+	Attachments    []restKBAttachment `json:"attachments"`
 }
 
 // kbArticleDraftOut is what publishing the draft would put live; the live text stays in team_text.
 type kbArticleDraftOut struct {
-	TeamText      kbTeamText `json:"team_text"`
-	Slug          string     `json:"slug"`
-	CollectionIDs []string   `json:"collection_ids"`
-	ShowContents  bool       `json:"show_contents"`
-	UpdatedBy     *string    `json:"updated_by"`
+	TeamText      kbTeamText        `json:"team_text"`
+	Slug          string            `json:"slug"`
+	CollectionIDs []string          `json:"collection_ids"`
+	ShowContents  bool              `json:"show_contents"`
+	UpdatedBy     *string           `json:"updated_by"`
+	Attachments   []kbAttachmentOut `json:"attachments"`
 }
 
 // withDraft adds an article's draft to its view. updated_at stays the article's, the one every change sends back.
@@ -40,7 +42,7 @@ func (out *kbArticleOut) withDraft(article restKBArticle) {
 		ids = []string{draft.CollectionID}
 	}
 	out.Draft = &kbArticleDraftOut{TeamText: kbTeamText{draft.Title, draft.BodyMD, draft.SEOTitle, draft.SEODescription},
-		Slug: draft.Slug, CollectionIDs: ids, ShowContents: draft.ShowContents}
+		Slug: draft.Slug, CollectionIDs: ids, ShowContents: draft.ShowContents, Attachments: kbAttachmentsView(draft.Attachments)}
 	if draft.UpdatedBy != nil {
 		out.Draft.UpdatedBy = &draft.UpdatedBy.Name
 	}

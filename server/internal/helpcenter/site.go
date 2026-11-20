@@ -405,6 +405,8 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		s.image(response, request, view, strings.TrimPrefix(sub, "/images/"))
 	case strings.HasPrefix(sub, "/media/"):
 		s.video(response, request, view, strings.TrimPrefix(sub, "/media/"))
+	case strings.HasPrefix(sub, filesPath):
+		s.file(response, request, view, strings.TrimPrefix(sub, filesPath))
 	case strings.HasPrefix(sub, stylePath):
 		s.brandAsset(response, request, view, strings.TrimPrefix(sub, stylePath))
 	case sub == "/robots.txt" && (base == "" || at.atRoot):
@@ -447,7 +449,7 @@ func (s *Site) channelRoute(request *http.Request, sub string) http.Handler {
 	if sub == "" || sub == "/" || sub == "/search" || sub == "/robots.txt" {
 		return nil
 	}
-	for _, prefix := range []string{"/c/", "/a/", "/images/", "/media/", stylePath} {
+	for _, prefix := range []string{"/c/", "/a/", "/images/", "/media/", filesPath, stylePath} {
 		if strings.HasPrefix(sub, prefix) {
 			return nil
 		}

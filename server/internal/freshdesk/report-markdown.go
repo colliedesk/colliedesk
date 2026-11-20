@@ -44,7 +44,8 @@ func (r *Report) Markdown() string {
 		count EntityCount
 	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Inline images", r.InlineImages.EntityCount}, {"Time entries", r.TimeEntries}, {"Saved replies", r.SavedReplies.EntityCount},
 		{"Knowledge base collections", r.KnowledgeBase.Collections}, {"Knowledge base articles", r.KnowledgeBase.Articles},
-		{"Knowledge base translations", r.KnowledgeBase.Translations}, {"Knowledge base collection names", r.KnowledgeBase.CollectionNames}, {"Knowledge base images", r.KnowledgeBase.Images.EntityCount}} {
+		{"Knowledge base translations", r.KnowledgeBase.Translations}, {"Knowledge base collection names", r.KnowledgeBase.CollectionNames}, {"Knowledge base images", r.KnowledgeBase.Images.EntityCount},
+		{"Knowledge base files", r.KnowledgeBase.Files}} {
 		fmt.Fprintf(&b, "| %s | %d | %d | %d |\n", row.name, row.count.Source, row.count.Imported, row.count.Failed)
 	}
 	fmt.Fprintf(&b, "\nAttachment bytes: %d in Freshdesk, %d stored. SHA-256 re-verified from storage: %d.\n",

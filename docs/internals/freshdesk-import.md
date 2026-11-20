@@ -350,8 +350,14 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   subscript and superscript, a link whose scheme is not http, https or mailto (its text stays), and
   any tag the converter left in the Markdown (only players' raw HTML is shown). A rerun takes an
   article again only when Freshdesk changed it, and undo removes it whole, so neither behaves
-  differently. Files on an article are not in the
-  documented attributes; if the API sends them they are listed (`kb_article_attachments_not_imported`). `source_html` keeps the original; `source_meta` keeps `tags`, `seo_data`, `hits`,
+  differently. Files on an article or translation
+  (`attachments`, not in the documented attributes) become media library files listed on it in their
+  order: one `kb_file` ledger row each, source id `<article>:<attachment>` or
+  `<article>:<lang>:<attachment>`. The reported size is checked before the download, the bytes after it
+  (25 MiB per file, 100 MiB per article, magic bytes and extension); a refused or failed file fails the
+  article's ledger row with the file name and reason, so the reconcile is `FAILED` and a rerun retries it.
+  The list is written straight to the live list, as the body is, not as a draft. Undo deletes the
+  created files nothing lists, except a file a person kept or replaced in place. `source_html` keeps the original; `source_meta` keeps `tags`, `seo_data`, `hits`,
   `thumbs_*`, `type`, `status`, `hierarchy`, `agent_id` and the draft reason. Timestamps are
   Freshdesk's; `published_at` is `updated_at` (Freshdesk has no publish time). The author is the
   Colliedesk agent with the Freshdesk agent's email.

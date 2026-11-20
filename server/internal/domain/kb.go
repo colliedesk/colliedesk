@@ -162,6 +162,8 @@ type KBArticleTranslation struct {
 	// LanguageVisible tells whether the help center shows this language to customers.
 	LanguageVisible bool                  `json:"language_visible"`
 	Original        KBTranslationOriginal `json:"original"`
+	// Attachments are the files the translation lists; empty shows the article's on its page.
+	Attachments KBAttachments `json:"attachments"`
 }
 
 // TrashedKBTranslation is a deleted translation, restorable until PurgesAt.
@@ -265,7 +267,9 @@ type KBArticle struct {
 	// Draft is the unpublished changes of a published article; nil without them.
 	Draft        *KBArticleDraft        `json:"draft"`
 	Translations []KBTranslationSummary `json:"translations"`
-	DeletedAt    *time.Time             `json:"deleted_at"`
+	// Attachments are the files the help center lists under the published text.
+	Attachments KBAttachments `json:"attachments"`
+	DeletedAt   *time.Time    `json:"deleted_at"`
 	// AIExclusion is set while AI may not read the article, in any language.
 	AIExclusion *KBAIExclusion `json:"ai_exclusion"`
 	// MissingMedia is set only in the answer to a save: media ids the text names that the library
@@ -516,6 +520,9 @@ type PublicKBArticle struct {
 	Alternates map[string]string
 	// Votes are what the page counts of "Was this article helpful?", read with the article page only.
 	Votes KBVoteCount
+	// Attachments are the files the page lists for download under the text, read with the article
+	// page and the help center index only; URL is left empty, the help center gives each its own address.
+	Attachments KBAttachments
 }
 
 // PublicKBTranslation is a published translation the help center shows, for sitemap.xml.

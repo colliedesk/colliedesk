@@ -49,7 +49,7 @@ func Catalog() []Spec {
 		kbArticlesSearchSpec(), kbArticleGetSpec(), kbArticleCreateSpec(), kbArticleUpdateSpec(), kbArticleDeleteSpec(), kbArticlesTrashSpec(), kbArticleUndeleteSpec(),
 		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbArticleAIExcludeSpec(), kbArticleAIIncludeSpec(), kbArticleDraftPublishSpec(), kbArticleDraftDiscardSpec(), kbArticleVotesGetSpec(), kbArticleVotesResetSpec(), kbImageUploadSpec(), kbImageGetSpec(),
 		kbMediaListSpec(), kbMediaGetSpec(), kbMediaUpdateSpec(), kbMediaTrashSpec(), kbMediaTrashListSpec(), kbMediaUndeleteSpec(), kbMediaPurgeSpec(), kbMediaReplaceSpec(), kbMediaReplaceUndoSpec(),
-		kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
+		kbFileUploadSpec(), kbArticleAttachmentsSetSpec(), kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
 		helpCenterLanguagesGetSpec(), helpCenterLanguagesSetSpec(), kbTranslationsListSpec(), kbTranslationsTrashSpec(), kbTranslationCreateSpec(), kbTranslationGetSpec(),
 		kbTranslationUpdateSpec(), kbTranslationDeleteSpec(), kbTranslationUndeleteSpec(), kbTranslationHistorySpec(), kbTranslationVersionRestoreSpec(),
 		kbCollectionTranslationSetSpec(), kbCollectionTranslationDeleteSpec(),

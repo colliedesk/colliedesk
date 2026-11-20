@@ -30,6 +30,16 @@ const (
 const (
 	KBMediaImage = "image"
 	KBMediaVideo = "video"
+	// KBMediaFile is a document or archive an article lists under its body for download.
+	KBMediaFile = "file"
+)
+
+// Limits of attached files.
+const (
+	// MaxKBFileBytes is the largest file the library takes.
+	MaxKBFileBytes = 25 << 20
+	// MaxKBArticleFileBytes is the most bytes of files one article, or one of its translations, lists.
+	MaxKBArticleFileBytes = 100 << 20
 )
 
 // KBMediaPath is the API path of a library item; KBImagePath is the older path of an image, which
@@ -115,7 +125,7 @@ type KBMediaSummary struct {
 	KeptBytes int64 `json:"kept_bytes"`
 }
 
-// KBMediaFilter selects library items. Kind is empty, image or video; Usage is empty, in_use,
+// KBMediaFilter selects library items. Kind is empty, image, video or file; Usage is empty, in_use,
 // unused or missing_alt; Sort is newest (default), oldest, name or largest.
 type KBMediaFilter struct {
 	Kind, Query, Usage, Sort, Cursor string
@@ -158,14 +168,14 @@ type KBMediaResult struct {
 var (
 	ErrKBMediaNotFound      = errors.New("knowledge base media not found")
 	ErrKBMediaBatchNotFound = errors.New("knowledge base media batch not found")
-	ErrKBMediaLimit         = fmt.Errorf("a workspace holds at most %d images and videos in its media library, counting the trash; delete some first", MaxKBMedia)
+	ErrKBMediaLimit         = fmt.Errorf("a workspace holds at most %d images, videos and files in its media library, counting the trash; delete some first", MaxKBMedia)
 )
 
 // CheckKBMediaFilter refuses an unknown kind, usage or sort.
 func CheckKBMediaFilter(filter KBMediaFilter) error {
 	switch {
-	case filter.Kind != "" && filter.Kind != KBMediaImage && filter.Kind != KBMediaVideo:
-		return invalidKB("kind is image or video.")
+	case filter.Kind != "" && filter.Kind != KBMediaImage && filter.Kind != KBMediaVideo && filter.Kind != KBMediaFile:
+		return invalidKB("kind is image, video or file.")
 	case filter.Usage != "" && filter.Usage != "in_use" && filter.Usage != "unused" && filter.Usage != "missing_alt":
 		return invalidKB("usage is in_use, unused or missing_alt.")
 	case filter.Sort != "" && filter.Sort != "newest" && filter.Sort != "oldest" && filter.Sort != "name" && filter.Sort != "largest":
@@ -216,6 +226,9 @@ type KBMediaReplacement struct {
 	SkippedArticleIDs []string   `json:"skipped_article_ids"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UndoneAt          *time.Time `json:"undone_at"`
+	// InPlace is a file's replacement: the file kept its id and took the new bytes, and the item put in
+	// its place holds the earlier version in the trash.
+	InPlace bool `json:"in_place"`
 }
 
 // KBMediaReplacedTranslation is a translation a replacement rewrote.
@@ -227,7 +240,7 @@ type KBMediaReplacedTranslation struct {
 var (
 	ErrKBMediaReplacementNotFound = errors.New("knowledge base media replacement not found")
 	// ErrKBMediaKindMismatch means a replacement of an image by a video or the other way.
-	ErrKBMediaKindMismatch = errors.New("an image is replaced by an image, a video by a video")
+	ErrKBMediaKindMismatch = errors.New("an image is replaced by an image, a video by a video, a file by a file")
 	// ErrKBMediaGone means the item a replacement would bring back was deleted for good.
 	ErrKBMediaGone = errors.New("the replaced item was deleted for good, so the replacement cannot be undone")
 )
@@ -282,6 +295,8 @@ type KBMediaUpload struct {
 
 // NewKBMediaUpload is what starting an upload asks.
 type NewKBMediaUpload struct {
+	// Kind is KBMediaVideo or KBMediaFile.
+	Kind string
 	Size int64
 	KBImageUpload
 }

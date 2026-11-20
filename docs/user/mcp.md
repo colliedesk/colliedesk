@@ -190,7 +190,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_media_purge` | Deletes items in the trash for good, freeing their storage. Cannot be undone | `kb_media:purge` |
 | `colliedesk_kb_media_replace` | Puts another image or video in place of one in every article that shows it | `kb_media:update` |
 | `colliedesk_kb_media_replace_undo` | Undoes a replacement | `kb_media:update` |
-| `colliedesk_kb_video_upload_start` | Starts uploading a video (MP4 or WebM, up to 200 MiB) in parts | `kb_media:create` |
+| `colliedesk_kb_file_upload` | Uploads a file (PDF, Office, CSV, ZIP...) of up to 5 MiB in one call, to list under articles | `kb_media:create` |
+| `colliedesk_kb_article_attachments_set` | Sets the files listed for download under an article or one translation, in order | `kb_articles:update` |
+| `colliedesk_kb_video_upload_start` | Starts uploading a video (MP4 or WebM, up to 200 MiB) or, with kind file, a file of up to 25 MiB, in parts | `kb_media:create` |
 | `colliedesk_kb_video_upload_part` | Sends the next part of an upload (up to 5 MiB, base64) | `kb_media:create` |
 | `colliedesk_kb_video_upload_status` | Says where an upload stands, to go on after an interruption | `kb_media:read` |
 | `colliedesk_kb_video_upload_list` | Lists the workspace's uploads in progress, who started each and when it expires | `kb_media:read` |

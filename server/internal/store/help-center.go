@@ -284,6 +284,9 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID string, num
 		if article.Votes, err = publicKBVoteCount(ctx, tx, workspaceID, id); err != nil {
 			return article, err
 		}
+		if article.Attachments, err = publicKBAttachments(ctx, tx, workspaceID, id, locale); err != nil {
+			return article, err
+		}
 		if !strings.Contains(body, domain.KBMediaPath) {
 			return article, nil
 		}
@@ -345,21 +348,22 @@ func (s *Store) SearchHelpCenter(ctx context.Context, workspaceID, query string,
 }
 
 // SearchHelpCenterIn is SearchHelpCenter in language locale: it searches the published translations
-// in it ("" is the primary language), their own words, never the primary text.
+// in it ("" is the primary language), their own words, never the primary text. The text of a file the
+// page lists finds its article too, ranked below the article's own words.
 func (s *Store) SearchHelpCenterIn(ctx context.Context, workspaceID, locale, query string, limit int) ([]domain.PublicKBArticle, error) {
-	sql := `WITH hits AS (
-				SELECT a.id, COALESCE(ts_rank(a.search, t.q), 0) AS rank, a.updated_at
-				FROM kb_articles a CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) t
-				WHERE ` + publishedKBArticle + ` AND (a.search @@ t.q OR a.title ILIKE $3)
+	sql := `WITH ` + fileHits(`l.locale IS NULL`) + `, hits AS (
+				SELECT a.id, COALESCE(ts_rank(a.search, t.q), 0) + COALESCE(f.rank, 0) / 2 AS rank, a.updated_at
+				FROM kb_articles a CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) t LEFT JOIN files f ON f.article_id=a.id
+				WHERE ` + publishedKBArticle + ` AND (a.search @@ t.q OR a.title ILIKE $3 OR f.article_id IS NOT NULL)
 				ORDER BY rank DESC, a.updated_at DESC, a.id DESC LIMIT $4)
 			SELECT ` + publicKBArticleColumns + `, left(a.body_md, $5) FROM hits h JOIN kb_articles a ON a.workspace_id=$1 AND a.id=h.id
 			ORDER BY h.rank DESC, h.updated_at DESC, h.id DESC`
 	args := []any{workspaceID, query, "%" + likePattern.Replace(query) + "%", limit, helpCenterExcerptChars}
 	if locale != "" {
-		sql = `WITH hits AS (
-				SELECT a.id, COALESCE(ts_rank(t.search, w.q), 0) AS rank, t.updated_at
-				FROM kb_articles a` + shownTranslation(`$6`) + ` CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) w
-				WHERE ` + publishedKBArticle + ` AND (t.search @@ w.q OR t.title ILIKE $3)
+		sql = `WITH ` + fileHits(translationFiles) + `, hits AS (
+				SELECT a.id, COALESCE(ts_rank(t.search, w.q), 0) + COALESCE(f.rank, 0) / 2 AS rank, t.updated_at
+				FROM kb_articles a` + shownTranslation(`$6`) + ` CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) w LEFT JOIN files f ON f.article_id=a.id
+				WHERE ` + publishedKBArticle + ` AND (t.search @@ w.q OR t.title ILIKE $3 OR f.article_id IS NOT NULL)
 				ORDER BY rank DESC, t.updated_at DESC, a.id DESC LIMIT $4)
 			SELECT ` + publicKBTranslationColumns + `, left(t.body_md, $5) FROM hits h JOIN kb_articles a ON a.workspace_id=$1 AND a.id=h.id
 				JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$6
@@ -419,12 +423,15 @@ type ChatKBArticle struct {
 	Version int
 	Title   string
 	Folder  string
-	// Size is the body's length in bytes; Body is read only when asked for.
+	// Size is the body's length in bytes, with the text of the files its page lists (kbFilesText);
+	// Body is read only when asked for, followed by that text.
 	Size int
 	Body string
 	// Locale is the language of Title and Body when they are a published translation shown to
 	// customers ("" the article's own text); TextKey changes with that translation.
 	Locale, TextKey string
+	// FilesKey changes with the files the page lists; "" while it lists none.
+	FilesKey string
 }
 
 // ChatKBArticles lists the articles the help center shows (publishedKBArticle) that are not kept away
@@ -456,11 +463,15 @@ func ChatKBArticlesIn(ctx context.Context, tx pgx.Tx, workspaceID string, withBo
 	if err != nil {
 		return nil, fmt.Errorf("read the help center for AI chat: %w", err)
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ChatKBArticle, error) {
+	articles, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ChatKBArticle, error) {
 		var a ChatKBArticle
 		err := row.Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey)
 		return a, err
 	})
+	if err != nil {
+		return nil, fmt.Errorf("read the help center for AI chat: %w", err)
+	}
+	return articles, withKBFiles(ctx, tx, workspaceID, articles, withBodies)
 }
 
 // ChatKBArticleIDOf is the id of the article the help center shows under a number, when ChatKBArticles
@@ -499,6 +510,9 @@ func ChatKBArticlesByIDIn(ctx context.Context, tx pgx.Tx, workspaceID string, id
 	if err != nil {
 		return nil, fmt.Errorf("read help center articles for AI chat: %w", err)
 	}
+	if err := withKBFiles(ctx, tx, workspaceID, list, true); err != nil {
+		return nil, err
+	}
 	for _, a := range list {
 		found[a.ID] = a
 	}
@@ -513,5 +527,12 @@ func ChatKBArticleByIDIn(ctx context.Context, tx pgx.Tx, workspaceID, id, locale
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ChatKBArticle{}, false, nil
 	}
-	return a, err == nil, err
+	if err != nil {
+		return ChatKBArticle{}, false, err
+	}
+	one := []ChatKBArticle{a}
+	if err := withKBFiles(ctx, tx, workspaceID, one, true); err != nil {
+		return ChatKBArticle{}, false, err
+	}
+	return one[0], true, nil
 }

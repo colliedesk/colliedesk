@@ -559,10 +559,9 @@ func TestSolutionsMarkupMarkdownCannotHoldIsNamed(t *testing.T) {
 	env := newImportEnv(t).withSolutions()
 	env.editSolutions(func(fixture map[string]any) {
 		fixtureArticle(fixture, "11", 101)["description"] = "<table><tr><th>A</th><th>B</th></tr><tr><td><p>one</p><p>two</p></td><td>x</td></tr></table><p>H<sub>2</sub>O</p>"
-		fixtureArticle(fixture, "11", 102)["attachments"] = []any{map[string]any{"id": 1.0, "name": "guide.pdf", "size": 3.0}}
 	})
 	report := env.mustRun(t)
-	if warningIDs(report, "kb_article_markup_dropped") != "101,106" || warningIDs(report, "kb_article_attachments_not_imported") != "102" {
+	if warningIDs(report, "kb_article_markup_dropped") != "101,106" {
 		t.Fatalf("warnings = %+v", report.Warnings)
 	}
 	var meta string

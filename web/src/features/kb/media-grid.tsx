@@ -4,6 +4,7 @@ import { formatBytes } from '../../lib/format-bytes';
 import type { KBMedia } from './media-api';
 import { mediaMessages } from './media-messages';
 import { Icon } from './editor/icons';
+import { fileFormat } from './kb-file-types';
 
 // The cards of the media library: a 4:3 picture (the thumbnail, a video's poster thumbnail), a video's
 // length on it, the name and the size. A card opens the item, or, in a page that selects, ticks it.
@@ -32,16 +33,27 @@ export function cardLabel(item: KBMedia, extra?: string) {
 function Picture({ item }: { item: KBMedia }) {
   return (
     <span className="media-picture" data-kind={item.kind} data-empty={item.thumbnail_url ? undefined : 'true'}>
-      {item.thumbnail_url ? <img src={item.thumbnail_url} alt="" loading="lazy" decoding="async" /> : <span className="media-picture-empty" aria-hidden="true" />}
+      {item.thumbnail_url ? <img src={item.thumbnail_url} alt="" loading="lazy" decoding="async" />
+        : item.kind === 'file' ? <FileGlyph name={item.name} /> : <span className="media-picture-empty" aria-hidden="true" />}
       {item.kind === 'video' && <span className="media-play" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M8 5v14l11-7Z" fill="currentColor" /></svg></span>}
       {item.kind === 'video' && item.duration_ms !== null && <span className="media-duration">{mediaMessages.duration(item.duration_ms)}</span>}
     </span>
   );
 }
 
-// facts is the card's second line: the size and, for an image its dimensions, for a video its format.
+// FileGlyph stands for a file, which has no picture: a page with its type on it.
+export function FileGlyph({ name }: { name: string }) {
+  return (
+    <span className="media-file-glyph" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="28" height="28"><path d="M6 2h8l5 5v15H6Z M14 2v5h5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></svg>
+      <span>{fileFormat(name)}</span>
+    </span>
+  );
+}
+
+// facts is the card's second line: the size and, for an image its dimensions, for a video or a file its format.
 export function facts(item: KBMedia) {
-  const format = item.kind === 'video' ? item.content_type.replace('video/', '').toUpperCase().replace('WEBM', 'WebM')
+  const format = item.kind === 'file' ? fileFormat(item.name) : item.kind === 'video' ? item.content_type.replace('video/', '').toUpperCase().replace('WEBM', 'WebM')
     : item.width !== null && item.height !== null ? `${item.width}×${item.height}` : '';
   return [formatBytes(item.size), format].filter(Boolean).join(' · ');
 }

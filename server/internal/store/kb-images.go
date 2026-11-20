@@ -267,8 +267,8 @@ type KBPurge struct {
 // show it as its logo or favicon.
 const kbMediaPurgeable = `((m.deleted_at IS NOT NULL AND m.deleted_at<$1)
 		OR (m.deleted_at IS NULL AND NOT m.kept AND m.last_uploaded_at<$1
-			AND NOT EXISTS(SELECT 1 FROM kb_article_media l WHERE l.workspace_id=m.workspace_id AND l.media_id=m.id)))
-	AND NOT EXISTS(SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+			AND NOT EXISTS(SELECT 1 FROM ` + kbMediaUses + ` l WHERE l.workspace_id=m.workspace_id AND l.media_id=m.id)))
+	AND NOT EXISTS(SELECT 1 FROM ` + kbMediaUses + ` l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
 		WHERE l.workspace_id=m.workspace_id AND l.media_id=m.id AND l.current AND a.deleted_at IS NULL)
 	AND NOT ` + kbMediaNamedByHelpCenter + `
 	AND NOT ` + kbMediaNamedByTemplate

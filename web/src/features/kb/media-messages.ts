@@ -1,4 +1,5 @@
 import { formatBytes } from '../../lib/format-bytes';
+import { fileExtensions } from './kb-file-types';
 
 // Strings of the media library pages, in the knowledge base chunk.
 const plural = (count: number, one: string, many: string) => `${count.toLocaleString('en')} ${count === 1 ? one : many}`;
@@ -11,7 +12,7 @@ export const mediaMessages = {
   libraryHeading: 'Library items',
   description: 'The images and videos of your articles. Upload here, then insert them from the editor.',
   upload: 'Upload',
-  uploadHint: 'Images up to 5 MB, videos up to 200 MiB (MP4 or WebM). Drop files anywhere on this page.',
+  uploadHint: 'Images up to 5 MB, videos up to 200 MiB (MP4 or WebM), files for articles to list up to 25 MiB. Drop files anywhere on this page.',
   dropHere: 'Drop to upload to the library',
   notMedia: (names: string) => `Only PNG, JPEG, GIF and WebP images and MP4 and WebM videos go in the library, so not uploaded: ${names}.`,
   search: 'Search media',
@@ -20,6 +21,7 @@ export const mediaMessages = {
   anyKind: 'All',
   images: 'Images',
   videos: 'Videos',
+  files: 'Files',
   usage: 'Use',
   anyUsage: 'All',
   inUse: 'In use',
@@ -38,7 +40,7 @@ export const mediaMessages = {
   empty: 'No images or videos yet. Upload one, or paste one into an article.',
   noMatches: 'Nothing in the library matches.',
   unnamed: 'Unnamed',
-  kindName: (kind: 'image' | 'video') => (kind === 'video' ? 'video' : 'image'),
+  kindName: (kind: 'image' | 'video' | 'file') => kind,
   duration: (ms: number) => {
     const seconds = Math.round(ms / 1000);
     const hours = Math.floor(seconds / 3600);
@@ -71,8 +73,8 @@ export const mediaMessages = {
   resume: 'Resume',
   cancel: 'Cancel',
   clearFinished: 'Clear finished',
-  notMediaRow: 'Not an image or video (PNG, JPEG, GIF, WebP, MP4, WebM).',
-  overLimit: (size: number, limit: number, kind: 'image' | 'video') => `${formatBytes(size)} is over the ${formatBytes(limit)} ${kind} limit. Not uploaded.`,
+  notMediaRow: `Not a type the library holds. Images: PNG, JPEG, GIF, WebP. Videos: MP4, WebM. Files: ${fileExtensions.map((extension) => extension.toUpperCase()).join(', ')}.`,
+  overLimit: (size: number, limit: number, kind: 'image' | 'video' | 'file') => `${formatBytes(size)} is over the ${formatBytes(limit)} ${kind} limit. Not uploaded.`,
   dismiss: 'Dismiss',
   dismissName: (name: string) => `Dismiss ${name}`,
   uploadFailed: 'The upload failed. Resume to try again from where it stopped.',
@@ -113,7 +115,7 @@ export const mediaMessages = {
   useAndSort: 'Use and sort',
   done: 'Done',
   emptyHeading: 'Your library is empty',
-  emptyHelp: 'Drop screenshots and screen recordings here, or upload them. Images up to 5 MB (PNG, JPEG, GIF, WebP); videos up to 200 MiB (MP4, WebM). Images you paste into an article land here too.',
+  emptyHelp: 'Drop screenshots, screen recordings and files here, or upload them. Images up to 5 MB (PNG, JPEG, GIF, WebP); videos up to 200 MiB (MP4, WebM); files up to 25 MiB (PDF, Office, CSV, ZIP and more). Images you paste into an article and files you attach land here too.',
   uploadFiles: 'Upload files',
   // Not used
   breadcrumb: 'Breadcrumb',
@@ -145,7 +147,7 @@ export const mediaMessages = {
   andMore: (count: number) => `and ${count.toLocaleString('en')} more`,
   // Details
   details: 'Details',
-  noneSelected: 'Select an image or video to see its alt text, where it is used, and what you can do with it.',
+  noneSelected: 'Select an image, video or file to see its alt text, where it is used, and what you can do with it.',
   itemTabs: 'Item',
   usedInCount: (count: number) => `Used in ${count.toLocaleString('en')}`,
   unsavedChanges: 'Unsaved changes',
@@ -192,12 +194,16 @@ export const mediaMessages = {
   copied: 'Copied.',
   download: 'Download',
   replace: 'Replace…',
-  replaceHeading: (kind: 'image' | 'video') => `Replace with another ${kind}`,
+  replaceHeading: (kind: 'image' | 'video' | 'file') => `Replace with another ${kind}`,
   replaceHelp: 'Every article that shows this gets the other one.',
   replaceTip: 'Each article gets a new version; undo puts it back.',
   replaceLabel: 'replacing',
   replaceWith: (name: string) => `Replace with ${name}`,
   replaced: (count: number) => `Replaced in ${plural(count, 'article', 'articles')}.`,
+  replaceFileLabel: 'Choose the new version',
+  replaceFileTip: 'Upload the new version from your computer. It keeps this file\'s address, so every article that lists it offers the new one.',
+  replacedFile: 'Replaced. The articles that list it offer the new version at the same address.',
+  uploadingVersion: (percent: number) => `Uploading the new version… ${percent}%`,
   undo: 'Undo',
   undone: 'Put back.',
   undoneSkipped: (count: number) => `Put back, except in ${plural(count, 'article', 'articles')} changed since.`,

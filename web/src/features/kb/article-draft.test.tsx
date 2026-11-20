@@ -20,7 +20,7 @@ const live = (fields: Record<string, unknown> = {}) => article({ status: 'publis
 // the token every write sends, moves with them.
 const changed = (fields: Record<string, unknown> = {}, articleFields: Record<string, unknown> = {}) => live({ has_draft: true, updated_at: '2026-10-03T00:00:00Z', ...articleFields, draft: {
   title: 'Reset a password', slug: 'reset-your-password', body_md: 'Open **Settings**.\nChoose Password.', seo_title: '', seo_description: '', collection_id: ids.setup,
-  collection_ids: [ids.setup], show_contents: true, created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: { agent_id: null, name: 'Ada' }, ...fields } });
+  collection_ids: [ids.setup], show_contents: true, attachments: [], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: { agent_id: null, name: 'Ada' }, ...fields } });
 
 function open() {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ArticleRoute articleId={ids.article} /></QueryClientProvider>);

@@ -31,6 +31,7 @@ type restKBTranslation struct {
 	DeletedBy     *restPerson           `json:"deleted_by"`
 	PurgesAt      string                `json:"purges_at"`
 	Original      *restKBOriginal       `json:"original"`
+	Attachments   []restKBAttachment    `json:"attachments"`
 }
 
 type restKBOriginal struct {
@@ -80,13 +81,14 @@ type kbOriginalOut struct {
 
 type kbTranslationOut struct {
 	kbTranslationRowOut
-	TeamText        kbTeamText    `json:"team_text"`
-	LanguageVisible bool          `json:"language_visible"`
-	Original        kbOriginalOut `json:"original"`
+	TeamText        kbTeamText        `json:"team_text"`
+	LanguageVisible bool              `json:"language_visible"`
+	Original        kbOriginalOut     `json:"original"`
+	Attachments     []kbAttachmentOut `json:"attachments"`
 }
 
 func kbTranslationView(item restKBTranslation) map[string]any {
-	out := kbTranslationOut{kbTranslationRowOut: kbTranslationRow(item), TeamText: kbTeamText{item.Title, item.BodyMD, item.SEOTitle, item.SEODesc}, LanguageVisible: item.LanguageOn}
+	out := kbTranslationOut{kbTranslationRowOut: kbTranslationRow(item), TeamText: kbTeamText{item.Title, item.BodyMD, item.SEOTitle, item.SEODesc}, LanguageVisible: item.LanguageOn, Attachments: kbAttachmentsView(item.Attachments)}
 	if original := item.Original; original != nil {
 		out.Original = kbOriginalOut{ArticleID: original.ID, Number: original.Number, Locale: original.Locale, Status: original.Status, Collection: original.CollectionName,
 			Version: original.Version, UpdatedAt: original.UpdatedAt, TeamText: kbTeamText{original.Title, original.BodyMD, original.SEOTitle, original.SEODesc}}

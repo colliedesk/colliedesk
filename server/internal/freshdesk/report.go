@@ -117,6 +117,8 @@ type KnowledgeBaseCount struct {
 	// CollectionNames are the categories' and folders' names in other languages.
 	CollectionNames EntityCount  `json:"collection_names"`
 	Images          KBImageCount `json:"images"`
+	// Files are the files attached to articles and translations, one per file of each list.
+	Files EntityCount `json:"files"`
 	// Published lists the articles imported as published; Drafts the others, by reason.
 	Published []string            `json:"published"`
 	Drafts    map[string][]string `json:"drafts"`

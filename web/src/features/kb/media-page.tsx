@@ -21,6 +21,7 @@ import { baseName, useUploadQueue } from './media-uploads';
 import { can } from '../../lib/can';
 import type { UploadQueue, UploadRow } from './media-uploads';
 import { useHolds } from '../../lib/permissions-context';
+import { fileAccept } from './kb-file-types';
 
 export interface MediaSearch {
   q?: string;
@@ -32,7 +33,7 @@ export interface MediaSearch {
 export type MediaView = 'library' | 'unused' | 'trash';
 
 const viewPath = { library: '/knowledge/media', unused: '/knowledge/media/unused', trash: '/knowledge/media/trash' } as const;
-const accept = 'image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime,.mov';
+const accept = `image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime,.mov,${fileAccept}`;
 
 // Every change to the library can move items between the pages, so all of them are read again.
 function useRefreshMedia() {
@@ -305,7 +306,7 @@ function Library({ search, go, onChanged, onUpload, tray }: { search: MediaSearc
           <span id="media-search-hint" className="sr-only">{mediaMessages.searchHint}</span>
           <fieldset className="segmented">
             <legend className="sr-only">{mediaMessages.kind}</legend>
-            {([[undefined, mediaMessages.anyKind], ['image', mediaMessages.images], ['video', mediaMessages.videos]] as const).map(([value, label]) => (
+            {([[undefined, mediaMessages.anyKind], ['image', mediaMessages.images], ['video', mediaMessages.videos], ['file', mediaMessages.files]] as const).map(([value, label]) => (
               <label key={label}><input type="radio" name="media-kind" checked={search.kind === value} onChange={() => go('library', { kind: value })} />{label}</label>
             ))}
           </fieldset>

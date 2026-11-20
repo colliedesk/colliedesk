@@ -14,6 +14,12 @@
 <div class="prose">
 {{.Body}}
 </div>
+{{- if .Files}}
+<section class="downloads" aria-labelledby="downloads-title">
+<h2 id="downloads-title" class="section-label">{{.T.Downloads}}</h2>
+<ul class="downloads-list">{{range .Files}}<li><a href="{{.URL}}" download><span class="file-type" aria-hidden="true">{{.Type}}</span><span class="file-name">{{.Name}}</span></a><span class="file-size">{{.Type}}, {{.Size}}</span></li>{{end}}</ul>
+</section>
+{{- end}}
 {{- with .Votes}}
 <section class="helpful" id="helpful" aria-labelledby="helpful-title">
 <h2 id="helpful-title" class="helpful-title">{{.T.Question}}</h2>

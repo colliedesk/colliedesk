@@ -15,7 +15,7 @@ SELECT storage_key, 'colliedesk upgrade fixture image: ' || url_hash FROM mail_i
 SELECT i.storage_key, 'colliedesk upgrade fixture kb image: ' || w.slug FROM kb_images i JOIN workspaces w ON w.id = i.workspace_id ORDER BY 1;
 \endif
 \if :has_kb_media
-SELECT m.storage_key, 'colliedesk upgrade fixture kb ' || CASE m.kind WHEN 'video' THEN 'video' ELSE 'image' END || ': ' || w.slug FROM kb_media m JOIN workspaces w ON w.id = m.workspace_id ORDER BY 1;
+SELECT m.storage_key, 'colliedesk upgrade fixture kb ' || CASE m.kind WHEN 'video' THEN 'video' WHEN 'file' THEN 'file' ELSE 'image' END || ': ' || w.slug FROM kb_media m JOIN workspaces w ON w.id = m.workspace_id ORDER BY 1;
 SELECT m.thumb_storage_key, 'colliedesk upgrade fixture kb ' || CASE m.kind WHEN 'video' THEN 'video thumbnail' ELSE 'thumbnail' END || ': ' || w.slug FROM kb_media m JOIN workspaces w ON w.id = m.workspace_id WHERE m.thumb_storage_key IS NOT NULL ORDER BY 1;
 SELECT m.poster_storage_key, 'colliedesk upgrade fixture kb poster: ' || w.slug FROM kb_media m JOIN workspaces w ON w.id = m.workspace_id WHERE m.poster_storage_key IS NOT NULL ORDER BY 1;
 \endif

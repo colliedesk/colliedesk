@@ -94,6 +94,8 @@ func writeKBUploadError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "upload_incomplete", sentence(err)+".")
 	case errors.Is(err, media.ErrHEVC), errors.As(err, &codec):
 		writeError(response, http.StatusBadRequest, "unsupported_codec", sentence(err)+".")
+	case errors.Is(err, media.ErrFileType):
+		writeError(response, http.StatusBadRequest, "unsupported_file_type", sentence(err)+"; nothing was stored.")
 	case errors.Is(err, media.ErrNotVideo), errors.Is(err, media.ErrVideoDamaged), errors.Is(err, media.ErrVideoUnsafeTrack), errors.Is(err, media.ErrVideoTooLarge):
 		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+"; nothing was stored.")
 	default:
@@ -108,17 +110,29 @@ func (a *API) createKBMediaUpload(response http.ResponseWriter, request *http.Re
 		return
 	}
 	var input struct {
+		Kind string `json:"kind"`
 		Size *int64 `json:"size"`
 		Name string `json:"name"`
 		Alt  string `json:"alt"`
 		Keep bool   `json:"keep"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Size == nil || *input.Size <= 0 {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send size, the video's bytes, and name, alt and keep when wanted.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send size, the bytes to come, kind (video, the default, or file), and name, alt and keep when wanted.")
 		return
 	}
-	if max := a.kbVideoMaxBytes(); *input.Size > max {
-		writeError(response, http.StatusRequestEntityTooLarge, "too_large", fmt.Sprintf("A video holds at most %d MiB on this server; nothing was stored.", max>>20))
+	switch input.Kind {
+	case "", domain.KBMediaVideo:
+		input.Kind = domain.KBMediaVideo
+		if max := a.kbVideoMaxBytes(); *input.Size > max {
+			writeError(response, http.StatusRequestEntityTooLarge, "too_large", fmt.Sprintf("A video holds at most %d MiB on this server; nothing was stored.", max>>20))
+			return
+		}
+	case domain.KBMediaFile:
+		if !writeKBFileStartRefusal(response, input.Name, *input.Size) {
+			return
+		}
+	default:
+		writeError(response, http.StatusBadRequest, "invalid_request", "kind is video or file; an image goes up whole to POST /api/v1/kb/images.")
 		return
 	}
 	who := principal(request)
@@ -141,7 +155,7 @@ func (a *API) createKBMediaUpload(response http.ResponseWriter, request *http.Re
 		}
 	}
 	upload, _, err := a.store.CreateKBMediaUpload(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who),
-		domain.NewKBMediaUpload{Size: *input.Size, KBImageUpload: domain.KBImageUpload{Name: input.Name, Alt: input.Alt, Keep: input.Keep}})
+		domain.NewKBMediaUpload{Kind: input.Kind, Size: *input.Size, KBImageUpload: domain.KBImageUpload{Name: input.Name, Alt: input.Alt, Keep: input.Keep}})
 	if err != nil {
 		writeKBUploadError(response, err)
 		return
@@ -327,6 +341,10 @@ func (a *API) completeKBMediaUpload(response http.ResponseWriter, request *http.
 		writeError(response, http.StatusConflict, "upload_lost", "The parts of this upload are gone from the server; start the upload again.")
 		return
 	}
+	if upload.Kind == domain.KBMediaFile {
+		a.completeKBFileUpload(response, request, upload, path, actor)
+		return
+	}
 	video, err := checkKBVideo(path, upload.Size)
 	if err != nil {
 		// The bytes cannot become a library item; the upload goes with them.
@@ -379,8 +397,8 @@ func checkKBVideo(path string, size int64) (media.Video, error) {
 	return video, file.Sync()
 }
 
-// getKBMediaFile streams the bytes of a library item, with ranges, so a video seeks: an id always
-// names the same bytes, so any range of them may be cached for a year.
+// getKBMediaFile streams the bytes of a library item, with ranges, so a video seeks: an image's or a
+// video's id always names the same bytes, so any range of them may be cached for a year.
 func (a *API) getKBMediaFile(response http.ResponseWriter, request *http.Request) {
 	workspaceID := principal(request).Workspace.ID
 	item, err := a.store.GetKBMedia(request.Context(), workspaceID, request.PathValue("id"))
@@ -390,6 +408,14 @@ func (a *API) getKBMediaFile(response http.ResponseWriter, request *http.Request
 			return
 		}
 		writeKBMediaError(response, domain.ErrKBMediaNotFound)
+		return
+	}
+	if item.Kind == domain.KBMediaFile {
+		// A file is only ever downloaded, and a replacement puts new bytes under its id, so each answer revalidates.
+		if !attachments.Serve(response, request, a.config.Attachments, attachments.Served{Key: item.StorageKey, ContentType: item.ContentType, Size: item.Size,
+			ETag: item.SHA256, Cache: "private, no-cache", Disposition: "attachment; filename*=UTF-8''" + attachments.EncodeFilename(item.Name)}) {
+			writeKBMediaError(response, domain.ErrKBMediaNotFound)
+		}
 		return
 	}
 	disposition := "inline"

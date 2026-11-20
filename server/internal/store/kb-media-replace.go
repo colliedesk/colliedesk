@@ -50,7 +50,8 @@ func lockKBArticlesForMedia(ctx context.Context, tx pgx.Tx, workspaceID string, 
 // text (or a translation) shows it, as a new version of kind media_replace, and in their unpublished
 // changes (replaceInKBDraft), and records the
 // replacement so it can be undone. An image is replaced by an image, a video by a video; with is
-// taken out of the library's trash if it is there.
+// taken out of the library's trash if it is there. A file is replaced by a file in place
+// (replaceKBFileInPlace), since articles list it by its id.
 func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Actor, id, with string) (domain.KBMediaReplacement, error) {
 	if !savedReplyID.MatchString(id) || !savedReplyID.MatchString(with) {
 		return domain.KBMediaReplacement{}, domain.ErrKBMediaNotFound
@@ -83,6 +84,9 @@ func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Ac
 		}
 		if len(kinds) != 1 {
 			return domain.KBMediaReplacement{}, domain.ErrKBMediaKindMismatch
+		}
+		if kinds[0] == domain.KBMediaFile {
+			return replaceKBFileInPlace(ctx, tx, workspaceID, actor, from, to)
 		}
 		changed, versions := []string{}, []int{}
 		translations := []replacedTranslation{}
@@ -189,6 +193,9 @@ func (s *Store) UndoKBMediaReplacement(ctx context.Context, workspaceID string, 
 		if err != nil || replacement.UndoneAt != nil {
 			return replacement, err
 		}
+		if replacement.InPlace {
+			return undoKBFileReplacement(ctx, tx, workspaceID, actor, replacement)
+		}
 		if err := tx.QueryRow(ctx, `SELECT article_versions, translations FROM kb_media_replacements WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&versions, &raw); err != nil {
 			return domain.KBMediaReplacement{}, err
 		}
@@ -275,13 +282,13 @@ func (s *Store) UndoKBMediaReplacement(ctx context.Context, workspaceID string, 
 	return replacement, nil
 }
 
-const kbMediaReplacementColumns = `id::text,from_media_id::text,to_media_id::text,article_ids::text[],translations,skipped_article_ids::text[],created_at,undone_at`
+const kbMediaReplacementColumns = `id::text,from_media_id::text,to_media_id::text,article_ids::text[],translations,skipped_article_ids::text[],created_at,undone_at,in_place`
 
 func scanKBMediaReplacement(row pgx.Row) (domain.KBMediaReplacement, error) {
 	var replacement domain.KBMediaReplacement
 	var translations []byte
 	if err := row.Scan(&replacement.ID, &replacement.From, &replacement.To, &replacement.ArticleIDs, &translations, &replacement.SkippedArticleIDs,
-		&replacement.CreatedAt, &replacement.UndoneAt); err != nil {
+		&replacement.CreatedAt, &replacement.UndoneAt, &replacement.InPlace); err != nil {
 		return replacement, err
 	}
 	replacement.CreatedAt, replacement.UndoneAt = domain.UTC(replacement.CreatedAt), domain.UTCOptional(replacement.UndoneAt)

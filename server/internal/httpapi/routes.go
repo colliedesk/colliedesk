@@ -73,6 +73,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listKBTranslationVersions, a.restoreKBTranslationVersion, a.putKBCollectionTranslation, a.deleteKBCollectionTranslation,
 		a.describeOAuthClient, a.allowOAuth,
 		a.addNoteMentions, a.listMentions, a.markMentionsRead, a.setMentionEmail,
+		a.setKBArticleAttachments, a.setKBTranslationAttachments,
 		a.listKBTemplates, a.createKBTemplate, a.listTrashedKBTemplates, a.getKBTemplate, a.updateKBTemplate, a.deleteKBTemplate,
 		a.restoreKBTemplate, a.listKBTemplateVersions, a.restoreKBTemplateVersion,
 	}

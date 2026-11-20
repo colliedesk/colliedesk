@@ -229,6 +229,9 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"PUT /api/v1/help-center/search-console":                   {"/api/v1/help-center/search-console", map[string]any{"google_site_verification": "Ab3dEf6hIj9lMn2pQr5tUv8xYz1-Ab3dEf6hIj9lMn2"}, admin, 200, ""},
 		"POST /api/v1/help-center/theme/check":                     {"/api/v1/help-center/theme/check", map[string]any{"colors": map[string]any{"text": "#999999"}}, admin, 200, ""},
 		"POST /api/v1/help-center/theme/preview":                   {"/api/v1/help-center/theme/preview", map[string]any{"page": "article", "theme": map[string]any{"colors": map[string]any{"text": "#999999"}}}, admin, 200, ""},
+		"PUT /api/v1/kb/articles/{id}/attachments":                 {"/api/v1/kb/articles/" + kb.articleID + "/attachments", map[string]any{"media_ids": []string{}}, admin, 200, ""},
+		"PUT /api/v1/kb/articles/{id}/translations/{locale}/attachments": {"/api/v1/kb/articles/" + kb.articleID + "/translations/fr/attachments",
+			map[string]any{"media_ids": []string{}}, admin, 200, ""},
 		// The contract server has no HELP_CENTER_DOMAIN, so every host name is refused.
 		"GET /api/v1/public/help-center/tls-ask": {"/api/v1/public/help-center/tls-ask?domain=acme.help.example.net", nil, "", 404, ""},
 	}
