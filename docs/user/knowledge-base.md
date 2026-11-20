@@ -326,7 +326,7 @@ public page answered to **Was this article helpful?**:
 
 One reader has one vote per article: voting again changes it. One visitor address adds at most 10
 new readers to an article a day; past that the page still thanks the reader but the vote is not
-counted. Emails and numbers of 6 digits or more
+counted. For this check each vote keeps a keyed hash of the address, never the address itself. Emails and numbers of 6 digits or more
 in what a reader writes are replaced with "[email removed]" and "[number removed]" before anything is
 stored, and the line is cut to 500 characters.
 
