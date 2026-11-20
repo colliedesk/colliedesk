@@ -59,6 +59,9 @@ func TestASharedOutputShapeNamesTheToolThatSpellsItOut(t *testing.T) {
 			text, _ := node["description"].(string)
 			match := sameShape.FindStringSubmatch(text)
 			if match == nil {
+				if strings.Contains(text, "Same shape as ") {
+					t.Errorf("%s %s: %q names a shared shape in a form a client cannot follow", name, field, text)
+				}
 				return
 			}
 			referred++
@@ -69,6 +72,9 @@ func TestASharedOutputShapeNamesTheToolThatSpellsItOut(t *testing.T) {
 			}
 			if canonical(node["type"]) != canonical(original["type"]) {
 				t.Errorf("%s %s: advertised type %v, want the full schema's %v", name, field, node["type"], original["type"])
+			}
+			if strings.Contains(match[1], "Of[") {
+				t.Errorf("%s %s: %q names one alternative of an anyOf, oneOf or allOf, which a reader cannot find by name", name, field, text)
 			}
 			owner, ok := advertised[match[2]]
 			if !ok || match[2] == name {

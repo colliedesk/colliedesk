@@ -318,16 +318,21 @@ endpoint and holds the JSON at or below 600,000 bytes. Clients with tool search 
 tool only when it is needed; others load all of it.
 
 Output schemas are most of the list, and many tools return the same shape (an article, a fix attempt,
-an import). A shape of 500 bytes or more, as compact JSON, is spelled out in one tool only
-(`advertisedOutputs` in `output_shapes.go`): a `_get` tool where one returns it, else a read tool, else
-the shortest name. Every other tool carries the shape's `type` and the description "Same shape as
-`field` in tool's output.". Two tests in `output_shapes_test.go` hold this:
-`TestNoOutputShapeIsSpelledOutInTwoTools` fails when a shape of that size is listed twice, and
-`TestASharedOutputShapeNamesTheToolThatSpellsItOut` follows each reference and requires the full shape
-there. Results are still checked against the full schema of each tool (`Spec.Output`), so a new tool
-writes its full output schema as before and the list stays small by itself. On 2026-11-12 the list was
-574,966 bytes for 246 tools; on 2026-11-20 it was 599,776 bytes for 254 tools before shared shapes and
-431,992 bytes after.
+an import). A shape of 500 bytes or more, as compact JSON, is listed in one tool only
+(`advertisedOutputs` in `output_shapes.go`). The tool that lists it is, in order: one of the start tools
+the server's instructions name (`colliedesk_whoami`, `colliedesk_inbox_search`,
+`colliedesk_conversation_get`), the place nearest the top of an output, a `_get` tool, a read tool, the
+shortest name. A place inside an `anyOf`, `oneOf` or `allOf` never lists a shape, because a reader
+cannot name it. Every other tool carries the shape's `type` and the description "Same shape as
+`field` in tool's output.". The listed copy may itself name the tool of a smaller shape inside it.
+Two tests in `output_shapes_test.go` hold this: `TestNoOutputShapeIsSpelledOutInTwoTools` fails when a
+shape of that size is listed twice, and `TestASharedOutputShapeNamesTheToolThatSpellsItOut` follows
+each reference and requires the full shape at its end. `Spec.Output` stays the full schema, and the
+tool tests check every result against it, so a new tool writes its full output schema and never trims
+it by hand. The operator endpoint lists full schemas; it has no budget.
+
+On 2026-11-12 the list was 574,966 bytes for 246 tools. On 2026-11-20 it was 599,776 bytes for 254
+tools before shared shapes and 430,547 bytes after, with 105 references, none more than 2 deep.
 
 When a new tool does not fit, shorten output schemas and descriptions or merge tools. When that is not
 enough, split the list into toolsets a client chooses, with the daily inbox tools as the default. Do

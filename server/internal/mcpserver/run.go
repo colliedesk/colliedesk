@@ -19,7 +19,8 @@ type handler func(c *call, arguments map[string]any) (any, error)
 
 // register adds the tool to the server with the validation, the bearer hand-over and the error
 // mapping that every tool shares.
-// output is the schema the tool list carries (advertisedOutputs); results are checked against spec.Output.
+// output is the schema the tool list carries, which may name another tool for a shared shape
+// (advertisedOutputs); spec.Output stays the full schema the tests check results against.
 func register(server *mcp.Server, spec Spec, output json.RawMessage, rest *restClient, funnel httpapi.FunnelRecorder) {
 	var schema jsonschema.Schema
 	if err := json.Unmarshal([]byte(spec.Input), &schema); err != nil {

@@ -107,10 +107,9 @@ func NewOperator(config Config) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "colliedesk-operator", Title: "Colliedesk operator", Version: config.Version},
 		&mcp.ServerOptions{Instructions: operatorInstructions})
 	rest := &restClient{api: config.API}
-	specs := listedSpecs(true)
-	outputs := advertisedOutputs(specs)
-	for _, spec := range specs {
-		register(server, spec, outputs[spec.Name], rest, nil)
+	// The operator list is small and has no budget, so each tool spells out its whole output.
+	for _, spec := range listedSpecs(true) {
+		register(server, spec, json.RawMessage(spec.Output), rest, nil)
 	}
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true})
