@@ -134,7 +134,10 @@ layouts, in the background of the CI `image` job and in the release.
   `compose.yaml` replaced, with `mv`, so it is never half written. A run killed at any point leaves a
   `compose.yaml` that serves complete data: the old major before the switch, 19 after it. The next
   run reads `compose.yaml`, not the state file, to choose between finishing on 19 and putting the
-  install back.
+  install back, and only on a positive match: the data volume it names is either the 19 one or the
+  old one. A third key (a hand edit) is refused, since the script cannot tell where the server
+  wrote. After each switch of `compose.yaml` the script runs `sync`, so after a power loss the file
+  on disk names the volume the server wrote, not the one before.
 - **After the switch, never point away from 19 or remove its volume.** Once `compose.yaml` names 19
   the server may have written there, and the 19 volume may be the only copy of those writes. A
   failure or a signal after the switch leaves `compose.yaml` on 19 and names the two ways on (run
@@ -143,7 +146,20 @@ layouts, in the background of the CI `image` job and in the release.
 - **The rollback is resumable.** It records `rolling_back` before it edits `compose.yaml`. Until
   PostgreSQL runs on the old volume, a stop puts `compose.yaml` back on 19; after that, the server
   may have written to the old volume, so a stop leaves `compose.yaml` on the old major and the next
-  `--rollback` finishes it. An upgrade refuses while a rollback is unfinished.
+  `--rollback` finishes it. An upgrade refuses while a rollback is unfinished. A rollback stopped
+  before it edited `compose.yaml` (still on 19) starts over. The state of before the rollback is
+  kept in `prior`, so a rollback that starts over and then fails still puts back `done` or `started`.
+  If the failure leaves `compose.yaml` on the old major (its copy gone), the state stays
+  `rolling_back` and nothing starts: a server on the old volume under a state that says 19 would
+  write where the next run does not look.
+- **One compose project.** The volumes belong to the project recorded in the state file. Docker
+  Compose takes `COMPOSE_PROJECT_NAME` from the shell or `.env` over `name:`, and in another project
+  it would start an empty database beside the install. A run that finds an upgrade or rollback under
+  way, or done, compares `docker compose config`'s `name` with the recorded one and refuses a
+  difference.
+- **An undo that cannot list the volumes stops.** Without the list the half-made 19 volume cannot
+  be found, so `compose.postgres-19.yaml` and the state `started` stay: the next run still knows the
+  volume as one no server ran on and removes it.
 - **The compose files keep their mode.** `umask 077` protects the dump; the script copies
   `compose.yaml` with `cp -p` before each edit, so the install's mode (often 664) survives.
 - **No lock against two runs at once.** The script is run by hand by one operator on one host; two
@@ -152,7 +168,9 @@ layouts, in the background of the CI `image` job and in the release.
 - **The exit handlers ignore signals and write errors.** A closed SSH session sends SIGHUP, and then
   every write to the terminal fails; the handler that puts the install back must still run to its
   end, so it ignores HUP, INT, TERM and PIPE and its messages swallow write errors. The test runs a
-  failed upgrade with stderr on `/dev/full`.
+  failed upgrade with stderr on `/dev/full`. The signal trap ignores further signals before it exits,
+  since a Ctrl-C reaches `docker` and the script at once and a second one must not cut the handler.
+  Not covered by a test: two signals within milliseconds cannot be timed reliably.
 - **The installer keeps the volume key it finds.** A rerun after the upgrade must keep
   `postgres19-data`, or PostgreSQL 19 starts on the volume 17 wrote. `tests/install-test.sh` holds it.
 - **No `start_interval` in the healthchecks.** It would shorten each start, but Compose refuses it on

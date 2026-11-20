@@ -14,7 +14,9 @@
 # script undoes it, or the next run does, and removes the half-made volume. Once compose.yaml names
 # 19 the server may write there, so nothing points it away and the 19 volume is never removed: a run
 # cut off is finished by the next run, or --rollback goes back. A rollback cut off is finished by
-# --rollback again. The state is in .postgres-upgrade. See docs/self-host/upgrade.md#postgresql-versions.
+# --rollback again. The state is in .postgres-upgrade; a run acts only on the compose project and
+# the volumes it records, and refuses a compose.yaml that names neither of them. See
+# docs/self-host/upgrade.md#postgresql-versions.
 set -eu
 
 DOCKER=${DOCKER:-docker}
@@ -69,16 +71,16 @@ major() { query postgres 'SHOW server_version_num;' | cut -c1-2; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # The state of an upgrade, one key=value per line, rewritten whole each time.
-state='' from_major='' old_image='' old_key='' project='' dump_dir='' started_at='' finished_at=''
+state='' prior='' from_major='' old_image='' old_key='' project='' dump_dir='' started_at='' finished_at=''
 load_state() {
-  for key in state from_major old_image old_key project dump_dir started_at finished_at; do
+  for key in state prior from_major old_image old_key project dump_dir started_at finished_at; do
     # shellcheck disable=SC2034 # read by the eval below
     value=$(sed -n "s/^$key=//p" "$STATE_FILE" | tail -n 1)
     eval "$key=\$value"
   done
 }
 save_state() {
-  for key in state from_major old_image old_key project dump_dir started_at finished_at; do
+  for key in state prior from_major old_image old_key project dump_dir started_at finished_at; do
     eval "printf '%s=%s\n' $key \"\$$key\""
   done >"$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
 }
@@ -127,8 +129,15 @@ start_all() { compose up -d --wait >/dev/null 2>&1; }
 # kept, since it may hold the only copy of writes made on 19.
 undo() {
   cf=''
+  key=$(file_key)
+  [ "$key" = "$old_key" ] || {
+    warn "compose.yaml keeps the PostgreSQL data in '$key', neither $old_key (PostgreSQL $from_major) nor $NEW_KEY (PostgreSQL $NEW_MAJOR), so it is not the install this upgrade left. Nothing was changed."
+    return 1
+  }
   start_all || return 1
-  new=$(volume_for "$NEW_KEY")
+  # Without the list the half-made volume cannot be told apart: $STAGE and the state stay, so the
+  # next run still removes it.
+  new=$(volume_for "$NEW_KEY") || return 1
   if [ -n "$new" ] && [ -f "$STAGE" ]; then
     "$DOCKER" volume rm "$new" >/dev/null 2>&1 || return 1
     new=''
@@ -179,10 +188,20 @@ on_exit() {
 }
 arm() {
   trap on_exit EXIT
-  trap 'exit 1' HUP INT TERM
+  trap 'trap "" HUP INT TERM; exit 1' HUP INT TERM
 }
 
 if [ -f "$STATE_FILE" ]; then load_state; fi
+# The volumes of an upgrade belong to the compose project it ran in. Run in another one
+# (COMPOSE_PROJECT_NAME in the shell or in .env), docker compose would start an empty database
+# beside the install.
+case $state in
+  'done' | started | rolling_back)
+    name=$(compose config 2>/dev/null | sed -n '1s/^name: //p')
+    [ "$name" = "$project" ] ||
+      fail "docker compose works on the project '${name:-unknown}' here, but this upgrade ran in '$project': COMPOSE_PROJECT_NAME in the shell or in .env differs. Run it again with COMPOSE_PROJECT_NAME=$project. Nothing was changed."
+    ;;
+esac
 
 # --rollback: compose.yaml back on the old major and volume. The current file is edited, not the copy
 # restored, so an installer run since the upgrade keeps what it changed. While it runs the state is
@@ -196,8 +215,13 @@ if [ "$ROLLBACK" = true ]; then
       [ "$(file_key)" = "$NEW_KEY" ] || fail "compose.yaml no longer keeps PostgreSQL data in $NEW_KEY, so it is not the install this upgrade left. Nothing was changed."
       ;;
     rolling_back)
-      [ "$(file_key)" = "$old_key" ] || fail "compose.yaml does not keep PostgreSQL data in $old_key, so it is not the install the unfinished rollback left. Nothing was changed."
-      phase=resume
+      # On 19 the rollback stopped before compose.yaml changed, so it starts over; on the old major
+      # the server may have run there, so it finishes.
+      case $(file_key) in
+        "$NEW_KEY") ;;
+        "$old_key") phase=resume ;;
+        *) fail "compose.yaml keeps PostgreSQL data in neither $old_key nor $NEW_KEY, so it is not the install the unfinished rollback left. Nothing was changed." ;;
+      esac
       ;;
     *) fail "nothing to roll back: $STATE_FILE does not record an upgrade to PostgreSQL 19" ;;
   esac
@@ -214,10 +238,16 @@ if [ "$ROLLBACK" = true ]; then
       case $phase in
         revert)
           if [ -f compose.yaml.before-rollback ]; then mv compose.yaml.before-rollback compose.yaml; fi
-          state=$prior
-          save_state
-          compose up -d >/dev/null 2>&1
-          warn "the rollback failed; compose.yaml is as it was, on PostgreSQL $NEW_MAJOR."
+          if [ "$(file_key)" = "$NEW_KEY" ]; then
+            state=$prior
+            save_state
+            compose up -d >/dev/null 2>&1
+            warn "the rollback failed; compose.yaml is as it was, on PostgreSQL $NEW_MAJOR."
+          else
+            # Not back on 19: the state stays rolling_back and nothing starts, so no server runs on
+            # the old volume under a state that says it is on 19.
+            warn "the rollback failed and compose.yaml could not be put back: it names PostgreSQL $from_major and nothing was started. Run sh upgrade-postgres.sh --rollback again to finish it."
+          fi
           ;;
         resume)
           compose up -d >/dev/null 2>&1
@@ -228,14 +258,16 @@ if [ "$ROLLBACK" = true ]; then
     exit "$status"
   }
   trap rolled EXIT
-  trap 'exit 1' HUP INT TERM
+  trap 'trap "" HUP INT TERM; exit 1' HUP INT TERM
   if [ -z "$phase" ]; then
     say "Stopping the server and moving PostgreSQL back to $from_major..."
     cp -p compose.yaml compose.yaml.before-rollback
-    prior=$state phase=revert state=rolling_back
+    [ "$state" = rolling_back ] || prior=$state
+    phase=revert state=rolling_back
     save_state
     compose rm -sf server >/dev/null 2>&1
     edit_compose "$old_image" "$NEW_KEY" "$old_key" '' compose.yaml
+    sync
   else
     say "A rollback did not finish; finishing it on PostgreSQL $from_major..."
   fi
@@ -325,7 +357,7 @@ done
 
 dump_dir=postgres-upgrade-$(date -u +%Y%m%d-%H%M%S)
 rm -f "$BACKUP" "$STAGE"
-state=started started_at=$(now) finished_at=''
+state=started prior='' started_at=$(now) finished_at=''
 save_state
 arm
 
@@ -360,5 +392,8 @@ compose exec -T postgres sh -c 'exec vacuumdb -U "$POSTGRES_USER" --analyze-only
 cp -p compose.yaml "$BACKUP.tmp"
 mv "$BACKUP.tmp" "$BACKUP"
 mv "$STAGE" compose.yaml
+# On disk before anything starts on it: after a power loss compose.yaml must name the volume the
+# server wrote.
+sync
 cf=''
 finish || exit 1

@@ -150,7 +150,10 @@ moves: other databases on the same server stay in the old volume, and the script
   `DATABASE_URL` that does not name the bundled `postgres` service), a `compose.yaml` that does not
   give the postgres service one image and one data volume, an `environment:` list the `PGDATA` line
   cannot be added to, a major older than 16, an existing `postgres19-data` volume, too little disk
-  space, a rollback that has not finished. It never prints a password.
+  space, a rollback that has not finished, a `compose.yaml` whose postgres data volume is neither
+  the old one nor `postgres19-data`, and a run in another compose project than the upgrade's (a
+  different `COMPOSE_PROJECT_NAME` in the shell or in `.env`; the message names the one to use). It
+  never prints a password.
 
 To go back to the major and the volume you had before:
 
@@ -161,7 +164,9 @@ sh upgrade-postgres.sh --rollback
 The data is then as it was when the server stopped for the upgrade. Writes made on PostgreSQL 19
 since then are not in it; they stay in the volume `colliedesk_postgres19-data`, which is kept. A
 rollback that was cut off leaves `compose.yaml` on the old major, or as it was on 19 if the server had
-not started on the old volume yet; run `sh upgrade-postgres.sh --rollback` again to finish it. Before
+not started on the old volume yet; run `sh upgrade-postgres.sh --rollback` again to finish it. If a
+failed rollback cannot put `compose.yaml` back on 19, it leaves it on the old major with nothing
+started and says so; `--rollback` again finishes it. Before
 you remove the 19 volume (`docker volume rm`), make sure nothing in it is missing from the old major:
 it holds every write made while the install ran on 19. Remove the old volume (`docker volume rm`) and
 the dump directory (`rm -r`) once the install has run on 19 long enough for you to trust it. The
@@ -169,8 +174,10 @@ rollback refuses, changing nothing, when the old volume is gone.
 
 Every pull request and every release runs this on an install of v1.0.1 (PostgreSQL 17) filled with
 the upgrade fixture, for both database login layouts the installer has made: upgrade, installer
-rerun, restart, a failed upgrade, a run killed in the restore, a run killed after it, one that cannot
-start on 19, a hangup after the switch and one in the rollback, rollback. No row or file may change.
+rerun, restart, a failed upgrade (also one whose undo cannot list the volumes), a run killed in the
+restore, a run killed after it, one that cannot start on 19, a hangup after the switch and one in the
+rollback, a rollback killed before it changed `compose.yaml` and one that cannot put it back,
+rollback, and the refusals. No row or file may change.
 
 ## Settings move into the database
 
