@@ -194,6 +194,24 @@ class Shards(unittest.TestCase):
         # -v prints each test's time, which go-test-timings.py reads back from the job logs.
         self.assertRegex(go, r'go test -count=1 -run "\$pattern" -v "\$\{packages\[@\]\}" &')
 
+    def test_the_checked_in_go_timings_still_describe_the_suite(self):
+        # A name the file lacks weighs the median, a fraction of a second. With 1,227 of 2,749 names
+        # missing and two 17 to 19 s gates among them, the last latency shard was estimated at 49 s
+        # and ran its tests in 157 to 161 s (runs 44698122766, 44698890999). Refresh the file as
+        # go-test-timings.py says when this fails.
+        timings = json.loads((ROOT / '.github/go-test-timings.json').read_text())
+        source = (ROOT / '.github/scripts/go-test-shard.py').read_text()
+        markers = re.findall(r"'(\w+)'", re.search(r'^TIMED = \((.*)\)$', source, re.M).group(1))
+        tests = set()
+        for path in (ROOT / 'server').rglob('*_test.go'):
+            tests.update(re.findall(r'(?m)^func (Test\w+)\(t \*testing\.T\)', path.read_text()))
+        gates = sorted(name for name in tests if any(marker in name for marker in markers))
+        self.assertGreater(len(gates), 10)
+        self.assertEqual([name for name in gates if name not in timings], [],
+                         'latency gates without a measured time')
+        timed = sum(name in timings for name in tests)
+        self.assertGreaterEqual(timed / len(tests), 0.85, f'{len(tests) - timed} of {len(tests)} tests have no time')
+
     def test_the_go_job_starts_a_latency_shards_regular_tests_only_after_its_gates_exit(self):
         go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
         script = re.search(r'- name: Test\n(?:        .*\n)*?        run: \|\n((?:          .*\n?)+)', go).group(1)
