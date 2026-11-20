@@ -6,7 +6,7 @@ import { json, refusal, serve, summary } from './kb.test.fixture';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const center = (enabled: boolean) => ({ enabled, title: '', locale: 'en', content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' });
+const center = (enabled: boolean) => ({ enabled, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' });
 const reset = summary(7, 'Reset your password', 'published');
 const refund = summary(8, 'Refund steps', 'published');
 

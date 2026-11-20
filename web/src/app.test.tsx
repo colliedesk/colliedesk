@@ -866,7 +866,7 @@ test('a role that runs the help center without reading articles opens its settin
     '/api/v1/config': () => json(200, selfHostedConfig),
     '/api/v1/kb/media': () => json(200, { items: [], next_cursor: null }),
     '/api/v1/kb/media-uploads': () => json(200, { items: [] }),
-    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/beta-desk' }),
+    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/beta-desk' }),
     '/api/v1/auth/sessions': () => json(200, { items: [] }),
   });
   const router = open('/');
@@ -891,7 +891,7 @@ test('a role that reads only the help center finds Knowledge on the rail, at its
   serve({
     '/api/v1/auth/me': () => json(200, narrow(['help_center:read', 'profile:update'])),
     '/api/v1/config': () => json(200, selfHostedConfig),
-    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/beta-desk' }),
+    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/beta-desk' }),
   });
   const router = open('/');
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/settings'));

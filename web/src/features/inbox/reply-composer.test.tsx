@@ -548,7 +548,7 @@ function withQueries(node: ReactNode) {
 
 test('Articles links a published article at the cursor as its title and address on two lines, plain text for the mail', async () => {
   serve({
-    'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
+    'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
     'GET /api/v1/kb/articles': () => json(200, { items: [summary(7, 'Reset your password', 'published')], next_cursor: null }),
   });
   const onSubmit = vi.fn();
@@ -569,7 +569,7 @@ test('Articles links a published article at the cursor as its title and address 
 });
 
 test('Escape closes the articles, leaves the draft alone and returns to the box; the saved replies take their place', async () => {
-  serve({ 'GET /api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }) });
+  serve({ 'GET /api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }) });
   render(withQueries(<ReplyComposer savedReplies={[refund]} />));
   const body = screen.getByLabelText('Message body') as HTMLTextAreaElement;
   fireEvent.change(body, { target: { value: 'My draft' } });
@@ -587,7 +587,7 @@ test('Escape closes the articles, leaves the draft alone and returns to the box;
 
 test('in the middle of a line the article gets lines of its own, so no word sticks to its address', async () => {
   serve({
-    'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
+    'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
     'GET /api/v1/kb/articles': () => json(200, { items: [summary(7, 'Reset your password', 'published')], next_cursor: null }),
   });
   render(withQueries(<ReplyComposer />));
