@@ -414,6 +414,13 @@ EOF
   upgrade || { cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh did not finish an upgrade killed after the restore'; }
   upgraded "$TMP/compose.base" on19
   refused 'an install already on PostgreSQL 19' '--rollback'
+  # The old compose file put back by hand on a finished upgrade: a plain run and --rollback both say
+  # so and give the same way on, changing nothing.
+  cp "$TMP/compose.yaml" "$TMP/compose.done"
+  cp "$TMP/compose.yaml.before-postgres-19" "$TMP/compose.yaml"
+  refused 'a finished upgrade whose old compose file was put back by hand' 'put back by hand'
+  refused 'a rollback of a finished upgrade whose old compose file was put back by hand' 'put back by hand' --rollback
+  mv "$TMP/compose.done" "$TMP/compose.yaml"
   dc down >/dev/null 2>&1 && dc up -d --wait >/dev/null 2>&1 || fail 'the install did not start again on PostgreSQL 19'
   [ "$(pg_major)" = 19 ] || fail 'the install is not on PostgreSQL 19 after a restart'
   same_data 'after a restart on PostgreSQL 19' on19

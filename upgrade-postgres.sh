@@ -244,6 +244,12 @@ fi
 [ "$(compose config 2>/dev/null | postgres_service)" = "$("$DOCKER" compose -f compose.yaml config 2>/dev/null | postgres_service)" ] ||
   fail "another compose file (compose.override.yaml, or COMPOSE_FILE in the shell or in .env) changes the postgres service, and this script reads it from compose.yaml alone. Move the change into compose.yaml or remove it, then run this again. Nothing was changed."
 
+# A finished upgrade whose compose.yaml names the old volume again: compose.yaml.before-postgres-19
+# was put back by hand. Neither a finish nor a rollback fits, and both runs say the same.
+if [ "$state" = 'done' ] && [ "$(file_key)" = "$old_key" ]; then
+  fail "compose.yaml names the volume $old_key of PostgreSQL $from_major again: it was put back by hand after the upgrade to PostgreSQL 19 finished at $finished_at. Colliedesk serves the data as it was when the server stopped for the upgrade ($started_at); what was written on 19 since then stays in the volume $NEW_KEY, which is kept. Nothing was changed. To serve the PostgreSQL 19 data again, put back the compose.yaml that names $NEW_KEY; to stay on $from_major, see docs/self-host/upgrade.md#postgresql-versions."
+fi
+
 # --rollback: compose.yaml back on the old major and volume. The current file is edited, not the copy
 # restored, so an installer run since the upgrade keeps what it changed. While it runs the state is
 # rolling_back; phase says how far it got: revert while the server has not run on the old volume

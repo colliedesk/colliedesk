@@ -193,6 +193,12 @@ layouts, in the background of the CI `image` job and in the release.
   since a Ctrl-C reaches `docker` and the script at once and a second one must not cut the handler.
   Not covered by a test: two signals within milliseconds cannot be timed reliably.
 - **The installer keeps the volume key it finds.** A rerun after the upgrade must keep
-  `postgres19-data`, or PostgreSQL 19 starts on the volume 17 wrote. `tests/install-test.sh` holds it.
+  `postgres19-data`, or PostgreSQL 19 starts on the volume 17 wrote. Without `compose.yaml` it reads
+  the key from the state `.postgres-upgrade` left (done: 19, failed or rolled back: the old key) and
+  stops while an upgrade or rollback is unfinished. `tests/install-test.sh` holds it.
+- **A finished upgrade with the old compose file put back by hand is refused by every run.** A
+  finish has nothing to finish and a rollback has nothing to move, and the server already serves
+  the old volume; the plain run and `--rollback` print the same message, so neither points at the
+  other.
 - **No `start_interval` in the healthchecks.** It would shorten each start, but Compose refuses it on
   Docker Engine before 25, such as Debian 12's `docker.io` (20.10).

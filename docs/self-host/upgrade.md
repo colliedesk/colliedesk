@@ -109,6 +109,11 @@ volume before it writes `compose.yaml` and keeps that major:
   starts an empty database in place of yours. Restore the volume or the backup
   ([roll back](#roll-back)) and run it again.
 
+The installer reads the data volume from `compose.yaml`. When `compose.yaml` is gone after
+`upgrade-postgres.sh` ran, it reads it from `.postgres-upgrade`: `postgres19-data` after a finished
+upgrade, the old volume after a failed or rolled-back one. While an upgrade or a rollback is not
+finished, it stops and changes nothing, since either volume may hold the data.
+
 The installer does not move a database to a new major. That is a dump and a restore into a new
 volume, and `upgrade-postgres.sh` does it for the bundled database. An install on an
 [external database](database.md) runs whatever version that server runs: upgrade that server the
@@ -145,7 +150,9 @@ moves: other databases on the same server stay in the old volume, and the script
   on 19, or run `--rollback` to go back. A run cut off before the switch is put back by the next run.
 - **A 19 volume Colliedesk may have run on is never removed by the script.** It may hold the only
   copy of what was written on 19. If you put `compose.yaml.before-postgres-19` back by hand after the
-  switch, the next run serves the old major and keeps that volume.
+  switch, the next run serves the old major and keeps that volume. After a finished upgrade, the
+  script and `--rollback` both say the file was put back by hand and change nothing: put back the
+  `compose.yaml` that names `postgres19-data` to serve the 19 data again.
 - **It refuses what it cannot do safely** and changes nothing: an external database (a
   `DATABASE_URL` that does not name the bundled `postgres` service), a `compose.yaml` that does not
   give the postgres service one image and one data volume, an `environment:` list the `PGDATA` line
@@ -191,6 +198,7 @@ restore, a run killed after it, one that cannot start on 19, a hangup after the 
 rollback, a rollback killed before it changed `compose.yaml` and one that cannot put it back,
 a finish on a cluster the restore did not write, a rollback to a cluster that is not the old one,
 an undo of a cut-off run onto a cluster that is not the old one,
+an old compose file put back by hand after a finished upgrade,
 rollback, and the refusals. No row or file may
 change.
 

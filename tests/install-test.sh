@@ -261,6 +261,24 @@ if grep -F 'postgres-data:' "$moved/compose.yaml" | grep -v postgres19-data >/de
   printf '%s\n' 'the installer put back the volume postgres-data on an install upgraded to 19' >&2
   exit 1
 fi
+# The compose file lost after upgrade-postgres.sh: the state it left names the volume of the data. A
+# finished upgrade stays on postgres19-data, a rolled-back one on its old volume, and an unfinished
+# one is refused with nothing written, since either volume may hold the data.
+rm -f "$moved/compose.yaml" "$moved/compose.yaml.bak"
+printf 'state=done\nold_key=postgres-data\n' >"$moved/.postgres-upgrade"
+STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
+grep -Fx '      - postgres19-data:/var/lib/postgresql/data' "$moved/compose.yaml" >/dev/null ||
+  { printf '%s\n' 'a rerun without compose.yaml after a finished upgrade went back to the volume postgres-data' >&2; exit 1; }
+rm -f "$moved/compose.yaml" "$moved/compose.yaml.bak"
+printf 'state=rolled_back\nold_key=postgres-data\n' >"$moved/.postgres-upgrade"
+STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
+grep -Fx '      - postgres-data:/var/lib/postgresql/data' "$moved/compose.yaml" >/dev/null ||
+  { printf '%s\n' 'a rerun without compose.yaml after a rollback did not use the old volume' >&2; exit 1; }
+rm -f "$moved/compose.yaml" "$moved/compose.yaml.bak"
+printf 'state=started\nold_key=postgres-data\n' >"$moved/.postgres-upgrade"
+expect_failure 'has not finished' env STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com
+[ ! -e "$moved/compose.yaml" ] && [ ! -e "$moved/compose.yaml.next" ] ||
+  { printf '%s\n' 'a rerun refused for an unfinished upgrade wrote a compose file' >&2; exit 1; }
 cp "$kept/compose.yaml" "$TMP/kept.compose"
 # A major this installer does not run, an initialized install whose volume holds no data, and a volume
 # it cannot read stop the installer before it changes the compose file.

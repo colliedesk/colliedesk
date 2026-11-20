@@ -216,6 +216,16 @@ cd "$TARGET_DIR"
 PG_KEY=
 if [ -f compose.yaml ]; then
   PG_KEY=$(sed -n 's#^      - \([A-Za-z0-9_.-]*\):/var/lib/postgresql/data$#\1#p' compose.yaml | head -n 1)
+elif [ -f .postgres-upgrade ]; then
+  # compose.yaml lost after upgrade-postgres.sh: the state it left names the volume of the data.
+  case $(sed -n 's/^state=//p' .postgres-upgrade | tail -n 1) in
+    done) PG_KEY=postgres19-data ;;
+    failed | rolled_back) PG_KEY=$(sed -n 's/^old_key=\([A-Za-z0-9_.-]*\)$/\1/p' .postgres-upgrade | tail -n 1) ;;
+    *)
+      rm -f compose.yaml.next
+      fail "compose.yaml is gone and the PostgreSQL upgrade recorded in .postgres-upgrade has not finished, so either data volume may hold the data. Nothing was changed. Put compose.yaml back from a backup, then finish what upgrade-postgres.sh started (run it again, or with --rollback): docs/self-host/upgrade.md#postgresql-versions"
+      ;;
+  esac
 fi
 PG_KEY=${PG_KEY:-postgres-data}
 render_compose() {
