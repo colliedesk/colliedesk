@@ -284,6 +284,9 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID string, num
 		if article.Votes, err = publicKBVoteCount(ctx, tx, workspaceID, id); err != nil {
 			return article, err
 		}
+		if article.Attachments, err = publicKBAttachments(ctx, tx, workspaceID, id, locale); err != nil {
+			return article, err
+		}
 		if !strings.Contains(body, domain.KBMediaPath) {
 			return article, nil
 		}

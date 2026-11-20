@@ -337,6 +337,19 @@ a:hover { text-decoration-thickness: 2px; }
 .prose th[align="right"], .prose td[align="right"] { text-align: right; }
 .prose .footnotes { font-size: 0.9375rem; color: var(--muted); }
 
+/* Files the article lists for download */
+.downloads { max-width: 42rem; margin-top: 2.5rem; }
+.downloads .section-label { margin: 0 0 0.5rem; }
+.downloads-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.downloads-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid var(--rule); }
+.downloads-list a { display: inline-flex; align-items: center; gap: 0.75rem; min-height: 2.75rem; min-width: 0; color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.downloads-list a:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+.file-type {
+  flex: none; display: inline-grid; place-items: center; min-width: 2.75rem; height: 2.75rem; padding: 0 0.25rem;
+  font: 700 0.6875rem/1 var(--font-body); letter-spacing: 0.04em; color: var(--muted); border: 1px solid var(--rule); border-radius: 0.375rem;
+}
+.file-size { margin-left: auto; color: var(--muted); font-size: 0.9375rem; }
+
 /* "Was this article helpful?" */
 .helpful { max-width: 42rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); }
 .helpful-title { font: 600 1.125rem/1.35 var(--font-head); margin: 0 0 0.75rem; }
