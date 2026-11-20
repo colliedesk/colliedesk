@@ -218,7 +218,7 @@ test('on a server that reads inboxes, a connected Gmail says new mail comes in, 
   const reading: GmailSettings = { ...connected, reads_inbox: true,
     inbox: { state: 'reading', read_at: '2026-10-19T08:05:00Z', message: 'New mail in this inbox comes in by itself, within about a minute, also without forwarding.' } };
   const view = render(<GmailConnection gmail={reading} supportAddress="support@example.com" timezone="UTC" canManage />);
-  expect(screen.getByText(/brings new inbox mail in/)).toBeInTheDocument();
+  expect(screen.getByText(/brings new mail in/)).toBeInTheDocument();
   expect(screen.queryByText(/cannot read the mailbox/)).not.toBeInTheDocument();
   expect(screen.getByTestId('gmail-inbox')).toHaveTextContent(/comes in by itself.*Last read/);
   view.unmount();

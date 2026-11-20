@@ -259,8 +259,8 @@ Disconnecting the whole email channel also disconnects Gmail.
 
 ### Bring new mail in from Gmail
 
-On a server whose operator turned on reading Gmail inboxes, **Send from your mailbox** says "With Gmail,
-Colliedesk sends your replies and brings new inbox mail in", and Google's page also asks to **Read your
+On a server whose operator turned on reading Gmail inboxes, **Send from your mailbox** says "Gmail sends
+your replies and brings new mail in", and Google's page also asks to **Read your
 email** (`gmail.readonly`, read only: Colliedesk never changes, labels or deletes anything in the
 mailbox). Leave it ticked. Then:
 
