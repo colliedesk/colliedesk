@@ -27,6 +27,10 @@ var (
 // authentication reads the topmost Authentication-Results header stamped by the trusted receiving
 // server (its authserv-id). Any other header may have been written by the sender and is ignored.
 // DMARC decides when present; otherwise any DKIM or SPF pass is a pass.
+// GmailAuthServID is the authserv-id Gmail stamps on mail it receives, Google Workspace domains included:
+// the verdict trusted for mail read from a connected Gmail inbox.
+const GmailAuthServID = "mx.google.com"
+
 func authentication(headers []string, trustedAuthServID string) string {
 	if trustedAuthServID == "" {
 		return AuthNone

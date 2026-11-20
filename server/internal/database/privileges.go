@@ -126,6 +126,10 @@ const (
 	// was not renewed for a week, so a quiet Microsoft 365 grant is refreshed before it expires unused. Only
 	// workspace and channel ids leave the transaction; each grant is read and renewed in its own workspace.
 	PrivilegeMailboxKeepAlive Privilege = "mailbox-keep-alive"
+	// PrivilegeMailboxInboxRead lists, in every workspace, the connected Gmail mailboxes whose grant may read
+	// the inbox, least recently read first, so the inbox reader brings their new mail in. Only workspace and
+	// channel ids leave the transaction; each mailbox is read and its mail stored in its own workspace.
+	PrivilegeMailboxInboxRead Privilege = "mailbox-inbox-read"
 	// PrivilegeAIJobClaim leases due AI tasks of every workspace for the AI worker; closes the usage rows
 	// a dead process left started; expires AI drafts and triage suggestions nobody decided on for a week and erases the text of
 	// drafts that ended 90 days ago. Only task ids, workspace ids and claim tokens leave the claim; each

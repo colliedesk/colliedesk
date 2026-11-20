@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/google/googletest"
@@ -130,5 +131,102 @@ func TestConfigNamesWhatIsMissing(t *testing.T) {
 		return map[string]string{"MAILBOX_TOKEN_KEYS": "nope"}[key]
 	}); err == nil {
 		t.Fatal("malformed key ring accepted")
+	}
+}
+
+func TestReadingIsAskedOnlyWhenTheOperatorTurnedItOn(t *testing.T) {
+	_, config := standIn(t)
+	sendOnly, _ := url.Parse(config.AuthorizationURL(redirectURI, "s", "v"))
+	if got := sendOnly.Query().Get("scope"); got != "openid email "+google.ScopeGmailSend {
+		t.Fatalf("send-only consent changed: %q", got)
+	}
+	config.ReadMailbox = true
+	reading, _ := url.Parse(config.AuthorizationURL(redirectURI, "s", "v"))
+	if got := strings.Fields(reading.Query().Get("scope")); !google.CanRead(got) || !strings.Contains(reading.Query().Get("scope"), google.ScopeGmailSend) {
+		t.Fatalf("reading consent: %q", got)
+	}
+	for value, want := range map[string]bool{"": false, "false": false, "true": true, " TRUE ": true} {
+		got, err := google.ConfigFromEnv(func(name string) string {
+			if name == google.SettingReadMailbox {
+				return value
+			}
+			return ""
+		})
+		if err != nil || got.ReadMailbox != want {
+			t.Errorf("%s=%q: %v %v", google.SettingReadMailbox, value, got.ReadMailbox, err)
+		}
+	}
+	if _, err := google.ConfigFromEnv(func(name string) string {
+		if name == google.SettingReadMailbox {
+			return "yes"
+		}
+		return ""
+	}); err == nil {
+		t.Fatal("google.read_mailbox=yes was accepted")
+	}
+}
+
+func TestAReadGrantListsNewInboxMailAndReadsItWhole(t *testing.T) {
+	fake, config := standIn(t)
+	config.ReadMailbox = true
+	grant, err := config.Exchange(context.Background(), consent(t, fake, config, "Support@Acme.example"), "verifier-1", redirectURI)
+	if err != nil || !google.CanRead(grant.Scopes) {
+		t.Fatalf("exchange: %+v %v", grant, err)
+	}
+	access, _, err := config.AccessToken(context.Background(), grant.RefreshToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	before := fake.Deliver("support@acme.example", []byte("Subject: old\r\n\r\nold\r\n"), time.Now().Add(-time.Hour))
+	profile, err := config.Profile(ctx, access)
+	if err != nil || profile.Address != "support@acme.example" || profile.HistoryID == "" {
+		t.Fatalf("profile: %+v %v", profile, err)
+	}
+	first := fake.Deliver("support@acme.example", []byte("Subject: one\r\n\r\none\r\n"), time.Now())
+	fake.Deliver("support@acme.example", []byte("Subject: sent\r\n\r\nsent\r\n"), time.Now(), "SENT")
+	second := fake.Deliver("support@acme.example", []byte("Subject: two\r\n\r\ntwo\r\n"), time.Now())
+	var listed []string
+	page := google.HistoryPage{}
+	for {
+		page, err = config.InboxHistory(ctx, access, profile.HistoryID, page.NextPageToken)
+		if err != nil {
+			t.Fatal(err)
+		}
+		listed = append(listed, page.MessageIDs...)
+		if page.NextPageToken == "" {
+			break
+		}
+	}
+	if strings.Join(listed, ",") != first+","+second || page.HistoryID == profile.HistoryID {
+		t.Fatalf("history listed %v (want %s,%s; not %s), history id %s", listed, first, second, before, page.HistoryID)
+	}
+	message, err := config.Message(ctx, access, first)
+	if err != nil || string(message.Raw) != "Subject: one\r\n\r\none\r\n" || message.ReceivedAt.IsZero() {
+		t.Fatalf("message: %+v %v", message, err)
+	}
+	if _, err := config.Message(ctx, access, "missing"); !errors.Is(err, google.ErrMessageGone) {
+		t.Fatalf("deleted message: %v", err)
+	}
+	fake.ForgetHistory()
+	if _, err := config.InboxHistory(ctx, access, profile.HistoryID, ""); !errors.Is(err, google.ErrHistoryGone) {
+		t.Fatalf("expired history id: %v", err)
+	}
+	inbox, err := config.ListInbox(ctx, access, time.Now().Add(-time.Minute), "")
+	if err != nil || len(inbox.MessageIDs) != 2 || inbox.MessageIDs[0] != second {
+		t.Fatalf("list after a time: %+v %v", inbox, err)
+	}
+}
+
+func TestASendOnlyGrantIsRefusedReading(t *testing.T) {
+	fake, config := standIn(t)
+	grant, err := config.Exchange(context.Background(), consent(t, fake, config, "a@b.example"), "verifier-1", redirectURI)
+	if err != nil || google.CanRead(grant.Scopes) {
+		t.Fatalf("exchange: %+v %v", grant, err)
+	}
+	access, _, _ := config.AccessToken(context.Background(), grant.RefreshToken)
+	var apiErr *google.APIError
+	if _, err := config.Profile(context.Background(), access); !errors.As(err, &apiErr) || !apiErr.ConnectionBroken() {
+		t.Fatalf("profile without gmail.readonly: %v", err)
 	}
 }

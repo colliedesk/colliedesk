@@ -8,7 +8,7 @@ import { MailboxConnection, MicrosoftRequestNote } from './gmail-connection';
 import { mailboxReturn } from './gmail-return';
 
 const gmail: GmailSettings = {
-  available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null,
+  available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null, reads_inbox: false, inbox: null,
 };
 const approval = 'https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=c&state=ch';
 const microsoft: MicrosoftSettings = {

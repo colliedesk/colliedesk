@@ -350,6 +350,9 @@ type TrialOutboundError struct {
 	// Unverified is set when the customer did write, but the trial cannot count the mail: one of
 	// ReasonMailNotViaHostedAddress or ReasonSenderAuthenticationFailed.
 	Unverified string
+	// FromMailbox, with ReasonMailNotViaHostedAddress, says the mail was read from the workspace's connected
+	// Gmail inbox rather than posted to its inbound URL: the account's owner can put any message there.
+	FromMailbox bool
 }
 
 // Reasons of a first-contact refusal whose customer did write.
@@ -357,7 +360,8 @@ const (
 	// ReasonContactAddressDiffers: the customer wrote from another address, merged into this contact.
 	ReasonContactAddressDiffers = "contact_address_differs"
 	// ReasonMailNotViaHostedAddress: the mail was posted to the workspace's own inbound URL, whose
-	// admin writes the whole message, so it proves nothing about the sender.
+	// admin writes the whole message, or read from its connected Gmail inbox, where the account's owner
+	// can insert any message; either way it proves nothing about the sender.
 	ReasonMailNotViaHostedAddress = "mail_not_via_hosted_address"
 	// ReasonSenderAuthenticationFailed: the mail came through the platform forwarder but failed SPF,
 	// DKIM or DMARC.
@@ -393,6 +397,11 @@ func (e *TrialOutboundError) Error() string {
 	}
 	switch e.Unverified {
 	case ReasonMailNotViaHostedAddress:
+		if e.FromMailbox {
+			return "This customer's email was read from your connected Gmail inbox, where your account can add any message, so Colliedesk cannot confirm who sent it. " +
+				"During the trial, replies go only to mail that arrives at your forwarding address (Settings → Channels → Email). " +
+				"To reply to this customer now, verify your sending domain in Settings or choose a plan."
+		}
 		return "This customer's email came in through your inbound URL, so Colliedesk cannot confirm who sent it. " +
 			"During the trial, replies go only to mail that arrives at your forwarding address (Settings → Channels → Email). " +
 			"To reply to this customer now, verify your sending domain in Settings or choose a plan."

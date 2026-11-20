@@ -282,6 +282,26 @@ naming `MAILBOX_TOKEN_KEYS`; the connection is kept, so fixing the keys is enoug
 A server with Gmail and no SMTP relay works for workspaces that connected Gmail; for the others,
 replies are marked **Delivery failed** until a relay is set.
 
+### Read Gmail inboxes (optional)
+
+With `google.read_mailbox=true` (operator console → Mailboxes → Google → **Read the Gmail inbox**, or
+`collie config set google.read_mailbox=true`), connecting Gmail also asks for `.../auth/gmail.readonly`,
+and the server reads each connected inbox about once a minute for new mail, which then arrives like
+forwarded mail (a message that arrives both ways is kept once). Off (the default), the consent and
+sending stay exactly as above.
+
+`gmail.readonly` is a **restricted** scope. Before turning this on for people outside your Google
+Workspace:
+
+1. Add `.../auth/gmail.readonly` to the consent screen's **Data access** and submit the app for Google's
+   verification again: a demo video showing the OAuth client id in the consent address bar and an inbox
+   message arriving in Colliedesk.
+2. Pass Google's security assessment (CASA) by an approved assessor, renewed every year.
+
+An **Internal** app (Google Workspace) needs neither, so you can turn it on for your own domain first.
+Connections made before the switch send only: each admin sees **Connect Gmail again** to allow reading.
+Turning the switch off stops reading at once and changes nothing stored.
+
 ## Send replies through Microsoft 365
 
 An admin connects a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to an email channel

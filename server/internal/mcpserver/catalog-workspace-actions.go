@@ -121,7 +121,8 @@ func gmailConnectSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_gmail_connect",
 		Title: "Connect Gmail for sending",
-		Description: `Start connecting a Gmail account to an email channel, so its replies are sent from that address through Gmail and kept in its Sent folder (incoming mail still arrives by forwarding). ` +
+		Description: `Start connecting a Gmail account to an email channel, so its replies are sent from that address through Gmail and kept in its Sent folder. ` +
+			`Incoming mail arrives by forwarding; on a server that reads inboxes (colliedesk_email_channel_get, gmail.reads_inbox) the consent also asks to read email, and new inbox mail then comes in by itself. ` +
 			`It answers Google's consent address: only the person this token acts as can finish it, by opening it within 10 minutes in a browser signed in to Colliedesk and agreeing on Google's page. ` +
 			`Connecting again replaces the account. Needs the email channel and the server's Google settings (see colliedesk_email_channel_get, gmail). ` + emailChannelChoice,
 		REST:   []string{"POST /api/v1/channels/email/gmail", "POST /api/v1/channels/{id}/email/gmail"},

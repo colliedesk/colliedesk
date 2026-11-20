@@ -64,11 +64,17 @@ type restEmailSettings struct {
 	HostedAddress *string `json:"hosted_address"`
 	Gmail         struct {
 		Available  bool `json:"available"`
+		ReadsInbox bool `json:"reads_inbox"`
 		Connection *struct {
 			Address string  `json:"address"`
 			Status  string  `json:"status"`
 			Error   *string `json:"error"`
 		} `json:"connection"`
+		Inbox *struct {
+			State   string  `json:"state"`
+			ReadAt  *string `json:"read_at"`
+			Message string  `json:"message"`
+		} `json:"inbox"`
 	} `json:"gmail"`
 	Microsoft struct {
 		Available         bool    `json:"available"`
@@ -369,9 +375,12 @@ func emailChannelView(settings restEmailSettings) map[string]any {
 		mailboxes = append(mailboxes, map[string]any{"channel_id": mailbox.ChannelID, "name": mailbox.Name, "support_address": mailbox.SupportAddress, "old_help_desk": mailbox.OldHelpDesk})
 	}
 	view["mail_switch"] = map[string]any{"imported": settings.MailSwitch.Imported, "mailboxes": mailboxes}
-	gmail := map[string]any{"available": settings.Gmail.Available, "connected": false}
+	gmail := map[string]any{"available": settings.Gmail.Available, "connected": false, "reads_inbox": settings.Gmail.ReadsInbox}
 	if connection := settings.Gmail.Connection; connection != nil {
 		gmail["connected"], gmail["address"], gmail["status"], gmail["error"] = true, connection.Address, connection.Status, connection.Error
+		if inbox := settings.Gmail.Inbox; inbox != nil {
+			gmail["inbox"] = map[string]any{"state": inbox.State, "read_at": inbox.ReadAt, "message": inbox.Message}
+		}
 	}
 	view["gmail"] = gmail
 	microsoft := map[string]any{"available": settings.Microsoft.Available, "connected": false, "admin_consent_url": settings.Microsoft.AdminConsentURL,

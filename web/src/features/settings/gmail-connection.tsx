@@ -218,7 +218,7 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
     <section ref={block} className="gmail-connection" aria-labelledby="gmail-connection-heading">
       <div className="heading-with-tip"><h3 id="gmail-connection-heading">{messages.mailboxHeading}</h3>
         <HelpTip label={messages.mailboxHeading} text={connection ? text.connectedWhy : messages.mailboxWhy} /></div>
-      <p className="muted-copy">{messages.mailboxDescription}</p>
+      <p className="muted-copy">{gmail.reads_inbox && active !== 'microsoft' ? messages.mailboxDescriptionGmailReads : messages.mailboxDescription}</p>
       {returned && (returned.kind === 'error'
         ? <p role="alert" className="error-copy">{returnText(returned)}
             {returned.reason === 'address_mismatch' && returned.provider === 'microsoft' && <> {messages.microsoftAliasNotSupported(supportAddress)}</>}
@@ -251,6 +251,11 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
         {canManage && available(active!) && <span className="button-row">{connectButton(active!, text.reconnect, true)}</span>}
       </div>}
       {connection?.status === 'connected' && available(active!) && <p className="muted-copy">{text.connected(connection.address, formatDate(connection.connected_at, timezone))}</p>}
+      {/* Whether new mail of the Gmail inbox comes in by itself; said only on a server that reads inboxes. */}
+      {active === 'google' && connection?.status === 'connected' && gmail.available && gmail.inbox && gmail.inbox.state !== 'off' && (gmail.inbox.state === 'reading'
+        ? <p className="muted-copy" data-testid="gmail-inbox">{gmail.inbox.message}{gmail.inbox.read_at && <> {messages.gmailInboxReadAt(formatDate(gmail.inbox.read_at, timezone))}</>}</p>
+        : <div role="note" className="warning-note" data-testid="gmail-inbox"><p>{gmail.inbox.message}</p>
+            {canManage && <span className="button-row">{connectButton('google', messages.gmailInboxAllowReading)}</span>}</div>)}
       {/* Only while the server has Microsoft settings: without them, the note above says what to set. */}
       {connection && active === 'microsoft' && microsoft?.available && microsoft.server_credentials_refused && canManage &&
         <p role="note" className="warning-note">{messages.microsoftServerCredentials}</p>}

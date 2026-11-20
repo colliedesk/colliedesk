@@ -52,7 +52,10 @@ type Inbound struct {
 	// Direct is true when the message reached Colliedesk without passing the support mailbox: an answer
 	// to a platform reply address, or a test message the product wrote. It does not show that the
 	// support mailbox forwards here.
-	Direct     bool
+	Direct bool
+	// Gmail is true when the message was read from the channel's connected Gmail inbox (its Authentication-
+	// Results are Gmail's, GmailAuthServID). It is not mail that passed a forwarder.
+	Gmail      bool
 	DropReason string
 	// BouncedMessageIDs are the Message-IDs named in a delivery status report's returned headers.
 	BouncedMessageIDs []string

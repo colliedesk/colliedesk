@@ -24,6 +24,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
+	"github.com/colliedesk/colliedesk/server/internal/gmailinbox"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
@@ -219,6 +220,11 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		g.Go(func(ctx context.Context) { mentions.Run(ctx, 15*time.Second) })
 	}
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
+	// A connected Gmail inbox is read for new mail once the operator turned reading on (google.read_mailbox)
+	// and the grant includes gmail.readonly; forwarding keeps working beside it (docs/internals/email.md).
+	if inboxes := (&gmailinbox.Reader{Store: channelStore, Google: googleConfig, Pipeline: journal, Logger: logger}); inboxes.Enabled() && !off[serverconfig.FeatureGmail] {
+		g.Go(func(ctx context.Context) { inboxes.Run(ctx, time.Minute) })
+	}
 	// What chat intake did not decide in time gets the channel's rules (docs/internals/channels.md "Intake").
 	intakeSweep := intake.New(channelStore, journal, nil)
 	g.Go(func(ctx context.Context) { intakeSweep.Run(ctx, 15*time.Second) })

@@ -292,6 +292,9 @@ type Envelope struct {
 	// SupportAddress is the channel's support address when the message arrived: mail under an earlier
 	// address does not show that the current one forwards here.
 	SupportAddress string `json:"support_address,omitempty"`
+	// Gmail marks mail read from the connected Gmail inbox (email.Inbound.Gmail): parsed again, it
+	// believes Gmail's Authentication-Results.
+	Gmail bool `json:"gmail,omitempty"`
 }
 
 type inbound struct{ a *Adapter }
@@ -319,10 +322,14 @@ func (i inbound) Parse(_ context.Context, _ channels.Channel, snapshotOf any, ra
 		if body, err = io.ReadAll(reader); err != nil {
 			return nil, fmt.Errorf("read held email: %w", err)
 		}
-		if parsed, err = mailpkg.Parse(body, i.a.config.TrustedAuthServID); err != nil {
+		trusted := i.a.config.TrustedAuthServID
+		if envelope.Gmail {
+			trusted = mailpkg.GmailAuthServID
+		}
+		if parsed, err = mailpkg.Parse(body, trusted); err != nil {
 			return nil, err
 		}
-		parsed.Platform, parsed.Direct, parsed.Cc = envelope.Platform, envelope.Direct, envelope.Cc
+		parsed.Platform, parsed.Direct, parsed.Cc, parsed.Gmail = envelope.Platform, envelope.Direct, envelope.Cc, envelope.Gmail
 	}
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
@@ -354,7 +361,10 @@ func (i inbound) Parse(_ context.Context, _ channels.Channel, snapshotOf any, ra
 		in.Files = append(in.Files, channels.InboundFile{Name: file.Filename, ContentType: file.ContentType, Data: file.Data, Inline: file.Embedded})
 	}
 	via := domain.ViaWorkspace
-	if parsed.Platform {
+	switch {
+	case parsed.Gmail:
+		via = domain.ViaGmail
+	case parsed.Platform:
 		via = domain.ViaPlatform
 	}
 	in.EmailMeta = &domain.IncomingEmail{From: parsed.FromAddress, Authentication: parsed.Authentication, Via: via, Attachments: parsed.Attachments,
@@ -364,7 +374,7 @@ func (i inbound) Parse(_ context.Context, _ channels.Channel, snapshotOf any, ra
 		parsed.Direct = true
 	}
 	in.Summary, _ = json.Marshal(Envelope{MessageID: parsed.MessageID, From: parsed.FromAddress, Platform: parsed.Platform, Direct: parsed.Direct, Cc: parsed.Cc,
-		SupportAddress: supportAddress})
+		SupportAddress: supportAddress, Gmail: parsed.Gmail})
 	switch {
 	case own.ownAddress(parsed.FromAddress):
 		in.DropReason = mailpkg.DropOwnAddress

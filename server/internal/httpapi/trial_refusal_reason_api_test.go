@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -40,6 +41,25 @@ func TestTrialRefusalSaysWhyTheCustomersMailDoesNotCount(t *testing.T) {
 		}
 		if strings.Contains(got.Body, "wrote to you first") {
 			t.Fatalf("the customer did write; the refusal must not say otherwise: %s", got.Body)
+		}
+	})
+	t.Run("mail read from the connected Gmail inbox", func(t *testing.T) {
+		f := newLimitsFixture(t, true)
+		read := f.receiveViaWorkspaceSecret(t, "inbox@customer.example")
+		// As the inbox reader stores it: the account's owner can put any message in a Gmail inbox.
+		if _, err := f.pool.Exec(context.Background(), `UPDATE messages SET email_meta=jsonb_set(email_meta,'{via}','"gmail"') WHERE workspace_id=$1 AND conversation_id=$2`,
+			f.workspaceA, *read.ConversationID); err != nil {
+			t.Fatal(err)
+		}
+		got := f.reply(t, f.adminA, *read.ConversationID)
+		wantStatus(t, got, http.StatusForbidden, restrictedCode, "reply to mail read from the Gmail inbox")
+		for _, want := range []string{`"reason":"mail_not_via_hosted_address"`, "Gmail inbox", "forwarding address", "verify your sending domain"} {
+			if !strings.Contains(got.Body, want) {
+				t.Fatalf("refusal lacks %q: %s", want, got.Body)
+			}
+		}
+		if strings.Contains(got.Body, "inbound URL") {
+			t.Fatalf("mail read from Gmail is not mail posted to the inbound URL: %s", got.Body)
 		}
 	})
 	t.Run("a conversation nobody wrote to keeps its reason", func(t *testing.T) {

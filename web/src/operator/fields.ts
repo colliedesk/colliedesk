@@ -44,6 +44,7 @@ export const fields: Record<string, FieldInfo> = {
   'resend.api_key': { label: 'Resend API key', kind: 'secret' },
   'google.client_id': { label: 'Google client ID', kind: 'text', help: 'Off while empty.' },
   'google.client_secret': { label: 'Google client secret', kind: 'secret' },
+  'google.read_mailbox': { label: 'Read the Gmail inbox', kind: 'switch', help: 'Asks Google for gmail.readonly, so new inbox mail arrives without forwarding. Needs a Google client verified for it.' },
   'microsoft.client_id': { label: 'Microsoft client ID', kind: 'text', help: 'Off while empty.' },
   'microsoft.client_secret': { label: 'Microsoft client secret', kind: 'secret' },
   'microsoft.tenant': { label: 'Who may connect', kind: 'select', options: [['common', 'Work, school and personal accounts'], ['organizations', 'Work and school accounts'], ['consumers', 'Personal accounts (Outlook.com)']], other: 'One tenant (its ID or domain)' },
@@ -99,7 +100,7 @@ export const sections: Record<string, Section[]> = {
     { title: 'Resend', lead: 'Delivery events and domain checks.', keys: ['resend.webhook_secret', 'resend.api_key'] },
   ],
   mailboxes: [
-    { title: 'Google', lead: 'Lets workspaces connect Gmail.', keys: ['google.client_id', 'google.client_secret'] },
+    { title: 'Google', lead: 'Lets workspaces connect Gmail.', keys: ['google.client_id', 'google.client_secret', 'google.read_mailbox'] },
     { title: 'Microsoft 365', lead: 'Lets workspaces connect Microsoft 365 and Outlook.com.', keys: ['microsoft.client_id', 'microsoft.client_secret', 'microsoft.tenant'] },
     { title: 'GitHub App', lead: 'On when all six are set. Autofix works through it.', keys: ['github.app_id', 'github.slug', 'github.client_id', 'github.private_key', 'github.client_secret', 'github.webhook_secret'] },
   ],
