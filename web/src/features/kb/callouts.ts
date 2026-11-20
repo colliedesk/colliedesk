@@ -36,12 +36,17 @@ export function callouts() {
 }
 
 // takeMarker removes the paragraph's first line when it is a known marker alone, and names its type.
+// The line ends at a newline or at a hard break (two trailing spaces or a backslash), as on the server.
 function takeMarker(paragraph: Node): CalloutType | null {
   const children = paragraph.children ?? [];
   let line = '';
   let count = 0;
   let rest = '';
   for (const child of children) {
+    if (child.type === 'break') {
+      count++;
+      break;
+    }
     if (child.type !== 'text') return null;
     const value = child.value ?? '';
     const end = value.indexOf('\n');
