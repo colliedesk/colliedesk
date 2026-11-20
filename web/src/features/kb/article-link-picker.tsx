@@ -9,9 +9,13 @@ import { kbMessages } from './kb-messages';
 
 interface ArticleLinkPickerProps {
   // The reply box, read for where its cursor is.
-  box: RefObject<HTMLTextAreaElement | null>;
+  box?: RefObject<HTMLTextAreaElement | null>;
   // Puts text in the box at the cursor, as a saved reply goes in.
-  onInsert: (text: string) => void;
+  onInsert?: (text: string) => void;
+  // The knowledge base editor takes the article itself and writes its own Markdown link; it has no box.
+  onPick?: (article: KBArticleSummary) => void;
+  // An article left out of the list: the one being edited.
+  exclude?: string;
   onClose: (restoreFocus: boolean) => void;
   // An admin can turn the help center on: the picker leads to its settings.
   canManage?: boolean;
@@ -33,7 +37,7 @@ export function articleLink(article: Pick<KBArticleSummary, 'title' | 'url'>, te
 // The settings open in a new tab, so the draft and the files in the reply box stay where they are.
 const openHelpCenterSettings = () => { window.open('/knowledge/settings#help-center-heading', '_blank', 'noopener'); };
 
-export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }: ArticleLinkPickerProps) {
+export function ArticleLinkPicker({ box, onInsert, onPick, exclude, onClose, canManage = false }: ArticleLinkPickerProps) {
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
   // Enter pressed before the list answered what is in the search box, kept until it has.
@@ -53,14 +57,15 @@ export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }:
     queryFn: ({ signal }) => kbApi.articles({ q: q || undefined, status: 'published', sort: 'manual' }, signal),
     enabled: !off, placeholderData: keepPreviousData, refetchOnMount: 'always',
   });
-  const items = enabled ? list.data?.items ?? [] : [];
+  const items = enabled ? (list.data?.items ?? []).filter((article) => article.id !== exclude) : [];
   // Until the list answers what is in the search box, it shows the answer to the search before.
   // Until the help center answered (or answered again) nothing is offered yet, so Enter waits for that too.
   const pending = !off && (!enabled || text.trim() !== q || list.isPending || list.isPlaceholderData);
   const insert = (article: KBArticleSummary) => {
-    const field = box.current;
+    if (onPick) { onPick(article); return; }
+    const field = box?.current;
     const value = field?.value ?? '';
-    onInsert(articleLink(article, value, Math.min(field?.selectionStart ?? value.length, value.length)));
+    onInsert?.(articleLink(article, value, Math.min(field?.selectionStart ?? value.length, value.length)));
   };
   useEffect(() => {
     if (!queued || pending) return;
