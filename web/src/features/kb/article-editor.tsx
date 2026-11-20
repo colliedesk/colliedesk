@@ -14,6 +14,9 @@ import { ArticleVotesBox } from './article-votes';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
 import { ArticleAttachments } from './article-attachments';
 import { ArticleDraftBar, draftMessages, editable } from './article-draft';
+import { sameBody, useArticleAutosave } from './article-autosave';
+import { ConflictCompare } from './conflict-compare';
+import { unsavedKey } from './unsaved-store';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
 import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
@@ -100,7 +103,8 @@ export function ArticleRoute({ articleId, collectionId, templateId }: { articleI
   const start = useTemplateStart(articleId || collections.isPending ? 'none' : templateId,
     items.find((item) => item.id === defaultCollection)?.default_template_id);
   const back = <BackLink />;
-  if ((articleId && article.isPending) || collections.isPending || start.pending) {
+  // The signed-in person names where unsaved text is kept on this device, so the editor waits for them too.
+  if ((articleId && article.isPending) || me.isPending || collections.isPending || start.pending) {
     return <main className="kb-frame kb-editor-page">{back}<p role="status" className="empty-copy">{messages.loading}</p></main>;
   }
   if (articleId && !article.data) {
@@ -111,7 +115,7 @@ export function ArticleRoute({ articleId, collectionId, templateId }: { articleI
     return <main className="kb-frame kb-editor-page">{back}<p role="status" className="warning-note">{kbMessages.articleInTrash}</p></main>;
   }
   return <ArticleEditor article={article.data} collections={items} defaultCollection={defaultCollection}
-    timezone={me.data?.timezone ?? 'UTC'} collectionsFailed={collections.isError} startBody={start.body} startNotice={start.notice} />;
+    timezone={me.data?.timezone ?? 'UTC'} workspaceId={me.data?.workspace.id} agentId={me.data?.agent.id} collectionsFailed={collections.isError} startBody={start.body} startNotice={start.notice} />;
 }
 
 function BackLink() {
@@ -135,13 +139,16 @@ interface ArticleEditorProps {
   collections: Parameters<typeof buildTree>[0];
   defaultCollection: string;
   timezone: string;
+  // workspaceId and agentId name this person's unsaved text on the device; without them none is kept.
+  workspaceId?: string;
+  agentId?: string;
   collectionsFailed?: boolean;
   // startBody is a new article's text from its template; startNotice says why it starts blank instead.
   startBody?: string;
   startNotice?: string;
 }
 
-export function ArticleEditor({ article, collections, defaultCollection, timezone, collectionsFailed, startBody = '', startNotice }: ArticleEditorProps) {
+export function ArticleEditor({ article, collections, defaultCollection, timezone, workspaceId, agentId, collectionsFailed, startBody = '', startNotice }: ArticleEditorProps) {
   const id = useId();
   const client = useQueryClient();
   const navigate = useNavigate();
@@ -151,6 +158,10 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // changes, those (editable). Every save, restore and delete sends base's updated_at.
   const [raw, setBase] = useState(article);
   const base = useMemo(() => raw && editable(raw), [raw]);
+  // rawNow is the newest answer at once, before the page renders it: an autosave or the list of files may have
+  // moved updated_at since.
+  const rawNow = useRef(raw);
+  rawNow.current = raw;
   const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(editable(article)) : { title: '', slug: '', body: startBody, collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '', show_contents: true }));
   const wide = useSyncExternalStore(subscribeWide, isWide);
   const [chosen, setMode] = useState<ViewMode>(() => (isWide() && (!article || characters(article.body_md) <= splitLimit) ? 'split' : 'edit'));
@@ -165,9 +176,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const [notice, setNotice] = useState('');
   const [imageProblems, setImageProblems] = useState<string[]>([]);
   const set = (change: Partial<Draft>) => { setSavedOnce(false); setDraft((current) => ({ ...current, ...change })); };
-  // sameBody: the editor writes every line ending as \n, so a text that differs from the stored one only there (an
-  // import or an API client wrote \r\n) is the article's own text, not an edit.
-  const sameBody = (text: string, of: KBArticle) => text === of.body_md || text === of.body_md.replace(/\r\n?/g, '\n');
+  // sameBody (article-autosave.tsx): a text that differs from the stored one only in its line endings (an import or
+  // an API client wrote \r\n) is the article's own text, not an edit.
   const isDirty = (form: Draft) => (base
     // Compared as save() sends them: title and address name trimmed, and an emptied address name is not
     // a change (the server keeps the old one), so a form is never dirty with nothing to send.
@@ -195,6 +205,28 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const seoDescriptionLength = characters(seoValue(draft.seo_description));
   const invalid = !draft.title.trim() || titleLength > maxTitle || tooLong || !draft.collection_id || uploading > 0
     || seoTitleLength > maxSEOTitle || seoDescriptionLength > maxSEODescription;
+  // theirs is the newer copy a save met, shown beside the form's text until the person picks one.
+  const [theirs, setTheirs] = useState<{ title: string; body: string }>();
+  const changedElsewhere = () => {
+    setConflict(true);
+    const of = rawNow.current;
+    if (of) kbApi.article(of.id).then((fresh) => { const text = editable(fresh); setTheirs({ title: text.title, body: text.body_md }); }, () => undefined);
+  };
+  const autosave = useArticleAutosave({
+    key: base && workspaceId && agentId ? unsavedKey(workspaceId, agentId, base.id) : undefined,
+    article: raw, text: { title: draft.title, body: draft.body }, dirty, timezone,
+    current: () => rawNow.current,
+    read: () => ({ title: draft.title, body: bodyNow() }),
+    blocked: () => busy || saving.current || conflict || uploading > 0 || (handle?.uploading() ?? false) || titleLength > maxTitle || characters(bodyNow()) > maxBody,
+    onSaved: (updated) => {
+      rawNow.current = updated;
+      setBase(updated);
+      client.setQueryData(['kb-article', updated.id], updated);
+    },
+    onConflict: changedElsewhere,
+    onProblem: setProblem,
+    onRestore: (text) => { set({ title: text.title, body: text.body }); handle?.load(text.body); },
+  });
 
   // Set from the press until the answer: clicks that land before the button turns disabled save nothing.
   const saving = useRef(false);
@@ -202,7 +234,6 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const createArticle = useCreateAction((value: Parameters<typeof kbApi.createArticle>[0], key: string) => kbApi.createArticle(value, key));
   const save = async (status?: KBArticleStatus, over?: KBArticle) => {
     const body = bodyNow();
-    const current = over ? editable(over) : base;
     const sent = body === draft.body ? draft : { ...draft, body };
     // Typing not yet on the counter is now; a text over the limit shows there and is not sent.
     if (sent !== draft) setDraft(sent);
@@ -211,6 +242,9 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     setBusy(true);
     setProblem(undefined);
     try {
+      const autosaving = autosave.settle();
+      if (autosaving) await autosaving;
+      const current = over ? editable(over) : rawNow.current && editable(rawNow.current);
       if (!current) {
         const value = { ...(sent.extras.length > 0 ? { collection_ids: [sent.collection_id, ...sent.extras] } : { collection_id: sent.collection_id }), title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft',
           ...(seoValue(sent.seo_title) ? { seo_title: seoValue(sent.seo_title) } : {}),
@@ -233,19 +267,24 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         ...(seoValue(sent.seo_description) !== current.seo_description ? { seo_description: seoValue(sent.seo_description) } : {}),
         ...(sent.show_contents !== current.show_contents ? { show_contents: sent.show_contents } : {}),
       };
+      // Text an autosave stored has no version yet: Save sends it again, and the server adds the version.
+      if (Object.keys(change).length === 0 && autosave.pending) Object.assign(change, { body_md: sent.body });
       // Nothing changed (Ctrl+S on a saved article): there is nothing to ask the server.
       if (Object.keys(change).length === 0) return;
       const updated = await kbApi.updateArticle(current.id, { updated_at: current.updated_at, ...change });
+      rawNow.current = updated;
       setBase(updated);
       // The server may write the title or address name its own way; text typed during the save stays.
       setDraft((now) => (now === sent ? { ...draftOf(editable(updated)), body: sent.body } : now));
       client.setQueryData(['kb-article', updated.id], updated);
       setConflict(false);
+      setTheirs(undefined);
       setSavedOnce(true);
+      autosave.saved(updated.updated_at);
       setNotice(status === 'published' ? kbMessages.statusPublished : status === 'draft' ? kbMessages.statusDraft : kbMessages.saved);
       void refresh();
     } catch (error) {
-      if (error instanceof ChangedElsewhereError) setConflict(true);
+      if (error instanceof ChangedElsewhereError) changedElsewhere();
       else setProblem(reason(error, kbMessages.articleActionFailed));
     } finally {
       saving.current = false;
@@ -276,6 +315,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     if (!fresh) return;
     show(fresh);
     setConflict(false);
+    setTheirs(undefined);
   };
   const keepMine = async () => {
     const fresh = await latest();
@@ -291,7 +331,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       leaving.current = true;
       await navigate({ to: '/knowledge' });
     } catch (error) {
-      if (error instanceof ChangedElsewhereError) setConflict(true);
+      if (error instanceof ChangedElsewhereError) changedElsewhere();
       else setProblem(reason(error, kbMessages.articleActionFailed));
       setDeleting(false);
       setBusy(false);
@@ -440,8 +480,6 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
 
   // The list of files is saved on its own, at once: text typed meanwhile stays in the form, and the next save
   // sends the updated_at this answer gave. Two lists saved one after another read the newest article here.
-  const rawNow = useRef(raw);
-  rawNow.current = raw;
   const setAttachments = async (mediaIds: string[]): Promise<KBAttachment[]> => {
     const changed = await kbApi.setAttachments(rawNow.current!.id, mediaIds, editable(rawNow.current!).updated_at);
     rawNow.current = changed;
@@ -505,7 +543,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       setNotice(done);
       void refresh();
     } catch (error) {
-      if (error instanceof ChangedElsewhereError) setConflict(true);
+      if (error instanceof ChangedElsewhereError) changedElsewhere();
       else setProblem(reason(error, kbMessages.articleActionFailed));
     } finally {
       setBusy(false);
@@ -514,7 +552,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const publishChanges = () => draftAction((of) => publishDraft.run({ id: of.id, updatedAt: of.updated_at }), draftMessages.changesPublished);
   const discardChanges = () => draftAction((of) => kbApi.discardDraft(of.id, of.updated_at), draftMessages.changesDiscarded);
   const askPublishChanges = () => { if (newMissing.length > 0) setAskingAlt('changes'); else void publishChanges(); };
-  const disabledSave = busy || invalid || (base !== undefined && !dirty);
+  const disabledSave = busy || invalid || (base !== undefined && !dirty && !autosave.pending);
   const saveLabel = busy ? kbMessages.saving : base ? kbMessages.saveChanges : kbMessages.saveDraft;
   const publishLabel = dirty || !base ? kbMessages.saveAndPublish : kbMessages.publish;
   const needsCollection = !draft.collection_id ? `${id}-needs-collection` : undefined;
@@ -530,7 +568,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       : { label: publishLabel, icon: 'globe' as const, disabled: busy || invalid, onSelect: publish },
     ...(base ? [{ label: kbMessages.deleteArticleMenu, icon: 'trash' as const, danger: true, separated: true, onSelect: () => setDeleting(true) }] : []),
   ];
-  const stateWords = [status === 'published' ? (isPublic === false ? kbMessages.notPublicShort : '') : '', raw?.has_draft ? draftMessages.unpublishedChanges : '', dirty ? kbMessages.unsaved : savedOnce ? kbMessages.saved : ''].filter(Boolean);
+  const stateWords = [status === 'published' ? (isPublic === false ? kbMessages.notPublicShort : '') : '', raw?.has_draft ? draftMessages.unpublishedChanges : '', autosave.word || (savedOnce ? kbMessages.saved : '')].filter(Boolean);
   const details = (
     <>
       <section className="kb-side-box" aria-labelledby={`${id}-visibility`}>
@@ -608,18 +646,13 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           </span>
         </>}
       </header>
-      {(startNotice || raw?.draft || conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || (base?.ai_exclusion && !phone)) && <div className="kb-editor-notes">
+      {(startNotice || autosave.restoreBar || raw?.draft || conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || (base?.ai_exclusion && !phone)) && <div className="kb-editor-notes">
         {startNotice && !base && <p role="status" className="warning-note">{startNotice}</p>}
         {base?.ai_exclusion && !phone && <ArticleAINote article={base} onChanged={aiChangedFromNote} />}
         {raw?.draft && <ArticleDraftBar article={raw} title={draft.title} body={bodyNow} busy={busy} dirty={dirty} onPublish={askPublishChanges} onDiscard={discardChanges} />}
-        {conflict && <div role="alert" className="warning-note kb-conflict">
-          <p>{kbMessages.changedElsewhere}</p>
-          <div className="button-row">
-            <button type="button" disabled={busy} onClick={() => void keepMine()}>{kbMessages.keepMine}</button>
-            <button type="button" disabled={busy} onClick={() => void loadTheirs()}>{kbMessages.loadTheirs}</button>
-          </div>
-          <small>{kbMessages.keepMineHelp}</small>
-        </div>}
+        {autosave.restoreBar}
+        {conflict && <ConflictCompare message={kbMessages.changedElsewhere} theirs={theirs} mine={{ title: draft.title, body: draft.body }} busy={busy}
+          onKeepMine={() => void keepMine()} onLoadTheirs={() => void loadTheirs()} />}
         {problem && <p role="alert" className="error-copy">{problem}</p>}
         {tooLong && <p role="alert" className="error-copy">{kbMessages.tooLong(bodyLength - maxBody)}</p>}
         {uploading > 0 && <p role="status" className="kb-hint">{kbMessages.waitingForImages}</p>}
@@ -676,7 +709,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           {kbMessages.details}{missing.length > 0 && <span className="kb-badge-count" aria-hidden="true">{missing.length}</span>}</button>
         {more}
         {/* A saved draft has nothing to save: its next step, Publish, takes the place of Save. */}
-        {status !== 'published' && base && !dirty
+        {status !== 'published' && base && !dirty && !autosave.pending
           ? <button type="button" className="primary-action" disabled={busy || invalid} onClick={publish}>{kbMessages.publish}</button>
           : <button className="primary-action" type="submit" form={`${id}-form`} disabled={disabledSave} aria-describedby={needsCollection}>{saveLabel}</button>}
       </div>}

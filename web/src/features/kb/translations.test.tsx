@@ -115,10 +115,36 @@ test('a translation saved elsewhere while one is typing keeps the typed text and
   await client.refetchQueries();
   await waitFor(() => expect(client.getQueryData(['kb-translation', ids.article, 'fr'])).toMatchObject({ updated_at: '2026-10-05T00:00:00Z' }));
   expect(screen.getByRole('textbox', { name: 'Text' })).toHaveValue('Mon texte pas encore enregistré.');
-  expect(await screen.findByRole('alert')).toHaveTextContent('Someone saved this translation after you opened it.');
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Someone saved this translation after you opened it.');
+  // Both versions are shown, line by line, before the person picks one.
+  expect(alert).toHaveTextContent('Only in theirs: Leur version.');
+  expect(alert).toHaveTextContent('Only in yours: Mon texte pas encore enregistré.');
   // Save mine over theirs: over the version they saved, so nothing of theirs is lost (it is in the history).
   fireEvent.click(screen.getByRole('button', { name: 'Save mine over theirs' }));
   await waitFor(() => expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-05T00:00:00Z', body_md: 'Mon texte pas encore enregistré.' }));
+});
+
+test('a translation save refused as saved elsewhere shows both versions to choose from', async () => {
+  let saved = translation();
+  serve({
+    'GET /api/v1/auth/me': () => json(200, me),
+    'GET /api/v1/help-center/languages': () => json(200, languages(true)),
+    [`GET /api/v1/kb/articles/${ids.article}`]: () => json(200, article({ translations: [saved] })),
+    [`GET /api/v1/kb/articles/${ids.article}/translations/fr`]: () => json(200, saved),
+    [`PATCH /api/v1/kb/articles/${ids.article}/translations/fr`]: () => {
+      saved = translation({ body_md: 'Leur version.', updated_at: '2026-10-05T00:00:00Z' });
+      return refusal(409, 'changed_elsewhere', 'The translation changed since you opened it.');
+    },
+  });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><PermissionsContext.Provider value={permissionsOf('admin')}><TranslationRoute articleId={ids.article} locale="fr" /></PermissionsContext.Provider></QueryClientProvider>);
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Text' }), { target: { value: 'Mon texte.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Someone saved this translation after you opened it.');
+  await waitFor(() => expect(alert).toHaveTextContent('Only in theirs: Leur version.'));
+  expect(alert).toHaveTextContent('Only in yours: Mon texte.');
+  expect(screen.getByRole('textbox', { name: 'Text' })).toHaveValue('Mon texte.');
 });
 
 test('a translation saved elsewhere while nothing is typed is shown as saved', async () => {

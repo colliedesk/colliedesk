@@ -8,6 +8,7 @@ import { attachmentMessages } from './attachment-messages';
 import { kbApi } from './kb-api';
 import type { KBArticle, KBArticleStatus, KBAttachment, KBTranslation, KBTranslationVersion } from './kb-api';
 import { kbMessages } from './kb-messages';
+import { ConflictCompare } from './conflict-compare';
 import { KBDialog, KBMenu } from './kb-ui';
 import { HelpTip } from '../../ui/help-tip';
 import { Icon } from './editor/icons';
@@ -80,6 +81,8 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [stale, setStale] = useState(false);
+  // theirs is the newer copy, shown beside the typed text until the person picks one.
+  const [theirs, setTheirs] = useState<KBTranslation>();
   const [notice, setNotice] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -99,6 +102,7 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
     if (!latest || !translation || Date.parse(latest.updated_at) <= Date.parse(translation.updated_at)) return;
     if (dirty) {
       setStale(true);
+      setTheirs(latest);
       return;
     }
     setTranslation(latest);
@@ -134,8 +138,10 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
       if (done) setNotice(done);
       await reload();
     } catch (error) {
-      if (error instanceof ChangedElsewhereError) setStale(true);
-      else setProblem(reason(error, t.failed));
+      if (error instanceof ChangedElsewhereError) {
+        setStale(true);
+        kbApi.translation(articleId, locale).then(setTheirs, () => undefined);
+      } else setProblem(reason(error, t.failed));
     } finally {
       setBusy(false);
     }
@@ -158,10 +164,12 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
       ...(upToDate && against.outdated ? { outdated: false } : {}),
     }));
     setStale(false);
+    setTheirs(undefined);
   }, t.saved);
   const loadTheirs = () => run(async () => {
     show(await kbApi.translation(articleId, locale));
     setStale(false);
+    setTheirs(undefined);
   });
   const keepMine = () => run(async () => {
     const theirs = await kbApi.translation(articleId, locale);
@@ -205,14 +213,8 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
         </span>
       </header>
       <div className="kb-editor-notes">
-        {stale && <div role="alert" className="warning-note kb-conflict">
-          <p>{t.changedElsewhere}</p>
-          <div className="button-row">
-            <button type="button" disabled={busy} onClick={() => void keepMine()}>{kbMessages.keepMine}</button>
-            <button type="button" disabled={busy} onClick={() => void loadTheirs()}>{kbMessages.loadTheirs}</button>
-          </div>
-          <small>{kbMessages.keepMineHelp}</small>
-        </div>}
+        {stale && <ConflictCompare message={t.changedElsewhere} theirs={theirs && { title: theirs.title, body: theirs.body_md }}
+          mine={{ title: draft.title, body: draft.body_md }} busy={busy} onKeepMine={() => void keepMine()} onLoadTheirs={() => void loadTheirs()} />}
         {problem && <p role="alert" className="error-copy">{problem}</p>}
         {inTrash && <div className="warning-note"><p>{t.inTrashNote}</p><button type="button" disabled={busy} onClick={() => void restore()}>{t.restoreFromTrash}</button></div>}
         {!listed && <p className="warning-note">{t.languageNotListed}</p>}

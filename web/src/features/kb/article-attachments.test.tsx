@@ -15,7 +15,7 @@ vi.mock('./media-api', async (original) => ({
     return { status: 200, body: { ...upload, size, offset: first + part.size }, offset: String(first + part.size) };
   },
 }));
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); });
 
 const settle = () => act(() => new Promise((resolve) => { setTimeout(resolve, 150); }));
 const upload = { id: '77777777-0000-4000-8000-000000000011', kind: 'file', name: 'Warranty form.pdf', size: 12, offset: 0, part_size: 8,

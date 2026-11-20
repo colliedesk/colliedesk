@@ -21,7 +21,7 @@ vi.mock('./media-api', async (original) => ({
       expires_at: '2026-10-22T00:00:00Z', media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' }, offset: String(first + part.size) };
   },
 }));
-afterEach(() => { navigate.mockReset(); blocker.mockReset(); vi.unstubAllGlobals(); });
+afterEach(() => { navigate.mockReset(); blocker.mockReset(); vi.unstubAllGlobals(); localStorage.clear(); });
 
 // settle waits for the editor to tell the page of what was typed, as it does a moment after typing stops.
 const settle = () => act(() => new Promise((resolve) => { setTimeout(resolve, 150); }));
