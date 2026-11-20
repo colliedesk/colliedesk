@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { EditorState, Prec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder } from '@codemirror/view';
@@ -85,8 +85,10 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const [video, setVideo] = useState<{ error: string } | undefined>();
   // picking is the media library picker, open or not.
   const [picking, setPicking] = useState(false);
-  // linking is the list of articles to link to, open or not.
-  const [linking, setLinking] = useState(false);
+  // linkAt is where the list of articles to link to opens, measured from the bar's left edge: under the button
+  // that opened it. Undefined while the list is closed.
+  const [linkAt, setLinkAt] = useState<number>();
+  const bar = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<Active>();
   // rover is the toolbar button that is the Tab stop; when it is disabled (Undo with nothing to undo), the first
   // button is, so the toolbar never loses its stop.
@@ -209,6 +211,11 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   };
 
   const editing = mode !== 'preview' && !!active;
+  // A phone's toolbar keeps Link to article under More formatting, so the list opens under that button.
+  const openLinking = () => {
+    const trigger = bar.current?.querySelector(`[data-tool="${compact ? 'more' : 'article'}"]`);
+    setLinkAt(trigger && bar.current ? trigger.getBoundingClientRect().left - bar.current.getBoundingClientRect().left : 0);
+  };
   // The Tab stop falls back to Bold when its button is disabled (Undo with nothing to undo) or not in this layout
   // (a phone's toolbar has Insert, Bold, Italic, Link and More only).
   const onPhone = ['insert', 'bold', 'italic', 'link', 'more'];
@@ -230,7 +237,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
       item(t.table, 'table', (view) => insertBlock(view, tableTemplate, [2, 8]))] : []),
     { ...item(t.strike, 'strike', (view) => toggleMark(view, '~~')), separated: compact }, item(t.code, 'code', inlineCode), item(t.task, 'task', line('task')),
     item(t.codeBlock, 'codeBlock', (view) => insertBlock(view, codeBlockTemplate, [4, 8])), item(t.hr, 'hr', (view) => insertBlock(view, '---')),
-    ...(compact ? [{ label: t.articleLink, icon: 'article' as const, disabled: !editing, onSelect: () => setLinking(true), separated: true }] : []),
+    ...(compact ? [{ label: t.articleLink, icon: 'article' as const, disabled: !editing, onSelect: openLinking, separated: true }] : []),
     ...(compact ? [item(t.search, 'search', openSearchPanel), item(t.undo, 'undo', undo, !active?.canUndo)] : []),
     item(t.redo, 'redo', redo, !active?.canRedo),
   ];
@@ -245,7 +252,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   return (
     <div ref={shell} className="md-shell" data-mode={mode} data-compact={compact ? 'true' : undefined}>
       {/* The bar holds the toolbar and the article list that opens over the text just under it. */}
-      <div className="md-bar">
+      <div ref={bar} className="md-bar" style={linkAt === undefined ? undefined : { '--link-at': `${linkAt}px` } as CSSProperties}>
         <div className="md-toolbar" role="toolbar" aria-label={kbMessages.formatting} onKeyDown={onToolbarKey}>
           {compact && insertMenu}
           {!compact && <>
@@ -264,7 +271,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           {tool('bold', t.bold, `${mod}B`, (view) => toggleMark(view, '**'), active?.strong)}
           {tool('italic', t.italic, `${mod}I`, (view) => toggleMark(view, '*'), active?.emphasis)}
           {tool('link', t.link, `${mod}K`, insertLink, active?.link)}
-          {!compact && tool('article', t.articleLink, '', () => setLinking(true))}
+          {!compact && tool('article', t.articleLink, '', openLinking)}
           {!compact && <>
             <span className="md-sep" aria-hidden="true" />
             {tool('ordered', t.ordered, '', line('ordered'), active?.ordered)}
@@ -280,9 +287,9 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           <KBMenu label={t.moreFormatting} title={t.moreFormatting} items={more} grid className="md-more" buttonClassName="md-tool" tool="more" tabIndex={stop === 'more' ? 0 : -1}
             disabled={!editing} trigger={<Icon name="more" />} />
         </div>
-        {linking && editing && <ArticleLinkPicker exclude={articleId}
-          onPick={(article) => { setLinking(false); act((view) => insertArticleLink(view, article)); }}
-          onClose={(restoreFocus) => { setLinking(false); if (restoreFocus) viewRef.current?.focus(); }} />}
+        {linkAt !== undefined && editing && <ArticleLinkPicker exclude={articleId}
+          onPick={(article) => { setLinkAt(undefined); act((view) => insertArticleLink(view, article)); }}
+          onClose={(restoreFocus) => { setLinkAt(undefined); if (restoreFocus) viewRef.current?.focus(); }} />}
       </div>
       {picking && editing && <MediaPicker onClose={() => { setPicking(false); viewRef.current?.focus(); }}
         onUpload={() => { setPicking(false); fileInput.current?.click(); }}
