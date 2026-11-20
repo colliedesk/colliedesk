@@ -57,6 +57,9 @@ test('knowledge base: Link to article in the editor writes a relative link to an
 
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  // The article is published: the save is an unpublished change until Publish changes puts it live.
+  await page.getByRole('button', { name: 'Publish changes' }).click();
+  await expect(page.getByRole('group', { name: 'Unpublished changes' })).toHaveCount(0);
   const stored = await (await page.request.get(`${baseURL}/api/v1/kb/articles/${editing.id}`)).json() as { body_md: string };
   expect(stored.body_md).toBe(`To change it, [Reset your password ${suffix}](${address})`);
 
