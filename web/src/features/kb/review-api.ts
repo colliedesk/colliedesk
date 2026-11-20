@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { request } from '../../api/client';
 import type { Generated, JsonResponse } from '../../api/schemas';
-import { kbArticleSchema } from './kb-api';
+import { attachmentSchema, kbArticleSchema } from './kb-api';
 
 // Reviews of knowledge base text: where a collection requires approval, a teammate who may publish approves
 // the exact text before it goes on the help center. The schemas come with the knowledge base chunk.
@@ -18,7 +18,7 @@ export const kbReviewSchema = z.object({
 }) satisfies z.ZodType<Generated<'KBReview'>>;
 const reviewListSchema = z.object({ reviews: z.array(kbReviewSchema) }) satisfies z.ZodType<JsonResponse<'listKBReviews', 200>>;
 const contentSchema = z.object({
-  title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), collection_ids: z.array(z.string().uuid()),
+  title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), collection_ids: z.array(z.string().uuid()), attachments: z.array(attachmentSchema),
 }) satisfies z.ZodType<Generated<'KBReviewContent'>>;
 const reviewDetailSchema = kbReviewSchema.extend({
   live: contentSchema.nullable(), proposed: contentSchema, diff: z.array(z.object({ change: z.enum(['same', 'removed', 'added']), text: z.string() })),

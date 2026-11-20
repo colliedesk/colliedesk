@@ -80,14 +80,16 @@ type KBReview struct {
 	CreatedAt          time.Time         `json:"created_at"`
 }
 
-// KBContent is what a review approves: the fields the help center shows and where it lists the text.
+// KBContent is what a review approves: the fields the help center shows, where it lists the text and
+// the files it lists under it.
 type KBContent struct {
-	Title          string   `json:"title"`
-	Slug           string   `json:"slug"`
-	BodyMD         string   `json:"body_md"`
-	SEOTitle       string   `json:"seo_title"`
-	SEODescription string   `json:"seo_description"`
-	CollectionIDs  []string `json:"collection_ids"`
+	Title          string        `json:"title"`
+	Slug           string        `json:"slug"`
+	BodyMD         string        `json:"body_md"`
+	SEOTitle       string        `json:"seo_title"`
+	SEODescription string        `json:"seo_description"`
+	CollectionIDs  []string      `json:"collection_ids"`
+	Attachments    KBAttachments `json:"attachments"`
 }
 
 // KBReviewDetail is a review with the text it is about: Proposed is the text waiting to be published
@@ -109,18 +111,28 @@ type KBReviewFilter struct {
 	Locale *string
 }
 
-// Hash is the content hash of c: sha256 over a JSON array of its fields, the collections sorted, so no
-// two different texts share one.
+// Hash is the content hash of c: sha256 over a JSON array of its fields, the collections sorted and the
+// files' ids in their order, so no two different texts share one. A text without files hashes as it did
+// before texts listed files.
 func (c KBContent) Hash() string {
 	collections := slices.Clone(c.CollectionIDs)
 	slices.Sort(collections)
 	collections = slices.Compact(collections)
-	encoded, _ := json.Marshal([]any{c.Title, c.Slug, c.BodyMD, c.SEOTitle, c.SEODescription, collections})
+	fields := []any{c.Title, c.Slug, c.BodyMD, c.SEOTitle, c.SEODescription, collections}
+	if len(c.Attachments) > 0 {
+		files := make([]string, len(c.Attachments))
+		for index, file := range c.Attachments {
+			files[index] = file.ID
+		}
+		fields = append(fields, files)
+	}
+	encoded, _ := json.Marshal(fields)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }
 
 // Content is the article's live text as a review sees it.
 func (a KBArticle) Content() KBContent {
-	return KBContent{Title: a.Title, Slug: a.Slug, BodyMD: a.BodyMD, SEOTitle: a.SEOTitle, SEODescription: a.SEODescription, CollectionIDs: a.CollectionIDs}
+	return KBContent{Title: a.Title, Slug: a.Slug, BodyMD: a.BodyMD, SEOTitle: a.SEOTitle, SEODescription: a.SEODescription, CollectionIDs: a.CollectionIDs,
+		Attachments: a.Attachments}
 }

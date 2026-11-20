@@ -31,9 +31,10 @@ type kbReviewOut struct {
 }
 
 type kbReviewContentOut struct {
-	Slug          string     `json:"slug"`
-	CollectionIDs []string   `json:"collection_ids"`
-	TeamText      kbTeamText `json:"team_text"`
+	Slug          string            `json:"slug"`
+	CollectionIDs []string          `json:"collection_ids"`
+	TeamText      kbTeamText        `json:"team_text"`
+	Attachments   []kbAttachmentOut `json:"attachments"`
 }
 
 type kbReviewDetailOut struct {
@@ -71,5 +72,10 @@ func kbReviewContent(content domain.KBContent) kbReviewContentOut {
 	if ids == nil {
 		ids = []string{}
 	}
-	return kbReviewContentOut{Slug: content.Slug, CollectionIDs: ids, TeamText: kbTeamText{content.Title, content.BodyMD, content.SEOTitle, content.SEODescription}}
+	files := make([]restKBAttachment, 0, len(content.Attachments))
+	for _, file := range content.Attachments {
+		files = append(files, restKBAttachment{ID: file.ID, Name: file.Name, ContentType: file.ContentType, Size: file.Size})
+	}
+	return kbReviewContentOut{Slug: content.Slug, CollectionIDs: ids, TeamText: kbTeamText{content.Title, content.BodyMD, content.SEOTitle, content.SEODescription},
+		Attachments: kbAttachmentsView(files)}
 }

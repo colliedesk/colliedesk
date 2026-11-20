@@ -9,7 +9,8 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const path = `/api/v1/kb/reviews/${id}`;
-const content = (body: string) => ({ title: 'Reset your password', slug: 'reset-your-password', body_md: body, seo_title: '', seo_description: '', collection_ids: [ids.setup] });
+const content = (body: string, attachments: unknown[] = []) => ({ title: 'Reset your password', slug: 'reset-your-password', body_md: body, seo_title: '', seo_description: '', collection_ids: [ids.setup], attachments });
+const file = (n: number, name: string) => ({ id: `cccccccc-cccc-4ccc-8ccc-00000000000${n}`, name, content_type: 'application/pdf', size: 120, url: `/kb/files/${n}` });
 const detail = (fields: Record<string, unknown> = {}) => ({
   id, article_id: ids.article, article_title: 'Reset your password', locale: null, state: 'open', note: 'Check the steps', content_hash: 'a'.repeat(64), current: true,
   reviewers: [{ agent_id: me.agent.id, name: 'Ada', seen_at: null }], requested_by: { agent_id: '99999999-9999-4999-8999-999999999991', name: 'Bo' },
@@ -62,4 +63,14 @@ test('a review id from another workspace says it is not here', async () => {
   serve({ 'GET /api/v1/auth/me': () => json(200, me), [`GET ${path}`]: () => refusal(404, 'not_found', 'Not found') });
   open();
   expect(await screen.findByText('This review is not in this workspace.')).toBeInTheDocument();
+});
+
+test('a review lists the files the text shows, with the ones added and removed against the live text', async () => {
+  const form = file(1, 'Warranty form.pdf'), sheet = file(2, 'parts.csv'), old = file(3, 'Old form.pdf');
+  serve({ 'GET /api/v1/auth/me': () => json(200, me),
+    [`GET ${path}`]: () => json(200, detail({ live: content('Open Settings.', [form, old]), proposed: content('Open Settings.', [form, sheet]), diff: [{ change: 'same', text: 'Open Settings.' }] })) });
+  open();
+  const files = await screen.findByRole('list', { name: 'Files' });
+  expect(within(files).getAllByRole('listitem').map((line) => [line.dataset.change, line.textContent])).toEqual([
+    ['same', 'Warranty form.pdf'], ['added', 'added: parts.csv'], ['removed', 'removed: Old form.pdf']]);
 });

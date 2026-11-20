@@ -4165,7 +4165,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Set the files the article lists under its text for download, in order: items of kind `file` of the media library (upload one with POST /api/v1/kb/media-uploads and `kind` file). On a published article the list goes into its draft, as an edit does, and the help center shows it once the draft is published; otherwise it is the article's list at once. A file is downloadable from the help center only while a published article or translation lists it. An id that is not a file of this workspace's library outside the trash is 404 `file_not_found` naming it. The same id twice is 400. */
+        /** @description Set the files the article lists under its text for download, in order: items of kind `file` of the media library (upload one with POST /api/v1/kb/media-uploads and `kind` file). On a published article the list goes into its draft, as an edit does, and the help center shows it once the draft is published; otherwise it is the article's list at once. The list is part of the text a review approves: a change opens a new review in place of an open one, and an approved text whose list changed needs a new approval before it is published. A file is downloadable from the help center only while a published article or translation lists it. An id that is not a file of this workspace's library outside the trash is 404 `file_not_found` naming it. The same id twice is 400. */
         put: operations["setKBArticleAttachments"];
         post?: never;
         delete?: never;
@@ -4526,7 +4526,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Set the files the translation lists under its text, in order, as for an article. A translation has no draft: the list changes at once. A translation that lists no file shows the article's files on its page. */
+        /** @description Set the files the translation lists under its text, in order, as for an article. A translation has no draft: the list changes at once. A translation that lists no file shows the article's files on its page. The list is part of the translation's text a review approves: in a collection that needs approval, a change to a published translation's list that no review approved is 409 `approval_required` and the list stays as it was. */
         put: operations["setKBTranslationAttachments"];
         post?: never;
         delete?: never;
@@ -7947,7 +7947,7 @@ export interface components {
         KBReviewList: {
             reviews: components["schemas"]["KBReview"][];
         };
-        /** @description A text as the help center shows it: the fields an approval covers. */
+        /** @description A text as the help center shows it: the fields an approval covers, the files it lists among them (a change of the list after an approval needs a new one). */
         KBReviewContent: {
             title: string;
             slug: string;
@@ -7955,6 +7955,8 @@ export interface components {
             seo_title: string;
             seo_description: string;
             collection_ids: string[];
+            /** @description The files the text lists, in order; a translation's own list (empty while it shows the article's files). */
+            attachments: components["schemas"]["KBAttachment"][];
         };
         KBDiffLine: {
             /**

@@ -29,8 +29,9 @@ const (
 		`"team_text":{"type":"object","required":["article_title","note","decision_note"],"properties":{` + kbReviewTeamText + `}}}}`
 	kbReviewOutput = `{"type":"object","required":["review"],"properties":{"review":` + kbReviewSchema + `}}`
 
-	kbReviewContentSchema = `{"type":["object","null"],"required":["slug","collection_ids","team_text"],"properties":{"slug":{"type":"string"},"collection_ids":{"type":"array","items":{"type":"string"}},"team_text":` + kbTeamTextSchema + `}}`
-	kbReviewDetailOutput  = `{"type":"object","required":[` + kbReviewRequired + `,"live","proposed"],"properties":{` + kbReviewRowProperties + `,` +
+	kbReviewContentSchema = `{"type":["object","null"],"required":["slug","collection_ids","team_text","attachments"],"properties":{"slug":{"type":"string"},"collection_ids":{"type":"array","items":{"type":"string"}},"team_text":` + kbTeamTextSchema +
+		`,"attachments":` + kbAttachmentsSchema + `}}`
+	kbReviewDetailOutput = `{"type":"object","required":[` + kbReviewRequired + `,"live","proposed"],"properties":{` + kbReviewRowProperties + `,` +
 		`"live":` + kbReviewContentSchema + `,"proposed":` + kbReviewContentSchema + `,` +
 		`"team_text":{"type":"object","required":["article_title","note","decision_note","diff"],"properties":{` + kbReviewTeamText + `,` +
 		`"diff":{"type":"array","description":"The lines of the body from live to proposed.","items":{"type":"object","required":["change","text"],"properties":{"change":{"type":"string","enum":["same","added","removed"]},"text":{"type":"string"}}}}}}}}`

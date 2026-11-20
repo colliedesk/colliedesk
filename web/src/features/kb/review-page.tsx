@@ -10,6 +10,19 @@ import { reviewApi } from './review-api';
 import type { KBReviewDetail } from './review-api';
 import { reviewMessages as r } from './review-messages';
 
+// fileChanges is the files the proposed text lists, in its order, marked against the live text's, then the
+// live files it no longer lists: an approval covers the list too.
+function fileChanges(review: KBReviewDetail) {
+  const live = review.live?.attachments ?? [];
+  const proposed = review.proposed.attachments;
+  const kept = new Set(live.map((file) => file.id));
+  const listed = new Set(proposed.map((file) => file.id));
+  return [
+    ...proposed.map((file) => ({ id: file.id, name: file.name, change: review.live && kept.has(file.id) ? 'same' : 'added' })),
+    ...live.filter((file) => !listed.has(file.id)).map((file) => ({ id: file.id, name: file.name, change: 'removed' })),
+  ];
+}
+
 // ReviewRoute is one review: what changed against the live text, line by line, and the reviewer's answer:
 // Approve, Request changes with one line for the author, or Edit the text (which replaces this review).
 export function ReviewRoute({ reviewId }: { reviewId: string }) {
@@ -58,6 +71,7 @@ function ReviewBody({ review, onDecided }: { review: KBReviewDetail; onDecided: 
       setProblem(reason(error, r.actionFailed));
     }
   };
+  const files = fileChanges(review);
   return (
     <section className="kb-languages kb-review" aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`}>{review.article_title}</h2>
@@ -84,6 +98,12 @@ function ReviewBody({ review, onDecided }: { review: KBReviewDetail; onDecided: 
       <ul className="kb-diff" aria-label={r.changes}>{review.diff.map((line, at) => (
         <li key={at} data-change={line.change}>{line.change !== 'same' && <span className="sr-only">{line.change === 'removed' ? r.removed : r.added}</span>}{line.text}</li>
       ))}</ul>
+      {files.length > 0 && <>
+        <h3>{r.files}</h3>
+        <ul className="kb-diff" aria-label={r.files}>{files.map((file) => (
+          <li key={file.id} data-change={file.change}>{file.change !== 'same' && <span className="sr-only">{file.change === 'removed' ? r.removed : r.added}</span>}{file.name}</li>
+        ))}</ul>
+      </>}
     </section>
   );
 }

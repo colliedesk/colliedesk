@@ -50,6 +50,7 @@ export const reviewMessages = {
   proposed: 'Proposed',
   notLive: 'Not published yet: all of it is new.',
   changes: 'Changes',
+  files: 'Files',
   removed: 'removed: ',
   added: 'added: ',
   noTextChange: 'Same text: the title, address or other fields changed.',

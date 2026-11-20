@@ -349,7 +349,8 @@ An article can offer files to download under its text: a warranty form, a price 
 Each goes up with a bar of its progress and shows its type and size. Move a file up or down to set
 the order readers see, or remove it from the list; the file stays in the [media library](#media-library).
 On a published article the list is part of its [unpublished changes](#unpublished-changes) until
-**Publish changes**; a translation has a list of its own, which changes at once.
+**Publish changes**; a translation has a list of its own, which changes at once. Where
+[approval is required](#review-before-publishing), the list is part of what a reviewer approves.
 
 - Accepted: PDF; Word, Excel and PowerPoint (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`);
   OpenDocument (`odt`, `ods`, `odp`); CSV, TXT and RTF; ZIP, 7z and `tar.gz`. The type is judged from
@@ -459,19 +460,21 @@ views:
 - **Approved**: approved texts not published yet. Tick several and select **Publish N**.
 
 Open one to see **Live now** (the published text, or **Not published yet**) beside **Proposed**, and
-**Changes**, each removed and added line. **Approve** approves it; **Request changes** sends it back
+**Changes**, each removed and added line, then **Files**, the files it lists with the ones added and
+removed. **Approve** approves it; **Request changes** sends it back
 with **What to change**. A text an AI agent wrote shows **Written by an AI agent through** its token.
 
 ### Who may approve
 
 - A reviewer holds `kb_articles:publish` and is chosen when the text is sent.
-- Nobody approves their own text: not the person who sent it, nor anyone who wrote part of it since it
-  was last published.
+- Nobody approves their own text: not the person who sent it, nor anyone who wrote part of it or changed
+  its files since it was last published.
 - A text an AI agent sent through a token is never approved by that token or by another token of the
   person who made it. A token acts for its maker, so it approves only for a reviewer, and the history
   names the token.
-- An approval holds for the exact text: title, address name, text, collections, search title and meta
-  description. Any later edit needs a new approval: the article says **Your edits need a new approval:
+- An approval holds for the exact text: title, address name, text, collections, search title, meta
+  description and the [files](#attach-files) it lists, in their order (a translation: its own files). Any later
+  edit, a change of the file list too, needs a new approval: the article says **Your edits need a new approval:
   save them and send them for review.**
 - An edit while a text is in review replaces the review (**Replaced by an edit**) with a new one for the
   same reviewers, except a reviewer who made the edit. Reviewers are emailed again (**Review again**).

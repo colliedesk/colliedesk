@@ -47,7 +47,7 @@ const summaryFields = {
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
 // A file listed under an article or translation, in the order the reader sees.
-const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
+export const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
 // The unpublished changes of a published article: what publishing them puts live. Its updated_at is the
 // version every save, publish, discard, restore or delete sends while it exists.
 const draftSchema = z.object({

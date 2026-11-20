@@ -13,9 +13,11 @@ import (
 // edit of a published one goes live at once. So a translation in a collection that needs approval is
 // reviewed as a draft, and published only with the text a review approved.
 
-// translationContent is what a review of the translation approves: its text, listed where its article is.
+// translationContent is what a review of the translation approves: its text and its own files, listed
+// where its article is.
 func translationContent(item domain.KBArticleTranslation, collections []string) domain.KBContent {
-	return domain.KBContent{Title: item.Title, Slug: item.Slug, BodyMD: item.BodyMD, SEOTitle: item.SEOTitle, SEODescription: item.SEODescription, CollectionIDs: collections}
+	return domain.KBContent{Title: item.Title, Slug: item.Slug, BodyMD: item.BodyMD, SEOTitle: item.SEOTitle, SEODescription: item.SEODescription, CollectionIDs: collections,
+		Attachments: item.Attachments}
 }
 
 // readKBTranslationText reads a translation with the collections of its article; domain.ErrKBTranslationNotFound when it has none.
