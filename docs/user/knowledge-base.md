@@ -319,12 +319,14 @@ public page answered to **Was this article helpful?**:
 
 - The count the page shows, such as "13 out of 17 found this helpful". Votes imported from
   Freshdesk count toward it, and the box says how many of them there are.
-- Each reader's vote, newest change first: **Yes** or **No**, who (a reader who is not signed in is
-  **Anonymous reader**), the day, and what they said was missing. The first five are shown;
+- Each reader's vote, newest change first: **Yes** or **No**, the day, and what they said was missing.
+  Readers are anonymous. The first five are shown;
   **Show all** lists the rest.
 - **Earlier counts**: the count before each reset, with who reset it.
 
-One reader has one vote per article: voting again changes it. Emails and numbers of 6 digits or more
+One reader has one vote per article: voting again changes it. One visitor address adds at most 10
+new readers to an article a day; past that the page still thanks the reader but the vote is not
+counted. Emails and numbers of 6 digits or more
 in what a reader writes are replaced with "[email removed]" and "[number removed]" before anything is
 stored, and the line is cut to 500 characters.
 
@@ -755,8 +757,8 @@ Then press **Verify** in Search Console or Bing.
 
 ### Limits
 
-- One visitor address can load 600 pages and run 30 searches a minute, votes counted as searches;
-  past that the page asks to wait a minute.
+- One visitor address can load 600 pages, run 30 searches and vote 20 times a minute; past that the
+  page asks to wait a minute.
 - During a Colliedesk Cloud **trial**, pages ask search engines not to index them. A paid plan lifts
   this.
 - A **locked** workspace (trial over, nothing paid) has no help center: its addresses say "This page
