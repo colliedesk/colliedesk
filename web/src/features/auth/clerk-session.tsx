@@ -33,6 +33,9 @@ export interface ClerkSessionProps {
   // this browser is signed out before anything is exchanged, or the same person would be signed
   // straight back in without a code.
   endSession?: boolean;
+  // placeholder stands where the form will be while Clerk loads and until it has drawn the form;
+  // without one, the page says copy.signingIn until Clerk has loaded.
+  placeholder?: ReactNode;
 }
 
 // The page Clerk returns to after sign-in: this one, without the signed-out marker, so the reload
@@ -46,7 +49,7 @@ function returnAddress() {
 
 // ClerkSession is the identity provider's sign-in form and the hand-over of its session token, inside a
 // ClerkProvider: the workspace app's cloud sign-in and the operator console's both use it.
-export function ClerkSession({ copy, onSessionToken, isRefused, refused, endSession = false }: ClerkSessionProps) {
+export function ClerkSession({ copy, onSessionToken, isRefused, refused, endSession = false, placeholder }: ClerkSessionProps) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const clerk = useClerk();
   const exchanged = useRef(false);
@@ -56,13 +59,15 @@ export function ClerkSession({ copy, onSessionToken, isRefused, refused, endSess
   // Checked once, when Clerk has loaded: a sign-in completed on this page afterwards is kept.
   const [ending, setEnding] = useState(endSession);
   const ended = useRef(false);
+  const [formShown, setFormShown] = useState(false);
   // Once Clerk's form shows (its UI loads after isLoaded), what the page held back (product analytics)
-  // may download.
+  // may download, and the placeholder gives way to the form.
   useEffect(() => {
     if (!isLoaded) return undefined;
     const shown = () => document.querySelector('.cl-formButtonPrimary, .cl-socialButtonsBlockButton, .cl-formFieldInput') !== null;
-    if (shown()) { markSignInFormReady(); return undefined; }
-    const watch = new MutationObserver(() => { if (shown()) { watch.disconnect(); markSignInFormReady(); } });
+    const ready = () => { setFormShown(true); markSignInFormReady(); };
+    if (shown()) { ready(); return undefined; }
+    const watch = new MutationObserver(() => { if (shown()) { watch.disconnect(); ready(); } });
     watch.observe(document.body, { childList: true, subtree: true });
     return () => watch.disconnect();
   }, [isLoaded]);
@@ -118,10 +123,14 @@ export function ClerkSession({ copy, onSessionToken, isRefused, refused, endSess
   </div> : <p>{copy.signingOut}</p>;
   if (refusal) return refused({ leave, getToken: freshToken, signOutFailed });
   if (failed) return <button type="button" onClick={() => setFailed(false)}>{copy.retry}</button>;
-  if (!isLoaded || isSignedIn) return <p>{copy.signingIn}</p>;
+  if (!isLoaded) return placeholder ?? <p>{copy.signingIn}</p>;
+  if (isSignedIn) return <p>{copy.signingIn}</p>;
   // Stay on this page after sign-in (Clerk would otherwise go to "/" and unmount this component
   // before the exchange). withSignUp lets a person who has no Clerk identity yet sign in with a
   // code; the server still admits only the emails it knows.
   const here = returnAddress();
-  return <SignIn routing="hash" withSignUp forceRedirectUrl={here} signUpForceRedirectUrl={here} appearance={clerkAppearance()} />;
+  const form = <SignIn routing="hash" withSignUp forceRedirectUrl={here} signUpForceRedirectUrl={here} appearance={clerkAppearance()} />;
+  if (!placeholder) return form;
+  // Clerk draws its form a moment after it has loaded: it is drawn hidden, under the placeholder.
+  return <>{!formShown && placeholder}<div hidden={!formShown}>{form}</div></>;
 }

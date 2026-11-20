@@ -21,11 +21,11 @@ import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signIn
 import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-intent';
 import { rememberSignupAttribution } from './lib/signup-attribution';
 import type { PlanIntent } from './features/settings/plan-intent';
-import { NavItemContent, SettingsNavLinkContext } from './features/settings/settings-nav';
+import { NavItemContent, SettingsNavLinkContext } from './features/settings/settings-nav-link';
 import { aiViews, conversationFieldsTitle, membersTabOf, movedAddress, settingsAddress } from './features/settings/settings-anchors';
 import type { MembersTab } from './features/settings/settings-anchors';
 import { confirmDiscardUnsavedSettings } from './features/settings/unsaved-probe';
-import type { NavItem } from './features/settings/settings-nav';
+import type { NavItem } from './features/settings/settings-nav-link';
 import type { ReactNode } from 'react';
 import { AppShell } from './features/shell/app-shell';
 import { askInbox } from './features/shell/inbox-intents';
