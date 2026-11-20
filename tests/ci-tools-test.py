@@ -884,6 +884,35 @@ class StaticChecks(unittest.TestCase):
         self.assertTrue({'go', 'web'} <= {n.strip() for n in needs.group(1).split(',')})
 
 
+class PrebuiltTestServers(unittest.TestCase):
+    """The e2e job links both test servers in the background, to the paths the e2e support code runs
+    them from; Playwright's servers and the CLI helper then find each binary current and start it at
+    once. Linked to /dev/null, the first `go run` of each kind linked it again before its server
+    started (3.3 and 3.7 seconds against 1.4 for the next, run 44712766738)."""
+
+    def setUp(self):
+        jobs = {name: '\n'.join(body) for name, body in workflow_jobs(ROOT / '.github/workflows/ci.yml')}
+        steps = re.split(r'\n      - ', jobs['e2e'])
+        found = [s for s in steps if 'ci-background.sh start app' in s]
+        self.assertEqual(len(found), 1)
+        self.step = found[0]
+        self.cli = (ROOT / 'web/e2e/support/cli.ts').read_text()
+        self.config = (ROOT / 'web/playwright.config.ts').read_text()
+
+    def test_the_background_build_links_to_the_paths_the_tests_run(self):
+        self.assertNotIn('/dev/null', self.step)
+        self.assertIn("const binDir = join(repoRoot, '.cache', 'e2e');", self.cli)
+        self.assertIn("`${binDir}/colliedesk${tags ? `-${tags}` : ''}`", self.cli)
+        built = {(tags, (ROOT / 'server' / out).resolve())
+                 for tags, out in re.findall(r'go build (?:-tags (\w+) )?-o (\S+) \./cmd/collie', self.step)}
+        self.assertEqual(built, {('e2e', ROOT / '.cache/e2e/colliedesk-e2e'), ('', ROOT / '.cache/e2e/colliedesk')})
+
+    def test_the_playwright_servers_run_the_built_binary(self):
+        self.assertNotIn('go run', self.config)
+        self.assertIn('binaryPath(tags)', self.config)
+        self.assertIn('export function binaryPath(', self.cli)
+
+
 class BundleBudget(unittest.TestCase):
     def test_e2e_checks_the_bundle_it_built(self):
         e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
