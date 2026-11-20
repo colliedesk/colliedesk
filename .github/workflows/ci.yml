@@ -670,9 +670,15 @@ jobs:
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
             go-${{ runner.os }}-
-      - name: Compile the migration tests
+      # One go test process ran the 92 tests in 86 to 89 seconds and the job in 125 to 140 (run
+      # 44793559236); three processes split by measured time (go-test-shard.py) run them at once, as
+      # the go jobs do. Each test makes its own database, so the processes share one server.
+      - name: Compile and split the migration tests
         working-directory: server
-        run: go test -c -o "$RUNNER_TEMP/floor-tests/" ./internal/database/...
+        run: |
+          go test -c -o "$RUNNER_TEMP/floor-tests/" ./internal/database/...
+          go test -list . ./internal/database/... > "$RUNNER_TEMP/floor-list.txt"
+          python3 ../.github/scripts/go-test-shard.py 1 1 --parts 3 --timings ../.github/go-test-timings.json < "$RUNNER_TEMP/floor-list.txt" > "$RUNNER_TEMP/floor-patterns.txt"
       - name: Wait for PostgreSQL ${{ matrix.major }}
         run: sh .github/scripts/ci-services.sh wait postgres
       # A wrong image would test 19 again, and a database the tests cannot reach makes them skip:
@@ -686,7 +692,18 @@ jobs:
           version=$(docker exec ci-postgres psql -U colliedesk -d colliedesk_test -tAc 'SHOW server_version_num')
           echo "server_version_num: $version"
           [ "$((version / 10000))" = "$MAJOR" ] || { echo "the test database runs $version, not PostgreSQL $MAJOR" >&2; exit 1; }
-          go test -count=1 -v ./internal/database/... | tee "$RUNNER_TEMP/floor.txt"
+          pids=()
+          status=0
+          part=0
+          while IFS= read -r pattern; do
+            part=$((part + 1))
+            go test -count=1 -run "$pattern" -v ./internal/database/... > "$RUNNER_TEMP/floor-part-$part.txt" 2>&1 &
+            pids+=($!)
+          done < "$RUNNER_TEMP/floor-patterns.txt"
+          for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+          cat "$RUNNER_TEMP"/floor-part-*.txt > "$RUNNER_TEMP/floor.txt"
+          cat "$RUNNER_TEMP/floor.txt"
+          [ "$status" = 0 ] || exit 1
           if grep -E '^\s*--- SKIP' "$RUNNER_TEMP/floor.txt"; then echo 'the tests above skipped instead of running' >&2; exit 1; fi
           grep -q -- '--- PASS: TestEveryMigrationAppliesOnFreshDatabaseAndRollsBackInReverse' "$RUNNER_TEMP/floor.txt" ||
             { echo 'TestEveryMigrationAppliesOnFreshDatabaseAndRollsBackInReverse did not run' >&2; exit 1; }
