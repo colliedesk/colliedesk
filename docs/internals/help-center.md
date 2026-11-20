@@ -497,7 +497,7 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   editor preview does not colour code; it would add a highlighter to the editor's chunk.
 - **On this page is built from the rendered headings.** `contentsOf` lists the H2 and H3 headings at
   the top level of the text with the ids `headingIDs` gave them, so every item links to a heading
-  that exists; fewer than 3 give no list. `show_contents` is a column of the article, not of a
+  that exists; fewer than 3 give no list, and it stops at 50 because it shows twice on the page. `show_contents` is a column of the article, not of a
   translation, so one switch covers every language. It is kept in each version and exported, but a
   version restore leaves it as it is: a restore brings back words, not page settings. A rendering
   change raises `renderVersion`, so no cached page is served in the old shape.

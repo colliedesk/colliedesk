@@ -169,7 +169,7 @@ all the code in a block, ready to copy.
 ### On this page
 
 An article with 3 or more Heading 2 and Heading 3 headings lists them under **On this page**, each
-linking to its heading. In a wide window the list is beside the text; on a phone it is above it. It is
+linking to its heading (the first 50, in a very long article). In a wide window the list is beside the text; on a phone it is above it. It is
 part of the page, so it needs no script. To turn it off for an article, clear **Show On this page**
 under **On this page** on the article page (on a phone, under **Details**). The switch is the
 article's, so it applies to every language, and it is in the [export](export.md). Restoring an older

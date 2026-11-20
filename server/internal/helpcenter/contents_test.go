@@ -47,3 +47,18 @@ func TestAnArticleWithThreeOrMoreHeadingsListsItsContents(t *testing.T) {
 		t.Errorf("2 headings gave %+v", two.contents)
 	}
 }
+
+// TestALongContentsListStopsAtFiftyItems: the list shows twice on a page, so an article of
+// thousands of headings would multiply the page; it lists its first 50.
+func TestALongContentsListStopsAtFiftyItems(t *testing.T) {
+	page, err := renderArticlePage(strings.Repeat("a\n---\n", 300), "/help/acme", "en", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.contents) != 50 {
+		t.Fatalf("300 headings gave %d items, want 50", len(page.contents))
+	}
+	if first, last := page.contents[0], page.contents[49]; first.ID != "a" || last.ID != "a-49" {
+		t.Errorf("items run from %q to %q, want a to a-49", first.ID, last.ID)
+	}
+}
