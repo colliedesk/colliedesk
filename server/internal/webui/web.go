@@ -27,8 +27,12 @@ func Handler(api http.Handler, signIn ConsoleSignIn) http.Handler {
 	if _, err := fs.Stat(static, "build/index.html"); err == nil {
 		served, _ = fs.Sub(static, "build")
 	}
+	return appHandler(api, OperatorHandler("/operator", signIn), served)
+}
+
+// appHandler serves the workspace app's build from served, sending the API's and the console's paths on.
+func appHandler(api, console http.Handler, served fs.FS) http.Handler {
 	files := http.FileServer(http.FS(served))
-	console := OperatorHandler("/operator", signIn)
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if strings.HasPrefix(request.URL.Path, "/api/") || oauthPath(request.URL.Path) {
 			api.ServeHTTP(response, request)
@@ -49,15 +53,29 @@ func Handler(api http.Handler, signIn ConsoleSignIn) http.Handler {
 		if path != "" {
 			if file, err := served.Open(path); err == nil {
 				_ = file.Close()
+				if strings.HasPrefix(path, "assets/") {
+					response.Header().Set("Cache-Control", hashedAssetCache)
+				}
 				files.ServeHTTP(response, request)
 				return
 			}
+			if strings.HasPrefix(path, "assets/") {
+				// A file an old page names after a deploy: the page in its place would be cached under a script's name.
+				http.NotFound(response, request)
+				return
+			}
 		}
+		// The page names the build's files; asked for again each time, a deploy reaches every open browser.
+		response.Header().Set("Cache-Control", "no-cache")
 		clone := request.Clone(request.Context())
 		clone.URL.Path = "/"
 		files.ServeHTTP(response, clone)
 	})
 }
+
+// hashedAssetCache: Vite names every file under assets/ by its content, so a name never changes what it holds
+// and browsers and the CDN may keep it for a year without asking again.
+const hashedAssetCache = "public, max-age=31536000, immutable"
 
 // oauthPath: the OAuth protocol's addresses outside /api/ that the API serves (discovery, registration,
 // token); the consent page /oauth/authorize is the web app's.
