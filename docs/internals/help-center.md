@@ -315,7 +315,7 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   to reload, with `no-store` and no ETag. A render that had started finishes in the background and
   its page serves the next visit; one still waiting for a slot does not start, and the next visit
   tries again (no queue of renders builds up). Left over: many
-  workspaces with slow texts can hold every slot for as long as one render takes (about 0.7 s now),
+  workspaces with slow texts can hold every slot for as long as one render takes (under 50 ms for every known text, see Traps),
   delaying others' first visits to the 1 s fallback. Chosen over rendering on write, which still
   needs the same guard for older articles and would add a migration and a render to every write path.
 
@@ -493,11 +493,21 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **Code is coloured with classes, never inline styles.** chroma splits a fenced block whose language
   it knows into spans with its short token classes, and `site.css` colours them for light and dark.
   Its HTML formatter's inline styles would be refused by `style-src 'self'`, so the CSP did not change.
-  A block over `highlightLimit` (8,000 characters) stays plain: lexing costs about 5 ms per KB. The
-  editor preview does not colour code; it would add a highlighter to the editor's chunk.
+  The language is looked up by exact name, alias or plain file extension in `codeLanguages`, a short
+  list of common languages (Traps). An article colours its blocks in order while their code totals at
+  most `highlightLimit` (10,000 characters) and their lexing at most `highlightTime` (30 ms); the block
+  that passes either, and every block after the time runs out, stays plain. Lexing costs up to about
+  3 ms per KB and colouring multiplies a block's HTML by up to 18, so the limit bounds the page too
+  (about 180 KB more). The editor preview does not colour code; it would add a highlighter to the
+  editor's chunk.
 - **On this page is built from the rendered headings.** `contentsOf` lists the H2 and H3 headings at
   the top level of the text with the ids `headingIDs` gave them, so every item links to a heading
-  that exists; fewer than 3 give no list, and it stops at 50 because it shows twice on the page. `show_contents` is a column of the article, not of a
+  that exists. `headingIDs` starts with the ids the page templates and the chat use (`reservedIDs`:
+  `main`, `q`, `chat-title`, …), so "## Main" gets `main-1` and the skip link still reaches `<main>`;
+  `TestEveryIDOfThePageTemplatesIsReserved` fails when a template adds an id the list lacks. An item's
+  words are `plainText` of the heading, with entities and backslash escapes resolved once ("Tom &amp;
+  Jerry" shows "Tom & Jerry"), the same words the FAQ data, the description and excerpts read. Fewer
+  than 3 give no list, and it stops at 50 because it shows twice on the page. `show_contents` is a column of the article, not of a
   translation, so one switch covers every language. It is kept in each version and exported, but a
   version restore leaves it as it is: a restore brings back words, not page settings. A rendering
   change raises `renderVersion`, so no cached page is served in the old shape.
@@ -512,7 +522,15 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   link start past 16 whose `(` does not close before the next one; `headingIDs` gives goldmark's ids
   (`a`, `a-1`, …) remembering the next free suffix; `linkify` asks goldmark's Linkify only where a
   URL prefix or an `@` within 65 characters follows, with a local part of at most 64. Every known
-  text now renders cold in under 30 ms locally; the render guard above bounds what is not known. `TestHelpCenterHostileArticlesLatencyBudget` holds them.
+  text now renders cold in under 50 ms locally (8,000 newlines in 12 C or Java blocks the slowest, about
+  45 ms); the render guard above bounds what is not known. `TestHelpCenterHostileArticlesLatencyBudget` holds them.
+- **chroma can cost seconds per article.** `lexers.Get` with a name it does not know matches it as a
+  file name and then against every lexer (3 to 15 ms a block, so 11,000 blocks of an unknown language
+  took over 1 s); the lexers that pick another one from the code (Markdown, Svelte, Org, SQL dialects
+  with an embedded language) reach that fallback from inside a block; and some lexers are quadratic
+  on crafted code (8,000 newlines in C or Java, colons in YAML). So the language is a map lookup in
+  `codeLanguages`, never `lexers.Get`, and `highlightTime` counts only the token reads: the first use
+  of a lexer compiles its rules, which is not the article's cost.
 
 - **A build without a version still changes its ETag.** Development builds have an empty version;
   the template hash in the ETag keeps an edited page from being revalidated as the old one.

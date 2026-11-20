@@ -95,11 +95,11 @@ func (budget *codeBudget) highlight(w util.BufWriter, language, code string) boo
 			return
 		}
 		if class != "" {
-			out.WriteString(`<span class="` + class + `">`)
+			_, _ = out.WriteString(`<span class="` + class + `">`)
 		}
 		goldhtml.DefaultWriter.RawWrite(out, []byte(run.String()))
 		if class != "" {
-			out.WriteString("</span>")
+			_, _ = out.WriteString("</span>")
 		}
 		run.Reset()
 	}
