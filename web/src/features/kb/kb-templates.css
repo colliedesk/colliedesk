@@ -1,0 +1,19 @@
+/* Article templates: a card of rows like the languages, and a form that opens in place of a row. */
+.kb-template-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; overflow: hidden; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.kb-template-list > li { display: grid; gap: var(--space-3); border-bottom: 1px solid var(--line); padding: var(--space-3) var(--space-4); }
+.kb-template-list > li:last-child { border-bottom: 0; }
+.kb-template-list > li:has(> .kb-template-text) { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.kb-template-list > li > :is(.kb-template-form, .saved-reply-panel) { grid-column: 1 / -1; }
+.kb-template-text { display: grid; gap: 2px; min-width: 0; }
+.kb-template-text strong { color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.kb-template-text span { color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.kb-template-text small { font-size: var(--fs-label); line-height: 16px; }
+.kb-template-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.kb-template-form { display: grid; gap: var(--space-3); border-radius: var(--radius-lg); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-4); }
+.kb-template-form textarea { min-height: 12rem; font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--fs-small); }
+.kb-template-note { color: var(--text-2); font-size: var(--fs-label); line-height: 16px; }
+@media (max-width: 44rem) {
+  .kb-templates-page { gap: var(--space-4); padding: var(--space-3) var(--space-4) var(--space-6); }
+  .kb-template-list > li:has(> .kb-template-text) { grid-template-columns: minmax(0, 1fr); }
+  .kb-template-actions button { min-height: var(--touch); }
+}
