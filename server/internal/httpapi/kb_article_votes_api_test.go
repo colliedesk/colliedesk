@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 type kbVotesView struct {
@@ -144,5 +146,35 @@ func TestARepeatedResetPressStoresOneReset(t *testing.T) {
 	reused := postWithKey(t, api, admin, "/api/v1/kb/articles/"+second.ID+"/votes/reset", "reset-press-1", nil)
 	if reused.Code != http.StatusUnprocessableEntity || errorCode(t, reused) != "idempotency_key_reused" {
 		t.Fatalf("the key on another article: status=%d body=%s, want 422 idempotency_key_reused", reused.Code, reused.Body.String())
+	}
+}
+
+func TestAnArticlePurgedFromTheTrashTakesItsVotesAndResetsWithIt(t *testing.T) {
+	api, service, pool, storage := testAPIWithStorage(t)
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Vote Purge", "admin@vote-purge.example.com")
+	slug := workspaceSlug(t, api, admin)
+	enableHelpCenter(t, api, admin, "Purge help", true)
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Old guide", "status": "published", "body_md": "a"})
+	page := fmt.Sprintf("/help/%s/a/%d-%s", slug, article.Number, article.Slug)
+	wantSeeOther(t, postVote(site, page+"/vote", url.Values{"helpful": {"no"}}, testOrigin, "192.0.2.95"), page+"?voted=no#helpful")
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+article.ID+"/votes/reset", nil, admin, http.StatusOK, nil)
+	wantSeeOther(t, postVote(site, page+"/vote", url.Values{"helpful": {"yes"}}, testOrigin, "192.0.2.96"), page+"?voted=yes#helpful")
+	kbCall(t, api, http.MethodDelete, "/api/v1/kb/articles/"+article.ID+"?updated_at="+url.QueryEscape(article.UpdatedAt), nil, admin, http.StatusNoContent, nil)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE kb_articles SET deleted_at=now()-interval '31 days' WHERE id=$1`, article.ID); err != nil {
+		t.Fatal(err)
+	}
+	purged, err := store.New(pool).WithObjects(storage).PurgeKBTrash(ctx)
+	if err != nil || purged.Articles != 1 {
+		t.Fatalf("purge = %+v, %v, want the one article", purged, err)
+	}
+	var votes, resets int
+	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM kb_article_votes WHERE article_id=$1), (SELECT count(*) FROM kb_article_vote_resets WHERE article_id=$1)`, article.ID).Scan(&votes, &resets); err != nil {
+		t.Fatal(err)
+	}
+	if votes != 0 || resets != 0 {
+		t.Fatalf("after the purge %d votes and %d resets are left, want none", votes, resets)
 	}
 }
