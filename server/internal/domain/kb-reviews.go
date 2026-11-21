@@ -35,8 +35,8 @@ var (
 	// ErrKBApprovalRequired means a collection of the article needs an approved version of exactly the
 	// text being published.
 	ErrKBApprovalRequired = errors.New("this collection needs an approved version; send it for review")
-	// ErrKBTranslationApprovalRequired is ErrKBApprovalRequired for a translation, which has no draft
-	// beside its published text.
+	// ErrKBTranslationApprovalRequired is ErrKBApprovalRequired for a translation or its unpublished
+	// changes.
 	ErrKBTranslationApprovalRequired = errors.New("this collection needs an approved version of the translation")
 	ErrKBReviewNotFound              = errors.New("knowledge base review not found")
 	// ErrKBNothingToReview means the article or translation has no unpublished text.

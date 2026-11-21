@@ -41,11 +41,13 @@ func insertContact(ctx context.Context, tx pgx.Tx, workspaceID, name, email stri
 
 // contactForEmail finds the contact of an address, or adds it with name, for mail and forms that arrive
 // from it. A contact merged into another answers with the one it was merged into, so new mail from a
-// merged address joins the kept contact instead of the duplicate.
+// merged address joins the kept contact instead of the duplicate. A known address locks its row
+// (DO SELECT FOR NO KEY UPDATE) without writing it, so a merge running at the same time is waited
+// for and its result read.
 func contactForEmail(ctx context.Context, tx pgx.Tx, workspaceID, name, email string) (string, error) {
 	var contactID string
 	err := tx.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,$2,$3)
-		ON CONFLICT(workspace_id,email) DO UPDATE SET email=contacts.email RETURNING COALESCE(merged_into_id,id)::text`, workspaceID, name, email).Scan(&contactID)
+		ON CONFLICT(workspace_id,email) DO SELECT FOR NO KEY UPDATE RETURNING COALESCE(merged_into_id,id)::text`, workspaceID, name, email).Scan(&contactID)
 	if err != nil {
 		return "", fmt.Errorf("find or create contact: %w", err)
 	}

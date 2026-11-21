@@ -42,3 +42,30 @@ func (a KBArticle) AsDrafted() KBArticle {
 	a.Attachments, a.Tags = draft.Attachments, draft.Tags
 	return a
 }
+
+// KBTranslationDraft is the unpublished changes of a published translation: every field as it will be
+// once published. UpdatedAt is when the draft was saved last; the translation's UpdatedAt is the token
+// to send back.
+type KBTranslationDraft struct {
+	Title          string            `json:"title"`
+	Slug           string            `json:"slug"`
+	BodyMD         string            `json:"body_md"`
+	SEOTitle       string            `json:"seo_title"`
+	SEODescription string            `json:"seo_description"`
+	Attachments    KBAttachments     `json:"attachments"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
+	UpdatedBy      *SavedReplyPerson `json:"updated_by"`
+}
+
+// AsDrafted is the translation as it will be once its draft is published; without a draft it is the
+// translation. UpdatedAt stays the translation's: the token every write checks.
+func (t KBArticleTranslation) AsDrafted() KBArticleTranslation {
+	if t.Draft == nil {
+		return t
+	}
+	draft := *t.Draft
+	t.Title, t.Slug, t.BodyMD, t.SEOTitle, t.SEODescription = draft.Title, draft.Slug, draft.BodyMD, draft.SEOTitle, draft.SEODescription
+	t.Attachments = draft.Attachments
+	return t
+}

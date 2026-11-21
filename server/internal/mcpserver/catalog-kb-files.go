@@ -34,7 +34,7 @@ func kbArticleAttachmentsSetSpec() Spec {
 		Name:  "colliedesk_kb_article_attachments_set",
 		Title: "Set the files listed under a knowledge base article",
 		Description: `Replace the files an article (or, with locale, one translation) lists for download under its text with media_ids, in that order; [] removes them all and the files stay in the library. ` +
-			`On a published article the list goes into its draft until colliedesk_kb_article_draft_publish; a translation changes at once, so a published one also needs kb_articles:publish. ` +
+			`On a published article or translation the list goes into its draft until colliedesk_kb_article_draft_publish (with the same locale). ` +
 			`Find files with colliedesk_kb_media_list kind file. At most 50 files, 25 MiB each and 100 MiB together.` + "\n\n" + kbTextNotice,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/kb/articles/{id}/attachments", "PUT /api/v1/kb/articles/{id}/translations/{locale}/attachments"},

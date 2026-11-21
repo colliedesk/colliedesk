@@ -223,17 +223,63 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 The Freshdesk importer and undo resolve the slug once, then run every read and write in
 `InWorkspace` for that workspace. Their advisory lock (`DB.TryAdvisoryLock`) reads no table.
 
+## Securing a new table
+
+Default privileges give the app role SELECT, INSERT, UPDATE and DELETE on every new table. A new
+table is open to every workspace until its migration secures it. Do it in the same migration, with
+one call:
+
+1. Workspace data (the table has `workspace_id`):
+
+   ```sql
+   SELECT secure_workspace_table('notes');
+   ```
+
+   This enables and forces row-level security, adds `workspace_isolation` for the app role and
+   `privileged_access` for the owner. Default privileges cover tables only, so it also gives the app
+   role `USAGE` and `SELECT` on the table's serial sequences. It refuses a table without
+   `workspace_id`.
+2. Server-wide data (operators, server config, cloud sign-ups):
+
+   ```sql
+   SELECT secure_server_table('server_jobs');
+   ```
+
+   Only the owner on the privileged path reaches it. The app role loses every grant on the table and
+   on its sequences.
+3. Fewer privileges for the app role (history that is only added, rows that are marked deleted):
+
+   ```sql
+   SELECT limit_app_role('note_versions', 'SELECT', 'INSERT');
+   ```
+
+   A plain `GRANT SELECT, INSERT` restricts nothing, because it adds to the default privileges.
+   `limit_app_role` revokes first, then grants exactly the listed privileges.
+
+`migration-check` refuses a migration after `20261121132937-workspace-table-security` that writes
+`CREATE`, `ALTER` or `DROP POLICY`, `ROW LEVEL SECURITY`, `pg_policies` or `app.privileged` by hand
+(comments do not count). If a table needs a
+shape the helpers do not give, add a helper in a migration and test it.
+
 ## Guards
 
-- **`TestEveryWorkspaceTableEnforcesRowLevelSecurity`** reads the catalog.
-  - It checks every table in the schema that has a `workspace_id` column or that the app role holds
-    any privilege on, plus `workspaces`.
-  - It fails when one of them lacks ENABLE, FORCE or the `workspace_isolation` policy.
-  - Default privileges grant every new table to the app role, so a new table must add all three in
-    its own migration, together with `privileged_access`, or revoke the app role. There is no
-    allowlist; `schema_migrations` is revoked.
-  - `TestSecurityGuardFlagsAnyTableTheAppRoleCanReach` proves the gate catches a table without
-    `workspace_id`.
+- **`TestEveryWorkspaceTableEnforcesRowLevelSecurity`** reads the catalog for every table in the
+  schema and compares each one with the exact shape the helpers make.
+  - A workspace table must have ENABLE, FORCE and exactly two policies: `workspace_isolation`
+    (permissive, all commands, the app role, the workspace check on `workspace_id`, or `id` on
+    `workspaces`) and `privileged_access` (permissive, all commands, the owner, the privileged
+    check). An extra permissive policy, a widened `USING` or a policy `TO PUBLIC` fails it.
+  - A server-wide table (the list in the test) must have only `privileged_access`, and the app role
+    must hold no privilege on it.
+  - `channel_types` and `schema_migrations` have no row-level security; the app role must not reach
+    them.
+  - `TestSecurityGuardFlagsAnyTableTheAppRoleCanReach` and
+    `TestSecurityGuardFlagsAPolicyThatOnlyMentionsTheWorkspace` prove the gate catches a table
+    without `workspace_id`, a widened policy, an extra policy and a public policy.
+- **`TestAppRoleHasExactlyThePrivilegesEachWorkspaceTableAllows`** fails when the app role holds
+  other than SELECT, INSERT, UPDATE and DELETE on a workspace table, except for the tables listed in
+  the test with fewer privileges.
+- **`migration-check`** (CI) refuses hand-written row-level security in new migrations; see above.
 - **`TestPrivilegedPathsMatchTheReviewedAllowlist`** parses the server source. It fails in three
   cases:
   - A `Privileged(...)` call site is added or removed.
@@ -265,13 +311,13 @@ The Freshdesk importer and undo resolve the slug once, then run every read and w
 
 ## Operator notes
 
-- **PostgreSQL 16 or newer** is required. The `SET` option of role membership (`pg_has_role(...,
-  'SET')`, `GRANT ... WITH INHERIT FALSE, SET TRUE`) appeared in 16. `database.MinPostgresMajor`
-  holds it, and every database command checks it first (`CheckPostgresVersion`), so an older server
+- **PostgreSQL 19 or newer** is required. The `SET` option of role membership (`pg_has_role(...,
+  'SET')`, `GRANT ... WITH INHERIT FALSE, SET TRUE`) appeared in 16; the floor is 19 so that queries
+  can use what 19 added. `database.MinPostgresMajor` holds it, and every database command checks it first (`CheckPostgresVersion`), so an older server
   stops with a message naming the version found, the version needed and how to upgrade, instead of
   failing on SQL it does not know. `install.sh`, `compose.yaml`
-  and CI pin `postgres:19.0-bookworm`, the version Colliedesk Cloud runs; an existing install keeps
-  the major its data volume holds (`docs/self-host/upgrade.md#postgresql-versions`).
+  and CI pin `postgres:19.0-bookworm`, the version Colliedesk Cloud runs; an existing install on an
+  older bundled major moves with `upgrade-postgres.sh` (`docs/self-host/upgrade.md#postgresql-versions`).
 - **Upgrades** need no manual step. `collie migrate`, which the compose command runs, creates
   the app role and grants it.
 - **Optional hardening for an existing install** (request-login mode):

@@ -89,8 +89,21 @@ fi
 # From 1.0.0 install.sh writes compose.yaml.next and then moves it over compose.yaml.
 # A release that picks the PostgreSQL image at run time writes @POSTGRES_IMAGE@ and sets it for a fresh install.
 previous_postgres=$(sed -n 's/^POSTGRES_IMAGE=//p' "$TMP/install.sh" | head -n 1)
+# Colliedesk runs on PostgreSQL 19 or newer, and an install on an older major moves its database first
+# (upgrade-postgres.sh, proved by tests/upgrade-postgres-test.sh): the previous release runs here on the
+# PostgreSQL this checkout pins, its data where 17 kept it, as that script leaves the compose file.
+pinned_postgres=$(sed -n 's/^POSTGRES_IMAGE=//p' "$ROOT/install.sh")
 sed -n "/^cat >\"\$TARGET_DIR\/compose\.yaml\(\.next\)\{0,1\}\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' |
-  sed "s|@POSTGRES_IMAGE@|$previous_postgres|" >"$TMP/compose.yaml"
+  sed "s|@POSTGRES_IMAGE@|$previous_postgres|" |
+  awk -v image="$pinned_postgres" '
+    /^  postgres:$/ { b = 1; print; next }
+    b && (/^  [^ ]/ || /^[^ ]/) { b = 0 }
+    b && /^    image: / { print "    image: " image; next }
+    b && /^      PGDATA:/ { next }
+    b && $0 == "    environment:" { print; print "      PGDATA: /var/lib/postgresql/data"; next }
+    { print }' >"$TMP/compose.yaml"
+grep -qxF "    image: $pinned_postgres" "$TMP/compose.yaml" && grep -qx '      PGDATA: /var/lib/postgresql/data' "$TMP/compose.yaml" ||
+  fail "could not run the compose file of $previous_tag on $pinned_postgres"
 mkdir -p "$TMP/initdb"
 sed -n "/^cat >\"\$TARGET_DIR\/initdb\/10-colliedesk-owner.sh\" <<'INITDB'$/,/^INITDB$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/initdb/10-colliedesk-owner.sh"
 chmod 755 "$TMP/initdb/10-colliedesk-owner.sh"

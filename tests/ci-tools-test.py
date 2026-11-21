@@ -747,6 +747,16 @@ class RunnerConcurrency(unittest.TestCase):
         self.assertEqual(runners(ROOT / '.github/workflows/ci.yml'), 18)
 
 
+class PostgresFloor(unittest.TestCase):
+    def test_ci_runs_no_postgres_older_than_colliedesk_needs(self):
+        floor = int(re.search(r'const MinPostgresMajor = (\d+)',
+                              (ROOT / 'server/internal/database/postgres-version.go').read_text()).group(1))
+        sources = sorted((ROOT / '.github/workflows').glob('*.yml')) + sorted((ROOT / '.github/scripts').glob('*.sh'))
+        for path in sources:
+            for major in re.findall(r'\bpostgres:(\d+)', path.read_text()):
+                self.assertGreaterEqual(int(major), floor, f'{path.name} runs PostgreSQL {major}; Colliedesk needs {floor}')
+
+
 class PublishEdge(unittest.TestCase):
     """edge is what Cloud and self-hosters pull: it moves only for a passing CI run of a push to this
     repository's main, only to that run's commit, and only while that commit is still main's head."""
@@ -786,7 +796,7 @@ class GoBuildCache(unittest.TestCase):
         prefix = prefixes.pop().split('${{')[0]
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         restores = re.findall(r'restore-keys: \|\n((?:\s{12}\S.*\n)+)', workflow)
-        self.assertEqual(len(restores), 4, 'the go, e2e, onboarding and postgres-floor jobs restore the Go cache')
+        self.assertEqual(len(restores), 3, 'the go, e2e and onboarding jobs restore the Go cache')
         for block in restores:
             for key in (line.strip() for line in block.splitlines()):
                 self.assertTrue(key.startswith(prefix), f'{key} can match an entry setup-go saved')

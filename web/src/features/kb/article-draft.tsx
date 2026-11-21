@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import type { KBArticle } from './kb-api';
+import type { KBArticle, KBTranslation } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { KBDialog } from './kb-ui';
 import { lineDiff } from './line-diff';
@@ -19,7 +19,7 @@ export const draftMessages = {
   compare: 'Compare with published',
   discard: 'Discard draft',
   discardHeading: 'Discard the unpublished changes?',
-  discardBody: 'The published article and its history stay as they are.',
+  discardBody: 'The published text and its history stay as they are.',
   confirmDiscard: 'Discard changes',
   changesPublished: 'Changes published',
   changesDiscarded: 'Unpublished changes discarded',
@@ -40,9 +40,17 @@ export const editable = (article: KBArticle): KBArticle => {
     attachments: draft.attachments, tags: draft.tags };
 };
 
+// editableTranslation is the same for a published translation: with unpublished changes, those.
+export const editableTranslation = (translation: KBTranslation): KBTranslation => {
+  const draft = translation.draft;
+  if (!draft) return translation;
+  return { ...translation, title: draft.title, slug: draft.slug, body_md: draft.body_md, seo_title: draft.seo_title, seo_description: draft.seo_description,
+    attachments: draft.attachments };
+};
+
 interface DraftBarProps {
-  // article is the article as the server answered, with draft set.
-  article: KBArticle;
+  // article is the article or translation as the server answered, with draft set: its own fields are the published text.
+  article: { title: string; body_md: string; draft: { updated_by: { name: string } | null } | null };
   // title and body are the text on screen, which Compare with published sets beside the published one.
   title: string;
   body: () => string;

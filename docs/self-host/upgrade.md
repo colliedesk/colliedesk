@@ -96,15 +96,16 @@ Every `exec` and `run` here has `-T` (no terminal), so the commands also work fr
 
 ## PostgreSQL versions
 
-A new install runs PostgreSQL 19, the release Colliedesk Cloud runs. PostgreSQL cannot open a data
-directory that another major version wrote, so the installer reads the version of the database
-volume before it writes `compose.yaml` and keeps that major:
+Colliedesk runs on PostgreSQL 19 or newer, the release Colliedesk Cloud runs, and a new install runs
+PostgreSQL 19. Releases up to v1.0.1 also ran on 16, 17 and 18; every later release needs 19.
+PostgreSQL cannot open a data directory that another major version wrote, so the installer reads the
+version of the database volume before it writes `compose.yaml`:
 
-- a volume made by PostgreSQL 16, 17 or 18 stays on it. The installer says so and changes nothing
-  else. Colliedesk supports every major from 16, and every migration is checked on 16 and 17, so
-  you do not need to act;
-- a volume made by a version older than 16, or newer than 19, stops the installer before it changes
-  `compose.yaml`;
+- a volume made by PostgreSQL 16, 17 or 18 stops the installer before it changes `compose.yaml`.
+  It names the major and the commands that
+  [move the database to 19](#move-the-bundled-database-to-postgresql-19); run them, then run the
+  installer again;
+- a volume made by a version older than 16, or newer than 19, stops the installer too;
 - an install that was set up before but whose volume is empty stops the installer too: it never
   starts an empty database in place of yours. Restore the volume or the backup
   ([roll back](#roll-back)) and run it again.
@@ -119,23 +120,29 @@ volume, and `upgrade-postgres.sh` does it for the bundled database. An install o
 [external database](database.md) runs whatever version that server runs: upgrade that server the
 way its provider says.
 
-On a PostgreSQL older than the oldest major Colliedesk supports (16), `collie serve`, `collie migrate`
-and every other command that reads or writes the database stop before they change anything. The log
-names the version found, the version needed and how to upgrade, and links here:
+On a PostgreSQL older than 19, `collie serve`, `collie migrate` and every other command that reads or
+writes the database stop before they change anything. An install on 16, 17 or 18 that pulls a newer
+release (`docker compose pull` with the default `latest` image) therefore does not start, and its
+data stays as it was. The log names the version found, the version needed and how to upgrade, and
+links here:
 
 ```text
-collie: PostgreSQL 16 or newer is required; this database is PostgreSQL 15.8. sh upgrade-postgres.sh moves a bundled database on PostgreSQL 16, 17 or 18 to 19; upgrade any other server the way its provider says. See https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/upgrade.md#postgresql-versions
+collie: PostgreSQL 19 or newer is required; this database is PostgreSQL 17.11. sh upgrade-postgres.sh moves a bundled database on PostgreSQL 16, 17 or 18 to 19; upgrade any other server the way its provider says. See https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/upgrade.md#postgresql-versions
 ```
 
 ### Move the bundled database to PostgreSQL 19
 
-You do not have to move: 16, 17 and 18 stay supported. To move, run `upgrade-postgres.sh` of the
-newest release in the install directory. `<tag>` is that release, for example `v1.1.0`:
+An install on PostgreSQL 16, 17 or 18 moves before it runs a release newer than v1.0.1. Run
+`upgrade-postgres.sh` in the install directory:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/colliedesk/colliedesk/<tag>/upgrade-postgres.sh
+curl -fsSLO https://raw.githubusercontent.com/colliedesk/colliedesk/main/upgrade-postgres.sh
 sh upgrade-postgres.sh
 ```
+
+It works the same before and after you pull the newer release: the server image named in `.env`
+starts on 19 at the end, and v1.0.1 runs on 19 too. If a rollback kept a `postgres19-data` volume
+from an earlier run, the script refuses until that volume is gone; see the rollback below.
 
 It stops the server and dumps the roles and the database to `postgres-upgrade-<date>/`. It starts
 PostgreSQL 19 from the pinned image on a new volume, `colliedesk_postgres19-data` (the installer's
@@ -190,6 +197,10 @@ To go back to the major and the volume you had before:
 sh upgrade-postgres.sh --rollback
 ```
 
+A release newer than v1.0.1 does not start on the old major. Before you roll back such an install,
+set `COLLIE_DESK_IMAGE` in `.env` to the release it ran before, for example
+`ghcr.io/colliedesk/colliedesk:1.0.1`; the rollback starts the server with that image.
+
 The data is then as it was when the server stopped for the upgrade. Writes made on PostgreSQL 19
 since then are not in it; they stay in the volume `colliedesk_postgres19-data`, which is kept. A
 rollback that was cut off leaves `compose.yaml` on the old major, or as it was on 19 if the server had
@@ -212,7 +223,10 @@ an old compose file put back by hand after a finished upgrade, and its rollback,
 an undo whose old volume is gone, a rollback of a run cut off before the switch, a resumed rollback onto a cluster that is not the
 old one,
 rollback, and the refusals. No row or file may
-change.
+change. The same install then pulls the server image of the commit, which needs 19: the installer and
+the server refuse PostgreSQL 17 and change nothing, the run refuses while the 19 volume the rollback
+kept is there, and once it is removed the install moves to 19, applies every migration of the commit
+and serves each workspace its own inbox.
 
 ## Settings move into the database
 

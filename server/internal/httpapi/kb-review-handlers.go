@@ -85,9 +85,8 @@ func writeKBReviewError(response http.ResponseWriter, err error) bool {
 			": POST /api/v1/kb/articles/{id}/reviews with reviewer_ids; once a reviewer approves this exact text, publish it.")
 	case errors.Is(err, domain.ErrKBTranslationApprovalRequired):
 		writeError(response, http.StatusConflict, "approval_required", capitalize(err.Error())+
-			". A translation has no draft beside its published text: set it to status draft (PATCH /api/v1/kb/articles/{id}/translations/{locale}), "+
-			"edit it, send it with POST /api/v1/kb/articles/{id}/translations/{locale}/reviews and reviewer_ids, and once a reviewer approves "+
-			"that exact text, set it to status published.")
+			": POST /api/v1/kb/articles/{id}/translations/{locale}/reviews with reviewer_ids; once a reviewer approves this exact text, publish it "+
+			"(POST /api/v1/kb/articles/{id}/translations/{locale}/draft/publish for the changes of a published translation, status published for one never published).")
 	case errors.Is(err, domain.ErrKBReviewNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The review was not found. GET /api/v1/kb/articles/{id}/reviews lists an article's reviews.")
 	case errors.Is(err, domain.ErrKBReviewOpen), errors.Is(err, domain.ErrKBReviewClosed), errors.Is(err, domain.ErrKBNothingToReview):

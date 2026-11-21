@@ -14,10 +14,8 @@ STATE=${CI_SERVICES_DIR:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/ci-services}
 # Postgres is pinned to the minor version Colliedesk Cloud runs, so the latency gates measure what
 # production does: 17.12 made AI retrieval about six times slower than 17.11 on the same rows.
 # PGDATA stays on the tmpfs (the image's default moved to /var/lib/postgresql/19/docker). PostgreSQL 19
-# changed how the lock table is sized: its release notes double a setting to keep the same capacity
-# (on 16 and 17 the same value only doubles the table). CI_POSTGRES_IMAGE picks another image, by
-# digest, for the job that runs the migrations on the oldest supported majors.
-POSTGRES_IMAGE=${CI_POSTGRES_IMAGE:-postgres:19.0-bookworm@sha256:f4859caf96de494e38efa69ed703b08a5bbd9605e152e604f2daec8841c87c41}
+# changed how the lock table is sized: its release notes double a setting to keep the same capacity.
+POSTGRES_IMAGE=postgres:19.0-bookworm@sha256:f4859caf96de494e38efa69ed703b08a5bbd9605e152e604f2daec8841c87c41
 
 run_service() {
   case "$1" in
@@ -39,12 +37,7 @@ start() {
     *) echo "ci-services: unknown service $1" >&2; return 1 ;;
   esac
   image=
-  if [ "$1" = postgres ]; then
-    case "$POSTGRES_IMAGE" in
-      *@sha256:*) image=" ($POSTGRES_IMAGE)" ;;
-      *) echo "ci-services: pin CI_POSTGRES_IMAGE by digest (name@sha256:...): $POSTGRES_IMAGE" >&2; return 1 ;;
-    esac
-  fi
+  [ "$1" != postgres ] || image=" ($POSTGRES_IMAGE)"
   mkdir -p "$STATE"
   rm -f "$STATE/$1.status"
   # Detached from the step's output streams, which the runner would otherwise wait on.

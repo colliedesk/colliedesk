@@ -61,12 +61,10 @@ func (r *run) rewriteFreshdeskLinks(ctx context.Context) error {
 	found := false
 	// Each query reads the item's Freshdesk id (an article's and the language for a translation), its
 	// id (the article's for a translation), the language, the text and whether it is unchanged since
-	// the import. A translation has its own history: unchanged while its own newest version is the
-	// import's (one with no version at all predates versions and is the import's), whatever happened to
-	// the article.
+	// the import. A translation has its own history: unchanged while the import wrote it last
+	// (store.KBTranslationImportedLastSQL), whatever happened to the article.
 	importedLast := store.KBImportedLastSQL("a")
-	translationIsImport := `COALESCE((SELECT v.kind='import' FROM kb_article_translation_versions v WHERE v.workspace_id=t.workspace_id AND v.article_id=t.article_id
-		AND v.locale=t.locale ORDER BY v.version DESC LIMIT 1), true)`
+	translationIsImport := store.KBTranslationImportedLastSQL("t")
 	for _, item := range []struct{ entity, sql string }{
 		{entityKBArticle, `SELECT i.source_id, a.id::text, '', a.body_md, ` + importedLast + `
 			FROM import_items i JOIN kb_articles a ON a.workspace_id=i.workspace_id AND a.id=i.target_id

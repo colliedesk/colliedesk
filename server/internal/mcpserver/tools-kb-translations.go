@@ -32,6 +32,8 @@ type restKBTranslation struct {
 	PurgesAt      string                `json:"purges_at"`
 	Original      *restKBOriginal       `json:"original"`
 	Attachments   []restKBAttachment    `json:"attachments"`
+	HasDraft      bool                  `json:"has_draft"`
+	Draft         *restKBDraft          `json:"draft"`
 }
 
 type restKBOriginal struct {
@@ -55,6 +57,7 @@ type kbTranslationRowOut struct {
 	Outdated    bool                 `json:"outdated"`
 	OutdatedAt  *string              `json:"outdated_at"`
 	InTrash     bool                 `json:"in_trash"`
+	HasDraft    bool                 `json:"has_draft"`
 	Slug        string               `json:"slug"`
 	PublishedAt *string              `json:"published_at"`
 	UpdatedAt   string               `json:"updated_at"`
@@ -64,7 +67,7 @@ type kbTranslationRowOut struct {
 }
 
 func kbTranslationRow(item restKBTranslation) kbTranslationRowOut {
-	return kbTranslationRowOut{ArticleID: item.ArticleID, Locale: item.Locale, Status: item.Status, Outdated: item.Outdated, OutdatedAt: item.OutdatedAt, InTrash: item.InTrash,
+	return kbTranslationRowOut{ArticleID: item.ArticleID, Locale: item.Locale, Status: item.Status, Outdated: item.Outdated, OutdatedAt: item.OutdatedAt, InTrash: item.InTrash, HasDraft: item.HasDraft,
 		Slug: item.Slug, PublishedAt: item.PublishedAt, UpdatedAt: item.UpdatedAt, LastChange: changeOut(item.LastChange), URL: item.URL, TeamText: kbTitle{item.Title}}
 }
 
@@ -81,14 +84,30 @@ type kbOriginalOut struct {
 
 type kbTranslationOut struct {
 	kbTranslationRowOut
-	TeamText        kbTeamText        `json:"team_text"`
-	LanguageVisible bool              `json:"language_visible"`
-	Original        kbOriginalOut     `json:"original"`
-	Attachments     []kbAttachmentOut `json:"attachments"`
+	TeamText        kbTeamText             `json:"team_text"`
+	LanguageVisible bool                   `json:"language_visible"`
+	Original        kbOriginalOut          `json:"original"`
+	Attachments     []kbAttachmentOut      `json:"attachments"`
+	Draft           *kbTranslationDraftOut `json:"draft"`
+}
+
+// kbTranslationDraftOut is what publishing a published translation's draft would put live.
+type kbTranslationDraftOut struct {
+	TeamText    kbTeamText        `json:"team_text"`
+	Slug        string            `json:"slug"`
+	UpdatedBy   *string           `json:"updated_by"`
+	Attachments []kbAttachmentOut `json:"attachments"`
 }
 
 func kbTranslationView(item restKBTranslation) map[string]any {
 	out := kbTranslationOut{kbTranslationRowOut: kbTranslationRow(item), TeamText: kbTeamText{item.Title, item.BodyMD, item.SEOTitle, item.SEODesc}, LanguageVisible: item.LanguageOn, Attachments: kbAttachmentsView(item.Attachments)}
+	if draft := item.Draft; draft != nil {
+		out.Draft = &kbTranslationDraftOut{TeamText: kbTeamText{draft.Title, draft.BodyMD, draft.SEOTitle, draft.SEODescription}, Slug: draft.Slug,
+			Attachments: kbAttachmentsView(draft.Attachments)}
+		if draft.UpdatedBy != nil {
+			out.Draft.UpdatedBy = &draft.UpdatedBy.Name
+		}
+	}
 	if original := item.Original; original != nil {
 		out.Original = kbOriginalOut{ArticleID: original.ID, Number: original.Number, Locale: original.Locale, Status: original.Status, Collection: original.CollectionName,
 			Version: original.Version, UpdatedAt: original.UpdatedAt, TeamText: kbTeamText{original.Title, original.BodyMD, original.SEOTitle, original.SEODesc}}

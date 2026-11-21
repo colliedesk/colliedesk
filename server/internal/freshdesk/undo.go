@@ -322,9 +322,8 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 // no article links and nobody kept in the library. It returns the storage keys of the images removed
 // and of their thumbnails.
 func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source string, result *UndoResult) ([]string, error) {
-	// A translation is the import's while its newest version is (one with no version predates versions).
-	const translationChanged = `COALESCE((SELECT w.kind FROM kb_article_translation_versions w WHERE w.workspace_id=t.workspace_id AND w.article_id=t.article_id
-		AND w.locale=t.locale ORDER BY w.version DESC LIMIT 1), 'import') <> 'import'`
+	// A translation is the import's while the import wrote it last (store.KBTranslationImportedLastSQL).
+	translationChanged := `NOT ` + store.KBTranslationImportedLastSQL("t")
 	rows, err := tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN kb_articles a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_article'
 			AND (NOT `+store.KBImportedLastSQL("a")+`

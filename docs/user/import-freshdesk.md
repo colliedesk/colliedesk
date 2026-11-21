@@ -127,11 +127,12 @@ shown to more people never opens its collection, so change it in Colliedesk. If 
 left the portal, the next run makes it a draft again, unless your team changed it since: then it stays
 published and the report warns (`kb_article_published_but_not_public`). When a portal changes the
 other way, the article stays a draft; publish it in Colliedesk. The same goes for each translation: a newer Freshdesk translation replaces one nobody
-changed in Colliedesk, and the report lists the others under `kb_translation_changed_in_both`. An
+changed in Colliedesk and with no unpublished changes, and the report lists the others under
+`kb_translation_changed_in_both`. An
 article whose text changed in Freshdesk while its translation did not gets that translation marked
 **Outdated**. `import undo` removes the imported articles and collections, but keeps an
 article your team edited, restored or deleted since, one with unpublished changes, or one of whose
-translations your team changed or added, and the collections that hold it or your own articles. From an article that stays, undo
+translations your team changed, added or has unpublished changes on, and the collections that hold it or your own articles. From an article that stays, undo
 removes the translations only the import wrote; it also removes the collection names the import
 wrote (not one a person set) and the languages it added that hold nothing any more. An imported image someone kept in the media library stays too, and undo says how many. Undo removes the imported files no article lists any more, but keeps a file someone kept in the media library or replaced, and says how many. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
 may lack the right), the status is `UNVERIFIED`.

@@ -78,14 +78,18 @@ func TestHelpCenterServesAFileOnlyWhileAPublishedArticleListsIt(t *testing.T) {
 	wantDownload(t, visit(site, sheetPath, "192.0.2.90"), "text/csv", `attachment; filename*=UTF-8''parts%20list.csv`, 20)
 	wantMissing(filePath)
 
-	// A published translation lists files of its own: in a hidden language they stay private.
+	// A published translation lists files of its own, from its draft once published: in a hidden
+	// language they stay private.
 	kbCall(t, api, http.MethodPut, "/api/v1/help-center/languages", map[string]any{"languages": []map[string]any{{"locale": "fr", "visible": true}, {"locale": "pt", "visible": false}}}, admin, http.StatusOK, nil)
 	small := pdfsample.PDF("Formulaire de garantie", 4096)
 	other1 := uploadKBFile(t, api, admin, "Formulaire.pdf", small)
 	other2 := uploadKBFile(t, api, admin, "Formulario.pdf", pdfsample.PDF("Formulario de garantia", 4096))
-	for locale, id := range map[string]string{"fr": other1.ID, "pt": other2.ID} {
+	for locale, file := range map[string]struct{ id, path string }{"fr": {other1.ID, "/formulaire.pdf"}, "pt": {other2.ID, "/formulario.pdf"}} {
 		kbCall(t, api, http.MethodPost, articlePath+"/translations", map[string]any{"locale": locale, "title": "Retours " + locale, "body_md": "x", "status": "published"}, admin, http.StatusCreated, nil)
-		kbCall(t, api, http.MethodPut, articlePath+"/translations/"+locale+"/attachments", map[string]any{"media_ids": []string{id}}, admin, http.StatusOK, nil)
+		var listed kbTranslationWithFiles
+		kbCall(t, api, http.MethodPut, articlePath+"/translations/"+locale+"/attachments", map[string]any{"media_ids": []string{file.id}}, admin, http.StatusOK, &listed)
+		wantMissing(base + "/files/" + file.id + file.path)
+		kbCall(t, api, http.MethodPost, articlePath+"/translations/"+locale+"/draft/publish", map[string]any{"updated_at": listed.UpdatedAt}, admin, http.StatusOK, nil)
 	}
 	wantDownload(t, visit(site, base+"/files/"+other1.ID+"/formulaire.pdf", "192.0.2.90"), "application/pdf", `attachment; filename*=UTF-8''Formulaire.pdf`, len(small))
 	wantMissing(base + "/files/" + other2.ID + "/formulario.pdf")

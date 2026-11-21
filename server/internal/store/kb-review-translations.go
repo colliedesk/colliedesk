@@ -8,9 +8,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// A translation has no draft layer: its text waits to be published while its status is draft, and an
-// edit of a published one goes live at once. So a translation in a collection that needs approval is
-// reviewed as a draft, and published only with the text a review approved.
+// A translation's text waits to be published while its status is draft, and an edit of a published one
+// waits in its draft row. A review approves that waiting text, so a translation in a collection that
+// needs approval is published, or its draft published, only with the text a review approved.
 
 // translationContent is what a review of the translation approves: its text and its own files, listed
 // where its article is.
@@ -59,8 +59,8 @@ func afterKBTranslationWrite(ctx context.Context, tx pgx.Tx, workspaceID string,
 }
 
 // kbPendingText tells whether the article (locale nil) or its translation has text waiting to be
-// published, and its hash: the article's draft over it, or a translation that is a draft. A text in
-// the trash has none.
+// published, and its hash: its draft over it, or a translation whose status is draft. A text in the
+// trash has none.
 func kbPendingText(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, locale *string) (bool, string, error) {
 	if locale == nil {
 		article, err := readKBArticle(ctx, tx, workspaceID, articleID)
@@ -74,7 +74,8 @@ func kbPendingText(ctx context.Context, tx pgx.Tx, workspaceID, articleID string
 	if err != nil {
 		return false, "", err
 	}
-	return item.DeletedAt == nil && item.Status != domain.KBPublished, content.Hash(), nil
+	pending := item.DeletedAt == nil && (item.Status != domain.KBPublished || item.Draft != nil)
+	return pending, translationContent(item.AsDrafted(), content.CollectionIDs).Hash(), nil
 }
 
 // reviewedKBText is the text a review is about as it is now, and what the help center shows of it
@@ -95,8 +96,9 @@ func reviewedKBText(ctx context.Context, tx pgx.Tx, workspaceID string, review d
 	if err != nil {
 		return domain.KBContent{}, nil, err
 	}
+	drafted := translationContent(item.AsDrafted(), content.CollectionIDs)
 	if item.Status != domain.KBPublished || item.DeletedAt != nil {
-		return content, nil, nil
+		return drafted, nil, nil
 	}
-	return content, &content, nil
+	return drafted, &content, nil
 }

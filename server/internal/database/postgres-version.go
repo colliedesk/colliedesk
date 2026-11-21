@@ -7,8 +7,8 @@ import (
 )
 
 // MinPostgresMajor is the oldest PostgreSQL major version Colliedesk runs on. Every migration and query
-// must work on it; CI runs the database package tests on it.
-const MinPostgresMajor = 16
+// must work on it; CI runs every test on it.
+const MinPostgresMajor = 19
 
 // CheckPostgresVersion refuses a server older than PostgreSQL minMajor before anything else runs, so an
 // install on an old server stops with a message that says how to upgrade instead of failing later on

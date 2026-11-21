@@ -239,7 +239,7 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   not a regex; `srcset` dropped; at most 50 distinct images per message, the rest get an empty `src`). An
   agent token gets the HTML as stored and the route is PersonOnly for tokens.
   - **Signature:** HMAC-SHA256 over workspace id and URL. The key is 32 random bytes in `server_secrets`
-    (created once with `INSERT ... ON CONFLICT DO NOTHING`, read by every process), so replicas, a deploy
+    (created once with `INSERT ... ON CONFLICT DO SELECT`, read by every process), so replicas, a deploy
     overlap and a restart all agree. It is not `SIGNUP_HASH_KEY`: that one has another purpose and another
     rotation.
   - **Fetch** (`mailimage.Fetcher`): the dialer's Control runs on every connection, so DNS rebinding and

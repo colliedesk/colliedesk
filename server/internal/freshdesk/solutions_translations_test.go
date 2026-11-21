@@ -127,8 +127,9 @@ func TestSolutionsRerunKeepsATranslationAPersonChangedAndBringsBackARemovedName(
 	if report.Status != freshdesk.StatusOK || strings.Join(report.KnowledgeBase.TranslationsChangedInBoth, ",") != "101:es" || warningIDs(report, "kb_translation_changed_in_both") != "101:es" {
 		t.Fatalf("status=%s changed=%v warnings=%+v", report.Status, report.KnowledgeBase.TranslationsChangedInBoth, report.Warnings)
 	}
+	// The edit of the published translation waits in its draft; the rerun leaves both alone.
 	translation, _ := env.kbTranslation(t, reset.ID, "es")
-	if translation.Newest != "edit" {
+	if translation.Newest != "draft" || env.spanishTranslation(t, reset.ID).Draft.BodyMD != body {
 		t.Fatalf("the person's translation was overwritten: %+v", translation)
 	}
 	// The article changed in Freshdesk, its translation did not come again: it is outdated now.
@@ -151,7 +152,7 @@ func TestSolutionsRerunKeepsATranslationAPersonChangedAndBringsBackARemovedName(
 	if strings.Join(result.KeptKBArticles, ",") != "101" || strings.Join(result.KeptKBTranslations, ",") != "101:es" || result.KBCollectionNames != 3 || result.KBLanguages != 1 {
 		t.Fatalf("undo = %+v", result)
 	}
-	if kept, ok := env.kbTranslation(t, reset.ID, "es"); !ok || kept.Newest != "edit" {
+	if kept, ok := env.kbTranslation(t, reset.ID, "es"); !ok || kept.Newest != "draft" {
 		t.Fatalf("the changed translation is gone: %+v", kept)
 	}
 	if got := env.kbLanguages(t); got != "en es:false" {

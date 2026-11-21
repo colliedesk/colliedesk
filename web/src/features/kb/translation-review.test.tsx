@@ -14,7 +14,7 @@ const approving = [{ ...collection(ids.setup, 'Setup', null, 1), require_approva
 const center = { enabled: true, title: 'Help', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' };
 const translation = {
   article_id: ids.article, locale: 'fr', title: 'Réinitialiser', slug: 'reinitialiser', status: 'draft', published_at: null, outdated: false, outdated_at: null,
-  created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z', in_trash: false, last_change: change, url: 'https://desk.example.com/help/acme/fr/a/7-r',
+  created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z', in_trash: false, has_draft: false, draft: null, last_change: change, url: 'https://desk.example.com/help/acme/fr/a/7-r',
   body_md: 'Ouvrez **Réglages**.', seo_title: '', seo_description: '', has_source_html: false, deleted_at: null, language_visible: true, attachments: [],
   original: { id: ids.article, number: 7, locale: 'en', title: 'Reset your password', body_md: 'Open **Settings**.', seo_title: '', seo_description: '',
     status: 'published', collection_id: ids.setup, collection_name: 'Setup', version: 3, updated_at: '2026-10-03T00:00:00Z' },
