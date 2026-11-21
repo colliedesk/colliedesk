@@ -377,9 +377,10 @@ the same article, as Freshdesk does it, never an article of its own.
   `updated_at`; theirs stays in the history) or "Discard mine and show theirs". Autosave stops until
   the person picks one. Every save takes the answer's `updated_at`, so a second save does not race itself.
 - **Autosave runs 3 s after typing stops, and on blur, `visibilitychange` to hidden, `pagehide` and
-  coming back online** (`use-autosave.ts`, `article-autosave.tsx`). A new article (no row yet) and a
-  translation are not autosaved: the first needs a collection and a Save to exist; the server takes a
-  translation's autosave (`autosave: true`), the translation editor does not send one yet. A save while the page
+  coming back online** (`use-autosave.ts`, `article-autosave.tsx`, `translation-autosave.ts`). A new
+  article or translation (no row yet) is not autosaved: it needs a Save to exist. A translation sends
+  only `title` and `body_md` with `autosave: true`, keeps no device copy, and its other actions wait
+  for an autosave in flight so they never send the same `updated_at`. A save while the page
   closes uses `keepalive` below 60,000 bytes (the browser holds at most 64 KiB of keepalive bodies);
   a longer text relies on the device copy.
 - **The device copy is per workspace, person and article.** `unsaved-store.ts` keys it

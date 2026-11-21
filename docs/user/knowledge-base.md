@@ -148,8 +148,11 @@ and at once when you switch to another window or tab, or close it. The status ne
   browser, for you and this article only, and saved when the connection comes back.
 - If the browser still holds text newer than the saved article when you open it, the editor asks
   **Restore unsaved text from 12:03?**. Select **Restore** to put it back, or **Discard**.
-- A new article saves for the first time with **Save draft** or **Save and publish**. A
-  [translation](#translations) saves with **Save** only.
+- A new article saves for the first time with **Save draft** or **Save and publish**.
+- A [translation](#translations) that exists autosaves its title and text the same way. A
+  published one keeps them in its unpublished changes. A new translation saves for the first time
+  with **Save translation**. The address and search fields save with **Save** only. A translation
+  keeps no copy on this device: without a connection its text stays in the open page until you save.
 
 If a teammate (or an AI agent) saved the article after you opened it, your save or autosave is
 refused and nothing is overwritten. The editor shows both texts line by line: struck through is only

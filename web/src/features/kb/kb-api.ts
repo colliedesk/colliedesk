@@ -231,8 +231,9 @@ export const kbApi = {
   translation: (id: string, locale: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}`, kbTranslationSchema),
   createTranslation: (id: string, value: RequestBody<'createKBTranslation'>, key: string) => request(`/api/v1/kb/articles/${id}/translations`, kbTranslationSchema,
     { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createKBTranslation'>(value) }),
-  updateTranslation: (id: string, locale: string, value: RequestBody<'updateKBTranslation'>) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}`, kbTranslationSchema,
-    { method: 'PATCH', body: json<'updateKBTranslation'>(value) }),
+  // init carries keepalive for an autosave sent as the page closes.
+  updateTranslation: (id: string, locale: string, value: RequestBody<'updateKBTranslation'>, init?: RequestInit) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}`, kbTranslationSchema,
+    { ...init, method: 'PATCH', body: json<'updateKBTranslation'>(value) }),
   deleteTranslation: (id: string, locale: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
   // key names this press (Idempotency-Key): a repeat answers the first restore.
   restoreTranslation: (id: string, locale: string, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/restore`, kbTranslationSchema,

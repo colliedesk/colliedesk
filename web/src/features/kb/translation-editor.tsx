@@ -16,6 +16,7 @@ import { HelpTip } from '../../ui/help-tip';
 import { Icon } from './editor/icons';
 import { reason } from './kb-tree';
 import { MarkdownPreview } from './markdown-preview';
+import { useTranslationAutosave } from './translation-autosave';
 import { languageName, translationMessages as t } from './translation-messages';
 
 // TranslationRoute is one language of an article: its text beside the original's. The article says
@@ -96,7 +97,8 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
   const undelete = useCreateAction((updatedAt: string, key: string) => kbApi.restoreTranslation(articleId, locale, updatedAt, key));
   const backTo = useCreateAction(({ version, updatedAt }: { version: number; updatedAt: string }, key: string) =>
     kbApi.restoreTranslationVersion(articleId, locale, version, updatedAt, key));
-  useEffect(() => setUpToDate(false), [translation?.updated_at]);
+  // Reset when the flag changes, not on every save: an autosave leaves the box as the person ticked it.
+  useEffect(() => setUpToDate(false), [translation?.outdated]);
   const set = (change: Partial<Draft>) => setDraft((current) => ({ ...current, ...change }));
   // shown is the saved text the form edits; the translation's own fields stay the published text.
   const shown = translation && editableTranslation(translation);
@@ -117,22 +119,39 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
     setTranslation(latest);
     setDraft(draftOf(latest));
   }, [latest, translation, dirty]);
-  // saved makes the server's answer the version being edited; show also puts its text in the form.
-  const saved = (answer: KBTranslation) => setTranslation(answer);
-  // The translation's own files are saved at once, as the article's are: typed text stays in the form, and the
-  // next save sends the updated_at this answer gave.
+  // translationNow is the newest answer at once, before the page renders it: an autosave or the list of files
+  // may have answered since, and the next request sends the updated_at it gave.
   const translationNow = useRef(translation);
   translationNow.current = translation;
-  const setAttachments = async (mediaIds: string[]): Promise<KBAttachment[]> => {
-    const answer = await kbApi.setTranslationAttachments(articleId, locale, mediaIds, translationNow.current!.updated_at);
+  // saved makes the server's answer the version being edited; show also puts its text in the form.
+  const saved = (answer: KBTranslation) => {
     translationNow.current = answer;
+    setTranslation(answer);
+  };
+  const changedElsewhere = () => {
+    setStale(true);
+    kbApi.translation(articleId, locale).then(setTheirs, () => undefined);
+  };
+  const autosave = useTranslationAutosave({ articleId, locale, title: draft.title, body: draft.body_md, timezone,
+    current: () => translationNow.current, blocked: () => busy || stale || translationNow.current?.in_trash === true,
+    onSaved: (answer) => {
+      saved(answer);
+      client.setQueryData(['kb-translation', articleId, locale], answer);
+    },
+    onConflict: changedElsewhere, onProblem: setProblem });
+  // The translation's own files are saved at once, as the article's are: typed text stays in the form, and the
+  // next save sends the updated_at this answer gave.
+  const setAttachments = async (mediaIds: string[]): Promise<KBAttachment[]> => {
+    await autosave.settle();
+    const answer = await kbApi.setTranslationAttachments(articleId, locale, mediaIds, translationNow.current!.updated_at);
     saved(answer);
     client.setQueryData(['kb-translation', articleId, locale], answer);
     return editableTranslation(answer).attachments;
   };
   const show = (answer: KBTranslation) => {
-    setTranslation(answer);
+    saved(answer);
     setDraft(draftOf(answer));
+    autosave.saved();
   };
   const reload = async () => {
     await client.invalidateQueries({ queryKey: ['kb-translation', articleId, locale] });
@@ -143,28 +162,28 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
     setBusy(true);
     setProblem(undefined);
     try {
+      // An autosave in flight answers first, so the action sends the updated_at it gave.
+      await autosave.settle();
       await action();
       if (done) setNotice(done);
       await reload();
     } catch (error) {
-      if (error instanceof ChangedElsewhereError) {
-        setStale(true);
-        kbApi.translation(articleId, locale).then(setTheirs, () => undefined);
-      } else setProblem(reason(error, t.failed));
+      if (error instanceof ChangedElsewhereError) changedElsewhere();
+      else setProblem(reason(error, t.failed));
     } finally {
       setBusy(false);
     }
   };
   // against is the version the change is made over: the one being edited, or theirs to save mine over.
-  const save = (status?: KBArticleStatus, against = translation) => run(async () => {
+  const save = (status?: KBArticleStatus, over?: KBTranslation) => run(async () => {
+    const against = over ?? translationNow.current;
     if (!against) {
       await create.run({ locale, title: draft.title, body_md: draft.body_md, ...(draft.slug.trim() ? { slug: draft.slug.trim() } : {}),
         ...(draft.seo_title ? { seo_title: draft.seo_title } : {}), ...(draft.seo_description ? { seo_description: draft.seo_description } : {}), ...(status ? { status } : {}) });
       return;
     }
     const text = editableTranslation(against);
-    saved(await kbApi.updateTranslation(articleId, locale, {
-      updated_at: against.updated_at,
+    const change = {
       ...(draft.title !== text.title ? { title: draft.title } : {}),
       ...(draft.body_md !== text.body_md ? { body_md: draft.body_md } : {}),
       ...(draft.slug.trim() && draft.slug !== text.slug ? { slug: draft.slug.trim() } : {}),
@@ -172,7 +191,12 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
       ...(draft.seo_description !== text.seo_description ? { seo_description: draft.seo_description } : {}),
       ...(status && status !== against.status ? { status } : {}),
       ...(upToDate && against.outdated ? { outdated: false } : {}),
-    }));
+    };
+    // Text an autosave stored has no version yet: Save sends it again, and the server adds the version.
+    if (Object.keys(change).length === 0 && autosave.pending) Object.assign(change, { body_md: draft.body_md });
+    const answer = await kbApi.updateTranslation(articleId, locale, { updated_at: against.updated_at, ...change });
+    saved(answer);
+    autosave.saved(answer.updated_at);
     setStale(false);
     setTheirs(undefined);
   }, t.saved);
@@ -185,22 +209,28 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
     const theirs = await kbApi.translation(articleId, locale);
     await save(undefined, theirs);
   });
-  const markOutdated = (outdated: boolean) => translation && run(async () => saved(await kbApi.updateTranslation(articleId, locale, { updated_at: translation.updated_at, outdated })), t.saved);
+  // now is the newest answer, read after an autosave in flight answered (run waits for it).
+  const now = () => translationNow.current!;
+  const markOutdated = (outdated: boolean) => translation && run(async () => saved(await kbApi.updateTranslation(articleId, locale, { updated_at: now().updated_at, outdated })), t.saved);
   const remove = () => translation && run(async () => {
-    await kbApi.deleteTranslation(articleId, locale, translation.updated_at);
+    await kbApi.deleteTranslation(articleId, locale, now().updated_at);
     setDeleting(false);
   });
-  const restore = () => translation && run(async () => show(await undelete.run(translation.updated_at)));
+  const restore = () => translation && run(async () => show(await undelete.run(now().updated_at)));
   // A published translation's unpublished changes go live, or are dropped, as an article's do.
-  const publishDraft = () => translation && run(async () => show(await publishChanges.run(translation.updated_at)), draftMessages.changesPublished);
-  const discardDraft = async () => { if (translation) await run(async () => show(await kbApi.discardTranslationDraft(articleId, locale, translation.updated_at)), draftMessages.changesDiscarded); };
-  const restoreVersion = (version: number) => translation
-    ? backTo.run({ version, updatedAt: translation.updated_at }).then(async (answer) => { show(answer); await reload(); })
-    : Promise.resolve();
+  const publishDraft = () => translation && run(async () => show(await publishChanges.run(now().updated_at)), draftMessages.changesPublished);
+  const discardDraft = async () => { if (translation) await run(async () => show(await kbApi.discardTranslationDraft(articleId, locale, now().updated_at)), draftMessages.changesDiscarded); };
+  const restoreVersion = async (version: number) => {
+    if (!translation) return;
+    await autosave.settle();
+    const answer = await backTo.run({ version, updatedAt: now().updated_at });
+    show(answer);
+    await reload();
+  };
   const status = translation?.status ?? 'draft';
   const inTrash = translation?.in_trash === true;
   const invalid = busy || !draft.title.trim() || inTrash;
-  const canSave = !invalid && (dirty || (upToDate && translation?.outdated));
+  const canSave = !invalid && (dirty || autosave.pending || (upToDate && translation?.outdated));
   // As an article's text: where one of its collections requires approval, Publish waits for a teammate's.
   const collections = useQuery({ queryKey: ['kb-collections'], queryFn: kbApi.collections }).data?.items ?? [];
   const approval = useTextApproval({ articleId, locale, collections, collectionIds: article?.collection_ids ?? [], dirty, version: translation?.updated_at });
@@ -218,6 +248,7 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
         <span className="kb-art-state">
           <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
           {translation?.outdated && <span className="kb-outdated">· {t.outdated}</span>}
+          {autosave.word && <span>· {autosave.word}</span>}
         </span>
         <span className="kb-art-acts">
           {/* As on an article: Publish and Save stay in the bar, the rest is in its menu, so the bar fits a phone. */}
