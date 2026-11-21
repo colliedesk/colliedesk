@@ -10,6 +10,7 @@ import { redoDepth, undoDepth } from '@codemirror/commands';
 import type { Active, Block, LineKind } from './editor-types';
 
 export type { Active, Block, LineKind } from './editor-types';
+export { sameActive } from './editor-types';
 
 const headingOf = (line: string): Block => {
   const match = /^(#{1,6})\s/.exec(line);
@@ -51,8 +52,6 @@ export function activeOf(state: EditorState): Active {
   };
 }
 
-export const sameActive = (a: Active | undefined, b: Active) =>
-  !!a && (Object.keys(b) as (keyof Active)[]).every((key) => a[key] === b[key]);
 
 // toggleMark wraps each selection in mark (** for bold), or takes the mark off when it is already there, inside or
 // just outside the selection. An empty selection gets the pair with the cursor between.

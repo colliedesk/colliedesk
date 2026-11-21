@@ -74,6 +74,9 @@ export interface Active {
   canRedo: boolean;
 }
 
+export const sameActive = (a: Active | undefined, b: Active) =>
+  !!a && (Object.keys(b) as (keyof Active)[]).every((key) => a[key] === b[key]);
+
 // ToolTarget is what the toolbar, its menus and its dialogs do to the text, in the editor that shows it.
 export interface ToolTarget {
   mark(kind: MarkKind): void;
