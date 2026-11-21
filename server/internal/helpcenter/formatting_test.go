@@ -1,6 +1,7 @@
 package helpcenter
 
 import (
+	"encoding/json"
 	"os"
 	"regexp"
 	"strings"
@@ -9,62 +10,28 @@ import (
 
 // The formatting subset of an article (underline, highlight, colour, alignment, indent and tables
 // with merged or coloured cells) renders with the help center's own classes, never a style attribute.
+// The editor preview runs the same cases (web/src/features/kb/markdown-preview.test.tsx).
 func TestArticleFormattingRendersWithHelpCenterClasses(t *testing.T) {
-	body := "<p data-indent=\"2\" data-align=\"center\">\n\n" +
-		"Say <u>under **b**</u> <mark>hi</mark> <span style=\"color:red\" data-color=\"danger\">red</span> <span data-color=\"pink\">plain</span>\n\n" +
-		"</p>\n\n" +
-		"<h2 data-align=\"right\">\n\n## Title\n\n</h2>\n\n" +
-		"<table>\n<tr>\n<th colspan=\"2\" data-align=\"center\" data-bg=\"accent\" style=\"background:red\">\n\nHead\n\n</th>\n</tr>\n" +
-		"<tr>\n<td data-bg=\"success\">\n\na\n\n</td>\n<td>\n\nb\n\nc\n\n</td>\n</tr>\n</table>\n"
-	out, err := renderArticle(body, "")
+	raw, err := os.ReadFile("../kbformat/testdata/render.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `<p class="kb-align-center kb-indent-2">Say <u>under <strong>b</strong></u> <mark>hi</mark> <span class="kb-color-danger">red</span> plain</p>
-<h2 id="title" class="kb-align-right">Title</h2>
-<table>
-<tbody>
-<tr>
-<th colspan="2" class="kb-align-center kb-bg-accent"><p>Head</p>
-</th>
-</tr>
-<tr>
-<td class="kb-bg-success"><p>a</p>
-</td>
-<td><p>b</p>
-<p>c</p>
-</td>
-</tr>
-</tbody>
-</table>
-`
-	if string(out) != want {
-		t.Fatalf("rendered\n%s\nwant\n%s", out, want)
+	var shared struct {
+		Cases []struct{ Name, Markdown, HTML string }
 	}
-}
-
-// A cell of a formatted table may hold an aligned or indented paragraph of its own.
-func TestArticleFormattingAlignsAParagraphInsideACell(t *testing.T) {
-	body := "<table>\n<tr>\n<td rowspan=\"2\">\n\n<p data-align=\"right\">\n\nx\n\n</p>\n\ny\n\n</td>\n</tr>\n</table>\n"
-	out, err := renderArticle(body, "")
-	if err != nil {
-		t.Fatal(err)
+	if err := json.Unmarshal(raw, &shared); err != nil || len(shared.Cases) == 0 {
+		t.Fatalf("read the cases: %v", err)
 	}
-	want := "<table>\n<tbody>\n<tr>\n<td rowspan=\"2\"><p class=\"kb-align-right\">x</p>\n<p>y</p>\n</td>\n</tr>\n</tbody>\n</table>\n"
-	if string(out) != want {
-		t.Fatalf("rendered\n%s\nwant\n%s", out, want)
-	}
-}
-
-// An inline formatting tag without its partner, or across another element's edge, is left out with
-// its text kept, so it can never wrap the rest of the page.
-func TestArticleFormattingLeavesOutUnpairedTags(t *testing.T) {
-	out, err := renderArticle("one <u>two **three</u> four** five </mark>", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := "<p>one two <strong>three four</strong> five </p>\n"; string(out) != want {
-		t.Fatalf("rendered %q, want %q", out, want)
+	for _, c := range shared.Cases {
+		t.Run(c.Name, func(t *testing.T) {
+			out, err := renderArticle(c.Markdown, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(out) != c.HTML {
+				t.Fatalf("rendered\n%s\nwant\n%s", out, c.HTML)
+			}
+		})
 	}
 }
 

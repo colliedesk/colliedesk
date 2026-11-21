@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import shared from '../../../../server/internal/kbhtml/testdata/articles.json';
+import formatting from '../../../../server/internal/kbformat/testdata/render.json';
 import { MarkdownPreview } from './markdown-preview';
 
 // The articles the help center renders too (server/internal/helpcenter/markdown_test.go).
@@ -11,6 +12,42 @@ describe('the preview shows an article as the help center does', () => {
     expect((container.textContent ?? '').split(/\s+/).filter(Boolean).join(' ')).toBe(c.text);
     expect(container.querySelectorAll('p')).toHaveLength(c.paragraphs);
     expect(container.querySelectorAll('iframe')).toHaveLength(c.iframes);
+  });
+});
+
+// shape writes a node as its elements, sorted attributes and text, so two renderings compare whatever their
+// line breaks between blocks. Heading ids are the help center's own.
+function shape(node: Node): string {
+  node.normalize();
+  return shapeOf(node).replace(/\s*(<\/?(?:p|h[1-6]|table|tbody|tr|th|td)\b[^>]*>)\s*/g, '$1');
+}
+
+function shapeOf(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return (node.nodeValue ?? '').replace(/\s+/g, ' ');
+  if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return '';
+  const children = Array.from(node.childNodes).map(shapeOf).join('');
+  if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) return children;
+  const element = node as Element;
+  const attributes = Array.from(element.attributes).filter((a) => a.name !== 'id').map((a) => ` ${a.name}="${a.value}"`).sort().join('');
+  return `<${element.localName}${attributes}>${children}</${element.localName}>`;
+}
+
+// The formatting the help center renders (server/internal/helpcenter/formatting_test.go): the same
+// elements, classes and text.
+describe('the preview shows formatting as the help center does', () => {
+  it.each(formatting.cases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+    const { container } = render(<MarkdownPreview text={c.markdown} />);
+    container.querySelector('.kb-html-warning')?.remove();
+    const want = document.createElement('template');
+    want.innerHTML = c.html;
+    const body = document.createDocumentFragment();
+    body.append(...container.querySelector('.kb-preview')!.childNodes);
+    expect(shape(body)).toBe(shape(want.content));
+  });
+
+  it('formatting it reads is shown, so nothing is named as left out', () => {
+    const { container } = render(<MarkdownPreview text={formatting.cases[0]!.markdown} />);
+    expect(container.querySelector('.kb-html-warning')).toBeNull();
   });
 });
 
