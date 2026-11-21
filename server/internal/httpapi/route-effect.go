@@ -187,6 +187,8 @@ var routesReachingOutside = map[string]string{
 	"POST /api/v1/kb/articles/{id}/draft/publish":                                    "public site",
 	"POST /api/v1/kb/articles/{id}/translations/{locale}/draft/publish":              "public site",
 	"POST /api/v1/kb/articles/publish":                                               "public site",
+	"POST /api/v1/kb/articles/bulk":                                                  "may publish or unpublish",
+	"POST /api/v1/kb/bulk-operations/{id}/undo":                                      "may republish or unpublish",
 	"POST /api/v1/kb/articles/{id}/votes/reset":                                      "the count a published article shows",
 	"DELETE /api/v1/kb/articles/{id}":                                                "may unpublish",
 	"POST /api/v1/kb/articles/{id}/restore":                                          "may republish",

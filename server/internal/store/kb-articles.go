@@ -575,6 +575,9 @@ type KBArticleChange struct {
 	// AuthorAgentID credits the article to another active team member at once, also on a published
 	// article, as a version of kind author_change.
 	AuthorAgentID *string
+	// Position puts the article back at this place in its collection, as undo of a bulk move does;
+	// without it a move goes to the end of the new collection.
+	Position *int
 }
 
 // immediate tells whether the change sets something that applies at once, and whether that is all
@@ -722,11 +725,11 @@ func writeKBArticleChange(ctx context.Context, tx pgx.Tx, workspaceID, id string
 // updateKBArticleRow writes the fields of change that are set to the article's row.
 func updateKBArticleRow(ctx context.Context, tx pgx.Tx, workspaceID, id string, change KBArticleChange) error {
 	_, err := tx.Exec(ctx, `UPDATE kb_articles SET title=COALESCE($3,title), slug=COALESCE($4,slug), body_md=COALESCE($5,body_md),
-		position=CASE WHEN $6::uuid IS DISTINCT FROM collection_id AND $6::uuid IS NOT NULL THEN `+kbArticleEnd(`$6::uuid`)+` ELSE position END,
+		position=COALESCE($11::int, CASE WHEN $6::uuid IS DISTINCT FROM collection_id AND $6::uuid IS NOT NULL THEN `+kbArticleEnd(`$6::uuid`)+` ELSE position END),
 		collection_id=COALESCE($6::uuid,collection_id), status=COALESCE($7,status),
 		published_at=CASE WHEN COALESCE($7,status)='published' THEN COALESCE(published_at, clock_timestamp()) END,
 		seo_title=COALESCE($8,seo_title), seo_description=COALESCE($9,seo_description), show_contents=COALESCE($10,show_contents), updated_at=clock_timestamp()
-		WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Title, change.Slug, change.BodyMD, change.CollectionID, change.Status, change.SEOTitle, change.SEODescription, change.ShowContents)
+		WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Title, change.Slug, change.BodyMD, change.CollectionID, change.Status, change.SEOTitle, change.SEODescription, change.ShowContents, change.Position)
 	return err
 }
 

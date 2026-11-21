@@ -7027,6 +7027,70 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/bulk:
+    post:
+      operationId: bulkKBArticles
+      x-permission: kb_articles:update
+      description: >
+        Apply one action to up to 500 articles, named by `ids` or by `filter` (the query of
+        GET /api/v1/kb/articles as an object, every page of it; more than 500 matches is 400). `action`
+        needs kb_articles:update for move, visibility, author, tags_add, tags_remove and
+        send_for_review, kb_articles:publish for approve, publish and unpublish, and kb_articles:delete
+        for trash. Each article is answered on its own in `results`, in order: `done`, `unchanged` (it
+        already was as asked) or `refused` with the error the call for that article alone gives, such as
+        409 `approval_required`, `permission_missing` for a visibility raise or for trashing a published
+        article without kb_articles:publish, or `not_found` for an id this workspace does not have. A
+        move or tag change of a published article goes to its draft. When something can be put back,
+        `operation` is the undo record: POST /api/v1/kb/bulk-operations/{id}/undo before `undo_until`
+        (10 minutes). A repeat with the same Idempotency-Key answers what the first one got.
+        x-permission is what most actions need; the handler checks the one `action` needs.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KBBulkInput'}
+      responses:
+        '200':
+          description: One result per article, and the undo record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KBBulkResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/bulk-operations/{id}/undo:
+    post:
+      operationId: undoKBBulkOperation
+      x-permission: kb_articles:update
+      description: >
+        Put back what a bulk action changed, once and within 10 minutes of it. An article changed since
+        the action is left as it is and listed as `not_undone` with 409 `changed_elsewhere`; one that
+        needs a permission the caller lacks (publish, to put a published article back on the help
+        center) is `not_undone` with `permission_missing`. Each article put back gets its own history
+        entry. 404 `not_found` for an id this workspace has no bulk action for, 409 `already_undone` and
+        409 `undo_expired`. A repeat with the same Idempotency-Key answers what the first one got.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false}
+      responses:
+        '200':
+          description: One result per article the bulk action changed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KBBulkUndoResult'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles:
     get:
       operationId: listKBArticles
@@ -15921,6 +15985,82 @@ components:
         previous_trial_ends_at: {type: string, format: date-time}
         trial_ends_at: {type: string, format: date-time, description: 'The trial end now.'}
         extended: {type: boolean, description: 'False when the trial already ended later than 14 days from now and was kept.'}
+    KBBulkInput:
+      type: object
+      required: [action]
+      additionalProperties: false
+      description: One action and its articles, by ids or by filter (exactly one of them), with what the action needs.
+      properties:
+        action: {type: string, enum: [move, visibility, author, tags_add, tags_remove, send_for_review, approve, publish, unpublish, trash]}
+        ids: {type: array, minItems: 1, maxItems: 500, uniqueItems: true, items: {type: string}}
+        filter: {$ref: '#/components/schemas/KBArticleFilters'}
+        collection_id: {type: string, format: uuid, description: 'move: the collection to move the articles to.'}
+        visibility: {$ref: '#/components/schemas/KBVisibility'}
+        author_agent_id: {type: string, format: uuid, description: 'author: the team member to credit the articles to.'}
+        tags: {type: array, minItems: 1, maxItems: 20, items: {type: string, minLength: 1, maxLength: 40}, description: 'tags_add, tags_remove: the tags.'}
+        reviewer_ids: {type: array, minItems: 1, items: {type: string, format: uuid}, description: 'send_for_review: teammates who may publish.'}
+        note: {type: string, maxLength: 2000, description: 'send_for_review, approve: a note for the review.'}
+    KBBulkResult:
+      type: object
+      required: [operation, counts, results]
+      properties:
+        operation:
+          description: The undo record; null when nothing can be put back.
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [id, action, undo_until]
+              properties:
+                id: {type: string, format: uuid}
+                action: {type: string}
+                undo_until: {type: string, format: date-time}
+        counts:
+          type: object
+          required: [done, unchanged, refused]
+          properties:
+            done: {type: integer}
+            unchanged: {type: integer}
+            refused: {type: integer}
+        results:
+          type: array
+          items:
+            type: object
+            required: [id, outcome, undoable]
+            properties:
+              id: {type: string}
+              number: {type: integer, format: int64}
+              title: {type: string, description: 'Absent for an id this workspace does not have.'}
+              outcome: {type: string, enum: [done, unchanged, refused]}
+              undoable: {type: boolean, description: 'true when undo can put this article back.'}
+              error: {$ref: '#/components/schemas/BulkItemError'}
+    KBBulkUndoResult:
+      type: object
+      required: [operation, counts, results]
+      properties:
+        operation:
+          type: object
+          required: [id, action, undone_at]
+          properties:
+            id: {type: string, format: uuid}
+            action: {type: string}
+            undone_at: {type: string, format: date-time}
+        counts:
+          type: object
+          required: [undone, not_undone]
+          properties:
+            undone: {type: integer}
+            not_undone: {type: integer}
+        results:
+          type: array
+          items:
+            type: object
+            required: [id, outcome]
+            properties:
+              id: {type: string}
+              number: {type: integer, format: int64}
+              title: {type: string}
+              outcome: {type: string, enum: [undone, not_undone]}
+              error: {$ref: '#/components/schemas/BulkItemError'}
     BulkItemError:
       type: object
       description: Why one item of a bulk request was not done; the same code and message a call for that item alone answers.
