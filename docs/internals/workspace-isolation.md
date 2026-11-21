@@ -266,7 +266,10 @@ The Freshdesk importer and undo resolve the slug once, then run every read and w
 ## Operator notes
 
 - **PostgreSQL 16 or newer** is required. The `SET` option of role membership (`pg_has_role(...,
-  'SET')`, `GRANT ... WITH INHERIT FALSE, SET TRUE`) appeared in 16. `install.sh`, `compose.yaml`
+  'SET')`, `GRANT ... WITH INHERIT FALSE, SET TRUE`) appeared in 16. `database.MinPostgresMajor`
+  holds it, and every database command checks it first (`CheckPostgresVersion`), so an older server
+  stops with a message naming the version found, the version needed and how to upgrade, instead of
+  failing on SQL it does not know. `install.sh`, `compose.yaml`
   and CI pin `postgres:19.0-bookworm`, the version Colliedesk Cloud runs; an existing install keeps
   the major its data volume holds (`docs/self-host/upgrade.md#postgresql-versions`).
 - **Upgrades** need no manual step. `collie migrate`, which the compose command runs, creates
