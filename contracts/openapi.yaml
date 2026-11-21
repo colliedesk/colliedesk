@@ -7224,7 +7224,7 @@ paths:
                 tags:
                   allOf: [{$ref: '#/components/schemas/KBArticleTags'}]
                   description: 'Replaces every tag. On a published article the new tags wait in its unpublished changes (draft.tags), like its text; the help center and its search keep the published tags until they are published.'
-                author_agent_id: {type: string, format: uuid, description: 'Credits the article to another active member of the team (GET /api/v1/agents). It applies at once, also on a published article, and adds a version of kind author_change that names the author before and after; the same author again changes nothing. Anyone else is 400 invalid_request.'}
+                author_agent_id: {type: string, format: uuid, description: 'Credits the article to another active member of the team (GET /api/v1/agents). It applies at once, also on a published article, and adds a version of kind author_change that names the author before and after, and moves updated_at; the same author again changes nothing. Anyone else is 400 invalid_request.'}
                 autosave: {type: boolean, description: 'An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400.'}
       responses:
         '200':

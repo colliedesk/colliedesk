@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 )
 
 type kbAuthorView struct {
@@ -77,6 +78,34 @@ func TestChangingAnArticleAuthorIsRecordedInItsHistory(t *testing.T) {
 	if article.Author == nil || article.Author.AgentID != writerID || !article.Author.Left {
 		t.Fatalf("author after leaving = %+v, want the writer with left=true", article.Author)
 	}
+}
+
+// A new author is a change of the article: its updated_at moves, so the list's updated filters find it
+// and an editor still holding the old updated_at is told the article changed instead of overwriting it.
+func TestChangingAnArticleAuthorMovesItsUpdatedAt(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "KB Author Time", "admin@kb-author-time.example.com")
+	writerID := agentID(t, api, agentSession(t, api, admin, "writer@kb-author-time.example.com"))
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Billing"})
+	created := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Refunds", "body_md": "Within 14 days.", "status": "published"})
+	fixtureSQL(t, pool, `UPDATE kb_articles SET updated_at='2026-10-01T00:00:00Z' WHERE id=$1`, created.ID)
+	before := kbGetArticle(t, api, admin, created.ID).UpdatedAt
+
+	var changed kbAuthoredArticle
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+created.ID, map[string]any{"updated_at": before, "author_agent_id": writerID}, admin, http.StatusOK, &changed)
+	if changed.UpdatedAt == before {
+		t.Fatalf("updated_at after the author change = %s, want it later than %s", changed.UpdatedAt, before)
+	}
+	var page struct {
+		Items []kbArticleView `json:"items"`
+	}
+	since := time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly)
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles?updated_after="+since, nil, admin, http.StatusOK, &page)
+	if len(page.Items) != 1 || page.Items[0].ID != created.ID {
+		t.Fatalf("updated_after=%s listed %+v, want the article whose author just changed", since, page.Items)
+	}
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+created.ID, map[string]any{"updated_at": before, "body_md": "Within 30 days."}, admin, http.StatusConflict, nil)
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+created.ID, map[string]any{"updated_at": changed.UpdatedAt, "body_md": "Within 30 days."}, admin, http.StatusOK, nil)
 }
 
 // Only an active member of this workspace's team can be credited. Someone of another workspace, a

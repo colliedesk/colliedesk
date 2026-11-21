@@ -19,7 +19,8 @@ const kbAuthorName = `COALESCE(NULLIF(%[1]s.display_name,''),%[1]s.email)`
 
 // setKBArticleAuthor credits the article to agentID, an active member of the team, at once, also on a
 // published article, and records it as a version of kind author_change with the author before and
-// after. The same author again changes nothing.
+// after. The change moves updated_at, so the list's updated filters find it and an editor holding the
+// old updated_at is told the article changed. The same author again changes nothing.
 func setKBArticleAuthor(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id, agentID string) error {
 	if !savedReplyID.MatchString(agentID) {
 		return errKBAuthorNotOnTeam
@@ -39,7 +40,7 @@ func setKBArticleAuthor(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 	if from != nil && *from == agentID {
 		return nil
 	}
-	if _, err := tx.Exec(ctx, `UPDATE kb_articles SET author_agent_id=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, id, agentID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE kb_articles SET author_agent_id=$3, updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2`, workspaceID, id, agentID); err != nil {
 		return fmt.Errorf("change knowledge base article author: %w", err)
 	}
 	return addKBArticleVersionNaming(ctx, tx, workspaceID, id, actor, domain.KBArticleAuthorChanged, nil, from, &agentID)
