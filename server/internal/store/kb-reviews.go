@@ -149,11 +149,15 @@ func insertKBReview(ctx context.Context, tx pgx.Tx, workspaceID string, actor Ac
 }
 
 // addKBReviewVersion records a review event in the history of the article (locale nil) or of its
-// translation, with the text it is about: the draft over the live article, or the translation. It
+// translation, with the text it is about: the draft over the live article or translation. It
 // changes no text, so it leaves the help center and updated_at alone.
 func addKBReviewVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, locale *string, actor Actor, kind string) error {
 	if locale != nil {
-		return recordKBTranslationVersion(ctx, tx, workspaceID, articleID, *locale, actor, kind, nil)
+		status, err := insertKBTranslationVersion(ctx, tx, workspaceID, articleID, *locale, actor, kind, nil, true)
+		if err != nil {
+			return err
+		}
+		return noteKBTextWriter(ctx, tx, workspaceID, articleID, locale, actor, kind, status)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,title,slug,body_md,seo_title,seo_description,status,collection_id,
 			show_contents,changed_by_agent_id,token_id,token_label,created_at)

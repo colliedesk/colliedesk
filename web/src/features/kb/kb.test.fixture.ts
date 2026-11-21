@@ -1,6 +1,8 @@
 import { vi } from 'vitest';
 import { permissionsOf, rolesOf } from '../../test-roles';
 
+type Visibility = 'everyone' | 'help_chat' | 'agents';
+
 // Fixtures and a fake server for the knowledge base tests: the real calls and schemas run against it.
 export const ids = {
   guides: '11111111-1111-4111-8111-111111111111',
@@ -12,7 +14,7 @@ export const ids = {
 };
 
 export const collection = (id: string, name: string, parent: string | null, count = 0, slug = name.toLowerCase()) => ({
-  id, parent_id: parent, name, slug, description: '', position: 0, default_template_id: null as string | null, require_approval: 'inherit' as 'inherit' | 'on' | 'off', article_count: count, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', translations: [] as never[],
+  id, parent_id: parent, name, slug, description: '', position: 0, default_template_id: null as string | null, require_approval: 'inherit' as 'inherit' | 'on' | 'off', visibility: 'everyone' as Visibility, effective_visibility: 'everyone' as Visibility, article_count: count, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', translations: [] as never[],
 });
 
 export const collections = [
@@ -27,11 +29,12 @@ export const change = { version: 1, kind: 'create', restored_from_version: null,
 export const summary = (n: number, title: string, status: 'draft' | 'published' = 'draft') => ({
   id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, number: n, collection_id: ids.setup, collection_ids: [ids.setup], position: 0, title, slug: title.toLowerCase().replace(/ /g, '-'), status,
   published_at: status === 'published' ? '2026-10-02T00:00:00Z' : null, author_agent_id: null, created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z', last_change: change, has_draft: false,
+  visibility: 'everyone' as Visibility, effective_visibility: 'everyone' as Visibility,
   url: `https://desk.example.com/help/acme/a/${n}-${title.toLowerCase().replace(/ /g, '-')}`,
 });
 
 export const article = (fields: Record<string, unknown> = {}) => ({
-  ...summary(7, 'Reset your password'), id: ids.article, body_md: 'Open **Settings**.', seo_title: '', seo_description: '', show_contents: true, has_source_html: false, translations: [], attachments: [], deleted_at: null, ai_exclusion: null, draft: null, ...fields,
+  ...summary(7, 'Reset your password'), id: ids.article, body_md: 'Open **Settings**.', seo_title: '', seo_description: '', show_contents: true, has_source_html: false, translations: [], attachments: [], deleted_at: null, ai_exclusion: null, draft: null, visibility_from: null, ...fields,
 });
 
 export const me = {

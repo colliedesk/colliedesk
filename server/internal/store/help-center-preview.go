@@ -73,8 +73,8 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 			batch.Queue(helpCenterArticlesSQL(`ARRAY(SELECT c.id FROM kb_collections c WHERE c.workspace_id=$1 AND c.parent_id IS NULL AND c.deleted_at IS NULL)`),
 				workspaceID, 0, homeArticles).Query(collectArticles)
 		} else {
-			const first = `(SELECT min(a.number) FROM kb_articles a WHERE ` + publishedKBArticle + `)`
-			batch.Queue(`SELECT `+publicKBArticleColumns+`, a.body_md, a.show_contents FROM kb_articles a WHERE `+publishedKBArticle+` AND a.number=`+first, workspaceID).
+			const first = `(SELECT min(a.number) FROM kb_articles a WHERE ` + publicKBArticle + `)`
+			batch.Queue(`SELECT `+publicKBArticleColumns+`, a.body_md, a.show_contents FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=`+first, workspaceID).
 				QueryRow(func(row pgx.Row) error {
 					var body string
 					var showContents bool
@@ -86,7 +86,7 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 					got.Article = &found
 					return err
 				})
-			batch.Queue(articleVideosSQL(`(SELECT a.id FROM kb_articles a WHERE `+publishedKBArticle+` AND a.number=`+first+`)`), workspaceID).
+			batch.Queue(articleVideosSQL(`(SELECT a.id FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=`+first+`)`), workspaceID).
 				Query(func(rows pgx.Rows) error {
 					videos, err := pgx.CollectRows(rows, scanPublicKBVideo)
 					if got.Article != nil {
@@ -94,7 +94,7 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 					}
 					return err
 				})
-			batch.Queue(helpCenterArticlesSQL(`ARRAY(SELECT a.collection_id FROM kb_articles a WHERE `+publishedKBArticle+` AND a.number=`+first+`)`),
+			batch.Queue(helpCenterArticlesSQL(`ARRAY(SELECT a.collection_id FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=`+first+`)`),
 				workspaceID, 0, neighbours).Query(collectArticles)
 		}
 		if err := tx.SendBatch(ctx, batch).Close(); err != nil {

@@ -289,9 +289,18 @@ func (s *Store) PublishKBArticleDraft(ctx context.Context, workspaceID string, a
 		if homeTrashed {
 			return domain.KBArticle{}, domain.ErrKBCollectionInTrash
 		}
-		return changeKBArticleLocked(ctx, tx, workspaceID, actor, id, domain.KBArticleEdited, nil, func(tx pgx.Tx) error {
+		// The draft may move the article to a collection more people see.
+		before, err := kbVisibilitySnapshot(ctx, tx, workspaceID, []string{id})
+		if err != nil {
+			return domain.KBArticle{}, err
+		}
+		article, err := changeKBArticleLocked(ctx, tx, workspaceID, actor, id, domain.KBArticleEdited, nil, func(tx pgx.Tx) error {
 			return publishKBArticleChange(ctx, tx, workspaceID, id, KBArticleChange{})
 		})
+		if err != nil {
+			return article, err
+		}
+		return article, guardKBVisibilityRaise(ctx, tx, workspaceID, before)
 	})
 	return article, kbError("publish knowledge base article draft", err)
 }

@@ -88,14 +88,13 @@ const (
 )
 
 // Why an article published in Freshdesk is imported as a draft. The strictest reading wins: an
-// internal article made public is a leak, a public one kept as a draft costs one click.
+// internal article made public is a leak, a public one kept as a draft costs one click. A folder's
+// visibility does not make a draft: its collection gets that visibility (collectionVisibility).
 const (
 	draftInFreshdesk     = "draft_in_freshdesk"
-	draftFolderVisible   = "folder_not_visible_to_all_users"
 	draftNotInPortal     = "category_not_in_any_portal"
 	draftPortalUnknown   = "category_portal_unknown"
 	draftSeveralPortals  = "category_in_another_portal"
-	visibilityAllUsers   = 1
 	kbCollectionLevelMax = 3
 )
 
@@ -439,15 +438,10 @@ func (kb *knowledgeBase) checkPortal(chosen int64) error {
 }
 
 // draftReason returns why an article is imported as a draft, or "" when it is published: published in
-// Freshdesk, in folders all visible to all users, in a category shown in the help center's portal.
+// Freshdesk, in a category shown in the help center's portal.
 func (kb *knowledgeBase) draftReason(article kbArticle, chosenPortal int64) string {
 	if article.Status != 2 {
 		return draftInFreshdesk
-	}
-	for _, folder := range kb.path(article.folder) {
-		if folder.Visibility != visibilityAllUsers {
-			return draftFolderVisible
-		}
 	}
 	portals := kb.portals()
 	category := kb.category(article.folder.categoryID)

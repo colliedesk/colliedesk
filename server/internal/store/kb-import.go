@@ -19,8 +19,10 @@ import (
 // KBImportCollection is a collection an import creates. Slug is made from Name; a slug taken by a
 // sibling gets "-" and SlugSuffix appended.
 type KBImportCollection struct {
-	ParentID             *string
-	Name, Description    string
+	ParentID          *string
+	Name, Description string
+	// Visibility is who can see it; empty is everyone.
+	Visibility           string
 	SlugSuffix           string
 	SourceMeta           []byte
 	CreatedAt, UpdatedAt time.Time
@@ -33,15 +35,22 @@ func ImportKBCollection(ctx context.Context, tx pgx.Tx, workspaceID string, inpu
 	if err := cleanKBCollection(&clean); err != nil {
 		return "", err
 	}
+	visibility := input.Visibility
+	if visibility == "" {
+		visibility = domain.KBVisibleEveryone
+	}
+	if err := domain.CheckKBVisibility(visibility); err != nil {
+		return "", err
+	}
 	if err := admitKBCollection(ctx, tx, workspaceID, input.ParentID); err != nil {
 		return "", err
 	}
 	insert := func(slug string) (string, error) {
 		return kbSavepoint(ctx, tx, func(sub pgx.Tx) (string, error) {
 			var id string
-			err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,source_meta,created_at,updated_at,position)
-				VALUES($1,$2,$3,$4,$5,$6,$7,$8,`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`) RETURNING id::text`,
-				workspaceID, input.ParentID, clean.Name, slug, clean.Description, input.SourceMeta, input.CreatedAt, input.UpdatedAt).Scan(&id)
+			err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,source_meta,created_at,updated_at,visibility,position)
+				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`) RETURNING id::text`,
+				workspaceID, input.ParentID, clean.Name, slug, clean.Description, input.SourceMeta, input.CreatedAt, input.UpdatedAt, visibility).Scan(&id)
 			return id, err
 		})
 	}
@@ -223,21 +232,25 @@ type KBImportTranslation struct {
 	CreatedAt, UpdatedAt          time.Time
 }
 
-// KBTranslationImportedLast tells whether a translation exists and whether its newest version is an import.
+// KBTranslationImportedLastSQL is the SQL condition that the import wrote the translation aliased t
+// last, as KBImportedLastSQL for an article: its newest version that is not a draft save or a review
+// is an import (a translation with no version at all was written before versions existed: the
+// import's), and it has no unpublished changes, not even an autosave that recorded no version.
+func KBTranslationImportedLastSQL(t string) string {
+	return `(COALESCE((SELECT v.kind FROM kb_article_translation_versions v WHERE v.workspace_id=` + t + `.workspace_id AND v.article_id=` + t + `.article_id
+		AND v.locale=` + t + `.locale AND ` + kbTextVersion("v.") + ` ORDER BY v.version DESC LIMIT 1), '` + domain.KBArticleImported + `')='` + domain.KBArticleImported + `'
+		AND NOT EXISTS (SELECT 1 FROM kb_article_drafts d WHERE d.workspace_id=` + t + `.workspace_id AND d.article_id=` + t + `.article_id AND d.locale=` + t + `.locale))`
+}
+
+// KBTranslationImportedLast tells whether a translation exists and whether the import wrote it last
+// (KBTranslationImportedLastSQL).
 func KBTranslationImportedLast(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string) (exists, imported bool, err error) {
-	var kind string
-	err = tx.QueryRow(ctx, `SELECT kind FROM kb_article_translation_versions WHERE workspace_id=$1 AND article_id=$2 AND locale=$3 ORDER BY version DESC LIMIT 1`,
-		workspaceID, articleID, locale).Scan(&kind)
+	err = tx.QueryRow(ctx, `SELECT `+KBTranslationImportedLastSQL("t")+` FROM kb_article_translations t WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3`,
+		workspaceID, articleID, locale).Scan(&imported)
 	if errors.Is(err, pgx.ErrNoRows) {
-		var found bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_article_translations WHERE workspace_id=$1 AND article_id=$2 AND locale=$3)`,
-			workspaceID, articleID, locale).Scan(&found); err != nil {
-			return false, false, err
-		}
-		// A translation with no version at all was written before versions existed: the import's.
-		return found, found, nil
+		return false, false, nil
 	}
-	return err == nil, kind == domain.KBArticleImported, err
+	return err == nil, imported, err
 }
 
 // PutKBArticleTranslation adds a translation of an article, or writes the source's newer one over it

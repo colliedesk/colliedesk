@@ -30,15 +30,10 @@ func (s *Store) RecordInboundEvent(ctx context.Context, workspaceID, channelID s
 		return "", false, errors.New("an Async channel's event must be JSON")
 	}
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, `INSERT INTO channel_inbound_events(workspace_id,channel_id,external_event_id,state,raw,received_at)
-			VALUES($1,$2,NULLIF($3,''),'received',$4,$5) ON CONFLICT (workspace_id,channel_id,external_event_id) WHERE external_event_id IS NOT NULL DO NOTHING
-			RETURNING id::text`, workspaceID, channelID, raw.ExternalEventID, raw.JSON, now).Scan(&id)
-		if errors.Is(err, pgx.ErrNoRows) {
-			duplicate = true
-			return tx.QueryRow(ctx, `SELECT id::text FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND external_event_id=$3`,
-				workspaceID, channelID, raw.ExternalEventID).Scan(&id)
-		}
-		return err
+		// An event without an external id never conflicts, so it is always new (old.id is NULL).
+		return tx.QueryRow(ctx, `INSERT INTO channel_inbound_events(workspace_id,channel_id,external_event_id,state,raw,received_at)
+			VALUES($1,$2,NULLIF($3,''),'received',$4,$5) ON CONFLICT (workspace_id,channel_id,external_event_id) WHERE external_event_id IS NOT NULL DO SELECT
+			RETURNING id::text, old.id IS NOT NULL`, workspaceID, channelID, raw.ExternalEventID, raw.JSON, now).Scan(&id, &duplicate)
 	})
 	if err != nil {
 		return "", false, fmt.Errorf("record channel event: %w", err)

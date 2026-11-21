@@ -261,16 +261,23 @@
     return { t: t, a: a, body: body, q: q, w: new Writer(body), id: null };
   };
   // sources: numbered 1..k in their order; a marker becomes the source's link, one of no source goes.
+  // A source with no address is one of the team's help notes: it is named so, and never linked.
   Chat.prototype.finishSources = function (turn, sources) {
     var self = this, nums = {}, list = el('ul', { 'class': 'tabs' });
     sources.forEach(function (s, i) { nums[s.number] = { n: i + 1, s: s }; });
     Array.prototype.slice.call(turn.body.querySelectorAll('.cite-wait')).forEach(function (cite) {
       var hit = nums[cite.getAttribute('data-number')];
       if (!hit) { cite.remove(); return; }
+      if (!hit.s.url) { cite.replaceWith(el('span', { 'class': 'cite', 'aria-label': word('sourceOf', { n: hit.n, title: word('helpNotes') }), text: String(hit.n) })); return; }
       cite.replaceWith(el('a', { 'class': 'cite', href: hit.s.url, tabindex: '-1', target: self.c.surface === 'embed' ? '_blank' : null, 'aria-label': word('sourceOf', { n: hit.n, title: hit.s.title }), text: String(hit.n) }));
     });
     if (!sources.length) return;
     sources.forEach(function (s, i) {
+      if (!s.url) {
+        list.appendChild(el('li', null, [el('span', { 'class': 'tab' }, [el('span', { 'class': 'cite', 'aria-hidden': 'true', text: String(i + 1) }),
+          el('span', { 'class': 'tab-title', text: word('helpNotes') })])]));
+        return;
+      }
       list.appendChild(el('li', null, [el('a', { 'class': 'tab', href: s.url, title: s.title, target: self.c.surface === 'embed' ? '_blank' : null }, [
         el('span', { 'class': 'cite', 'aria-hidden': 'true', text: String(i + 1) }), el('span', { 'class': 'tab-folder', text: s.folder }), el('span', { 'class': 'tab-title', text: s.title })])]));
     });
@@ -299,6 +306,7 @@
     var self = this;
     if (status === 'over_limit') {
       var list = el('ul', { 'class': 'index' });
+      sources = sources.filter(function (s) { return s.url; });
       sources.forEach(function (s) { list.appendChild(el('li', null, [el('a', { href: s.url, target: self.c.surface === 'embed' ? '_blank' : null }, [s.title, el('small', { text: s.folder })])])); });
       var paused = note('', 'pause', word('paused'), sources.length ? word('pausedMatches') : word('stillRead'), null);
       if (sources.length) paused.appendChild(list);

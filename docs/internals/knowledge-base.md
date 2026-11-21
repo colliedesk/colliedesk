@@ -248,8 +248,13 @@ Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
 - **Export** writes `kb-article-drafts.ndjson`; the versions file carries the `draft` kind.
 - **Agents:** `kb_article_update` saves the draft, `kb_article_get` returns `draft` in the same call
   (no separate draft tool, the tool list is near its budget), and `kb_article_draft_publish` /
-  `kb_article_draft_discard` act on it. Translations still write their live row until #694 gives them
-  the same flow on this table.
+  `kb_article_draft_discard` act on it; with `locale` they act on a translation's row
+  (`…/translations/{locale}/draft[/publish]`).
+- **A translation's row follows the article's rules** (`kb-translation-drafts.go`). Its token is the
+  later of the translation's and the row's `updated_at`; save, autosave, restore and media replace
+  write the row, unpublish folds it into the translation, delete and undelete keep it. Its
+  `attachment_ids` are the files the row shows, copied to the translation on publish. A Freshdesk
+  rerun or undo treats a translation with a row as changed in Colliedesk.
 ## Votes
 
 Migration `20261120073704-kb-article-votes`; code `helpcenter/votes.go` (form, cookie, redirect),
@@ -372,9 +377,10 @@ the same article, as Freshdesk does it, never an article of its own.
   `updated_at`; theirs stays in the history) or "Discard mine and show theirs". Autosave stops until
   the person picks one. Every save takes the answer's `updated_at`, so a second save does not race itself.
 - **Autosave runs 3 s after typing stops, and on blur, `visibilitychange` to hidden, `pagehide` and
-  coming back online** (`use-autosave.ts`, `article-autosave.tsx`). A new article (no row yet) and a
-  translation are not autosaved: the first needs a collection and a Save to exist, and a translation
-  has no draft row before #694, so its autosave would change the live page. A save while the page
+  coming back online** (`use-autosave.ts`, `article-autosave.tsx`, `translation-autosave.ts`). A new
+  article or translation (no row yet) is not autosaved: it needs a Save to exist. A translation sends
+  only `title` and `body_md` with `autosave: true`, keeps no device copy, and its other actions wait
+  for an autosave in flight so they never send the same `updated_at`. A save while the page
   closes uses `keepalive` below 60,000 bytes (the browser holds at most 64 KiB of keepalive bodies);
   a longer text relies on the device copy.
 - **The device copy is per workspace, person and article.** `unsaved-store.ts` keys it
@@ -585,9 +591,9 @@ Migration `20261120184320-kb-article-reviews`; code `store/kb-reviews.go`, `kb-r
   points at the old one (`supersedes_review_id`) and drops the reviewer who edited, so a second
   person still approves. With nobody left it stays superseded
   (`TestAnEditInReviewReopensTheReviewWithoutTheReviewerWhoEdited`).
-- **A translation has no draft layer.** Its pending text is a translation in draft status; saving a
-  published one where approval is required is refused (`ErrKBTranslationApprovalRequired`) and the
-  error says to set it to draft first.
+- **A published translation is reviewed through its draft row.** A save writes the row and supersedes
+  an open review; `…/translations/{locale}/draft/publish` needs an approved review of the row's hash
+  where approval is required, else `ErrKBTranslationApprovalRequired`.
 - **Mail goes through the outbox columns.** `kb_review_reviewers.email` and `kb_reviews.author_email`
   move `queued` → `sending` → `sent` (or `rejected`, or `off` for a deactivated person or a closed
   review); the `kbreviewmail` sender claims each row right before it sends, so two servers never send
@@ -596,12 +602,48 @@ Migration `20261120184320-kb-article-reviews`; code `store/kb-reviews.go`, `kb-r
 - **Not gated on purpose.** A media replacement already needs `kb_articles:publish` and changes every
   article that shows the item; a Freshdesk import writes the source's status. Neither opens a review.
 
+## Visibility
+
+Migration `kb-visibility`; code in `server/internal/store/kb-visibility*.go`. User page:
+[knowledge-base.md](../user/knowledge-base.md#visibility).
+
+- **One public definition.** `kb_articles.visibility` and `kb_collections.visibility` hold `everyone`,
+  `help_chat` or `agents`. What a customer may read is decided only by the `security_invoker` views:
+  `kb_article_visibility` (the effective rank), `kb_public_articles` (help center), `kb_help_chat_articles`
+  (help chat) and `kb_published_articles` (team-side AI), with the `*_translations` views beside them.
+  Forced row-level security still applies, since the views run as the caller.
+- **Most restrictive wins, and it fails closed.** The effective rank is the greatest of the article's
+  own, its home's and every live extra collection's, each with its live parents. A home that is not
+  live counts as `agents`, and `kb_visibility_rank` ranks any unknown value as `agents`
+  (`domain.KBVisibilityRank` agrees), so a mistake hides an article rather than showing it.
+- **Raising is a publish.** Any write that may show a published article to more people (its own
+  value, a collection's value or parent, publishing a draft that moves it, restoring a collection from
+  the trash) takes a `kbVisibilitySnapshot` first and calls `guardKBVisibilityRaise` after the write,
+  in the same transaction. An article whose rank fell, in a collection that needs approval, without an
+  approved review of its published text, rolls the write back: 409 `approval_required` with the ids.
+  The handlers ask for `kb_articles:publish` before a raise (`KBArticleVisibilityRaises`,
+  `KBCollectionVisibilityRaises`); lowering needs only `kb_articles:update`.
+- **A restricted page is a missing page.** The help center, its search, the sitemap, `llms.txt`, the
+  `.md` copy and legacy addresses read `kb_public_articles`, so a restricted article is 404 (a legacy
+  address goes to search) like an article that does not exist. Help chat quotes a `help_chat` article
+  as "Our help notes" with no title, collection or address. AI drafts and triage read every published
+  article, restricted ones included; a draft is given no article address, so it cannot link one.
+
+### Traps
+
+- **Never read `status = 'published'` for a customer.** `TestOnlyTeamSideFilesReadThePublishedStatusDirectly`
+  fails when a file outside the team-side list (`teamSideKBFiles` in `kb_visibility_gate_test.go`)
+  decides on its own that an article is published. Read through the views instead. Add a file to the
+  list only when it serves the team's own screens or writes.
+- **A new write that reshapes the tree needs the guard.** A path that changes a parent, a collection
+  list or the trash state of a collection and skips `guardKBVisibilityRaise` can publish unreviewed text.
+
 ## Traps
 
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges
   give the app role all four rights, so `GRANT SELECT, INSERT` alone does not make a table append-only.
   The migration revokes all rights on `kb_article_versions` first; `TestKnowledgeBaseVersionsAreAppendOnlyForTheAppRole`
-  pins it. (`saved_reply_versions` was created with only the grant, so the app role can still change it.)
+  pins it. A new table uses `limit_app_role` ([workspace isolation](workspace-isolation.md#securing-a-new-table)).
 - **"Unused" is more than "no article".** The help center's logo and favicon (`help_centers.logo_media_id`,
   `favicon_media_id`) are library items no article links. `kbMediaNamedByHelpCenter` is part of the
   purge rule (`kbMediaPurgeable`), the `unused` and `in_use` filters, trash-unused and the admin's

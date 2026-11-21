@@ -20,15 +20,16 @@ func importedThumb(key string) string {
 
 // kbVoteCountsSQL reads, for article $2 of workspace $1, the current votes and the votes an import
 // brought in with the article and its published translations (Freshdesk's thumbs): a draft or a
-// translation in the trash shows no reader, so its votes do not count. Imported votes count only while
-// the article's votes were never reset.
+// translation in the trash shows no reader, so its votes do not count. Who may read the article does
+// not change its count; only a published article has a page that shows it. Imported votes count only
+// while the article's votes were never reset.
 var kbVoteCountsSQL = `SELECT
 	(SELECT count(*) FROM kb_article_votes v WHERE v.workspace_id=$1 AND v.article_id=$2 AND v.reset_id IS NULL AND v.helpful),
 	(SELECT count(*) FROM kb_article_votes v WHERE v.workspace_id=$1 AND v.article_id=$2 AND v.reset_id IS NULL AND NOT v.helpful),
 	COALESCE(sum(` + importedThumb("thumbs_up") + `), 0)::bigint, COALESCE(sum(` + importedThumb("thumbs_down") + `), 0)::bigint
 	FROM (SELECT a.source_meta FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2
 		UNION ALL SELECT t.source_meta FROM kb_article_translations t
-			WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.status='published' AND t.deleted_at IS NULL) s(m)
+			WHERE t.workspace_id=$1 AND t.article_id=$2 AND ` + publishedKBTranslation + `) s(m)
 	WHERE m IS NOT NULL AND NOT EXISTS (SELECT 1 FROM kb_article_vote_resets r WHERE r.workspace_id=$1 AND r.article_id=$2)`
 
 // kbVoteCounts are the current and imported counts of an article, read in tx.
@@ -57,12 +58,11 @@ const (
 
 // lockKBVotes locks the votes version of article articleID, making the row on the first vote: the votes
 // and resets of one article take their turns on it, so the readers an address added are counted
-// without a race and a reset counts or closes every vote. Other articles' votes never wait.
+// without a race and a reset counts or closes every vote. Other articles' votes never wait. One
+// statement makes the row or locks the one there (ON CONFLICT DO SELECT FOR UPDATE).
 func lockKBVotes(ctx context.Context, tx pgx.Tx, workspaceID, articleID string) error {
-	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_vote_versions (workspace_id, article_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, workspaceID, articleID); err != nil {
-		return fmt.Errorf("make votes version: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM kb_article_vote_versions WHERE workspace_id=$1 AND article_id=$2 FOR UPDATE`, workspaceID, articleID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_vote_versions (workspace_id, article_id) VALUES ($1, $2)
+		ON CONFLICT (workspace_id, article_id) DO SELECT FOR UPDATE RETURNING 1`, workspaceID, articleID); err != nil {
 		return fmt.Errorf("lock votes version: %w", err)
 	}
 	return nil
@@ -104,7 +104,7 @@ func (s *Store) VoteKBArticle(ctx context.Context, workspaceID string, number in
 	}
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
 		var articleID string
-		err := tx.QueryRow(ctx, `SELECT a.id::text FROM kb_articles a WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number).Scan(&articleID)
+		err := tx.QueryRow(ctx, `SELECT a.id::text FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=$2`, workspaceID, number).Scan(&articleID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return struct{}{}, domain.ErrKBArticleNotFound
 		}

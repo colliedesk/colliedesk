@@ -78,9 +78,13 @@ type KBCollection struct {
 	DefaultTemplateID *string `json:"default_template_id"`
 	// RequireApproval is whether an article in it needs an approved version before it is published:
 	// inherit (the workspace setting), on or off.
-	RequireApproval string    `json:"require_approval"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	RequireApproval string `json:"require_approval"`
+	// Visibility is who can see the collection and its articles (KBVisibilities); EffectiveVisibility
+	// also counts its live parents.
+	Visibility          string    `json:"visibility"`
+	EffectiveVisibility string    `json:"effective_visibility"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 	// Translations are its name and description in the help center's other languages.
 	Translations []KBCollectionTranslation `json:"translations"`
 }
@@ -114,24 +118,30 @@ type KBArticleSummary struct {
 	URL string `json:"url"`
 	// HasDraft is set while a published article has unpublished changes (KBArticle.Draft).
 	HasDraft bool `json:"has_draft"`
+	// Visibility is who the article itself is for (KBVisibilities); EffectiveVisibility is the most
+	// restrictive of it and of every live collection the article is in, which is what applies.
+	Visibility          string `json:"visibility"`
+	EffectiveVisibility string `json:"effective_visibility"`
 }
 
 // KBTranslationSummary is one language version of an article without its text, as the article and
 // the lists of a language show it. Outdated is set when the article's own title or text changed after
 // the translation was last brought up to date.
 type KBTranslationSummary struct {
-	ArticleID   string           `json:"article_id"`
-	Locale      string           `json:"locale"`
-	Title       string           `json:"title"`
-	Slug        string           `json:"slug"`
-	Status      string           `json:"status"`
-	PublishedAt *time.Time       `json:"published_at"`
-	Outdated    bool             `json:"outdated"`
-	OutdatedAt  *time.Time       `json:"outdated_at"`
-	CreatedAt   time.Time        `json:"created_at"`
-	UpdatedAt   time.Time        `json:"updated_at"`
-	InTrash     bool             `json:"in_trash"`
-	LastChange  *KBArticleChange `json:"last_change"`
+	ArticleID   string     `json:"article_id"`
+	Locale      string     `json:"locale"`
+	Title       string     `json:"title"`
+	Slug        string     `json:"slug"`
+	Status      string     `json:"status"`
+	PublishedAt *time.Time `json:"published_at"`
+	Outdated    bool       `json:"outdated"`
+	OutdatedAt  *time.Time `json:"outdated_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	InTrash     bool       `json:"in_trash"`
+	// HasDraft is set while a published translation has unpublished changes.
+	HasDraft   bool             `json:"has_draft"`
+	LastChange *KBArticleChange `json:"last_change"`
 	// URL is the public address in its language; the API fills it in.
 	URL string `json:"url"`
 }
@@ -167,6 +177,8 @@ type KBArticleTranslation struct {
 	Original        KBTranslationOriginal `json:"original"`
 	// Attachments are the files the translation lists; empty shows the article's on its page.
 	Attachments KBAttachments `json:"attachments"`
+	// Draft is the unpublished changes of a published translation, nil without them.
+	Draft *KBTranslationDraft `json:"draft"`
 }
 
 // TrashedKBTranslation is a deleted translation, restorable until PurgesAt.
@@ -275,6 +287,9 @@ type KBArticle struct {
 	DeletedAt   *time.Time    `json:"deleted_at"`
 	// AIExclusion is set while AI may not read the article, in any language.
 	AIExclusion *KBAIExclusion `json:"ai_exclusion"`
+	// VisibilityFrom is the collection that makes EffectiveVisibility more restrictive than the
+	// article's own Visibility; nil when the article's own setting applies.
+	VisibilityFrom *KBVisibilityCollection `json:"visibility_from"`
 	// MissingMedia is set only in the answer to a save: media ids the text names that the library
 	// does not have.
 	MissingMedia []string `json:"missing_media,omitempty"`

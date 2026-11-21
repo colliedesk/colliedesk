@@ -207,8 +207,11 @@ func TestAnImageOfAHiddenLanguageIsNotPublic(t *testing.T) {
 	image := uploadKBImage(t, f.api, f.admin, otherPNG(43), http.StatusCreated)
 	var de kbTranslationView
 	kbCall(t, f.api, http.MethodGet, "/api/v1/kb/articles/"+f.translated.ID+"/translations/de", nil, f.admin, http.StatusOK, &de)
+	var saved kbTranslationView
 	kbCall(t, f.api, http.MethodPatch, "/api/v1/kb/articles/"+f.translated.ID+"/translations/de", map[string]any{"updated_at": de.UpdatedAt,
-		"body_md": "versteckt\n\n![Bild](" + image.URL + ")"}, f.admin, http.StatusOK, nil)
+		"body_md": "versteckt\n\n![Bild](" + image.URL + ")"}, f.admin, http.StatusOK, &saved)
+	kbCall(t, f.api, http.MethodPost, kbTranslationPath(f.translated.ID, "de", "/draft/publish"), map[string]any{"updated_at": saved.UpdatedAt},
+		f.admin, http.StatusOK, nil)
 	public := f.base + "/images/" + image.ID
 	if response := visit(f.site, public, "198.51.100.95"); response.Code != http.StatusNotFound {
 		t.Fatalf("image of a hidden language = %d, want 404", response.Code)

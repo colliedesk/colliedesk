@@ -43,28 +43,28 @@ const (
 		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made it; null when a person made it in the web app."},` +
 		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
 
-	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text"],"properties":{` +
+	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility"],"properties":{` +
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,` +
 		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"has_draft":{"type":"boolean","description":"Unpublished changes wait in a draft; colliedesk_kb_article_get shows them."},` +
-		`"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}}}`
+		`"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}},` + kbVisibilityOutput + `}}`
 
-	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments"],"properties":{` +
+	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from"],"properties":{` +
 		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
 		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"has_draft":{"type":"boolean"},"draft":` + kbArticleDraftSchema + `,"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
 		kbShowContentsProperty + `,"in_trash":{"type":"boolean"},"has_source_html":{"type":"boolean","description":"An import kept the original HTML; it is in the workspace export."},` +
 		`"ai_exclusion":{"type":["object","null"],"description":"Set while AI may not read the article (colliedesk_kb_article_ai_exclude); null while it may.","required":["at","by"],"properties":{"at":{"type":"string"},"by":{"type":["string","null"]}}},` +
-		`"translations":{"type":"array","description":"Its versions in the help center's other languages, without their text (in the trash too). Read one with colliedesk_kb_translation_get.","items":` + kbTranslationSummarySchema + `},"attachments":` + kbAttachmentsSchema + `}}`
+		`"translations":{"type":"array","description":"Its versions in the help center's other languages, without their text (in the trash too). Read one with colliedesk_kb_translation_get.","items":` + kbTranslationSummarySchema + `},"attachments":` + kbAttachmentsSchema + `,` + kbVisibilityOutput + `,` + kbVisibilityFromOutput + `}}`
 
 	kbArticleOutput = `{"type":"object","required":["article"],"properties":{"article":` + kbArticleSchema + `}}`
 
-	kbCollectionSchema = `{"type":"object","required":["id","parent_id","name","slug","description","position","article_count","updated_at","default_template_id"],"properties":{` +
+	kbCollectionSchema = `{"type":"object","required":["id","parent_id","name","slug","description","position","article_count","updated_at","default_template_id","visibility","effective_visibility"],"properties":{` +
 		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"default_template_id":{"type":["string","null"],"description":"The template every new article in it starts from (colliedesk_kb_templates_list); null: they start empty."},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
 		`"position":{"type":"integer"},"article_count":{"type":"integer"},"updated_at":{"type":"string"},"deleted_at":{"type":"string"},"deleted_by":{"type":["string","null"]},"purges_at":{"type":"string"},` +
 		`"translations":{"type":"array","description":"Its name and description in the help center's other languages (colliedesk_kb_collection_translation_set).","items":{"type":"object","properties":{` +
-		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}},` + kbRequireApprovalProperty + `}}`
+		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}},` + kbRequireApprovalProperty + `,` + kbVisibilityOutput + `}}`
 
 	// kbRequireApprovalProperty is a collection's approval setting, in its answer and in a change.
 	kbRequireApprovalProperty = `"require_approval":{"type":"string","enum":["inherit","on","off"],"description":"Whether its articles need an approved version before they are published: ` +
@@ -117,7 +117,7 @@ func kbCollectionCreateSpec() Spec {
 		REST: []string{"POST /api/v1/kb/collections"},
 		Input: `{"type":"object","additionalProperties":false,"required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,` +
 			`"description":{"type":"string","maxLength":2000},"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,"position":{"type":"integer","minimum":0,"maximum":1000000,` +
-			`"description":"Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand (colliedesk_kb_order_set), else by name."}}}`,
+			`"description":"Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand (colliedesk_kb_order_set), else by name."},` + kbVisibilityProperty + `}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionCreate,
 	}
@@ -127,13 +127,13 @@ func kbCollectionUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_collection_update",
 		Title: "Change a knowledge base collection",
-		Description: `Rename a collection, change its slug, description, position, default template or whether its articles need approval (require_approval, needs kb_articles:publish), or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
-			`A move that would nest it more than three levels deep, or under itself, is refused.`,
+		Description: `Rename a collection, change its slug, description, position, default template, whether its articles need approval (require_approval, needs kb_articles:publish) or who can see it (visibility), or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
+			`A move that would nest it more than three levels deep, or under itself, is refused. A change or move that shows published articles to more people needs kb_articles:publish.`,
 
 		REST: []string{"PATCH /api/v1/kb/collections/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["collection_id","updated_at"],"properties":{` + kbCollectionIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,"description":{"type":"string","maxLength":2000},"position":{"type":"integer","minimum":0,"maximum":1000000},` +
-			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,` + kbRequireApprovalProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
+			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,` + kbRequireApprovalProperty + `,` + kbVisibilityProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionUpdate,
 	}
@@ -172,14 +172,14 @@ func kbArticlesSearchSpec() Spec {
 		Title: "Search knowledge base articles",
 		Description: `List or search the articles outside the trash, without their text, one page at a time. With query, articles whose title or text hold every word of it as a word or the start of one ` +
 			`(or whose title holds it) come first by relevance. Without it the order is sort: recent (most recently updated first) or manual (the help center's order, set with colliedesk_kb_order_set; ` +
-			`collections in their order, each with its own articles before those of its collections). With collection_id the default is manual, otherwise recent. Filter by status or collection_id; has_draft true keeps the published articles with unpublished changes. ` +
+			`collections in their order, each with its own articles before those of its collections). With collection_id the default is manual, otherwise recent. Filter by status, collection_id or visibility (who can see it now); has_draft true keeps the published articles with unpublished changes. ` +
 			`Words are matched with no language rules: a word inside another word, or text in scripts written without spaces (Chinese, Japanese, Thai), is found only where it starts a word or in the title. ` +
 			`Read one whole with colliedesk_kb_article_get. For the next page pass next_cursor as cursor. ` +
 			`Each article has its public address (url); to link one in a reply, search with status published.` + "\n\n" + kbTextNotice,
 		REST: []string{"GET /api/v1/kb/articles"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","maxLength":200},"status":{"type":"string","enum":["draft","published"]},` +
 			`"collection_id":{"type":"string",` + uuid + `},"has_draft":{"type":"boolean"},"state":{"type":"string","enum":["in_review","approved"],` +
-			`"description":"in_review: with an open review; approved: their unpublished text is approved and can be published (colliedesk_kb_articles_publish)."},"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
+			`"description":"in_review: with an open review; approved: their unpublished text is approved and can be published (colliedesk_kb_articles_publish)."},` + kbVisibilityFilter + `,"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
 		Output: `{"type":"object","required":["articles","next_cursor"],"properties":{"articles":{"type":"array","items":` + kbArticleRowSchema + `},` +
 			`"next_cursor":{"type":["string","null"],"description":"Null on the last page."}}}`,
 		run: kbArticlesSearch,
@@ -205,7 +205,7 @@ func kbArticleCreateSpec() Spec {
 		Title: "Write a knowledge base article",
 		Description: `Write an article in Markdown in a collection (collection_id), or listed in several (collection_ids, its home first). ` +
 			`Give body, or template_id to start from a template's text; with neither it starts from its collection's default template, or empty. Later changes to the template never change the article. It is a draft unless status is published; a published article is on the public help center while that is on. ` +
-			`seo_title and seo_description are what search engines show; left out, the title and the start of the text are used. ` +
+			`seo_title and seo_description are what search engines show; left out, the title and the start of the text are used. visibility keeps it from the help center or from help chat. ` +
 			`An article with 3 or more H2 and H3 headings lists them as On this page; show_contents false turns that off. ` +
 			`The text holds at most 100,000 characters and is never cut. Put images in with colliedesk_kb_image_upload and link them as ![text](url). ` +
 			`Delete it with colliedesk_kb_article_delete to undo.` + "\n\n" + kbTextNotice,
@@ -214,7 +214,7 @@ func kbArticleCreateSpec() Spec {
 		Input: `{"type":"object","additionalProperties":false,"required":["title"],"properties":{` + kbCollectionIDProperty + `,` + kbCollectionIDsProperty + `,` +
 			`"title":{"type":"string","minLength":1,"maxLength":300},"body":{"type":"string","maxLength":100000,"description":"` + kbBodyDescription + `"},` +
 			`"template_id":{"type":"string",` + uuid + `,"description":"Instead of body: start from this template's text (colliedesk_kb_templates_list)."},` + kbSlugProperty + `,` +
-			`"status":{"type":"string","enum":["draft","published"],"default":"draft"},` + kbSEOProperties + `,` + kbShowContentsProperty + `}}`,
+			`"status":{"type":"string","enum":["draft","published"],"default":"draft"},` + kbSEOProperties + `,` + kbShowContentsProperty + `,` + kbVisibilityProperty + `}}`,
 		Output: kbArticleOutput,
 		run:    kbArticleCreate,
 	}
@@ -224,15 +224,15 @@ func kbArticleUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_update",
 		Title: "Edit a knowledge base article",
-		Description: `Change the title, text, slug, collection, search title (seo_title), meta description (seo_description) or On this page switch (show_contents) of an article, or publish (status published) or unpublish it (status draft). ` +
+		Description: `Change the title, text, slug, collection, search title (seo_title), meta description (seo_description), On this page switch (show_contents) or who can see it (visibility) of an article, or publish (status published) or unpublish it (status draft). ` +
 			`On a published article the change goes to its draft and the help center keeps the live text until colliedesk_kb_article_draft_publish (status draft unpublishes it with the draft as its text). ` +
 			`collection_id moves it to a new home; collection_ids replaces every collection it is listed in (the home first), and its address never changes. Every change is a new version; ` +
-			`colliedesk_kb_article_version_restore brings an earlier text back.` + "\n\n" + kbTextNotice,
+			`colliedesk_kb_article_version_restore brings an earlier text back. visibility applies at once, also on a published article; showing it to more people needs kb_articles:publish.` + "\n\n" + kbTextNotice,
 
 		REST: []string{"PATCH /api/v1/kb/articles/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["article_id","updated_at"],"properties":{` + kbArticleIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"title":{"type":"string","minLength":1,"maxLength":300},"body":{"type":"string","maxLength":100000,"description":"` + kbBodyDescription + `"},` + kbSlugProperty + `,` +
-			`"collection_id":{"type":"string",` + uuid + `},` + kbCollectionIDsProperty + `,"status":{"type":"string","enum":["draft","published"]},` + kbSEOProperties + `,` + kbShowContentsProperty + `}}`,
+			`"collection_id":{"type":"string",` + uuid + `},` + kbCollectionIDsProperty + `,"status":{"type":"string","enum":["draft","published"]},` + kbSEOProperties + `,` + kbShowContentsProperty + `,` + kbVisibilityProperty + `}}`,
 		Output: kbArticleOutput,
 		run:    kbArticleUpdate,
 	}

@@ -59,11 +59,12 @@ const kbCollectionColumns = `c.id::text,c.parent_id::text,c.name,c.slug,c.descri
 	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.default_template_id::text,c.require_approval,c.created_at,c.updated_at,
 	COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'imported',t.source_meta IS NOT NULL,
 		'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY t.locale)
-		FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id),'[]'::jsonb)`
+		FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id),'[]'::jsonb),` + kbCollectionVisibilityColumns
 
 func kbCollectionTargets(collection *domain.KBCollection) []any {
 	return []any{&collection.ID, &collection.ParentID, &collection.Name, &collection.Slug, &collection.Description, &collection.Position,
-		&collection.ArticleCount, &collection.DefaultTemplateID, &collection.RequireApproval, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations}
+		&collection.ArticleCount, &collection.DefaultTemplateID, &collection.RequireApproval, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations,
+		&collection.Visibility, &collection.EffectiveVisibility}
 }
 
 func scanKBCollection(row pgx.Row) (domain.KBCollection, error) {
@@ -128,9 +129,17 @@ type KBCollectionInput struct {
 	Position                int
 	// DefaultTemplateID is the template new articles in it start from; nil for none.
 	DefaultTemplateID *string
+	// Visibility is who may see the collection and its articles; empty is everyone.
+	Visibility string
 }
 
 func cleanKBCollection(input *KBCollectionInput) error {
+	if input.Visibility == "" {
+		input.Visibility = domain.KBVisibleEveryone
+	}
+	if err := domain.CheckKBVisibility(input.Visibility); err != nil {
+		return err
+	}
 	name, err := domain.CleanKBText("name", input.Name, domain.MaxKBCollectionName)
 	if err != nil {
 		return err
@@ -216,9 +225,9 @@ func (s *Store) CreateKBCollection(ctx context.Context, workspaceID string, acto
 		collection, err := kbSavepoint(ctx, tx, func(sub pgx.Tx) (domain.KBCollection, error) {
 			var id string
 			// Without a position it goes after its siblings once they were ordered by hand.
-			if err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,position,default_template_id)
-				VALUES($1,$2,$3,$4,$5,COALESCE(NULLIF($6,0),`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`),$7) RETURNING id::text`,
-				workspaceID, input.ParentID, input.Name, input.Slug, input.Description, input.Position, input.DefaultTemplateID).Scan(&id); err != nil {
+			if err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,position,default_template_id,visibility)
+				VALUES($1,$2,$3,$4,$5,COALESCE(NULLIF($6,0),`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`),$7,$8) RETURNING id::text`,
+				workspaceID, input.ParentID, input.Name, input.Slug, input.Description, input.Position, input.DefaultTemplateID, input.Visibility).Scan(&id); err != nil {
 				return domain.KBCollection{}, err
 			}
 			return readKBCollection(ctx, sub, workspaceID, id)
@@ -268,6 +277,8 @@ type KBCollectionChange struct {
 	DefaultTemplateID  *string
 	// RequireApproval, when set, is inherit, on or off (domain.KBApprovalModes).
 	RequireApproval *string
+	// Visibility, when set, is who may see the collection and its articles (domain.KBVisibilities).
+	Visibility *string
 }
 
 // UpdateKBCollection changes a live collection. seen is the updated_at the client read.
@@ -300,6 +311,11 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 	if change.RequireApproval != nil && !slices.Contains(domain.KBApprovalModes, *change.RequireApproval) {
 		return domain.KBCollection{}, &domain.InvalidKBError{Message: "require_approval is inherit (the workspace setting), on or off."}
 	}
+	if change.Visibility != nil {
+		if err := domain.CheckKBVisibility(*change.Visibility); err != nil {
+			return domain.KBCollection{}, err
+		}
+	}
 	collection, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBCollection, error) {
 		if err := lockKB(ctx, tx, workspaceID); err != nil {
 			return domain.KBCollection{}, err
@@ -328,18 +344,30 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 				return domain.KBCollection{}, tooDeep()
 			}
 		}
+		// A new visibility or parent may show published articles to more people.
+		var before map[string]int
+		if change.Visibility != nil || change.MoveParent {
+			var err error
+			if before, err = kbVisibilitySnapshot(ctx, tx, workspaceID, nil); err != nil {
+				return domain.KBCollection{}, err
+			}
+		}
 		collection, err := kbSavepoint(ctx, tx, func(sub pgx.Tx) (domain.KBCollection, error) {
 			if _, err := sub.Exec(ctx, `UPDATE kb_collections SET name=COALESCE($3,name), slug=COALESCE($4,slug), description=COALESCE($5,description),
 				position=CASE WHEN $6::int IS NOT NULL THEN $6 WHEN $7 AND $8::uuid IS DISTINCT FROM parent_id THEN `+kbCollectionEnd(`$8::uuid`, `$2::uuid`)+` ELSE position END,
 				parent_id=CASE WHEN $7 THEN $8::uuid ELSE parent_id END,
-				default_template_id=CASE WHEN $9 THEN $10::uuid ELSE default_template_id END, require_approval=COALESCE($11,require_approval), updated_at=clock_timestamp()
+				default_template_id=CASE WHEN $9 THEN $10::uuid ELSE default_template_id END, require_approval=COALESCE($11,require_approval),
+				visibility=COALESCE($12,visibility), updated_at=clock_timestamp()
 				WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Name, change.Slug, change.Description, change.Position, change.MoveParent, change.Parent,
-				change.SetDefaultTemplate, change.DefaultTemplateID, change.RequireApproval); err != nil {
+				change.SetDefaultTemplate, change.DefaultTemplateID, change.RequireApproval, change.Visibility); err != nil {
 				return domain.KBCollection{}, err
 			}
 			return readKBCollection(ctx, sub, workspaceID, id)
 		})
 		if err != nil {
+			return domain.KBCollection{}, err
+		}
+		if err := guardKBVisibilityRaise(ctx, tx, workspaceID, before); err != nil {
 			return domain.KBCollection{}, err
 		}
 		return collection, bumpKB(ctx, tx, workspaceID)
@@ -401,8 +429,16 @@ func (s *Store) DeleteKBCollection(ctx context.Context, workspaceID string, acto
 		if full {
 			return struct{}{}, domain.ErrKBCollectionNotEmpty
 		}
+		// Articles also listed in a restricted collection are seen more widely once it is in the trash.
+		before, err := kbVisibilitySnapshot(ctx, tx, workspaceID, nil)
+		if err != nil {
+			return struct{}{}, err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE kb_collections SET deleted_at=$3, deleted_by_agent_id=$4, updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2`,
 			workspaceID, id, s.now(), optionalID(actor.AgentID)); err != nil {
+			return struct{}{}, err
+		}
+		if err := guardKBVisibilityRaise(ctx, tx, workspaceID, before); err != nil {
 			return struct{}{}, err
 		}
 		return struct{}{}, bumpKB(ctx, tx, workspaceID)
@@ -467,7 +503,8 @@ func kbError(what string, err error) error {
 		return nil
 	}
 	var invalid *domain.InvalidKBError
-	if errors.As(err, &invalid) {
+	var raise *domain.KBVisibilityRaiseError
+	if errors.As(err, &invalid) || errors.As(err, &raise) {
 		return err
 	}
 	for _, known := range kbErrors {

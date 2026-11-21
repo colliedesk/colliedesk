@@ -175,8 +175,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_article_version_restore` | Makes the text of an earlier version current again, as a new version | `kb_articles:update` |
 | `colliedesk_kb_article_ai_exclude` | Keeps an article away from reply drafts and triage suggestions, in every language; its text does not change | `kb_articles:update` |
 | `colliedesk_kb_article_ai_include` | Lets AI read an excluded article again | `kb_articles:update` |
-| `colliedesk_kb_article_draft_publish` | Puts the unpublished changes of a published article on the help center | `kb_articles:publish` |
-| `colliedesk_kb_article_draft_discard` | Drops the unpublished changes of a published article | `kb_articles:update` |
+| `colliedesk_kb_article_draft_publish` | Puts the unpublished changes of a published article or translation on the help center | `kb_articles:publish` |
+| `colliedesk_kb_article_draft_discard` | Drops the unpublished changes of a published article or translation | `kb_articles:update` |
 | `colliedesk_kb_article_votes_get` | Reads an article's "Was this article helpful?" counts, each reader's vote and what they said was missing | `kb_articles:read` |
 | `colliedesk_kb_article_votes_reset` | Starts an article's helpful count again from 0; the earlier counts stay under resets. Cannot be undone | `kb_articles:update` |
 | `colliedesk_kb_article_send_for_review` | Saves an article's or translation's text and asks teammates who may publish to approve it | `kb_articles:update` |
