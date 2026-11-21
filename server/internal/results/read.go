@@ -40,6 +40,8 @@ type Page struct {
 	HoursSaved    map[string]*HoursSaved `json:"hours_saved"`
 	Error         *ComputeError          `json:"error"`
 	WeeklyEmail   *WeeklyEmail           `json:"weekly_email"`
+	// HelpCenter is read live by the store, not from a snapshot.
+	HelpCenter *HelpCenter `json:"help_center"`
 }
 
 // WeeklyEmail is an admin's own weekly email.
@@ -59,7 +61,8 @@ type Viewer struct {
 	Now     time.Time
 }
 
-// Read returns the newest stored numbers; nothing is computed.
+// Read returns the newest stored numbers; nothing is computed. The help center section is not here:
+// the store reads it live (docs/internals/results.md › Help center).
 func Read(ctx context.Context, tx pgx.Tx, workspaceID string, viewer Viewer) (Page, error) {
 	admin := viewer.Admin
 	page := Page{BaselineState: "none", HoursSaved: map[string]*HoursSaved{}}
