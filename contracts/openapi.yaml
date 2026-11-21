@@ -5377,6 +5377,37 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/agents/me/kb-editor:
+    put:
+      operationId: setKBEditor
+      x-permission: profile:update
+      description: >-
+        Sets the editor the caller writes knowledge base articles in: `visual` (formatted, the default for
+        someone who never chose) or `markdown` (Write, Split and Preview). Both edit the same Markdown. The
+        choice belongs to the caller; every other agent keeps their own.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [editor]
+              properties:
+                editor: {type: string, enum: [visual, markdown]}
+      responses:
+        '200':
+          description: The caller's choice
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [editor]
+                properties:
+                  editor: {type: string, enum: [visual, markdown]}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/ai/usage:
     get:
       operationId: getAIUsage
@@ -11894,9 +11925,13 @@ components:
           description: When the browser first saw `ttclid` or `fbclid`. Missing, in the future or older than 7 days, the sign-up time stands in.
     Me:
       type: object
-      required: [agent, workspace, timezone, token, permissions, plan, onboarding_goal, ai_features, setup_guide_hidden]
+      required: [agent, workspace, timezone, token, permissions, plan, onboarding_goal, ai_features, setup_guide_hidden, kb_editor]
       properties:
         setup_guide_hidden: {type: boolean, description: True when this agent hid the setup guide in the inbox.}
+        kb_editor:
+          type: [string, 'null']
+          enum: [visual, markdown, null]
+          description: The article editor this agent chose; null until they choose, and the web app then opens the visual one.
         ai_features:
           type: object
           description: Which AI features can run now in the workspace (on, with a working provider); the web app offers only those.

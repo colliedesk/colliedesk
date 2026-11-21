@@ -3237,6 +3237,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/me/kb-editor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Sets the editor the caller writes knowledge base articles in: `visual` (formatted, the default for someone who never chose) or `markdown` (Write, Split and Preview). Both edit the same Markdown. The choice belongs to the caller; every other agent keeps their own. */
+        put: operations["setKBEditor"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/usage": {
         parameters: {
             query?: never;
@@ -7680,6 +7697,11 @@ export interface components {
         Me: {
             /** @description True when this agent hid the setup guide in the inbox. */
             setup_guide_hidden: boolean;
+            /**
+             * @description The article editor this agent chose; null until they choose, and the web app then opens the visual one.
+             * @enum {string|null}
+             */
+            kb_editor: "visual" | "markdown" | null;
             /** @description Which AI features can run now in the workspace (on, with a working provider); the web app offers only those. */
             ai_features: {
                 triage: boolean;
@@ -18208,6 +18230,39 @@ export interface operations {
                 content: {
                     "application/json": {
                         hidden: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setKBEditor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    editor: "visual" | "markdown";
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's choice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        editor: "visual" | "markdown";
                     };
                 };
             };
