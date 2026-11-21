@@ -151,9 +151,10 @@ moves: other databases on the same server stay in the old volume, and the script
   run, which then upgrades again, or by `--rollback`, which only puts it back.
 - **A 19 volume Colliedesk may have run on is never removed by the script.** It may hold the only
   copy of what was written on 19. If you put `compose.yaml.before-postgres-19` back by hand after the
-  switch, the next run serves the old major, keeps that volume and stops there. After a finished upgrade, the
-  script and `--rollback` both say the file was put back by hand and change nothing: put back the
-  `compose.yaml` that names `postgres19-data` to serve the 19 data again.
+  switch, the next run serves the old major, keeps that volume and stops there. After a finished
+  upgrade, the script says the file was put back by hand and changes nothing: put back the
+  `compose.yaml` that names `postgres19-data` to serve the 19 data again, or run `--rollback` to
+  stay on the old major. It records the rollback and leaves `compose.yaml` as it is.
 - **It refuses what it cannot do safely** and changes nothing: an external database (a
   `DATABASE_URL` that does not name the bundled `postgres` service), a `compose.yaml` that does not
   give the postgres service one image and one data volume, an `environment:` list the `PGDATA` line
@@ -199,8 +200,8 @@ restore, a run killed after it, one that cannot start on 19, a hangup after the 
 rollback, a rollback killed before it changed `compose.yaml` and one that cannot put it back,
 a finish on a cluster the restore did not write, a rollback to a cluster that is not the old one,
 an undo of a cut-off run onto a cluster that is not the old one,
-an old compose file put back by hand after a finished upgrade,
-a rollback of a run cut off before the switch, a resumed rollback onto a cluster that is not the
+an old compose file put back by hand after a finished upgrade, and its rollback,
+an undo whose old volume is gone, a rollback of a run cut off before the switch, a resumed rollback onto a cluster that is not the
 old one,
 rollback, and the refusals. No row or file may
 change.

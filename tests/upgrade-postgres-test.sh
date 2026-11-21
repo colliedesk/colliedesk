@@ -204,9 +204,12 @@ check() {
 # The running server keeps writing (background work, its heartbeat), so the data is read with the
 # server stopped, the way upgrade-postgres.sh dumps it. Tables in $TMP/churn are the ones a server
 # start rewrites by itself.
-# A fixture email whose file is not stored is retried on every start, and queued replies are tried
-# again with no mail relay to take them.
+# A fixture email whose file is not stored is retried on every start, queued replies are tried
+# again with no mail relay to take them, and the custom help center domains are checked again with
+# no DNS record or address to prove them.
 { printf 'allow\tchannel_inbound_events\t%s\tretried on each server start\n' attempts error
+  printf 'allow\thelp_center_domains\t%s\tchecked on each server start\n' checked_at check_error \
+    address_checked_at address_error failing_since status pending_reason
   printf 'allow\tchannel_outbox\t%s\tdelivery tried again\n' status attempts next_attempt_at locked_until claim_token \
     last_error last_error_code held_by_pause updated_at
 } >"$TMP/churn"
@@ -416,13 +419,25 @@ EOF
   upgrade || { cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh did not finish an upgrade killed after the restore'; }
   upgraded "$TMP/compose.base" on19
   refused 'an install already on PostgreSQL 19' '--rollback'
-  # The old compose file put back by hand on a finished upgrade: a plain run and --rollback both say
-  # so and give the same way on, changing nothing.
+  # The old compose file put back by hand on a finished upgrade: a plain run says so and changes
+  # nothing; --rollback records the install as rolled back on the old major, the file as it is.
   cp "$TMP/compose.yaml" "$TMP/compose.done"
+  cp "$TMP/.postgres-upgrade" "$TMP/state.done"
   cp "$TMP/compose.yaml.before-postgres-19" "$TMP/compose.yaml"
-  refused 'a finished upgrade whose old compose file was put back by hand' 'put back by hand'
-  refused 'a rollback of a finished upgrade whose old compose file was put back by hand' 'put back by hand' --rollback
+  cp "$TMP/compose.yaml" "$TMP/compose.put-back"
+  refused 'a finished upgrade whose old compose file was put back by hand' 'sh upgrade-postgres.sh --rollback'
+  upgrade --rollback || { cat "$TMP/upgrade.out" >&2; fail '--rollback did not finish on a finished upgrade whose old compose file was put back by hand'; }
+  no_secret_printed 'a rollback of a finished upgrade whose old compose file was put back by hand'
+  [ "$(state state)" = rolled_back ] || fail "a rollback of a finished upgrade whose old compose file was put back by hand left the state $(state state), want rolled_back"
+  cmp -s "$TMP/compose.yaml" "$TMP/compose.put-back" || fail 'a rollback of a finished upgrade whose old compose file was put back by hand changed compose.yaml'
+  [ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] && server_running ||
+    fail 'a rollback of a finished upgrade whose old compose file was put back by hand does not serve PostgreSQL 17 from its old volume'
+  [ -n "$(volume_for postgres19-data)" ] && grep -q 'postgres19-data' "$TMP/upgrade.out" ||
+    { cat "$TMP/upgrade.out" >&2; fail 'a rollback of a finished upgrade whose old compose file was put back by hand did not keep and name the PostgreSQL 19 volume'; }
+  step 'a rollback of a finished upgrade whose old compose file was put back by hand: on 17, the file as it is, the 19 volume kept'
   mv "$TMP/compose.done" "$TMP/compose.yaml"
+  mv "$TMP/state.done" "$TMP/.postgres-upgrade"
+  rm -f "$TMP/compose.put-back"
   dc down >/dev/null 2>&1 && dc up -d --wait >/dev/null 2>&1 || fail 'the install did not start again on PostgreSQL 19'
   [ "$(pg_major)" = 19 ] || fail 'the install is not on PostgreSQL 19 after a restart'
   same_data 'after a restart on PostgreSQL 19' on19
@@ -579,6 +594,17 @@ EOF
   [ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] && server_running ||
     fail 'an undo that could not list the volumes does not serve PostgreSQL 17 from its old volume'
   step 'undo without the volume list: compose.postgres-19.yaml kept for the next run'
+
+  # An undo whose old volume was removed would start an empty database: refused, the server kept.
+  cp "$TMP/compose.yaml" "$TMP/compose.on17"
+  cp "$TMP/.postgres-upgrade" "$TMP/state.started"
+  sed 's/postgres-data:/postgres-gone:/' "$TMP/compose.on17" >"$TMP/compose.yaml"
+  sed 's/^old_key=.*/old_key=postgres-gone/' "$TMP/state.started" >"$TMP/.postgres-upgrade"
+  refused 'an undo whose old volume is gone' 'postgres-gone of PostgreSQL 17 is gone'
+  mv "$TMP/compose.on17" "$TMP/compose.yaml"
+  mv "$TMP/state.started" "$TMP/.postgres-upgrade"
+  gone=$(volume_for postgres-gone)
+  [ -z "$gone" ] || { "$DOCKER" volume rm -f "$gone" >/dev/null 2>&1; fail 'an undo whose old volume is gone made an empty one'; }
 
   # --rollback after a run cut off before the switch puts the install back and upgrades nothing.
   upgrade --rollback || { cat "$TMP/upgrade.out" >&2; fail '--rollback did not put back an upgrade cut off before the switch'; }

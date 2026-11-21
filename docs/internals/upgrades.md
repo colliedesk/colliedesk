@@ -196,9 +196,12 @@ layouts, in the background of the CI `image` job and in the release.
   `postgres19-data`, or PostgreSQL 19 starts on the volume 17 wrote. Without `compose.yaml` it reads
   the key from the state `.postgres-upgrade` left (done: 19, failed or rolled back: the old key) and
   stops while an upgrade or rollback is unfinished. `tests/install-test.sh` holds it.
-- **A finished upgrade with the old compose file put back by hand is refused by every run.** A
-  finish has nothing to finish and a rollback has nothing to move, and the server already serves
-  the old volume; the plain run and `--rollback` print the same message, so neither points at the
-  other.
+- **A finished upgrade with the old compose file put back by hand: the plain run refuses,
+  `--rollback` records it.** The server already serves the old volume, so a finish would move it
+  away from data it may have written. `--rollback` runs as a resumed rollback: it checks that the
+  old cluster starts from `compose.yaml`, leaves the file as it is and records `rolled_back`, so the
+  installer, run without `compose.yaml`, picks the old volume and not `postgres19-data`.
+- **An undo checks that the old volume exists.** Without it docker compose would create an empty
+  one and the cluster check would blame an edit of the postgres service.
 - **No `start_interval` in the healthchecks.** It would shorten each start, but Compose refuses it on
   Docker Engine before 25, such as Debian 12's `docker.io` (20.10).
