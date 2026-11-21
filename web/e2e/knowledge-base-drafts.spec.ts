@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { servers } from './support/cli';
 import { createWorkspaceWithSlug } from './support/workspace';
+import { writeInMarkdown } from './support/kb-editor';
 
 test('knowledge base: a save of a published article keeps the help center on the published text until Publish changes puts the new text live', async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
@@ -18,7 +19,7 @@ test('knowledge base: a save of a published article keeps the help center on the
   const found = async (q: string) => (await page.request.get(`${helpCenter}/search?q=${q}`)).text();
 
   await page.goto(`${servers.main}/knowledge/articles/${article.id}`);
-  await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
+  await (await writeInMarkdown(page)).click();
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type(' Or call the billing desk.');
   await page.getByRole('button', { name: 'Save', exact: true }).click();

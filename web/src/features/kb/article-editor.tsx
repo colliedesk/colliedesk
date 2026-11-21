@@ -16,12 +16,13 @@ import { ArticleAIBox, ArticleAINote } from './article-ai';
 import { ArticleVisibilityBox } from './article-visibility';
 import { ArticleAttachments } from './article-attachments';
 import { ArticleDraftBar, draftMessages, editable } from './article-draft';
-import { sameBody, useArticleAutosave } from './article-autosave';
+import { sameBody, storedAs, useArticleAutosave } from './article-autosave';
 import { ConflictCompare } from './conflict-compare';
 import { unsavedKey } from './unsaved-store';
 import { ArticleReviewBox, useTextApproval } from './article-review';
-import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
-import { editorPart } from './editor-part';
+import type { EditorHandle, UploadHooks, ViewMode } from './editor/editor-types';
+import { editorPart, preloadEditor, visualPart } from './editor-part';
+import { EditorKindSwitch, useEditorKind } from './editor-choice';
 import { kbApi } from './kb-api';
 import type { KBArticle, KBArticleStatus, KBArticleVersion, KBAttachment, KBVisibility } from './kb-api';
 import { kbMessages } from './kb-messages';
@@ -96,9 +97,10 @@ const seoValue = (text: string) => text.trim().split(/\s+/).filter(Boolean).join
 // ArticleRoute opens an article in the editor, or a new one (in collectionId when given), started from
 // templateId ('none' for blank) or else from the collection's default template.
 export function ArticleRoute({ articleId, collectionId, templateId }: { articleId?: string; collectionId?: string; templateId?: string }) {
-  // The editor's chunk loads alongside the article, not after it.
-  useEffect(editorPart.preload, []);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  // The chunk of the editor this member writes in loads alongside the article, not after it.
+  const choice = me.data ? me.data.kb_editor : undefined;
+  useEffect(() => preloadEditor(choice), [choice]);
   const collections = useQuery({ queryKey: ['kb-collections'], queryFn: kbApi.collections });
   const article = useQuery({ queryKey: ['kb-article', articleId], queryFn: () => kbApi.article(articleId ?? ''), enabled: articleId !== undefined, retry: false });
   const items = collections.data?.items ?? [];
@@ -171,8 +173,10 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const [newVisibility, setNewVisibility] = useState<KBVisibility>('everyone');
   const wide = useSyncExternalStore(subscribeWide, isWide);
   const [chosen, setMode] = useState<ViewMode>(() => (isWide() && (!article || characters(article.body_md) <= splitLimit) ? 'split' : 'edit'));
-  const mode: ViewMode = chosen === 'split' && !wide ? 'edit' : chosen;
-  const modes: ViewMode[] = wide ? ['edit', 'split', 'preview'] : ['edit', 'preview'];
+  // The visual editor shows the article as it reads, so only the Markdown source has a side-by-side preview.
+  const [kind, setKind] = useEditorKind();
+  const mode: ViewMode = chosen === 'split' && (!wide || kind === 'visual') ? 'edit' : chosen;
+  const modes: ViewMode[] = wide && kind === 'markdown' ? ['edit', 'split', 'preview'] : ['edit', 'preview'];
   const [handle, setHandle] = useState<EditorHandle>();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -279,6 +283,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       // Nothing changed (Ctrl+S on a saved article): there is nothing to ask the server.
       if (Object.keys(change).length === 0) return;
       const updated = await kbApi.updateArticle(current.id, { updated_at: current.updated_at, ...change });
+      storedAs(updated, sent.body);
       rawNow.current = updated;
       setBase(updated);
       // The server may write the title or address name its own way; text typed during the save stays.
@@ -449,6 +454,12 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const madeWith = useRef<string>(undefined);
   // The preview first draws after the editor is on screen, so opening never waits for it.
   const [previewReady, setPreviewReady] = useState(false);
+  // switchEditor hands the text to the other editor as it stands, so nothing typed in the last moment is lost.
+  const switchEditor = (next: typeof kind) => {
+    if (handle) madeWith.current = handle.markdown();
+    setHandle(undefined);
+    setKind(next);
+  };
   const onReady = (ready: EditorHandle) => {
     setHandle(ready);
     requestAnimationFrame(() => { setTimeout(() => setPreviewReady(true), 0); });
@@ -712,12 +723,13 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
               {mode !== 'preview' && <InsertTemplateMenu disabled={!handle} defaultTemplateId={collections.find((item) => item.id === draft.collection_id)?.default_template_id}
                 onInsert={(body) => handle?.insert(body)} />}
               <small id={`${id}-count`} className={tooLong ? 'error-copy kb-count' : 'kb-count'}>{kbMessages.characters(bodyLength, maxBody)}</small>
-              <small id={`${id}-help`} className="sr-only">{kbMessages.bodyHelp}</small>
+              <small id={`${id}-help`} className="sr-only">{kind === 'visual' ? kbMessages.bodyHelpVisual : kbMessages.bodyHelp}</small>
+              <EditorKindSwitch kind={kind} disabled={!handle || uploading > 0 || handle.uploading()} onChoose={switchEditor} />
             </div>
             <div role="tabpanel" id={`${id}-panel`} className="kb-editor-panel" aria-labelledby={`${id}-${mode}-tab`}>
-              <Part part={editorPart} failed={<div className="kb-editor-loading"><PartUnavailable /></div>} render={({ default: Editor }) => {
+              <Part key={kind} part={kind === 'visual' ? visualPart : editorPart} failed={<div className="kb-editor-loading"><PartUnavailable /></div>} render={({ default: Editor }) => {
                 madeWith.current ??= draft.body;
-                return <Editor initial={madeWith.current} uploads={imageHooks} label={kbMessages.body} describedBy={`${id}-help ${id}-count`} invalid={tooLong} mode={mode}
+                return <Editor initial={madeWith.current} uploads={imageHooks} label={kind === 'visual' ? kbMessages.bodyVisual : kbMessages.body} describedBy={`${id}-help ${id}-count`} invalid={tooLong} mode={mode}
                   preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} library={library} />} articleId={article?.id} onChange={(text) => set({ body: text })} onReady={onReady} />;
               }} />
               {!handle && <p role="status" className="kb-editor-loading kb-hint">{kbMessages.loadingEditor}</p>}

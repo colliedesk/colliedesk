@@ -71,10 +71,30 @@ type Rules struct {
 		Max     int    `json:"max"`
 		pattern *regexp.Regexp
 	} `json:"dimension"`
-	DropWithContent []string `json:"dropWithContent"`
+	DropWithContent []string   `json:"dropWithContent"`
+	Formatting      Formatting `json:"formatting"`
 
 	policy *bluemonday.Policy
 }
+
+// Formatting is the formatting HTML an article may hold besides the players (package kbformat).
+type Formatting struct {
+	// Marks are inline elements kept with no attribute.
+	Marks []string `json:"marks"`
+	// Colors are the palette names of a span's data-color and a cell's data-bg.
+	Colors []string `json:"colors"`
+	// Align are the values of data-align; the start of the line needs none.
+	Align []string `json:"align"`
+	// Indent is the largest data-indent.
+	Indent int `json:"indent"`
+	// Blocks are the elements that wrap one paragraph or heading to align or indent it.
+	Blocks []string `json:"blocks"`
+	// Span is the largest colspan and rowspan of a table cell.
+	Span int `json:"span"`
+}
+
+// FormattingRules is the formatting part of allowlist.json.
+func FormattingRules() Formatting { return rules.Formatting }
 
 var rules = Load()
 

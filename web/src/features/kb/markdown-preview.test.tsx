@@ -1,7 +1,9 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import shared from '../../../../server/internal/kbhtml/testdata/articles.json';
+import formatting from '../../../../server/internal/kbformat/testdata/render.json';
 import { MarkdownPreview } from './markdown-preview';
+import { shape } from './preview-shape.test.fixture';
 
 // The articles the help center renders too (server/internal/helpcenter/markdown_test.go).
 describe('the preview shows an article as the help center does', () => {
@@ -11,6 +13,25 @@ describe('the preview shows an article as the help center does', () => {
     expect((container.textContent ?? '').split(/\s+/).filter(Boolean).join(' ')).toBe(c.text);
     expect(container.querySelectorAll('p')).toHaveLength(c.paragraphs);
     expect(container.querySelectorAll('iframe')).toHaveLength(c.iframes);
+  });
+});
+
+// The formatting the help center renders (server/internal/helpcenter/formatting_test.go): the same
+// elements, classes and text.
+describe('the preview shows formatting as the help center does', () => {
+  it.each(formatting.cases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+    const { container } = render(<MarkdownPreview text={c.markdown} />);
+    container.querySelector('.kb-html-warning')?.remove();
+    const want = document.createElement('template');
+    want.innerHTML = c.html;
+    const body = document.createDocumentFragment();
+    body.append(...container.querySelector('.kb-preview')!.childNodes);
+    expect(shape(body)).toBe(shape(want.content));
+  });
+
+  it('formatting it reads is shown, so nothing is named as left out', () => {
+    const { container } = render(<MarkdownPreview text={formatting.cases[0]!.markdown} />);
+    expect(container.querySelector('.kb-html-warning')).toBeNull();
   });
 });
 

@@ -24,8 +24,18 @@ type State = { kind: 'saving' } | { kind: 'saved'; at: string } | { kind: 'offli
 
 // A keepalive request outlives a closing page, but the browser takes at most 64 KiB of them at once.
 const keepaliveBytes = 60_000;
+// The server respells formatting tags (<U> as <u>), so a saved text can come back different. Per article
+// it remembers the last text sent and how the server stored it: that text on screen is the stored one.
+const spellings = new Map<string, { sent: string; stored: string }>();
+export const storedAs = (updated: KBArticle, sent: string) => {
+  spellings.set(updated.id, { sent, stored: editable(updated).body_md });
+};
 // The editor writes every line ending as \n; a stored \r\n text is the same text.
-export const sameBody = (text: string, of: KBArticle) => text === of.body_md || text === of.body_md.replace(/\r\n?/g, '\n');
+export const sameBody = (text: string, of: KBArticle) => {
+  if (text === of.body_md || text === of.body_md.replace(/\r\n?/g, '\n')) return true;
+  const spelled = spellings.get(of.id);
+  return spelled !== undefined && spelled.sent === text && spelled.stored === of.body_md;
+};
 
 interface Options {
   // key is where this person's unsaved text of this article is kept on the device (unsavedKey).
@@ -86,6 +96,7 @@ export function useArticleAutosave(options: Options) {
     inFlight.current = kbApi.updateArticle(shown.id, { updated_at: shown.updated_at, autosave: true, ...change },
       leaving && new TextEncoder().encode(body).length < keepaliveBytes ? { keepalive: true } : undefined)
       .then((updated) => {
+        storedAs(updated, now.body);
         options.onSaved(updated);
         setPending(true);
         if (key) clearUnsaved(key, now);

@@ -1,0 +1,20 @@
+/* An article's formatting, as the help center styles it (server/internal/helpcenter/static/site.css),
+   in the editor's preview and visual mode. Colours use the app's tokens (styles/tokens.css). */
+:is(.kb-preview, .kb-visual) .kb-align-center { text-align: center; }
+:is(.kb-preview, .kb-visual) .kb-align-right { text-align: right; }
+:is(.kb-preview, .kb-visual) .kb-indent-1 { margin-left: 2rem; }
+:is(.kb-preview, .kb-visual) .kb-indent-2 { margin-left: 4rem; }
+:is(.kb-preview, .kb-visual) .kb-indent-3 { margin-left: 6rem; }
+:is(.kb-preview, .kb-visual) .kb-indent-4 { margin-left: 8rem; }
+:is(.kb-preview, .kb-visual) .kb-color-accent { color: var(--accent-text); }
+:is(.kb-preview, .kb-visual) .kb-color-success { color: var(--ok); }
+:is(.kb-preview, .kb-visual) .kb-color-warning { color: var(--warn); }
+:is(.kb-preview, .kb-visual) .kb-color-danger { color: var(--danger); }
+:is(.kb-preview, .kb-visual) .kb-color-muted { color: var(--text-3); }
+:is(.kb-preview, .kb-visual) .kb-bg-accent { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+:is(.kb-preview, .kb-visual) .kb-bg-success { background: var(--ok-soft); }
+:is(.kb-preview, .kb-visual) .kb-bg-warning { background: var(--warn-soft); }
+:is(.kb-preview, .kb-visual) .kb-bg-danger { background: var(--danger-soft); }
+:is(.kb-preview, .kb-visual) .kb-bg-muted { background: var(--surface-2); }
+:is(.kb-preview, .kb-visual) mark { background: color-mix(in srgb, var(--warn) 28%, transparent); color: inherit; padding: 0 0.1em; border-radius: 3px; }
+:is(.kb-preview, .kb-visual) :is(th, td) > p { margin: 0.25rem 0; }

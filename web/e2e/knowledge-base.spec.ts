@@ -2,6 +2,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { servers } from './support/cli';
 import { createWorkspaceWithSlug } from './support/workspace';
+import { writeInMarkdown } from './support/kb-editor';
 
 // The smallest PNG there is: one transparent pixel.
 const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
@@ -28,7 +29,7 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   await page.getByRole('button', { name: 'New article' }).click();
   await page.getByRole('menuitem', { name: /^Blank/ }).click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Reset your password');
-  const text = page.getByRole('textbox', { name: 'Text (Markdown)' });
+  const text = await writeInMarkdown(page);
   await text.click();
   await page.keyboard.type('## Steps');
   await page.keyboard.press('Enter');
@@ -97,6 +98,7 @@ test('knowledge base: an article opened and published untouched keeps its Markdo
   page.on('request', (request) => { if (request.url().includes('tracker.example')) external.push(request.url()); });
 
   await page.goto(`${servers.main}/knowledge/articles/${id}`);
+  await writeInMarkdown(page);
   await page.getByRole('tab', { name: 'Preview' }).click();
   const preview = page.getByRole('region', { name: 'Preview' });
   await expect(preview.getByRole('heading', { level: 2, name: 'Steps' })).toBeVisible();
@@ -136,6 +138,7 @@ test('knowledge base: Insert video puts a YouTube player in the article, which t
   const { id } = await article.json() as { id: string };
 
   await page.goto(`${servers.main}/knowledge/articles/${id}`);
+  await writeInMarkdown(page);
   await page.getByRole('tab', { name: 'Write' }).click();
   await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
   await page.keyboard.press('ControlOrMeta+End');
@@ -193,6 +196,7 @@ test('knowledge base: a WebM uploaded in the media library plays in a published 
 
   // The editor's Media button puts the library video in the article; the preview shows it.
   await page.goto(`${servers.main}/knowledge/articles/${article}`);
+  await writeInMarkdown(page);
   await page.getByRole('tab', { name: 'Write' }).click();
   await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
   await page.keyboard.press('ControlOrMeta+End');
@@ -268,7 +272,7 @@ test('knowledge base: an article excluded from AI says since when and by whom, k
   await page.getByRole('button', { name: 'New article' }).click();
   await page.getByRole('menuitem', { name: /^Blank/ }).click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Internal refund rules');
-  await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
+  await (await writeInMarkdown(page)).click();
   await page.keyboard.type('Refunds above 100 need a second approval.');
   await page.getByRole('button', { name: 'Save and publish' }).click();
   await expect(page).toHaveURL(/\/knowledge\/articles\/[0-9a-f-]{36}$/);

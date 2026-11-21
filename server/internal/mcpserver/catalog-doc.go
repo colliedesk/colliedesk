@@ -182,6 +182,7 @@ var toolDocs = map[string]string{
 	"colliedesk_workspace_rename":                    "Renames the workspace (replies never carry this name; it is the help center title while the help center has none)",
 	"colliedesk_my_timezone_set":                     "Sets or clears your own timezone",
 	"colliedesk_my_display_name_set":                 "Sets or clears your own display name",
+	"colliedesk_my_kb_editor_set":                    "Chooses the editor you write articles in: visual or Markdown",
 	"colliedesk_team_member_update":                  "Renames, deactivates or reactivates a team member",
 	"colliedesk_invites_list":                        "Lists invites and their state, never their links",
 	"colliedesk_invite_create":                       "Invites a person with roles by name and returns the one-time link",

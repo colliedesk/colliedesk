@@ -1,0 +1,30 @@
+{
+  "about": "Formatting HTML as the help center renders it (server/internal/helpcenter/formatting_test.go) and as the editor preview shows it (web/src/features/kb/markdown-preview.test.tsx, which compares the elements, classes and text, without heading ids). docs/internals/knowledge-base.md shows the forms.",
+  "cases": [
+    {
+      "name": "formatting renders with the help center's classes and no style attribute",
+      "markdown": "<p data-indent=\"2\" data-align=\"center\">\n\nSay <u>under **b**</u> <mark>hi</mark> <span style=\"color:red\" data-color=\"danger\">red</span> <span data-color=\"pink\">plain</span>\n\n</p>\n\n<h2 data-align=\"right\">\n\n## Title\n\n</h2>\n\n<table>\n<tr>\n<th colspan=\"2\" data-align=\"center\" data-bg=\"accent\" style=\"background:red\">\n\nHead\n\n</th>\n</tr>\n<tr>\n<td data-bg=\"success\">\n\na\n\n</td>\n<td>\n\nb\n\nc\n\n</td>\n</tr>\n</table>\n",
+      "html": "<p class=\"kb-align-center kb-indent-2\">Say <u>under <strong>b</strong></u> <mark>hi</mark> <span class=\"kb-color-danger\">red</span> plain</p>\n<h2 id=\"title\" class=\"kb-align-right\">Title</h2>\n<table>\n<tbody>\n<tr>\n<th colspan=\"2\" class=\"kb-align-center kb-bg-accent\"><p>Head</p>\n</th>\n</tr>\n<tr>\n<td class=\"kb-bg-success\"><p>a</p>\n</td>\n<td><p>b</p>\n<p>c</p>\n</td>\n</tr>\n</tbody>\n</table>\n"
+    },
+    {
+      "name": "a cell of a formatted table holds an aligned paragraph of its own",
+      "markdown": "<table>\n<tr>\n<td rowspan=\"2\">\n\n<p data-align=\"right\">\n\nx\n\n</p>\n\ny\n\n</td>\n</tr>\n</table>\n",
+      "html": "<table>\n<tbody>\n<tr>\n<td rowspan=\"2\"><p class=\"kb-align-right\">x</p>\n<p>y</p>\n</td>\n</tr>\n</tbody>\n</table>\n"
+    },
+    {
+      "name": "an inline tag without its partner, or across another element's edge, is left out with its text",
+      "markdown": "one <u>two **three</u> four** five </mark>",
+      "html": "<p>one two <strong>three four</strong> five </p>\n"
+    },
+    {
+      "name": "inline tags nest, and a closing tag crossing an inner opening leaves both out",
+      "markdown": "<mark>a <u>b</u> c</mark> and <u>d <mark>e</u> f</mark>\n",
+      "html": "<p><mark>a <u>b</u> c</mark> and d e f</p>\n"
+    },
+    {
+      "name": "a table that breaks the shape stays HTML the page leaves out",
+      "markdown": "<table>\n<tr>\n<td>\n\nA\n\n</td>\n</table>\n",
+      "html": "<p>A</p>\n"
+    }
+  ]
+}
