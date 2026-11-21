@@ -1,0 +1,155 @@
+{
+  "about": "HTML and the Markdown it becomes. The Freshdesk import (server/internal/freshdesk, articleMarkdown) and the editor's paste (web/src/features/kb/editor/paste-html.ts) both read this file, so an article imported from Freshdesk and one pasted from a web page come out the same.",
+  "cases": [
+    {
+      "name": "heading, bold and italic",
+      "html": "<h2>Reset your password</h2><p>Open <strong>Settings</strong> and choose <em>Security</em>.</p>",
+      "markdown": "## Reset your password\n\nOpen **Settings** and choose *Security*."
+    },
+    {
+      "name": "every heading level",
+      "html": "<h1>Title</h1><h3>Sub</h3><h4>Four</h4><h6>Six</h6>",
+      "markdown": "# Title\n\n### Sub\n\n#### Four\n\n###### Six"
+    },
+    {
+      "name": "b, i and both together",
+      "html": "<p><b>Bold</b> <i>it</i> <strong><em>both</em></strong></p>",
+      "markdown": "**Bold** *it* ***both***"
+    },
+    {
+      "name": "spaces inside emphasis move outside it",
+      "html": "<p>Use <strong> spaced bold </strong> text and <strong>Bold </strong>after</p>",
+      "markdown": "Use **spaced bold** text and **Bold** after"
+    },
+    {
+      "name": "emphasis inside a word",
+      "html": "<p><em>it</em>alic and <strong>b</strong>old</p>",
+      "markdown": "*it*alic and **b**old"
+    },
+    {
+      "name": "bullet and numbered lists",
+      "html": "<ul><li>First</li><li>Second</li></ul><p>Then</p><ol><li>One</li><li>Two</li></ol>",
+      "markdown": "- First\n- Second\n\nThen\n\n1. One\n2. Two"
+    },
+    {
+      "name": "numbered list that starts later",
+      "html": "<ol start=\"3\"><li>Three</li><li>Four</li></ol>",
+      "markdown": "3. Three\n4. Four"
+    },
+    {
+      "name": "nested lists",
+      "html": "<ul><li>First<ul><li>Inner</li></ul></li><li>Second</li></ul>",
+      "markdown": "- First\n  \n  - Inner\n- Second"
+    },
+    {
+      "name": "nested numbered list",
+      "html": "<ol><li>One<ol><li>Inner</li></ol></li></ol>",
+      "markdown": "1. One\n   \n   1. Inner"
+    },
+    {
+      "name": "a paragraph in a list item",
+      "html": "<ul><li><p>Para item</p></li><li>Plain</li></ul>",
+      "markdown": "- Para item\n- Plain"
+    },
+    {
+      "name": "links: web, title, relative, fragment, mail",
+      "html": "<p>See <a href=\"https://example.com/guide\">the guide</a>, <a href=\"https://example.com\" title=\"T\">Link</a>, <a href=\"/relative\">Rel</a> <a href=\"#top\">Top</a> <a href=\"mailto:help@example.com\">Mail</a>.</p>",
+      "markdown": "See [the guide](https://example.com/guide), [Link](https://example.com \"T\"), [Rel](/relative) [Top](#top) [Mail](mailto:help@example.com)."
+    },
+    {
+      "name": "link whose text is its address",
+      "html": "<p><a href=\"https://example.com/a_b\">https://example.com/a_b</a></p>",
+      "markdown": "[https://example.com/a\\_b](https://example.com/a_b)"
+    },
+    {
+      "name": "a javascript: link keeps only its text",
+      "html": "<p><a href=\"javascript:alert(1)\">Click</a> and <a href=\" JavaScript:alert(1)\">Again</a></p>",
+      "markdown": "Click and Again"
+    },
+    {
+      "name": "a data: link keeps only its text",
+      "html": "<p><a href=\"data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;\">Data</a></p>",
+      "markdown": "Data"
+    },
+    {
+      "name": "an anchor without an address keeps its text",
+      "html": "<p><a name=\"top\">Top</a> of the page</p>",
+      "markdown": "Top of the page"
+    },
+    {
+      "name": "image, with its handlers left out",
+      "html": "<p><img src=\"https://example.com/a.png\" alt=\"Chart\" onerror=\"alert(1)\"></p>",
+      "markdown": "![Chart](https://example.com/a.png)"
+    },
+    {
+      "name": "image inside a link",
+      "html": "<p><a href=\"https://example.com/x\"><img src=\"https://example.com/i.png\" alt=\"I\"></a></p>",
+      "markdown": "[![I](https://example.com/i.png)](https://example.com/x)"
+    },
+    {
+      "name": "table with a header row",
+      "html": "<table><thead><tr><th>Plan</th><th>Seats</th></tr></thead><tbody><tr><td>Team</td><td>5</td></tr></tbody></table>",
+      "markdown": "| Plan | Seats |\n|------|-------|\n| Team | 5     |"
+    },
+    {
+      "name": "table without a header row",
+      "html": "<table><tbody><tr><td>Plan</td><td>Seats</td></tr><tr><td>Team</td><td>5</td></tr></tbody></table>",
+      "markdown": "|      |       |\n|------|-------|\n| Plan | Seats |\n| Team | 5     |"
+    },
+    {
+      "name": "table cells with a pipe, bold and a link",
+      "html": "<table><tr><th>A | B</th><th>Link</th></tr><tr><td><strong>x</strong></td><td><a href=\"https://example.com\">site</a></td></tr></table>",
+      "markdown": "| A \\| B | Link                        |\n|--------|-----------------------------|\n| **x**  | [site](https://example.com) |"
+    },
+    {
+      "name": "code block and inline code",
+      "html": "<pre><code>make test\ngo vet</code></pre><p>Run <code>make</code> now.</p>",
+      "markdown": "```\nmake test\ngo vet\n```\n\nRun `make` now."
+    },
+    {
+      "name": "code block with a language, and a plain pre",
+      "html": "<pre><code class=\"language-go\">x := 1</code></pre><pre>plain pre\nline</pre>",
+      "markdown": "```go\nx := 1\n```\n\n```\nplain pre\nline\n```"
+    },
+    {
+      "name": "fonts, sizes and colours leave, the words stay",
+      "html": "<p><span style=\"font-family:Arial;color:#f00;font-size:20px\">Plain words</span> <font face=\"Courier\" color=\"red\" size=\"5\">and more</font></p>",
+      "markdown": "Plain words and more"
+    },
+    {
+      "name": "underline becomes plain text",
+      "html": "<p><u>Underlined</u> text</p>",
+      "markdown": "Underlined text"
+    },
+    {
+      "name": "strikethrough, quote, line break and rule",
+      "html": "<p><del>Old</del> new</p><blockquote><p>Quoted</p></blockquote><p>Line one<br>Line two</p><hr><p>After</p>",
+      "markdown": "~~Old~~ new\n\n> Quoted\n\nLine one  \nLine two\n\n* * *\n\nAfter"
+    },
+    {
+      "name": "script, style and form elements leave with their content",
+      "html": "<p>Hi</p><script>alert(1)</script><style>p{color:red}</style><form><input value=\"x\"><button>Go</button></form>",
+      "markdown": "Hi"
+    },
+    {
+      "name": "text that looks like a tag stays text",
+      "html": "<p>Type &lt;script&gt;alert(1)&lt;/script&gt; to test, Tom &amp; Jerry &lt;3</p>",
+      "markdown": "Type &lt;script&gt;alert(1)&lt;/script&gt; to test, Tom & Jerry &lt;3"
+    },
+    {
+      "name": "Markdown characters in text are escaped",
+      "html": "<p>A * star and _under_ and [x](y), 5*3, snake_case_name, a\\b and `tick`</p>",
+      "markdown": "A * star and \\_under_ and \\[x](y), 5\\*3, snake\\_case\\_name, a\\\\b and \\`tick\\`"
+    },
+    {
+      "name": "a line that would start a list or a heading is escaped",
+      "html": "<p>1. not a list</p><p># not heading</p><p>- dash start</p><p>+ plus</p><p>&gt; gt</p>",
+      "markdown": "1\\. not a list\n\n\\# not heading\n\n\\- dash start\n\n\\+ plus\n\n&gt; gt"
+    },
+    {
+      "name": "white space collapses, empty paragraphs leave",
+      "html": "<p>  spaced\n   words&nbsp;here </p><p></p><p>next</p><div>Block one</div><div>Block two</div><span>loose text</span> <b>bold</b>",
+      "markdown": "spaced words here\n\nnext\n\nBlock one\n\nBlock two\n\nloose text **bold**"
+    }
+  ]
+}

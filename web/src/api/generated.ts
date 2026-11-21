@@ -4112,7 +4112,7 @@ export interface paths {
         delete: operations["deleteKBArticle"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, collection (or the collections it is listed in), status (publish or unpublish), search title or meta description. On a draft article the change is made at once. On a published article it is saved as unpublished changes (`draft`, a version of kind `draft`): the help center, its search, sitemap.xml, llms.txt and AI keep the published text until `POST /api/v1/kb/articles/{id}/draft/publish`, and saving again changes the same draft. `status: draft` on a published article unpublishes it, with its unpublished changes, and needs `kb_articles:publish`. Send back the article's `updated_at` you read (saving its unpublished changes moves it too); when it was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON. */
+        /** @description Change the title, slug, text, collection (or the collections it is listed in), status (publish or unpublish), search title or meta description. On a draft article the change is made at once. On a published article it is saved as unpublished changes (`draft`, a version of kind `draft`): the help center, its search, sitemap.xml, llms.txt and AI keep the published text until `POST /api/v1/kb/articles/{id}/draft/publish`, and saving again changes the same draft. `status: draft` on a published article unpublishes it, with its unpublished changes, and needs `kb_articles:publish`. Send back the article's `updated_at` you read (saving its unpublished changes moves it too); when it was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history, except an autosave (`autosave: true`). An article in the trash is 404. At most 64 KiB of JSON. */
         patch: operations["updateKBArticle"];
         trace?: never;
     };
@@ -4626,6 +4626,23 @@ export interface paths {
         get: operations["getKBImage"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/images/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Store an image found at a web address in the media library, so an article shows the library's copy and never loads it from the other site: the editor does this for an image pasted from a web page or a document. The server fetches it once and stores it as POST /api/v1/kb/images stores an upload (the same checks, metadata removal, thumbnail, storage cap and 30-day purge unless kept); the same bytes give the item already stored. The server refuses private, loopback, link-local, CGNAT, multicast and metadata addresses (also after DNS and on every redirect, at most 3) and ports other than 80 and 443, and nothing is stored after a refusal. A `data:` image or a file is uploaded to POST /api/v1/kb/images instead. */
+        post: operations["importKBImage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -20466,6 +20483,8 @@ export interface operations {
                     show_contents?: boolean;
                     /** @description Who can see the article. It applies at once, also on a published article, and adds no version. Letting more people see a published article needs kb_articles:publish, and is 409 approval_required when a collection it is in needs approval and no review approved its published text; keeping it from more people needs only kb_articles:update. */
                     visibility?: components["schemas"]["KBVisibility"];
+                    /** @description An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400. */
+                    autosave?: boolean;
                 };
             };
         };
@@ -21610,6 +21629,101 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    importKBImage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The image's full http or https address. */
+                    url: string;
+                    /** @description The name the library shows; the last part of the address without its extension when left out. */
+                    name?: string;
+                    /** @description Alt text the editor offers when it inserts the image. */
+                    alt?: string;
+                    /** @description true keeps the image from the purge of unused items. */
+                    keep?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The image an earlier request with the same Idempotency-Key imported; nothing was fetched or stored again */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMedia"];
+                };
+            };
+            /** @description The stored image, or the item that already held the same bytes */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMedia"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Error code `address_refused`: the address is private, internal or not on a web port. Also a missing permission, or `storage_limit_reached`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            /** @description The image is over 5 MiB; nothing was stored. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The address answered with something that is not a PNG, JPEG, GIF or WebP image; nothing was stored. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["IdempotencyKeyReused"];
+            /** @description The address could not be reached or answered with an error; nothing was stored. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many images are being fetched (`busy`, with Retry-After), or file storage is not configured. */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listKBMedia: {

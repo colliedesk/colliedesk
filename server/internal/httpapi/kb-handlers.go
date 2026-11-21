@@ -3,8 +3,6 @@ package httpapi
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -586,11 +584,17 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		SEODesc       *string    `json:"seo_description"`
 		ShowContents  *bool      `json:"show_contents"`
 		Visibility    *string    `json:"visibility"`
+		Autosave      bool       `json:"autosave"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
 		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.CollectionIDs == nil && input.Status == nil && input.SEOTitle == nil &&
 			input.SEODesc == nil && input.ShowContents == nil && input.Visibility == nil) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title, seo_description, show_contents or visibility.")
+		return
+	}
+	if input.Autosave && (input.Slug != nil || input.CollectionID != nil || input.CollectionIDs != nil || input.Status != nil || input.SEOTitle != nil || input.SEODesc != nil || input.ShowContents != nil ||
+		input.Visibility != nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "An autosave changes only title and body_md; save the other fields without autosave.")
 		return
 	}
 	homeCollection, extras, problem := kbArticleCollections(input.CollectionID, input.CollectionIDs)
@@ -620,7 +624,7 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 	}
 	article, err := a.store.UpdateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt,
 		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: homeCollection, ExtraCollectionIDs: extras, Status: input.Status,
-			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, Visibility: input.Visibility})
+			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, Visibility: input.Visibility, Autosave: input.Autosave})
 	if err != nil {
 		writeKBError(response, err)
 		return
@@ -770,7 +774,6 @@ func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusServiceUnavailable, "storage_unavailable", "File storage is not configured on this server.")
 		return
 	}
-	who := principal(request)
 	if request.ContentLength > domain.MaxKBImageBytes {
 		writeError(response, http.StatusRequestEntityTooLarge, "too_large", "An image holds at most 5 MiB; nothing was stored.")
 		return
@@ -782,62 +785,12 @@ func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "The image could not be read.")
 		return
 	}
-	if len(data) > domain.MaxKBImageBytes {
-		writeError(response, http.StatusRequestEntityTooLarge, "too_large", "An image holds at most 5 MiB; nothing was stored.")
-		return
-	}
-	// The bytes decide the type, never the declared Content-Type, so nothing else is served as an image.
-	info, err := media.InspectImage(data)
-	if err != nil {
+	image, ok := a.storeKBImage(request.Context(), response, request, data, upload, func(err error) {
 		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+"; nothing was stored.")
-		return
-	}
-	// Location, camera and comments leave before anything is stored or compared.
-	data, err = media.StripMetadata(info, data)
-	if err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+"; nothing was stored.")
-		return
-	}
-	sum := sha256.Sum256(data)
-	if image, found, err := a.store.FindKBImage(request.Context(), who.Workspace.ID, hex.EncodeToString(sum[:]), upload); err != nil {
-		writeKBError(response, err)
-		return
-	} else if found {
-		// Bytes the workspace already holds take no room: a full workspace can still use them again.
+	})
+	if ok {
 		writeJSON(response, http.StatusCreated, image)
-		return
 	}
-	if err := a.store.CheckKBImageAdmission(request.Context(), who.Workspace.ID, int64(len(data))); err != nil {
-		writeStoreError(response, err)
-		return
-	}
-	object, err := a.config.Attachments.Put(request.Context(), who.Workspace.ID, bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		writeInternalError(response, err)
-		return
-	}
-	input := store.NewKBImage{Object: object, ContentType: info.ContentType, Width: info.Width, Height: info.Height, KBImageUpload: upload}
-	input.Thumb = a.storeKBThumbnail(request.Context(), who.Workspace.ID, info, data)
-	image, created, err := a.store.CreateKBImage(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), input)
-	discard := func(keys ...string) {
-		for _, key := range keys {
-			if discardErr := a.store.DiscardObject(request.Context(), who.Workspace.ID, key); discardErr != nil {
-				log.Printf("knowledge base image: discard unrecorded bytes: %v", discardErr)
-			}
-		}
-	}
-	if err != nil {
-		discard(object.Key)
-		if input.Thumb != nil {
-			discard(input.Thumb.Key)
-		}
-		writeKBError(response, err)
-		return
-	}
-	if !created && input.Thumb != nil {
-		discard(input.Thumb.Key)
-	}
-	writeJSON(response, http.StatusCreated, image)
 }
 
 // storeKBThumbnail makes and stores the library thumbnail of an image, or returns nil: an image too

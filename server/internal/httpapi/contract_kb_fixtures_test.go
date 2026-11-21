@@ -180,6 +180,7 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/kb/articles/{id}/votes/reset":                   {path: "/api/v1/kb/articles/" + kb.articleID + "/votes/reset", token: admin, status: 200},
 		"POST /api/v1/kb/images":                                      {path: kbImagesPath, token: admin, status: 201},
 		"GET /api/v1/kb/images/{id}":                                  {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},
+		"POST /api/v1/kb/images/import":                               {"/api/v1/kb/images/import", map[string]any{"url": f.remoteImageURL}, admin, 201, ""},
 		"GET /api/v1/kb/media":                                        {path: "/api/v1/kb/media?usage=unused&sort=largest", token: admin, status: 200},
 		"PATCH /api/v1/kb/media/{id}":                                 {"/api/v1/kb/media/" + kb.imageID, map[string]any{"updated_at": kb.imageSeen, "alt": "The settings screen"}, admin, 200, ""},
 		"GET /api/v1/kb/media/trash":                                  {path: "/api/v1/kb/media/trash", token: admin, status: 200},

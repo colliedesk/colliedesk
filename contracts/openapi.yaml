@@ -7089,7 +7089,7 @@ paths:
         `status: draft` on a published article unpublishes it, with its unpublished changes, and needs
         `kb_articles:publish`. Send back the article's `updated_at` you read (saving its unpublished
         changes moves it too); when it was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change
-        adds a version to the history. An article in the trash is 404. At most 64 KiB of JSON.
+        adds a version to the history, except an autosave (`autosave: true`). An article in the trash is 404. At most 64 KiB of JSON.
       requestBody:
         required: true
         content:
@@ -7111,6 +7111,7 @@ paths:
                 visibility:
                   allOf: [{$ref: '#/components/schemas/KBVisibility'}]
                   description: 'Who can see the article. It applies at once, also on a published article, and adds no version. Letting more people see a published article needs kb_articles:publish, and is 409 approval_required when a collection it is in needs approval and no review approved its published text; keeping it from more people needs only kb_articles:update.'
+                autosave: {type: boolean, description: 'An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400.'}
       responses:
         '200':
           description: Updated article
@@ -8018,6 +8019,62 @@ paths:
             image/webp: {schema: {type: string, format: binary}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/images/import:
+    post:
+      operationId: importKBImage
+      x-permission: kb_media:create
+      description: >
+        Store an image found at a web address in the media library, so an article shows the library's
+        copy and never loads it from the other site: the editor does this for an image pasted from a web
+        page or a document. The server fetches it once and stores it as POST /api/v1/kb/images stores an
+        upload (the same checks, metadata removal, thumbnail, storage cap and 30-day purge unless kept);
+        the same bytes give the item already stored. The server refuses private, loopback, link-local,
+        CGNAT, multicast and metadata addresses (also after DNS and on every redirect, at most 3) and
+        ports other than 80 and 443, and nothing is stored after a refusal. A `data:` image or a file is
+        uploaded to POST /api/v1/kb/images instead.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url]
+              properties:
+                url: {type: string, maxLength: 4096, description: The image's full http or https address.}
+                name: {type: string, maxLength: 200, description: The name the library shows; the last part of the address without its extension when left out.}
+                alt: {type: string, maxLength: 500, description: Alt text the editor offers when it inserts the image.}
+                keep: {type: boolean, description: 'true keeps the image from the purge of unused items.'}
+      responses:
+        '201':
+          description: The stored image, or the item that already held the same bytes
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMedia'}}}
+        '200':
+          description: The image an earlier request with the same Idempotency-Key imported; nothing was fetched or stored again
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMedia'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          description: 'Error code `address_refused`: the address is private, internal or not on a web port. Also a missing permission, or `storage_limit_reached`.'
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413':
+          description: The image is over 5 MiB; nothing was stored.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '415':
+          description: The address answered with something that is not a PNG, JPEG, GIF or WebP image; nothing was stored.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+        '502':
+          description: The address could not be reached or answered with an error; nothing was stored.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '503':
+          description: Too many images are being fetched (`busy`, with Retry-After), or file storage is not configured.
+          headers:
+            Retry-After: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/kb/media:
     get:
       operationId: listKBMedia

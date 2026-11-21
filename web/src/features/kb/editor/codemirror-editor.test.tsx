@@ -7,7 +7,7 @@ import type { EditorHandle, UploadHooks } from './codemirror-editor';
 // jsdom lays nothing out; CodeMirror measures text ranges, so they answer with empty boxes.
 if (!('getClientRects' in Range.prototype)) Object.assign(Range.prototype, { getClientRects: () => [], getBoundingClientRect: () => new DOMRect() });
 
-const never: UploadHooks = { accept: (files) => files, upload: () => new Promise(() => {}), onStart: () => {}, onDone: () => {}, onError: () => {} };
+const never: UploadHooks = { accept: (files) => files, upload: () => new Promise(() => {}), store: () => new Promise(() => {}), onStart: () => {}, onDone: () => {}, onError: () => {} };
 
 async function make(initial: string, uploads: UploadHooks = never) {
   let handle: EditorHandle | undefined;
@@ -389,6 +389,26 @@ test('the picker says what Insert waits for in one line, and why alt text matter
   expect(picker).toHaveTextContent('Insert waits for the alt text of one image.');
   expect(within(picker).getByRole('button', { name: 'About Alt text' })).toHaveAccessibleDescription('Screen readers say nothing for an image without it.');
   expect(within(picker).getByRole('button', { name: 'Insert 1' })).toHaveAccessibleDescription(/Screen readers say nothing for an image without it/);
+});
+
+test('Full screen fills the window with the text and its toolbar; Escape leaves it, unless a dialog takes the Escape first', async () => {
+  const { text } = await make('Text');
+  const shell = text.closest('.md-shell')!;
+  const full = screen.getByRole('button', { name: 'Full screen (Esc to leave)' });
+  expect(full).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(full);
+  expect(shell).toHaveAttribute('data-fullscreen', 'true');
+  expect(full).toHaveAttribute('aria-pressed', 'true');
+  expect(within(shell as HTMLElement).getByRole('toolbar', { name: 'Formatting' })).toBeInTheDocument();
+  // A dialog opened from the toolbar closes on its own Escape; the text stays full screen.
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image, video or callout' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^YouTube or Vimeo link/ }));
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'YouTube or Vimeo link' }), { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: 'YouTube or Vimeo link' })).not.toBeInTheDocument();
+  expect(shell).toHaveAttribute('data-fullscreen', 'true');
+  fireEvent.keyDown(text, { key: 'Escape' });
+  expect(shell).not.toHaveAttribute('data-fullscreen');
+  expect(full).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('the video link field, while a refusal shows in place of the help, describes itself only with ids that are on the page', async () => {

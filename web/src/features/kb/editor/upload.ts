@@ -6,26 +6,31 @@ import { blockAt, blockChange } from './commands';
 
 // UploadHooks connect the editor to the article page: which files it accepts (refusing the others with a
 // reason), how one is sent and how it is described, and what the page shows meanwhile.
+// Named is what the page hears of an upload: a file, or an image a paste holds by its address.
+export type Named = { name: string };
 export interface UploadHooks {
   accept(files: File[]): File[];
   // upload sends a file and gives what the article holds for it (an image's Markdown, a video's HTML);
   // progress (0 to 1) shows in its place while a large file goes.
   // signal aborts when the person cancels the upload from its place in the text.
   upload(file: File, progress: (done: number) => void, signal: AbortSignal): Promise<{ snippet: string }>;
-  onStart(file: File): void;
-  onDone(file: File): void;
-  onError(file: File, error: unknown): void;
+  // store puts an image a paste holds by its address (web, blob: or data:) in the media library, and gives
+  // the address the article uses for it.
+  store(src: string, signal: AbortSignal): Promise<string>;
+  onStart(item: Named): void;
+  onDone(item: Named): void;
+  onError(item: Named, error: unknown): void;
 }
 
 class UploadingWidget extends WidgetType {
-  constructor(readonly name: string, readonly cancel: () => void, readonly percent?: number) {
+  constructor(readonly name: string, readonly cancel: () => void, readonly inline: boolean, readonly percent?: number) {
     super();
   }
   eq(other: UploadingWidget) {
-    return other.name === this.name && other.percent === this.percent && other.cancel === this.cancel;
+    return other.name === this.name && other.percent === this.percent && other.cancel === this.cancel && other.inline === this.inline;
   }
   toDOM() {
-    const box = document.createElement('div');
+    const box = document.createElement(this.inline ? 'span' : 'div');
     box.className = 'cm-uploading';
     const status = document.createElement('span');
     status.setAttribute('role', 'status');
@@ -46,7 +51,8 @@ class UploadingWidget extends WidgetType {
   }
 }
 
-const add = StateEffect.define<{ id: object; pos: number; name: string; cancel: () => void }>({
+// inline: the place sits at the cursor inside a line (a paste waiting on its images), not between blocks.
+const add = StateEffect.define<{ id: object; pos: number; name: string; cancel: () => void; inline?: boolean }>({
   map: (value, change) => ({ ...value, pos: change.mapPos(value.pos, 1) }),
 });
 const remove = StateEffect.define<object>();
@@ -63,8 +69,8 @@ export const uploads = StateField.define<DecorationSet>({
         next = next.update({
           add: [
             Decoration.widget({
-              widget: new UploadingWidget(effect.value.name, effect.value.cancel),
-              block: true,
+              widget: new UploadingWidget(effect.value.name, effect.value.cancel, effect.value.inline ?? false),
+              block: !effect.value.inline,
               side: 1,
               id: effect.value.id,
             }).range(effect.value.pos),
@@ -81,7 +87,7 @@ export const uploads = StateField.define<DecorationSet>({
         if (at !== undefined && old)
           next = next.update({
             filter: (_from, _to, deco) => deco.spec.id !== effect.value.id,
-            add: [Decoration.widget({ widget: new UploadingWidget(old.name, old.cancel, effect.value.percent), block: true, side: 1, id: effect.value.id }).range(at)],
+            add: [Decoration.widget({ widget: new UploadingWidget(old.name, old.cancel, old.inline, effect.value.percent), block: !old.inline, side: 1, id: effect.value.id }).range(at)],
           });
       }
     }
@@ -92,7 +98,7 @@ export const uploads = StateField.define<DecorationSet>({
 
 export const uploadsPending = (view: EditorView) => view.state.field(uploads).size > 0;
 
-const where = (view: EditorView, id: object) => {
+export const where = (view: EditorView, id: object) => {
   let found: number | undefined;
   view.state.field(uploads).between(0, view.state.doc.length, (from, _to, deco) => {
     if (deco.spec.id === id) found = from;
@@ -147,6 +153,14 @@ export function startUpload(view: EditorView, files: File[], pos: number, hooks:
     );
   }
 }
+
+// holdPlace shows a place that waits at pos, inside the line, until releasePlace takes it away.
+export function holdPlace(view: EditorView, pos: number, name: string, cancel: () => void) {
+  const id = {};
+  view.dispatch({ effects: add.of({ id, pos, name, cancel, inline: true }) });
+  return id;
+}
+export const releasePlace = (id: object) => remove.of(id);
 
 const imagesOf = (list: FileList | null | undefined) => [...(list ?? [])];
 

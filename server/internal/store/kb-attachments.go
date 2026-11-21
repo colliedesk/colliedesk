@@ -169,7 +169,7 @@ func (s *Store) SetKBArticleAttachments(ctx context.Context, workspaceID string,
 			workspaceID, id, ids, optionalID(actor.AgentID)); err != nil {
 			return domain.KBArticle{}, fmt.Errorf("save knowledge base draft attachments: %w", err)
 		}
-		return recordKBArticleDraft(ctx, tx, workspaceID, actor, id)
+		return recordKBArticleDraft(ctx, tx, workspaceID, actor, id, true)
 	})
 	return article, kbError("set knowledge base article attachments", err)
 }

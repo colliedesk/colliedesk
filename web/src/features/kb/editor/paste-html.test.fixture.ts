@@ -1,0 +1,26 @@
+// What Google Docs puts on the clipboard as text/html for a heading, a list, a link, a 2 × 2 table, an
+// image and some emphasis: every run is a styled span, the whole copy sits in one <b> that is not bold,
+// and each table cell and list item holds a paragraph.
+export const googleDocsHTML = '<meta charset="utf-8"><b style="font-weight:normal;" id="docs-internal-guid-1a2b3c4d-7fff-1234-5678-9abcdef01234">'
+  + '<h2 dir="ltr" style="line-height:1.38;margin-top:18pt;margin-bottom:6pt;"><span style="font-size:16pt;font-family:Arial,sans-serif;color:#000000;'
+  + 'background-color:transparent;font-weight:400;font-style:normal;font-variant:normal;text-decoration:none;vertical-align:baseline;white-space:pre;'
+  + 'white-space:pre-wrap;">Getting started</span></h2>'
+  + '<ul style="margin-top:0;margin-bottom:0;padding-inline-start:48px;"><li dir="ltr" style="list-style-type:disc;font-size:11pt;font-family:Arial,sans-serif;" aria-level="1">'
+  + '<p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;" role="presentation"><span style="font-size:11pt;font-family:Arial,sans-serif;'
+  + 'color:#000000;font-weight:400;font-style:normal;white-space:pre-wrap;">Open the app</span></p></li>'
+  + '<li dir="ltr" style="list-style-type:disc;font-size:11pt;" aria-level="1"><p dir="ltr" role="presentation"><span style="font-size:11pt;font-weight:400;">'
+  + 'Choose </span><span style="font-size:11pt;font-weight:700;">Settings</span></p></li></ul>'
+  + '<p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;"><span style="font-size:11pt;font-weight:400;">See </span>'
+  + '<a href="https://example.com/help" style="text-decoration:none;"><span style="font-size:11pt;color:#1155cc;font-weight:400;text-decoration:underline;'
+  + '-webkit-text-decoration-skip:none;text-decoration-skip-ink:none;">the help page</span></a><span style="font-size:11pt;font-weight:400;">.</span></p>'
+  + '<div dir="ltr" style="margin-left:0pt;" align="left"><table style="border:none;border-collapse:collapse;"><colgroup><col width="300"><col width="300"></colgroup><tbody>'
+  + '<tr style="height:0pt"><td style="border-left:solid #000000 1pt;padding:5pt 5pt 5pt 5pt;"><p dir="ltr" style="line-height:1.2;"><span style="font-size:11pt;">Plan</span></p></td>'
+  + '<td style="border-left:solid #000000 1pt;"><p dir="ltr"><span style="font-size:11pt;">Seats</span></p></td></tr>'
+  + '<tr style="height:0pt"><td><p dir="ltr"><span style="font-size:11pt;">Team</span></p></td><td><p dir="ltr"><span style="font-size:11pt;">5</span></p></td></tr>'
+  + '</tbody></table></div><br>'
+  + '<p dir="ltr"><span style="font-size:11pt;border:none;display:inline-block;overflow:hidden;width:200px;height:100px;">'
+  + '<img src="https://lh7-rt.googleusercontent.com/docsz/AD_4nXcopy/photo.png" width="200" height="100" style="margin-left:0px;margin-top:0px;"></span></p>'
+  + '<p dir="ltr"><span style="font-size:11pt;font-weight:700;">Bold</span><span style="font-size:11pt;font-weight:400;"> and </span>'
+  + '<span style="font-size:11pt;font-weight:400;font-style:italic;">italic</span><span style="font-size:11pt;font-weight:400;"> and </span>'
+  + '<span style="font-size:14pt;font-family:\'Comic Sans MS\';color:#ff0000;background-color:#ffff00;">plain</span></p>'
+  + '</b><br class="Apple-interchange-newline">';
