@@ -197,6 +197,7 @@ tags, the only HTML the help center shows besides [videos](#videos):
 | Text colour | `<span data-color="danger">words</span>`: `accent`, `success` (green), `warning` (amber), `danger` (red) or `muted` (grey) |
 | Aligned or indented paragraph | the paragraph between `<p data-align="center">` and `</p>`, each on a line of its own with a blank line before and after the paragraph; `data-align` is `center` or `right`, `data-indent` is `1` to `4` |
 | Aligned or indented heading | the same with `<h2 …>` and `</h2>` around a `## Heading` (any level 1 to 6) |
+| Image size, position, border, caption or link | the image line between `<figure …>` and `</figure>`, each on a line of its own with blank lines between; `data-width` is `small`, `medium`, `full` or a width in pixels (`1` to `4096`), `data-align` is `left`, `center`, `right` or `inline`, a bare `data-border` adds a frame, and a caption goes between `<figcaption>` and `</figcaption>` under the image. See [Image size and position](#image-size-and-position) |
 | Merged or coloured cells | an HTML `<table>` with `<tr>`, `<th>` and `<td>`; a cell may have `colspan` and `rowspan` (up to 20), `data-align` and `data-bg` (a colour name), and holds Markdown between blank lines |
 
 ```html
@@ -228,7 +229,8 @@ Plans
   the visual editor, **Align and indent** aligns the selected cells instead; in a list, a quote or a
   callout it is off.
 - Saving writes each tag in one spelling: lowercase, double quotes, these attributes only, in the order
-  `colspan`, `rowspan`, `data-align`, `data-indent`, `data-color`, `data-bg`. For example
+  `colspan`, `rowspan`, `data-align`, `data-indent`, `data-color`, `data-bg` (on a figure: `data-width`,
+  `data-align`, `data-border`). For example
   `<SPAN DATA-COLOR='danger'>` is saved as `<span data-color="danger">`. The rest of the text keeps every
   byte. The editors already write that spelling, so what you see is what is saved.
 
@@ -343,6 +345,65 @@ The column on the right of the editor lists the images of the article that have 
 **Add alt text**, which writes it in the text (and in the library when the library has none).
 **Publish** asks first when an image still has no alt text: add it, or **Publish anyway**.
 
+### Image size and position
+
+In the visual editor, select an image to show its bar:
+
+- **Width**: **Original size**, **Small** (a third of the text width), **Medium** (three fifths),
+  **Full width**, or **Pixels…** for a width from 1 to 4,096 pixels. An image is never shown wider than
+  the text; on a phone, Small and Medium fill the width.
+- **Alignment**: **Left, text wraps** and **Right, text wraps** put the image at that side with the
+  text beside it, **Centre** puts it in the middle, and **In the line** keeps it in the line of text.
+  On a phone a wrapped image stands on its own.
+- **Border** draws a frame around the image and its caption.
+- **Caption** puts the cursor in a line of text under the image; an empty caption is left out.
+- **Link** makes the image a link, or changes or removes it.
+- **Annotate** draws on a copy of the image: see [Annotate an image](#annotate-an-image).
+
+In the Markdown, a sized, aligned, framed, captioned or linked image is a `<figure>`:
+
+```html
+<figure data-width="480" data-align="center" data-border>
+
+[![Settings page](/api/v1/kb/images/…)](https://example.com/settings)
+
+<figcaption>
+
+The settings page
+
+</figcaption>
+
+</figure>
+```
+
+The help center shows these with classes of its own style sheet, in its light and dark look; a `style`
+attribute, a class or an unknown width or alignment is never kept. An image you never sized, aligned,
+framed, captioned or linked stays a plain `![name](…)` line.
+
+### Annotate an image
+
+Select an image from the media library and **Annotate** on its bar. A dialog shows the image at its own
+size with four tools:
+
+- **Arrow**: drag from the tail to the point.
+- **Box**: drag from one corner to the other.
+- **Text**: type the words, then click where they go.
+- **Blur**: drag over what must not be seen, such as an email address. The area is pixelated in the
+  saved image itself, not covered by a layer that could be taken off.
+
+**Undo last** takes back the last mark. **Save copy** saves the drawn image as a new library item
+named after the original, "Settings page (annotated).png" for example, and puts it in the place of the
+original in this article only (and its translations), as a new version of the article. A JPEG stays a
+JPEG; any other image is saved as a PNG, and an animated GIF keeps only its first frame. The copy
+counts toward your storage like any upload.
+
+The original is not changed. It stays in the library, and the copy's panel lists it under **Earlier
+version** with **Undo**, which puts the original back in the article. Other articles that show the
+original keep it.
+
+Save or undo your changes before you annotate: the copy goes in the saved text. A new article must be
+saved first. Only an image from the media library can be annotated.
+
 ### Media library
 
 **Knowledge → Media** shows every image, video and [file](#attach-files) of the workspace, newest first, with a search by
@@ -399,7 +460,9 @@ showed one then say "Media no longer exists").
 
 **Replacing** an item puts another image (or video, for a video) in its place in every article that
 shows it, as a new version of each article; published ones change on the help center at once. Undo
-the replacement to put the first one back. An article saved with an image that no longer exists is
+the replacement to put the first one back. An [annotated copy](#annotate-an-image) replaces its
+original in one article only; the copy's panel shows the original under **Earlier version**, with
+**Undo**. An article saved with an image that no longer exists is
 saved all the same, and the answer names the missing image.
 
 Only uploaded images are shown. An image linked from another site (`![x](https://…)`) is not shown in
