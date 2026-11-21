@@ -7974,6 +7974,8 @@ export interface components {
             collection_ids: string[];
             /** @description The files the text lists, in order; a translation's own list (empty while it shows the article's files). */
             attachments: components["schemas"]["KBAttachment"][];
+            /** @description The article's tags, sorted; a change of them after an approval needs a new one. Left out when it has none, and for a translation, which shares the article's. */
+            tags?: string[];
         };
         KBDiffLine: {
             /**
@@ -8194,6 +8196,8 @@ export interface components {
              */
             purges_at: string;
         };
+        /** @description The article's tags, shared by its translations and separate from conversation tags. The server trims each, writes it in lower case with one space between words, drops repeats and sorts them; an empty tag, one over 40 characters or a 21st is 400 invalid_request. An empty list removes every tag. */
+        KBArticleTags: string[];
         /** @description Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids. Send body_md or template_id, not both; with neither the text is empty. */
         KBArticleInput: {
             /**
@@ -8226,6 +8230,7 @@ export interface components {
             show_contents?: boolean;
             /** @description Who can see the article; a collection it is in can restrict it further. Left out, everyone. */
             visibility?: components["schemas"]["KBVisibility"];
+            tags?: components["schemas"]["KBArticleTags"];
         };
         /**
          * @description published: on the public help center while it is on. draft: only agents see it.
@@ -8269,6 +8274,8 @@ export interface components {
             article_ids: string[];
         };
         KBArticleSummary: {
+            /** @description Its published tags, sorted; a published article's unpublished tags are in draft.tags. */
+            tags: components["schemas"]["KBArticleTags"];
             /** Format: uuid */
             id: string;
             /** @description Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>. */
@@ -8488,6 +8495,8 @@ export interface components {
             updated_at: string;
         };
         KBArticle: {
+            /** @description Its published tags, as in KBArticleSummary. */
+            tags: components["schemas"]["KBArticleTags"];
             /** @description Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source. */
             ai_drafts_this_month?: number;
             /** Format: uuid */
@@ -8550,6 +8559,8 @@ export interface components {
         };
         /** @description The unpublished changes of a published article: every field as it will be once published. */
         KBArticleDraft: {
+            /** @description The tags it will have once published. */
+            tags: components["schemas"]["KBArticleTags"];
             title: string;
             slug: string;
             body_md: string;
@@ -8592,6 +8603,7 @@ export interface components {
             url: string;
         };
         TrashedKBArticle: {
+            tags: components["schemas"]["KBArticleTags"];
             /** Format: uuid */
             id: string;
             number: number;
@@ -20483,6 +20495,8 @@ export interface operations {
                     show_contents?: boolean;
                     /** @description Who can see the article. It applies at once, also on a published article, and adds no version. Letting more people see a published article needs kb_articles:publish, and is 409 approval_required when a collection it is in needs approval and no review approved its published text; keeping it from more people needs only kb_articles:update. */
                     visibility?: components["schemas"]["KBVisibility"];
+                    /** @description Replaces every tag. On a published article the new tags wait in its unpublished changes (draft.tags), like its text; the help center and its search keep the published tags until they are published. */
+                    tags?: components["schemas"]["KBArticleTags"];
                     /** @description An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400. */
                     autosave?: boolean;
                 };

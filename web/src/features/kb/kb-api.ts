@@ -47,6 +47,8 @@ const summaryFields = {
   last_change: changeSchema.nullable(), url: z.string(),
   // has_draft: a published article with unpublished changes; the help center still shows the published text.
   has_draft: z.boolean(),
+  // The published tags, shared by its translations; a published article's tag change waits in draft.tags.
+  tags: z.array(z.string()),
   ...visibilityFields,
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
@@ -57,7 +59,7 @@ export const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string
 const draftSchema = z.object({
   title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), collection_id: z.string().uuid(),
   collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
-  updated_at: z.string().datetime(), updated_by: personSchema.nullable(),
+  updated_at: z.string().datetime(), updated_by: personSchema.nullable(), tags: z.array(z.string()),
 }) satisfies z.ZodType<Generated<'KBArticleDraft'>>;
 export const kbArticleSchema = z.object({
   ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,

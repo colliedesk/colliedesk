@@ -96,6 +96,9 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 	if err := fillKBCollectionIDs(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
 		return article, err
 	}
+	if err := fillKBTags(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
+		return article, err
+	}
 	if err := readKBVisibilityFrom(ctx, tx, workspaceID, &article); err != nil {
 		return article, err
 	}
@@ -103,6 +106,9 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 		return article, err
 	}
 	if err := fillKBArticleAttachments(ctx, tx, workspaceID, &article); err != nil {
+		return article, err
+	}
+	if err := fillKBDraftTags(ctx, tx, workspaceID, &article); err != nil {
 		return article, err
 	}
 	article.Translations, err = listKBArticleTranslations(ctx, tx, workspaceID, id)
@@ -231,6 +237,9 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 		for index := range items {
 			pointers[index] = &items[index]
 		}
+		if err := fillKBTags(ctx, tx, workspaceID, pointers...); err != nil {
+			return nil, err
+		}
 		return items, fillKBCollectionIDs(ctx, tx, workspaceID, pointers...)
 	})
 	if err != nil {
@@ -280,6 +289,9 @@ func (s *Store) ListTrashedKBArticles(ctx context.Context, workspaceID string, l
 		pointers := make([]*domain.KBArticleSummary, len(items))
 		for index := range items {
 			pointers[index] = &items[index].KBArticleSummary
+		}
+		if err := fillKBTags(ctx, tx, workspaceID, pointers...); err != nil {
+			return nil, err
 		}
 		return items, fillKBCollectionIDs(ctx, tx, workspaceID, pointers...)
 	})
@@ -502,6 +514,8 @@ type KBArticleInput struct {
 	// BodyFromCollection starts the article from its home collection's default template, if it has
 	// one; BodyMD is then empty.
 	BodyFromCollection bool
+	// Tags are the article's tags; domain.CleanKBTags cleans them.
+	Tags []string
 }
 
 // CreateKBArticle adds an article with the next number of the workspace and its first version.
@@ -536,6 +550,9 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 	if err := domain.CheckKBVisibility(input.Visibility); err != nil {
 		return domain.KBArticle{}, err
 	}
+	if input.Tags, err = domain.CleanKBTags(input.Tags); err != nil {
+		return domain.KBArticle{}, err
+	}
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
 		number, err := admitKBArticle(ctx, tx, workspaceID)
 		if err != nil {
@@ -559,6 +576,9 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 			return domain.KBArticle{}, err
 		}
 		if err := setKBArticleCollections(ctx, tx, workspaceID, id, extras); err != nil {
+			return domain.KBArticle{}, err
+		}
+		if err := replaceKBArticleTags(ctx, tx, workspaceID, id, input.Tags); err != nil {
 			return domain.KBArticle{}, err
 		}
 		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleCreated, nil); err != nil {
@@ -586,6 +606,8 @@ type KBArticleChange struct {
 	Autosave bool
 	// Visibility applies at once, also to a published article, and is not a version of its text.
 	Visibility *string
+	// Tags replaces the article's tags; a published article's go to its draft, as its text does.
+	Tags *[]string
 }
 
 // onlyVisibility tells whether the change sets nothing but the visibility.
@@ -626,6 +648,13 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 		if err := domain.CheckKBVisibility(*change.Visibility); err != nil {
 			return domain.KBArticle{}, err
 		}
+	}
+	if change.Tags != nil {
+		tags, err := domain.CleanKBTags(*change.Tags)
+		if err != nil {
+			return domain.KBArticle{}, err
+		}
+		change.Tags = &tags
 	}
 	for _, field := range []struct {
 		value **string
@@ -699,6 +728,11 @@ func writeKBArticleChange(ctx context.Context, tx pgx.Tx, workspaceID, id string
 	}
 	if err := updateKBArticleRow(ctx, tx, workspaceID, id, change); err != nil {
 		return err
+	}
+	if change.Tags != nil {
+		if err := replaceKBArticleTags(ctx, tx, workspaceID, id, *change.Tags); err != nil {
+			return err
+		}
 	}
 	if change.ExtraCollectionIDs != nil {
 		return setKBArticleCollections(ctx, tx, workspaceID, id, extras)

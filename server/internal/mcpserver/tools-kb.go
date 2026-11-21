@@ -92,6 +92,7 @@ type restKBArticle struct {
 	HasDraft      bool                  `json:"has_draft"`
 	Draft         *restKBDraft          `json:"draft"`
 	Attachments   []restKBAttachment    `json:"attachments"`
+	Tags          []string              `json:"tags"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
 	AIExclusion    *struct {
@@ -121,7 +122,16 @@ type kbArticleRowOut struct {
 	DeletedAt     string               `json:"deleted_at,omitempty"`
 	DeletedBy     *string              `json:"deleted_by,omitempty"`
 	PurgesAt      string               `json:"purges_at,omitempty"`
+	Tags          []string             `json:"tags"`
 	kbVisibilityOut
+}
+
+// kbTags is an article's tags as an answer carries them: never null.
+func kbTags(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }
 
 // kbCollectionIDs is where the article is listed, its home first; never null.
@@ -135,7 +145,7 @@ func kbCollectionIDs(article restKBArticle) []string {
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
 	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Position: article.Position, Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, HasDraft: article.HasDraft, PurgesAt: article.PurgesAt,
-		kbVisibilityOut: article.kbVisibilityOut}
+		Tags: kbTags(article.Tags), kbVisibilityOut: article.kbVisibilityOut}
 	if article.DeletedAt != nil {
 		out.DeletedAt = *article.DeletedAt
 	}
@@ -165,6 +175,7 @@ type kbArticleOut struct {
 	AIExclusion   *kbAIExclusionOut     `json:"ai_exclusion"`
 	Translations  []kbTranslationRowOut `json:"translations"`
 	Attachments   []kbAttachmentOut     `json:"attachments"`
+	Tags          []string              `json:"tags"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
 }
@@ -187,7 +198,7 @@ func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
 		ShowContents: article.ShowContents, InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}, Attachments: kbAttachmentsView(article.Attachments),
-		kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom}
+		Tags: kbTags(article.Tags), kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, kbTranslationRow(translation))
 	}
@@ -436,7 +447,7 @@ func kbArticleUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	change := kbArticleFields(arguments, "article_id")
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: title, body, slug, collection_id, collection_ids, status, seo_title, seo_description, show_contents or visibility."}
+		return nil, &toolError{"Give something to change: title, body, slug, collection_id, collection_ids, status, seo_title, seo_description, show_contents, visibility or tags."}
 	}
 	c.forArticle(args.ID)
 	var updated restKBArticle

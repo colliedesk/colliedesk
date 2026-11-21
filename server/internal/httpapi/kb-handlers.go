@@ -504,6 +504,7 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 		ShowContents  *bool     `json:"show_contents"`
 		TemplateID    *string   `json:"template_id"`
 		Visibility    string    `json:"visibility"`
+		Tags          []string  `json:"tags"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "An article needs a collection_id and a title; body_md or template_id, slug, status and visibility are optional.")
@@ -549,11 +550,11 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 	if input.Status == "published" && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, body, templateID, strconv.FormatBool(fromCollection), input.Status, input.SEOTitle, input.SEODesc, showContentsKey(input.ShowContents), input.Visibility}, func(ctx context.Context) (any, error) {
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, body, templateID, strconv.FormatBool(fromCollection), input.Status, input.SEOTitle, input.SEODesc, showContentsKey(input.ShowContents), input.Visibility, strings.Join(input.Tags, "\n")}, func(ctx context.Context) (any, error) {
 		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
 			store.KBArticleInput{CollectionID: input.CollectionID, ExtraCollectionIDs: extraIDs, Title: input.Title, Slug: slug, BodyMD: body, Status: input.Status,
 				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, TemplateID: templateID, BodyFromCollection: fromCollection,
-				Visibility: input.Visibility})
+				Visibility: input.Visibility, Tags: input.Tags})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered
@@ -584,16 +585,17 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		SEODesc       *string    `json:"seo_description"`
 		ShowContents  *bool      `json:"show_contents"`
 		Visibility    *string    `json:"visibility"`
+		Tags          *[]string  `json:"tags"`
 		Autosave      bool       `json:"autosave"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
 		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.CollectionIDs == nil && input.Status == nil && input.SEOTitle == nil &&
-			input.SEODesc == nil && input.ShowContents == nil && input.Visibility == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title, seo_description, show_contents or visibility.")
+			input.SEODesc == nil && input.ShowContents == nil && input.Visibility == nil && input.Tags == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title, seo_description, show_contents, visibility or tags.")
 		return
 	}
 	if input.Autosave && (input.Slug != nil || input.CollectionID != nil || input.CollectionIDs != nil || input.Status != nil || input.SEOTitle != nil || input.SEODesc != nil || input.ShowContents != nil ||
-		input.Visibility != nil) {
+		input.Visibility != nil || input.Tags != nil) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "An autosave changes only title and body_md; save the other fields without autosave.")
 		return
 	}
@@ -624,7 +626,7 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 	}
 	article, err := a.store.UpdateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt,
 		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: homeCollection, ExtraCollectionIDs: extras, Status: input.Status,
-			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, Visibility: input.Visibility, Autosave: input.Autosave})
+			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, Visibility: input.Visibility, Tags: input.Tags, Autosave: input.Autosave})
 	if err != nil {
 		writeKBError(response, err)
 		return

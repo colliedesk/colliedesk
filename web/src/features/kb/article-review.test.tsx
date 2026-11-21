@@ -84,7 +84,7 @@ test('a reviewer asking for changes shows their line; an open review can be with
 test('unpublished changes waiting for a reviewer cannot be published from the changes bar', async () => {
   const live = article({ status: 'published', published_at: '2026-10-02T00:00:00Z', has_draft: true, draft: {
     title: 'Reset a password', slug: 'reset-your-password', body_md: 'Open **Settings**.\nChoose Password.', seo_title: '', seo_description: '', collection_id: ids.setup,
-    collection_ids: [ids.setup], show_contents: true, attachments: [], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: { agent_id: null, name: 'Ada' } } });
+    collection_ids: [ids.setup], show_contents: true, attachments: [], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: { agent_id: null, name: 'Ada' }, tags: [] } });
   serve(base([review('open')], live));
   open();
   expect(await screen.findByRole('button', { name: 'Publish changes' })).toBeDisabled();

@@ -68,7 +68,7 @@ test('a chosen file goes up in parts, kept in the library, is listed under the a
 test('on a published article the files go into its unpublished changes, and typed text stays', async () => {
   const published = article({ status: 'published', published_at: '2026-10-02T00:00:00Z' });
   const draft = { title: published.title, slug: published.slug, body_md: published.body_md, seo_title: '', seo_description: '', collection_id: ids.setup,
-    collection_ids: [ids.setup], show_contents: true, attachments: [warranty], created_at: '2026-10-05T00:00:00Z', updated_at: '2026-10-05T00:00:00Z', updated_by: null };
+    collection_ids: [ids.setup], show_contents: true, attachments: [warranty], created_at: '2026-10-05T00:00:00Z', updated_at: '2026-10-05T00:00:00Z', updated_by: null, tags: [] };
   serve({ ...base, [`GET /api/v1/kb/articles/${ids.article}`]: () => json(200, published),
     [attachments]: () => json(200, { ...published, has_draft: true, draft, updated_at: '2026-10-05T00:00:00Z' }) });
   open({ articleId: ids.article });

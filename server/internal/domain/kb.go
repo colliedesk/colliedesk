@@ -122,6 +122,8 @@ type KBArticleSummary struct {
 	// restrictive of it and of every live collection the article is in, which is what applies.
 	Visibility          string `json:"visibility"`
 	EffectiveVisibility string `json:"effective_visibility"`
+	// Tags are the published tags, sorted (CleanKBTags); a published article's draft has its own.
+	Tags []string `json:"tags"`
 }
 
 // KBTranslationSummary is one language version of an article without its text, as the article and

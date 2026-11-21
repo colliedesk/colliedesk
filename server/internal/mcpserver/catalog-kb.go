@@ -31,6 +31,10 @@ const (
 	// kbTeamTextSchema is an article's team_text: its title, text and search fields, all written by the team.
 	kbTeamTextSchema = `{"type":"object","required":["title","body","seo_title","seo_description"],"properties":{"title":{"type":"string"},"body":{"type":"string"},` +
 		`"seo_title":{"type":"string"},"seo_description":{"type":"string"}}}`
+	// kbTagsProperty sets an article's tags; kbTagsOutput is how the answers carry them.
+	kbTagsProperty = `"tags":{"type":"array","maxItems":20,"items":{"type":"string","minLength":1,"maxLength":40},` +
+		`"description":"Replaces every tag (empty removes them). Written in lower case, repeats dropped; shared by its translations, separate from conversation tags. On a published article they wait in its draft until published."}`
+	kbTagsOutput   = `"tags":{"type":"array","items":{"type":"string"},"description":"Its published tags, sorted; colliedesk_kb_tags_list lists every tag."}`
 	kbSlugProperty = `"slug":{"type":"string","minLength":1,"maxLength":120,"description":"Lowercase letters and digits of any script joined by hyphens. Changing it changes the help center address; old addresses are not redirected."}`
 
 	// kbArticleChangeSchema is a saved reply change with the kinds only articles have: written by an
@@ -40,14 +44,14 @@ const (
 		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made it; null when a person made it in the web app."},` +
 		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
 
-	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility"],"properties":{` +
+	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility","tags"],"properties":{` + kbTagsOutput + `,` +
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,` +
 		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"has_draft":{"type":"boolean","description":"Unpublished changes wait in a draft; colliedesk_kb_article_get shows them."},` +
 		`"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}},` + kbVisibilityOutput + `}}`
 
-	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from"],"properties":{` +
+	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from","tags"],"properties":{` + kbTagsOutput + `,` +
 		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
 		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"has_draft":{"type":"boolean"},"draft":` + kbArticleDraftSchema + `,"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
@@ -211,7 +215,7 @@ func kbArticleCreateSpec() Spec {
 		Input: `{"type":"object","additionalProperties":false,"required":["title"],"properties":{` + kbCollectionIDProperty + `,` + kbCollectionIDsProperty + `,` +
 			`"title":{"type":"string","minLength":1,"maxLength":300},"body":{"type":"string","maxLength":100000,"description":"` + kbBodyDescription + `"},` +
 			`"template_id":{"type":"string",` + uuid + `,"description":"Instead of body: start from this template's text (colliedesk_kb_templates_list)."},` + kbSlugProperty + `,` +
-			`"status":{"type":"string","enum":["draft","published"],"default":"draft"},` + kbSEOProperties + `,` + kbShowContentsProperty + `,` + kbVisibilityProperty + `}}`,
+			`"status":{"type":"string","enum":["draft","published"],"default":"draft"},` + kbSEOProperties + `,` + kbShowContentsProperty + `,` + kbVisibilityProperty + `,` + kbTagsProperty + `}}`,
 		Output: kbArticleOutput,
 		run:    kbArticleCreate,
 	}
@@ -229,7 +233,7 @@ func kbArticleUpdateSpec() Spec {
 		REST: []string{"PATCH /api/v1/kb/articles/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["article_id","updated_at"],"properties":{` + kbArticleIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"title":{"type":"string","minLength":1,"maxLength":300},"body":{"type":"string","maxLength":100000,"description":"` + kbBodyDescription + `"},` + kbSlugProperty + `,` +
-			`"collection_id":{"type":"string",` + uuid + `},` + kbCollectionIDsProperty + `,"status":{"type":"string","enum":["draft","published"]},` + kbSEOProperties + `,` + kbShowContentsProperty + `,` + kbVisibilityProperty + `}}`,
+			`"collection_id":{"type":"string",` + uuid + `},` + kbCollectionIDsProperty + `,"status":{"type":"string","enum":["draft","published"]},` + kbSEOProperties + `,` + kbShowContentsProperty + `,` + kbVisibilityProperty + `,` + kbTagsProperty + `}}`,
 		Output: kbArticleOutput,
 		run:    kbArticleUpdate,
 	}

@@ -7111,6 +7111,9 @@ paths:
                 visibility:
                   allOf: [{$ref: '#/components/schemas/KBVisibility'}]
                   description: 'Who can see the article. It applies at once, also on a published article, and adds no version. Letting more people see a published article needs kb_articles:publish, and is 409 approval_required when a collection it is in needs approval and no review approved its published text; keeping it from more people needs only kb_articles:update.'
+                tags:
+                  allOf: [{$ref: '#/components/schemas/KBArticleTags'}]
+                  description: 'Replaces every tag. On a published article the new tags wait in its unpublished changes (draft.tags), like its text; the help center and its search keep the published tags until they are published.'
                 autosave: {type: boolean, description: 'An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400.'}
       responses:
         '200':
@@ -12260,6 +12263,10 @@ components:
           type: array
           description: 'The files the text lists, in order; a translation''s own list (empty while it shows the article''s files).'
           items: {$ref: '#/components/schemas/KBAttachment'}
+        tags:
+          type: array
+          items: {type: string}
+          description: 'The article''s tags, sorted; a change of them after an approval needs a new one. Left out when it has none, and for a translation, which shares the article''s.'
     KBDiffLine:
       type: object
       required: [change, text]
@@ -12472,6 +12479,11 @@ components:
             - {type: 'null'}
             - {$ref: '#/components/schemas/SavedReplyPerson'}
         purges_at: {type: string, format: date-time, description: When it is deleted for good (30 days after deleted_at).}
+    KBArticleTags:
+      type: array
+      maxItems: 20
+      description: 'The article''s tags, shared by its translations and separate from conversation tags. The server trims each, writes it in lower case with one space between words, drops repeats and sorts them; an empty tag, one over 40 characters or a 21st is 400 invalid_request. An empty list removes every tag.'
+      items: {type: string, minLength: 1, maxLength: 40}
     KBArticleInput:
       type: object
       required: [title]
@@ -12490,6 +12502,7 @@ components:
         visibility:
           allOf: [{$ref: '#/components/schemas/KBVisibility'}]
           description: 'Who can see the article; a collection it is in can restrict it further. Left out, everyone.'
+        tags: {$ref: '#/components/schemas/KBArticleTags'}
     KBArticleStatus:
       type: string
       enum: [draft, published]
@@ -12537,8 +12550,9 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags]
       properties:
+        tags: {allOf: [{$ref: '#/components/schemas/KBArticleTags'}], description: 'Its published tags, sorted; a published article''s unpublished tags are in draft.tags.'}
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1, description: 'Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>.'}
         collection_id: {type: string, format: uuid, description: 'Its home collection: the breadcrumb and its place among siblings.'}
@@ -12761,8 +12775,9 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, visibility_from, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, visibility_from, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments, tags]
       properties:
+        tags: {allOf: [{$ref: '#/components/schemas/KBArticleTags'}], description: 'Its published tags, as in KBArticleSummary.'}
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
@@ -12820,8 +12835,9 @@ components:
     KBArticleDraft:
       type: object
       description: 'The unpublished changes of a published article: every field as it will be once published.'
-      required: [title, slug, body_md, seo_title, seo_description, collection_id, collection_ids, show_contents, attachments, created_at, updated_at, updated_by]
+      required: [title, slug, body_md, seo_title, seo_description, collection_id, collection_ids, show_contents, attachments, tags, created_at, updated_at, updated_by]
       properties:
+        tags: {allOf: [{$ref: '#/components/schemas/KBArticleTags'}], description: 'The tags it will have once published.'}
         title: {type: string}
         slug: {type: string}
         body_md: {type: string}
@@ -12853,8 +12869,9 @@ components:
         url: {type: string, description: '/api/v1/kb/media/<id> for the team; the help center serves it at /files/<id>/<name> while a published article lists it.'}
     TrashedKBArticle:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, deleted_at, deleted_by, purges_at]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, deleted_at, deleted_by, purges_at, tags]
       properties:
+        tags: {$ref: '#/components/schemas/KBArticleTags'}
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
         collection_id: {type: string, format: uuid}

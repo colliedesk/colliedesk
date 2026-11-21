@@ -481,7 +481,7 @@ test('Publish anyway publishes an article whose images still lack alt text', asy
 
 // withChanges is a published article whose unpublished changes have the text body.
 const withChanges = (live: string, body: string) => article({ status: 'published', body_md: live, has_draft: true, draft: { title: 'Reset your password', slug: 'reset-your-password',
-  body_md: body, seo_title: '', seo_description: '', collection_id: ids.setup, collection_ids: [ids.setup], show_contents: true, attachments: [], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: null } });
+  body_md: body, seo_title: '', seo_description: '', collection_id: ids.setup, collection_ids: [ids.setup], show_contents: true, attachments: [], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: null, tags: [] } });
 
 test('publishing changes does not ask about an image without alt text the published article already has', async () => {
   const old = '![](https://example.com/old.png)';
