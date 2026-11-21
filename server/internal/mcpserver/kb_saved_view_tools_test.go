@@ -57,3 +57,36 @@ func TestKnowledgeBaseSavedViewsThroughMCP(t *testing.T) {
 		t.Errorf("restore from another workspace: %q", message)
 	}
 }
+
+// A knowledge base view's filters, with q passed as query and tag as tags, find in
+// colliedesk_kb_articles_search the articles the view shows a person.
+func TestAKnowledgeBaseViewsFiltersSearchTheArticlesItShows(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("KB View Search", "admin@kb-view-search.example.com")
+	send := e.connect(w.send, "")
+	collection := at(t, e.ok(send, "colliedesk_kb_collection_create", map[string]any{"name": "Billing"}), "collection", "id").(string)
+	for _, article := range []map[string]any{
+		{"title": "Refund rules", "body": "Refunds within five days.", "status": "published", "tags": []any{"billing", "refunds"}},
+		{"title": "Refund form", "body": "Fill in the refund form.", "status": "published", "tags": []any{"forms"}},
+		{"title": "Invoices", "body": "Monthly refund of credits.", "status": "draft", "tags": []any{"billing"}},
+	} {
+		article["collection_id"] = collection
+		e.ok(send, "colliedesk_kb_article_create", article)
+	}
+	e.ok(send, "colliedesk_saved_view_create", map[string]any{"name": "Published billing refunds", "area": "kb", "scope": "personal",
+		"filters": map[string]any{"q": "refund", "status": "published", "tag": []any{"billing"}}})
+
+	views := e.ok(send, "colliedesk_saved_views_list", map[string]any{"area": "kb"})["saved_views"].([]any)
+	filters := at(t, views[0], "filters").(map[string]any)
+	filters["query"], filters["tags"] = filters["q"], filters["tag"]
+	delete(filters, "q")
+	delete(filters, "tag")
+	found := e.ok(send, "colliedesk_kb_articles_search", filters)
+	var titles []string
+	for _, row := range found["articles"].([]any) {
+		titles = append(titles, at(t, row, "team_text", "title").(string))
+	}
+	if fmt.Sprint(titles) != "[Refund rules]" {
+		t.Fatalf("articles of the view = %v, want [Refund rules]", titles)
+	}
+}
