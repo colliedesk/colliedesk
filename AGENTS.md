@@ -54,7 +54,7 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 - **AI agent**: an external model client (Claude, Codex) working the queue through MCP. Not the
   same as a support agent.
 
-## Four ways to hurt yourself
+## Three ways to hurt yourself
 
 1. Writing a query without `workspace_id` in the filter. The tests will catch most of these;
    do not rely on that.
@@ -62,12 +62,6 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    source; web types are generated from it and CI fails when they drift.
 3. Adding a one-way door: an action with no reverse (close without reopen, add without remove,
    invite without revoke) or no way to see its state.
-4. Writing a migration by feel. Follow [docs/internals/migrations.md](docs/internals/migrations.md):
-   an opening comment, lines of at most 100 characters, and the security helpers
-   (`secure_workspace_table`, `secure_server_table`, `limit_app_role`) instead of hand-written
-   policies. `go run ./cmd/migration-check --repo=..` (in `server/`) refuses anything else. An applied
-   migration may only be edited for readability, and only when
-   `migration-check --base=origin/main --database="$TEST_DATABASE_URL"` proves the schema is the same.
 
 ## Hit every surface
 
