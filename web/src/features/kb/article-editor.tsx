@@ -14,7 +14,7 @@ import { ArticleVotesBox } from './article-votes';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
 import { ArticleAttachments } from './article-attachments';
 import { ArticleDraftBar, draftMessages, editable } from './article-draft';
-import { sameBody, useArticleAutosave } from './article-autosave';
+import { sameBody, storedAs, useArticleAutosave } from './article-autosave';
 import { ConflictCompare } from './conflict-compare';
 import { unsavedKey } from './unsaved-store';
 import { ArticleReviewBox, useTextApproval } from './article-review';
@@ -274,6 +274,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       // Nothing changed (Ctrl+S on a saved article): there is nothing to ask the server.
       if (Object.keys(change).length === 0) return;
       const updated = await kbApi.updateArticle(current.id, { updated_at: current.updated_at, ...change });
+      storedAs(updated, sent.body);
       rawNow.current = updated;
       setBase(updated);
       // The server may write the title or address name its own way; text typed during the save stays.

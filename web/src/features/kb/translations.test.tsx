@@ -216,6 +216,22 @@ test('a save shows what was saved even before the page reads the translation aga
   expect(screen.queryByText(/Someone saved this translation/)).not.toBeInTheDocument();
 });
 
+test('a saved text whose formatting tags the server respells shows the stored spelling and leaves nothing to save', async () => {
+  serve({
+    'GET /api/v1/auth/me': () => json(200, me),
+    'GET /api/v1/help-center/languages': () => json(200, languages(true)),
+    [`GET /api/v1/kb/articles/${ids.article}`]: () => json(200, article({ translations: [translation()] })),
+    [`GET /api/v1/kb/articles/${ids.article}/translations/fr`]: () => json(200, translation()),
+    [`PATCH /api/v1/kb/articles/${ids.article}/translations/fr`]: () => json(200, translation({ body_md: 'Ouvrez <u>Réglages</u>.', updated_at: '2026-10-06T00:00:00Z' })),
+  });
+  show(<TranslationRoute articleId={ids.article} locale="fr" />);
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Text' }), { target: { value: 'Ouvrez <U>Réglages</U>.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await screen.findByText('Saved');
+  expect(screen.getByRole('textbox', { name: 'Text' })).toHaveValue('Ouvrez <u>Réglages</u>.');
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+});
+
 test('a published translation keeps Save in reach: history, unpublish and delete are in its menu, as on an article', async () => {
   serve({
     'GET /api/v1/auth/me': () => json(200, me),

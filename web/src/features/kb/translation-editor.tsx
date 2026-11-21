@@ -154,16 +154,20 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
         ...(draft.seo_title ? { seo_title: draft.seo_title } : {}), ...(draft.seo_description ? { seo_description: draft.seo_description } : {}), ...(status ? { status } : {}) });
       return;
     }
-    saved(await kbApi.updateTranslation(articleId, locale, {
+    const sent = draft.body_md;
+    const answer = await kbApi.updateTranslation(articleId, locale, {
       updated_at: against.updated_at,
       ...(draft.title !== against.title ? { title: draft.title } : {}),
-      ...(draft.body_md !== against.body_md ? { body_md: draft.body_md } : {}),
+      ...(sent !== against.body_md ? { body_md: sent } : {}),
       ...(draft.slug.trim() && draft.slug !== against.slug ? { slug: draft.slug.trim() } : {}),
       ...(draft.seo_title !== against.seo_title ? { seo_title: draft.seo_title } : {}),
       ...(draft.seo_description !== against.seo_description ? { seo_description: draft.seo_description } : {}),
       ...(status && status !== against.status ? { status } : {}),
       ...(upToDate && against.outdated ? { outdated: false } : {}),
-    }));
+    });
+    saved(answer);
+    // The server respells formatting tags (<U> as <u>): the form shows the stored text unless typing went on.
+    setDraft((now) => (now.body_md === sent ? { ...now, body_md: answer.body_md } : now));
     setStale(false);
     setTheirs(undefined);
   }, t.saved);
