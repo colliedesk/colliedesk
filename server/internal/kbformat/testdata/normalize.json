@@ -48,5 +48,20 @@
     "name": "other HTML is left for the body check",
     "in": "<div class=\"x\">\n\nText <kbd>Ctrl</kbd>\n\n</div>\n",
     "out": "<div class=\"x\">\n\nText <kbd>Ctrl</kbd>\n\n</div>\n"
+  },
+  {
+    "name": "an image's figure writes its attributes in one order and the border with no value",
+    "in": "<FIGURE data-border=\"\" data-align='center' DATA-WIDTH=\"480\">\n\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n<FIGCAPTION class=\"x\">\n\nCaption\n\n</FIGCAPTION>\n\n</FIGURE>\n",
+    "out": "<figure data-width=\"480\" data-align=\"center\" data-border>\n\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n<figcaption>\n\nCaption\n\n</figcaption>\n\n</figure>\n"
+  },
+  {
+    "name": "a figure keeps no style attribute and no width or alignment it does not know",
+    "in": "<figure style=\"float:left\" data-width=\"huge\" data-align=\"middle\" data-border=\"x\">\n\n![a](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n\n<figure data-width=\"5000\" data-align=\"inline\">\n\n![b](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n\n<figure data-width=\"0480\" data-align=\"left\">\n\n![c](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n",
+    "out": "<figure data-border>\n\n![a](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n\n<figure data-align=\"inline\">\n\n![b](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n\n<figure data-align=\"left\">\n\n![c](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n"
+  },
+  {
+    "name": "only a figure takes a width, a border, or the left and inline alignments",
+    "in": "<p data-align=\"left\" data-width=\"small\" data-border>\n\nx\n\n</p>\n\n<figure data-width=\"medium\" data-indent=\"1\">\n\n![d](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n",
+    "out": "<p>\n\nx\n\n</p>\n\n<figure data-width=\"medium\">\n\n![d](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n"
   }
 ]

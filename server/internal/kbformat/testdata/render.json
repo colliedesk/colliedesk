@@ -25,6 +25,26 @@
       "name": "a table that breaks the shape stays HTML the page leaves out",
       "markdown": "<table>\n<tr>\n<td>\n\nA\n\n</td>\n</table>\n",
       "html": "<p>A</p>\n"
+    },
+    {
+      "name": "an image 480 pixels wide, centred, with a link and a caption renders with the help center's classes",
+      "markdown": "<figure data-width=\"480\" data-align=\"center\" style=\"float:left\">\n\n[![A screenshot](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)](https://example.com/guide)\n\n<figcaption>\n\nThe **settings** page\n\n</figcaption>\n\n</figure>\n",
+      "html": "<figure class=\"kb-figure kb-figure-center\"><a href=\"https://example.com/guide\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"A screenshot\" loading=\"lazy\" width=\"480\"></a><figcaption>The <strong>settings</strong> page</figcaption></figure>\n"
+    },
+    {
+      "name": "an image's size, alignment and border are classes",
+      "markdown": "<figure data-width=\"small\" data-align=\"right\" data-border>\n\n![Chart](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n\n<figure data-width=\"medium\" data-align=\"left\">\n\n![Left](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n\n<figure data-width=\"full\">\n\n![Full](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n",
+      "html": "<figure class=\"kb-figure kb-figure-small kb-figure-right kb-figure-border\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Chart\" loading=\"lazy\"></figure>\n<figure class=\"kb-figure kb-figure-medium kb-figure-left\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Left\" loading=\"lazy\"></figure>\n<figure class=\"kb-figure kb-figure-full\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Full\" loading=\"lazy\"></figure>\n"
+    },
+    {
+      "name": "an image's unknown width is left out and the image still shows",
+      "markdown": "<figure data-width=\"huge\" data-align=\"inline\">\n\n![Wide](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n\n<figure data-width=\"5000\">\n\n![Big](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n",
+      "html": "<figure class=\"kb-figure kb-figure-inline\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Wide\" loading=\"lazy\"></figure>\n<figure class=\"kb-figure\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Big\" loading=\"lazy\"></figure>\n"
+    },
+    {
+      "name": "a figure that holds anything but one image shows its content without the figure",
+      "markdown": "<figure data-align=\"center\">\n\nJust text\n\n</figure>\n",
+      "html": "<p>Just text</p>\n"
     }
   ]
 }
