@@ -7,9 +7,11 @@ DECLARE
 BEGIN
     PERFORM set_config('app.privileged', 'on', true);
     SELECT count(*) INTO in_use FROM workspace_onboarding
-        WHERE source IN ('ai_chatgpt', 'ai_claude', 'ai_gemini', 'ai_perplexity', 'ai_other', 'tiktok', 'youtube');
+        WHERE source IN ('ai_chatgpt', 'ai_claude', 'ai_gemini', 'ai_perplexity', 'ai_other',
+            'tiktok', 'youtube');
     IF in_use > 0 THEN
-        RAISE EXCEPTION 'cannot roll back: % onboarding answer(s) use AI assistant, TikTok or YouTube sources; preserve attribution before rollback', in_use;
+        RAISE EXCEPTION 'cannot roll back: % onboarding answer(s) use AI assistant, TikTok or '
+            'YouTube sources; preserve attribution before rollback', in_use;
     END IF;
 END
 $$;

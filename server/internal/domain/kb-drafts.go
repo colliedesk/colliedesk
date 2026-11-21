@@ -24,6 +24,7 @@ type KBArticleDraft struct {
 	CollectionIDs  []string          `json:"collection_ids"`
 	ShowContents   bool              `json:"show_contents"`
 	Attachments    KBAttachments     `json:"attachments"`
+	Tags           []string          `json:"tags"`
 	CreatedAt      time.Time         `json:"created_at"`
 	UpdatedAt      time.Time         `json:"updated_at"`
 	UpdatedBy      *SavedReplyPerson `json:"updated_by"`
@@ -38,7 +39,7 @@ func (a KBArticle) AsDrafted() KBArticle {
 	draft := *a.Draft
 	a.Title, a.Slug, a.BodyMD, a.SEOTitle, a.SEODescription = draft.Title, draft.Slug, draft.BodyMD, draft.SEOTitle, draft.SEODescription
 	a.CollectionID, a.CollectionIDs, a.ShowContents = draft.CollectionID, draft.CollectionIDs, draft.ShowContents
-	a.Attachments = draft.Attachments
+	a.Attachments, a.Tags = draft.Attachments, draft.Tags
 	return a
 }
 

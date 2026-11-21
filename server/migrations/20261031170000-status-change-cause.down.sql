@@ -16,4 +16,5 @@ $$;
 
 DROP TRIGGER conversation_status_changes_cause ON conversation_status_changes;
 DROP FUNCTION conversation_status_changes_cause();
-ALTER TABLE conversation_status_changes DROP COLUMN actor_token_id, DROP COLUMN cause, DROP COLUMN quiet;
+ALTER TABLE conversation_status_changes DROP COLUMN actor_token_id, DROP COLUMN cause,
+    DROP COLUMN quiet;

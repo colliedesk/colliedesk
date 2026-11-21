@@ -1,27 +1,37 @@
--- AI decides intake cards (docs/internals/channels.md "Intake"): one task at a time decides a card, and a
--- person's decision says which suggestion of AI it followed or corrected (the labels of intake's eval).
+-- AI decides intake cards (docs/internals/channels.md "Intake"): one task at a time decides a card,
+-- and a person's decision says which suggestion of AI it followed or corrected (the labels of
+-- intake's eval).
 
--- A person who decided as AI suggested names that suggestion; one who decided otherwise names it in
--- corrects_decision_id.
+-- A person who decided as AI suggested names that suggestion; one who decided otherwise names it
+-- in corrects_decision_id.
 ALTER TABLE intake_decisions ADD COLUMN follows_decision_id uuid,
-    ADD FOREIGN KEY (workspace_id, follows_decision_id) REFERENCES intake_decisions(workspace_id, id) ON DELETE SET NULL (follows_decision_id),
+    ADD FOREIGN KEY (workspace_id, follows_decision_id)
+        REFERENCES intake_decisions(workspace_id, id) ON DELETE SET NULL (follows_decision_id),
     ADD CHECK (follows_decision_id IS NULL OR corrects_decision_id IS NULL);
 
--- Why AI did not act on its own, also: it hesitated between two or more conversations of the customer
--- (attach_requires_single_candidate), or the batch had nothing it could read (no text, no picture sent).
+-- Why AI did not act on its own, also: it hesitated between two or more conversations of the
+-- customer (attach_requires_single_candidate), or the batch had nothing it could read (no text, no
+-- picture sent).
 ALTER TABLE intake_decisions DROP CONSTRAINT intake_decisions_not_applied_reason_check,
-    ADD CONSTRAINT intake_decisions_not_applied_reason_check CHECK (not_applied_reason IN ('level_suggest', 'below_threshold', 'too_old', 'credential',
-        'person_first', 'target_changed', 'lane_blocked', 'gate_closed', 'limit', 'error', 'several_candidates', 'no_content'));
+    ADD CONSTRAINT intake_decisions_not_applied_reason_check CHECK (not_applied_reason IN (
+        'level_suggest', 'below_threshold', 'too_old', 'credential', 'person_first',
+        'target_changed', 'lane_blocked', 'gate_closed', 'limit', 'error', 'several_candidates',
+        'no_content'
+    ));
 
--- One AI task decides a card at a time: the hold, the lane's turn and a person's requeue may all ask.
-CREATE UNIQUE INDEX ai_tasks_intake_gathering ON ai_tasks(workspace_id, gathering_id) WHERE kind = 'intake' AND state IN ('queued', 'running');
+-- One AI task decides a card at a time: the hold, the lane's turn and a person's requeue may
+-- all ask.
+CREATE UNIQUE INDEX ai_tasks_intake_gathering ON ai_tasks(workspace_id, gathering_id)
+    WHERE kind = 'intake' AND state IN ('queued', 'running');
 
--- What intake said a customer's message added to a conversation was: an acknowledgement (a thank-you, an
--- "ok") joined to a resolved conversation keeps it resolved and asks for no automatic draft.
-ALTER TABLE messages ADD COLUMN intake_reply_kind text CHECK (intake_reply_kind IN ('substantive', 'acknowledgement'));
+-- What intake said a customer's message added to a conversation was: an acknowledgement (a
+-- thank-you, an "ok") joined to a resolved conversation keeps it resolved and asks for no
+-- automatic draft.
+ALTER TABLE messages ADD COLUMN intake_reply_kind text
+    CHECK (intake_reply_kind IN ('substantive', 'acknowledgement'));
 
--- A customer's message queues an automatic draft where drafts are suggested; a thank-you AI kept in a
--- resolved conversation (acknowledgement) asks for no answer.
+-- A customer's message queues an automatic draft where drafts are suggested; a thank-you AI kept in
+-- a resolved conversation (acknowledgement) asks for no answer.
 CREATE OR REPLACE FUNCTION ai_draft_on_customer_message() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     waiting uuid;

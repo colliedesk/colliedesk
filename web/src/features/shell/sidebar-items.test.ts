@@ -5,7 +5,7 @@ import { channelItems, inboxIsCurrent, viewItems } from './sidebar-items';
 
 const hrefOf = (query: InboxQuery) => `/?${new URLSearchParams(query as Record<string, string>).toString()}`;
 const view = (name: string, filters: SavedView['filters']): SavedView => ({
-  id: `11111111-1111-4111-8111-${String(name.length).padStart(12, '0')}`, name, scope: 'shared' as const, filters,
+  id: `11111111-1111-4111-8111-${String(name.length).padStart(12, '0')}`, name, area: 'inbox' as const, scope: 'shared' as const, filters,
   owner_agent_id: null, created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', deleted_at: null, purges_at: null,
 });
 

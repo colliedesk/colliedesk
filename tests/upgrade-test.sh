@@ -147,16 +147,33 @@ echo 'SELECT name FROM schema_migrations ORDER BY name;' | psql_as postgres refe
 [ -s "$TMP/previous-migrations" ] || fail "$PREVIOUS applied no migrations"
 
 # The fixture database: the previous release's migrations one by one, as the owner and with the
-# setting `collie migrate` uses, each followed by its fixture file. Migration files never change once
-# merged (migration-check), so these are the files the previous release ran; the schema comparison
-# below proves it.
+# setting `collie migrate` uses, each followed by its fixture file. An applied migration may be
+# edited for readability when it builds the same schema (docs/internals/migrations.md), so the files
+# come from the previous release's tag, not this checkout; the schema comparison below proves they
+# are the files it ran. An image that is not a release (no vX.Y.Z version) uses this checkout's.
+previous_version=$("$DOCKER" run --rm "$PREVIOUS" version)
+previous_tree=
+if printf '%s\n' "$previous_version" | grep -qxE 'v[0-9]+\.[0-9]+\.[0-9]+'; then
+  git -C "$ROOT" rev-parse -q --verify "refs/tags/$previous_version^{commit}" >/dev/null ||
+    git -C "$ROOT" fetch -q --no-tags --depth=1 origin "refs/tags/$previous_version:refs/tags/$previous_version" ||
+    fail "cannot fetch the tag $previous_version of $PREVIOUS"
+  previous_tree=$previous_version
+fi
+previous_migration() {
+  if [ -n "$previous_tree" ]; then
+    git -C "$ROOT" show "$previous_tree:server/migrations/$1"
+  else
+    cat "$ROOT/server/migrations/$1"
+  fi
+}
 step "building the fixture on $(grep -c . "$TMP/previous-migrations") migrations"
 echo 'CREATE TABLE schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());' | psql_as colliedesk colliedesk
 blocks=0
 while read -r name; do
-  [ -f "$ROOT/server/migrations/$name" ] || fail "migration $name of $PREVIOUS is not in this checkout"
+  previous_migration "$name" >"$TMP/migration.sql" 2>/dev/null ||
+    fail "migration $name of $PREVIOUS is not in ${previous_tree:-this checkout}"
   { echo "SELECT set_config('app.privileged', 'on', true) \\g /dev/null"
-    cat "$ROOT/server/migrations/$name"
+    cat "$TMP/migration.sql"
     echo
     echo "INSERT INTO schema_migrations(name) VALUES ('$name');"
   } | psql_as colliedesk colliedesk -1 >/dev/null || fail "migration $name failed on the fixture"

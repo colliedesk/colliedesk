@@ -59,12 +59,12 @@ func workspaceSettingsGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_workspace_settings_get",
 		Title: "Show the workspace settings",
-		Description: `Show the workspace's name, address (slug) and timezone, and your own timezone (the team member this token acts as). ` +
+		Description: `Show the workspace's name, address (slug) and timezone, and your own timezone and knowledge base list columns (the team member this token acts as). ` +
 			`Times in Colliedesk are stored in UTC; the timezone decides how they are shown and what "today" means.`,
 		REST:  []string{"GET /api/v1/auth/me"},
 		Input: noArguments,
 		Output: `{"type":"object","required":["workspace","your_timezone"],"properties":{"workspace":{"type":"object","properties":{"name":{"type":"string"},"slug":{"type":"string"},"timezone":{"type":"string"}}},` +
-			`"your_timezone":{"type":"string"},"your_timezone_is_the_workspace_default":{"type":"boolean"}}}`,
+			`"your_timezone":{"type":"string"},"your_timezone_is_the_workspace_default":{"type":"boolean"},"your_kb_list_columns":` + kbListColumnsSchema + `}}`,
 		run: workspaceSettingsGet,
 	}
 }

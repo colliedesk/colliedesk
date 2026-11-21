@@ -9,10 +9,10 @@ import (
 
 func TestCheckAcceptsPairedDomainNamedMigrations(t *testing.T) {
 	repo := migrationRepo(t, map[string]string{
-		"20261014060000-core-helpdesk.up.sql":   "SELECT 1;\n",
+		"20261014060000-core-helpdesk.up.sql":   "-- Core.\nSELECT 1;\n",
 		"20261014060000-core-helpdesk.down.sql": "SELECT 1;\n",
 	})
-	if err := Check(repo, ""); err != nil {
+	if err := Check(repo, Options{}); err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 }
@@ -21,7 +21,7 @@ func TestCheckRejectsMigrationWithoutDownPair(t *testing.T) {
 	repo := migrationRepo(t, map[string]string{
 		"20261014060000-core-helpdesk.up.sql": "SELECT 1;\n",
 	})
-	err := Check(repo, "")
+	err := Check(repo, Options{})
 	if err == nil || !strings.Contains(err.Error(), "matching up and down") {
 		t.Fatalf("expected missing pair error, got %v", err)
 	}
@@ -53,10 +53,10 @@ func TestCheckRejectsHandWrittenRowSecurityAfterTheHelpers(t *testing.T) {
 		"SELECT '--'; CREATE POLICY everyone ON notes USING (true);",
 	} {
 		repo := migrationRepo(t, map[string]string{
-			"20261201000000-notes.up.sql":   "CREATE TABLE notes (workspace_id uuid);\n" + statement + "\n",
+			"20261201000000-notes.up.sql":   "-- Notes.\nCREATE TABLE notes (workspace_id uuid);\n" + statement + "\n",
 			"20261201000000-notes.down.sql": "DROP TABLE notes;\n",
 		})
-		err := Check(repo, "")
+		err := Check(repo, Options{})
 		if err == nil || !strings.Contains(err.Error(), "secure_workspace_table") {
 			t.Errorf("%s: want an error naming the helper, got %v", statement, err)
 		}
@@ -65,21 +65,21 @@ func TestCheckRejectsHandWrittenRowSecurityAfterTheHelpers(t *testing.T) {
 
 func TestCheckAcceptsHandWrittenRowSecurityBeforeTheHelpers(t *testing.T) {
 	repo := migrationRepo(t, map[string]string{
-		"20261014135950-workspace-row-level-security.up.sql":   "ALTER TABLE notes ENABLE ROW LEVEL SECURITY;\nSELECT 1 FROM pg_policies;\n",
+		"20261014135950-workspace-row-level-security.up.sql":   "-- Bootstrap.\nALTER TABLE notes ENABLE ROW LEVEL SECURITY;\nSELECT 1 FROM pg_policies;\n",
 		"20261014135950-workspace-row-level-security.down.sql": "SELECT set_config('app.privileged', 'on', true);\n",
 	})
-	if err := Check(repo, ""); err != nil {
+	if err := Check(repo, Options{}); err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 }
 
 func TestCheckAcceptsTheHelperCalls(t *testing.T) {
 	repo := migrationRepo(t, map[string]string{
-		"20261201000000-notes.up.sql": "CREATE TABLE notes (workspace_id uuid);\nSELECT secure_workspace_table('notes');\n" +
+		"20261201000000-notes.up.sql": "-- Notes.\nCREATE TABLE notes (workspace_id uuid);\nSELECT secure_workspace_table('notes');\n" +
 			"SELECT limit_app_role('notes', 'SELECT', 'INSERT');\n",
 		"20261201000000-notes.down.sql": "DROP TABLE notes;\n",
 	})
-	if err := Check(repo, ""); err != nil {
+	if err := Check(repo, Options{}); err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 }
@@ -89,7 +89,7 @@ func TestCheckIgnoresHelperWordsInComments(t *testing.T) {
 		"20261201000000-notes.up.sql":   "/* no CREATE POLICY here,\n   secure_workspace_table writes it */\nCREATE TABLE notes (workspace_id uuid);\n-- row level security comes from the helper\nSELECT secure_workspace_table('notes');\n",
 		"20261201000000-notes.down.sql": "DROP TABLE notes;\n",
 	})
-	if err := Check(repo, ""); err != nil {
+	if err := Check(repo, Options{}); err != nil {
 		t.Fatal(err)
 	}
 }

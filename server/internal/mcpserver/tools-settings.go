@@ -109,7 +109,7 @@ func workspaceSettingsGet(c *call, _ map[string]any) (any, error) {
 		yours, isDefault = *me.Agent.TimezoneOverride, false
 	}
 	return map[string]any{"workspace": map[string]any{"name": me.Workspace.Name, "slug": me.Workspace.Slug, "timezone": me.Workspace.Timezone},
-		"your_timezone": yours, "your_timezone_is_the_workspace_default": isDefault}, nil
+		"your_timezone": yours, "your_timezone_is_the_workspace_default": isDefault, "your_kb_list_columns": me.KBListColumns}, nil
 }
 
 func workspaceSettingsUpdate(c *call, arguments map[string]any) (any, error) {

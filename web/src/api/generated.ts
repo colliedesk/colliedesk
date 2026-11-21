@@ -2389,10 +2389,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The inbox views the caller can use: the views shared with the whole workspace, then the caller's own personal views, each group ordered by name ignoring case. A deleted view is not listed here (see `GET /api/v1/saved-views/trash`). */
+        /** @description The views of one area the caller can use (the inbox unless `area` says kb): the views shared with the whole workspace, then the caller's own personal views, each group ordered by name ignoring case. A deleted view is not listed here (see `GET /api/v1/saved-views/trash`). */
         get: operations["listSavedViews"];
         put?: never;
-        /** @description Saves a set of inbox filters under a name. A personal view is seen only by the person who saved it; a shared view by everyone in the workspace, and anyone may change or delete it. Names are unique ignoring case among the caller's personal views and among the shared views (409). Each person keeps at most 50 personal views and a workspace at most 50 shared ones (409). */
+        /** @description Saves a set of filters under a name: inbox filters (`area` inbox, the default) or knowledge base article list filters (`area` kb, the filters of `GET /api/v1/kb/articles`). A personal view is seen only by the person who saved it; a shared view by everyone in the workspace, and anyone may change or delete it. Within an area, names are unique ignoring case among the caller's personal views and among the shared views (409). In each area a person keeps at most 50 personal views and a workspace at most 50 shared ones (409). */
         post: operations["createSavedView"];
         delete?: never;
         options?: never;
@@ -2407,7 +2407,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Views deleted in the last 30 days that the caller could see, newest deletion first. Each can be restored with `POST /api/v1/saved-views/{id}/restore` until `purges_at`; after that it is gone. */
+        /** @description Views of one area (the inbox unless `area` says kb) deleted in the last 30 days that the caller could see, newest deletion first. Each can be restored with `POST /api/v1/saved-views/{id}/restore` until `purges_at`; after that it is gone. */
         get: operations["listDeletedSavedViews"];
         put?: never;
         post?: never;
@@ -3230,6 +3230,23 @@ export interface paths {
         get?: never;
         /** @description Hides the setup guide from the inbox of the caller, or shows it again. It is a choice of the person; other agents keep their own. */
         put: operations["setSetupGuideHidden"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/me/kb-list-columns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Chooses the columns the caller sees in the knowledge base article list, in their order. Article is always shown first and is not in the list. It is a choice of the person, kept on the server for every browser they sign in from; other agents keep their own. Null goes back to the default. */
+        put: operations["setKBListColumns"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4089,6 +4106,40 @@ export interface paths {
         put?: never;
         /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. At most 64 KiB of JSON. With `template_id` the server copies the template's text (see `GET /api/v1/kb/templates`); without `body_md` or `template_id` the article starts from the collection's `default_template_id` when it has one, else empty. */
         post: operations["createKBArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The articles GET /api/v1/kb/articles lists with the same filters, in its order, as one CSV file to download: UTF-8 with a byte order mark, a header row, then one row per article, at most 50,000. Columns: title, address (its help center page), collection (its home, with the collections above it, joined by " / "), status (draft, in_review, approved, published or unpublished_changes), author (a team member who left the team ends in " (left)"), tags (joined by ", "), languages (its translations, an outdated one followed by " (outdated)"), created_at and updated_at (RFC 3339 in the caller's timezone), helpful_votes and not_helpful_votes (what the article's page counts). A cell that starts with =, +, -, @, a tab or a carriage return starts with ' instead, so a spreadsheet never reads it as a formula. A failure after the file started breaks the download instead of ending the file early, so a short file is never taken for the whole list. */
+        get: operations["exportKBArticles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Every tag the workspace's articles outside the trash have published, by name, with how many articles have it. Use a name as a `tag` value of GET /api/v1/kb/articles. */
+        get: operations["listKBTags"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5036,7 +5087,7 @@ export interface paths {
         };
         /** @description Whether the public help center is on, its title and language. `content_version` grows with every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the knowledge base is public. */
         get: operations["getHelpCenter"];
-        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. `require_approval` makes publishing need an approved review in every collection that inherits it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes). */
+        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. `require_approval` makes publishing need an approved review in every collection that inherits it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes). `show_tags` shows each article's tags on its page; left out, it stays as it is. */
         put: operations["putHelpCenter"];
         post?: never;
         delete?: never;
@@ -7664,12 +7715,49 @@ export interface components {
             /** @description overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target). */
             sla?: ("overdue" | "due_soon")[];
         };
+        /** @description The filters of `GET /api/v1/kb/articles` as one object, under the same names and checked as that list checks them; a list holds the values the query string repeats (tag) or separates with commas (author). Tags are kept cleaned (lowercase). A date is midnight in the workspace's timezone when the view is opened. An empty object is every article outside the trash. */
+        KBArticleFilters: {
+            q?: string;
+            /** @enum {string} */
+            status?: "draft" | "published";
+            /** Format: uuid */
+            collection_id?: string;
+            /** @description true needs collection_id. */
+            include_subcollections?: boolean;
+            author?: string[];
+            tag?: string[];
+            /** @enum {string} */
+            tag_match?: "any" | "all";
+            /** @description An RFC 3339 time or a date, as the created_after query of GET /api/v1/kb/articles. */
+            created_after?: string;
+            created_before?: string;
+            updated_after?: string;
+            updated_before?: string;
+            /** @enum {string} */
+            translation?: "missing" | "outdated";
+            locale?: string;
+            has_draft?: boolean;
+            visibility?: components["schemas"]["KBVisibility"];
+            /** @enum {string} */
+            state?: "in_review" | "approved";
+            /** @enum {string} */
+            sort?: "recent" | "manual";
+        };
+        /**
+         * @description inbox: conversation filters. kb: knowledge base article list filters.
+         * @default inbox
+         * @enum {string}
+         */
+        SavedViewArea: "inbox" | "kb";
+        /** @description The view's filters, as its area takes them. */
+        SavedViewFilters: components["schemas"]["ConversationFilters"] | components["schemas"]["KBArticleFilters"];
         /** @enum {string} */
         SavedViewScope: "personal" | "shared";
         SavedViewInput: {
             name: string;
+            area?: components["schemas"]["SavedViewArea"];
             scope: components["schemas"]["SavedViewScope"];
-            filters: components["schemas"]["ConversationFilters"];
+            filters: components["schemas"]["SavedViewFilters"];
         };
         SavedViewChange: {
             /**
@@ -7679,14 +7767,15 @@ export interface components {
             updated_at: string;
             name?: string;
             scope?: components["schemas"]["SavedViewScope"];
-            filters?: components["schemas"]["ConversationFilters"];
+            filters?: components["schemas"]["SavedViewFilters"];
         };
         SavedView: {
             /** Format: uuid */
             id: string;
             name: string;
+            area: components["schemas"]["SavedViewArea"];
             scope: components["schemas"]["SavedViewScope"];
-            filters: components["schemas"]["ConversationFilters"];
+            filters: components["schemas"]["SavedViewFilters"];
             /**
              * Format: uuid
              * @description The person a personal view belongs to; null for a shared view.
@@ -7857,6 +7946,7 @@ export interface components {
         Me: {
             /** @description True when this agent hid the setup guide in the inbox. */
             setup_guide_hidden: boolean;
+            kb_list_columns: components["schemas"]["KBListColumns"];
             /**
              * @description The article editor this agent chose; null until they choose, and the web app then opens the visual one.
              * @enum {string|null}
@@ -8156,6 +8246,8 @@ export interface components {
             collection_ids: string[];
             /** @description The files the text lists, in order; a translation's own list (empty while it shows the article's files). */
             attachments: components["schemas"]["KBAttachment"][];
+            /** @description The article's tags, sorted; a change of them after an approval needs a new one. Left out when it has none, and for a translation, which shares the article's. */
+            tags?: string[];
         };
         KBDiffLine: {
             /**
@@ -8376,6 +8468,8 @@ export interface components {
              */
             purges_at: string;
         };
+        /** @description The article's tags, shared by its translations and separate from conversation tags. The server trims each, writes it in lower case with one space between words, drops repeats and sorts them; an empty tag, one over 40 characters or a 21st is 400 invalid_request. An empty list removes every tag. */
+        KBArticleTags: string[];
         /** @description Send collection_id (its one collection), or collection_ids (several, the home first); with both, collection_id is the first of collection_ids. Send body_md or template_id, not both; with neither the text is empty. */
         KBArticleInput: {
             /**
@@ -8408,6 +8502,15 @@ export interface components {
             show_contents?: boolean;
             /** @description Who can see the article; a collection it is in can restrict it further. Left out, everyone. */
             visibility?: components["schemas"]["KBVisibility"];
+            tags?: components["schemas"]["KBArticleTags"];
+        };
+        KBArticleAuthor: {
+            /** Format: uuid */
+            agent_id: string;
+            /** @description The display name, else the email. */
+            name: string;
+            /** @description True once they left the team: the article still names them, and another active member can be credited instead. */
+            left: boolean;
         };
         /**
          * @description published: on the public help center while it is on. draft: only agents see it.
@@ -8417,10 +8520,10 @@ export interface components {
         KBArticleChange: {
             version: number;
             /**
-             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change); review_request, review_approve, review_changes, review_withdraw: the unpublished text was sent for review, approved, sent back with changes to make, or the review was withdrawn (the text did not change).
+             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change); review_request, review_approve, review_changes, review_withdraw: the unpublished text was sent for review, approved, sent back with changes to make, or the review was withdrawn (the text did not change); author_change: the article was credited to another team member (the text did not change).
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw" | "author_change";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
             /** @description The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person. */
@@ -8451,6 +8554,20 @@ export interface components {
             article_ids: string[];
         };
         KBArticleSummary: {
+            /** @description What readers answered to "Was this article helpful?", imported votes included, as GET /api/v1/kb/articles/{id}/votes counts them. */
+            votes: components["schemas"]["KBVoteTally"];
+            /**
+             * @description in_review: its own unpublished text waits for a reviewer; approved: a reviewer approved that text as it is now, ready to publish (POST /api/v1/kb/articles/publish). Null without either.
+             * @enum {string|null}
+             */
+            review_state: "in_review" | "approved" | null;
+            /** @description Its published tags, sorted; a published article's unpublished tags are in draft.tags. */
+            tags: components["schemas"]["KBArticleTags"];
+            /** @description Its translations outside the trash, by locale; outdated is set when the article changed after the translation was last brought up to date. A language of the help center that is not here is missing. */
+            languages: {
+                locale: string;
+                outdated: boolean;
+            }[];
             /** Format: uuid */
             id: string;
             /** @description Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>. */
@@ -8474,6 +8591,8 @@ export interface components {
             published_at: string | null;
             /** Format: uuid */
             author_agent_id: string | null;
+            /** @description Who the article is credited to, with left true once they left the team; null without an author. */
+            author: null | components["schemas"]["KBArticleAuthor"];
             /** Format: date-time */
             created_at: string;
             /**
@@ -8697,6 +8816,8 @@ export interface components {
             updated_at: string;
         };
         KBArticle: {
+            /** @description Its published tags, as in KBArticleSummary. */
+            tags: components["schemas"]["KBArticleTags"];
             /** @description Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source. */
             ai_drafts_this_month?: number;
             /** @description Only when one article is read (GET): its help center views in the last 30 days, today included (GET /api/v1/kb/articles/{id}/stats has them per day). */
@@ -8718,6 +8839,8 @@ export interface components {
             published_at: string | null;
             /** Format: uuid */
             author_agent_id: string | null;
+            /** @description Who the article is credited to, with left true once they left the team; null without an author. */
+            author: null | components["schemas"]["KBArticleAuthor"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -8763,6 +8886,8 @@ export interface components {
         };
         /** @description The unpublished changes of a published article: every field as it will be once published. */
         KBArticleDraft: {
+            /** @description The tags it will have once published. */
+            tags: components["schemas"]["KBArticleTags"];
             title: string;
             slug: string;
             body_md: string;
@@ -8805,6 +8930,7 @@ export interface components {
             url: string;
         };
         TrashedKBArticle: {
+            tags: components["schemas"]["KBArticleTags"];
             /** Format: uuid */
             id: string;
             number: number;
@@ -8820,6 +8946,8 @@ export interface components {
             published_at: string | null;
             /** Format: uuid */
             author_agent_id: string | null;
+            /** @description Who the article is credited to, with left true once they left the team; null without an author. */
+            author: null | components["schemas"]["KBArticleAuthor"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -8844,10 +8972,15 @@ export interface components {
         KBArticleVersion: {
             version: number;
             /**
-             * @description review_request, review_approve, review_changes and review_withdraw record a review of the unpublished text they hold; they change no text.
+             * @description review_request, review_approve, review_changes and review_withdraw record a review of the unpublished text they hold; they change no text. author_change credits the article to another team member (author_change says who before and after); it changes no text.
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw" | "author_change";
+            /** @description Only on a version of kind author_change: the author before and after. Either is null when that person was deleted for good, or when the article had no author. */
+            author_change?: {
+                from: null | components["schemas"]["KBArticleAuthor"];
+                to: null | components["schemas"]["KBArticleAuthor"];
+            };
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -8871,6 +9004,14 @@ export interface components {
              * @description Null once that collection was deleted for good.
              */
             collection_id: string | null;
+        };
+        /** @enum {string} */
+        KBListColumn: "status" | "collection" | "author" | "tags" | "languages" | "created" | "updated" | "votes";
+        /** @description The columns of the knowledge base article list this agent sees after Article, in order (PUT /api/v1/agents/me/kb-list-columns). */
+        KBListColumns: {
+            columns: components["schemas"]["KBListColumn"][];
+            /** @description True while the agent has not chosen: columns is then status, author, tags, updated. */
+            default: boolean;
         };
         KBVoteTally: {
             helpful: number;
@@ -9113,6 +9254,8 @@ export interface components {
             locale: string;
             /** @description Whether an article needs a teammate's approval of its exact text before it is published, in every collection whose `require_approval` is `inherit`. Left out, it stays as it is. Sending it needs kb_articles:publish too. */
             require_approval?: boolean;
+            /** @description Whether an article page shows the article's tags to readers. Left out, it stays as it is. */
+            show_tags?: boolean;
         };
         HelpCenter: {
             enabled: boolean;
@@ -9120,6 +9263,8 @@ export interface components {
             locale: string;
             /** @description Articles in collections that inherit the setting need an approved version to be published (POST /api/v1/kb/articles/{id}/reviews). */
             require_approval: boolean;
+            /** @description Article pages show the article's published tags. Help center search finds an article by its tags either way. */
+            show_tags: boolean;
             content_version: number;
             /**
              * Format: date-time
@@ -11759,6 +11904,40 @@ export interface components {
         };
     };
     parameters: {
+        KBListQ: string;
+        KBListStatus: "draft" | "published";
+        /** @description Only the articles directly in this collection (their home, collection_id). Another workspace's or an unknown collection gives no articles. */
+        KBListCollectionId: string;
+        /** @description true with collection_id: also the articles in its collections, at every depth, and the ones listed in any of them (collection_ids). Collections in the trash are left out. The order is `recent` unless `sort` is given. */
+        KBListIncludeSubcollections: boolean;
+        /** @description Only the articles credited to one of these team members (author_agent_id), comma-separated, at most 50. Another workspace's or an unknown id gives no articles. */
+        KBListAuthor: string;
+        /** @description Only the articles with these published tags; repeat it for each tag (tags may hold commas). Cleaned as tags are (lowercase, spaces collapsed), at most 20. */
+        KBListTag: string[];
+        /** @description any (the default): the articles with at least one of the tag values. all: only the ones with every one. */
+        KBListTagMatch: "any" | "all";
+        /** @description A date range, half-open: `_after` keeps the articles at or after it, `_before` the ones strictly before it. Either an RFC 3339 time with an offset (2026-10-01T00:00:00Z) or a date (2026-10-01), which is midnight starting that day in the workspace's timezone. For the days 1 to 31 October: created_after=2026-10-01&created_before=2026-11-01. */
+        KBListCreatedAfter: string;
+        /** @description The end of the created_at range, excluded; a time or a date, as created_after. */
+        KBListCreatedBefore: string;
+        /** @description The start of the updated_at range (which unpublished changes move too), included; a time or a date, as created_after. */
+        KBListUpdatedAfter: string;
+        /** @description The end of the updated_at range, excluded; a time or a date, as created_after. */
+        KBListUpdatedBefore: string;
+        /** @description missing: only the articles without a translation (outside the trash) in `locale`, or without one in at least one of the help center's languages when `locale` is not given. outdated: only the ones with an outdated translation in `locale`, or in any language. */
+        KBListTranslation: "missing" | "outdated";
+        /** @description The language translation looks at; it must be a language of the help center. */
+        KBListLocale: string;
+        /** @description true: only the published articles with unpublished changes (has_draft). */
+        KBListHasDraft: boolean;
+        /** @description Only the articles with this effective_visibility. */
+        KBListVisibility: components["schemas"]["KBVisibility"];
+        /** @description in_review: only the articles whose unpublished text waits for a reviewer. approved: only the ones whose unpublished text a reviewer approved as it is now, ready to publish (POST /api/v1/kb/articles/publish). Translations are left out. */
+        KBListState: "in_review" | "approved";
+        /** @description The order without `q`; ignored with `q`. */
+        KBListSort: "recent" | "manual";
+        /** @description inbox (the default): the inbox views. kb: the knowledge base article list views. */
+        SavedViewAreaQuery: components["schemas"]["SavedViewArea"];
         /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
         RoleKey: string;
         ID: string;
@@ -16794,7 +16973,10 @@ export interface operations {
     };
     listSavedViews: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description inbox (the default): the inbox views. kb: the knowledge base article list views. */
+                area?: components["parameters"]["SavedViewAreaQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -16812,6 +16994,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -16858,7 +17041,10 @@ export interface operations {
     };
     listDeletedSavedViews: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description inbox (the default): the inbox views. kb: the knowledge base article list views. */
+                area?: components["parameters"]["SavedViewAreaQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -16876,6 +17062,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -18550,6 +18737,35 @@ export interface operations {
                     "application/json": {
                         hidden: boolean;
                     };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setKBListColumns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    columns: components["schemas"]["KBListColumn"][] | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's columns */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBListColumns"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -20627,18 +20843,38 @@ export interface operations {
     listKBArticles: {
         parameters: {
             query?: {
-                q?: string;
-                status?: "draft" | "published";
-                /** @description Only the articles directly in this collection. */
-                collection_id?: string;
+                q?: components["parameters"]["KBListQ"];
+                status?: components["parameters"]["KBListStatus"];
+                /** @description Only the articles directly in this collection (their home, collection_id). Another workspace's or an unknown collection gives no articles. */
+                collection_id?: components["parameters"]["KBListCollectionId"];
+                /** @description true with collection_id: also the articles in its collections, at every depth, and the ones listed in any of them (collection_ids). Collections in the trash are left out. The order is `recent` unless `sort` is given. */
+                include_subcollections?: components["parameters"]["KBListIncludeSubcollections"];
+                /** @description Only the articles credited to one of these team members (author_agent_id), comma-separated, at most 50. Another workspace's or an unknown id gives no articles. */
+                author?: components["parameters"]["KBListAuthor"];
+                /** @description Only the articles with these published tags; repeat it for each tag (tags may hold commas). Cleaned as tags are (lowercase, spaces collapsed), at most 20. */
+                tag?: components["parameters"]["KBListTag"];
+                /** @description any (the default): the articles with at least one of the tag values. all: only the ones with every one. */
+                tag_match?: components["parameters"]["KBListTagMatch"];
+                /** @description A date range, half-open: `_after` keeps the articles at or after it, `_before` the ones strictly before it. Either an RFC 3339 time with an offset (2026-10-01T00:00:00Z) or a date (2026-10-01), which is midnight starting that day in the workspace's timezone. For the days 1 to 31 October: created_after=2026-10-01&created_before=2026-11-01. */
+                created_after?: components["parameters"]["KBListCreatedAfter"];
+                /** @description The end of the created_at range, excluded; a time or a date, as created_after. */
+                created_before?: components["parameters"]["KBListCreatedBefore"];
+                /** @description The start of the updated_at range (which unpublished changes move too), included; a time or a date, as created_after. */
+                updated_after?: components["parameters"]["KBListUpdatedAfter"];
+                /** @description The end of the updated_at range, excluded; a time or a date, as created_after. */
+                updated_before?: components["parameters"]["KBListUpdatedBefore"];
+                /** @description missing: only the articles without a translation (outside the trash) in `locale`, or without one in at least one of the help center's languages when `locale` is not given. outdated: only the ones with an outdated translation in `locale`, or in any language. */
+                translation?: components["parameters"]["KBListTranslation"];
+                /** @description The language translation looks at; it must be a language of the help center. */
+                locale?: components["parameters"]["KBListLocale"];
                 /** @description true: only the published articles with unpublished changes (has_draft). */
-                has_draft?: boolean;
+                has_draft?: components["parameters"]["KBListHasDraft"];
                 /** @description Only the articles with this effective_visibility. */
-                visibility?: components["schemas"]["KBVisibility"];
+                visibility?: components["parameters"]["KBListVisibility"];
                 /** @description in_review: only the articles whose unpublished text waits for a reviewer. approved: only the ones whose unpublished text a reviewer approved as it is now, ready to publish (POST /api/v1/kb/articles/publish). Translations are left out. */
-                state?: "in_review" | "approved";
+                state?: components["parameters"]["KBListState"];
                 /** @description The order without `q`; ignored with `q`. */
-                sort?: "recent" | "manual";
+                sort?: components["parameters"]["KBListSort"];
                 limit?: number;
                 /** @description The next_cursor of the previous page. */
                 cursor?: string;
@@ -20706,6 +20942,89 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    exportKBArticles: {
+        parameters: {
+            query?: {
+                q?: components["parameters"]["KBListQ"];
+                status?: components["parameters"]["KBListStatus"];
+                /** @description Only the articles directly in this collection (their home, collection_id). Another workspace's or an unknown collection gives no articles. */
+                collection_id?: components["parameters"]["KBListCollectionId"];
+                /** @description true with collection_id: also the articles in its collections, at every depth, and the ones listed in any of them (collection_ids). Collections in the trash are left out. The order is `recent` unless `sort` is given. */
+                include_subcollections?: components["parameters"]["KBListIncludeSubcollections"];
+                /** @description Only the articles credited to one of these team members (author_agent_id), comma-separated, at most 50. Another workspace's or an unknown id gives no articles. */
+                author?: components["parameters"]["KBListAuthor"];
+                /** @description Only the articles with these published tags; repeat it for each tag (tags may hold commas). Cleaned as tags are (lowercase, spaces collapsed), at most 20. */
+                tag?: components["parameters"]["KBListTag"];
+                /** @description any (the default): the articles with at least one of the tag values. all: only the ones with every one. */
+                tag_match?: components["parameters"]["KBListTagMatch"];
+                /** @description A date range, half-open: `_after` keeps the articles at or after it, `_before` the ones strictly before it. Either an RFC 3339 time with an offset (2026-10-01T00:00:00Z) or a date (2026-10-01), which is midnight starting that day in the workspace's timezone. For the days 1 to 31 October: created_after=2026-10-01&created_before=2026-11-01. */
+                created_after?: components["parameters"]["KBListCreatedAfter"];
+                /** @description The end of the created_at range, excluded; a time or a date, as created_after. */
+                created_before?: components["parameters"]["KBListCreatedBefore"];
+                /** @description The start of the updated_at range (which unpublished changes move too), included; a time or a date, as created_after. */
+                updated_after?: components["parameters"]["KBListUpdatedAfter"];
+                /** @description The end of the updated_at range, excluded; a time or a date, as created_after. */
+                updated_before?: components["parameters"]["KBListUpdatedBefore"];
+                /** @description missing: only the articles without a translation (outside the trash) in `locale`, or without one in at least one of the help center's languages when `locale` is not given. outdated: only the ones with an outdated translation in `locale`, or in any language. */
+                translation?: components["parameters"]["KBListTranslation"];
+                /** @description The language translation looks at; it must be a language of the help center. */
+                locale?: components["parameters"]["KBListLocale"];
+                /** @description true: only the published articles with unpublished changes (has_draft). */
+                has_draft?: components["parameters"]["KBListHasDraft"];
+                /** @description Only the articles with this effective_visibility. */
+                visibility?: components["parameters"]["KBListVisibility"];
+                /** @description in_review: only the articles whose unpublished text waits for a reviewer. approved: only the ones whose unpublished text a reviewer approved as it is now, ready to publish (POST /api/v1/kb/articles/publish). Translations are left out. */
+                state?: components["parameters"]["KBListState"];
+                /** @description The order without `q`; ignored with `q`. */
+                sort?: components["parameters"]["KBListSort"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The articles as CSV, sent as an attachment named knowledge-base-articles.csv */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listKBTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The knowledge base tags */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            tag: string;
+                            article_count: number;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listTrashedKBArticles: {
@@ -20827,6 +21146,13 @@ export interface operations {
                     show_contents?: boolean;
                     /** @description Who can see the article. It applies at once, also on a published article, and adds no version. Letting more people see a published article needs kb_articles:publish, and is 409 approval_required when a collection it is in needs approval and no review approved its published text; keeping it from more people needs only kb_articles:update. */
                     visibility?: components["schemas"]["KBVisibility"];
+                    /** @description Replaces every tag. On a published article the new tags wait in its unpublished changes (draft.tags), like its text; the help center and its search keep the published tags until they are published. */
+                    tags?: components["schemas"]["KBArticleTags"];
+                    /**
+                     * Format: uuid
+                     * @description Credits the article to another active member of the team (GET /api/v1/agents). It applies at once, also on a published article, and adds a version of kind author_change that names the author before and after, and moves updated_at; the same author again changes nothing. Anyone else is 400 invalid_request.
+                     */
+                    author_agent_id?: string;
                     /** @description An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400. */
                     autosave?: boolean;
                 };

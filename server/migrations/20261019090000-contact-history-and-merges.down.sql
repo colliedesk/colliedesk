@@ -1,5 +1,6 @@
--- Rolling back would turn every merged contact into a contact of its own again with no record of what
--- the merge moved, so it refuses while any merge is in effect. Undo the merges deliberately first.
+-- Rolling back would turn every merged contact into a contact of its own again with no record
+-- of what the merge moved, so it refuses while any merge is in effect. Undo the merges
+-- deliberately first.
 DO $$
 BEGIN
     PERFORM set_config('app.privileged', 'on', true);

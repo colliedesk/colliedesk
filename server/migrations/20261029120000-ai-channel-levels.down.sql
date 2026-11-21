@@ -1,13 +1,19 @@
--- For tests only: a workspace that set a level on a channel, a scope, the intake feature or a source
--- consent cannot be put back without losing it, so the down migration refuses it.
+-- For tests only: a workspace that set a level on a channel, a scope, the intake feature or a
+-- source consent cannot be put back without losing it, so the down migration refuses it.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM channel_ai_levels) OR EXISTS (SELECT 1 FROM ai_source_consents)
             OR EXISTS (SELECT 1 FROM ai_slots WHERE slot = 'intake')
-            OR EXISTS (SELECT 1 FROM ai_settings_events WHERE slot = 'intake' OR kind IN ('channel_level_changed', 'source_consent_changed'))
-            OR EXISTS (SELECT 1 FROM ai_usage WHERE feature = 'intake') OR EXISTS (SELECT 1 FROM ai_tasks WHERE kind = 'intake')
+            OR EXISTS (
+                SELECT 1 FROM ai_settings_events
+                    WHERE slot = 'intake'
+                        OR kind IN ('channel_level_changed', 'source_consent_changed')
+            )
+            OR EXISTS (SELECT 1 FROM ai_usage WHERE feature = 'intake')
+            OR EXISTS (SELECT 1 FROM ai_tasks WHERE kind = 'intake')
             OR EXISTS (SELECT 1 FROM channel_events WHERE kind = 'ai_changed') THEN
-        RAISE EXCEPTION 'AI levels per channel or the intake feature are in use; restore the backup taken before the upgrade instead';
+        RAISE EXCEPTION 'AI levels per channel or the intake feature are in use; '
+            'restore the backup taken before the upgrade instead';
     END IF;
 END
 $$;
@@ -74,16 +80,22 @@ $$;
 DROP FUNCTION ai_level(uuid, uuid, text, text);
 ALTER TABLE conversations DROP COLUMN channel_scope;
 ALTER TABLE channel_events DROP CONSTRAINT channel_events_kind_check,
-    ADD CONSTRAINT channel_events_kind_check CHECK (kind IN ('added', 'renamed', 'enabled', 'disabled', 'config_changed', 'credential_changed',
-        'removed', 'held_replayed', 'held_discarded', 'default_changed'));
+    ADD CONSTRAINT channel_events_kind_check CHECK (kind IN (
+        'added', 'renamed', 'enabled', 'disabled', 'config_changed', 'credential_changed',
+        'removed', 'held_replayed', 'held_discarded', 'default_changed'
+    ));
 ALTER TABLE ai_settings_events DROP CONSTRAINT ai_settings_events_kind_check,
-    ADD CONSTRAINT ai_settings_events_kind_check CHECK (kind IN ('provider_added', 'provider_changed', 'provider_key_changed',
-        'provider_removed', 'slot_changed', 'automatic_limits_changed', 'chat_deleted'));
+    ADD CONSTRAINT ai_settings_events_kind_check CHECK (kind IN (
+        'provider_added', 'provider_changed', 'provider_key_changed', 'provider_removed',
+        'slot_changed', 'automatic_limits_changed', 'chat_deleted'
+    ));
 DROP TABLE ai_source_consents;
 DROP TABLE channel_ai_levels;
 ALTER TABLE ai_slots ADD COLUMN automatic boolean NOT NULL DEFAULT false;
 -- Triage that suggests by itself is triage that is on; draft that suggests by itself is automatic.
-UPDATE ai_slots SET automatic = enabled AND ((slot = 'triage' AND default_level = 'auto') OR (slot = 'draft' AND default_level = 'suggest'));
+UPDATE ai_slots SET automatic = enabled AND (
+    (slot = 'triage' AND default_level = 'auto') OR (slot = 'draft' AND default_level = 'suggest')
+);
 ALTER TABLE ai_slots DROP CONSTRAINT ai_slots_triage_auto_parts,
     DROP CONSTRAINT ai_slots_level_auto,
     DROP CONSTRAINT ai_slots_level_needs_consent,

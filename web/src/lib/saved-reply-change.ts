@@ -2,10 +2,14 @@ import type { SavedReplyChange } from '../api/schemas';
 import { messages } from '../messages';
 import { savedReplyMessages } from '../features/settings/saved-reply-messages';
 
+// HistoryKind is every kind of version a history lists: a saved reply's, a knowledge base article's or a translation's.
+export type HistoryKind = SavedReplyChange['kind'] | 'import' | 'media_replace' | 'ai_exclude' | 'ai_include' | 'mark_current' | 'mark_outdated' | 'draft'
+  | 'review_request' | 'review_approve' | 'review_changes' | 'review_withdraw' | 'author_change';
+
 // savedReplyChangeText says who made a change to a saved reply and how: "Edited by Ada via Claude
 // triage", "Version 2 restored by Ada", or for an approved agent request "Edited by Ada via Claude
 // triage (approved request)". A knowledge base article's history reads the same, and adds imports.
-export function savedReplyChangeText(change: Pick<SavedReplyChange, 'restored_from_version' | 'changed_by' | 'token' | 'agent_request_id'> & { kind: SavedReplyChange['kind'] | 'import' | 'media_replace' | 'ai_exclude' | 'ai_include' | 'mark_current' | 'mark_outdated' | 'draft' | 'review_request' | 'review_approve' | 'review_changes' | 'review_withdraw' }): string {
+export function savedReplyChangeText(change: Pick<SavedReplyChange, 'restored_from_version' | 'changed_by' | 'token' | 'agent_request_id'> & { kind: HistoryKind }): string {
   const what = change.kind === 'restore' && change.restored_from_version !== null
     ? savedReplyMessages.savedReplyRestoredVersion(change.restored_from_version)
     : savedReplyMessages.savedReplyChangeVerb[change.kind];

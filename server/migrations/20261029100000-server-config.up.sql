@@ -1,16 +1,20 @@
--- The server's configuration lives here, not in the environment (docs/internals/operator-console.md). Every
--- save is a version: a full snapshot of every key set, so restoring one is copying it into a new version and
--- nothing is ever lost. Secrets are sealed with MAILBOX_TOKEN_KEYS and bound to their key's name. None of these
--- tables has a workspace_id, and the app role gets no grant: only the privileged owner path reads them (same
--- shape as server_secrets).
+-- The server's configuration lives here, not in the environment
+-- (docs/internals/operator-console.md). Every save is a version: a full snapshot of every key set,
+-- so restoring one is copying it into a new version and nothing is ever lost. Secrets are sealed
+-- with MAILBOX_TOKEN_KEYS and bound to their key's name. None of these tables has a workspace_id,
+-- and the app role gets no grant: only the privileged owner path reads them (same shape as
+-- server_secrets).
 CREATE TABLE server_config_versions (
     id bigserial PRIMARY KEY,
     created_at timestamptz NOT NULL DEFAULT now(),
     created_by text NOT NULL CHECK (char_length(created_by) BETWEEN 1 AND 200),
-    source text NOT NULL CHECK (source IN ('env-import', 'console', 'cli', 'apply-file', 'restore', 'trial-auto-revert', 'request')),
+    source text NOT NULL CHECK (source IN (
+        'env-import', 'console', 'cli', 'apply-file', 'restore', 'trial-auto-revert', 'request'
+    )),
     parent_id bigint NULL REFERENCES server_config_versions(id),
     note text NOT NULL DEFAULT '' CHECK (char_length(note) <= 500),
-    status text NOT NULL DEFAULT 'saved' CHECK (status IN ('saved', 'trial', 'confirmed', 'reverted', 'rejected')),
+    status text NOT NULL DEFAULT 'saved'
+        CHECK (status IN ('saved', 'trial', 'confirmed', 'reverted', 'rejected')),
     trial_expires_at timestamptz NULL,
     request_id uuid NULL,
     rejected_reason text NULL CHECK (char_length(rejected_reason) <= 2000)
@@ -36,7 +40,8 @@ CREATE TABLE server_config_state (
 );
 INSERT INTO server_config_state (singleton) VALUES (true);
 
--- Each running `collie serve` says here which version it runs; rows without a heartbeat for 10 minutes go.
+-- Each running `collie serve` says here which version it runs; rows without a heartbeat for 10
+-- minutes go.
 CREATE TABLE server_processes (
     instance_id text PRIMARY KEY CHECK (char_length(instance_id) BETWEEN 1 AND 100),
     hostname text NOT NULL DEFAULT '',
@@ -48,8 +53,9 @@ CREATE TABLE server_processes (
     waiting_for text NULL
 );
 
--- The Polar products the server sells and recognizes. Add-only by design: a subscription's webhook names the
--- product it was bought as, so a product id must always map to the same plan. Only on_sale changes.
+-- The Polar products the server sells and recognizes. Add-only by design: a subscription's webhook
+-- names the product it was bought as, so a product id must always map to the same plan. Only
+-- on_sale changes.
 CREATE TABLE polar_products (
     product_id text PRIMARY KEY CHECK (char_length(product_id) BETWEEN 1 AND 200),
     plan text NOT NULL CHECK (plan IN ('team', 'founding', 'solo', 'small', 'team25')),
@@ -76,7 +82,8 @@ $$;
 CREATE TRIGGER polar_products_add_only BEFORE UPDATE OR DELETE ON polar_products
     FOR EACH ROW EXECUTE FUNCTION polar_products_add_only();
 
--- What changed the server's configuration and its operators, and who did it. Append-only; never a secret's value.
+-- What changed the server's configuration and its operators, and who did it. Append-only; never a
+-- secret's value.
 CREATE TABLE operator_audit (
     id bigserial PRIMARY KEY,
     at timestamptz NOT NULL DEFAULT now(),
@@ -98,26 +105,10 @@ $$;
 CREATE TRIGGER operator_audit_append_only BEFORE UPDATE OR DELETE ON operator_audit
     FOR EACH ROW EXECUTE FUNCTION operator_audit_append_only();
 
-DO $$
-DECLARE
-    app_role text;
-    name text;
-BEGIN
-    SELECT roles[1]::text INTO app_role FROM pg_policies
-        WHERE schemaname = current_schema() AND tablename = 'workspaces' AND policyname = 'workspace_isolation';
-    IF app_role IS NULL THEN
-        RAISE EXCEPTION 'row-level security is not set up in this schema';
-    END IF;
-    FOREACH name IN ARRAY ARRAY['server_config_versions', 'server_config_values', 'server_config_state',
-        'server_processes', 'polar_products', 'operator_audit'] LOOP
-        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', name);
-        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', name);
-        -- The app role gets every new table by default; these are for the privileged path only.
-        EXECUTE format('REVOKE ALL ON %I FROM %I', name, app_role);
-        EXECUTE format($policy$CREATE POLICY privileged_access ON %1$I FOR ALL TO %2$I
-            USING ((SELECT current_setting('app.privileged', true) = 'on'))
-            WITH CHECK ((SELECT current_setting('app.privileged', true) = 'on'))$policy$, name, current_user);
-    END LOOP;
-    EXECUTE format('REVOKE ALL ON SEQUENCE server_config_versions_id_seq, operator_audit_id_seq FROM %I', app_role);
-END
-$$;
+-- The app role gets every new table by default; these are for the privileged path only.
+SELECT secure_server_table('server_config_versions');
+SELECT secure_server_table('server_config_values');
+SELECT secure_server_table('server_config_state');
+SELECT secure_server_table('server_processes');
+SELECT secure_server_table('polar_products');
+SELECT secure_server_table('operator_audit');

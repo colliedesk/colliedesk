@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -27,6 +28,10 @@ func TestMigrationNewCreatesPairedDomainNamedFiles(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(repo, "server", "migrations", name)); err != nil {
 			t.Errorf("expected %s: %v", name, err)
 		}
+	}
+	// Whoever writes the migration, a person or an agent, is pointed at the rules it must follow.
+	if !strings.Contains(output.String(), "docs/internals/migrations.md") {
+		t.Errorf("output %q does not name docs/internals/migrations.md", output.String())
 	}
 }
 

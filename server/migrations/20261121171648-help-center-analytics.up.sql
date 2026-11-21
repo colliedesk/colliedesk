@@ -17,7 +17,9 @@ CREATE TABLE help_center_analytics (
     updated_at timestamptz NOT NULL DEFAULT now(),
     updated_by_agent_id uuid,
     CHECK ((ga4_api_secret_sealed IS NULL) = (ga4_api_secret_key_id IS NULL)),
-    FOREIGN KEY (workspace_id, updated_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (updated_by_agent_id)
+    FOREIGN KEY (workspace_id, updated_by_agent_id)
+        REFERENCES agents(workspace_id, id)
+        ON DELETE SET NULL (updated_by_agent_id)
 );
 CREATE INDEX help_center_analytics_enabled ON help_center_analytics(workspace_id) WHERE enabled;
 

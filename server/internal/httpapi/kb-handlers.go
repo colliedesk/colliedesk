@@ -304,51 +304,38 @@ func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request
 		return
 	}
 	query := request.URL.Query()
-	filter := store.KBArticleFilter{Query: query.Get("q"), Status: query.Get("status"), CollectionID: query.Get("collection_id"), Sort: query.Get("sort"),
-		Limit: limit, Cursor: query.Get("cursor"), ReviewState: query.Get("state"), Visibility: query.Get("visibility")}
-	if filter.Visibility != "" && domain.CheckKBVisibility(filter.Visibility) != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "visibility is everyone, help_chat or agents: who can see the article now.")
+	filter, err := kbArticleFilter(query, principal(request).Workspace.Timezone)
+	if message, invalid := isFilterError(err); invalid {
+		writeError(response, http.StatusBadRequest, "invalid_request", message)
 		return
 	}
-	if filter.ReviewState != "" && filter.ReviewState != store.KBInReview && filter.ReviewState != store.KBApproved {
-		writeError(response, http.StatusBadRequest, "invalid_request", "state is in_review or approved.")
-		return
-	}
-	switch query.Get("has_draft") {
-	case "", "false":
-	case "true":
-		filter.HasDraft = true
-	default:
-		writeError(response, http.StatusBadRequest, "invalid_request", "has_draft is true or false.")
-		return
-	}
-	if filter.Sort != "" && filter.Sort != store.KBSortRecent && filter.Sort != store.KBSortManual {
-		writeError(response, http.StatusBadRequest, "invalid_request", "sort is recent or manual.")
-		return
-	}
-	if len([]rune(filter.Query)) > 200 {
-		writeError(response, http.StatusBadRequest, "invalid_request", "q holds at most 200 characters.")
-		return
-	}
-	if filter.Status != "" && domain.CheckKBStatus(filter.Status) != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "status is draft or published.")
-		return
-	}
+	filter.Limit, filter.Cursor = limit, query.Get("cursor")
 	items, next, err := a.store.ListKBArticles(request.Context(), principal(request).Workspace.ID, filter)
 	if errors.Is(err, store.ErrBadCursor) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "cursor must be the next_cursor of the previous page.")
 		return
 	}
 	if err != nil {
-		writeStoreError(response, err)
+		writeKBError(response, err)
 		return
 	}
 	home, ok := a.helpCenterHome(response, request)
 	if !ok {
 		return
 	}
+	ids := make([]string, len(items))
 	for index := range items {
 		addressKBArticle(home, &items[index])
+		ids[index] = items[index].ID
+	}
+	votes, err := a.store.KBArticleVoteTotals(request.Context(), principal(request).Workspace.ID, ids)
+	if err != nil {
+		writeKBError(response, err)
+		return
+	}
+	for index := range items {
+		tally := votes[items[index].ID]
+		items[index].Votes = &tally
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "next_cursor": optionalString(next)})
 }
@@ -510,6 +497,7 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 		ShowContents  *bool     `json:"show_contents"`
 		TemplateID    *string   `json:"template_id"`
 		Visibility    string    `json:"visibility"`
+		Tags          []string  `json:"tags"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "An article needs a collection_id and a title; body_md or template_id, slug, status and visibility are optional.")
@@ -555,11 +543,11 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 	if input.Status == "published" && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, body, templateID, strconv.FormatBool(fromCollection), input.Status, input.SEOTitle, input.SEODesc, showContentsKey(input.ShowContents), input.Visibility}, func(ctx context.Context) (any, error) {
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, body, templateID, strconv.FormatBool(fromCollection), input.Status, input.SEOTitle, input.SEODesc, showContentsKey(input.ShowContents), input.Visibility, strings.Join(input.Tags, "\n")}, func(ctx context.Context) (any, error) {
 		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
 			store.KBArticleInput{CollectionID: input.CollectionID, ExtraCollectionIDs: extraIDs, Title: input.Title, Slug: slug, BodyMD: body, Status: input.Status,
 				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, TemplateID: templateID, BodyFromCollection: fromCollection,
-				Visibility: input.Visibility})
+				Visibility: input.Visibility, Tags: input.Tags})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered
@@ -590,16 +578,18 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		SEODesc       *string    `json:"seo_description"`
 		ShowContents  *bool      `json:"show_contents"`
 		Visibility    *string    `json:"visibility"`
+		Tags          *[]string  `json:"tags"`
+		AuthorAgentID *string    `json:"author_agent_id"`
 		Autosave      bool       `json:"autosave"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
 		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.CollectionIDs == nil && input.Status == nil && input.SEOTitle == nil &&
-			input.SEODesc == nil && input.ShowContents == nil && input.Visibility == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title, seo_description, show_contents or visibility.")
+			input.SEODesc == nil && input.ShowContents == nil && input.Visibility == nil && input.Tags == nil && input.AuthorAgentID == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title, seo_description, show_contents, visibility, tags or author_agent_id.")
 		return
 	}
 	if input.Autosave && (input.Slug != nil || input.CollectionID != nil || input.CollectionIDs != nil || input.Status != nil || input.SEOTitle != nil || input.SEODesc != nil || input.ShowContents != nil ||
-		input.Visibility != nil) {
+		input.Visibility != nil || input.Tags != nil || input.AuthorAgentID != nil) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "An autosave changes only title and body_md; save the other fields without autosave.")
 		return
 	}
@@ -630,7 +620,7 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 	}
 	article, err := a.store.UpdateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt,
 		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: homeCollection, ExtraCollectionIDs: extras, Status: input.Status,
-			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, Visibility: input.Visibility, Autosave: input.Autosave})
+			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, Visibility: input.Visibility, Tags: input.Tags, AuthorAgentID: input.AuthorAgentID, Autosave: input.Autosave})
 	if err != nil {
 		writeKBError(response, err)
 		return
@@ -878,6 +868,7 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 		Title           *string `json:"title"`
 		Locale          *string `json:"locale"`
 		RequireApproval *bool   `json:"require_approval"`
+		ShowTags        *bool   `json:"show_tags"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil || input.Title == nil || input.Locale == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send enabled, title and locale.")
@@ -889,7 +880,7 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID,
-		store.HelpCenterChange{Enabled: *input.Enabled, Title: *input.Title, Locale: *input.Locale, RequireApproval: input.RequireApproval})
+		store.HelpCenterChange{Enabled: *input.Enabled, Title: *input.Title, Locale: *input.Locale, RequireApproval: input.RequireApproval, ShowTags: input.ShowTags})
 	if err != nil {
 		writeKBError(response, err)
 		return

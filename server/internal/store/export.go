@@ -288,7 +288,7 @@ func exportSavedReplies(ctx context.Context, tx pgx.Tx, workspaceID string, sink
 // exportSavedViews writes every view of the workspace, every person's personal views and the trash
 // included: the export is the workspace's whole record, and only an admin downloads it.
 func exportSavedViews(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,name,scope,owner_agent_id::text,filters,created_by_agent_id::text,created_at,updated_at,deleted_at
+	rows, err := tx.Query(ctx, `SELECT id::text,name,area,scope,owner_agent_id::text,filters,created_by_agent_id::text,created_at,updated_at,deleted_at
 		FROM saved_views WHERE workspace_id=$1 ORDER BY id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export saved views: %w", err)
@@ -297,7 +297,7 @@ func exportSavedViews(ctx context.Context, tx pgx.Tx, workspaceID string, sink e
 	for rows.Next() {
 		var record export.SavedView
 		var filters []byte
-		if err := rows.Scan(&record.ID, &record.Name, &record.Scope, &record.OwnerAgentID, &filters, &record.CreatedByAgentID,
+		if err := rows.Scan(&record.ID, &record.Name, &record.Area, &record.Scope, &record.OwnerAgentID, &filters, &record.CreatedByAgentID,
 			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt); err != nil {
 			return fmt.Errorf("export saved views: %w", err)
 		}
@@ -678,6 +678,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 				WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id AND x.collection_id<>a.collection_id ORDER BY x.collection_id),a.position,a.number,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.show_contents,a.status,a.published_at,a.author_agent_id::text,a.source_meta,a.source_html,
 			COALESCE((SELECT array_agg(l.media_id::text ORDER BY l.media_id) FROM kb_article_media l JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id
 				WHERE l.workspace_id=a.workspace_id AND l.article_id=a.id AND m.kind='image'), '{}'),
+			COALESCE((SELECT array_agg(t.tag ORDER BY t.tag) FROM kb_article_tags t WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id), '{}'),
 			a.created_at,a.updated_at,a.deleted_at,a.deleted_by_agent_id::text,a.ai_excluded_at,a.ai_excluded_by_agent_id::text
 		FROM kb_articles a WHERE a.workspace_id=$1 ORDER BY a.number`, workspaceID)
 	if err != nil {
@@ -687,7 +688,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		var record export.KBArticle
 		var meta []byte
 		if err := rows.Scan(&record.ID, &record.CollectionID, &record.CollectionIDs, &record.Position, &record.Number, &record.Title, &record.Slug, &record.BodyMD, &record.SEOTitle, &record.SEODescription, &record.ShowContents, &record.Status, &record.PublishedAt,
-			&record.AuthorAgentID, &meta, &record.SourceHTML, &record.ImageIDs, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID,
+			&record.AuthorAgentID, &meta, &record.SourceHTML, &record.ImageIDs, &record.Tags, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID,
 			&record.AIExcludedAt, &record.AIExcludedByAgentID); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base articles: %w", err)
@@ -706,7 +707,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 
 	rows, err = tx.Query(ctx, `SELECT article_id::text,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,show_contents,status,collection_id::text,changed_by_agent_id::text,
-			token_id::text,token_label,agent_request_id::text,created_at
+			token_id::text,token_label,agent_request_id::text,author_from_agent_id::text,author_to_agent_id::text,created_at
 		FROM kb_article_versions WHERE workspace_id=$1 ORDER BY article_id,version`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base versions: %w", err)
@@ -714,7 +715,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBArticleVersion
 		if err := rows.Scan(&record.ArticleID, &record.Version, &record.Kind, &record.RestoredFromVersion, &record.Title, &record.Slug, &record.BodyMD, &record.SEOTitle, &record.SEODescription, &record.ShowContents, &record.Status,
-			&record.CollectionID, &record.ChangedByAgentID, &record.TokenID, &record.TokenLabel, &record.AgentRequestID, &record.CreatedAt); err != nil {
+			&record.CollectionID, &record.ChangedByAgentID, &record.TokenID, &record.TokenLabel, &record.AgentRequestID, &record.AuthorFromAgentID, &record.AuthorToAgentID, &record.CreatedAt); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base versions: %w", err)
 		}
@@ -863,11 +864,11 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 
 	var center export.HelpCenter
 	// The custom domain's token is never exported: it is a credential of this server's check.
-	err = tx.QueryRow(ctx, `SELECT h.enabled,h.title,h.locale,h.require_approval,h.content_version,h.last_article_number,h.updated_at,
+	err = tx.QueryRow(ctx, `SELECT h.enabled,h.title,h.locale,h.require_approval,h.show_tags,h.content_version,h.last_article_number,h.updated_at,
 		h.logo_media_id::text,h.favicon_media_id::text,h.logo_alt,h.linkback_url,h.contact_url,h.contact_phone,h.color_primary,h.color_header,h.color_header_text,
 		h.color_background,h.color_text,h.color_link,h.color_footer,h.body_font,h.heading_font,h.custom_css,h.google_site_verification,h.bing_site_verification,d.hostname,d.status,d.verified_at
 		FROM help_centers h LEFT JOIN help_center_domains d ON d.workspace_id=h.workspace_id WHERE h.workspace_id=$1`, workspaceID).
-		Scan(&center.Enabled, &center.Title, &center.Locale, &center.RequireApproval, &center.ContentVersion, &center.LastArticleNumber, &center.UpdatedAt,
+		Scan(&center.Enabled, &center.Title, &center.Locale, &center.RequireApproval, &center.ShowTags, &center.ContentVersion, &center.LastArticleNumber, &center.UpdatedAt,
 			&center.LogoMediaID, &center.FaviconMediaID, &center.LogoAlt, &center.LinkbackURL, &center.ContactURL, &center.ContactPhone,
 			&center.ColorPrimary, &center.ColorHeader, &center.ColorHeaderText, &center.ColorBackground, &center.ColorText, &center.ColorLink,
 			&center.ColorFooter, &center.BodyFont, &center.HeadingFont, &center.CustomCSS, &center.GoogleSiteVerification, &center.BingSiteVerification, &center.CustomDomain, &center.CustomDomainStatus, &center.CustomDomainVerifiedAt)

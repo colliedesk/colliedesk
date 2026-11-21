@@ -109,7 +109,10 @@ func writeSavedViewError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusBadRequest, "invalid_request", message)
 		return
 	}
+	var invalidKB *domain.InvalidKBError
 	switch {
+	case errors.As(err, &invalidKB):
+		writeError(response, http.StatusBadRequest, "invalid_request", invalidKB.Message)
 	case errors.Is(err, domain.ErrSavedViewNameTaken):
 		writeError(response, http.StatusConflict, "duplicate_name", "A view with this name already exists. Names are compared ignoring case, among your personal views and among the shared ones; pick another name.")
 	case errors.Is(err, domain.ErrSavedViewLimit):
@@ -134,8 +137,13 @@ func savedViewID(response http.ResponseWriter, request *http.Request) (string, b
 }
 
 func (a *API) listSavedViews(response http.ResponseWriter, request *http.Request) {
+	area, err := checkedViewArea(request.URL.Query().Get("area"))
+	if err != nil {
+		writeSavedViewError(response, err)
+		return
+	}
 	who := principal(request)
-	items, err := a.store.ListSavedViews(request.Context(), who.Workspace.ID, who.Agent.ID)
+	items, err := a.store.ListSavedViews(request.Context(), who.Workspace.ID, who.Agent.ID, area)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -144,8 +152,13 @@ func (a *API) listSavedViews(response http.ResponseWriter, request *http.Request
 }
 
 func (a *API) listDeletedSavedViews(response http.ResponseWriter, request *http.Request) {
+	area, err := checkedViewArea(request.URL.Query().Get("area"))
+	if err != nil {
+		writeSavedViewError(response, err)
+		return
+	}
 	who := principal(request)
-	items, err := a.store.ListDeletedSavedViews(request.Context(), who.Workspace.ID, who.Agent.ID)
+	items, err := a.store.ListDeletedSavedViews(request.Context(), who.Workspace.ID, who.Agent.ID, area)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -156,6 +169,7 @@ func (a *API) listDeletedSavedViews(response http.ResponseWriter, request *http.
 func (a *API) createSavedView(response http.ResponseWriter, request *http.Request) {
 	var input struct {
 		Name    string          `json:"name"`
+		Area    string          `json:"area"`
 		Scope   string          `json:"scope"`
 		Filters json.RawMessage `json:"filters"`
 	}
@@ -167,17 +181,21 @@ func (a *API) createSavedView(response http.ResponseWriter, request *http.Reques
 	if err == nil {
 		err = checkedViewScope(input.Scope)
 	}
+	var area string
+	if err == nil {
+		area, err = checkedViewArea(input.Area)
+	}
 	var filters json.RawMessage
 	if err == nil {
-		filters, err = checkedFilters(input.Filters, a.conversationChannels())
+		filters, err = a.checkedViewFilters(request.Context(), principal(request).Workspace.ID, area, input.Filters)
 	}
 	if err != nil {
 		writeSavedViewError(response, err)
 		return
 	}
 	who := principal(request)
-	a.createOnce(response, request, createSavedViewOperation, []string{name, input.Scope, string(filters)}, func(ctx context.Context) (any, error) {
-		view, err := a.store.CreateSavedView(ctx, who.Workspace.ID, who.Agent.ID, name, input.Scope, filters)
+	a.createOnce(response, request, createSavedViewOperation, []string{name, area, input.Scope, string(filters)}, func(ctx context.Context) (any, error) {
+		view, err := a.store.CreateSavedView(ctx, who.Workspace.ID, who.Agent.ID, area, name, input.Scope, filters)
 		if err != nil {
 			writeSavedViewError(response, err)
 			return nil, errAnswered
@@ -201,7 +219,10 @@ func (a *API) updateSavedView(response http.ResponseWriter, request *http.Reques
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new name, scope or filters.")
 		return
 	}
-	change := store.SavedViewChange{Seen: *input.UpdatedAt}
+	workspaceID := principal(request).Workspace.ID
+	change := store.SavedViewChange{Seen: *input.UpdatedAt, Filters: input.Filters, CheckFilters: func(area string, raw json.RawMessage) (json.RawMessage, error) {
+		return a.checkedViewFilters(request.Context(), workspaceID, area, raw)
+	}}
 	var err error
 	if input.Name != nil {
 		var name string
@@ -213,9 +234,6 @@ func (a *API) updateSavedView(response http.ResponseWriter, request *http.Reques
 		if err = checkedViewScope(*input.Scope); err == nil {
 			change.Scope = input.Scope
 		}
-	}
-	if err == nil && input.Filters != nil {
-		change.Filters, err = checkedFilters(input.Filters, a.conversationChannels())
 	}
 	if err != nil {
 		writeSavedViewError(response, err)

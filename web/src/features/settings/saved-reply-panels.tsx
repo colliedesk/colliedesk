@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { InvalidRequestError } from '../../api/client';
 import type { Generated, SavedReplyChange } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
-import { savedReplyChangeText } from '../../lib/saved-reply-change';
+import { savedReplyChangeText, type HistoryKind } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
 import { QuietNote } from './quiet-note';
 import { savedReplyMessages } from './saved-reply-messages';
@@ -65,7 +65,7 @@ function FoldedText({ text, label }: { text: string; label: string }) {
 // A version as the history shows it: who changed what, and the title and text after the change. Saved
 // replies and knowledge base articles both have one.
 export type HistoryVersion = Pick<SavedReplyChange, 'version' | 'restored_from_version' | 'changed_by' | 'token' | 'agent_request_id' | 'created_at'>
-  & { kind: SavedReplyChange['kind'] | 'import' | 'media_replace' | 'ai_exclude' | 'ai_include' | 'mark_current' | 'mark_outdated' | 'draft' | 'review_request' | 'review_approve' | 'review_changes' | 'review_withdraw'; title: string };
+  & { kind: HistoryKind; title: string };
 
 interface HistoryProps<V extends HistoryVersion> {
   title: string;
