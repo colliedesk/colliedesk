@@ -308,6 +308,8 @@ Results reads the same tables (docs/internals/results.md › Help center).
 - **The team is the session cookie.** `Config.Team` is `signedIn`: a request that carries a Colliedesk
   session cookie is a team member previewing, without a database read on the public page. A reader who
   is also signed in to the app in the same browser is not counted; that is the price of no query.
+  The cookie is host-only, so on a custom domain or a `<slug>.<domain>` host the browser does not send
+  it and a signed-in team member's view counts as a reader's.
 - **Only article pages count today.** Home, collection and search pages emit the event too (with the
   search words); the counter keeps only `Kind == Article`. Help-chat-only and agents-only articles answer
   404 and emit nothing.
