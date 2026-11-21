@@ -1,12 +1,14 @@
 package httpapi_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 )
 
 type helpCenterTagsView struct {
@@ -99,5 +101,33 @@ func TestAIRetrievalFindsAnArticleByItsTag(t *testing.T) {
 	buildAIRetrieval(t, pool)
 	if got := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "marram", KBLimit: 5}); len(got) == 0 || got[0].KBArticleID != tagged.ID {
 		t.Fatalf("published new tag query = %v, want Returns policy first", retrievedTitles(got))
+	}
+}
+
+// The help center search finds the tags of a search's words through an index, not by building a
+// search vector for every tag of the workspace.
+func TestHelpCenterTagSearchReadsAnIndex(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Tag Index", "admin@tag-index.example.com")
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Help"}).ID
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection, "title": "Returns", "body_md": "x", "status": "published", "tags": []string{"zephyrine"}})
+	workspace := workspaceID(t, api, admin)
+	// A knowledge base with a few thousand tags, of which the search matches one.
+	fixtureSQL(t, pool, `INSERT INTO kb_article_tags(workspace_id, article_id, tag) SELECT $1, $2, 'topic' || n FROM generate_series(1, 5000) n`,
+		workspace, article.ID)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `ANALYZE kb_article_tags`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := pool.Query(ctx, "EXPLAIN "+store.KBTagHitsSQL(), workspace, "zephyrine return")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan := strings.Join(lines, "\n"); !strings.Contains(plan, "kb_article_tags_search_idx") {
+		t.Fatalf("the tag search does not use kb_article_tags_search_idx:\n%s", plan)
 	}
 }

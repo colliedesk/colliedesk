@@ -109,6 +109,12 @@ var kbTagHits = `tagged AS (SELECT kt.article_id, kb_search_vector(string_agg(kt
 		FROM kb_article_tags kt WHERE kt.workspace_id=$1 AND kb_search_vector(kt.tag) @@ ` + kbAnyWordQuery + `
 		GROUP BY kt.article_id)`
 
+// KBTagHitsSQL is kbTagHits as a statement of its own, with $1 the workspace and $2 the search.
+// Exported for the EXPLAIN of the tag search test.
+func KBTagHitsSQL() string {
+	return `WITH ` + kbTagHits + ` SELECT article_id, words FROM tagged`
+}
+
 // shownKBTags returns the published tags of the article, sorted, when the help center shows tags, and
 // none when it does not.
 func shownKBTags(ctx context.Context, tx pgx.Tx, workspaceID, id string) ([]string, error) {

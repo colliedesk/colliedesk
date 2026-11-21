@@ -12,6 +12,9 @@ CREATE TABLE kb_article_tags (
 );
 -- The list filter and the tag counts read the articles of one tag.
 CREATE INDEX kb_article_tags_tag_idx ON kb_article_tags(workspace_id, tag);
+-- The help center search finds the tags that match a word of the search here, then keeps those of its
+-- workspace, so a search never builds a vector for every tag of a large knowledge base.
+CREATE INDEX kb_article_tags_search_idx ON kb_article_tags USING gin (kb_search_vector(tag));
 
 ALTER TABLE kb_article_drafts ADD COLUMN tags text[];
 
