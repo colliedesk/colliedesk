@@ -10,7 +10,7 @@ vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
 
 const me = '66666666-6666-4666-8666-666666666666';
 const view = (id: string, name: string, scope: 'personal' | 'shared', filters: SavedView['filters'], deleted = false): SavedView => ({
-  id, name, scope, filters, owner_agent_id: scope === 'personal' ? me : null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
+  id, name, area: 'inbox', scope, filters, owner_agent_id: scope === 'personal' ? me : null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
   deleted_at: deleted ? '2026-10-18T00:00:00Z' : null, purges_at: deleted ? '2026-11-17T00:00:00Z' : null,
 });
 const urgent = view('11111111-1111-4111-8111-111111111111', 'Urgent queue', 'shared', { status: ['open'], priority: ['urgent'] });

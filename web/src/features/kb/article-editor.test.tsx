@@ -526,7 +526,7 @@ test('an article is excluded from AI and let back without touching an edit in pr
   const excluded = { ...shown, ai_exclusion: { at: '2026-10-22T09:00:00Z', by: { agent_id: me.agent.id, name: 'Mai Tran' } },
     last_change: { ...shown.last_change, version: 2, kind: 'ai_exclude' } };
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, shown),
-    'GET /api/v1/help-center': () => json(200, { enabled: true, title: 'Acme', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
+    'GET /api/v1/help-center': () => json(200, { enabled: true, title: 'Acme', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' }),
     'POST /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/ai-exclusion': () => json(200, excluded),
     'DELETE /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/ai-exclusion': () => json(200, { ...shown, last_change: { ...shown.last_change, version: 3, kind: 'ai_include' } }) });
   open({ articleId: ids.article });

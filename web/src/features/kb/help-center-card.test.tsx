@@ -7,7 +7,7 @@ import { json, serve } from './kb.test.fixture';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const off = { enabled: false, title: '', locale: 'pt-BR', require_approval: false, content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' };
+const off = { enabled: false, title: '', locale: 'pt-BR', require_approval: false, content_version: 3, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' };
 
 function open(canManage: boolean) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><HelpCenterSettings canManage={canManage} workspaceName="Acme" /></QueryClientProvider>);

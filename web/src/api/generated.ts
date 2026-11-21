@@ -2389,10 +2389,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The inbox views the caller can use: the views shared with the whole workspace, then the caller's own personal views, each group ordered by name ignoring case. A deleted view is not listed here (see `GET /api/v1/saved-views/trash`). */
+        /** @description The views of one area the caller can use (the inbox unless `area` says kb): the views shared with the whole workspace, then the caller's own personal views, each group ordered by name ignoring case. A deleted view is not listed here (see `GET /api/v1/saved-views/trash`). */
         get: operations["listSavedViews"];
         put?: never;
-        /** @description Saves a set of inbox filters under a name. A personal view is seen only by the person who saved it; a shared view by everyone in the workspace, and anyone may change or delete it. Names are unique ignoring case among the caller's personal views and among the shared views (409). Each person keeps at most 50 personal views and a workspace at most 50 shared ones (409). */
+        /** @description Saves a set of filters under a name: inbox filters (`area` inbox, the default) or knowledge base article list filters (`area` kb, the filters of `GET /api/v1/kb/articles`). A personal view is seen only by the person who saved it; a shared view by everyone in the workspace, and anyone may change or delete it. Within an area, names are unique ignoring case among the caller's personal views and among the shared views (409). In each area a person keeps at most 50 personal views and a workspace at most 50 shared ones (409). */
         post: operations["createSavedView"];
         delete?: never;
         options?: never;
@@ -2407,7 +2407,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Views deleted in the last 30 days that the caller could see, newest deletion first. Each can be restored with `POST /api/v1/saved-views/{id}/restore` until `purges_at`; after that it is gone. */
+        /** @description Views of one area (the inbox unless `area` says kb) deleted in the last 30 days that the caller could see, newest deletion first. Each can be restored with `POST /api/v1/saved-views/{id}/restore` until `purges_at`; after that it is gone. */
         get: operations["listDeletedSavedViews"];
         put?: never;
         post?: never;
@@ -3230,6 +3230,23 @@ export interface paths {
         get?: never;
         /** @description Hides the setup guide from the inbox of the caller, or shows it again. It is a choice of the person; other agents keep their own. */
         put: operations["setSetupGuideHidden"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/me/kb-list-columns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Chooses the columns the caller sees in the knowledge base article list, in their order. Article is always shown first and is not in the list. It is a choice of the person, kept on the server for every browser they sign in from; other agents keep their own. Null goes back to the default. */
+        put: operations["setKBListColumns"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4994,7 +5011,7 @@ export interface paths {
         };
         /** @description Whether the public help center is on, its title and language. `content_version` grows with every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the knowledge base is public. */
         get: operations["getHelpCenter"];
-        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. `require_approval` makes publishing need an approved review in every collection that inherits it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes). */
+        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. `require_approval` makes publishing need an approved review in every collection that inherits it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes). `show_tags` shows each article's tags on its page; left out, it stays as it is. */
         put: operations["putHelpCenter"];
         post?: never;
         delete?: never;
@@ -7521,12 +7538,49 @@ export interface components {
             /** @description overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target). */
             sla?: ("overdue" | "due_soon")[];
         };
+        /** @description The filters of `GET /api/v1/kb/articles` as one object, under the same names and checked as that list checks them; a list holds the values the query string repeats (tag) or separates with commas (author). Tags are kept cleaned (lowercase). A date is midnight in the workspace's timezone when the view is opened. An empty object is every article outside the trash. */
+        KBArticleFilters: {
+            q?: string;
+            /** @enum {string} */
+            status?: "draft" | "published";
+            /** Format: uuid */
+            collection_id?: string;
+            /** @description true needs collection_id. */
+            include_subcollections?: boolean;
+            author?: string[];
+            tag?: string[];
+            /** @enum {string} */
+            tag_match?: "any" | "all";
+            /** @description An RFC 3339 time or a date, as the created_after query of GET /api/v1/kb/articles. */
+            created_after?: string;
+            created_before?: string;
+            updated_after?: string;
+            updated_before?: string;
+            /** @enum {string} */
+            translation?: "missing" | "outdated";
+            locale?: string;
+            has_draft?: boolean;
+            visibility?: components["schemas"]["KBVisibility"];
+            /** @enum {string} */
+            state?: "in_review" | "approved";
+            /** @enum {string} */
+            sort?: "recent" | "manual";
+        };
+        /**
+         * @description inbox: conversation filters. kb: knowledge base article list filters.
+         * @default inbox
+         * @enum {string}
+         */
+        SavedViewArea: "inbox" | "kb";
+        /** @description The view's filters, as its area takes them. */
+        SavedViewFilters: components["schemas"]["ConversationFilters"] | components["schemas"]["KBArticleFilters"];
         /** @enum {string} */
         SavedViewScope: "personal" | "shared";
         SavedViewInput: {
             name: string;
+            area?: components["schemas"]["SavedViewArea"];
             scope: components["schemas"]["SavedViewScope"];
-            filters: components["schemas"]["ConversationFilters"];
+            filters: components["schemas"]["SavedViewFilters"];
         };
         SavedViewChange: {
             /**
@@ -7536,14 +7590,15 @@ export interface components {
             updated_at: string;
             name?: string;
             scope?: components["schemas"]["SavedViewScope"];
-            filters?: components["schemas"]["ConversationFilters"];
+            filters?: components["schemas"]["SavedViewFilters"];
         };
         SavedView: {
             /** Format: uuid */
             id: string;
             name: string;
+            area: components["schemas"]["SavedViewArea"];
             scope: components["schemas"]["SavedViewScope"];
-            filters: components["schemas"]["ConversationFilters"];
+            filters: components["schemas"]["SavedViewFilters"];
             /**
              * Format: uuid
              * @description The person a personal view belongs to; null for a shared view.
@@ -7714,6 +7769,7 @@ export interface components {
         Me: {
             /** @description True when this agent hid the setup guide in the inbox. */
             setup_guide_hidden: boolean;
+            kb_list_columns: components["schemas"]["KBListColumns"];
             /** @description Which AI features can run now in the workspace (on, with a working provider); the web app offers only those. */
             ai_features: {
                 triage: boolean;
@@ -8316,6 +8372,8 @@ export interface components {
             article_ids: string[];
         };
         KBArticleSummary: {
+            /** @description What readers answered to "Was this article helpful?", imported votes included, as GET /api/v1/kb/articles/{id}/votes counts them. */
+            votes: components["schemas"]["KBVoteTally"];
             /**
              * @description in_review: its own unpublished text waits for a reviewer; approved: a reviewer approved that text as it is now, ready to publish (POST /api/v1/kb/articles/publish). Null without either.
              * @enum {string|null}
@@ -8734,6 +8792,14 @@ export interface components {
              */
             collection_id: string | null;
         };
+        /** @enum {string} */
+        KBListColumn: "status" | "collection" | "author" | "tags" | "languages" | "created" | "updated" | "votes";
+        /** @description The columns of the knowledge base article list this agent sees after Article, in order (PUT /api/v1/agents/me/kb-list-columns). */
+        KBListColumns: {
+            columns: components["schemas"]["KBListColumn"][];
+            /** @description True while the agent has not chosen: columns is then status, author, tags, updated. */
+            default: boolean;
+        };
         KBVoteTally: {
             helpful: number;
             not_helpful: number;
@@ -8928,6 +8994,8 @@ export interface components {
             locale: string;
             /** @description Whether an article needs a teammate's approval of its exact text before it is published, in every collection whose `require_approval` is `inherit`. Left out, it stays as it is. Sending it needs kb_articles:publish too. */
             require_approval?: boolean;
+            /** @description Whether an article page shows the article's tags to readers. Left out, it stays as it is. */
+            show_tags?: boolean;
         };
         HelpCenter: {
             enabled: boolean;
@@ -8935,6 +9003,8 @@ export interface components {
             locale: string;
             /** @description Articles in collections that inherit the setting need an approved version to be published (POST /api/v1/kb/articles/{id}/reviews). */
             require_approval: boolean;
+            /** @description Article pages show the article's published tags. Help center search finds an article by its tags either way. */
+            show_tags: boolean;
             content_version: number;
             /**
              * Format: date-time
@@ -11556,6 +11626,8 @@ export interface components {
         KBListState: "in_review" | "approved";
         /** @description The order without `q`; ignored with `q`. */
         KBListSort: "recent" | "manual";
+        /** @description inbox (the default): the inbox views. kb: the knowledge base article list views. */
+        SavedViewAreaQuery: components["schemas"]["SavedViewArea"];
         /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
         RoleKey: string;
         ID: string;
@@ -16591,7 +16663,10 @@ export interface operations {
     };
     listSavedViews: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description inbox (the default): the inbox views. kb: the knowledge base article list views. */
+                area?: components["parameters"]["SavedViewAreaQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -16609,6 +16684,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -16655,7 +16731,10 @@ export interface operations {
     };
     listDeletedSavedViews: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description inbox (the default): the inbox views. kb: the knowledge base article list views. */
+                area?: components["parameters"]["SavedViewAreaQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -16673,6 +16752,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -18347,6 +18427,35 @@ export interface operations {
                     "application/json": {
                         hidden: boolean;
                     };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setKBListColumns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    columns: components["schemas"]["KBListColumn"][] | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's columns */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBListColumns"];
                 };
             };
             400: components["responses"]["BadRequest"];

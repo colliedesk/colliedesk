@@ -55,6 +55,8 @@ const summaryFields = {
   languages: z.array(z.object({ locale: z.string(), outdated: z.boolean() })),
   // in_review: its own unpublished text waits for a reviewer; approved: a reviewer approved it, ready to publish.
   review_state: z.enum(['in_review', 'approved']).nullable(),
+  // Readers' answers to "Was this article helpful?", imported ones included.
+  votes: z.object({ helpful: z.number().int(), not_helpful: z.number().int() }),
   ...visibilityFields,
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
@@ -119,6 +121,8 @@ const imageSchema = z.object({
 }) satisfies z.ZodType<Pick<Generated<'KBMedia'>, 'id' | 'content_type' | 'size' | 'sha256' | 'url' | 'created_at'>>;
 const helpCenterSchema = z.object({
   enabled: z.boolean(), title: z.string(), locale: z.string(), require_approval: z.boolean(), content_version: z.number().int(), updated_at: nullableDate, url: z.string(),
+  // Readers see an article's tags only while this is on.
+  show_tags: z.boolean(),
 }) satisfies z.ZodType<Generated<'HelpCenter'>>;
 
 const orderSchema = z.object({

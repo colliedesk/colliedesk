@@ -20,7 +20,7 @@ const publisher = roleOf({ id: '00000000-0000-4000-8000-0000000000b1', name: 'Ed
   { members: [{ id: me.agent.id, name: 'Ada', active: true }, { id: bo, name: 'Bo', active: true }, { id: dee, name: 'Dee', active: false }] });
 const writer = roleOf({ id: '00000000-0000-4000-8000-0000000000b2', name: 'Writer', system: null }, ['kb_articles:read', 'kb_articles:update'],
   { members: [{ id: cy, name: 'Cy', active: true }] });
-const center = { enabled: true, title: 'Help', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' };
+const center = { enabled: true, title: 'Help', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' };
 const review = (state: 'open' | 'approved' | 'changes_requested', fields: Record<string, unknown> = {}) => ({
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', article_id: ids.article, article_title: 'Reset your password', locale: null, state, note: 'Check the steps', content_hash: 'a'.repeat(64), current: true,
   reviewers: [{ agent_id: bo, name: 'Bo', seen_at: null }], requested_by: { agent_id: me.agent.id, name: 'Ada' }, requested_by_token: null,

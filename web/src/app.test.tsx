@@ -866,7 +866,7 @@ test('a role that runs the help center without reading articles opens its settin
     '/api/v1/config': () => json(200, selfHostedConfig),
     '/api/v1/kb/media': () => json(200, { items: [], next_cursor: null }),
     '/api/v1/kb/media-uploads': () => json(200, { items: [] }),
-    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/beta-desk' }),
+    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/beta-desk' }),
     '/api/v1/auth/sessions': () => json(200, { items: [] }),
   });
   const router = open('/');
@@ -891,7 +891,7 @@ test('a role that reads only the help center finds Knowledge on the rail, at its
   serve({
     '/api/v1/auth/me': () => json(200, narrow(['help_center:read', 'profile:update'])),
     '/api/v1/config': () => json(200, selfHostedConfig),
-    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/beta-desk' }),
+    '/api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/beta-desk' }),
   });
   const router = open('/');
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/settings'));
@@ -969,7 +969,7 @@ test('the settings menu of a phone turned on its side opens Account', async () =
   }
 });
 
-const savedView = { id: '33333333-3333-4333-8333-333333333333', name: 'Mine, open', scope: 'personal', filters: { status: ['open'], assignee: ['me'] },
+const savedView = { id: '33333333-3333-4333-8333-333333333333', name: 'Mine, open', area: 'inbox', scope: 'personal', filters: { status: ['open'], assignee: ['me'] },
   owner_agent_id: '11111111-1111-4111-8111-111111111111', created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', deleted_at: null, purges_at: null };
 const channelRow = (id: string, name: string, type: string, state: string) => ({ id, type, name, enabled: true, status: { state, reason_code: null, message: null }, summary: '',
   capabilities: [], held_count: 0, unsent_count: 0, last_inbound_at: null, created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z' });

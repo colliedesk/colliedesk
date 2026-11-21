@@ -15,7 +15,7 @@ function open(search: KnowledgeSearch = {}) {
   return (next: KnowledgeSearch) => view.rerender(<QueryClientProvider client={client}><KnowledgeRoute search={next} /></QueryClientProvider>);
 }
 
-const helpCenterOn = () => json(200, { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' });
+const helpCenterOn = () => json(200, { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' });
 const internal = { ...summary(1, 'Refund rules', 'published'), effective_visibility: 'agents' as const };
 const botOnly = { ...summary(3, 'Plan limits', 'published'), visibility: 'help_chat' as const, effective_visibility: 'help_chat' as const };
 const base = {

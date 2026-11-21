@@ -18,11 +18,13 @@ export const conversationFiltersSchema = z.object({
   updated_after: z.string().datetime({ offset: true }).optional(), updated_before: z.string().datetime({ offset: true }).optional(),
   sort: conversationSortSchema.optional(), search: z.string().optional(),
 }) satisfies z.ZodType<Generated<'ConversationFilters'>>;
-export const savedViewSchema = z.object({
-  id: z.string().uuid(), name: z.string(), scope: z.enum(['personal', 'shared']), filters: conversationFiltersSchema,
+export const viewFields = {
+  id: z.string().uuid(), name: z.string(), scope: z.enum(['personal', 'shared']),
   owner_agent_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   deleted_at: nullableDate, purges_at: nullableDate,
-}) satisfies z.ZodType<Generated<'SavedView'>>;
+};
+// An inbox view: the list without an area answers only these.
+export const savedViewSchema = z.object({ ...viewFields, area: z.literal('inbox'), filters: conversationFiltersSchema }) satisfies z.ZodType<Generated<'SavedView'>>;
 export const savedViewListSchema = z.object({ items: z.array(savedViewSchema) }) satisfies z.ZodType<JsonResponse<'listSavedViews', 200>>;
 
 const json = <Operation extends 'createSavedView' | 'updateSavedView'>(value: RequestBody<Operation>): string => JSON.stringify(value);
