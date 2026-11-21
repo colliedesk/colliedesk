@@ -223,17 +223,60 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 The Freshdesk importer and undo resolve the slug once, then run every read and write in
 `InWorkspace` for that workspace. Their advisory lock (`DB.TryAdvisoryLock`) reads no table.
 
+## Securing a new table
+
+Default privileges give the app role SELECT, INSERT, UPDATE and DELETE on every new table. A new
+table is open to every workspace until its migration secures it. Do it in the same migration, with
+one call:
+
+1. Workspace data (the table has `workspace_id`):
+
+   ```sql
+   SELECT secure_workspace_table('notes');
+   ```
+
+   This enables and forces row-level security, adds `workspace_isolation` for the app role and
+   `privileged_access` for the owner. It refuses a table without `workspace_id`.
+2. Server-wide data (operators, server config, cloud sign-ups):
+
+   ```sql
+   SELECT secure_server_table('server_jobs');
+   ```
+
+   Only the owner on the privileged path reaches it. The app role loses every grant on the table and
+   on its sequences.
+3. Fewer privileges for the app role (history that is only added, rows that are marked deleted):
+
+   ```sql
+   SELECT limit_app_role('note_versions', 'SELECT', 'INSERT');
+   ```
+
+   A plain `GRANT SELECT, INSERT` restricts nothing, because it adds to the default privileges.
+   `limit_app_role` revokes first, then grants exactly the listed privileges.
+
+`migration-check` refuses a migration after `20261121132937-workspace-table-security` that writes
+`CREATE POLICY`, `ROW LEVEL SECURITY`, `pg_policies` or `app.privileged` by hand. If a table needs a
+shape the helpers do not give, add a helper in a migration and test it.
+
 ## Guards
 
-- **`TestEveryWorkspaceTableEnforcesRowLevelSecurity`** reads the catalog.
-  - It checks every table in the schema that has a `workspace_id` column or that the app role holds
-    any privilege on, plus `workspaces`.
-  - It fails when one of them lacks ENABLE, FORCE or the `workspace_isolation` policy.
-  - Default privileges grant every new table to the app role, so a new table must add all three in
-    its own migration, together with `privileged_access`, or revoke the app role. There is no
-    allowlist; `schema_migrations` is revoked.
-  - `TestSecurityGuardFlagsAnyTableTheAppRoleCanReach` proves the gate catches a table without
-    `workspace_id`.
+- **`TestEveryWorkspaceTableEnforcesRowLevelSecurity`** reads the catalog for every table in the
+  schema and compares each one with the exact shape the helpers make.
+  - A workspace table must have ENABLE, FORCE and exactly two policies: `workspace_isolation`
+    (permissive, all commands, the app role, the workspace check on `workspace_id`, or `id` on
+    `workspaces`) and `privileged_access` (permissive, all commands, the owner, the privileged
+    check). An extra permissive policy, a widened `USING` or a policy `TO PUBLIC` fails it.
+  - A server-wide table (the list in the test) must have only `privileged_access`, and the app role
+    must hold no privilege on it.
+  - `channel_types` and `schema_migrations` have no row-level security; the app role must not reach
+    them.
+  - `TestSecurityGuardFlagsAnyTableTheAppRoleCanReach` and
+    `TestSecurityGuardFlagsAPolicyThatOnlyMentionsTheWorkspace` prove the gate catches a table
+    without `workspace_id`, a widened policy, an extra policy and a public policy.
+- **`TestAppRoleHasExactlyThePrivilegesEachWorkspaceTableAllows`** fails when the app role holds
+  other than SELECT, INSERT, UPDATE and DELETE on a workspace table, except for the tables listed in
+  the test with fewer privileges.
+- **`migration-check`** (CI) refuses hand-written row-level security in new migrations; see above.
 - **`TestPrivilegedPathsMatchTheReviewedAllowlist`** parses the server source. It fails in three
   cases:
   - A `Privileged(...)` call site is added or removed.
