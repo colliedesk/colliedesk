@@ -137,6 +137,11 @@ func TestAReportArrivingDuringAMergeJoinsTheKeptContact(t *testing.T) {
 			if waiting > 0 {
 				break
 			}
+			select {
+			case r := <-done:
+				return fmt.Errorf("the report finished without waiting on the contact the merge holds: %v", r.err)
+			default:
+			}
 			if time.Now().After(deadline) {
 				return fmt.Errorf("the report did not wait on the contact the merge holds")
 			}
@@ -147,7 +152,12 @@ func TestAReportArrivingDuringAMergeJoinsTheKeptContact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := <-done
+	var r report
+	select {
+	case r = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the report did not finish after the merge committed")
+	}
 	if r.err != nil {
 		t.Fatal(r.err)
 	}
