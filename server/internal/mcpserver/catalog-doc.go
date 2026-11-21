@@ -129,6 +129,8 @@ var toolDocs = map[string]string{
 	"colliedesk_kb_review_request_changes":           "Sends text back to its author with a one-line note",
 	"colliedesk_kb_review_withdraw":                  "Takes back a review you sent",
 	"colliedesk_kb_articles_publish":                 "Publishes several articles at once, each answered on its own; text that needs an approval is refused without one",
+	"colliedesk_kb_articles_bulk":                    "Moves, tags, credits, reviews, publishes, unpublishes or trashes up to 500 articles by ids or by filter, each answered on its own",
+	"colliedesk_kb_articles_bulk_undo":               "Puts back what one bulk change did, within ten minutes, leaving articles changed since",
 	"colliedesk_kb_image_upload":                     "Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one",
 	"colliedesk_kb_image_import":                     "Stores an image found at a public web address in the media library and gives the link to put in an article",
 	"colliedesk_kb_image_get":                        "Shows a knowledge base image to the model",
