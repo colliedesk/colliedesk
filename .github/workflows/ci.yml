@@ -146,12 +146,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           go vet ./... ../docs/...
+          base=()
           if [ -n "$BASE_SHA" ]; then
             git fetch --no-tags --depth=1 origin "$BASE_SHA"
-            go run ./cmd/migration-check --repo=.. --base="$BASE_SHA" --database="$TEST_DATABASE_URL"
-          else
-            go run ./cmd/migration-check --repo=..
+            base=(--base="$BASE_SHA" --database="$TEST_DATABASE_URL")
           fi
+          go run ./cmd/migration-check --repo=.. "${base[@]}"
       # go-cache.yml saves main's entry on every push. A pull request whose go.sum main has not cached
       # yet (a new module) saves once, on its own ref, so its next runs skip compiling that module
       # (the Anthropic SDK: about 23 seconds per job). Only shard 7 uploads, so one job pays for it.
