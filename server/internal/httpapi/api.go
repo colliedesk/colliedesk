@@ -28,6 +28,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/github"
 	"github.com/colliedesk/colliedesk/server/internal/google"
+	"github.com/colliedesk/colliedesk/server/internal/hcanalytics"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
@@ -168,6 +169,10 @@ type Config struct {
 	// PageViews receives an event for each public help center page a reader is served (the view counter,
 	// kbviews); nil sends none. The process owns it, so it outlives a configuration reload.
 	PageViews pageview.Consumer
+	// Analytics sends the page views of workspaces that turned on help center analytics to their GA4 or
+	// Plausible; the process owns it, and it is also in PageViews. nil leaves the settings editable but
+	// sends nothing and refuses a test send.
+	Analytics *hcanalytics.Sender
 	// Carry is the state the APIs of one process share across configurations (re-serve); nil makes a new one.
 	Carry *Carry
 	// OperatorOrigin is OPERATOR_ORIGIN: the operator console's own host. Empty serves it at Origin/operator.
@@ -686,6 +691,9 @@ func Routes() []Route {
 		{http.MethodPut, "/api/v1/help-center/theme", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/help-center/search-console", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/help-center/search-console", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-center/analytics", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/help-center/analytics", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/help-center/analytics/test", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/help-center/freshdesk-redirect", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/help-center/theme/check", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/help-center/domain", auth.PermissionSession},
