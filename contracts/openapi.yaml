@@ -7779,8 +7779,9 @@ paths:
       description: >
         Change the title, slug, text, status, search title or meta description of a translation, or
         mark it up to date with the article (`outdated: false`) or outdated again (`outdated: true`).
-        Send back the `updated_at` you read (409 `changed_elsewhere`). Every change is a version; a
-        change of the flag alone is kind `mark_current` or `mark_outdated`. A change of a published
+        Send back the `updated_at` you read (409 `changed_elsewhere`). Every change is a version, except
+        an autosave (`autosave: true`); a change of the flag alone is kind `mark_current` or
+        `mark_outdated`. A change of a published
         translation's title, slug, text, search title or meta description is saved as its draft
         (`has_draft`, `draft`, a version of kind `draft`): the help center keeps the published text until
         POST /api/v1/kb/articles/{id}/translations/{locale}/draft/publish. Publishing or unpublishing it
@@ -7801,6 +7802,7 @@ paths:
                 seo_title: {type: string, maxLength: 120}
                 seo_description: {type: string, maxLength: 320}
                 outdated: {type: boolean}
+                autosave: {type: boolean, description: 'An editor saving while the person types: only title and body_md may change, and no version is added. A translation that is not published is changed in place; a published one keeps the text in its draft, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400.'}
       responses:
         '200':
           description: The changed translation

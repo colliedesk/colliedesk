@@ -266,10 +266,15 @@ func (a *API) updateKBTranslation(response http.ResponseWriter, request *http.Re
 		SEOTitle  *string    `json:"seo_title"`
 		SEODesc   *string    `json:"seo_description"`
 		Outdated  *bool      `json:"outdated"`
+		Autosave  bool       `json:"autosave"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
 		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.Status == nil && input.SEOTitle == nil && input.SEODesc == nil && input.Outdated == nil) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, status, seo_title, seo_description or outdated.")
+		return
+	}
+	if input.Autosave && (input.Slug != nil || input.Status != nil || input.SEOTitle != nil || input.SEODesc != nil || input.Outdated != nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "An autosave changes only title and body_md; save the other fields without autosave.")
 		return
 	}
 	who := principal(request)
@@ -287,7 +292,7 @@ func (a *API) updateKBTranslation(response http.ResponseWriter, request *http.Re
 	}
 	translation, err := a.store.UpdateKBTranslation(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), request.PathValue("locale"),
 		*input.UpdatedAt, store.KBTranslationChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, Status: input.Status, SEOTitle: input.SEOTitle,
-			SEODescription: input.SEODesc, Outdated: input.Outdated})
+			SEODescription: input.SEODesc, Outdated: input.Outdated, Autosave: input.Autosave})
 	if err != nil {
 		writeKBError(response, err)
 		return

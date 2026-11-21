@@ -150,6 +150,18 @@ func addKBTranslationVersion(ctx context.Context, tx pgx.Tx, workspaceID, articl
 	return bumpKB(ctx, tx, workspaceID)
 }
 
+// autosavedKBTranslation does what addKBTranslationVersion does after an autosave of a translation that
+// is not published, except recording the version: the next save does. Its writer is still an author.
+func autosavedKBTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string, actor Actor, kind string, _ *int) error {
+	if err := noteKBTextWriter(ctx, tx, workspaceID, articleID, &locale, actor, kind, domain.KBDraft); err != nil {
+		return err
+	}
+	if _, err := linkKBMedia(ctx, tx, workspaceID, articleID); err != nil {
+		return err
+	}
+	return bumpKB(ctx, tx, workspaceID)
+}
+
 // recordKBTranslationVersion records the translation as it is now as its next version.
 func recordKBTranslationVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string, actor Actor, kind string, restoredFrom *int) error {
 	status, err := insertKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, kind, restoredFrom, false)
@@ -352,7 +364,11 @@ func (s *Store) UpdateKBTranslation(ctx context.Context, workspaceID string, act
 		if err := writeKBTranslationRow(ctx, tx, workspaceID, articleID, locale, change); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
-		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, kind, nil); err != nil {
+		record := addKBTranslationVersion
+		if change.Autosave {
+			record = autosavedKBTranslation
+		}
+		if err := record(ctx, tx, workspaceID, articleID, locale, actor, kind, nil); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
 		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, was); err != nil {
