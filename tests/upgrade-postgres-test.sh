@@ -116,10 +116,14 @@ no_secret_printed() {
 
 # The install as install.sh of $BASE_TAG laid it out: PostgreSQL 17, its data at the image's default
 # path, no PGDATA line.
-git -C "$ROOT" show "$BASE_TAG:install.sh" >"$TMP/install.sh" 2>/dev/null ||
-  { git -C "$ROOT" fetch -q --depth 1 origin "refs/tags/$BASE_TAG:refs/tags/$BASE_TAG" 2>/dev/null &&
-    git -C "$ROOT" show "$BASE_TAG:install.sh" >"$TMP/install.sh"; } ||
-  fail "cannot read install.sh of $BASE_TAG"
+# The other layout's run, and upgrade-test.sh, fetch into the same shallow checkout at the same time:
+# a fetch that finds .git/shallow.lock taken fails, so wait a second and look again.
+fetches=0
+until git -C "$ROOT" show "$BASE_TAG:install.sh" >"$TMP/install.sh" 2>/dev/null; do
+  fetches=$((fetches + 1))
+  [ "$fetches" -le 10 ] || fail "cannot read install.sh of $BASE_TAG: $(cat "$TMP/fetch.err")"
+  git -C "$ROOT" fetch -q --depth 1 origin "refs/tags/$BASE_TAG:refs/tags/$BASE_TAG" 2>"$TMP/fetch.err" || sleep 1
+done
 sed -n "/^cat >\"\$TARGET_DIR\/compose\.yaml\.next\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
 mkdir -p "$TMP/initdb"
 sed -n "/^cat >\"\$TARGET_DIR\/initdb\/10-colliedesk-owner.sh\" <<'INITDB'$/,/^INITDB$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/initdb/10-colliedesk-owner.sh"
