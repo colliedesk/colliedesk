@@ -170,11 +170,12 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 	join, with := ``, ``
 	switch {
 	case query == "" && sort == KBSortManual && filter.CollectionID != "" && !filter.IncludeSubcollections:
-		order = ` ORDER BY a.position, lower(a.title), a.number`
+		join = kbArticleCollection
+		order = ` ORDER BY ` + kbArticlesBy(kbArticleMode, `a.position`, `a.title`)
 	case query == "" && sort == KBSortManual:
 		// Across collections, as the help center lists them: a collection's articles, then its collections'.
-		with, join = kbTreeOrder, ` LEFT JOIN tree k ON k.id=a.collection_id`
-		order = ` ORDER BY k.path NULLS LAST, a.position, lower(a.title), a.number`
+		with, join = kbTreeOrder, ` LEFT JOIN tree k ON k.id=a.collection_id`+kbArticleCollection
+		order = ` ORDER BY k.path NULLS LAST, ` + kbArticlesBy(kbArticleMode, `a.position`, `a.title`)
 	}
 	if query != "" {
 		args = append(args, "%"+likePattern.Replace(query)+"%")

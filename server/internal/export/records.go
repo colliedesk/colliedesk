@@ -435,7 +435,9 @@ type KBCollection struct {
 	DefaultTemplateID *string `json:"default_template_id"`
 	// RequireApproval is inherit (the help center's setting), on or off: whether publishing an article
 	// in the collection needs a teammate's approval.
-	RequireApproval  string          `json:"require_approval"`
+	RequireApproval string `json:"require_approval"`
+	// ArticleOrder is manual (by position), title, newest or updated: how it lists its articles.
+	ArticleOrder     string          `json:"article_order"`
 	SourceMeta       json.RawMessage `json:"source_meta"`
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`

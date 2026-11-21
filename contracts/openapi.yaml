@@ -6850,6 +6850,7 @@ paths:
                 require_approval:
                   allOf: [{$ref: '#/components/schemas/KBApprovalMode'}]
                   description: 'Whether its articles need an approved version before they are published. Changing it also needs help_center:update.'
+                article_order: {$ref: '#/components/schemas/KBArticleOrder'}
                 visibility:
                   allOf: [{$ref: '#/components/schemas/KBVisibility'}]
                   description: 'Who can see the collection and every article in it. Keeping it from more people, sent alone, needs only kb_articles:update and applies at once. Letting more people see it, like every other change here, needs kb_articles:publish; it is 409 approval_required, naming each article, when a published article it would show to more people is in a collection that needs approval and no review approved its published text.'
@@ -12843,9 +12844,13 @@ components:
       type: string
       enum: [inherit, 'on', 'off']
       description: 'Whether an article listed in the collection is published only once a teammate approved its exact text: inherit (the workspace setting require_approval of the help center), on or off. An article needs approval when any of its collections does.'
+    KBArticleOrder:
+      type: string
+      enum: [manual, title, newest, updated]
+      description: 'How the collection lists its articles, in the help center, the app and the API (sort=manual): manual by the position set with PUT /api/v1/kb/order, title A to Z, newest by first publication (a draft by when it was written), updated the most recently changed first. Positions stay stored under every order, so setting manual again brings the hand order back.'
     KBCollection:
       type: object
-      required: [id, parent_id, name, slug, description, position, default_template_id, require_approval, visibility, effective_visibility, article_count, created_at, updated_at, translations]
+      required: [id, parent_id, name, slug, description, position, default_template_id, require_approval, article_order, visibility, effective_visibility, article_count, created_at, updated_at, translations]
       properties:
         translations: {type: array, description: Its name and description in the help center's other languages., items: {$ref: '#/components/schemas/KBCollectionTranslation'}}
         id: {type: string, format: uuid}
@@ -12856,6 +12861,7 @@ components:
         position: {type: integer}
         default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in it starts from; null for none.'}
         require_approval: {$ref: '#/components/schemas/KBApprovalMode'}
+        article_order: {$ref: '#/components/schemas/KBArticleOrder'}
         visibility: {$ref: '#/components/schemas/KBVisibility'}
         effective_visibility:
           allOf: [{$ref: '#/components/schemas/KBVisibility'}]

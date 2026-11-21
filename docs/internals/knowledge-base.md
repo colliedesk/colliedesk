@@ -74,6 +74,18 @@ The public help center is in `help-center.md`.
   the same keys (`kbArticleOrder`, `kbCollectionOrder` in `store/kb-order.go`); the article list
   without a collection uses the tree's depth-first path (`kbTreeOrder`) when `sort=manual`.
   `kb_articles_order_idx` serves a collection's list in order without sorting it.
+- **A collection's article order is a sort mode, not a rewrite of positions.**
+  `kb_collections.article_order` (`manual`, `title`, `newest`, `updated`) picks the keys in
+  `kbArticlesBy` (`store/kb-order.go`): each mode is a `CASE WHEN mode=… THEN key END`, so one SQL
+  serves every collection of a tree list at once, and `lower(title), number` close every mode so a
+  page boundary never moves. Positions stay as they were, so `manual` brings the hand order back;
+  `PUT /api/v1/kb/order` still accepts an order under another mode (it is stored, not shown), and the
+  web app hides the move buttons instead of refusing. `newest` reads `COALESCE(published_at,
+  created_at)`, so a never-published draft sorts by when it was written. Trap: the help center lists
+  an article from another home (`a.extra`) under the listing collection's mode, not its home's (`lc`
+  joins on `a.listed`), and a translated page sorts `title` by `t.title`. A non-manual collection
+  list is not served by `kb_articles_order_idx`; at 2,000 articles per workspace the sort stays inside
+  the budget.
 - **Limits:** 2,000 articles (`domain.MaxKBArticles`, the one place the cap lives) and 1,000
   collections per workspace, the trash included (it stops a create-delete loop), 100,000 characters
   per text. A longer text is refused, never cut. The article cap is what search can serve inside the

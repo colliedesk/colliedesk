@@ -646,7 +646,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	if err := exportKBTemplates(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,c.default_template_id::text,c.require_approval,c.source_meta,c.created_at,c.updated_at,c.deleted_at,c.deleted_by_agent_id::text,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,c.default_template_id::text,c.require_approval,c.article_order,c.source_meta,c.created_at,c.updated_at,c.deleted_at,c.deleted_by_agent_id::text,
 			COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'source_meta',t.source_meta,
 				'created_at',to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
 				ORDER BY t.locale) FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id), '[]'::jsonb)
@@ -657,7 +657,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBCollection
 		var meta []byte
-		if err := rows.Scan(&record.ID, &record.ParentID, &record.Name, &record.Slug, &record.Description, &record.Position, &record.DefaultTemplateID, &record.RequireApproval, &meta,
+		if err := rows.Scan(&record.ID, &record.ParentID, &record.Name, &record.Slug, &record.Description, &record.Position, &record.DefaultTemplateID, &record.RequireApproval, &record.ArticleOrder, &meta,
 			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID, &record.Translations); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base collections: %w", err)

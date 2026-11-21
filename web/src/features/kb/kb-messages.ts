@@ -58,6 +58,12 @@ export const kbMessages = {
   collectionDescription: 'Description (optional)',
   collectionParent: 'Inside',
   topLevel: 'Top level',
+  articleOrder: 'Article order',
+  articleOrders: { manual: 'By hand', title: 'Title, A to Z', newest: 'Newest first', updated: 'Recently updated first' },
+  articleOrderTip: 'The order set by hand is kept: choose By hand again to get it back.',
+  // sortedBy says why a collection's articles have no buttons to move them.
+  sortedBy: { title: 'Sorted by title, A to Z.', newest: 'Sorted newest first.', updated: 'Sorted with the most recently updated first.' },
+  orderByHand: 'Edit the collection to order it by hand.',
   createCollection: 'Create collection',
   saveCollection: 'Save collection',
   editCollection: 'Edit',

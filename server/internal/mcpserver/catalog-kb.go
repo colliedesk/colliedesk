@@ -80,11 +80,15 @@ const (
 		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"default_template_id":{"type":["string","null"],"description":"The template every new article in it starts from (colliedesk_kb_templates_list); null: they start empty."},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
 		`"position":{"type":"integer"},"article_count":{"type":"integer"},"updated_at":{"type":"string"},"deleted_at":{"type":"string"},"deleted_by":{"type":["string","null"]},"purges_at":{"type":"string"},` +
 		`"translations":{"type":"array","description":"Its name and description in the help center's other languages (colliedesk_kb_collection_translation_set).","items":{"type":"object","properties":{` +
-		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}},` + kbRequireApprovalProperty + `,` + kbVisibilityOutput + `}}`
+		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}},` + kbRequireApprovalProperty + `,` + kbArticleOrderProperty + `,` + kbVisibilityOutput + `}}`
 
 	// kbRequireApprovalProperty is a collection's approval setting, in its answer and in a change.
 	kbRequireApprovalProperty = `"require_approval":{"type":"string","enum":["inherit","on","off"],"description":"Whether its articles need an approved version before they are published: ` +
 		`inherit follows the help center's require_approval, on and off override it. An article in several collections needs one if any of them does."}`
+
+	// kbArticleOrderProperty is how a collection lists its articles, in its answer and in a change.
+	kbArticleOrderProperty = `"article_order":{"type":"string","enum":["manual","title","newest","updated"],"description":"How it lists its articles: manual (colliedesk_kb_order_set), title A to Z, ` +
+		`newest or updated first. The manual order stays stored."}`
 
 	kbDefaultTemplateProperty = `"default_template_id":{"type":["string","null"],` + uuid + `,"description":"A template from colliedesk_kb_templates_list that every new article in it starts from; null clears it. Deleting the template clears it too."}`
 
@@ -145,13 +149,13 @@ func kbCollectionUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_collection_update",
 		Title: "Change a knowledge base collection",
-		Description: `Rename a collection, change its slug, description, position, default template, whether its articles need approval (require_approval, needs kb_articles:publish) or who can see it (visibility), or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
+		Description: `Rename a collection, change its slug, description, position, default template, whether its articles need approval (require_approval, needs kb_articles:publish), how it lists its articles (article_order) or who can see it (visibility), or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
 			`A move that would nest it more than six levels deep, or under itself, is refused. A change or move that shows published articles to more people needs kb_articles:publish.`,
 
 		REST: []string{"PATCH /api/v1/kb/collections/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["collection_id","updated_at"],"properties":{` + kbCollectionIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,"description":{"type":"string","maxLength":2000},"position":{"type":"integer","minimum":0,"maximum":1000000},` +
-			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,` + kbRequireApprovalProperty + `,` + kbVisibilityProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
+			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,` + kbRequireApprovalProperty + `,` + kbArticleOrderProperty + `,` + kbVisibilityProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionUpdate,
 	}

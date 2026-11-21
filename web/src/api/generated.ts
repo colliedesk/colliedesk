@@ -8378,6 +8378,11 @@ export interface components {
          * @enum {string}
          */
         KBApprovalMode: "inherit" | "on" | "off";
+        /**
+         * @description How the collection lists its articles, in the help center, the app and the API (sort=manual): manual by the position set with PUT /api/v1/kb/order, title A to Z, newest by first publication (a draft by when it was written), updated the most recently changed first. Positions stay stored under every order, so setting manual again brings the hand order back.
+         * @enum {string}
+         */
+        KBArticleOrder: "manual" | "title" | "newest" | "updated";
         KBCollection: {
             /** @description Its name and description in the help center's other languages. */
             translations: components["schemas"]["KBCollectionTranslation"][];
@@ -8395,6 +8400,7 @@ export interface components {
              */
             default_template_id: string | null;
             require_approval: components["schemas"]["KBApprovalMode"];
+            article_order: components["schemas"]["KBArticleOrder"];
             visibility: components["schemas"]["KBVisibility"];
             /** @description The most restrictive of its own visibility and that of its parents: who can see what is in it. */
             effective_visibility: components["schemas"]["KBVisibility"];
@@ -20570,6 +20576,7 @@ export interface operations {
                     default_template_id?: string | null;
                     /** @description Whether its articles need an approved version before they are published. Changing it also needs help_center:update. */
                     require_approval?: components["schemas"]["KBApprovalMode"];
+                    article_order?: components["schemas"]["KBArticleOrder"];
                     /** @description Who can see the collection and every article in it. Keeping it from more people, sent alone, needs only kb_articles:update and applies at once. Letting more people see it, like every other change here, needs kb_articles:publish; it is 409 approval_required, naming each article, when a published article it would show to more people is in a collection that needs approval and no review approved its published text. */
                     visibility?: components["schemas"]["KBVisibility"];
                 };

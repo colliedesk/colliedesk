@@ -82,6 +82,9 @@ type KBCollection struct {
 	// RequireApproval is whether an article in it needs an approved version before it is published:
 	// inherit (the workspace setting), on or off.
 	RequireApproval string `json:"require_approval"`
+	// ArticleOrder is how it lists its articles (KBArticleOrders): by the position set by hand, by
+	// title, newest first or most recently updated first.
+	ArticleOrder string `json:"article_order"`
 	// Visibility is who can see the collection and its articles (KBVisibilities); EffectiveVisibility
 	// also counts its live parents.
 	Visibility          string    `json:"visibility"`

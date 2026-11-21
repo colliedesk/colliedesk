@@ -56,14 +56,14 @@ func kbSavepoint[T any](ctx context.Context, tx pgx.Tx, write func(pgx.Tx) (T, e
 }
 
 const kbCollectionColumns = `c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,
-	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.default_template_id::text,c.require_approval,c.created_at,c.updated_at,
+	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.default_template_id::text,c.require_approval,c.article_order,c.created_at,c.updated_at,
 	COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'imported',t.source_meta IS NOT NULL,
 		'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY t.locale)
 		FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id),'[]'::jsonb),` + kbCollectionVisibilityColumns
 
 func kbCollectionTargets(collection *domain.KBCollection) []any {
 	return []any{&collection.ID, &collection.ParentID, &collection.Name, &collection.Slug, &collection.Description, &collection.Position,
-		&collection.ArticleCount, &collection.DefaultTemplateID, &collection.RequireApproval, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations,
+		&collection.ArticleCount, &collection.DefaultTemplateID, &collection.RequireApproval, &collection.ArticleOrder, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations,
 		&collection.Visibility, &collection.EffectiveVisibility}
 }
 
@@ -277,6 +277,8 @@ type KBCollectionChange struct {
 	DefaultTemplateID  *string
 	// RequireApproval, when set, is inherit, on or off (domain.KBApprovalModes).
 	RequireApproval *string
+	// ArticleOrder, when set, is how it lists its articles (domain.KBArticleOrders).
+	ArticleOrder *string
 	// Visibility, when set, is who may see the collection and its articles (domain.KBVisibilities).
 	Visibility *string
 }
@@ -310,6 +312,9 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 	}
 	if change.RequireApproval != nil && !slices.Contains(domain.KBApprovalModes, *change.RequireApproval) {
 		return domain.KBCollection{}, &domain.InvalidKBError{Message: "require_approval is inherit (the workspace setting), on or off."}
+	}
+	if change.ArticleOrder != nil && !slices.Contains(domain.KBArticleOrders, *change.ArticleOrder) {
+		return domain.KBCollection{}, &domain.InvalidKBError{Message: "article_order is manual (the order set by hand), title, newest or updated."}
 	}
 	if change.Visibility != nil {
 		if err := domain.CheckKBVisibility(*change.Visibility); err != nil {
@@ -357,9 +362,9 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 				position=CASE WHEN $6::int IS NOT NULL THEN $6 WHEN $7 AND $8::uuid IS DISTINCT FROM parent_id THEN `+kbCollectionEnd(`$8::uuid`, `$2::uuid`)+` ELSE position END,
 				parent_id=CASE WHEN $7 THEN $8::uuid ELSE parent_id END,
 				default_template_id=CASE WHEN $9 THEN $10::uuid ELSE default_template_id END, require_approval=COALESCE($11,require_approval),
-				visibility=COALESCE($12,visibility), updated_at=clock_timestamp()
+				visibility=COALESCE($12,visibility), article_order=COALESCE($13,article_order), updated_at=clock_timestamp()
 				WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Name, change.Slug, change.Description, change.Position, change.MoveParent, change.Parent,
-				change.SetDefaultTemplate, change.DefaultTemplateID, change.RequireApproval, change.Visibility); err != nil {
+				change.SetDefaultTemplate, change.DefaultTemplateID, change.RequireApproval, change.Visibility, change.ArticleOrder); err != nil {
 				return domain.KBCollection{}, err
 			}
 			return readKBCollection(ctx, sub, workspaceID, id)

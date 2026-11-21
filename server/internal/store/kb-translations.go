@@ -706,7 +706,7 @@ func (s *Store) ListKBLanguage(ctx context.Context, workspaceID string, filter K
 			LEFT JOIN tree k ON k.id=a.collection_id
 			LEFT JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$2 AND t.deleted_at IS NULL
 			WHERE a.workspace_id=$1 AND a.deleted_at IS NULL`+where+`
-			ORDER BY k.path NULLS LAST, a.position, lower(a.title), a.number LIMIT $3 OFFSET $4`, workspaceID, filter.Locale, filter.Limit+1, offset)
+			ORDER BY k.path NULLS LAST, `+kbArticlesBy(`c.article_order`, `a.position`, `a.title`)+` LIMIT $3 OFFSET $4`, workspaceID, filter.Locale, filter.Limit+1, offset)
 		if err != nil {
 			return nil, err
 		}

@@ -18,6 +18,22 @@ const (
 	kbArticleOrder    = `position, lower(title), number`
 )
 
+// kbArticlesBy sorts the articles a of a collection whose article_order is mode (an SQL expression):
+// manual by position (an SQL expression; the help center lists an article from another home with 0),
+// title A to Z, newest by first publication (a draft by when it was written), updated the most recently
+// changed first. Every order then falls back to title (an SQL expression: a translated list sorts by
+// its own titles) and number, so a page boundary never moves.
+func kbArticlesBy(mode, position, title string) string {
+	return `CASE WHEN ` + mode + `='manual' THEN ` + position + ` END, CASE WHEN ` + mode + `='newest' THEN COALESCE(a.published_at, a.created_at) END DESC,
+		CASE WHEN ` + mode + `='updated' THEN a.updated_at END DESC, lower(` + title + `), a.number`
+}
+
+// kbArticleCollection joins ko, the home collection of articles a, for kbArticleMode.
+const kbArticleCollection = ` LEFT JOIN kb_collections ko ON ko.workspace_id=a.workspace_id AND ko.id=a.collection_id`
+
+// kbArticleMode is the article_order of ko, the collection kbArticleCollection joins.
+const kbArticleMode = `COALESCE(ko.article_order, 'manual')`
+
 // kbArticleEnd is the position of an article added to collection (an SQL expression) of workspace $1:
 // after the last one once the collection was ordered by hand, else 0, which keeps the title order.
 func kbArticleEnd(collection string) string {

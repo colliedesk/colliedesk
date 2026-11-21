@@ -99,6 +99,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
         ...(values.parent_id !== original.parent_id ? { parent_id: values.parent_id } : {}),
         ...(values.default_template_id !== (original.default_template_id ?? null) ? { default_template_id: values.default_template_id } : {}),
         ...(values.require_approval !== original.require_approval ? { require_approval: values.require_approval } : {}),
+        ...(values.article_order !== original.article_order ? { article_order: values.article_order } : {}),
         ...(values.visibility !== original.visibility ? { visibility: values.visibility } : {}),
       });
       await refresh();
@@ -129,7 +130,9 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   // shown after its move leaves the focus on the list's heading.
   const focusHeading = () => document.getElementById('kb-articles-heading')?.focus();
   const moves = useOrderMoves(refresh, focusHeading);
-  const ordered = selected && !filtersBeyondCollection(search) ? selected : undefined;
+  // A collection sorted by title or date orders itself: nothing to move by hand.
+  const sortedBy = selected && selected.collection.article_order !== 'manual' ? selected.collection.article_order : undefined;
+  const ordered = selected && !sortedBy && !filtersBeyondCollection(search) ? selected : undefined;
   const articleIds = items.map((article) => article.id);
   const parent = selected ? nodes.find((node) => node.collection.id === selected.collection.parent_id) : undefined;
   const siblings = selected ? parent?.children ?? tree : [];
@@ -231,6 +234,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
           <div className="kb-list-scroll">
             {articles.isError && <p role="alert" className="error-copy kb-list-note">{kbMessages.listFailed}{' '}
               <button type="button" className="link-action" onClick={() => void articles.refetch()}>{kbMessages.retry}</button></p>}
+            {sortedBy && <p className="muted-copy kb-list-note">{kbMessages.sortedBy[sortedBy]} {kbMessages.orderByHand}</p>}
             {articles.isPending && <p role="status" className="empty-copy kb-list-note">{messages.loading}</p>}
             {articles.isSuccess && items.length === 0 && <p className="empty-copy kb-list-note">{search.q ? kbMessages.noMatches : kbMessages.noArticles}</p>}
             {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage}

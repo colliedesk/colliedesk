@@ -20,7 +20,7 @@ one, for example "Getting started". An article can also be listed in more collec
 
 - **Add**: select **New collection**, type a **Name** (and a description if you like), choose where it
   goes under **Inside** (asked once there is a collection to put it in), then **Create collection**. To add one inside the collection you are looking
-  at, select **Add a collection inside**. A collection on the third level cannot hold another one.
+  at, select **Add a collection inside**. A collection on the sixth level cannot hold another one.
 - **Choose**: select a collection on the left to list only the articles directly in it; **All
   articles** lists every one. The number next to a collection counts the articles directly in it, drafts included, not those of the collections inside it.
 - **Edit**: select the collection, then **Edit**. You can rename it, change its description, move it
@@ -52,6 +52,24 @@ before, Colliedesk takes their change into account and moves yours again; if tha
 says so and nothing changes. If someone else moved or deleted the very row you moved, the page says
 so and shows the list as it is now. The order is not part of an article's history, so restoring a
 version does not move an article.
+
+### Article order
+
+A collection can sort its articles by itself instead. Select it, then **Edit**, and pick an
+**Article order**:
+
+- **By hand**: the order you set with **Move up** and **Move down** (the default).
+- **Title, A to Z**: by title, ignoring upper and lower case. A help center page in another language
+  sorts by the translated titles.
+- **Newest first**: by when the article was first published; a draft that was never published by when
+  it was written.
+- **Recently updated first**: the article changed most recently comes first.
+
+The help center, the collection's article list, the reply box's **Articles** list follow it. Articles with the same title or date keep their article number order. While a collection sorts by
+itself, its articles have no **Move up** and **Move down** buttons, and the list says how it is
+sorted. Your order by hand is kept: pick **By hand** again and it comes back as it was. Agents set it
+with `article_order` on `PATCH /api/v1/kb/collections/{id}` or the `colliedesk_kb_collection_update`
+tool.
 
 ### Several collections
 
