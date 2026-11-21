@@ -130,6 +130,8 @@ function fence(pre: Element): string {
 }
 
 function table(el: HTMLTableElement, images: Set<string>): string {
+  // Only the pipe needs escaping here: text arrives with its backslashes escaped (paste-html-inline.ts), and GFM
+  // splits a row only at a pipe without a backslash before it, in text and in code alike.
   const rows = [...el.rows].map((row) => ({
     header: row.parentElement?.tagName === 'THEAD' || [...row.cells].some((cell) => cell.tagName === 'TH'),
     cells: [...row.cells].map((cell) => blocks(cell, images).join(' ').replace(/\s*\n\s*/g, ' ').replace(/\|/g, '\\|')),

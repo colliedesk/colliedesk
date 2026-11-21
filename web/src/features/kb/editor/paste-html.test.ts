@@ -23,6 +23,17 @@ test('a Google Docs copy keeps its heading, list, link, table, emphasis and imag
   expect(pasted.images).toEqual(['https://lh7-rt.googleusercontent.com/docsz/AD_4nXcopy/photo.png']);
 });
 
+test('a backslash and a pipe in a table cell stay text in that cell, also inside code', () => {
+  // GFM reads \\ as a backslash and \| as a pipe, both in text and in a code span in a table.
+  const pasted = pastedMarkdown('<table><tr><th>Path</th></tr><tr><td>C:\\dir | x</td></tr><tr><td><code>a\\|b</code></td></tr></table>');
+  expect(pasted.markdown).toBe([
+    '| Path         |',
+    '|--------------|',
+    '| C:\\\\dir \\| x |',
+    '| `a\\\\|b`      |',
+  ].join('\n'));
+});
+
 test('images to store are listed once each, and a javascript: or file: image is left out', () => {
   const pasted = pastedMarkdown('<p><img src="data:image/png;base64,iVBORw0KGgo=" alt="Pasted"><img src="javascript:alert(1)" alt="bad">'
     + '<img src="file:///etc/passwd" alt="file"><img src="https://example.com/a.png" alt="A"><img src="https://example.com/a.png" alt="A again">'
