@@ -1189,9 +1189,11 @@ cookie and no change to their Content-Security-Policy, and a reader never waits 
 What is sent, for each page a reader opens (the home page, a collection, an article, a search):
 
 - **GA4** gets a `page_view` with the page address, its title, the referrer, the language and, on a
-  search page, the search words (`search_term`). Its visitor id is a hash of the reader's address and
-  browser under a key that lives only in the server's memory and changes every UTC day. GA4 never gets
-  the reader's address or browser.
+  search page, the search words (`search_term`). Its visitor id is a hash of your workspace, the
+  reader's address and browser under a key that lives only in the server's memory and changes every
+  UTC day, so the same reader has another id in another workspace and on the next day. GA4 counts all
+  of one reader's page views of a UTC day as one session. GA4 never gets the reader's address or
+  browser.
 - **Plausible** gets a `pageview` with the page address and the referrer, and the reader's address
   and browser in the request headers. Plausible turns them into its own daily visitor id and does not
   keep them.
@@ -1219,7 +1221,10 @@ To turn it on:
 
 The status line says **Last page view accepted 12:04** or the last error with its time, such as GA4
 refusing the request. A failed send is tried again after 10 and 30 seconds; each try waits at most
-5 seconds for the service. Saving the settings clears the status.
+5 seconds for the service. After 5 failed sends in a row, the server sends nothing for your help
+center for 5 minutes, and the status shows the last error; saving the settings ends the pause.
+Saving the settings clears the status. If the server can no longer open the saved API secret (its key
+was removed), the status and the test say so: enter the secret again and save.
 
 - The API secret is write-only: nobody reads it back, not the app, the API, MCP or the export. It is
   stored sealed (a self-hosted server needs `MAILBOX_TOKEN_KEYS`, see
@@ -1227,7 +1232,8 @@ refusing the request. A failed send is tried again after 10 and 30 seconds; each
   refused and nothing is saved). Leave the field empty to keep the saved secret.
 - To stop sending, clear **Send page views** and save. **Remove secret** deletes the saved API secret
   and stops sending to GA4 (through the API or `colliedesk_help_center_analytics_set`, save
-  `"ga4_api_secret": ""`).
+  `"ga4_api_secret": ""`). Once the save answers, page views waiting to be sent or tried again with the
+  old settings are dropped; only a send already on its way can still arrive.
 - A Plausible on a private, loopback or link-local address, or on plain `http`, is refused and
   nothing is saved; a public name that resolves to a private address is refused when the server sends.
 - Reading the settings needs `help_center:read`; saving and sending a test need `help_center:update`,
