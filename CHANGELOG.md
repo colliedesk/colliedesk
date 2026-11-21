@@ -18,6 +18,11 @@ Colliedesk; the old volume is kept and `sh upgrade-postgres.sh --rollback` goes 
 database still needs PostgreSQL 16 or newer. See
 [move the bundled database to PostgreSQL 19](docs/self-host/upgrade.md#move-the-bundled-database-to-postgresql-19).
 
+**Self-hosting: an unsupported PostgreSQL stops the server with the fix.** On a PostgreSQL older than
+16, `collie serve`, `collie migrate` and every other database command stop before they change
+anything, and the log names the version found, the version needed and `sh upgrade-postgres.sh`. See
+[PostgreSQL versions](docs/self-host/upgrade.md#postgresql-versions).
+
 **Workspace host names: each workspace's desk runs on its own host.** With `HELP_CENTER_DOMAIN`
 (for example `example.com`), the team works at `https://<slug>.example.com`: the app, its API and MCP
 run there, and the help center moves to `https://<slug>.example.com/help` (its old addresses on that
