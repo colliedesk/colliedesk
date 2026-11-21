@@ -101,6 +101,7 @@ func newExportFixture(t *testing.T) exportFixture {
 	create(t, api, agent.Token, "/api/v1/saved-views", map[string]any{"name": "Agent urgent", "scope": "personal", "filters": map[string]any{"priority": []string{"urgent"}}})
 	retired := create(t, api, admin, "/api/v1/saved-views", map[string]any{"name": "Retired view", "scope": "shared", "filters": map[string]any{}})
 	request(t, api, http.MethodDelete, "/api/v1/saved-views/"+retired, nil, admin, nil)
+	create(t, api, admin, "/api/v1/saved-views", map[string]any{"name": "Draft articles", "area": "kb", "scope": "shared", "filters": map[string]any{"status": "draft"}})
 	return exportFixture{api: api, pool: pool, storage: storage, adminToken: admin, agentToken: agent.Token,
 		workspaceID: workspace, attachmentID: attachmentID, otherToken: other, otherWorkspace: workspaceID(t, api, other), inboundSecret: secret}
 }
@@ -159,10 +160,19 @@ func TestExportStreamsTheWholeWorkspaceAsZip(t *testing.T) {
 	defer func() {
 		// Saved views come along, every person's and the trash too; an admin downloads the whole record.
 		views := ndjsonLines(t, entries["saved-views.ndjson"])
-		if len(views) != 2 {
-			t.Fatalf("saved-views.ndjson has %d lines, want the personal and the trashed shared view", len(views))
+		if len(views) != 3 {
+			t.Fatalf("saved-views.ndjson has %d lines, want the personal, the trashed shared and the knowledge base view", len(views))
 		}
 		for _, line := range views {
+			if line["name"] == "Draft articles" {
+				if line["area"] != "kb" || fmt.Sprint(line["filters"]) != "map[status:draft]" {
+					t.Errorf("knowledge base view record = %v", line)
+				}
+				continue
+			}
+			if line["area"] != "inbox" {
+				t.Errorf("inbox view record = %v, want area inbox", line)
+			}
 			if line["scope"] == "personal" && (line["owner_agent_id"] == nil || fmt.Sprint(line["filters"]) != "map[priority:[urgent]]" || line["deleted_at"] != nil) {
 				t.Errorf("personal view record = %v", line)
 			}

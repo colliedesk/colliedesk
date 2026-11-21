@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 type restKBCollection struct {
@@ -92,6 +94,10 @@ type restKBArticle struct {
 	HasDraft      bool                  `json:"has_draft"`
 	Draft         *restKBDraft          `json:"draft"`
 	Attachments   []restKBAttachment    `json:"attachments"`
+	Tags          []string              `json:"tags"`
+	Author        *kbAuthorOut          `json:"author"`
+	Languages     []kbLanguageOut       `json:"languages"`
+	Votes         *domain.KBVoteTally   `json:"votes"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
 	Views30d       *int64               `json:"views_30d"`
@@ -104,6 +110,19 @@ type restKBArticle struct {
 
 type kbTitle struct {
 	Title string `json:"title"`
+}
+
+// kbAuthorOut is the team member an article is credited to, the same in the REST answer and the tool's.
+type kbAuthorOut struct {
+	AgentID string `json:"agent_id"`
+	Name    string `json:"name"`
+	Left    bool   `json:"left"`
+}
+
+// kbAuthorChange is whom a version of kind author_change credited the article to before and after.
+type kbAuthorChange struct {
+	From *kbAuthorOut `json:"from"`
+	To   *kbAuthorOut `json:"to"`
 }
 
 type kbArticleRowOut struct {
@@ -123,7 +142,25 @@ type kbArticleRowOut struct {
 	DeletedAt     string               `json:"deleted_at,omitempty"`
 	DeletedBy     *string              `json:"deleted_by,omitempty"`
 	PurgesAt      string               `json:"purges_at,omitempty"`
+	Tags          []string             `json:"tags"`
+	Author        *kbAuthorOut         `json:"author"`
+	Languages     []kbLanguageOut      `json:"languages"`
+	Votes         *domain.KBVoteTally  `json:"votes,omitempty"`
 	kbVisibilityOut
+}
+
+// kbLanguageOut is one translation of an article as a search row carries it.
+type kbLanguageOut struct {
+	Locale   string `json:"locale"`
+	Outdated bool   `json:"outdated"`
+}
+
+// kbTags is an article's tags as an answer carries them: never null.
+func kbTags(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }
 
 // kbCollectionIDs is where the article is listed, its home first; never null.
@@ -137,7 +174,10 @@ func kbCollectionIDs(article restKBArticle) []string {
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
 	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Position: article.Position, Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, HasDraft: article.HasDraft, PurgesAt: article.PurgesAt,
-		kbVisibilityOut: article.kbVisibilityOut}
+		Tags: kbTags(article.Tags), Author: article.Author, Languages: article.Languages, Votes: article.Votes, kbVisibilityOut: article.kbVisibilityOut}
+	if out.Languages == nil {
+		out.Languages = []kbLanguageOut{}
+	}
 	if article.DeletedAt != nil {
 		out.DeletedAt = *article.DeletedAt
 	}
@@ -167,6 +207,8 @@ type kbArticleOut struct {
 	AIExclusion   *kbAIExclusionOut     `json:"ai_exclusion"`
 	Translations  []kbTranslationRowOut `json:"translations"`
 	Attachments   []kbAttachmentOut     `json:"attachments"`
+	Tags          []string              `json:"tags"`
+	Author        *kbAuthorOut          `json:"author"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
 	// Views30d and Uses30d come with one article read on its own, not with a change.
@@ -192,7 +234,7 @@ func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
 		ShowContents: article.ShowContents, InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}, Attachments: kbAttachmentsView(article.Attachments),
-		kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom, Views30d: article.Views30d, Uses30d: article.Uses30d}
+		Tags: kbTags(article.Tags), Author: article.Author, kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom, Views30d: article.Views30d, Uses30d: article.Uses30d}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, kbTranslationRow(translation))
 	}
@@ -333,30 +375,19 @@ func kbArticlePage(c *call, path string, query url.Values) (any, error) {
 
 func kbArticlesSearch(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		Query        string `json:"query"`
-		Status       string `json:"status"`
-		CollectionID string `json:"collection_id"`
-		Sort         string `json:"sort"`
-		HasDraft     bool   `json:"has_draft"`
-		State        string `json:"state"`
-		Visibility   string `json:"visibility"`
-		Limit        int    `json:"limit"`
-		Cursor       string `json:"cursor"`
+		Limit  int    `json:"limit"`
+		Cursor string `json:"cursor"`
+		kbArticleListArguments
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
-	query := url.Values{}
-	for key, value := range map[string]string{"q": args.Query, "status": args.Status, "collection_id": args.CollectionID, "sort": args.Sort, "cursor": args.Cursor, "state": args.State, "visibility": args.Visibility} {
-		if value != "" {
-			query.Set(key, value)
-		}
+	query := args.listValues()
+	if args.Cursor != "" {
+		query.Set("cursor", args.Cursor)
 	}
 	if args.Limit > 0 {
 		query.Set("limit", strconv.Itoa(args.Limit))
-	}
-	if args.HasDraft {
-		query.Set("has_draft", "true")
 	}
 	return kbArticlePage(c, "/api/v1/kb/articles", query)
 }
@@ -441,7 +472,7 @@ func kbArticleUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	change := kbArticleFields(arguments, "article_id")
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: title, body, slug, collection_id, collection_ids, status, seo_title, seo_description, show_contents or visibility."}
+		return nil, &toolError{"Give something to change: title, body, slug, collection_id, collection_ids, status, seo_title, seo_description, show_contents, visibility, tags or author_agent_id."}
 	}
 	c.forArticle(args.ID)
 	var updated restKBArticle
@@ -533,11 +564,12 @@ func kbArticleHistory(c *call, arguments map[string]any) (any, error) {
 	var page struct {
 		Items []struct {
 			restSavedReplyChange
-			Title        string  `json:"title"`
-			Slug         string  `json:"slug"`
-			BodyMD       string  `json:"body_md"`
-			Status       string  `json:"status"`
-			CollectionID *string `json:"collection_id"`
+			Title        string          `json:"title"`
+			Slug         string          `json:"slug"`
+			BodyMD       string          `json:"body_md"`
+			Status       string          `json:"status"`
+			CollectionID *string         `json:"collection_id"`
+			AuthorChange *kbAuthorChange `json:"author_change"`
 		} `json:"items"`
 		NextBeforeVersion *int `json:"next_before_version"`
 	}
@@ -546,11 +578,12 @@ func kbArticleHistory(c *call, arguments map[string]any) (any, error) {
 	}
 	type versionOut struct {
 		savedReplyChangeOut
-		TeamText      teamText `json:"team_text"`
-		BodyTruncated bool     `json:"body_truncated"`
-		Status        string   `json:"status"`
-		Slug          string   `json:"slug"`
-		CollectionID  *string  `json:"collection_id"`
+		TeamText      teamText        `json:"team_text"`
+		BodyTruncated bool            `json:"body_truncated"`
+		Status        string          `json:"status"`
+		Slug          string          `json:"slug"`
+		CollectionID  *string         `json:"collection_id"`
+		AuthorChange  *kbAuthorChange `json:"author_change,omitempty"`
 	}
 	versions := make([]versionOut, 0, len(page.Items))
 	for _, item := range page.Items {
@@ -558,7 +591,7 @@ func kbArticleHistory(c *call, arguments map[string]any) (any, error) {
 		if args.Version == 0 {
 			body, truncated = cutReplyBody(body)
 		}
-		versions = append(versions, versionOut{*changeOut(&item.restSavedReplyChange), teamText{item.Title, body}, truncated, item.Status, item.Slug, item.CollectionID})
+		versions = append(versions, versionOut{*changeOut(&item.restSavedReplyChange), teamText{item.Title, body}, truncated, item.Status, item.Slug, item.CollectionID, item.AuthorChange})
 	}
 	if args.Version > 0 {
 		if len(versions) == 0 || versions[0].Version != args.Version {

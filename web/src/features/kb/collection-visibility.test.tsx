@@ -12,7 +12,7 @@ const base = {
   'GET /api/v1/auth/me': () => json(200, me),
   'GET /api/v1/kb/collections': () => json(200, { items: collections }),
   'GET /api/v1/kb/articles': () => json(200, { items: [summary(1, 'Reset your password')], next_cursor: null }),
-  'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
+  'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' }),
 };
 const setup = collections.find((item) => item.id === ids.setup)!;
 const helpText = 'Applies to every article in it and its collections.';

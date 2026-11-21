@@ -14,6 +14,8 @@ import { ArticleVotesBox } from './article-votes';
 import { ArticleStatsBox } from './article-stats';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
 import { ArticleVisibilityBox } from './article-visibility';
+import { ArticleAuthorBox } from './article-author';
+import { ArticleTagsField, sameTags } from './article-tags-field';
 import { ArticleAttachments } from './article-attachments';
 import { ArticleDraftBar, draftMessages, editable } from './article-draft';
 import { sameBody, storedAs, useArticleAutosave } from './article-autosave';
@@ -64,11 +66,13 @@ interface Draft {
   seo_description: string;
   // show_contents lists the article's headings as On this page, in every language.
   show_contents: boolean;
+  // tags are saved with the text; a published article's wait with its other unpublished changes.
+  tags: string[];
 }
 
 const draftOf = (article: KBArticle): Draft => ({ title: article.title, slug: article.slug, body: article.body_md, collection_id: article.collection_id,
   extras: article.collection_ids.slice(1), seo_title: article.seo_title, seo_description: article.seo_description,
-  show_contents: article.show_contents });
+  show_contents: article.show_contents, tags: article.tags });
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((id, at) => id === b[at]);
 // listChange is how a save places the article: nothing when it stays, collection_id for a move that leaves the
 // other collections as the server keeps them, else collection_ids with the home first.
@@ -168,7 +172,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // moved updated_at since.
   const rawNow = useRef(raw);
   rawNow.current = raw;
-  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(editable(article)) : { title: '', slug: '', body: startBody, collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '', show_contents: true }));
+  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(editable(article)) : { title: '', slug: '', body: startBody, collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '', show_contents: true, tags: [] }));
   // Who can see a new article, sent when it is created; a saved one changes it at once (ArticleVisibilityBox).
   const [newVisibility, setNewVisibility] = useState<KBVisibility>('everyone');
   const wide = useSyncExternalStore(subscribeWide, isWide);
@@ -192,9 +196,9 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     // Compared as save() sends them: title and address name trimmed, and an emptied address name is not
     // a change (the server keeps the old one), so a form is never dirty with nothing to send.
     ? form.title.trim() !== base.title || (form.slug.trim() !== '' && form.slug.trim() !== base.slug) || !sameBody(form.body, base) || Object.keys(listChange(form, base)).length > 0
-      || seoValue(form.seo_title) !== base.seo_title || seoValue(form.seo_description) !== base.seo_description || form.show_contents !== base.show_contents
+      || seoValue(form.seo_title) !== base.seo_title || seoValue(form.seo_description) !== base.seo_description || form.show_contents !== base.show_contents || !sameTags(form.tags, base.tags)
     // A new article's text is unchanged while it is still its template's.
-    : form.title.trim() !== '' || (form.body.trim() !== '' && form.body !== startBody));
+    : form.title.trim() !== '' || (form.body.trim() !== '' && form.body !== startBody) || form.tags.length > 0);
   const dirty = isDirty(draft);
   // bodyNow reads the editor at once: it tells the page of typing a moment after it stops.
   const bodyNow = () => handle?.markdown() ?? draft.body;
@@ -260,6 +264,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           ...(seoValue(sent.seo_title) ? { seo_title: seoValue(sent.seo_title) } : {}),
           ...(seoValue(sent.seo_description) ? { seo_description: seoValue(sent.seo_description) } : {}),
           ...(sent.show_contents ? {} : { show_contents: false }),
+          ...(sent.tags.length > 0 ? { tags: sent.tags } : {}),
           ...(newVisibility === 'everyone' ? {} : { visibility: newVisibility }) } as const;
         const created = await createArticle.run(value);
         client.setQueryData(['kb-article', created.id], created);
@@ -277,6 +282,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         ...(seoValue(sent.seo_title) !== current.seo_title ? { seo_title: seoValue(sent.seo_title) } : {}),
         ...(seoValue(sent.seo_description) !== current.seo_description ? { seo_description: seoValue(sent.seo_description) } : {}),
         ...(sent.show_contents !== current.show_contents ? { show_contents: sent.show_contents } : {}),
+        ...(!sameTags(sent.tags, current.tags) ? { tags: sent.tags } : {}),
       };
       // Text an autosave stored has no version yet: Save sends it again, and the server adds the version.
       if (Object.keys(change).length === 0 && autosave.pending) Object.assign(change, { body_md: sent.body });
@@ -615,6 +621,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {isPublic === false && <a className="button-link" href="/knowledge/settings#help-center-heading">
           <Icon name="globe" />{kbMessages.turnOnHelpCenter}</a>}
       </section>
+      {raw && <ArticleAuthorBox headingId={`${id}-author`} article={raw} onChanged={aiChanged} />}
       <ArticleVisibilityBox headingId={`${id}-who`} article={raw} onChanged={aiChanged} value={newVisibility} onChoose={setNewVisibility} />
       {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {(!base || status !== 'published' || raw?.has_draft || dirty) && <ArticleReviewBox articleId={base?.id} approval={approval} dirty={dirty} saved={base !== undefined}
@@ -642,6 +649,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           <small className="kb-hint"><span id={`${id}-slug`}>{kbMessages.articleSlugHelp(base.number, draft.slug.trim())}</span>{' '}
             <HelpTip label={kbMessages.articleSlug} text={kbMessages.articleSlugTip} id={`${id}-slug-tip`} /></small></div>}
       </section>
+      <ArticleTagsField headingId={`${id}-tags`} value={draft.tags} onChange={(tags) => set({ tags })} />
       <section className="kb-side-box" aria-labelledby={`${id}-search`}>
         <h3 id={`${id}-search`}>{seoMessages.searchEngines}</h3>
         <p className="kb-hint"><span id={`${id}-search-help`}>{seoMessages.seoHelp}</span>{' '}
@@ -832,6 +840,7 @@ function AltDialog({ image, library, onSave, onClose }: { image: MissingAlt; lib
 
 // versionChanges names what a version changed from the one before it.
 function versionChanges(version: KBArticleVersion, previous: KBArticleVersion): string[] {
+  if (version.author_change) return [kbMessages.authorChangedFromTo(kbMessages.authorName(version.author_change.from), kbMessages.authorName(version.author_change.to))];
   return [
     ...(version.title !== previous.title ? [savedReplyMessages.savedReplyTitleChanged] : []),
     ...(version.slug !== previous.slug ? [kbMessages.slugChanged] : []),

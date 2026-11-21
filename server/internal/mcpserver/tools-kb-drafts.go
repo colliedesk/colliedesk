@@ -18,6 +18,7 @@ type restKBDraft struct {
 	UpdatedAt      string             `json:"updated_at"`
 	UpdatedBy      *restPerson        `json:"updated_by"`
 	Attachments    []restKBAttachment `json:"attachments"`
+	Tags           []string           `json:"tags"`
 }
 
 // kbArticleDraftOut is what publishing the draft would put live; the live text stays in team_text.
@@ -28,6 +29,7 @@ type kbArticleDraftOut struct {
 	ShowContents  bool              `json:"show_contents"`
 	UpdatedBy     *string           `json:"updated_by"`
 	Attachments   []kbAttachmentOut `json:"attachments"`
+	Tags          []string          `json:"tags"`
 }
 
 // withDraft adds an article's draft to its view. updated_at stays the article's, the one every change sends back.
@@ -42,7 +44,7 @@ func (out *kbArticleOut) withDraft(article restKBArticle) {
 		ids = []string{draft.CollectionID}
 	}
 	out.Draft = &kbArticleDraftOut{TeamText: kbTeamText{draft.Title, draft.BodyMD, draft.SEOTitle, draft.SEODescription},
-		Slug: draft.Slug, CollectionIDs: ids, ShowContents: draft.ShowContents, Attachments: kbAttachmentsView(draft.Attachments)}
+		Slug: draft.Slug, CollectionIDs: ids, ShowContents: draft.ShowContents, Attachments: kbAttachmentsView(draft.Attachments), Tags: kbTags(draft.Tags)}
 	if draft.UpdatedBy != nil {
 		out.Draft.UpdatedBy = &draft.UpdatedBy.Name
 	}

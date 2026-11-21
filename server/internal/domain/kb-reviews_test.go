@@ -23,6 +23,28 @@ func TestATextWithoutFilesKeepsItsHash(t *testing.T) {
 	}
 }
 
+// Tags are part of the reviewed text, sorted, so a tag change after an approval needs a new one; a text
+// without tags keeps the hash it had before articles had tags.
+func TestTagsArePartOfTheHash(t *testing.T) {
+	// sha256 of ["Refunds","refunds","Within 14 days.","","",["a","b"],{"tags":["billing","refunds"]}]
+	const want = "5348bf191e865d6a4dc2a77ca06bc9f2f1d940577f9deeac9ba788b0acc38c25"
+	tagged := refundsText(nil)
+	tagged.Tags = []string{"refunds", "billing"}
+	if got := tagged.Hash(); got != want {
+		t.Fatalf("hash with tags = %s, want %s", got, want)
+	}
+	untagged := refundsText(nil)
+	untagged.Tags = []string{}
+	if got := untagged.Hash(); got != "1d4d1d69b8ec7bc2ac7f8db2126d3f5bb9de715acb5d96c1fe03938e8d35327b" {
+		t.Fatalf("hash with no tags = %s, want the hash of a text without tags", got)
+	}
+	var article domain.KBArticle
+	article.Tags = []string{"billing"}
+	if got := article.Content().Tags; len(got) != 1 || got[0] != "billing" {
+		t.Fatalf("article content tags = %v, want [billing]", got)
+	}
+}
+
 // The files are part of the text in their order: another order is another text an approval does not cover.
 func TestTheFileOrderIsPartOfTheHash(t *testing.T) {
 	// sha256 of ["Refunds","refunds","Within 14 days.","","",["a","b"],["f2","f1"]]

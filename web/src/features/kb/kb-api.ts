@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
-import type { Generated, JsonResponse } from '../../api/schemas';
+import { kbListColumnSchema } from '../../api/schemas';
+import type { Generated, JsonResponse, KBListColumn } from '../../api/schemas';
+import { articleQuery } from './knowledge-search';
+import type { KBArticleFilters } from './knowledge-search';
 
 // The knowledge base pages load in their own chunk, so their schemas and calls are not in the first bundle.
 
@@ -16,10 +19,12 @@ export const approvalModeSchema = z.enum(['inherit', 'on', 'off']) satisfies z.Z
 export const visibilitySchema = z.enum(['everyone', 'help_chat', 'agents']) satisfies z.ZodType<Generated<'KBVisibility'>>;
 const visibilityFields = { visibility: visibilitySchema, effective_visibility: visibilitySchema };
 const changeFields = {
-  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft', ...reviewKinds]), restored_from_version: z.number().int().nullable(),
+  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft', ...reviewKinds, 'author_change']), restored_from_version: z.number().int().nullable(),
   changed_by: personSchema.nullable(), token: z.object({ id: z.string().uuid().nullable(), label: z.string() }).nullable(),
   agent_request_id: z.string().uuid().nullable(), created_at: z.string().datetime(),
 };
+// The team member an article is credited to; left once they left the team, and the article still names them.
+export const kbAuthorSchema = z.object({ agent_id: z.string().uuid(), name: z.string(), left: z.boolean() }) satisfies z.ZodType<Generated<'KBArticleAuthor'>>;
 const changeSchema = z.object(changeFields) satisfies z.ZodType<Generated<'KBArticleChange'>>;
 const collectionNameSchema = z.object({
   locale: z.string(), name: z.string(), description: z.string(), imported: z.boolean(), updated_at: z.string().datetime(),
@@ -45,13 +50,22 @@ const translationSummaryFields = {
 const translationSummarySchema = z.object(translationSummaryFields) satisfies z.ZodType<Generated<'KBTranslationSummary'>>;
 const summaryFields = {
   id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), collection_ids: z.array(z.string().uuid()).min(1), position: z.number().int(), title: z.string(), slug: z.string(), status: statusSchema,
-  published_at: nullableDate, author_agent_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  published_at: nullableDate, author_agent_id: z.string().uuid().nullable(), author: kbAuthorSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   last_change: changeSchema.nullable(), url: z.string(),
   // has_draft: a published article with unpublished changes; the help center still shows the published text.
   has_draft: z.boolean(),
+  // The published tags, shared by its translations; a published article's tag change waits in draft.tags.
+  tags: z.array(z.string()),
+  // Its translations outside the trash; a help center language not listed is missing.
+  languages: z.array(z.object({ locale: z.string(), outdated: z.boolean() })),
+  // in_review: its own unpublished text waits for a reviewer; approved: a reviewer approved it, ready to publish.
+  review_state: z.enum(['in_review', 'approved']).nullable(),
   ...visibilityFields,
 };
-const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
+const listColumnsSchema = z.object({ columns: z.array(kbListColumnSchema), default: z.boolean() }) satisfies z.ZodType<JsonResponse<'setKBListColumns', 200>>;
+// Only the article list counts readers' answers to "Was this article helpful?" (imported ones included);
+// one article read alone, or in the trash, comes without them.
+const summarySchema = z.object({ ...summaryFields, votes: z.object({ helpful: z.number().int(), not_helpful: z.number().int() }) }) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
 // A file listed under an article or translation, in the order the reader sees.
 export const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
 // The unpublished changes of a published article: what publishing them puts live. Its updated_at is the
@@ -59,7 +73,7 @@ export const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string
 const draftSchema = z.object({
   title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), collection_id: z.string().uuid(),
   collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
-  updated_at: z.string().datetime(), updated_by: personSchema.nullable(),
+  updated_at: z.string().datetime(), updated_by: personSchema.nullable(), tags: z.array(z.string()),
 }) satisfies z.ZodType<Generated<'KBArticleDraft'>>;
 export const kbArticleSchema = z.object({
   ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
@@ -111,6 +125,7 @@ const trashedArticleSchema = z.object({
 }) satisfies z.ZodType<Generated<'TrashedKBArticle'>>;
 const versionSchema = z.object({
   ...changeFields, title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), status: statusSchema, collection_id: z.string().uuid().nullable(),
+  author_change: z.object({ from: kbAuthorSchema.nullable(), to: kbAuthorSchema.nullable() }).optional(),
 }) satisfies z.ZodType<Generated<'KBArticleVersion'>>;
 const imageSchema = z.object({
   id: z.string().uuid(), content_type: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']), size: z.number().int(), sha256: z.string(),
@@ -118,6 +133,8 @@ const imageSchema = z.object({
 }) satisfies z.ZodType<Pick<Generated<'KBMedia'>, 'id' | 'content_type' | 'size' | 'sha256' | 'url' | 'created_at'>>;
 const helpCenterSchema = z.object({
   enabled: z.boolean(), title: z.string(), locale: z.string(), require_approval: z.boolean(), content_version: z.number().int(), updated_at: nullableDate, url: z.string(),
+  // Readers see an article's tags only while this is on.
+  show_tags: z.boolean(),
 }) satisfies z.ZodType<Generated<'HelpCenter'>>;
 
 const orderSchema = z.object({
@@ -155,16 +172,16 @@ export type KBLanguageState = 'missing' | 'outdated' | 'translated';
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
   | 'restoreKBArticleVersion' | 'putHelpCenter' | 'setKBOrder' | 'putHelpCenterLanguages' | 'createKBTranslation' | 'updateKBTranslation' | 'restoreKBTranslation'
   | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation' | 'publishKBArticleDraft' | 'publishKBTranslationDraft'
-  | 'setKBArticleAttachments' | 'setKBTranslationAttachments';
+  | 'setKBArticleAttachments' | 'setKBTranslationAttachments' | 'setKBListColumns';
 const json = <O extends Operation>(value: RequestBody<O>): string => JSON.stringify(value);
+
+const tagListSchema = z.object({ items: z.array(z.object({ tag: z.string(), article_count: z.number().int() })) }) satisfies z.ZodType<JsonResponse<'listKBTags', 200>>;
 
 // The calls that answer 204 carry no body.
 const noContent = z.undefined();
 
-// sort is the order without q: recent (the default without collection_id) or manual, the help center's.
-// limit is the page size, 1 to 200 (50 when left out). has_draft 'true' keeps the articles with unpublished changes.
-// state keeps the articles whose unpublished text waits for a reviewer (in_review) or was approved as it is (approved).
-export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string; has_draft?: 'true'; state?: 'in_review' | 'approved'; visibility?: KBVisibility };
+// The list's filters (KBArticleFilters, as a saved view stores them); limit is the page size, 1 to 200 (50 when left out).
+export type ArticleQuery = KBArticleFilters & { limit?: number; cursor?: string };
 
 // query is called with a variable, never an object literal, inside a path: the gate that checks every path
 // the web app calls is a route (web_routes_test.go) reads a path up to its first closing brace.
@@ -188,7 +205,20 @@ export const kbApi = {
   deleteCollection: (id: string, updatedAt: string) => request(`/api/v1/kb/collections/${id}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
   restoreCollection: (id: string, updatedAt: string) => request(`/api/v1/kb/collections/${id}/restore`, kbCollectionSchema, { method: 'POST', body: json<'restoreKBCollection'>({ updated_at: updatedAt }) }),
   // signal lets a newer search cancel the request of the one it replaced.
-  articles: (filter: ArticleQuery, signal?: AbortSignal) => request(`/api/v1/kb/articles${query(filter)}`, articlePageSchema, { signal }),
+  articles: (filter: ArticleQuery, signal?: AbortSignal) => {
+    const filters = articleQuery(filter);
+    return request(`/api/v1/kb/articles${filters}`, articlePageSchema, { signal });
+  },
+  // The CSV of the articles these filters keep, every page of them: the browser downloads it with the session cookie.
+  exportHref: (filter: KBArticleFilters) => {
+    const filters = articleQuery(filter);
+    return `/api/v1/kb/articles/export.csv${filters}`;
+  },
+  // Every published tag, with how many articles have it, to pick from in the tag filter.
+  tags: () => request('/api/v1/kb/tags', tagListSchema),
+  // The list columns of the person signed in, on every device; null goes back to the default ones.
+  setListColumns: (columns: KBListColumn[] | null) => request('/api/v1/agents/me/kb-list-columns', listColumnsSchema,
+    { method: 'PUT', body: json<'setKBListColumns'>({ columns }) }),
   trashedArticles: (cursor?: string) => request(`/api/v1/kb/articles/trash${page(cursor)}`, trashedArticlePageSchema),
   article: (id: string) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema),
   // key names this save (Idempotency-Key): a retry with the same key returns the article the first stored.

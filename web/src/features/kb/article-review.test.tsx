@@ -20,7 +20,7 @@ const publisher = roleOf({ id: '00000000-0000-4000-8000-0000000000b1', name: 'Ed
   { members: [{ id: me.agent.id, name: 'Ada', active: true }, { id: bo, name: 'Bo', active: true }, { id: dee, name: 'Dee', active: false }] });
 const writer = roleOf({ id: '00000000-0000-4000-8000-0000000000b2', name: 'Writer', system: null }, ['kb_articles:read', 'kb_articles:update'],
   { members: [{ id: cy, name: 'Cy', active: true }] });
-const center = { enabled: true, title: 'Help', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' };
+const center = { enabled: true, title: 'Help', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' };
 const review = (state: 'open' | 'approved' | 'changes_requested', fields: Record<string, unknown> = {}) => ({
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', article_id: ids.article, article_title: 'Reset your password', locale: null, state, note: 'Check the steps', content_hash: 'a'.repeat(64), current: true,
   reviewers: [{ agent_id: bo, name: 'Bo', seen_at: null }], requested_by: { agent_id: me.agent.id, name: 'Ada' }, requested_by_token: null,
@@ -84,7 +84,7 @@ test('a reviewer asking for changes shows their line; an open review can be with
 test('unpublished changes waiting for a reviewer cannot be published from the changes bar', async () => {
   const live = article({ status: 'published', published_at: '2026-10-02T00:00:00Z', has_draft: true, draft: {
     title: 'Reset a password', slug: 'reset-your-password', body_md: 'Open **Settings**.\nChoose Password.', seo_title: '', seo_description: '', collection_id: ids.setup,
-    collection_ids: [ids.setup], show_contents: true, attachments: [], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: { agent_id: null, name: 'Ada' } } });
+    collection_ids: [ids.setup], show_contents: true, attachments: [], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: { agent_id: null, name: 'Ada' }, tags: [] } });
   serve(base([review('open')], live));
   open();
   expect(await screen.findByRole('button', { name: 'Publish changes' })).toBeDisabled();

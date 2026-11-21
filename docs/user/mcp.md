@@ -144,8 +144,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_saved_reply_version_restore` | Makes an earlier version current again, as a new version | `saved_replies:update` |
 | `colliedesk_saved_replies_trash` | Lists the saved replies in the trash a page at a time, with when each is deleted for good | `saved_replies:read` |
 | `colliedesk_saved_reply_undelete` | Takes a saved reply out of the trash | `saved_replies:delete` |
-| `colliedesk_saved_views_list` | Lists the [saved inbox views](inbox.md#saved-views) the token's person can use, or the ones in the trash | `saved_views:read` |
-| `colliedesk_saved_view_create` | Saves inbox filters as a personal or shared view | `saved_views:create` |
+| `colliedesk_saved_views_list` | Lists the saved views of the [inbox](inbox.md#saved-views) or the [knowledge base](knowledge-base.md#saved-views) the token's person can use, or the ones in the trash | `saved_views:read` |
+| `colliedesk_saved_view_create` | Saves inbox or knowledge base article filters as a personal or shared view | `saved_views:create` |
 | `colliedesk_saved_view_update` | Changes the name, the filters or who sees a view | `saved_views:update` |
 | `colliedesk_saved_view_delete` | Moves a view to the trash for 30 days; changes no conversation | `saved_views:delete` |
 | `colliedesk_saved_view_restore` | Takes a view out of the trash | `saved_views:delete` |
@@ -165,6 +165,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_template_history` | Lists the versions of a template a page at a time: who, through which token, and the text | `kb_articles:read` |
 | `colliedesk_kb_template_version_restore` | Makes an earlier version of a template current again, as a new version | `kb_articles:update` |
 | `colliedesk_kb_articles_search` | Lists or searches the articles, without their text, a page at a time, each with its public address (`url`) to link in a reply | `kb_articles:read` |
+| `colliedesk_kb_articles_export` | Gives the article list, with the same filters, as the CSV the list page downloads, and the link to the whole file | `kb_articles:read` |
+| `colliedesk_kb_tags_list` | Lists the tags of the articles, by name, with how many articles have each | `kb_articles:read` |
 | `colliedesk_kb_article_get` | Reads one article with its whole Markdown text and its public address (`url`), also from the trash | `kb_articles:read` |
 | `colliedesk_kb_article_create` | Writes an article, as a draft or published | `kb_articles:create` |
 | `colliedesk_kb_article_update` | Edits, moves, publishes or unpublishes an article; every change is a version | `kb_articles:update` |
@@ -247,8 +249,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_response_targets_set` | Changes the business hours or the response targets | `workspace:update` |
 | `colliedesk_my_sla_alerts_set` | Turns your own reminder and overdue emails on or off | `profile:update` |
 | `colliedesk_my_mention_email_set` | Turns your own mention emails on or off | `profile:update` |
+| `colliedesk_my_kb_list_columns_set` | Chooses your own knowledge base article list columns | `profile:update` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | any token |
-| `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | any token |
+| `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone and knowledge base list columns | any token |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `workspace:update` |
 | `colliedesk_workspace_rename` | Renames the workspace (replies never carry this name; it is the help center title while the help center has none) | `workspace:update` |
 | `colliedesk_my_timezone_set` | Sets or clears your own timezone | `profile:update` |

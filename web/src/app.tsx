@@ -44,6 +44,7 @@ import { customersPageName } from './features/contacts/contact-page-name';
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
+import { knowledgeSearchFrom } from './features/kb/knowledge-search';
 import { channelsRoutePart, preloadChannelsPage } from './features/settings/channels/channels-preload';
 import { preloadSetupStep, setupFlowPart } from './features/onboarding/setup-flow-part';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
@@ -266,13 +267,7 @@ const knowledgeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge',
   loader: pageChunk(kbPart),
-  validateSearch: (search: Record<string, unknown>): { collection?: string; q?: string; status?: 'draft' | 'published'; has_draft?: 'true'; visibility?: 'everyone' | 'help_chat' | 'agents' } => ({
-    ...(typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
-    ...(typeof search.q === 'string' && search.q !== '' ? { q: search.q } : {}),
-    ...(search.status === 'draft' || search.status === 'published' ? { status: search.status } : {}),
-    ...(search.has_draft === 'true' || search.has_draft === true ? { has_draft: 'true' as const } : {}),
-    ...(search.visibility === 'everyone' || search.visibility === 'help_chat' || search.visibility === 'agents' ? { visibility: search.visibility } : {}),
-  }),
+  validateSearch: knowledgeSearchFrom,
   component: function Knowledge() {
     const search = knowledgeRoute.useSearch();
     return <Part part={kbPart} failed={kbFailed} render={({ KnowledgeRoute }) => <KnowledgeRoute search={search} />} />;

@@ -21,11 +21,19 @@ const (
 	SavedViewShared   = "shared"
 )
 
-// SavedView is a named set of inbox filters. Filters is the ConversationFilters object of the
-// contract, already checked against the filters GET /conversations accepts.
+// Where a saved view opens: the inbox or the knowledge base article list. A view never changes area.
+const (
+	SavedViewInbox = "inbox"
+	SavedViewKB    = "kb"
+)
+
+// SavedView is a named set of filters of one area. Filters is the ConversationFilters object of the
+// contract for the inbox, KBArticleFilters for the knowledge base, already checked against the
+// filters GET /conversations or GET /kb/articles accepts.
 type SavedView struct {
 	ID           string          `json:"id"`
 	Name         string          `json:"name"`
+	Area         string          `json:"area"`
 	Scope        string          `json:"scope"`
 	Filters      json.RawMessage `json:"filters"`
 	OwnerAgentID *string         `json:"owner_agent_id"`
