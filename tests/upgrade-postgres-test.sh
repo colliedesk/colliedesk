@@ -323,6 +323,7 @@ upgraded() {
 
 # rolled_back: --rollback put the install on PostgreSQL 17 and its old volume, data as before.
 # rolled_back gone: the same with stdout and stderr failing on every write (an SSH session that dropped).
+# rolled_back '' NAME: the data as baseline NAME instead of before.
 rolled_back() {
   if [ "${1:-}" = gone ]; then
     (cd "$TMP" && sh "$ROOT/upgrade-postgres.sh" --rollback >/dev/full 2>&1) || fail 'a rollback whose terminal is gone failed'
@@ -341,7 +342,7 @@ rolled_back() {
   [ "$(mode "$TMP/compose.yaml")" = "$compose_mode" ] || fail "the rollback left compose.yaml with mode $(mode "$TMP/compose.yaml"), want $compose_mode"
   [ "$(state state)" = rolled_back ] || fail "the state file says $(state state), want rolled_back"
   server_running || fail 'the server is not running after the rollback'
-  same_data 'after the rollback' before
+  same_data 'after the rollback' "${2:-before}"
   check_inbox acme owner@acme.example
   refused 'a second upgrade over the kept PostgreSQL 19 volume' 'postgres19-data'
   step 'rolled back: PostgreSQL 17 on its old volume, data as before, the 19 volume kept'
@@ -791,6 +792,9 @@ grep -qF 'PostgreSQL 19 or newer is required' "$TMP/server.log" && grep -qF 'sh 
 [ "$(echo 'SELECT count(*) FROM schema_migrations;' | psql_as "$SUPER" colliedesk -At)" = "$migrations" ] ||
   fail "$IMAGE migrated the PostgreSQL 17 database it refused"
 step "$IMAGE on PostgreSQL 17: refused, names upgrade-postgres.sh"
+# The 17 volume as a rollback brings it back: before, plus the sign-ins of the checks since.
+check snapshot "$TMP/on17" || fail 'the database fails its own check (on17)'
+cp "$TMP/files.now" "$TMP/on17.files"
 # The 19 volume the rollback kept holds what the server wrote on 19: the run refuses until the
 # operator removes it, as docs/self-host/upgrade.md says, and then moves the install to 19.
 if upgrade; then cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh upgraded over the PostgreSQL 19 volume a rollback kept'; fi
@@ -830,6 +834,6 @@ no_secret_printed "rolling back with $IMAGE in .env"
 sed "s#^COLLIE_DESK_IMAGE=.*#COLLIE_DESK_IMAGE=$PREVIOUS#" "$TMP/.env" >"$TMP/.env.next"
 cat "$TMP/.env.next" >"$TMP/.env"
 rm "$TMP/.env.next"
-rolled_back
+rolled_back '' on17
 step "a rollback with $IMAGE in .env names COLLIE_DESK_IMAGE; with $PREVIOUS it finishes"
 step 'passed'
