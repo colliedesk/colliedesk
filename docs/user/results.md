@@ -96,6 +96,31 @@ that window. It is an upper bound and the page prints the formula:
 
 It assumes each of those conversations would have taken as long as it did in Freshdesk.
 
+## Help center
+
+For the same window, in the workspace's timezone, today included:
+
+- **Article views**: readers who opened an article of your [help center](knowledge-base.md#public-help-center)
+  in a browser. The same reader on the same article counts once per 30 minutes. Bots, link previews,
+  prefetches and your team's own previews (anyone signed in to Colliedesk in that browser) are not
+  counted. Click the number for the views of each day.
+- **Requests opened**: the conversations customers opened in that window, spam and imported
+  conversations left out. Click it for those conversations in the inbox.
+- **Self-service score**: article views divided by requests opened, such as 10.0 for 500 views and 50
+  requests. The higher it is, the more answers people found without writing in. A window, or a week,
+  without a request says **No requests**. The table under it shows each week from Monday; the first and
+  the last week are cut to the window.
+- **Articles**: each article viewed or used in a reply in the window, most viewed first (the 50 most
+  viewed when there are more), with its views, **Helpful** (the votes its page shows now, such as
+  "80% · 4 of 5") and **Used in replies**: the sent replies that linked the article or were an AI draft
+  that quoted it, each reply once. Click the title to open the article, and the number of replies for
+  the replies themselves.
+
+A view reaches this page within a minute. Colliedesk keeps only the number of views of each article,
+language and day: never the reader's address, browser or the page they came from. Links in a reply
+count when they point to your help center at its Colliedesk address, its custom domain, or an old
+Freshdesk article address of an imported article.
+
 ## Open the conversations behind a number
 
 Click a number (or a count under it, such as "8 waiting for a first reply"). The inbox opens with
@@ -126,7 +151,10 @@ them the page says so and shows no switch, and your choice shows again once the 
 
 `GET /api/v1/results` returns the numbers (`results:read`), and `GET /api/v1/conversations?result=…`
 the conversations behind one. The MCP tool `colliedesk_results_get` and the `result` argument of
-`colliedesk_inbox_search` do the same ([MCP](mcp.md)). The share link needs `results:share`, since
+`colliedesk_inbox_search` do the same ([MCP](mcp.md)). Both carry `help_center`: for each window its
+`views`, `requests`, `score` (`null` without requests), `days`, `weeks` and `articles` (with
+`articles_total`). The replies that used one article are in `colliedesk_kb_article_stats`
+([knowledge base](knowledge-base.md#views-and-replies)). The share link needs `results:share`, since
 the numbers leave sign-in: with it, a token reads, creates and turns off the link
 (`colliedesk_results_share_link_get`, `colliedesk_results_share_link_create`,
 `colliedesk_results_share_link_revoke`), and creating one returns the link to the agent at once. A

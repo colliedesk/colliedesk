@@ -291,6 +291,61 @@ MCP `catalog-kb-votes.go`, export `store/export-kb-votes.go`, web `features/kb/a
 - **Export.** `kb-article-vote-resets.ndjson`, then `kb-article-votes.ndjson` with closed votes too:
   after a reset the export is the only way to read them. `voter` is exported hex.
 
+## Views and uses
+
+Migration `20261121091907-kb-article-views-and-uses`; code `pageview/` (who is a reader, the event),
+`helpcenter/page-views.go` (emits it), `kbviews/counter.go` (counts in memory), `store/kb-article-views.go`
+(the write), `kblinks/find.go` and `store/kb-article-uses.go` (uses), `store/kb-article-stats.go`
+(`GET /api/v1/kb/articles/{id}/stats`), MCP `catalog-kb-stats.go`, web `features/kb/article-stats.tsx`.
+Results reads the same tables (docs/internals/results.md › Help center).
+
+- **One rule for a reader.** `pageview.IsReader` is the only check: GET (not HEAD), status 200, not a
+  bot (`pageview/bots.go`, one list, matched on the lower-cased User-Agent; an empty User-Agent is a
+  bot), not a prefetch (`Sec-Purpose` or `Purpose` naming `prefetch`), not the team. A later counter or
+  analytics consumer takes the same `pageview.Event`, so two numbers never disagree on what a visit is.
+- **HeadlessChrome is a bot.** It is in the list, and Playwright's default User-Agent says it: an e2e test
+  that expects a view sets a desktop browser's User-Agent.
+- **The team is the session cookie.** `Config.Team` is `signedIn`: a request that carries a Colliedesk
+  session cookie is a team member previewing, without a database read on the public page. A reader who
+  is also signed in to the app in the same browser is not counted; that is the price of no query.
+- **Only article pages count today.** Home, collection and search pages emit the event too (with the
+  search words); the counter keeps only `Kind == Article`. Help-chat-only and agents-only articles answer
+  404 and emit nothing.
+- **A reader once per 30 minutes.** The reader key is `HMAC-SHA256(day key, client address, UA, local
+  day)`, per article; the client address is the one the site already trusts (`Config.Client`, else the
+  connection's). The key is random, lives in memory only and changes at each UTC day (`Options.NewKey`,
+  injectable with the clock `Options.Now`); the readers of the old key are forgotten with it.
+  At most 200,000 readers are remembered (`maxReaders`); past it a new reader's view still counts, it is
+  only not remembered, so rotating User-Agents cannot grow the memory. The cost is a double count, never
+  a lost view.
+- **Never on the page's path.** `PageViewed` only adds to a map under a mutex. `Run` writes every 30 s
+  (`FlushEvery`, `COLLIEDESK_E2E_VIEW_FLUSH_MS` in the e2e build only) and once more after
+  `server.Shutdown` with 10 s to do it; a failed write puts the counts back for the next one. A server
+  killed with SIGKILL loses at most 30 s of views.
+- **One statement, privileged.** The write is one `INSERT … SELECT FROM unnest(…) JOIN kb_articles … ON
+  CONFLICT DO UPDATE SET views = views + EXCLUDED.views` across workspaces, under
+  `PrivilegeKBArticleViews`. The join skips counts of an article purged since the view; the others still
+  add up. `day` is the calendar day in the workspace's timezone at the view (`workspaces.timezone`);
+  changing the timezone later does not move stored days.
+- **Nothing about the reader is stored.** `kb_article_views` is (workspace, article, locale, day,
+  views). The address, User-Agent and referrer never leave memory.
+- **A use is a sent reply.** `recordKBArticleUses` runs inside the transaction that inserts an outgoing
+  message (a note, a notice or an unsent draft never does). `link` is an article address in the body on
+  the workspace's help center (`/help/<slug>/a/<number>-…` on this server's origin or the active custom
+  domain), or an old Freshdesk address (`/support/solutions/articles/<id>`, `/a/solutions/articles/<id>`)
+  of an article the import ledger maps (`import_items`, `kb_article`, status `done`). `ai_source` is each
+  `ai_draft_sources` article of the draft the reply was sent from. One row per message, article and
+  kind; a reply that both links and quotes an article has two rows and is counted once (`count(DISTINCT
+  message_id)`). A reply whose delivery fails later still counts: the agent used the article.
+- **A trashed article keeps its stats.** The stats route reads it; a purge cascades the rows away.
+- **The stats route** is `kb_articles:read`. Without `from`/`to` it is the last 30 days, today included
+  (`KBArticleStatsDefaultDays`); with them, the days `[from, to)` in the workspace timezone, at most 366.
+  It lists the newest 50 replies (`MaxKBArticleStatsReplies`) and `replies_total`. Another workspace's
+  id is 404, like an unknown one. `colliedesk_kb_article_get` carries `views_30d` and `uses_30d` from
+  the same read.
+- **Export.** `kb-article-views.ndjson` (article, locale, day, views) and `kb-article-uses.ndjson`
+  (article, conversation, message, kind, `created_at` UTC), after the votes.
+
 ## Translations
 
 Migration `20261105100000-kb-translations`; code `store/kb-translations.go`, `httpapi/kb-translation-handlers.go`,

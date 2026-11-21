@@ -93,6 +93,25 @@ since a snapshot is replaced. A snapshot not kept in the caller's workspace answ
 about other workspaces. Every time the API returns is UTC: the loader converts what the database
 session returns.
 
+## Help center
+
+`help_center` on `GET /api/v1/results` (`results/help-center.go`, `store/results-help-center.go`): help
+center article views next to the conversations opened, for each window. How a view and a use are counted
+is in docs/internals/knowledge-base.md › Views and uses.
+
+| Decision | Why |
+|---|---|
+| Read live on each request, not kept in the snapshot | Views are already one row per article, locale and day, so the read is a few index scans (budget in `TestResultsComputeAndReadStayInBudget`); a snapshot would show views up to an hour old next to a counter written every 30 s |
+| Windows are calendar days in the workspace's timezone, today included, as `[from, to)` (`results.Period`) | `kb_article_views.day` is a local day, so the conversations are cut on the same local midnights; UTC days would compare different periods |
+| Requests are the conversations created in the window with no `origin` (not imported) and not spam: the inbox's `source=native` with `created_after`/`created_before` | The number opens that inbox list and the list must show exactly that count; imported history is not something the help center could have avoided |
+| The score is views ÷ requests to one decimal, `null` when there is no request; the UI writes "No requests" | Never a division by zero, never an infinite or 0 score that reads as a result |
+| Weeks start on Monday, the first and the last cut to the window | The weeks add up to the window; a full first week would count days outside it |
+| `days` are the days of the window, with views and requests, zero days included | The views number opens them; a gap would read as a missing write |
+| The article rows are the articles viewed or used in a reply in the window, most viewed first, at most 50 (`MaxHelpCenterArticles`), with `articles_total` | The answer stays one call for an agent and a bounded size; the editor box and `/stats` read any one article |
+| `helpful`, `votes` and `helpful_percent` are what the article's page shows now, not votes cast in the window | Votes can be reset and a reader changes a vote; a per-window count would disagree with the article's own box |
+| `uses` counts distinct sent replies (a reply that links and quotes the article counts once) | It answers "how many replies used it"; it opens the list of those replies (`/stats`) |
+| Not on the share page nor in the weekly email | `results.Shared` is pinned field by field; adding the block there is its own decision |
+
 ## Share link and weekly email
 
 | Decision | Why |
