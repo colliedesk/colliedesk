@@ -125,6 +125,11 @@ volume (`postgres19-data`), never `pg_upgrade`: the upgrade only dumps from the 
 install made by the v1.0.1 installer (PostgreSQL 17, no `PGDATA` line), for both database login
 layouts, in the background of the CI `image` job and in the release.
 
+- **The fixture runs v1.0.1, not the candidate.** Releases after v1.0.1 need PostgreSQL 19, so only
+  v1.0.1 can fill a 17 install. The test runs every move and rollback with v1.0.1, then sets the
+  candidate image on the install while it is back on 17: the server must refuse and name
+  `upgrade-postgres.sh`, and after the move it must apply every migration of the checkout.
+
 - **Compare data only while the server is stopped.** The server writes on its own (AI indexing,
   inbound and outbox retries, snapshots, the settings import), so a snapshot of a running install
   differs from the next one for no fault of the upgrade. The test stops the server, compares,
