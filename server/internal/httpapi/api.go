@@ -643,6 +643,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/kb/articles/{id}/draft", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/articles/{id}/votes", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/articles/{id}/votes/reset", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}/stats", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/articles/{id}/reviews", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/reviews/{id}/approve", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/articles/{id}/reviews", auth.PermissionSession},

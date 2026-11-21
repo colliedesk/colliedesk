@@ -125,6 +125,7 @@ var routeAccess = map[string]TokenAccess{
 	"DELETE /api/v1/kb/articles/{id}/draft":                                          need(auth.PermKBArticlesUpdate),
 	"GET /api/v1/kb/articles/{id}/votes":                                             need(auth.PermKBArticlesRead),
 	"POST /api/v1/kb/articles/{id}/votes/reset":                                      need(auth.PermKBArticlesUpdate),
+	"GET /api/v1/kb/articles/{id}/stats":                                             need(auth.PermKBArticlesRead),
 	"POST /api/v1/kb/articles/{id}/reviews":                                          need(auth.PermKBArticlesUpdate),
 	"POST /api/v1/kb/reviews/{id}/approve":                                           need(auth.PermKBArticlesPublish),
 	"POST /api/v1/kb/reviews/approve":                                                need(auth.PermKBArticlesPublish),

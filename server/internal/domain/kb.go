@@ -292,6 +292,10 @@ type KBArticle struct {
 	// AIDraftsThisMonth is set only when one article is read: the AI reply drafts this UTC month that
 	// used it as a source.
 	AIDraftsThisMonth *int `json:"ai_drafts_this_month,omitempty"`
+	// Views30d and Uses30d are set only when one article is read: its help center views and the sent
+	// replies that used it in the last KBArticleStatsDefaultDays days, today included.
+	Views30d *int64 `json:"views_30d,omitempty"`
+	Uses30d  *int64 `json:"uses_30d,omitempty"`
 }
 
 // KBAIExclusion is since when, and by whom, an article is kept away from AI.

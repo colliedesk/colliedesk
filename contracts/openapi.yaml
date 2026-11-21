@@ -7277,6 +7277,31 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/{id}/stats:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBArticleStats
+      x-permission: kb_articles:read
+      description: >
+        How much an article was read and used: its help center views and the sent replies that used it,
+        per calendar day in the workspace's timezone, for the days [from, to) (to excluded). Without
+        `from` and `to` it is the last 30 days, today included, the same days as `views_30d` and
+        `uses_30d` on the article. A view is one reader opening the article in a browser, counted once
+        per 30 minutes; bots, link previews, prefetches and the team's own previews are not counted. A
+        use is a sent reply that linked the article (on any of the help center's addresses, old
+        Freshdesk addresses included) or was an AI draft quoting it, each reply once. `replies` lists
+        the newest 50 of those replies with their conversation.
+      parameters:
+        - {name: from, in: query, schema: {type: string, format: date}, description: 'First day (YYYY-MM-DD, workspace timezone). Give from and to together.'}
+        - {name: to, in: query, schema: {type: string, format: date}, description: 'The day after the last one (YYYY-MM-DD), at most 366 days after from.'}
+      responses:
+        '200':
+          description: The article's views and uses
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleStats'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/kb/articles/{id}/reviews:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -10913,8 +10938,9 @@ components:
         resets_at: {type: string, format: date-time, description: The first instant of the next UTC month.}
     Results:
       type: object
-      required: [current, baseline, baseline_state, hours_saved, error, weekly_email]
+      required: [current, baseline, baseline_state, hours_saved, error, weekly_email, help_center]
       properties:
+        help_center: {$ref: '#/components/schemas/ResultsHelpCenter'}
         weekly_email:
           description: 'The caller''s weekly email (people with results:share; null for others).'
           oneOf:
@@ -10957,6 +10983,84 @@ components:
               properties:
                 message: {type: string}
                 at: {type: string, format: date-time}
+    ResultsHelpCenter:
+      type: object
+      additionalProperties: false
+      description: >-
+        Help center article views next to the conversations opened, read live (not from the snapshot). A view is
+        one reader opening an article in a browser, counted once per 30 minutes; bots, link previews, prefetches
+        and the team's own previews are not counted.
+      required: [timezone, windows]
+      properties:
+        timezone: {type: string, description: The workspace's timezone (IANA); every day and week is a calendar day or week there.}
+        windows:
+          type: object
+          additionalProperties: false
+          required: [30d, 7d]
+          properties:
+            30d: {$ref: '#/components/schemas/ResultsHelpCenterWindow'}
+            7d: {$ref: '#/components/schemas/ResultsHelpCenterWindow'}
+    ResultsHelpCenterWindow:
+      type: object
+      additionalProperties: false
+      description: The last 30 or 7 calendar days, today included, as [from, to).
+      required: [from, to, views, requests, score, weeks, days, articles, articles_total]
+      properties:
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time, description: Excluded.}
+        views: {type: integer, minimum: 0, description: Help center article views.}
+        requests:
+          type: integer
+          minimum: 0
+          description: >-
+            Conversations opened: the inbox list with source=native, created_after=from and created_before=to
+            (every status but spam; imported conversations are not counted).
+        score:
+          type: [number, 'null']
+          description: The self-service score, views per conversation opened to one decimal; null when no conversation was opened.
+        weeks:
+          type: array
+          description: Weeks from Monday, the first and the last cut to the window, so they add up to it.
+          items:
+            type: object
+            additionalProperties: false
+            required: [from, to, first_day, last_day, views, requests, score]
+            properties:
+              from: {type: string, format: date-time}
+              to: {type: string, format: date-time}
+              first_day: {type: string, format: date}
+              last_day: {type: string, format: date}
+              views: {type: integer, minimum: 0}
+              requests: {type: integer, minimum: 0}
+              score: {type: [number, 'null'], description: Null when no conversation was opened that week.}
+        days:
+          type: array
+          description: Every day of the window, oldest first.
+          items:
+            type: object
+            additionalProperties: false
+            required: [day, views, requests]
+            properties:
+              day: {type: string, format: date}
+              views: {type: integer, minimum: 0}
+              requests: {type: integer, minimum: 0}
+        articles:
+          type: array
+          description: The articles viewed or used in a sent reply in the window, most viewed first, at most 50.
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, number, title, views, helpful, votes, helpful_percent, uses]
+            properties:
+              id: {type: string, format: uuid}
+              number: {type: integer, minimum: 1}
+              title: {type: string}
+              views: {type: integer, minimum: 0}
+              helpful: {type: integer, minimum: 0, description: 'Readers who found it helpful, as its page shows now (not only in the window).'}
+              votes: {type: integer, minimum: 0, description: All the votes its page counts now.}
+              helpful_percent: {type: [integer, 'null'], minimum: 0, maximum: 100, description: Null without votes.}
+              uses: {type: integer, minimum: 0, description: Sent replies in the window that linked it or were an AI draft quoting it.}
+        articles_total: {type: integer, minimum: 0, description: All the articles viewed or used in the window.}
     ResultsShareLink:
       type: object
       required: [created_at, created_by_name, last_viewed_at]
@@ -12764,6 +12868,8 @@ components:
       required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, visibility_from, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments]
       properties:
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
+        views_30d: {type: integer, minimum: 0, description: 'Only when one article is read (GET): its help center views in the last 30 days, today included (GET /api/v1/kb/articles/{id}/stats has them per day).'}
+        uses_30d: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the sent replies in the last 30 days that linked it or were an AI draft quoting it.'}
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
         collection_id: {type: string, format: uuid}
@@ -12914,6 +13020,49 @@ components:
       properties:
         helpful: {type: integer, minimum: 0}
         not_helpful: {type: integer, minimum: 0}
+    KBArticleStats:
+      type: object
+      additionalProperties: false
+      required: [article_id, timezone, from, to, first_day, last_day, views, uses, days, replies, replies_total]
+      properties:
+        article_id: {type: string, format: uuid}
+        timezone: {type: string, description: The workspace's timezone (IANA); every day is a calendar day there.}
+        from: {type: string, format: date-time, description: The first day's start.}
+        to: {type: string, format: date-time, description: 'The end of the last day, excluded.'}
+        first_day: {type: string, format: date}
+        last_day: {type: string, format: date}
+        views: {type: integer, minimum: 0, description: Help center views of the article in the days.}
+        uses: {type: integer, minimum: 0, description: Sent replies that linked the article or were an AI draft quoting it.}
+        days:
+          type: array
+          description: Every day of the range, oldest first, days without views included.
+          items:
+            type: object
+            additionalProperties: false
+            required: [day, views, uses]
+            properties:
+              day: {type: string, format: date}
+              views: {type: integer, minimum: 0}
+              uses: {type: integer, minimum: 0}
+        replies:
+          type: array
+          description: The newest 50 replies that used the article, newest first.
+          items:
+            type: object
+            additionalProperties: false
+            required: [conversation_id, display_ref, subject, message_id, kinds, at]
+            properties:
+              conversation_id: {type: string, format: uuid}
+              display_ref: {type: string, description: 'The conversation''s code, as the inbox shows it.'}
+              subject: {type: string}
+              message_id: {type: string, format: uuid}
+              kinds:
+                type: array
+                minItems: 1
+                description: '`link`: the reply linked the article; `ai_source`: it was sent from an AI draft that quoted it.'
+                items: {type: string, enum: [ai_source, link]}
+              at: {type: string, format: date-time}
+        replies_total: {type: integer, minimum: 0, description: 'All the replies that used it in the days; equals uses.'}
     KBArticleVotes:
       type: object
       required: [article_id, helpful, not_helpful, imported, votes, resets]
