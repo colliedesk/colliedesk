@@ -8,7 +8,7 @@ import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
 import { SearchIcon } from '../../ui/icons';
 import { typingDelayMs } from '../inbox/inbox-filters';
-import { editorPart } from './editor-part';
+import { usePreloadEditor } from './editor-part';
 import { SavedReplyTrash } from '../settings/saved-reply-panels';
 import { CollectionForm, CollectionTree } from './collection-panel';
 import type { CollectionValues } from './collection-panel';
@@ -51,6 +51,7 @@ export function useRefreshKB() {
 export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const navigate = useNavigate();
   const refresh = useRefreshKB();
+  const preloadEditor = usePreloadEditor();
   const createCollection = useCreateAction((value: Parameters<typeof kbApi.createCollection>[0], key: string) => kbApi.createCollection(value, key));
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const timezone = me.data?.timezone ?? 'UTC';
@@ -235,7 +236,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             {articles.isPending && <p role="status" className="empty-copy kb-list-note">{messages.loading}</p>}
             {articles.isSuccess && items.length === 0 && <p className="empty-copy kb-list-note">{search.q ? kbMessages.noMatches : kbMessages.noArticles}</p>}
             {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage}
-              onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
+              onPointerOver={preloadEditor} onFocus={preloadEditor}>
               {items.map((article) => <ArticleRow key={article.id} article={article} timezone={timezone} isPublic={publicNow}
                 collection={names.get(article.collection_id)}
                 order={ordered && <OrderButtons ids={articleIds} id={article.id} name={article.title} more={articles.hasNextPage} busy={moves.moving} onAnnounce={moves.announce}
