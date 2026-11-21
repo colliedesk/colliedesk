@@ -81,10 +81,15 @@ esac
 if [ -n "${PREVIOUS_INSTALL_SH:-}" ]; then
   cp "$PREVIOUS_INSTALL_SH" "$TMP/install.sh"
 else
-  git -C "$ROOT" show "$previous_tag:install.sh" >"$TMP/install.sh" 2>/dev/null ||
-    { git -C "$ROOT" fetch -q --depth 1 origin "refs/tags/$previous_tag:refs/tags/$previous_tag" 2>/dev/null &&
-      git -C "$ROOT" show "$previous_tag:install.sh" >"$TMP/install.sh"; } ||
-    fail "cannot read install.sh of $previous_tag; set PREVIOUS_INSTALL_SH"
+  # upgrade-postgres-test.sh fetches into the same shallow checkout at the same time: a fetch that
+  # finds .git/shallow.lock taken fails, so wait a second and look again.
+  fetches=0
+  until git -C "$ROOT" show "$previous_tag:install.sh" >"$TMP/install.sh" 2>/dev/null; do
+    fetches=$((fetches + 1))
+    [ "$fetches" -le 10 ] ||
+      fail "cannot read install.sh of $previous_tag ($(cat "$TMP/fetch.err")); set PREVIOUS_INSTALL_SH"
+    git -C "$ROOT" fetch -q --depth 1 origin "refs/tags/$previous_tag:refs/tags/$previous_tag" 2>"$TMP/fetch.err" || sleep 1
+  done
 fi
 # From 1.0.0 install.sh writes compose.yaml.next and then moves it over compose.yaml.
 # A release that picks the PostgreSQL image at run time writes @POSTGRES_IMAGE@ and sets it for a fresh install.

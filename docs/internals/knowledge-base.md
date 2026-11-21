@@ -656,6 +656,12 @@ Migration `kb-visibility`; code in `server/internal/store/kb-visibility*.go`. Us
   who kept it). A trashed image is accepted only in the field that already names it, so a theme read
   and sent back whole still saves; the save locks the `help_centers` row before the media rows, an
   order no other path reverses.
+- **A delete trigger also runs inside a workspace's cascade.** Deleting a workspace removes its
+  `kb_article_attachments` rows after the workspace row is gone, so `ai_retrieval_attachment_changed`
+  queues an article only while its workspace is visible: the insert would otherwise fail the foreign
+  key to `workspaces` (retention, `app.privileged`) or row-level security (a superuser, whose cascade
+  runs as the table owner). A new trigger that writes another table on DELETE needs the same check;
+  `TestAWorkspaceWhoseArticleListsAFileIsDeleted` pins this one.
 - **A generated column cannot be copied in.** `restore-workspace.sh` skips columns with
   `attgenerated` set; the database computes `kb_articles.search` and `kb_article_translations.search` again.
 - **Write the article row lock first.** Every path that writes a translation locks the article's row
