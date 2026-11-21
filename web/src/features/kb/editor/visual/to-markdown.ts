@@ -4,6 +4,8 @@ import { toMarkdown } from 'mdast-util-to-markdown';
 import type { Join } from 'mdast-util-to-markdown';
 import { tagString } from '../format-tags';
 import type { FormatTag } from '../format-tags';
+import { figureTag } from './article-figure';
+import type { FigureAttrs } from './article-figure';
 import { html, phrasing } from './to-markdown-inline';
 import type { MD } from './to-markdown-inline';
 import { table } from './to-markdown-table';
@@ -77,8 +79,20 @@ function block(node: PMNode): MD[] {
       return table(node, flow);
     case 'markdownBlock':
       return [html(node.attrs.source as string)];
+    case 'articleFigure':
+      return figure(node);
   }
   throw new Error(`the visual editor cannot write a ${node.type.name}`);
+}
+
+// figure writes an image's <figure> as the server reads it.
+function figure(node: PMNode): MD[] {
+  const attrs = node.attrs as FigureAttrs;
+  const image: MD = { type: 'image', url: attrs.src, alt: attrs.alt ?? '', title: attrs.title };
+  const shown: MD = attrs.href ? { type: 'link', url: attrs.href, title: null, children: [image] } : image;
+  const picture: MD = { type: 'paragraph', children: [shown] };
+  const caption = node.childCount > 0 ? [html('<figcaption>'), { type: 'paragraph', children: phrasing(node) }, html('</figcaption>')] : [];
+  return [html(tagString(figureTag(attrs))), picture, ...caption, html('</figure>')];
 }
 
 function list(node: PMNode): MD {

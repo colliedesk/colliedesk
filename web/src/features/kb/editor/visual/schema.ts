@@ -12,6 +12,7 @@ import Strike from '@tiptap/extension-strike';
 import { Table, TableRow } from '@tiptap/extension-table';
 import Text from '@tiptap/extension-text';
 import Underline from '@tiptap/extension-underline';
+import { ArticleFigure } from './article-figure';
 import { ArticleImage } from './article-image';
 import { Color, Highlight, InlineCode, Link } from './marks';
 import { ArticleCell, ArticleDocument, ArticleHeader, BlockFormat, Callout, ListSpacing, MarkdownBlock } from './nodes';
@@ -20,7 +21,7 @@ import { ArticleCell, ArticleDocument, ArticleHeader, BlockFormat, Callout, List
 // shows is exactly what it can save (Markdown, GFM and the server's formatting tags).
 export const articleContent = [
   ArticleDocument, Paragraph, Text, Heading, Blockquote, CodeBlock, HorizontalRule, HardBreak,
-  ArticleImage,
+  ArticleImage, ArticleFigure,
   BulletList, OrderedList, ListItem, TaskList, TaskItem.configure({ nested: true }),
   Table.configure({ resizable: false }), TableRow, ArticleHeader, ArticleCell,
   Callout, MarkdownBlock, BlockFormat, ListSpacing,

@@ -101,3 +101,21 @@ B
 </td>
 </tr>
 </table>
+
+<figure data-width="480" data-align="center" data-border>
+
+[![A screenshot](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)](https://example.com/guide)
+
+<figcaption>
+
+The **settings** page
+
+</figcaption>
+
+</figure>
+
+<figure data-width="small" data-align="left">
+
+![Chart](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)
+
+</figure>
