@@ -8234,7 +8234,8 @@ paths:
       description: >
         The library's trash, last moved there first, 60 items a page unless `limit` says otherwise,
         each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its
-        usage. An item the purge keeps (the help center's logo or favicon) has no `purge_at`. An item
+        usage. An item the purge keeps (the help center's logo or favicon, or the earlier version of a
+        replacement not undone) has no `purge_at`. An item
         in the trash still counts toward the plan's storage until it is purged.
       parameters:
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string}}
@@ -8355,6 +8356,9 @@ paths:
         the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no
         longer names it) or `not_found`. Articles in the trash and older versions that named one
         then show "Media no longer exists". This cannot be undone. It needs `kb_media:purge`.
+        An item a replacement put another in the place of, and that is not undone, is its earlier
+        version: the call then purges nothing and answers 409 `media_kept`, naming the articles and the
+        replacement in `kept_by`. Undo the replacement first; the item may stay in the trash meanwhile.
       requestBody:
         required: true
         content:
@@ -8377,6 +8381,7 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/kb/media/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -13295,7 +13300,7 @@ components:
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         usage: {$ref: '#/components/schemas/KBMediaUsage'}
-        purge_at: {type: string, format: date-time, description: 'When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article and not the help center names.'}
+        purge_at: {type: string, format: date-time, description: 'When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article, not the help center and no replacement not undone keeps.'}
     KBMediaUsage:
       type: object
       required: [articles, trashed_articles, older_versions, help_center]
@@ -15722,6 +15727,25 @@ components:
                   number: {type: integer}
                   title: {type: string}
                   status: {type: string, enum: [draft, published]}
+            kept_by:
+              type: array
+              description: 'Only on media_kept: each item asked for that a replacement not undone keeps as its earlier version.'
+              items:
+                type: object
+                required: [media_id, replacement_id, to_media_id, articles]
+                properties:
+                  media_id: {type: string, format: uuid}
+                  replacement_id: {type: string, format: uuid, description: 'Undo it (POST /api/v1/kb/media-replacements/{id}/undo) to let the item go.'}
+                  to_media_id: {type: string, format: uuid, description: The item shown in its place.}
+                  articles:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, number, title]
+                      properties:
+                        id: {type: string, format: uuid}
+                        number: {type: integer}
+                        title: {type: string}
             refused_cc:
               type: array
               items: {type: string}

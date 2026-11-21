@@ -130,6 +130,7 @@ func kbMediaPurgeSpec() Spec {
 		Name:  "colliedesk_kb_media_purge",
 		Title: "Delete knowledge base media in the trash for good",
 		Description: `Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Each id answers purged, not_in_trash, not_found, or in_use: the help center shows it as its logo or favicon (usage.help_center), so it stays in the trash until colliedesk_help_center_theme_update names another image. ` +
+			`An item a replacement not undone keeps as its earlier version refuses the whole call (conflict, naming the articles and the replacement_id): undo it with colliedesk_kb_media_replace_undo first. ` +
 			`This cannot be undone: articles in the trash and older versions that named one show "Media no longer exists".`,
 		Idempotent: true,
 		REST:       []string{"POST /api/v1/kb/media/purge"},

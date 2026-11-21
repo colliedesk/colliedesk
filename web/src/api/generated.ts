@@ -4749,7 +4749,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The library's trash, last moved there first, 60 items a page unless `limit` says otherwise, each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its usage. An item the purge keeps (the help center's logo or favicon) has no `purge_at`. An item in the trash still counts toward the plan's storage until it is purged. */
+        /** @description The library's trash, last moved there first, 60 items a page unless `limit` says otherwise, each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its usage. An item the purge keeps (the help center's logo or favicon, or the earlier version of a replacement not undone) has no `purge_at`. An item in the trash still counts toward the plan's storage until it is purged. */
         get: operations["listTrashedKBMedia"];
         put?: never;
         /** @description Move up to 100 library items to the trash, each only while no live article's current text names it, and answer each id: `trashed`, `already_in_trash`, `in_use` or `not_found`. Send the `batch_id` of an earlier call to add to its batch; `POST /api/v1/kb/media/restore` with that `batch_id` brings back the whole batch. Saving an article that names an item in the trash takes it out again. Calling it twice changes nothing more. */
@@ -4803,7 +4803,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. It needs `kb_media:purge`. */
+        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. It needs `kb_media:purge`. An item a replacement put another in the place of, and that is not undone, is its earlier version: the call then purges nothing and answers 409 `media_kept`, naming the articles and the replacement in `kept_by`. Undo the replacement first; the item may stay in the trash meanwhile. */
         post: operations["purgeKBMedia"];
         delete?: never;
         options?: never;
@@ -8973,7 +8973,7 @@ export interface components {
             usage?: components["schemas"]["KBMediaUsage"];
             /**
              * Format: date-time
-             * @description When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article and not the help center names.
+             * @description When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article, not the help center and no replacement not undone keeps.
              */
             purge_at?: string;
         };
@@ -11001,6 +11001,27 @@ export interface components {
                     title: string;
                     /** @enum {string} */
                     status: "draft" | "published";
+                }[];
+                /** @description Only on media_kept: each item asked for that a replacement not undone keeps as its earlier version. */
+                kept_by?: {
+                    /** Format: uuid */
+                    media_id: string;
+                    /**
+                     * Format: uuid
+                     * @description Undo it (POST /api/v1/kb/media-replacements/{id}/undo) to let the item go.
+                     */
+                    replacement_id: string;
+                    /**
+                     * Format: uuid
+                     * @description The item shown in its place.
+                     */
+                    to_media_id: string;
+                    articles: {
+                        /** Format: uuid */
+                        id: string;
+                        number: number;
+                        title: string;
+                    }[];
                 }[];
                 /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
                 refused_cc?: string[];
@@ -22309,6 +22330,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
     getKBMediaFile: {

@@ -168,6 +168,11 @@ func (a *API) purgeKBMedia(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	results, err := a.store.PurgeKBMediaNow(request.Context(), principal(request).Workspace.ID, input.IDs)
+	if kept := (*domain.KBMediaKeptError)(nil); errors.As(err, &kept) {
+		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "media_kept",
+			"message": kept.Error(), "kept_by": kept.Kept})})
+		return
+	}
 	if err != nil {
 		writeKBMediaTrashError(response, err)
 		return

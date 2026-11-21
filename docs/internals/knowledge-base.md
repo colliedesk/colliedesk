@@ -576,6 +576,12 @@ in a workspace's custom CSS.
   translations only. The replacement row is the copy's history: `GET /api/v1/kb/media/{copy}` lists the
   original under `earlier_versions`, and undoing the replacement puts it back. The editor refuses
   while the text on screen differs from what is saved, since the replace rewrites the saved text.
+- **A replacement not undone keeps its earlier version.** `kbMediaKeptByReplacement` (a row of
+  `kb_media_replacements` with this `from_media_id`, `undone_at IS NULL` and not `in_place`) keeps the
+  item from every purge: `PurgeKBMediaNow` deletes nothing and answers 409 `media_kept` with the
+  articles and the replacement in `kept_by`; `kbMediaPurgeable` skips it, so the trash shows no
+  `purge_at`. It may still go to the trash. The guard lifts once the replacement is undone. An in-place
+  file replacement keeps no earlier bytes, so it keeps nothing.
 
 ## Files
 

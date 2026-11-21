@@ -462,7 +462,8 @@ showed one then say "Media no longer exists").
 shows it, as a new version of each article; published ones change on the help center at once. Undo
 the replacement to put the first one back. An [annotated copy](#annotate-an-image) replaces its
 original in one article only; the copy's panel shows the original under **Earlier version**, with
-**Undo**. An article saved with an image that no longer exists is
+**Undo**. A replaced item stays as that earlier version: it may go to the trash, but it cannot be
+deleted forever, and the 30-day purge skips it, until the replacement is undone. An article saved with an image that no longer exists is
 saved all the same, and the answer names the missing image.
 
 Only uploaded images are shown. An image linked from another site (`![x](https://…)`) is not shown in

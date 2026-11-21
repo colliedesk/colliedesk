@@ -106,10 +106,17 @@ func TestKBMediaReplaceRewritesEveryArticleAndUndoes(t *testing.T) {
 		t.Fatalf("image replaced by a video status=%d", response.Code)
 	}
 
-	// Once the replaced item is deleted for good, the replacement cannot be undone.
+	// The purge keeps the replaced item while the replacement stands; were its row gone anyway (removed
+	// by hand, say), the replacement could not be undone.
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/"+old.ID+"/replace", map[string]any{"with_media_id": replacement.ID}, admin, http.StatusOK, &done)
 	kbCall(t, api, http.MethodDelete, "/api/v1/kb/media/"+old.ID, nil, admin, http.StatusOK, nil)
-	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/purge", map[string]any{"ids": []string{old.ID}}, admin, http.StatusOK, nil)
+	kept := kbCall(t, api, http.MethodPost, "/api/v1/kb/media/purge", map[string]any{"ids": []string{old.ID}}, admin, http.StatusConflict, nil)
+	if errorCode(t, kept) != "media_kept" {
+		t.Fatalf("purge of a replaced item = %s", kept.Body.String())
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM kb_media WHERE id=$1`, old.ID); err != nil {
+		t.Fatal(err)
+	}
 	gone := kbCall(t, api, http.MethodPost, "/api/v1/kb/media-replacements/"+done.ID+"/undo", nil, admin, http.StatusConflict, nil)
 	if errorCode(t, gone) != "media_gone" {
 		t.Fatalf("undo after purge = %s", gone.Body.String())
