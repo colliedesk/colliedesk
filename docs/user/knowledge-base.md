@@ -1222,7 +1222,8 @@ refusing the request. A failed send is tried again after 10 and 30 seconds; each
 5 seconds for the service. Saving the settings clears the status.
 
 - The API secret is write-only: nobody reads it back, not the app, the API, MCP or the export. It is
-  stored sealed (with `MAILBOX_TOKEN_KEYS` on a self-hosted server; without that key a secret is
+  stored sealed (a self-hosted server needs `MAILBOX_TOKEN_KEYS`, see
+  [environment variables](../self-host/environment-variables.md); without that key a secret is
   refused and nothing is saved). Leave the field empty to keep the saved secret.
 - To stop sending, clear **Send page views** and save. To remove the API secret too, save
   `"ga4_api_secret": ""` through the API or `colliedesk_help_center_analytics_set`.
