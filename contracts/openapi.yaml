@@ -9607,7 +9607,9 @@ paths:
         `ok` GA4 test still asks you to look at Reports › Realtime. Plausible accepts every event and
         says only whether its bot filter dropped it. A service that cannot be reached, answers an error
         or is on a private address gives `ok` false with the reason. 409 `analytics_not_set` before any
-        save; 503 `analytics_unavailable` on a server that does not send page views.
+        save, and `analytics_secret_unreadable` when no key of this server opens the saved GA4 API
+        secret (enter it again and save); 503 `analytics_unavailable` on a server that does not send
+        page views.
       responses:
         '200':
           description: What the service answered

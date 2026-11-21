@@ -5519,7 +5519,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Send one test page view of `/colliedesk-analytics-test` to the saved service now, on or off, with the caller's browser and address, and say what it answered. GA4 first checks the event at its validation endpoint, which names a wrong measurement ID but never checks the API secret, so an `ok` GA4 test still asks you to look at Reports › Realtime. Plausible accepts every event and says only whether its bot filter dropped it. A service that cannot be reached, answers an error or is on a private address gives `ok` false with the reason. 409 `analytics_not_set` before any save; 503 `analytics_unavailable` on a server that does not send page views. */
+        /** @description Send one test page view of `/colliedesk-analytics-test` to the saved service now, on or off, with the caller's browser and address, and say what it answered. GA4 first checks the event at its validation endpoint, which names a wrong measurement ID but never checks the API secret, so an `ok` GA4 test still asks you to look at Reports › Realtime. Plausible accepts every event and says only whether its bot filter dropped it. A service that cannot be reached, answers an error or is on a private address gives `ok` false with the reason. 409 `analytics_not_set` before any save, and `analytics_secret_unreadable` when no key of this server opens the saved GA4 API secret (enter it again and save); 503 `analytics_unavailable` on a server that does not send page views. */
         post: operations["testHelpCenterAnalytics"];
         delete?: never;
         options?: never;

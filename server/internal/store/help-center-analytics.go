@@ -32,8 +32,16 @@ func readAnalyticsSettings(ctx context.Context, tx pgx.Tx, workspaceID string) (
 	if err != nil {
 		return hcanalytics.Settings{}, fmt.Errorf("read the help center analytics: %w", err)
 	}
+	for _, at := range []*time.Time{settings.LastSentAt, settings.LastErrorAt, settings.UpdatedAt} {
+		if at != nil {
+			*at = at.UTC()
+		}
+	}
 	return settings, nil
 }
+
+// unopenableSecret is the problem of a target whose sealed GA4 API secret no key of this server opens.
+const unopenableSecret = "The saved GA4 API secret cannot be opened on this server: enter it again and save."
 
 // GetHelpCenterAnalytics returns the workspace's analytics settings; before the first save, no
 // provider and Plausible's hosted address.
@@ -89,7 +97,8 @@ func (s *Store) PutHelpCenterAnalytics(ctx context.Context, workspaceID, actorID
 }
 
 // HelpCenterAnalyticsTarget returns the workspace's saved target with its API secret opened, enabled
-// or not, or nil before the first save.
+// or not, or nil before the first save. A secret no key of this server opens gives a target with only
+// its Problem and Version set.
 func (s *Store) HelpCenterAnalyticsTarget(ctx context.Context, workspaceID string) (*hcanalytics.Target, error) {
 	type row struct {
 		target        hcanalytics.Target
@@ -97,12 +106,13 @@ func (s *Store) HelpCenterAnalyticsTarget(ctx context.Context, workspaceID strin
 		sealed        []byte
 		measurementID *string
 		domain        *string
+		updatedAt     time.Time
 	}
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (*row, error) {
 		r := row{target: hcanalytics.Target{WorkspaceID: workspaceID}}
 		err := tx.QueryRow(ctx, `SELECT provider, enabled, ga4_measurement_id, ga4_api_secret_key_id, ga4_api_secret_sealed, plausible_domain,
-				plausible_base_url FROM help_center_analytics WHERE workspace_id=$1`, workspaceID).Scan(&r.target.Provider, &r.target.Enabled,
-			&r.measurementID, &r.keyID, &r.sealed, &r.domain, &r.target.BaseURL)
+				plausible_base_url, updated_at FROM help_center_analytics WHERE workspace_id=$1`, workspaceID).Scan(&r.target.Provider, &r.target.Enabled,
+			&r.measurementID, &r.keyID, &r.sealed, &r.domain, &r.target.BaseURL, &r.updatedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
@@ -115,6 +125,7 @@ func (s *Store) HelpCenterAnalyticsTarget(ctx context.Context, workspaceID strin
 		return nil, err
 	}
 	target := got.target
+	target.Version = got.updatedAt.UnixMicro()
 	if got.measurementID != nil {
 		target.MeasurementID = *got.measurementID
 	}
@@ -124,7 +135,8 @@ func (s *Store) HelpCenterAnalyticsTarget(ctx context.Context, workspaceID strin
 	if got.keyID != nil && got.sealed != nil {
 		plain, err := s.sealKeys.Open(*got.keyID, got.sealed, analyticsSecretContext(workspaceID))
 		if err != nil {
-			return nil, fmt.Errorf("open the GA4 API secret: %w", err)
+			slog.Warn("help center analytics: the GA4 API secret cannot be opened", "workspace", workspaceID, "error", err)
+			return &hcanalytics.Target{WorkspaceID: workspaceID, Enabled: target.Enabled, Version: target.Version, Problem: unopenableSecret}, nil
 		}
 		target.APISecret = string(plain)
 	}
@@ -132,7 +144,8 @@ func (s *Store) HelpCenterAnalyticsTarget(ctx context.Context, workspaceID strin
 }
 
 // HelpCenterAnalyticsTargets returns the enabled target of every workspace. A workspace whose target
-// cannot be read is logged and left out, so it does not stop the others.
+// cannot be read is logged and listed with only its Problem, so it does not stop the others and the
+// sender keeps the target it already has.
 func (s *Store) HelpCenterAnalyticsTargets(ctx context.Context) ([]hcanalytics.Target, error) {
 	var workspaces []string
 	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterAnalytics, func(tx pgx.Tx) error {
@@ -151,6 +164,7 @@ func (s *Store) HelpCenterAnalyticsTargets(ctx context.Context) ([]hcanalytics.T
 		target, err := s.HelpCenterAnalyticsTarget(ctx, workspaceID)
 		if err != nil {
 			slog.Warn("help center analytics: a target cannot be read", "workspace", workspaceID, "error", err)
+			targets = append(targets, hcanalytics.Target{WorkspaceID: workspaceID, Problem: "The analytics settings could not be read; the next reload tries again."})
 			continue
 		}
 		if target != nil && target.Enabled {
@@ -161,14 +175,16 @@ func (s *Store) HelpCenterAnalyticsTargets(ctx context.Context) ([]hcanalytics.T
 }
 
 // RecordHelpCenterAnalyticsResults writes, in one statement for every workspace, when a page view was
-// last accepted and when and why one was last refused.
+// last accepted and when and why one was last refused. A result applies only while the settings it
+// was gathered for (its Version, their update time) are still the saved ones.
 func (s *Store) RecordHelpCenterAnalyticsResults(ctx context.Context, results []hcanalytics.Result) error {
 	if len(results) == 0 {
 		return nil
 	}
-	workspaces, sent, failures, failed := make([]string, len(results)), make([]*time.Time, len(results)), make([]*string, len(results)), make([]*time.Time, len(results))
+	workspaces, versions := make([]string, len(results)), make([]time.Time, len(results))
+	sent, failures, failed := make([]*time.Time, len(results)), make([]*string, len(results)), make([]*time.Time, len(results))
 	for index, result := range results {
-		workspaces[index] = result.WorkspaceID
+		workspaces[index], versions[index] = result.WorkspaceID, time.UnixMicro(result.Version).UTC()
 		if !result.SentAt.IsZero() {
 			sent[index] = &result.SentAt
 		}
@@ -179,8 +195,8 @@ func (s *Store) RecordHelpCenterAnalyticsResults(ctx context.Context, results []
 	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterAnalytics, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `UPDATE help_center_analytics h SET last_sent_at=COALESCE(GREATEST(h.last_sent_at, r.sent_at), h.last_sent_at),
 				last_error=COALESCE(r.error, h.last_error), last_error_at=COALESCE(r.error_at, h.last_error_at)
-			FROM unnest($1::uuid[], $2::timestamptz[], $3::text[], $4::timestamptz[]) AS r(workspace_id, sent_at, error, error_at)
-			WHERE h.workspace_id=r.workspace_id`, workspaces, sent, failures, failed)
+			FROM unnest($1::uuid[], $2::timestamptz[], $3::text[], $4::timestamptz[], $5::timestamptz[]) AS r(workspace_id, sent_at, error, error_at, version)
+			WHERE h.workspace_id=r.workspace_id AND h.updated_at=r.version`, workspaces, sent, failures, failed, versions)
 		return err
 	})
 	if err != nil {

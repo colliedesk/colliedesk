@@ -84,5 +84,9 @@ func (a *API) testHelpCenterAnalytics(response http.ResponseWriter, request *htt
 			"Save Google Analytics 4 or Plausible first (PUT /api/v1/help-center/analytics), then send a test.")
 		return
 	}
+	if target.Problem != "" {
+		writeError(response, http.StatusConflict, "analytics_secret_unreadable", target.Problem)
+		return
+	}
 	writeJSON(response, http.StatusOK, a.config.Analytics.Test(request.Context(), *target, request.UserAgent(), clientIP(request, a.config.TrustedProxies)))
 }

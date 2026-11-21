@@ -47,7 +47,8 @@ type Result struct {
 
 // Store reads the targets and records the results. HelpCenterAnalyticsTargets returns every
 // enabled target of every workspace; HelpCenterAnalyticsTarget returns one workspace's saved target,
-// enabled or not, or nil when it has none.
+// enabled or not, or nil when it has none. Either may return a target with only its Problem set.
+// RecordHelpCenterAnalyticsResults applies a result only while its Version is still the saved one.
 type Store interface {
 	HelpCenterAnalyticsTargets(ctx context.Context) ([]Target, error)
 	HelpCenterAnalyticsTarget(ctx context.Context, workspaceID string) (*Target, error)
