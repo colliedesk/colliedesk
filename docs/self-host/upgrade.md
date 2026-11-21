@@ -147,10 +147,11 @@ moves: other databases on the same server stay in the old volume, and the script
 - **After the switch nothing points `compose.yaml` away from 19.** Colliedesk may have written to
   the 19 volume by then. If it does not become healthy on 19, or the run is cut off (a reboot, a lost
   SSH session), `compose.yaml` stays on 19 and the script says how to go on: run it again to finish
-  on 19, or run `--rollback` to go back. A run cut off before the switch is put back by the next run.
+  on 19, or run `--rollback` to go back. A run cut off before the switch is put back by the next
+  run, which then upgrades again, or by `--rollback`, which only puts it back.
 - **A 19 volume Colliedesk may have run on is never removed by the script.** It may hold the only
   copy of what was written on 19. If you put `compose.yaml.before-postgres-19` back by hand after the
-  switch, the next run serves the old major and keeps that volume. After a finished upgrade, the
+  switch, the next run serves the old major, keeps that volume and stops there. After a finished upgrade, the
   script and `--rollback` both say the file was put back by hand and change nothing: put back the
   `compose.yaml` that names `postgres19-data` to serve the 19 data again.
 - **It refuses what it cannot do safely** and changes nothing: an external database (a
@@ -199,6 +200,8 @@ rollback, a rollback killed before it changed `compose.yaml` and one that cannot
 a finish on a cluster the restore did not write, a rollback to a cluster that is not the old one,
 an undo of a cut-off run onto a cluster that is not the old one,
 an old compose file put back by hand after a finished upgrade,
+a rollback of a run cut off before the switch, a resumed rollback onto a cluster that is not the
+old one,
 rollback, and the refusals. No row or file may
 change.
 

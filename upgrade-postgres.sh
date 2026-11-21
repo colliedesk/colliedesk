@@ -259,6 +259,13 @@ if [ "$ROLLBACK" = true ]; then
   phase=''
   case $state in
     'done' | started)
+      # A run cut off before the switch, or one whose old compose file was put back by hand: the
+      # undo puts the install back on the old major, and nothing is upgraded again.
+      if [ "$state" = started ] && [ "$(file_key)" = "$old_key" ]; then
+        say "An upgrade started at $started_at did not finish; putting the install back on PostgreSQL $from_major..."
+        undo || fail "could not undo the upgrade started at $started_at; see docs/self-host/upgrade.md#postgresql-versions"
+        exit 0
+      fi
       [ "$(file_key)" = "$NEW_KEY" ] || fail "compose.yaml no longer keeps PostgreSQL data in $NEW_KEY, so it is not the install this upgrade left. Nothing was changed."
       ;;
     rolling_back)
@@ -322,6 +329,8 @@ if [ "$ROLLBACK" = true ]; then
     sync
   else
     say "A rollback did not finish; finishing it on PostgreSQL $from_major..."
+    # A server started by hand since stops before PostgreSQL changes under it.
+    compose rm -sf server >/dev/null 2>&1
   fi
   start_postgres || fail "PostgreSQL $from_major did not start; run docker compose logs postgres for details"
   is_cluster "$from_major" "$old_key" "$old_cluster" || {
@@ -358,6 +367,8 @@ case $state in
     fi
     say "Putting the install back on PostgreSQL $from_major first..."
     undo || fail "could not undo the upgrade started at $started_at; see docs/self-host/upgrade.md#postgresql-versions"
+    # A 19 volume the undo kept may hold writes made on 19: no new upgrade runs over it.
+    [ -z "$new" ] || exit 1
     ;;
   done) fail "this install was upgraded to PostgreSQL 19 at $finished_at. To go back: sh upgrade-postgres.sh --rollback" ;;
   rolling_back) fail "a rollback to PostgreSQL $from_major did not finish. Run sh upgrade-postgres.sh --rollback again to finish it." ;;

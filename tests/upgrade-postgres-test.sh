@@ -403,6 +403,8 @@ EOF
   mv "$TMP/compose.yaml.before-postgres-19" "$TMP/compose.yaml"
   if upgrade; then cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh upgraded over a PostgreSQL 19 volume the server may have written'; fi
   no_secret_printed 'keeping the 19 volume'
+  grep -qF 'runs PostgreSQL 17 again' "$TMP/upgrade.out" || { cat "$TMP/upgrade.out" >&2; fail 'a run that put the install back on 17 did not say so'; }
+  if grep -qF 'Nothing was changed' "$TMP/upgrade.out"; then cat "$TMP/upgrade.out" >&2; fail 'a run that put the install back on 17 said nothing was changed'; fi
   [ -n "$(volume_for postgres19-data)" ] || { cat "$TMP/upgrade.out" >&2; fail 'a run after the old compose file was put back removed the PostgreSQL 19 volume'; }
   [ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] && server_running ||
     fail 'a run after the old compose file was put back does not serve PostgreSQL 17 from its old volume'
@@ -468,6 +470,21 @@ EOF
   if server_running; then fail 'a rollback that could not put compose.yaml back started the server'; fi
   grep -q -- '--rollback again' "$TMP/upgrade.out" || { cat "$TMP/upgrade.out" >&2; fail 'a rollback that could not put compose.yaml back did not say how to go on'; }
   step 'rollback restarted, compose.yaml with no way back: stays on 17, nothing started'
+  # A server started by hand on 17 since, and PGDATA moved: the resumed rollback stops the server
+  # before PostgreSQL changes under it, and starts nothing on the other cluster.
+  dc up -d --wait >/dev/null 2>&1 || fail 'the install did not start by hand on PostgreSQL 17 before a resumed rollback'
+  cp "$TMP/compose.yaml" "$TMP/compose.on17"
+  sed 's#^      PGDATA: /var/lib/postgresql/data$#      PGDATA: /var/lib/postgresql/data/moved#' "$TMP/compose.on17" >"$TMP/compose.yaml"
+  if cmp -s "$TMP/compose.on17" "$TMP/compose.yaml"; then fail 'compose.yaml on 17 has no PGDATA line to move'; fi
+  if upgrade --rollback; then cat "$TMP/upgrade.out" >&2; fail 'a resumed rollback onto a PostgreSQL 17 cluster that is not the old one succeeded'; fi
+  grep -qF 'not the PostgreSQL 17 database of before the upgrade' "$TMP/upgrade.out" ||
+    { cat "$TMP/upgrade.out" >&2; fail 'a resumed rollback onto another cluster did not name it as such'; }
+  no_secret_printed 'a resumed rollback onto another cluster'
+  if server_running; then fail 'a resumed rollback onto another cluster left the server running'; fi
+  [ "$(state state)" = rolling_back ] || fail "a resumed rollback onto another cluster left the state $(state state), want rolling_back"
+  mv "$TMP/compose.on17" "$TMP/compose.yaml"
+  "$DOCKER" run --rm -v "$old_volume:/data" --entrypoint rm "$(sed -n 's/^    image: \(postgres:.*\)/\1/p' "$TMP/compose.yaml")" -rf /data/moved
+  step 'a resumed rollback onto another cluster: the server stopped, nothing started'
   rolled_back
   # An upgrade in another compose project would upgrade an empty database made there: refused,
   # with the state of an earlier upgrade and without one.
@@ -562,6 +579,17 @@ EOF
   [ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] && server_running ||
     fail 'an undo that could not list the volumes does not serve PostgreSQL 17 from its old volume'
   step 'undo without the volume list: compose.postgres-19.yaml kept for the next run'
+
+  # --rollback after a run cut off before the switch puts the install back and upgrades nothing.
+  upgrade --rollback || { cat "$TMP/upgrade.out" >&2; fail '--rollback did not put back an upgrade cut off before the switch'; }
+  no_secret_printed 'a rollback of a run cut off before the switch'
+  [ "$(state state)" = failed ] || fail "a rollback of a run cut off before the switch left the state $(state state), want failed"
+  [ ! -e "$TMP/compose.postgres-19.yaml" ] && [ -z "$(volume_for postgres19-data)" ] ||
+    fail 'a rollback of a run cut off before the switch kept the half-made PostgreSQL 19 volume'
+  [ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] && server_running ||
+    fail 'a rollback of a run cut off before the switch does not serve PostgreSQL 17 from its old volume'
+  same_data 'after a rollback of a run cut off before the switch' before
+  step 'rollback of a run cut off before the switch: back on 17, the half-made volume removed'
 
   # Killed for good in the restore (kill -9, power loss): compose.yaml still names PostgreSQL 17 and
   # its volume, so a plain start serves the data as it was, and the next run undoes and upgrades.
