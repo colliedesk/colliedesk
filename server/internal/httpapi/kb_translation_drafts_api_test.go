@@ -1,11 +1,15 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -51,7 +55,7 @@ func kbTranslationVersionKinds(t *testing.T, api http.Handler, token, articleID,
 }
 
 // Saving a published translation keeps the change as a draft: its help center page, the Markdown copy,
-// search, sitemap.xml, llms.txt and AI answers keep the published text until someone publishes it;
+// search, sitemap.xml, llms.txt, AI answers and the help chat keep the published text until someone publishes it;
 // Discard drops the change.
 func TestSavingAPublishedTranslationKeepsTheHelpCenterOnThePublishedText(t *testing.T) {
 	f := newLanguagesFixture(t)
@@ -96,6 +100,27 @@ func TestSavingAPublishedTranslationKeepsTheHelpCenterOnThePublishedText(t *test
 			if strings.Contains(doc.Text, "mélèze") || strings.Contains(doc.Title, "Payer avec") {
 				t.Errorf("%s: AI reads the draft: %+v", step, doc)
 			}
+		}
+		var chat []store.ChatKBArticle
+		if err := database.New(f.pool).InWorkspace(context.Background(), workspace, func(tx pgx.Tx) error {
+			var err error
+			chat, err = store.ChatKBArticlesIn(context.Background(), tx, workspace, true, "fr")
+			return err
+		}); err != nil {
+			t.Fatalf("%s: chat articles: %v", step, err)
+		}
+		read := false
+		for _, article := range chat {
+			if article.ID != id {
+				continue
+			}
+			read = true
+			if article.Locale != "fr" || article.Title != "Payer par carte" || !strings.HasPrefix(article.Body, "Toute carte convient : sapinette.") {
+				t.Errorf("%s: the French help chat reads %+v, want the published translation", step, article)
+			}
+		}
+		if !read {
+			t.Errorf("%s: the French help chat does not read the article: %+v", step, chat)
 		}
 	}
 	unchanged("after a draft save")
