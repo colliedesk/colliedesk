@@ -117,6 +117,18 @@ func (filter KBArticleFilter) where(args []any) (string, []any, bool) {
 	return where, args, true
 }
 
+// CheckKBFilterLocale refuses, as ListKBArticles does, a filter locale that is not a language of the
+// workspace's help center; a saved view checks its filters with it before they are stored.
+func (s *Store) CheckKBFilterLocale(ctx context.Context, workspaceID, locale string) error {
+	if locale == "" {
+		return nil
+	}
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		return struct{}{}, checkKBFilterLocale(ctx, tx, workspaceID, locale)
+	})
+	return err
+}
+
 // checkKBFilterLocale refuses a filter Locale that is not a language of the help center.
 func checkKBFilterLocale(ctx context.Context, tx pgx.Tx, workspaceID, locale string) error {
 	if locale == "" {

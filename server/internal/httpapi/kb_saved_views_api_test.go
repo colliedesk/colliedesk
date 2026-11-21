@@ -148,3 +148,25 @@ func TestKnowledgeBaseSavedViewsNeverCrossWorkspaces(t *testing.T) {
 		t.Fatalf("another workspace changes the view = %d, want 404", response.Code)
 	}
 }
+
+// A knowledge base view on a language the help center does not have is refused when it is saved, with
+// the answer the article list gives for that language, so a saved view never fails when it opens.
+func TestKnowledgeBaseSavedViewRefusesALanguageTheHelpCenterDoesNotHave(t *testing.T) {
+	f := newKBFilterFixture(t)
+	listed := request(t, f.api, http.MethodGet, "/api/v1/kb/articles?translation=missing&locale=de", nil, f.admin, nil)
+	if listed.Code != http.StatusBadRequest {
+		t.Fatalf("the list on locale de = %d %s, want 400", listed.Code, listed.Body.String())
+	}
+	german := map[string]any{"translation": "missing", "locale": "de"}
+	created := request(t, f.api, http.MethodPost, "/api/v1/saved-views", map[string]any{"name": "German", "area": "kb", "scope": "shared", "filters": german}, f.admin, nil)
+	if created.Code != listed.Code || errorMessage(t, created) != errorMessage(t, listed) {
+		t.Fatalf("saving a view on locale de = %d %s, want the list's %d %s", created.Code, created.Body.String(), listed.Code, listed.Body.String())
+	}
+
+	var french areaView
+	kbCall(t, f.api, http.MethodPost, "/api/v1/saved-views", map[string]any{"name": "French", "area": "kb", "scope": "shared", "filters": map[string]any{"translation": "missing", "locale": "fr"}}, f.admin, http.StatusCreated, &french)
+	changed := request(t, f.api, http.MethodPatch, "/api/v1/saved-views/"+french.ID, map[string]any{"updated_at": french.UpdatedAt, "filters": german}, f.admin, nil)
+	if changed.Code != listed.Code || errorMessage(t, changed) != errorMessage(t, listed) {
+		t.Fatalf("changing a view to locale de = %d %s, want the list's %d %s", changed.Code, changed.Body.String(), listed.Code, listed.Body.String())
+	}
+}

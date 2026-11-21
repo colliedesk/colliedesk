@@ -109,7 +109,10 @@ func writeSavedViewError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusBadRequest, "invalid_request", message)
 		return
 	}
+	var invalidKB *domain.InvalidKBError
 	switch {
+	case errors.As(err, &invalidKB):
+		writeError(response, http.StatusBadRequest, "invalid_request", invalidKB.Message)
 	case errors.Is(err, domain.ErrSavedViewNameTaken):
 		writeError(response, http.StatusConflict, "duplicate_name", "A view with this name already exists. Names are compared ignoring case, among your personal views and among the shared ones; pick another name.")
 	case errors.Is(err, domain.ErrSavedViewLimit):
@@ -184,7 +187,7 @@ func (a *API) createSavedView(response http.ResponseWriter, request *http.Reques
 	}
 	var filters json.RawMessage
 	if err == nil {
-		filters, err = a.checkedViewFilters(area, input.Filters)
+		filters, err = a.checkedViewFilters(request.Context(), principal(request).Workspace.ID, area, input.Filters)
 	}
 	if err != nil {
 		writeSavedViewError(response, err)
@@ -216,7 +219,10 @@ func (a *API) updateSavedView(response http.ResponseWriter, request *http.Reques
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new name, scope or filters.")
 		return
 	}
-	change := store.SavedViewChange{Seen: *input.UpdatedAt, Filters: input.Filters, CheckFilters: a.checkedViewFilters}
+	workspaceID := principal(request).Workspace.ID
+	change := store.SavedViewChange{Seen: *input.UpdatedAt, Filters: input.Filters, CheckFilters: func(area string, raw json.RawMessage) (json.RawMessage, error) {
+		return a.checkedViewFilters(request.Context(), workspaceID, area, raw)
+	}}
 	var err error
 	if input.Name != nil {
 		var name string

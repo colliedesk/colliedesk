@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/url"
 	"strconv"
@@ -59,9 +60,9 @@ func (f kbViewFilters) query() url.Values {
 }
 
 // checkedKBFilters decodes the filters of a knowledge base view and holds them to what GET
-// /kb/articles accepts, so the view always opens. It returns them re-encoded without empty fields
-// and with the tags cleaned as an article's are.
-func checkedKBFilters(raw json.RawMessage) (json.RawMessage, error) {
+// /kb/articles accepts in this workspace, a locale included, so the view always opens. It returns them
+// re-encoded without empty fields and with the tags cleaned as an article's are.
+func (a *API) checkedKBFilters(ctx context.Context, workspaceID string, raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, filterError("A saved view needs filters: an object, {} for every article.")
 	}
@@ -79,6 +80,9 @@ func checkedKBFilters(raw json.RawMessage) (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := a.store.CheckKBFilterLocale(ctx, workspaceID, parsed.Locale); err != nil {
+		return nil, err
+	}
 	filters.Tag = parsed.Tags
 	return json.Marshal(filters)
 }
@@ -94,10 +98,10 @@ func checkedViewArea(area string) (string, error) {
 	return "", filterError("area is inbox (conversation filters) or kb (knowledge base article filters).")
 }
 
-// checkedViewFilters holds the filters of a view to what its area's list accepts.
-func (a *API) checkedViewFilters(area string, raw json.RawMessage) (json.RawMessage, error) {
+// checkedViewFilters holds the filters of a view to what its area's list accepts in the workspace.
+func (a *API) checkedViewFilters(ctx context.Context, workspaceID, area string, raw json.RawMessage) (json.RawMessage, error) {
 	if area == domain.SavedViewKB {
-		return checkedKBFilters(raw)
+		return a.checkedKBFilters(ctx, workspaceID, raw)
 	}
 	return checkedFilters(raw, a.conversationChannels())
 }
