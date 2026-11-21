@@ -4,6 +4,7 @@ import { api, ChangedElsewhereError } from '../../api/client';
 import { useCreateAction } from '../../api/use-create';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
 import { ArticleAttachments } from './article-attachments';
+import { ArticleDraftBar, draftMessages, editableTranslation } from './article-draft';
 import { attachmentMessages } from './attachment-messages';
 import { ArticleReviewBox, useTextApproval } from './article-review';
 import { kbApi } from './kb-api';
@@ -64,10 +65,14 @@ interface Draft {
 
 const modes = ['write', 'preview'] as const;
 
-const draftOf = (translation?: KBTranslation): Draft => ({
+// draftOf is the text the form shows: a published translation's unpublished changes when it has them.
+const draftOf = (raw?: KBTranslation): Draft => {
+  const translation = raw && editableTranslation(raw);
+  return {
   title: translation?.title ?? '', body_md: translation?.body_md ?? '', slug: translation?.slug ?? '',
   seo_title: translation?.seo_title ?? '', seo_description: translation?.seo_description ?? '',
-});
+  };
+};
 
 function TranslationEditor({ articleId, locale, latest, article, visible, listed, timezone }: EditorProps) {
   const id = useId();
@@ -93,8 +98,11 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
     kbApi.restoreTranslationVersion(articleId, locale, version, updatedAt, key));
   useEffect(() => setUpToDate(false), [translation?.updated_at]);
   const set = (change: Partial<Draft>) => setDraft((current) => ({ ...current, ...change }));
-  const dirty = !translation || draft.title !== translation.title || draft.body_md !== translation.body_md || draft.slug !== translation.slug
-    || draft.seo_title !== translation.seo_title || draft.seo_description !== translation.seo_description;
+  // shown is the saved text the form edits; the translation's own fields stay the published text.
+  const shown = translation && editableTranslation(translation);
+  const publishChanges = useCreateAction((updatedAt: string, key: string) => kbApi.publishTranslationDraft(articleId, locale, updatedAt, key));
+  const dirty = !shown || !translation || draft.title !== shown.title || draft.body_md !== shown.body_md || draft.slug !== shown.slug
+    || draft.seo_title !== shown.seo_title || draft.seo_description !== shown.seo_description;
   // A newer version from the server (someone saved elsewhere, the tab read it again): taken as it is
   // while nothing is typed; otherwise the typed text stays and the page says so.
   // Only a newer version counts: a read that answers what was there before this page's own save never
@@ -120,7 +128,7 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
     translationNow.current = answer;
     saved(answer);
     client.setQueryData(['kb-translation', articleId, locale], answer);
-    return answer.attachments;
+    return editableTranslation(answer).attachments;
   };
   const show = (answer: KBTranslation) => {
     setTranslation(answer);
@@ -154,13 +162,14 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
         ...(draft.seo_title ? { seo_title: draft.seo_title } : {}), ...(draft.seo_description ? { seo_description: draft.seo_description } : {}), ...(status ? { status } : {}) });
       return;
     }
+    const text = editableTranslation(against);
     saved(await kbApi.updateTranslation(articleId, locale, {
       updated_at: against.updated_at,
-      ...(draft.title !== against.title ? { title: draft.title } : {}),
-      ...(draft.body_md !== against.body_md ? { body_md: draft.body_md } : {}),
-      ...(draft.slug.trim() && draft.slug !== against.slug ? { slug: draft.slug.trim() } : {}),
-      ...(draft.seo_title !== against.seo_title ? { seo_title: draft.seo_title } : {}),
-      ...(draft.seo_description !== against.seo_description ? { seo_description: draft.seo_description } : {}),
+      ...(draft.title !== text.title ? { title: draft.title } : {}),
+      ...(draft.body_md !== text.body_md ? { body_md: draft.body_md } : {}),
+      ...(draft.slug.trim() && draft.slug !== text.slug ? { slug: draft.slug.trim() } : {}),
+      ...(draft.seo_title !== text.seo_title ? { seo_title: draft.seo_title } : {}),
+      ...(draft.seo_description !== text.seo_description ? { seo_description: draft.seo_description } : {}),
       ...(status && status !== against.status ? { status } : {}),
       ...(upToDate && against.outdated ? { outdated: false } : {}),
     }));
@@ -182,6 +191,9 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
     setDeleting(false);
   });
   const restore = () => translation && run(async () => show(await undelete.run(translation.updated_at)));
+  // A published translation's unpublished changes go live, or are dropped, as an article's do.
+  const publishDraft = () => translation && run(async () => show(await publishChanges.run(translation.updated_at)), draftMessages.changesPublished);
+  const discardDraft = async () => { if (translation) await run(async () => show(await kbApi.discardTranslationDraft(articleId, locale, translation.updated_at)), draftMessages.changesDiscarded); };
   const restoreVersion = (version: number) => translation
     ? backTo.run({ version, updatedAt: translation.updated_at }).then(async (answer) => { show(answer); await reload(); })
     : Promise.resolve();
@@ -220,11 +232,13 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
         </span>
       </header>
       <div className="kb-editor-notes">
-        {stale && <ConflictCompare message={t.changedElsewhere} theirs={theirs && { title: theirs.title, body: theirs.body_md }}
+        {stale && <ConflictCompare message={t.changedElsewhere} theirs={theirs && { title: editableTranslation(theirs).title, body: editableTranslation(theirs).body_md }}
           mine={{ title: draft.title, body: draft.body_md }} busy={busy} onKeepMine={() => void keepMine()} onLoadTheirs={() => void loadTheirs()} />}
         {problem && <p role="alert" className="error-copy">{problem}</p>}
         {inTrash && <div className="warning-note"><p>{t.inTrashNote}</p><button type="button" disabled={busy} onClick={() => void restore()}>{t.restoreFromTrash}</button></div>}
-        {listed && !inTrash && (status !== 'published' || dirty) && <ArticleReviewBox articleId={articleId} locale={locale} approval={approval} dirty={dirty}
+        {translation?.draft && !inTrash && <ArticleDraftBar article={translation} title={draft.title} body={() => draft.body_md} busy={busy} dirty={dirty} blocked={blocked}
+          onPublish={() => void publishDraft()} onDiscard={discardDraft} />}
+        {listed && !inTrash && (status !== 'published' || dirty || translation?.has_draft) && <ArticleReviewBox articleId={articleId} locale={locale} approval={approval} dirty={dirty}
           saved={translation !== undefined} headingId={`${id}-review`} reasonId={reasonId} />}
         {!listed && <p className="warning-note">{t.languageNotListed}</p>}
         {listed && visible === false && <p className="muted-copy" data-quiet="state">{t.languageHidden} <a href="/knowledge/languages">{t.languagesTab}</a></p>}
@@ -270,7 +284,7 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
                   onChange={(event) => set({ body_md: event.target.value })} /></div>
               : <div className="kb-translation-scroll"><MarkdownPreview text={draft.body_md} /></div>}
           </div>
-          <ArticleAttachments files={translation?.attachments ?? []} onSet={translation && !inTrash ? setAttachments : undefined}
+          <ArticleAttachments files={shown?.attachments ?? []} onSet={translation && !inTrash ? setAttachments : undefined}
             saveFirst={attachmentMessages.saveTranslationFirst} note={attachmentMessages.articleFiles} />
           <details className="kb-translation-more">
             <summary>{kbMessages.details}</summary>
