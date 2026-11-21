@@ -1,11 +1,12 @@
 import type { MenuItem } from '../kb-ui';
 import { kbMessages } from '../kb-messages';
 import { calloutTypes } from '../callouts';
+import { alignMenu, colorMenu } from './format-menus';
 import type { IconName } from './icons';
 import type { Active, Block, LineKind, ToolTarget } from './editor-types';
 
 // What the toolbar's two menus hold, for the editor that shows the text. compact: a phone's toolbar, or a column
-// too narrow for every tool, where More also holds the headings, lists, table, search and undo.
+// too narrow for every tool, where More also holds the headings, the text colour, alignment, lists, table, search and undo.
 export interface MenuContext {
   compact: boolean;
   editing: boolean;
@@ -27,7 +28,9 @@ export function moreMenu(c: MenuContext): MenuItem[] {
   const heading = (block: Block, label: string, icon: IconName): MenuItem => ({ label, icon, disabled: !c.editing || c.active?.block === block, onSelect: () => c.act((target) => target.block(block)) });
   const line = (kind: LineKind) => (target: ToolTarget) => target.lines(kind);
   return [
-    ...(c.compact ? [heading('paragraph', t.paragraph, 'text'), heading('h2', t.h2, 'h2'), heading('h3', t.h3, 'h3'),
+    ...(c.compact ? [heading('paragraph', t.paragraph, 'text'), heading('h1', t.h1, 'h1'), heading('h2', t.h2, 'h2'), heading('h3', t.h3, 'h3'), heading('h4', t.h4, 'h4'),
+      { ...item(t.underline, 'underline', (target) => target.mark('underline')), separated: true }, item(t.highlight, 'highlight', (target) => target.mark('highlight')),
+      ...first(colorMenu(c)), ...first(alignMenu(c)),
       { ...item(t.ordered, 'ordered', line('ordered')), separated: true }, item(t.bullet, 'bullet', line('bullet')), item(t.quote, 'quote', line('quote')),
       item(t.table, 'table', (target) => target.table())] : []),
     { ...item(t.strike, 'strike', (target) => target.mark('strike')), separated: c.compact }, item(t.code, 'code', (target) => target.mark('code')), item(t.task, 'task', line('task')),
@@ -39,6 +42,9 @@ export function moreMenu(c: MenuContext): MenuItem[] {
     ...(c.compact ? [{ label: c.full ? t.exitFullscreen : t.fullscreen, icon: 'fullscreen' as const, onSelect: c.toggleFull, separated: true }] : []),
   ];
 }
+
+// first starts a group of the More menu on a new row.
+const first = (items: MenuItem[]) => items.map((entry, at) => (at === 0 ? { ...entry, separated: true } : entry));
 
 export function insertMenu(c: MenuContext): MenuItem[] {
   const t = kbMessages.tools;

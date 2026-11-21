@@ -1,27 +1,8 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { Editor } from '@tiptap/core';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
-import type { EditorHandle, UploadHooks } from '../editor-types';
+import type { UploadHooks } from '../editor-types';
 import { schema } from './schema';
-import VisualEditor from './visual-editor';
-
-// jsdom lays nothing out; ProseMirror measures text ranges to scroll the cursor into view.
-if (!('getClientRects' in Range.prototype)) Object.assign(Range.prototype, { getClientRects: () => [], getBoundingClientRect: () => new DOMRect() });
-if (!('elementFromPoint' in document)) Object.assign(document, { elementFromPoint: () => null });
-
-const never: UploadHooks = { accept: (files) => files, upload: () => new Promise(() => {}), store: () => new Promise(() => {}), onStart: () => {}, onDone: () => {}, onError: () => {} };
-
-async function make(initial: string, uploads: UploadHooks = never) {
-  let handle: EditorHandle | undefined;
-  const onChange = vi.fn();
-  render(<VisualEditor initial={initial} uploads={uploads} label="Text" describedBy="help" invalid={false} mode="edit" onChange={onChange}
-    onReady={(ready) => { handle = ready; }} />);
-  await waitFor(() => expect(handle).toBeDefined());
-  const text = screen.getByRole('textbox', { name: 'Text' });
-  // Tiptap puts the editor on its element, as the page's own scripts never need it.
-  const editor = (text as HTMLElement & { editor: Editor }).editor;
-  return { handle: handle!, onChange, text, editor };
-}
+import { make, never } from './visual-editor.test.fixture';
 
 test('an article is saved as it was written until the person changes it', async () => {
   const article = 'Steps\n=====\n\n__bold__ and *it*\n\n<b>raw</b>\n';

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { CalloutType } from '../callouts';
+import type { Align, Palette } from './format-tags';
 
 // What the article page and the toolbar ask of an editor, whichever one shows the text: the Markdown source
 // (CodeMirror) or the visual editor (ProseMirror). Nothing here loads either.
@@ -55,9 +56,15 @@ export interface EditorProps {
   onReady: (handle: EditorHandle) => void;
 }
 
-export type Block = 'paragraph' | 'h1' | 'h2' | 'h3';
+export type Block = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4';
 export type LineKind = 'bullet' | 'ordered' | 'task' | 'quote';
-export type MarkKind = 'bold' | 'italic' | 'strike' | 'code';
+export type MarkKind = 'bold' | 'italic' | 'strike' | 'code' | 'underline' | 'highlight';
+// FormatAt is what alignment and indent act on where the cursor is: a top-level paragraph or heading (both), the
+// selected table cells (alignment only) or nothing (in a list, a quote or a callout, where the server keeps neither).
+export type FormatAt = 'block' | 'cell' | 'none';
+// TableAction is what the table tools do to the table the cursor is in; bg-… sets the selected cells' background.
+export type TableAction = 'headerRow' | 'rowBefore' | 'rowAfter' | 'columnBefore' | 'columnAfter' | 'deleteRow' | 'deleteColumn'
+  | 'merge' | 'split' | 'deleteTable' | `bg-${Palette}` | 'bg-none';
 
 // Active is what the toolbar shows pressed where the cursor is.
 export interface Active {
@@ -70,6 +77,18 @@ export interface Active {
   ordered: boolean;
   task: boolean;
   quote: boolean;
+  underline: boolean;
+  highlight: boolean;
+  // color is the palette colour of the selected words, '' for none.
+  color: string;
+  align: 'left' | Align;
+  indent: number;
+  formatAt: FormatAt;
+  // table: the cursor is in a table the table tools can change; headerRow: its first row is a header row.
+  table: boolean;
+  headerRow: boolean;
+  canMerge: boolean;
+  canSplit: boolean;
   canUndo: boolean;
   canRedo: boolean;
 }
@@ -88,6 +107,13 @@ export interface ToolTarget {
   callout(type: CalloutType): void;
   codeBlock(language: string): void;
   table(): void;
+  // color sets the selected words' palette colour; null takes it off.
+  color(color: Palette | null): void;
+  // align aligns the block or the selected cells; null is the default, left.
+  align(align: Align | null): void;
+  indent(delta: 1 | -1): void;
+  // tableEdit changes the table the cursor is in; only the visual editor has it, as Markdown holds no merged cell.
+  tableEdit?: (action: TableAction) => void;
   rule(): void;
   articleLink(article: { title: string; url: string }): void;
   upload(files: File[]): void;

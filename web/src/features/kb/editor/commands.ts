@@ -8,6 +8,7 @@ import { redoDepth, undoDepth } from '@codemirror/commands';
 // document model, so the text stays exactly what is stored in body_md.
 
 import type { Active, Block, LineKind } from './editor-types';
+import { formatActive } from './format-commands';
 
 export type { Active, Block, LineKind } from './editor-types';
 export { sameActive } from './editor-types';
@@ -15,7 +16,7 @@ export { sameActive } from './editor-types';
 const headingOf = (line: string): Block => {
   const match = /^(#{1,6})\s/.exec(line);
   if (!match) return 'paragraph';
-  return match[1].length <= 3 ? (`h${match[1].length}` as Block) : 'paragraph';
+  return match[1].length <= 4 ? (`h${match[1].length}` as Block) : 'paragraph';
 };
 
 // inside reports whether the cursor sits in a node of one of the names (Emphasis, StrongEmphasis…).
@@ -47,6 +48,7 @@ export function activeOf(state: EditorState): Active {
     ordered: /^\s*\d+[.)]\s/.test(line),
     task: /^\s*[-*+]\s\[[ xX]\]\s/.test(line),
     quote: /^\s*>/.test(line),
+    ...formatActive(state),
     canUndo: undoDepth(state) > 0,
     canRedo: redoDepth(state) > 0,
   };

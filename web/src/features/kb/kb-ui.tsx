@@ -74,6 +74,8 @@ export interface MenuItem {
   // hint is a second line (a menu that explains its choices) or a note at the end.
   hint?: string;
   icon?: IconName;
+  // swatch is a colour (a CSS value from the app's tokens) shown in place of an icon.
+  swatch?: string;
   danger?: boolean;
   disabled?: boolean;
   separated?: boolean;
@@ -140,6 +142,7 @@ export function KBMenu({ label, trigger, title, items, className, buttonClassNam
               <button type="button" role="menuitem" className={item.danger ? 'danger-action' : undefined} disabled={item.disabled}
                 onClick={() => { close(!describe); item.onSelect(); }}>
                 {item.icon && <Icon name={item.icon} />}
+                {item.swatch && <span className="kb-menu-swatch" style={{ background: item.swatch }} aria-hidden="true" />}
                 <span className="kb-menu-text"><span>{item.label}</span>{item.hint && <small>{item.hint}</small>}</span>
               </button>
             </div>

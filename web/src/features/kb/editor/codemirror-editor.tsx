@@ -7,6 +7,7 @@ import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
 import { kbMessages } from '../kb-messages';
 import { activeOf, callout, codeBlock, inlineCode, insertBlock, insertLink, sameActive, setHeading, tableTemplate, toggleLines, toggleMark } from './commands';
 import { insertArticleLink } from './article-link';
+import { setBlockFormat, setColor, toggleWrap } from './format-commands';
 import { markdownHighlight, markdownLanguage } from './theme';
 import { startUpload, uploadEvents, uploads as uploadField, uploadsPending } from './upload';
 import { pasteEvents } from './paste-formatted';
@@ -22,6 +23,7 @@ const formatKeys = Prec.high(keymap.of([
   // defaultKeymap binds Mod-i to selectParentSyntax; this one comes first.
   { key: 'Mod-b', run: (view) => (toggleMark(view, '**'), true) },
   { key: 'Mod-i', run: (view) => (toggleMark(view, '*'), true) },
+  { key: 'Mod-u', run: (view) => (toggleWrap(view, '<u>', '</u>'), true) },
   { key: 'Mod-e', run: (view) => (inlineCode(view), true) },
   { key: 'Mod-k', run: (view) => (insertLink(view), true) },
 ]));
@@ -30,12 +32,16 @@ const phrases = EditorState.phrases.of({
   Find: 'Find', Replace: 'Replace', next: 'Next', previous: 'Previous', all: 'All', 'match case': 'Match case', regexp: 'Regular expression',
   'by word': 'Whole words', replace: 'Replace', 'replace all': 'Replace all', close: 'Close',
 });
-const marks: Record<Exclude<MarkKind, 'code'>, string> = { bold: '**', italic: '*', strike: '~~' };
+const marks: Record<Exclude<MarkKind, 'code' | 'underline' | 'highlight'>, string> = { bold: '**', italic: '*', strike: '~~' };
+const wraps = { underline: ['<u>', '</u>'], highlight: ['<mark>', '</mark>'] } as const;
 
 // sourceTarget is what the toolbar does to the Markdown source: it adds or takes away syntax, never parses.
 function sourceTarget(view: EditorView, hooks: { current: UploadHooks }): ToolTarget {
   return {
-    mark: (kind) => (kind === 'code' ? inlineCode(view) : toggleMark(view, marks[kind])),
+    mark: (kind) => (kind === 'code' ? inlineCode(view) : kind === 'underline' || kind === 'highlight' ? toggleWrap(view, wraps[kind][0], wraps[kind][1]) : toggleMark(view, marks[kind])),
+    color: (color) => setColor(view, color),
+    align: (align) => setBlockFormat(view, { align }),
+    indent: (delta) => setBlockFormat(view, { indent: delta }),
     link: () => insertLink(view),
     block: (block) => setHeading(view, block),
     lines: (kind) => toggleLines(view, kind),

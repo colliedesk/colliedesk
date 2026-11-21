@@ -2,10 +2,11 @@ import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import { articleAddress } from '../article-address';
 import type { Active, Block, ToolTarget, UploadHooks } from '../editor-types';
+import { editTable, formatOf, setAlign, setColor, setIndent } from './visual-format';
 import { insertBlocks } from './visual-insert';
 import { startUpload } from './visual-upload';
 
-const levels: Record<number, Block> = { 1: 'h1', 2: 'h2', 3: 'h3' };
+const levels: Record<number, Block> = { 1: 'h1', 2: 'h2', 3: 'h3', 4: 'h4' };
 
 // activeOf is what the toolbar shows pressed where the cursor is.
 export function activeOf(editor: Editor): Active {
@@ -21,6 +22,7 @@ export function activeOf(editor: Editor): Active {
     ordered: editor.isActive('orderedList'),
     task: editor.isActive('taskList'),
     quote: editor.isActive('blockquote'),
+    ...formatOf(editor),
     canUndo: editor.can().undo(),
     canRedo: editor.can().redo(),
   };
@@ -52,10 +54,11 @@ export function visualTarget(editor: Editor, hooks: { current: UploadHooks }, op
       if (kind === 'bold') run.toggleBold().run();
       else if (kind === 'italic') run.toggleItalic().run();
       else if (kind === 'strike') run.toggleStrike().run();
+      else if (kind === 'underline' || kind === 'highlight') run.toggleMark(kind).run();
       else run.toggleCode().run();
     },
     link: openLink,
-    block: (block) => (block === 'paragraph' ? chain().setParagraph().run() : chain().setHeading({ level: Number(block.slice(1)) as 1 | 2 | 3 }).run()),
+    block: (block) => (block === 'paragraph' ? chain().setParagraph().run() : chain().setHeading({ level: Number(block.slice(1)) as 1 | 2 | 3 | 4 }).run()),
     lines: (kind) => {
       const run = chain();
       if (kind === 'bullet') run.toggleBulletList().run();
@@ -67,6 +70,10 @@ export function visualTarget(editor: Editor, hooks: { current: UploadHooks }, op
     callout: (type) => putNode(editor, { type: 'callout', attrs: { type }, content: [{ type: 'paragraph' }] }),
     codeBlock: (language) => putNode(editor, { type: 'codeBlock', attrs: { language: language || null } }),
     table: () => chain().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run(),
+    color: (color) => setColor(editor, color),
+    align: (align) => setAlign(editor, align),
+    indent: (delta) => setIndent(editor, delta),
+    tableEdit: (action) => editTable(editor, action),
     rule: () => chain().setHorizontalRule().run(),
     articleLink: (article) => {
       const href = articleAddress(article.url);

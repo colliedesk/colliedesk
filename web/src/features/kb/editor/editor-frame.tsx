@@ -4,11 +4,13 @@ import { kbMessages } from '../kb-messages';
 import { ArticleLinkPicker } from '../article-link-picker';
 import { MediaPicker } from '../media-picker';
 import { KBMenu, usePhone } from '../kb-ui';
+import type { MenuItem } from '../kb-ui';
 import { embedFor } from '../media-grid';
 import { Icon } from './icons';
 import type { IconName } from './icons';
 import { CodeBlockDialog } from './code-block-dialog';
 import { VideoLinkDialog } from './video-link-dialog';
+import { alignMenu, colorMenu, tableMenu } from './format-menus';
 import { insertMenu, moreMenu } from './toolbar-menus';
 import type { MenuContext } from './toolbar-menus';
 import type { Active, Block, ToolTarget, ViewMode } from './editor-types';
@@ -31,8 +33,10 @@ export interface EditorFrameProps {
 // Under this width (px) the whole desktop toolbar does not fit on one row.
 const compactWidth = 720;
 const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl+';
-// A phone's toolbar has Insert, Bold, Italic, Link and More only.
-const onPhone = ['insert', 'bold', 'italic', 'link', 'more'];
+// A phone's toolbar has Insert, Bold, Italic, Link, Text colour, Align, the table tools in a table, and More.
+const onPhone = ['insert', 'bold', 'italic', 'link', 'tableTools', 'more'];
+const blocks: Block[] = ['paragraph', 'h1', 'h2', 'h3', 'h4'];
+const alignIcon: Record<string, IconName> = { left: 'alignLeft', center: 'alignCenter', right: 'alignRight' };
 
 // EditorFrame is the toolbar, its menus and dialogs, full screen and the preview around an editor's text: the same
 // for the Markdown source and the visual editor, which differ only in the target the tools act on.
@@ -102,6 +106,16 @@ export function EditorFrame({ mode, articleId, preview, target, active, overlay,
     openCoding: () => setCoding(true), openPicking: () => setPicking(true), openDevice: () => fileInput.current?.click(),
     openVideo: () => setVideo(true), toggleFull: () => setFull(!full),
   };
+  // menu is a toolbar button with a menu of its own, in the toolbar's roving focus.
+  const menu = (name: string, label: string, items: MenuItem[], icon: IconName, disabled = false) => (
+    <KBMenu label={label} title={label} items={items} align="start" buttonClassName="md-tool" tool={name} tabIndex={stop === name ? 0 : -1}
+      disabled={disabled || !editing} trigger={<Icon name={icon} />} />
+  );
+  const formatMenus = <>
+    {menu('color', t.textColor, colorMenu(menus), 'color')}
+    {menu('align', t.alignIndent, alignMenu(menus), alignIcon[active?.align ?? 'left'] ?? 'alignLeft', active?.formatAt === 'none')}
+  </>;
+  const tableTools = !!active?.table && !!target?.tableEdit && menu('tableTools', t.tableTools, tableMenu(menus), 'table');
   const insert = <KBMenu label={t.insertMenuLong} title={t.insertMenuLong} align="start" describe items={insertMenu(menus)} className="md-insert" buttonClassName="md-insert-button"
     tool="insert" tabIndex={stop === 'insert' ? 0 : -1} disabled={!editing}
     trigger={<><Icon name="image" /><span>{t.insertMenu}</span><span className="md-insert-long">{t.insertMenuMore}</span><Icon name="chevronDown" /></>} />;
@@ -128,25 +142,27 @@ export function EditorFrame({ mode, articleId, preview, target, active, overlay,
             <label className="sr-only" htmlFor={`${id}-block`}>{kbMessages.blockType}</label>
             <select id={`${id}-block`} className="md-block" value={active?.block ?? 'paragraph'} disabled={!editing}
               onChange={(event) => act((x) => x.block(event.target.value as Block))}>
-              <option value="paragraph">{t.paragraph}</option>
-              {/* The article page shows the title as its h1, so the text offers no Heading 1; a stored one still shows here. */}
-              {active?.block === 'h1' && <option value="h1">{t.h1}</option>}
-              <option value="h2">{t.h2}</option>
-              <option value="h3">{t.h3}</option>
+              {blocks.map((block) => <option key={block} value={block}>{t[block]}</option>)}
             </select>
             <span className="md-sep" aria-hidden="true" />
           </>}
           {compact && <span className="md-grow" />}
           {tool('bold', t.bold, `${mod}B`, (x) => x.mark('bold'), active?.strong)}
           {tool('italic', t.italic, `${mod}I`, (x) => x.mark('italic'), active?.emphasis)}
+          {!compact && <>
+            {tool('underline', t.underline, `${mod}U`, (x) => x.mark('underline'), active?.underline)}
+            {tool('highlight', t.highlight, '', (x) => x.mark('highlight'), active?.highlight)}
+            {formatMenus}
+          </>}
           {tool('link', t.link, `${mod}K`, (x) => x.link(), active?.link)}
+          {compact && tableTools}
           {!compact && tool('article', t.articleLink, '', openLinking)}
           {!compact && <>
             <span className="md-sep" aria-hidden="true" />
             {tool('ordered', t.ordered, '', (x) => x.lines('ordered'), active?.ordered)}
             {tool('bullet', t.bullet, '', (x) => x.lines('bullet'), active?.bullet)}
             {tool('quote', t.quote, '', (x) => x.lines('quote'), active?.quote)}
-            {tool('table', t.table, '', (x) => x.table())}
+            {tableTools || tool('table', t.table, '', (x) => x.table())}
             <span className="md-sep" aria-hidden="true" />
             {insert}
             <span className="md-grow" />
