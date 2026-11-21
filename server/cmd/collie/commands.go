@@ -26,6 +26,9 @@ var stdin io.Reader = os.Stdin
 // version is stamped at image build time with -ldflags "-X main.version=..."; see server/Dockerfile.
 var version = "dev"
 
+// postgresFloor is the oldest PostgreSQL major a database command runs on; tests raise it.
+var postgresFloor = database.MinPostgresMajor
+
 // clock is the time source of operator commands; tests replace it.
 var clock = func() time.Time { return time.Now().UTC() }
 
@@ -56,6 +59,9 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer pool.Close()
+	if err := database.New(pool).CheckPostgresVersion(ctx, postgresFloor); err != nil {
+		return err
+	}
 
 	switch args[0] {
 	case "migrate":
