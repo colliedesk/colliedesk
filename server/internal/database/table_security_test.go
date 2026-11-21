@@ -186,9 +186,9 @@ func TestLimitAppRoleLeavesOnlyTheNamedPrivileges(t *testing.T) {
 	if pgErr := new(pgconn.PgError); !errors.As(err, &pgErr) || pgErr.Code != "42501" {
 		t.Fatalf("delete on an add-only table: %v, want permission denied", err)
 	}
-	for _, privilege := range []string{"TRUNCATE", "ALL", "SELECT; DROP TABLE workspaces"} {
-		if _, err := pool.Exec(ctx, `SELECT limit_app_role('probe_notes', $1)`, privilege); err == nil {
-			t.Errorf("limit_app_role accepted %q", privilege)
+	for _, privilege := range []any{"TRUNCATE", "ALL", "SELECT; DROP TABLE workspaces", nil} {
+		if _, err := pool.Exec(ctx, `SELECT limit_app_role('probe_notes', 'SELECT', $1::text)`, privilege); err == nil {
+			t.Errorf("limit_app_role accepted %v", privilege)
 		}
 	}
 }
@@ -213,5 +213,26 @@ func TestSecurityGuardFlagsAPolicyThatOnlyMentionsTheWorkspace(t *testing.T) {
 				t.Fatalf("gaps = %v, want only probe_notes", gaps)
 			}
 		})
+	}
+}
+
+func TestSecureWorkspaceTableLetsTheAppRoleUseItsSequences(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	db := New(pool)
+	ids := seedTwoWorkspaces(t, pool)
+	if _, err := pool.Exec(ctx, `CREATE TABLE probe_counted (id bigserial PRIMARY KEY, workspace_id uuid NOT NULL REFERENCES workspaces(id));
+		SELECT secure_workspace_table('probe_counted')`); err != nil {
+		t.Fatal(err)
+	}
+	err := db.InWorkspace(ctx, ids.a, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO probe_counted(workspace_id) VALUES ($1)`, ids.a)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("app role insert into a serial table: %v", err)
 	}
 }

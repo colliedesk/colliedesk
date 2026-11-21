@@ -236,7 +236,9 @@ one call:
    ```
 
    This enables and forces row-level security, adds `workspace_isolation` for the app role and
-   `privileged_access` for the owner. It refuses a table without `workspace_id`.
+   `privileged_access` for the owner. Default privileges cover tables only, so it also gives the app
+   role `USAGE` and `SELECT` on the table's serial sequences. It refuses a table without
+   `workspace_id`.
 2. Server-wide data (operators, server config, cloud sign-ups):
 
    ```sql
@@ -255,7 +257,8 @@ one call:
    `limit_app_role` revokes first, then grants exactly the listed privileges.
 
 `migration-check` refuses a migration after `20261121132937-workspace-table-security` that writes
-`CREATE POLICY`, `ROW LEVEL SECURITY`, `pg_policies` or `app.privileged` by hand. If a table needs a
+`CREATE`, `ALTER` or `DROP POLICY`, `ROW LEVEL SECURITY`, `pg_policies` or `app.privileged` by hand
+(comments do not count). If a table needs a
 shape the helpers do not give, add a helper in a migration and test it.
 
 ## Guards

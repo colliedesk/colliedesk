@@ -12,10 +12,8 @@ import (
 // limit_app_role. Migrations after it call those instead of writing row-level security by hand.
 const tableSecurityHelpers = "20261121132937-workspace-table-security"
 
-var (
-	handWrittenTableSecurity = regexp.MustCompile(`(?i)create\s+policy|row\s+level\s+security|pg_policies|app\.privileged`)
-	sqlLineComment           = regexp.MustCompile(`--[^\n]*`)
-)
+var handWrittenTableSecurity = regexp.MustCompile(
+	`(?i)(create|alter|drop)\s+policy|row\s+level\s+security|pg_policies|app\.privileged`)
 
 func checkTableSecurity(dir, stem string, files map[string]string) error {
 	if stem <= tableSecurityHelpers {
@@ -26,7 +24,7 @@ func checkTableSecurity(dir, stem string, files map[string]string) error {
 		if err != nil {
 			return fmt.Errorf("read migration %q: %w", name, err)
 		}
-		code := sqlLineComment.ReplaceAllString(string(contents), "")
+		code := withoutComments(string(contents))
 		if match := handWrittenTableSecurity.FindString(code); match != "" {
 			return fmt.Errorf("migration %q writes %q by hand: use SELECT secure_workspace_table('t'), "+
 				"secure_server_table('t') or limit_app_role('t', ...) (docs/internals/workspace-isolation.md)",
@@ -34,4 +32,37 @@ func checkTableSecurity(dir, stem string, files map[string]string) error {
 		}
 	}
 	return nil
+}
+
+// withoutComments drops -- and /* */ comments; quoted strings are kept, so a "--" inside one does not
+// hide the statement after it.
+func withoutComments(sql string) string {
+	var code strings.Builder
+	for i := 0; i < len(sql); i++ {
+		switch {
+		case sql[i] == '\'':
+			end := strings.IndexByte(sql[i+1:], '\'')
+			if end < 0 {
+				return code.String() + sql[i:]
+			}
+			code.WriteString(sql[i : i+end+2])
+			i += end + 1
+		case strings.HasPrefix(sql[i:], "--"):
+			end := strings.IndexByte(sql[i:], '\n')
+			if end < 0 {
+				return code.String()
+			}
+			i += end - 1
+		case strings.HasPrefix(sql[i:], "/*"):
+			end := strings.Index(sql[i+2:], "*/")
+			if end < 0 {
+				return code.String()
+			}
+			code.WriteByte(' ')
+			i += end + 3
+		default:
+			code.WriteByte(sql[i])
+		}
+	}
+	return code.String()
 }

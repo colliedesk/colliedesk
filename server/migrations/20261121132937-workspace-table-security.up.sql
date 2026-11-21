@@ -19,11 +19,19 @@ BEGIN
 END
 $$;
 
+-- Sequences the table owns (serial columns); identity columns need no grant.
+CREATE FUNCTION owned_sequences(t regclass) RETURNS SETOF regclass LANGUAGE sql STABLE AS $$
+    SELECT d.objid::regclass FROM pg_depend d JOIN pg_class s ON s.oid = d.objid
+        WHERE d.refobjid = t AND d.classid = 'pg_class'::regclass AND s.relkind = 'S' AND d.deptype = 'a'
+$$;
+
 -- Rows belong to the workspace in app.workspace_id; the owner reaches every row on the privileged path.
 -- The privileged policy names the owner, so the app role cannot use it by setting app.privileged.
+-- Default privileges cover tables only, so the app role also gets the table's serial sequences.
 CREATE FUNCTION secure_workspace_table(t regclass) RETURNS void LANGUAGE plpgsql AS $$
 DECLARE
     key text := CASE WHEN t = 'workspaces'::regclass THEN 'id' ELSE 'workspace_id' END;
+    sequence regclass;
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = t AND attname = key AND NOT attisdropped) THEN
         RAISE EXCEPTION '% has no % column; use secure_server_table for server-wide data', t, key;
@@ -37,6 +45,9 @@ BEGIN
     EXECUTE format($policy$CREATE POLICY privileged_access ON %1$s FOR ALL TO %2$I
         USING ((SELECT current_setting('app.privileged', true) = 'on'))
         WITH CHECK ((SELECT current_setting('app.privileged', true) = 'on'))$policy$, t, current_user);
+    FOR sequence IN SELECT owned_sequences(t) LOOP
+        EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE %s TO %I', sequence, app_role());
+    END LOOP;
 END
 $$;
 
@@ -51,8 +62,7 @@ BEGIN
     EXECUTE format($policy$CREATE POLICY privileged_access ON %1$s FOR ALL TO %2$I
         USING ((SELECT current_setting('app.privileged', true) = 'on'))
         WITH CHECK ((SELECT current_setting('app.privileged', true) = 'on'))$policy$, t, current_user);
-    FOR sequence IN SELECT d.objid::regclass FROM pg_depend d JOIN pg_class s ON s.oid = d.objid
-        WHERE d.refobjid = t AND d.classid = 'pg_class'::regclass AND s.relkind = 'S' LOOP
+    FOR sequence IN SELECT owned_sequences(t) LOOP
         EXECUTE format('REVOKE ALL ON SEQUENCE %s FROM %I', sequence, app_role());
     END LOOP;
 END
@@ -63,7 +73,7 @@ DECLARE
     privilege text;
 BEGIN
     FOREACH privilege IN ARRAY privileges LOOP
-        IF privilege NOT IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE') THEN
+        IF privilege IS NULL OR privilege NOT IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE') THEN
             RAISE EXCEPTION 'limit_app_role: % is not one of SELECT, INSERT, UPDATE, DELETE', privilege;
         END IF;
     END LOOP;
@@ -72,7 +82,7 @@ BEGIN
 END
 $$;
 
-REVOKE EXECUTE ON FUNCTION app_role(), secure_workspace_table(regclass), secure_server_table(regclass),
+REVOKE EXECUTE ON FUNCTION app_role(), owned_sequences(regclass), secure_workspace_table(regclass), secure_server_table(regclass),
     limit_app_role(regclass, text[]) FROM PUBLIC;
 
 -- These tables were meant to refuse the app role a DELETE (history is only added; roles and number
