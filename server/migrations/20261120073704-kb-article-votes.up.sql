@@ -1,10 +1,10 @@
--- "Was this article helpful?" on the public help center (docs/internals/knowledge-base.md, "Votes").
--- One vote per reader and article: the reader is a first-party cookie id, of which only the SHA-256 is
--- kept (voter). A second vote changes the first. A "No" may carry one line,
--- "What was missing?", stored masked (no email, no run of 6+ digits).
+-- "Was this article helpful?" on the public help center (docs/internals/knowledge-base.md,
+-- "Votes"). One vote per reader and article: the reader is a first-party cookie id, of which only
+-- the SHA-256 is kept (voter). A second vote changes the first. A "No" may carry one line, "What
+-- was missing?", stored masked (no email, no run of 6+ digits).
 --
--- A reset by the team closes the current votes (reset_id) and keeps, append-only, the counts the page
--- showed before it, so the history of the counts stays readable.
+-- A reset by the team closes the current votes (reset_id) and keeps, append-only, the counts the
+-- page showed before it, so the history of the counts stays readable.
 
 CREATE TABLE kb_article_vote_resets (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -19,19 +19,24 @@ CREATE TABLE kb_article_vote_resets (
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (workspace_id, id),
     CHECK ((token_id IS NULL) OR (token_label IS NOT NULL)),
-    FOREIGN KEY (workspace_id, article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, reset_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (reset_by_agent_id),
-    FOREIGN KEY (workspace_id, token_id) REFERENCES sessions(workspace_id, id) ON DELETE SET NULL (token_id)
+    FOREIGN KEY (workspace_id, article_id)
+        REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, reset_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (reset_by_agent_id),
+    FOREIGN KEY (workspace_id, token_id)
+        REFERENCES sessions(workspace_id, id) ON DELETE SET NULL (token_id)
 );
-CREATE INDEX kb_article_vote_resets_article_idx ON kb_article_vote_resets(workspace_id, article_id, created_at);
+CREATE INDEX kb_article_vote_resets_article_idx
+    ON kb_article_vote_resets(workspace_id, article_id, created_at);
 
 CREATE TABLE kb_article_votes (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     article_id uuid NOT NULL,
     voter bytea NOT NULL CHECK (octet_length(voter) = 32),
-    -- HMAC-SHA256 of the address the vote came from (an IPv4 address, an IPv6 /64), keyed with a server
-    -- secret: it bounds the new readers one address adds to an article in a day, and never shows.
+    -- HMAC-SHA256 of the address the vote came from (an IPv4 address, an IPv6 /64), keyed with a
+    -- server secret: it bounds the new readers one address adds to an article in a day, and never
+    -- shows.
     address bytea NOT NULL CHECK (octet_length(address) = 32),
     helpful boolean NOT NULL,
     -- "What was missing?", masked; only a "No" has one.
@@ -40,46 +45,33 @@ CREATE TABLE kb_article_votes (
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     CHECK (missing IS NULL OR NOT helpful),
-    FOREIGN KEY (workspace_id, article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, reset_id) REFERENCES kb_article_vote_resets(workspace_id, id) ON DELETE CASCADE
+    FOREIGN KEY (workspace_id, article_id)
+        REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, reset_id)
+        REFERENCES kb_article_vote_resets(workspace_id, id) ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX kb_article_votes_voter_idx ON kb_article_votes(workspace_id, article_id, voter) WHERE reset_id IS NULL;
-CREATE INDEX kb_article_votes_article_idx ON kb_article_votes(workspace_id, article_id, updated_at DESC);
-CREATE INDEX kb_article_votes_address_idx ON kb_article_votes(workspace_id, article_id, address, created_at);
+CREATE UNIQUE INDEX kb_article_votes_voter_idx ON kb_article_votes(workspace_id, article_id, voter)
+    WHERE reset_id IS NULL;
+CREATE INDEX kb_article_votes_article_idx
+    ON kb_article_votes(workspace_id, article_id, updated_at DESC);
+CREATE INDEX kb_article_votes_address_idx
+    ON kb_article_votes(workspace_id, article_id, address, created_at);
 
--- One row per article that has had a vote: version grows with every vote and reset of that article, so
--- its cached page knows the count is stale while other articles' pages and the knowledge base's
+-- One row per article that has had a vote: version grows with every vote and reset of that article,
+-- so its cached page knows the count is stale while other articles' pages and the knowledge base's
 -- content_version stay. Votes and resets of the article lock this row, one at a time.
 CREATE TABLE kb_article_vote_versions (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     article_id uuid NOT NULL,
     version bigint NOT NULL DEFAULT 0 CHECK (version >= 0),
     PRIMARY KEY (workspace_id, article_id),
-    FOREIGN KEY (workspace_id, article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE
+    FOREIGN KEY (workspace_id, article_id)
+        REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE
 );
 
-DO $$
-DECLARE
-    app_role text;
-    table_name text;
-BEGIN
-    SELECT roles[1]::text INTO app_role FROM pg_policies
-        WHERE schemaname = current_schema() AND tablename = 'workspaces' AND policyname = 'workspace_isolation';
-    IF app_role IS NULL THEN
-        RAISE EXCEPTION 'row-level security is not set up in this schema';
-    END IF;
-    FOREACH table_name IN ARRAY ARRAY['kb_article_vote_resets', 'kb_article_votes', 'kb_article_vote_versions'] LOOP
-        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', table_name);
-        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', table_name);
-        EXECUTE format($policy$CREATE POLICY workspace_isolation ON %2$I FOR ALL TO %1$I
-            USING (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))
-            WITH CHECK (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))$policy$, app_role, table_name);
-        EXECUTE format($policy$CREATE POLICY privileged_access ON %2$I FOR ALL TO %1$I
-            USING ((SELECT current_setting('app.privileged', true) = 'on'))
-            WITH CHECK ((SELECT current_setting('app.privileged', true) = 'on'))$policy$, current_user, table_name);
-        EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO %I', table_name, app_role);
-    END LOOP;
-    -- A reset is history: written and read, never changed (it goes by cascade, which runs as the owner).
-    EXECUTE format('REVOKE UPDATE, DELETE ON kb_article_vote_resets FROM %I', app_role);
-END
-$$;
+SELECT secure_workspace_table('kb_article_vote_resets');
+SELECT secure_workspace_table('kb_article_votes');
+SELECT secure_workspace_table('kb_article_vote_versions');
+-- A reset is history: written and read, never changed (it goes by cascade, which runs as the
+-- owner).
+SELECT limit_app_role('kb_article_vote_resets', 'SELECT', 'INSERT');

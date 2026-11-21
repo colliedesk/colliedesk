@@ -1,12 +1,13 @@
 -- A published article, or a published translation, can hold one set of unpublished changes
--- (docs/internals/knowledge-base.md, "Drafts"). A person or an AI agent edits it as often as they like;
--- the help center, search, sitemap.xml, llms.txt and AI answers keep reading the published row until
--- someone publishes the draft. Publishing copies it into the live row, discarding deletes it.
+-- (docs/internals/knowledge-base.md, "Drafts"). A person or an AI agent edits it as often as they
+-- like; the help center, search, sitemap.xml, llms.txt and AI answers keep reading the published
+-- row until someone publishes the draft. Publishing copies it into the live row, discarding deletes
+-- it.
 --
--- locale NULL is the article's own text; otherwise the row is the draft of that translation. A draft
--- row exists only while its article or translation is published: a draft article is edited in place.
--- collection_id and extra_collection_ids NULL mean "keep where it is listed now"; show_contents NULL
--- keeps the article's on-this-page switch as it is.
+-- locale NULL is the article's own text; otherwise the row is the draft of that translation. A
+-- draft row exists only while its article or translation is published: a draft article is edited in
+-- place. collection_id and extra_collection_ids NULL mean "keep where it is listed now";
+-- show_contents NULL keeps the article's on-this-page switch as it is.
 --
 -- No existing row changes and no draft is created: every article and translation stays as it was.
 CREATE TABLE kb_article_drafts (
@@ -25,41 +26,40 @@ CREATE TABLE kb_article_drafts (
     updated_by_agent_id uuid,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    CHECK (locale IS NULL OR (collection_id IS NULL AND extra_collection_ids IS NULL AND show_contents IS NULL)),
-    FOREIGN KEY (workspace_id, article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, article_id, locale) REFERENCES kb_article_translations(workspace_id, article_id, locale) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, collection_id) REFERENCES kb_collections(workspace_id, id) ON DELETE SET NULL (collection_id),
-    FOREIGN KEY (workspace_id, updated_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (updated_by_agent_id)
+    CHECK (
+        locale IS NULL
+        OR (collection_id IS NULL AND extra_collection_ids IS NULL AND show_contents IS NULL)
+    ),
+    FOREIGN KEY (workspace_id, article_id)
+        REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, article_id, locale)
+        REFERENCES kb_article_translations(workspace_id, article_id, locale) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, collection_id)
+        REFERENCES kb_collections(workspace_id, id) ON DELETE SET NULL (collection_id),
+    FOREIGN KEY (workspace_id, updated_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (updated_by_agent_id)
 );
-CREATE UNIQUE INDEX kb_article_drafts_article_idx ON kb_article_drafts(workspace_id, article_id) WHERE locale IS NULL;
-CREATE UNIQUE INDEX kb_article_drafts_translation_idx ON kb_article_drafts(workspace_id, article_id, locale) WHERE locale IS NOT NULL;
+CREATE UNIQUE INDEX kb_article_drafts_article_idx ON kb_article_drafts(workspace_id, article_id)
+    WHERE locale IS NULL;
+CREATE UNIQUE INDEX kb_article_drafts_translation_idx
+    ON kb_article_drafts(workspace_id, article_id, locale)
+    WHERE locale IS NOT NULL;
 
--- Saving a draft is a version of the article, so the history shows who changed what before it went live.
--- Its status is the live one: the version is not on the help center.
+-- Saving a draft is a version of the article, so the history shows who changed what before it went
+-- live. Its status is the live one: the version is not on the help center.
 ALTER TABLE kb_article_versions DROP CONSTRAINT kb_article_versions_kind_check;
 ALTER TABLE kb_article_versions ADD CONSTRAINT kb_article_versions_kind_check
-    CHECK (kind IN ('create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft'));
-ALTER TABLE kb_article_translation_versions DROP CONSTRAINT kb_article_translation_versions_kind_check;
-ALTER TABLE kb_article_translation_versions ADD CONSTRAINT kb_article_translation_versions_kind_check
-    CHECK (kind IN ('create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'mark_current', 'mark_outdated', 'draft'));
+    CHECK (kind IN (
+        'create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude',
+        'ai_include', 'draft'
+    ));
+ALTER TABLE kb_article_translation_versions
+    DROP CONSTRAINT kb_article_translation_versions_kind_check;
+ALTER TABLE kb_article_translation_versions
+    ADD CONSTRAINT kb_article_translation_versions_kind_check
+    CHECK (kind IN (
+        'create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace',
+        'mark_current', 'mark_outdated', 'draft'
+    ));
 
-DO $$
-DECLARE
-    app_role text;
-BEGIN
-    SELECT roles[1]::text INTO app_role FROM pg_policies
-        WHERE schemaname = current_schema() AND tablename = 'workspaces' AND policyname = 'workspace_isolation';
-    IF app_role IS NULL THEN
-        RAISE EXCEPTION 'row-level security is not set up in this schema';
-    END IF;
-    ALTER TABLE kb_article_drafts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE kb_article_drafts FORCE ROW LEVEL SECURITY;
-    EXECUTE format($policy$CREATE POLICY workspace_isolation ON kb_article_drafts FOR ALL TO %I
-        USING (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))
-        WITH CHECK (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))$policy$, app_role);
-    EXECUTE format($policy$CREATE POLICY privileged_access ON kb_article_drafts FOR ALL TO %I
-        USING ((SELECT current_setting('app.privileged', true) = 'on'))
-        WITH CHECK ((SELECT current_setting('app.privileged', true) = 'on'))$policy$, current_user);
-    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON kb_article_drafts TO %I', app_role);
-END
-$$;
+SELECT secure_workspace_table('kb_article_drafts');
