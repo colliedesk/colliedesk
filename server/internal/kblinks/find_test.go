@@ -8,7 +8,8 @@ import (
 )
 
 func TestFindReadsEveryAddressOfTheHelpCenter(t *testing.T) {
-	site := kblinks.Site{Slug: "acme", Hosts: []string{"Help.Acme.example"}}
+	site := kblinks.Site{Slug: "acme", AppHost: "desk.example.com", SlugHost: "acme.colliedesk.example",
+		Hosts: []string{"Help.Acme.example"}, FreshdeskHosts: []string{"acme.freshdesk.com"}}
 	body := `Hi Ada, try https://desk.example.com/help/acme/a/12-reset-a-password.
 Or in German: [hier](https://desk.example.com/help/acme/de/a/13-passwort).
 Our own domain: <https://help.acme.example/a/14> and https://HELP.acme.example/pt-BR/a/15-x?ref=mail#steps
@@ -16,7 +17,9 @@ The team host: https://acme.colliedesk.example/help/a/16-billing, again https://
 The old portal: https://acme.freshdesk.com/support/solutions/articles/7201-reset-password and
 https://help.acme.example/de/support/solutions/articles/7202
 Not ours: https://desk.example.com/help/other/a/17-x, https://elsewhere.example/a/18-y,
-https://desk.example.com/help/acme/c/3-guides, https://desk.example.com/help/acme/a/0-zero, help.acme.example/a/19`
+https://desk.example.com/help/acme/c/3-guides, https://desk.example.com/help/acme/a/0-zero, help.acme.example/a/19,
+https://acme.evil.example/help/a/20, https://elsewhere.example/help/acme/a/21, https://acme.colliedesk.example/a/22,
+https://evil.example/support/solutions/articles/7203, https://desk.example.com/support/solutions/articles/7204`
 	links := kblinks.Find(body, site)
 	if want := []int64{12, 13, 14, 15, 16}; !slices.Equal(links.Numbers, want) {
 		t.Fatalf("numbers = %v, want %v", links.Numbers, want)

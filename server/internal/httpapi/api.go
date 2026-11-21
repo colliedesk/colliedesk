@@ -399,7 +399,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
-			WithSealKeys(config.Google.Keys)}
+			WithSealKeys(config.Google.Keys).WithHelpCenterHosts(config.Origin, config.HelpCenterDomain)}
 	api.store = api.store.WithChannels(Channels(config, outbound, helpchat.Config{HelpCenterRoutes: api.helpChatRoutes(), HelpCenterAdditions: api.helpChatAdditions,
 		ChatActive: func(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
 			return api.ai.ChatActiveIn(ctx, tx, workspaceID)

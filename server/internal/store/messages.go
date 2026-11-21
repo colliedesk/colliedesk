@@ -423,7 +423,7 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 			return domain.Message{}, err
 		}
 		if actor.NoticeKind == "" && actor.Via == nil {
-			if err := recordKBArticleUses(ctx, tx, workspaceID, conversationID, messageID, body, actor.AIDraftID); err != nil {
+			if err := s.recordKBArticleUses(ctx, tx, workspaceID, conversationID, messageID, body, actor.AIDraftID); err != nil {
 				return domain.Message{}, err
 			}
 		}

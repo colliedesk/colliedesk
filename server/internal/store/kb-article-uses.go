@@ -3,18 +3,33 @@ package store
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/colliedesk/colliedesk/server/internal/kblinks"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 )
 
+// WithHelpCenterHosts returns a store that reads a sent reply's article links on this server's help
+// center hosts: origin (APP_ORIGIN) and <slug>.<helpCenterDomain>. Without it only custom domains and
+// old Freshdesk hosts are read.
+func (s *Store) WithHelpCenterHosts(origin, helpCenterDomain string) *Store {
+	copy := *s
+	copy.appHost, copy.helpCenterDomain = "", strings.ToLower(helpCenterDomain)
+	if parsed, err := url.Parse(origin); err == nil {
+		copy.appHost = strings.ToLower(parsed.Hostname())
+	}
+	return &copy
+}
+
 // recordKBArticleUses records, inside the reply's transaction, the articles a sent reply used: the
-// help center articles its body links to (current addresses on any of the workspace's help center
-// hosts, or old Freshdesk addresses of imported articles), and the sources of the AI draft it was sent
+// help center articles its body links to (current addresses on the workspace's own help center hosts,
+// or old Freshdesk addresses of imported articles on those or on the Freshdesk hosts it imported from), and the sources of the AI draft it was sent
 // from. Each article counts once per reply and kind. Notes, notices and drafts not sent never reach it.
-func recordKBArticleUses(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID, body, draftID string) error {
-	site, err := helpCenterSite(ctx, tx, workspaceID)
+func (s *Store) recordKBArticleUses(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID, body, draftID string) error {
+	site, err := s.helpCenterSite(ctx, tx, workspaceID)
 	if err != nil {
 		return err
 	}
@@ -42,18 +57,19 @@ func recordKBArticleUses(ctx context.Context, tx pgx.Tx, workspaceID, conversati
 	return nil
 }
 
-// helpCenterSite is what names the workspace's help center in an address: its slug and its claimed
-// custom domain.
-func helpCenterSite(ctx context.Context, tx pgx.Tx, workspaceID string) (kblinks.Site, error) {
-	var site kblinks.Site
-	var host *string
-	if err := tx.QueryRow(ctx, `SELECT w.slug, d.hostname FROM workspaces w
-		LEFT JOIN help_center_domains d ON d.workspace_id=w.id AND d.status='active'
-		WHERE w.id=$1`, workspaceID).Scan(&site.Slug, &host); err != nil {
+// helpCenterSite is what names the workspace's help center in an address: its slug, this server's
+// hosts, its verified custom domain and the Freshdesk hosts of its imports (the account's host and the
+// old help center domain the import was given).
+func (s *Store) helpCenterSite(ctx context.Context, tx pgx.Tx, workspaceID string) (kblinks.Site, error) {
+	site := kblinks.Site{AppHost: s.appHost}
+	if err := tx.QueryRow(ctx, `SELECT w.slug,
+			COALESCE((SELECT array_agg(d.hostname) FROM help_center_domains d WHERE d.workspace_id=w.id AND d.status='active'), '{}'),
+			COALESCE((SELECT array_agg(DISTINCT lower(h.host)) FROM import_jobs j
+				CROSS JOIN LATERAL (VALUES (j.domain), (j.options->>'old_help_center_domain')) h(host)
+				WHERE j.workspace_id=w.id AND j.kind='import' AND j.source='freshdesk' AND COALESCE(h.host,'')<>''), '{}')
+		FROM workspaces w WHERE w.id=$1`, workspaceID).Scan(&site.Slug, &site.Hosts, &site.FreshdeskHosts); err != nil {
 		return kblinks.Site{}, fmt.Errorf("read help center site: %w", err)
 	}
-	if host != nil {
-		site.Hosts = []string{*host}
-	}
+	site.SlugHost = workspacehost.Host(s.helpCenterDomain, site.Slug)
 	return site, nil
 }

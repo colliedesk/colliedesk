@@ -334,9 +334,13 @@ Results reads the same tables (docs/internals/results.md › Help center).
   views). The address, User-Agent and referrer never leave memory.
 - **A use is a sent reply.** `recordKBArticleUses` runs inside the transaction that inserts an outgoing
   message (a note, a notice or an unsent draft never does). `link` is an article address in the body on
-  the workspace's help center (`/help/<slug>/a/<number>-…` on this server's origin or the active custom
-  domain), or an old Freshdesk address (`/support/solutions/articles/<id>`, `/a/solutions/articles/<id>`)
-  of an article the import ledger maps (`import_items`, `kb_article`, status `done`). `ai_source` is each
+  one of the workspace's own help center hosts only (`kblinks.Site`): `/help/<slug>/a/<number>-…` on this
+  server's origin, `/help/a/<number>-…` on `<slug>.<HELP_CENTER_DOMAIN>`, any path on a verified custom
+  domain. A host that merely starts with the slug, or the help center path on another host, is not one.
+  An old Freshdesk address (`/support/solutions/articles/<id>`) counts on those hosts and on the hosts the
+  workspace imported from (`import_jobs.domain` and `options.old_help_center_domain`), when the import
+  ledger maps the id (`import_items`, `kb_article`, status `done`). An import run with the CLI leaves no
+  `import_jobs` row, so its old Freshdesk addresses are not counted: an undercount, never a false use. `ai_source` is each
   `ai_draft_sources` article of the draft the reply was sent from. One row per message, article and
   kind; a reply that both links and quotes an article has two rows and is counted once (`count(DISTINCT
   message_id)`). A reply whose delivery fails later still counts: the agent used the article.

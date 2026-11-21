@@ -10,20 +10,29 @@ import (
 	"strings"
 )
 
-// Site is what names a workspace's help center in an address.
+// Site is what names a workspace's help center in an address: only its own hosts do, so a host that
+// merely starts with the slug, or the help center path on another host, is not it.
 type Site struct {
-	// Slug is the workspace's: <any host>/help/<slug>/... and <slug>.<domain>/help/... are its help center.
+	// Slug is the workspace's: <AppHost>/help/<slug>/... is its help center.
 	Slug string
-	// Hosts are its custom domains, the whole host being the help center.
+	// AppHost is this server's host (APP_ORIGIN); empty matches nothing.
+	AppHost string
+	// SlugHost is the workspace's own host, <slug>.<HELP_CENTER_DOMAIN>, whose /help/... is its help
+	// center; empty without a help center domain.
+	SlugHost string
+	// Hosts are its verified custom domains, the whole host being the help center.
 	Hosts []string
+	// FreshdeskHosts are the old Freshdesk portal hosts it imported from: an old article path counts
+	// there, and on the help center's own hosts, never on any other host.
+	FreshdeskHosts []string
 }
 
 // Links are the articles a text links to, each once, in the order they first appear.
 type Links struct {
 	// Numbers are article numbers from current addresses (/a/<number>-<slug>).
 	Numbers []int64
-	// Freshdesk are Freshdesk article ids from old portal addresses (/support/solutions/articles/<id>),
-	// on any host: the id only names an article through the workspace's own import ledger.
+	// Freshdesk are Freshdesk article ids from old portal addresses (/support/solutions/articles/<id>)
+	// on the help center or an old portal host; the id names an article through the import ledger.
 	Freshdesk []string
 }
 
@@ -46,8 +55,8 @@ func Find(text string, site Site) Links {
 		if err != nil {
 			continue
 		}
-		path := parsed.Path
-		if below, ok := helpCenterPath(strings.ToLower(parsed.Hostname()), path, site); ok {
+		host, path := parsed.Hostname(), parsed.Path
+		if below, ok := helpCenterPath(host, path, site); ok {
 			if match := article.FindStringSubmatch(below); match != nil {
 				if number, err := strconv.ParseInt(match[1], 10, 64); err == nil && !slices.Contains(links.Numbers, number) {
 					links.Numbers = append(links.Numbers, number)
@@ -55,6 +64,8 @@ func Find(text string, site Site) Links {
 				continue
 			}
 			path = below
+		} else if !hostIn(host, site.FreshdeskHosts) {
+			continue
 		}
 		if match := freshdesk.FindStringSubmatch(path); match != nil && !slices.Contains(links.Freshdesk, match[1]) {
 			links.Freshdesk = append(links.Freshdesk, match[1])
@@ -65,20 +76,20 @@ func Find(text string, site Site) Links {
 
 // helpCenterPath is the path below the help center's address when host and path are on it.
 func helpCenterPath(host, path string, site Site) (string, bool) {
-	for _, custom := range site.Hosts {
-		if strings.EqualFold(host, custom) {
-			return path, true
-		}
+	switch {
+	case hostIn(host, site.Hosts):
+		return path, true
+	case site.SlugHost != "" && strings.EqualFold(host, site.SlugHost):
+		return cutBase(path, "/help")
+	case site.Slug != "" && site.AppHost != "" && strings.EqualFold(host, site.AppHost):
+		return cutBase(path, "/help/"+site.Slug)
 	}
-	if site.Slug == "" {
-		return "", false
-	}
-	if label, _, ok := strings.Cut(host, "."); ok && label == site.Slug {
-		if below, ok := cutBase(path, "/help"); ok {
-			return below, true
-		}
-	}
-	return cutBase(path, "/help/"+site.Slug)
+	return "", false
+}
+
+// hostIn reports whether host is one of hosts, ignoring case.
+func hostIn(host string, hosts []string) bool {
+	return slices.ContainsFunc(hosts, func(h string) bool { return h != "" && strings.EqualFold(host, h) })
 }
 
 // cutBase is path below base, when path is base or starts with base and a slash.
