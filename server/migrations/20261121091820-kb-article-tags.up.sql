@@ -42,10 +42,14 @@ END
 $$;
 
 -- AI retrieval reads an article's tags with its title: a tag added or removed queues the article.
+-- Deleting a workspace cascades to its tags after the workspace row is gone, so the trigger queues
+-- only for a workspace it can see: otherwise the delete fails on the foreign key to workspaces
+-- (app.privileged) or on row-level security (a superuser, whose cascade runs as the table owner).
 CREATE FUNCTION ai_retrieval_tag_changed() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     INSERT INTO ai_retrieval_pending(workspace_id, kb_article_id)
-        SELECT DISTINCT workspace_id, article_id FROM changed;
+        SELECT DISTINCT c.workspace_id, c.article_id FROM changed c
+        WHERE EXISTS (SELECT 1 FROM workspaces w WHERE w.id = c.workspace_id);
     RETURN NULL;
 END
 $$;
