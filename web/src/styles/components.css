@@ -356,6 +356,8 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .badge { border-radius: var(--radius-sm); background: var(--surface-3); color: var(--text-2); font-weight: 600; padding: 2px var(--space-2); }
 .badge-fail, .badge-delivery-failed { background: var(--danger-soft); color: var(--danger); }
 .badge-none { background: var(--warn-soft); color: var(--warn); }
+/* Who can see an article: everyone shows no badge; a restricted one says so wherever it is listed. */
+.badge[data-visibility] { background: var(--surface-2); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--fs-label); }
 .badge-delivery-sent { background: transparent; padding-inline: 0; color: var(--text-3); font-weight: 400; }
 .message-attachments { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; font-size: var(--fs-label); }
 .message-attachments li { display: inline-flex; align-items: center; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: var(--space-1) var(--space-3); }
@@ -503,6 +505,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .saved-reply-picker li[aria-selected="true"] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
 .picker-option-title, .picker-option-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker-option-detail { color: var(--text-3); font-size: var(--fs-label); }
+.picker-option-badge { justify-self: start; }
 .saved-reply-picker > button { margin: 0 var(--space-3) var(--space-3); }
 .article-link-picker { display: contents; }
 .saved-reply-empty { margin: 0; padding: var(--space-3); color: var(--text-3); font-size: var(--fs-small); }

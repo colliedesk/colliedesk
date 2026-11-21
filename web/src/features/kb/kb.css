@@ -235,8 +235,6 @@ span.kb-article-open { opacity: 0.35; }
 .badge[data-status="draft"] { background: var(--note-bg); color: var(--note-text); box-shadow: inset 0 0 0 1px var(--note-line); }
 .badge[data-status="published"] { background: var(--ok-soft); color: var(--ok); }
 .kb-article-meta .badge, .kb-status .badge { font-size: var(--fs-label); }
-/* Who can see an article: everyone shows no badge; a restricted one says so wherever it is listed. */
-.badge[data-visibility] { background: var(--surface-2); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--fs-label); }
 .kb-visibility-box [role="radiogroup"] { display: grid; gap: var(--space-2); }
 .kb-visibility-option { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: var(--space-2); cursor: pointer; }
 .kb-visibility-option input { margin-top: 3px; }

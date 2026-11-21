@@ -20,4 +20,5 @@ export const visibilityMessages = {
   filter: 'Who can see',
   anyone: 'Anyone',
   insertText: 'Inserts its text: this article has no public page to link.',
+  insertFailed: 'Its text could not be read. Try again.',
 } as const;
