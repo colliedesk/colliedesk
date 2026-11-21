@@ -24,14 +24,13 @@ type HelpCenterLegacyTarget struct {
 // import_items_source_id_idx, which holds the knowledge base rows only. Exported for the EXPLAIN of
 // the performance test.
 func HelpCenterLegacyTargetSQL(entity string) string {
-	// What an imported item can be now: a published article outside the trash, or a collection
-	// outside the trash.
+	// What an imported item can be now: an article or a collection the help center shows.
 	article, collection := "false", "false"
 	switch entity {
 	case "kb_article":
-		article = "a.workspace_id=i.workspace_id AND a.id=i.target_id AND a.status='published' AND a.deleted_at IS NULL"
+		article = "a.workspace_id=i.workspace_id AND a.id=i.target_id AND " + publicKBArticleFlag
 	case "kb_category", "kb_folder":
-		collection = "c.workspace_id=i.workspace_id AND c.id=i.target_id AND c.deleted_at IS NULL"
+		collection = "c.workspace_id=i.workspace_id AND c.id=i.target_id AND " + publicKBCollection
 	default:
 		return ""
 	}
@@ -92,8 +91,8 @@ type HelpCenterLegacyItem struct {
 func (s *Store) HelpCenterLegacyItems(ctx context.Context, workspaceID, accountSource string) ([]HelpCenterLegacyItem, error) {
 	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]HelpCenterLegacyItem, error) {
 		rows, err := tx.Query(ctx, `SELECT i.entity, i.source_id, a.number, a.slug, c.id::text FROM import_items i
-			LEFT JOIN kb_articles a ON i.entity='kb_article' AND a.workspace_id=i.workspace_id AND a.id=i.target_id AND a.status='published' AND a.deleted_at IS NULL
-			LEFT JOIN kb_collections c ON i.entity IN ('kb_category','kb_folder') AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND c.deleted_at IS NULL
+			LEFT JOIN kb_articles a ON i.entity='kb_article' AND a.workspace_id=i.workspace_id AND a.id=i.target_id AND `+publicKBArticleFlag+`
+			LEFT JOIN kb_collections c ON i.entity IN ('kb_category','kb_folder') AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND `+publicKBCollection+`
 			WHERE i.workspace_id=$1 AND i.source=$2 AND i.source LIKE 'freshdesk:%' AND i.status='done'
 				AND i.entity IN ('kb_article','kb_category','kb_folder') AND (a.id IS NOT NULL OR c.id IS NOT NULL)
 			ORDER BY i.entity, length(i.source_id), i.source_id`, workspaceID, accountSource)

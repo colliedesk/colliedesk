@@ -78,9 +78,13 @@ type KBCollection struct {
 	DefaultTemplateID *string `json:"default_template_id"`
 	// RequireApproval is whether an article in it needs an approved version before it is published:
 	// inherit (the workspace setting), on or off.
-	RequireApproval string    `json:"require_approval"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	RequireApproval string `json:"require_approval"`
+	// Visibility is who can see the collection and its articles (KBVisibilities); EffectiveVisibility
+	// also counts its live parents.
+	Visibility          string    `json:"visibility"`
+	EffectiveVisibility string    `json:"effective_visibility"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 	// Translations are its name and description in the help center's other languages.
 	Translations []KBCollectionTranslation `json:"translations"`
 }
@@ -114,6 +118,10 @@ type KBArticleSummary struct {
 	URL string `json:"url"`
 	// HasDraft is set while a published article has unpublished changes (KBArticle.Draft).
 	HasDraft bool `json:"has_draft"`
+	// Visibility is who the article itself is for (KBVisibilities); EffectiveVisibility is the most
+	// restrictive of it and of every live collection the article is in, which is what applies.
+	Visibility          string `json:"visibility"`
+	EffectiveVisibility string `json:"effective_visibility"`
 }
 
 // KBTranslationSummary is one language version of an article without its text, as the article and
@@ -279,6 +287,9 @@ type KBArticle struct {
 	DeletedAt   *time.Time    `json:"deleted_at"`
 	// AIExclusion is set while AI may not read the article, in any language.
 	AIExclusion *KBAIExclusion `json:"ai_exclusion"`
+	// VisibilityFrom is the collection that makes EffectiveVisibility more restrictive than the
+	// article's own Visibility; nil when the article's own setting applies.
+	VisibilityFrom *KBVisibilityCollection `json:"visibility_from"`
 	// MissingMedia is set only in the answer to a save: media ids the text names that the library
 	// does not have.
 	MissingMedia []string `json:"missing_media,omitempty"`

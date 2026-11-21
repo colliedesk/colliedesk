@@ -119,6 +119,14 @@ volume, and `upgrade-postgres.sh` does it for the bundled database. An install o
 [external database](database.md) runs whatever version that server runs: upgrade that server the
 way its provider says.
 
+On a PostgreSQL older than the oldest major Colliedesk supports (16), `collie serve`, `collie migrate`
+and every other command that reads or writes the database stop before they change anything. The log
+names the version found, the version needed and how to upgrade, and links here:
+
+```text
+collie: PostgreSQL 16 or newer is required; this database is PostgreSQL 15.8. sh upgrade-postgres.sh moves a bundled database on PostgreSQL 16, 17 or 18 to 19; upgrade any other server the way its provider says. See https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/upgrade.md#postgresql-versions
+```
+
 ### Move the bundled database to PostgreSQL 19
 
 You do not have to move: 16, 17 and 18 stay supported. To move, run `upgrade-postgres.sh` of the

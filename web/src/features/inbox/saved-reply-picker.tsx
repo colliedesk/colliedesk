@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { savedReplyMatches } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
@@ -30,11 +30,13 @@ interface SavedReplyPickerProps<T extends { id: string; title: string }> {
   onQueryChange?: (query: string) => void;
   // A second, quieter line under an item's title, for example the address an article link points to.
   detail?: (item: T) => string | undefined;
+  // A mark beside an item's title, for example who can see an article; it is read with the detail line.
+  badge?: (item: T) => ReactNode;
 }
 
 // SavedReplyPicker is a searchable list the keyboard drives end to end: type to filter by title,
 // arrows to move, Enter to insert, Escape to close. The list is already in memory, so it opens at once.
-export function SavedReplyPicker<T extends { id: string; title: string } = SavedReply>({ replies, onPick, onClose, onManage, state = 'ready', texts = savedReplyTexts, onQueryChange, detail }: SavedReplyPickerProps<T>) {
+export function SavedReplyPicker<T extends { id: string; title: string } = SavedReply>({ replies, onPick, onClose, onManage, state = 'ready', texts = savedReplyTexts, onQueryChange, detail, badge }: SavedReplyPickerProps<T>) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const search = useRef<HTMLInputElement>(null);
@@ -71,14 +73,19 @@ export function SavedReplyPicker<T extends { id: string; title: string } = Saved
         placeholder={texts.search} autoComplete="off" value={query} onKeyDown={onKey}
         onChange={(event) => { setQuery(event.target.value); setActive(0); onQueryChange?.(event.target.value); }} /></div>}
       <ul id={`${prefix}-list`} role="listbox" aria-label={texts.label} onMouseDown={(event) => event.preventDefault()}>
-        {matches.map((reply, index) => (
-          <li key={reply.id} id={optionId(index)} role="option" aria-selected={index === current} onClick={() => onPick(reply)}
-            // The title names the option; the detail line describes it.
-            aria-labelledby={`${optionId(index)}-title`} aria-describedby={detail?.(reply) ? `${optionId(index)}-detail` : undefined}
-            onMouseMove={() => { if (index !== current) setActive(index); }}>
-            <span id={`${optionId(index)}-title`} className="picker-option-title">{reply.title}</span>
-            {detail?.(reply) && <span id={`${optionId(index)}-detail`} className="picker-option-detail">{detail(reply)}</span>}</li>
-        ))}
+        {matches.map((reply, index) => {
+          const mark = badge?.(reply);
+          const described = [mark ? `${optionId(index)}-badge` : '', detail?.(reply) ? `${optionId(index)}-detail` : ''].filter(Boolean).join(' ');
+          return (
+            <li key={reply.id} id={optionId(index)} role="option" aria-selected={index === current} onClick={() => onPick(reply)}
+              // The title names the option; the badge and the detail line describe it.
+              aria-labelledby={`${optionId(index)}-title`} aria-describedby={described || undefined}
+              onMouseMove={() => { if (index !== current) setActive(index); }}>
+              <span id={`${optionId(index)}-title`} className="picker-option-title">{reply.title}</span>
+              {mark && <span id={`${optionId(index)}-badge`} className="picker-option-badge">{mark}</span>}
+              {detail?.(reply) && <span id={`${optionId(index)}-detail`} className="picker-option-detail">{detail(reply)}</span>}</li>
+          );
+        })}
       </ul>
       {state === 'loading' && replies.length === 0 && <p className="saved-reply-empty" role="status">{texts.loading}</p>}
       {state === 'failed' && replies.length === 0 && <p className="saved-reply-empty" role="alert">{texts.failed}</p>}

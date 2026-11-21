@@ -14,7 +14,7 @@ import (
 // domain.MaxKBArticles rows.
 func (s *Store) HelpCenterIndex(ctx context.Context, workspaceID string) ([]domain.PublicKBArticle, error) {
 	articles, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
-		rows, err := tx.Query(ctx, `SELECT `+publicKBArticleColumns+` FROM kb_articles a WHERE `+publishedKBArticle+`
+		rows, err := tx.Query(ctx, `SELECT `+publicKBArticleColumns+` FROM kb_articles a WHERE `+publicKBArticle+`
 			ORDER BY a.collection_id NULLS LAST, a.position, lower(a.title), a.number`, workspaceID)
 		if err != nil {
 			return nil, err
@@ -36,7 +36,7 @@ func (s *Store) HelpCenterIndex(ctx context.Context, workspaceID string) ([]doma
 func (s *Store) HelpCenterTranslationIndex(ctx context.Context, workspaceID string) ([]domain.PublicKBTranslation, error) {
 	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBTranslation, error) {
 		rows, err := tx.Query(ctx, `SELECT a.number, t.locale, t.slug, t.updated_at FROM kb_articles a`+shownTranslation(`t.locale`)+`
-			WHERE `+publishedKBArticle+` ORDER BY a.number, hl.position, t.locale`, workspaceID)
+			WHERE `+publicKBArticle+` ORDER BY a.number, hl.position, t.locale`, workspaceID)
 		if err != nil {
 			return nil, err
 		}

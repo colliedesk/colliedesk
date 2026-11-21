@@ -76,6 +76,8 @@ type ChatSource struct {
 	Version   int     `json:"version"`
 	Title     *string `json:"title"`
 	Folder    *string `json:"folder"`
+	// Public says the help center shows the article now.
+	Public bool `json:"-"`
 }
 
 // ChatTurn is one question and answer of a transcript.
@@ -222,7 +224,8 @@ func readChatTurns(ctx context.Context, tx pgx.Tx, workspaceID, sessionID string
 	for i, turn := range turns {
 		index[turn.ID] = i
 	}
-	sources, err := tx.Query(ctx, `SELECT o.turn_id::text,o.ordinal,o.kb_article_id::text,o.article_number,o.article_version,o.title,o.folder
+	sources, err := tx.Query(ctx, `SELECT o.turn_id::text,o.ordinal,o.kb_article_id::text,o.article_number,o.article_version,o.title,o.folder,
+			EXISTS (SELECT 1 FROM kb_public_articles kp WHERE kp.workspace_id=o.workspace_id AND kp.id=o.kb_article_id)
 		FROM ai_chat_sources o JOIN ai_chat_turns t ON t.workspace_id=o.workspace_id AND t.id=o.turn_id
 		WHERE o.workspace_id=$1 AND t.session_id=$2 ORDER BY t.seq,o.ordinal`, workspaceID, sessionID)
 	if err != nil {
@@ -232,7 +235,7 @@ func readChatTurns(ctx context.Context, tx pgx.Tx, workspaceID, sessionID string
 	for sources.Next() {
 		var turnID string
 		var source ChatSource
-		if err := sources.Scan(&turnID, &source.Ordinal, &source.ArticleID, &source.Number, &source.Version, &source.Title, &source.Folder); err != nil {
+		if err := sources.Scan(&turnID, &source.Ordinal, &source.ArticleID, &source.Number, &source.Version, &source.Title, &source.Folder, &source.Public); err != nil {
 			return nil, err
 		}
 		if i, ok := index[turnID]; ok {
@@ -345,7 +348,7 @@ func (s *Service) ChatUsage(ctx context.Context, workspaceID string, month time.
 				(SELECT count(*) FILTER (WHERE f.rating='helpful') FROM ai_chat_feedback f WHERE f.workspace_id=$1 AND f.created_at>=$2 AND f.created_at<$3),
 				(SELECT count(*) FROM ai_chat_feedback f WHERE f.workspace_id=$1 AND f.created_at>=$2 AND f.created_at<$3),
 				(SELECT count(*) FROM kb_articles a JOIN help_centers h ON h.workspace_id=a.workspace_id AND h.enabled
-					WHERE a.workspace_id=$1 AND a.status='published' AND a.deleted_at IS NULL AND NOT a.ai_excluded)`,
+					WHERE a.workspace_id=$1 AND NOT a.ai_excluded AND EXISTS (SELECT 1 FROM kb_help_chat_articles kv WHERE kv.workspace_id=a.workspace_id AND kv.id=a.id))`,
 			workspaceID, month, month.AddDate(0, 1, 0), day).
 			Scan(&usage.Answers, &usage.AnswersToday, &spent, &usage.Chats, &usage.HandedOff, &usage.Helpful, &usage.Rated, &usage.Articles)
 		if err != nil {

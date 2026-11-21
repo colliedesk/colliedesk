@@ -8159,6 +8159,20 @@ export interface components {
              * @description The template every new article in this collection starts from; null for none. A template in the trash is 409 template_in_trash; trashing the template sets this to null.
              */
             default_template_id?: string | null;
+            /** @description Who can see the collection and every article in it, its collections included. Left out, everyone. */
+            visibility?: components["schemas"]["KBVisibility"];
+        };
+        /**
+         * @description Who can see it. everyone: the help center, help chat and the team. help_chat: help chat may quote it without linking it; the help center never shows it, its search, sitemap.xml and llms.txt leave it out, and its address is 404. agents: only the team (reply suggestions and AI drafts, which never link it). An article is as restricted as the most restrictive of itself and every collection it is in, their parents included (effective_visibility).
+         * @enum {string}
+         */
+        KBVisibility: "everyone" | "help_chat" | "agents";
+        /** @description The collection that keeps the article more restricted than its own visibility. */
+        KBVisibilityFrom: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            visibility: components["schemas"]["KBVisibility"];
         };
         /**
          * @description Whether an article listed in the collection is published only once a teammate approved its exact text: inherit (the workspace setting require_approval of the help center), on or off. An article needs approval when any of its collections does.
@@ -8182,6 +8196,9 @@ export interface components {
              */
             default_template_id: string | null;
             require_approval: components["schemas"]["KBApprovalMode"];
+            visibility: components["schemas"]["KBVisibility"];
+            /** @description The most restrictive of its own visibility and that of its parents: who can see what is in it. */
+            effective_visibility: components["schemas"]["KBVisibility"];
             /** @description Articles directly in this collection and outside the trash, drafts included. */
             article_count: number;
             /** Format: date-time */
@@ -8201,6 +8218,8 @@ export interface components {
             position: number;
             /** Format: uuid */
             default_template_id?: string | null;
+            visibility?: components["schemas"]["KBVisibility"];
+            effective_visibility?: components["schemas"]["KBVisibility"];
             article_count: number;
             /** Format: date-time */
             created_at: string;
@@ -8245,6 +8264,8 @@ export interface components {
             seo_description?: string;
             /** @description Left out, it is on. The help center lists its H2 and H3 headings as On this page when it has 3 or more; false turns the list off for the article in every language. A version restore leaves it as it is. */
             show_contents?: boolean;
+            /** @description Who can see the article; a collection it is in can restrict it further. Left out, everyone. */
+            visibility?: components["schemas"]["KBVisibility"];
         };
         /**
          * @description published: on the public help center while it is on. draft: only agents see it.
@@ -8326,6 +8347,10 @@ export interface components {
             url: string;
             /** @description The article is published and has unpublished changes (GET /api/v1/kb/articles/{id} returns them as draft). */
             has_draft: boolean;
+            /** @description Its own visibility, as set on the article. */
+            visibility: components["schemas"]["KBVisibility"];
+            /** @description Who can see it now: the most restrictive of its own visibility and that of every collection it is in, their parents included. Only everyone is on the help center; a help_chat or agents article is never linked in a reply or a chat. */
+            effective_visibility: components["schemas"]["KBVisibility"];
         };
         KBArticleAIExclusion: {
             /** Format: date-time */
@@ -8559,6 +8584,12 @@ export interface components {
             url: string;
             /** @description The article is published and has unpublished changes, in draft. */
             has_draft: boolean;
+            /** @description Its own visibility, as set on the article. */
+            visibility: components["schemas"]["KBVisibility"];
+            /** @description Who can see it now, as in KBArticleSummary. */
+            effective_visibility: components["schemas"]["KBVisibility"];
+            /** @description The collection (or a parent of one) that makes it more restricted than its own visibility, shown as "Agents only because of <name>"; null when its own visibility decides. */
+            visibility_from: null | components["schemas"]["KBVisibilityFrom"];
             /** @description The unpublished changes of a published article; null when it has none. The help center shows the published fields until they are published. */
             draft: null | components["schemas"]["KBArticleDraft"];
             body_md: string;
@@ -20132,6 +20163,8 @@ export interface operations {
                     default_template_id?: string | null;
                     /** @description Whether its articles need an approved version before they are published. Changing it also needs help_center:update. */
                     require_approval?: components["schemas"]["KBApprovalMode"];
+                    /** @description Who can see the collection and every article in it. Keeping it from more people, sent alone, needs only kb_articles:update and applies at once. Letting more people see it, like every other change here, needs kb_articles:publish; it is 409 approval_required, naming each article, when a published article it would show to more people is in a collection that needs approval and no review approved its published text. */
+                    visibility?: components["schemas"]["KBVisibility"];
                 };
             };
         };
@@ -20324,6 +20357,8 @@ export interface operations {
                 collection_id?: string;
                 /** @description true: only the published articles with unpublished changes (has_draft). */
                 has_draft?: boolean;
+                /** @description Only the articles with this effective_visibility. */
+                visibility?: components["schemas"]["KBVisibility"];
                 /** @description in_review: only the articles whose unpublished text waits for a reviewer. approved: only the ones whose unpublished text a reviewer approved as it is now, ready to publish (POST /api/v1/kb/articles/publish). Translations are left out. */
                 state?: "in_review" | "approved";
                 /** @description The order without `q`; ignored with `q`. */
@@ -20513,6 +20548,8 @@ export interface operations {
                     seo_description?: string;
                     /** @description The help center lists its H2 and H3 headings as On this page when it has 3 or more; false turns the list off for the article in every language. A version restore leaves it as it is. */
                     show_contents?: boolean;
+                    /** @description Who can see the article. It applies at once, also on a published article, and adds no version. Letting more people see a published article needs kb_articles:publish, and is 409 approval_required when a collection it is in needs approval and no review approved its published text; keeping it from more people needs only kb_articles:update. */
+                    visibility?: components["schemas"]["KBVisibility"];
                     /** @description An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400. */
                     autosave?: boolean;
                 };

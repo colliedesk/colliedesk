@@ -14,9 +14,9 @@ import (
 // listedByShownArticle is the rule that makes a file public, on rows l of kb_article_attachments joined
 // to their article a: the article is published and outside the trash, and the list is its own or the
 // list of one of its published translations in a language customers see.
-const listedByShownArticle = publishedKBArticle + ` AND (l.locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t
+const listedByShownArticle = publicKBArticle + ` AND (l.locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.locale=t.locale AND hl.visible
-		WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=l.locale AND t.status='published' AND t.deleted_at IS NULL))`
+		WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=l.locale AND ` + publicKBTranslation + `))`
 
 // HelpCenterFile returns a file the help center may hand out: a published article, or a published
 // translation shown to customers, lists it, and it is not in the library's trash. A draft's list never
@@ -64,7 +64,7 @@ func indexedKBAttachments(ctx context.Context, tx pgx.Tx, workspaceID string, ar
 	rows, err := tx.Query(ctx, `SELECT a.number, m.id::text, m.name, m.content_type, m.size FROM kb_article_attachments l
 		JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
 		JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id AND m.kind='file' AND m.deleted_at IS NULL
-		WHERE l.workspace_id=$1 AND l.locale IS NULL AND `+publishedKBArticle+` ORDER BY a.number, l.position`, workspaceID)
+		WHERE l.workspace_id=$1 AND l.locale IS NULL AND `+publicKBArticle+` ORDER BY a.number, l.position`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("read help center index attachments: %w", err)
 	}

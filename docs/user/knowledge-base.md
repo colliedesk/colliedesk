@@ -115,10 +115,10 @@ the end of a published article's row opens its public page.
 
 Every action on an article is in the bar at the top: **Save**, **Publish** for a draft, and **⋯** with
 **View on help center**, **Copy link**, **Version history**, **Publish** or **Unpublish**, and
-**Delete article…**. The column on the right only shows the article's **Visibility** (with **Turn on
-help center** while it is off), the images that still need alt text, and its **Placement**
-(collection and address name). On a phone the bar is at the bottom of the screen: the status,
-**Details** (visibility, alt text, collections, address), **⋯** and **Save**.
+**Delete article…**. The column on the right only shows the article's **Status** (with **Turn on
+help center** while it is off), [who can see it](#visibility), the images that still need alt text, and
+its **Placement** (collection and address name). On a phone the bar is at the bottom of the screen: the
+status, **Details** (status, who can see it, alt text, collections, address), **⋯** and **Save**.
 
 **Write** shows the Markdown, **Preview** shows how the article reads, and **Side by side** (in a wide
 window) shows both. A wide window opens an article side by side, unless it is longer than 20,000
@@ -226,7 +226,8 @@ the list as it is until you publish them. Restoring an older version leaves it a
 To point from one article to another, select **Link to article** in the toolbar (under **⋯** in a narrow
 editor) and choose the article. It is the same list as **Articles** in the reply box: the published
 articles in the help center's [order](#order), with a search, `Enter` or a click to pick and `Esc` to close.
-The article you are editing is not in it, and the list is empty while the help center is off.
+The article you are editing is not in it, nor is an article that is not for [everyone](#visibility),
+since it has no public page. The list is empty while the help center is off.
 
 - With text selected, the selection becomes the link text: `to reset it` becomes
   `[to reset it](/a/7-reset-your-password)`.
@@ -640,6 +641,39 @@ To keep one published article away from AI, open it and select **Exclude from AI
 AI** (on the right; on a phone, under the text). From then on drafts and suggestions skip it in every language; people and the help center
 still see it. The article says since when and by whom, and its history has the change. **Let AI use
 it again** undoes it. Neither changes the text, so an edit someone has open still saves.
+To keep an article for your team but out of help chat and the help center, make it
+[Agents only](#visibility) instead.
+
+## Visibility
+
+**Who can see this** sets who reads an article. It is in the column on the right of the editor (on a
+phone, under **Details**), and in a collection's **Edit** form.
+
+| Choice | Who sees it |
+|---|---|
+| **Everyone** (the default) | The help center, help chat and your team. |
+| **Help chat only** | Help chat may quote it, without a link, as "Our help notes". The help center never shows it. |
+| **Agents only** | Only your team: reply suggestions and AI drafts. |
+
+A collection narrows every article in it and in the collections inside it. An article is as restricted
+as the most restrictive of itself and every collection it is in, their parents included. When a
+collection keeps an article more restricted than its own choice, the editor says so, for example
+"Agents only because of Internal". Moving an article into such a collection, or a collection under one,
+restricts it at once.
+
+A help center page that is not for everyone answers as if it did not exist (404). The help center's
+search, `sitemap.xml` and `llms.txt` leave it out, and so does an address it had before. An AI draft may
+use a restricted article, but never puts its address in the reply.
+
+Raising who can see a published article (for example from **Agents only** to **Everyone**) needs the right
+to publish (`kb_articles:publish`), whichever way it happens: the article's own choice, its collection's
+choice, moving the article, or moving the collection. Where publishing needs [approval](#review-before-publishing),
+each such article also needs an approved review of its current text. Otherwise nothing changes, and
+Colliedesk names the articles: "2 articles would become public without an approved review: …". Making
+an article more restricted needs only the right to edit (`kb_articles:update`).
+
+The knowledge base list marks each article that is not for everyone (**Help chat only**, **Agents
+only**), and **Who can see** above the list keeps only the articles with that choice.
 
 ## Translations
 
@@ -966,8 +1000,9 @@ to serve on the domain again.
 
 ### What visitors see
 
-- Only published articles outside the trash. Drafts, the trash, and collections with nothing
-  published in or below them never appear: not in a page, a count, a search or an address.
+- Only published articles outside the trash that are for [everyone](#visibility). Drafts, the trash,
+  articles for help chat or agents only, and collections with nothing of these in or below them never
+  appear: not in a page, a count, a search or an address.
 - The home page lists the top-level collections, each with its first articles and the collections
   inside it. A collection page lists those collections, each with its first articles, and its own
   articles in their [order](#order), 50 a page. An article page lists the other articles of its
@@ -1088,6 +1123,9 @@ The article goes in where the cursor is, as its title on one line and its
 the customer sees exactly these two lines, and their mail app makes the address a link. You can
 edit both before you send. `Ctrl+Z` (`Cmd+Z`) takes the link back out.
 
+An article that is not for [everyone](#visibility) has no public page to link. The list marks it
+**Help chat only** or **Agents only**, and choosing it inserts its published text instead of a link.
+
 The list shows only published articles, and only while the help center is on: while it is off no
 article has a public page, so the list says so instead. An admin gets **Open help center
 settings**, which opens Knowledge base → Settings in a new tab, so your draft stays; an agent asks an admin. The list
@@ -1145,6 +1183,13 @@ Articles and collections:
   `collection_ids`.
 - Search title and meta description: `seo_title` and `seo_description` on `POST` and
   `PATCH /api/v1/kb/articles`, and on `colliedesk_kb_article_create` and `colliedesk_kb_article_update`.
+- [Who can see it](#visibility): `visibility` (`everyone`, `help_chat` or `agents`) on
+  `colliedesk_kb_article_create`, `colliedesk_kb_article_update`, `colliedesk_kb_collection_create` and
+  `colliedesk_kb_collection_update`, and on `POST` and `PATCH` of `/api/v1/kb/articles` and
+  `/api/v1/kb/collections`. Every answer carries `visibility` and `effective_visibility` (the most
+  restrictive of the article and its collections). `visibility=` on `colliedesk_kb_articles_search` and
+  `GET /api/v1/kb/articles` keeps the articles with that effective visibility. A raise that would publish
+  unreviewed text is refused with `approval_required` and the article ids.
 - Keep an article away from AI: `colliedesk_kb_article_ai_exclude` and `colliedesk_kb_article_ai_include`,
   with `kb_articles:update`.
 - Unpublished changes: `colliedesk_kb_article_update` (or `PATCH /api/v1/kb/articles/{id}`) on a

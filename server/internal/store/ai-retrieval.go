@@ -57,6 +57,9 @@ type AIRetrievalQuery struct {
 	// search (the help chat) sets it, so a workspace with many languages costs it no more than one.
 	// Nil scores every language (internal drafts and triage).
 	KBReader *string
+	// HelpChat searches only the articles help chat may read (kb_help_chat_articles); left false, every
+	// published article counts, those kept for the team included (internal drafts and triage).
+	HelpChat bool
 }
 
 // AIRetrievedDoc is one source. Title and Number come from the database, so a source shown to a
@@ -160,7 +163,7 @@ func AIRetrieve(ctx context.Context, tx pgx.Tx, workspaceID string, query AIRetr
 	if err != nil {
 		return nil, fmt.Errorf("read AI retrieval terms: %w", err)
 	}
-	kb, err := aiRetrieveKB(ctx, tx, workspaceID, terms, query.KBLimit, query.KBReader)
+	kb, err := aiRetrieveKB(ctx, tx, workspaceID, terms, query.KBLimit, query.KBReader, query.HelpChat)
 	if err != nil {
 		return nil, err
 	}
@@ -175,27 +178,43 @@ func AIRetrieve(ctx context.Context, tx pgx.Tx, workspaceID string, query AIRetr
 // so rows whose source changed since they were built (and wait in the queue) leave enough behind.
 const aiRecheckSlack = `20`
 
+// aiKBViews names the views of the articles and translations a search may read: every published one,
+// or for help chat only those it may read.
+func aiKBViews(helpChat bool) (articles, translations string) {
+	if helpChat {
+		return "kb_help_chat_articles", "kb_help_chat_translations"
+	}
+	return "kb_published_articles", "kb_published_translations"
+}
+
 // aiReadableArticle is the check of an article at search time.
-const aiReadableArticle = `a.workspace_id=d.workspace_id AND a.id=d.kb_article_id AND a.status='published' AND a.deleted_at IS NULL AND NOT a.ai_excluded`
+func aiReadableArticle(helpChat bool) string {
+	articles, _ := aiKBViews(helpChat)
+	return `a.workspace_id=d.workspace_id AND a.id=d.kb_article_id AND NOT a.ai_excluded
+		AND EXISTS (SELECT 1 FROM ` + articles + ` kv WHERE kv.workspace_id=a.workspace_id AND kv.id=a.id)`
+}
 
 // aiReadableTranslation is the check of a translation row d at search time: published and outside the
 // trash, like its article (docs/internals/ai-retrieval.md).
-const aiReadableTranslation = `(d.kb_locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=d.workspace_id
-	AND t.article_id=d.kb_article_id AND t.locale=d.kb_locale AND t.status='published' AND t.deleted_at IS NULL))`
+func aiReadableTranslation(helpChat bool) string {
+	return aiPublishedTranslationOf("d", helpChat)
+}
 
 // aiPublishedTranslationOf is the check of a row of ai_retrieval_docs named by alias: an article's own
 // text, or a translation that is published and outside the trash. A row an older build left for a
 // translation that is a draft now (the translations migration keeps the index as it was) neither hides
 // the article's own text from a reader of that language nor wins its article's place (the same check
 // on the scored rows, in best); the next build of the article drops it.
-func aiPublishedTranslationOf(alias string) string {
-	return `(` + alias + `.kb_locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=` + alias + `.workspace_id
-	AND t.article_id=` + alias + `.kb_article_id AND t.locale=` + alias + `.kb_locale AND t.status='published' AND t.deleted_at IS NULL))`
+func aiPublishedTranslationOf(alias string, helpChat bool) string {
+	_, translations := aiKBViews(helpChat)
+	return `(` + alias + `.kb_locale IS NULL OR EXISTS (SELECT 1 FROM ` + translations + ` kt WHERE kt.workspace_id=` + alias + `.workspace_id
+	AND kt.article_id=` + alias + `.kb_article_id AND kt.locale=` + alias + `.kb_locale))`
 }
 
-func aiRetrieveKB(ctx context.Context, tx pgx.Tx, workspaceID string, terms []string, limit int, reader *string) ([]AIRetrievedDoc, error) {
+func aiRetrieveKB(ctx context.Context, tx pgx.Tx, workspaceID string, terms []string, limit int, reader *string, helpChat bool) ([]AIRetrievedDoc, error) {
+	_, translations := aiKBViews(helpChat)
 	var tokens int64
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(d.tokens),0) FROM ai_retrieval_docs d JOIN kb_articles a ON `+aiReadableArticle+`
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(d.tokens),0) FROM ai_retrieval_docs d JOIN kb_articles a ON `+aiReadableArticle(helpChat)+`
 		WHERE d.workspace_id=$1 AND d.kb_article_id IS NOT NULL AND d.kb_locale IS NULL`, workspaceID).Scan(&tokens); err != nil {
 		return nil, fmt.Errorf("size the knowledge base for AI: %w", err)
 	}
@@ -209,7 +228,7 @@ func aiRetrieveKB(ctx context.Context, tx pgx.Tx, workspaceID string, terms []st
 		// Every article in its own language, the matching ones first.
 		rows, err = tx.Query(ctx, `WITH `+aiScored(`SELECT id, kb_article_id AS source, kb_locale AS locale, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL AND kb_locale IS NULL`)+`
 			SELECT d.kb_article_id::text, '', a.number, d.title, d.body, COALESCE(score.s, 0)
-			FROM ai_retrieval_docs d JOIN kb_articles a ON `+aiReadableArticle+` LEFT JOIN score ON score.id=d.id
+			FROM ai_retrieval_docs d JOIN kb_articles a ON `+aiReadableArticle(helpChat)+` LEFT JOIN score ON score.id=d.id
 			WHERE d.workspace_id=$1 AND d.kb_article_id IS NOT NULL AND d.kb_locale IS NULL
 			ORDER BY COALESCE(score.s, 0) DESC, a.number`, workspaceID, terms)
 	} else {
@@ -224,17 +243,17 @@ func aiRetrieveKB(ctx context.Context, tx pgx.Tx, workspaceID string, terms []st
 			// for a published translation, the trigger removes it on unpublish or trash).
 			args = append(args, *reader)
 			languages = ` AND (kb_locale = $4 OR (kb_locale IS NULL AND NOT EXISTS (SELECT 1 FROM ai_retrieval_docs o
-				WHERE o.workspace_id=$1 AND o.kb_article_id=ai_retrieval_docs.kb_article_id AND o.kb_locale=$4 AND ` + aiPublishedTranslationOf("o") + `)))`
+				WHERE o.workspace_id=$1 AND o.kb_article_id=ai_retrieval_docs.kb_article_id AND o.kb_locale=$4 AND ` + aiPublishedTranslationOf("o", helpChat) + `)))`
 		}
 		kbSQL := `WITH ` + aiScored(`SELECT id, kb_article_id AS source, kb_locale AS locale, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL`+languages) + `,
 			best AS (SELECT DISTINCT ON (source) id, s FROM score
-				WHERE score.locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=$1 AND t.article_id=score.source::uuid
-					AND t.locale=score.locale AND t.status='published' AND t.deleted_at IS NULL)
+				WHERE score.locale IS NULL OR EXISTS (SELECT 1 FROM ` + translations + ` kt WHERE kt.workspace_id=$1 AND kt.article_id=score.source::uuid
+					AND kt.locale=score.locale)
 				ORDER BY source, s DESC, locale NULLS FIRST),
 			top AS (SELECT id, s FROM best ORDER BY s DESC LIMIT $3 + ` + aiRecheckSlack + `)
 			SELECT d.kb_article_id::text, COALESCE(d.kb_locale, ''), a.number, d.title, d.body, top.s
-			FROM top JOIN ai_retrieval_docs d ON d.workspace_id=$1 AND d.id=top.id JOIN kb_articles a ON ` + aiReadableArticle + `
-			WHERE ` + aiReadableTranslation + `
+			FROM top JOIN ai_retrieval_docs d ON d.workspace_id=$1 AND d.id=top.id JOIN kb_articles a ON ` + aiReadableArticle(helpChat) + `
+			WHERE ` + aiReadableTranslation(helpChat) + `
 			ORDER BY top.s DESC, a.number LIMIT $3`
 		rows, err = tx.Query(ctx, kbSQL, args...)
 	}
@@ -604,11 +623,11 @@ func buildAIArticles(ctx context.Context, tx pgx.Tx, workspaceID string, ids []s
 		return err
 	}
 	rows, err := tx.Query(ctx, `SELECT a.id::text, NULL::text, a.title, a.body_md, a.updated_at FROM kb_articles a
-			WHERE a.workspace_id=$1 AND a.id=ANY($2::uuid[]) AND a.status='published' AND a.deleted_at IS NULL AND NOT a.ai_excluded
+			WHERE a.workspace_id=$1 AND a.id=ANY($2::uuid[]) AND NOT a.ai_excluded AND EXISTS (SELECT 1 FROM kb_published_articles kv WHERE kv.workspace_id=a.workspace_id AND kv.id=a.id)
 		UNION ALL
 		SELECT a.id::text, t.locale, t.title, t.body_md, t.updated_at FROM kb_articles a JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id
-			WHERE a.workspace_id=$1 AND a.id=ANY($2::uuid[]) AND a.status='published' AND a.deleted_at IS NULL AND NOT a.ai_excluded
-				AND t.status='published' AND t.deleted_at IS NULL`, workspaceID, ids)
+			WHERE a.workspace_id=$1 AND a.id=ANY($2::uuid[]) AND NOT a.ai_excluded
+				AND EXISTS (SELECT 1 FROM kb_published_translations kt WHERE kt.workspace_id=t.workspace_id AND kt.article_id=t.article_id AND kt.locale=t.locale)`, workspaceID, ids)
 	if err != nil {
 		return err
 	}

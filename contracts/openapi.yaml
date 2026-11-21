@@ -6782,6 +6782,9 @@ paths:
                 require_approval:
                   allOf: [{$ref: '#/components/schemas/KBApprovalMode'}]
                   description: 'Whether its articles need an approved version before they are published. Changing it also needs help_center:update.'
+                visibility:
+                  allOf: [{$ref: '#/components/schemas/KBVisibility'}]
+                  description: 'Who can see the collection and every article in it. Keeping it from more people, sent alone, needs only kb_articles:update and applies at once. Letting more people see it, like every other change here, needs kb_articles:publish; it is 409 approval_required, naming each article, when a published article it would show to more people is in a collection that needs approval and no review approved its published text.'
       responses:
         '200':
           description: Updated collection
@@ -6974,6 +6977,7 @@ paths:
         - {name: status, in: query, schema: {type: string, enum: [draft, published]}}
         - {name: collection_id, in: query, description: Only the articles directly in this collection., schema: {type: string, format: uuid}}
         - {name: has_draft, in: query, description: 'true: only the published articles with unpublished changes (has_draft).', schema: {type: boolean}}
+        - {name: visibility, in: query, description: 'Only the articles with this effective_visibility.', schema: {$ref: '#/components/schemas/KBVisibility'}}
         - name: state
           in: query
           description: >-
@@ -7104,6 +7108,9 @@ paths:
                 seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
                 seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
                 show_contents: {type: boolean, description: 'The help center lists its H2 and H3 headings as On this page when it has 3 or more; false turns the list off for the article in every language. A version restore leaves it as it is.'}
+                visibility:
+                  allOf: [{$ref: '#/components/schemas/KBVisibility'}]
+                  description: 'Who can see the article. It applies at once, also on a published article, and adds no version. Letting more people see a published article needs kb_articles:publish, and is 409 approval_required when a collection it is in needs approval and no review approved its published text; keeping it from more people needs only kb_articles:update.'
                 autosave: {type: boolean, description: 'An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400.'}
       responses:
         '200':
@@ -12468,13 +12475,28 @@ components:
         parent_id: {type: [string, 'null'], format: uuid}
         position: {type: integer, minimum: 0, maximum: 1000000, description: 'Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand, else 0 (by name).'}
         default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in this collection starts from; null for none. A template in the trash is 409 template_in_trash; trashing the template sets this to null.'}
+        visibility:
+          allOf: [{$ref: '#/components/schemas/KBVisibility'}]
+          description: 'Who can see the collection and every article in it, its collections included. Left out, everyone.'
+    KBVisibility:
+      type: string
+      enum: [everyone, help_chat, agents]
+      description: 'Who can see it. everyone: the help center, help chat and the team. help_chat: help chat may quote it without linking it; the help center never shows it, its search, sitemap.xml and llms.txt leave it out, and its address is 404. agents: only the team (reply suggestions and AI drafts, which never link it). An article is as restricted as the most restrictive of itself and every collection it is in, their parents included (effective_visibility).'
+    KBVisibilityFrom:
+      type: object
+      required: [id, name, visibility]
+      description: The collection that keeps the article more restricted than its own visibility.
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        visibility: {$ref: '#/components/schemas/KBVisibility'}
     KBApprovalMode:
       type: string
       enum: [inherit, 'on', 'off']
       description: 'Whether an article listed in the collection is published only once a teammate approved its exact text: inherit (the workspace setting require_approval of the help center), on or off. An article needs approval when any of its collections does.'
     KBCollection:
       type: object
-      required: [id, parent_id, name, slug, description, position, default_template_id, require_approval, article_count, created_at, updated_at, translations]
+      required: [id, parent_id, name, slug, description, position, default_template_id, require_approval, visibility, effective_visibility, article_count, created_at, updated_at, translations]
       properties:
         translations: {type: array, description: Its name and description in the help center's other languages., items: {$ref: '#/components/schemas/KBCollectionTranslation'}}
         id: {type: string, format: uuid}
@@ -12485,6 +12507,10 @@ components:
         position: {type: integer}
         default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in it starts from; null for none.'}
         require_approval: {$ref: '#/components/schemas/KBApprovalMode'}
+        visibility: {$ref: '#/components/schemas/KBVisibility'}
+        effective_visibility:
+          allOf: [{$ref: '#/components/schemas/KBVisibility'}]
+          description: 'The most restrictive of its own visibility and that of its parents: who can see what is in it.'
         article_count: {type: integer, description: 'Articles directly in this collection and outside the trash, drafts included.'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -12500,6 +12526,8 @@ components:
         description: {type: string}
         position: {type: integer}
         default_template_id: {type: [string, 'null'], format: uuid}
+        visibility: {$ref: '#/components/schemas/KBVisibility'}
+        effective_visibility: {$ref: '#/components/schemas/KBVisibility'}
         article_count: {type: integer}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -12524,6 +12552,9 @@ components:
         seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
         seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
         show_contents: {type: boolean, description: 'Left out, it is on. The help center lists its H2 and H3 headings as On this page when it has 3 or more; false turns the list off for the article in every language. A version restore leaves it as it is.'}
+        visibility:
+          allOf: [{$ref: '#/components/schemas/KBVisibility'}]
+          description: 'Who can see the article; a collection it is in can restrict it further. Left out, everyone.'
     KBArticleStatus:
       type: string
       enum: [draft, published]
@@ -12571,7 +12602,7 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1, description: 'Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>.'}
@@ -12602,6 +12633,12 @@ components:
             article is published and the help center is on; a new slug is a new address, and the old
             one still leads to the article.
         has_draft: {type: boolean, description: 'The article is published and has unpublished changes (GET /api/v1/kb/articles/{id} returns them as draft).'}
+        visibility:
+          allOf: [{$ref: '#/components/schemas/KBVisibility'}]
+          description: 'Its own visibility, as set on the article.'
+        effective_visibility:
+          allOf: [{$ref: '#/components/schemas/KBVisibility'}]
+          description: 'Who can see it now: the most restrictive of its own visibility and that of every collection it is in, their parents included. Only everyone is on the help center; a help_chat or agents article is never linked in a reply or a chat.'
     KBArticleAIExclusion:
       type: object
       required: [at, by]
@@ -12818,7 +12855,7 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, visibility_from, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments]
       properties:
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
         id: {type: string, format: uuid}
@@ -12839,6 +12876,13 @@ components:
             - {$ref: '#/components/schemas/KBArticleChange'}
         url: {type: string, format: uri, description: 'The public address of the article, as in KBArticleSummary.'}
         has_draft: {type: boolean, description: 'The article is published and has unpublished changes, in draft.'}
+        visibility: {allOf: [{$ref: '#/components/schemas/KBVisibility'}], description: 'Its own visibility, as set on the article.'}
+        effective_visibility: {allOf: [{$ref: '#/components/schemas/KBVisibility'}], description: 'Who can see it now, as in KBArticleSummary.'}
+        visibility_from:
+          description: 'The collection (or a parent of one) that makes it more restricted than its own visibility, shown as "Agents only because of <name>"; null when its own visibility decides.'
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBVisibilityFrom'}
         draft:
           description: 'The unpublished changes of a published article; null when it has none. The help center shows the published fields until they are published.'
           oneOf:
