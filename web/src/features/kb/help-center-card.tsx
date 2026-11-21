@@ -5,6 +5,7 @@ import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { messages } from '../../messages';
 import { useSaveFeedback } from '../settings/save-feedback';
 import { kbApi } from './kb-api';
+import { HelpCenterAnalyticsSection } from './help-center-analytics';
 import { HelpCenterApproval } from './help-center-approval';
 import { HelpCenterDomainSection } from './help-center-domain';
 import { HelpCenterFreshdeskRedirectSection } from './help-center-freshdesk-redirect';
@@ -75,6 +76,7 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
     <HelpCenterApproval settings={settings.data} canManage={canManage} />
     <HelpCenterDomainSection canManage={canManage} timezone={timezone} />
     <HelpCenterSearchConsoleSection canManage={canManage} />
+    <HelpCenterAnalyticsSection canManage={canManage} timezone={timezone} />
     <HelpCenterFreshdeskRedirectSection />
     <Brand canManage={canManage} />
   </>;
