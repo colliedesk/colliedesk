@@ -360,6 +360,51 @@ Results reads the same tables (docs/internals/results.md › Help center).
 - **Export.** `kb-article-views.ndjson` (article, locale, day, views) and `kb-article-uses.ndjson`
   (article, conversation, message, kind, `created_at` UTC), after the votes.
 
+## Analytics
+
+Migration `20261121171648-help-center-analytics`; code `hcanalytics/` (check, queue, send, test event),
+`store/help-center-analytics.go`, `httpapi/help-center-analytics-handlers.go`, MCP
+`catalog-help-center-analytics.go`, web `features/kb/help-center-analytics.tsx`. User page:
+docs/user/knowledge-base.md › Analytics.
+
+- **Server-side, never a script.** The sender is one more `pageview.Consumer` next to the view counter
+  (`pageview.Fanout` in `cmd/collie/generation.go`), so it sends exactly the visits `IsReader` counts.
+  The public pages, their headers and their CSP are byte for byte the same with analytics on or off
+  (`TestTheHelpCenterPageIsByteIdenticalWithAnalyticsOnAndOff`); a help center source still names no
+  outbound client (`TestPublicPagesMakeNoExternalCall`).
+- **Never on the page's path.** `PageViewed` reads the target from memory and puts the delivery in a
+  buffered channel of 10,000 (`Options.QueueSize`) without waiting: a full queue drops its oldest
+  delivery and counts it (`Dropped`). Four senders (`Options.Senders`) drain it with a 5 s timeout per
+  request (`Options.Timeout`). A hanging service never slows a page
+  (`TestAPageNeverWaitsOnAHangingAnalyticsServiceAndTheFailureIsShown`). Queued deliveries are lost at
+  shutdown; the results are flushed.
+- **Targets live in memory.** `Run` loads the enabled targets at start and every 30 s (`FlushEvery`)
+  under `PrivilegeHelpCenterAnalytics`, which lists only workspace ids; each target and its sealed API
+  secret are read in their own workspace. A save calls `Reload` for its workspace at once. A periodic
+  load that started before a save can put the old target back for at most one interval: accepted.
+- **Retries and results.** A failure is queued again after 10 and 30 s (`RetryDelays`). The last
+  accepted send and the last error per workspace are kept in memory and written in one
+  `UPDATE … FROM unnest` each flush and at shutdown. A save clears them, since they described the
+  settings before it.
+- **Reader ids.** GA4's `client_id` is `HMAC-SHA256(day key, client address + UA)`, the `session_id`
+  comes from the same sum; the key is random, in memory, new each UTC day (as the view counter's).
+  GA4 never gets the address or the UA. Plausible needs them to make its own daily id, so they go in
+  `X-Forwarded-For` and `User-Agent` of the request and nowhere else.
+- **Outbound guard.** The client dials through `netguard`, so a Plausible base URL whose name resolves
+  to a private, loopback or link-local address is refused at send; `CheckBaseURL` refuses such a literal
+  address, `localhost` and plain `http` at save. Redirects are not followed. Tests reach a local stub only
+  through `Options.AllowDial`.
+- **The secret.** Sealed with the key ring under the context `help_center_analytics:ga4_api_secret:<workspace>`
+  (`ErrSealKeysMissing` without `MAILBOX_TOKEN_KEYS`); never in an answer, a log or the export (only
+  `ga4_api_secret_set`). GA4 on without a secret is refused (`hcanalytics.SecretMissing`) and the
+  transaction rolls back.
+- **The test event** goes out at once, outside the queue, as the person (their UA and address), for the
+  page `/colliedesk-analytics-test`. GA4 is first sent to `/debug/mp/collect`, which names a bad
+  measurement ID but never checks the API secret, then to `/mp/collect`. Plausible answers 202 to
+  everything; `X-Plausible-Dropped` means its bot filter dropped the event.
+- **Export.** `help-center.ndjson` has `analytics`. Saving analytics creates the workspace's
+  `help_centers` row (off) when there is none, as Search Console's save does, so the line is written.
+
 ## Translations
 
 Migration `20261105100000-kb-translations`; code `store/kb-translations.go`, `httpapi/kb-translation-handlers.go`,
