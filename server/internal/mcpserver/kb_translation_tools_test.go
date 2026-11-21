@@ -62,8 +62,11 @@ func TestAnAgentTranslatesAnArticleMarksItUpToDateAndUndoesEveryStep(t *testing.
 		t.Fatalf("restored = %v", restored)
 	}
 	restored = e.ok(session, "colliedesk_kb_article_draft_publish", map[string]any{"article_id": articleID, "locale": "fr", "updated_at": at(t, restored, "translation", "updated_at")})
-	if at(t, restored, "translation", "team_text", "body") != "Ouvrez **Facturation**." || at(t, restored, "translation", "draft") != nil {
+	if at(t, restored, "translation", "has_draft") != false {
 		t.Fatalf("published restored draft = %v", restored)
+	}
+	if live := e.ok(session, "colliedesk_kb_translation_get", map[string]any{"article_id": articleID, "locale": "fr"}); at(t, live, "translation", "team_text", "body") != "Ouvrez **Facturation**." {
+		t.Fatalf("translation after publishing the restored draft = %v", live)
 	}
 	deleted := e.ok(session, "colliedesk_kb_translation_delete", map[string]any{"article_id": articleID, "locale": "fr", "updated_at": at(t, restored, "translation", "updated_at")})
 	if !strings.Contains(at(t, deleted, "next").(string), "colliedesk_kb_translation_undelete") {
