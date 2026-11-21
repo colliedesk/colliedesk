@@ -183,10 +183,8 @@ func kbArticlesSearchSpec() Spec {
 			`Words are matched with no language rules: a word inside another word, or text in scripts written without spaces (Chinese, Japanese, Thai), is found only where it starts a word or in the title. ` +
 			`Read one whole with colliedesk_kb_article_get. For the next page pass next_cursor as cursor. ` +
 			`Each article has its public address (url); to link one in a reply, search with status published.` + "\n\n" + kbTextNotice,
-		REST: []string{"GET /api/v1/kb/articles"},
-		Input: `{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","maxLength":200},"status":{"type":"string","enum":["draft","published"]},` +
-			`"collection_id":{"type":"string",` + uuid + `},"has_draft":{"type":"boolean"},"state":{"type":"string","enum":["in_review","approved"],` +
-			`"description":"in_review: with an open review; approved: their unpublished text is approved and can be published (colliedesk_kb_articles_publish)."},` + kbVisibilityFilter + `,` + kbListFilterProperties + `,"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
+		REST:  []string{"GET /api/v1/kb/articles"},
+		Input: `{"type":"object","additionalProperties":false,"properties":{` + kbArticleListInput + `,` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
 		Output: `{"type":"object","required":["articles","next_cursor"],"properties":{"articles":{"type":"array","items":` + kbArticleRowSchema + `},` +
 			`"next_cursor":{"type":["string","null"],"description":"Null on the last page."}}}`,
 		run: kbArticlesSearch,

@@ -107,3 +107,13 @@ func agentLocation(workspace string, override *string) *time.Location {
 	}
 	return location
 }
+
+// listKBTags lists the tags the article list filters by, with their article counts.
+func (a *API) listKBTags(response http.ResponseWriter, request *http.Request) {
+	tags, err := a.store.ListKBTags(request.Context(), principal(request).Workspace.ID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"items": tags})
+}

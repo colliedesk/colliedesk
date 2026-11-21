@@ -366,31 +366,19 @@ func kbArticlePage(c *call, path string, query url.Values) (any, error) {
 
 func kbArticlesSearch(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		Query        string `json:"query"`
-		Status       string `json:"status"`
-		CollectionID string `json:"collection_id"`
-		Sort         string `json:"sort"`
-		HasDraft     bool   `json:"has_draft"`
-		State        string `json:"state"`
-		Visibility   string `json:"visibility"`
-		Limit        int    `json:"limit"`
-		Cursor       string `json:"cursor"`
-		kbListFilterArguments
+		Limit  int    `json:"limit"`
+		Cursor string `json:"cursor"`
+		kbArticleListArguments
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
-	query := args.kbListFilterArguments.values()
-	for key, value := range map[string]string{"q": args.Query, "status": args.Status, "collection_id": args.CollectionID, "sort": args.Sort, "cursor": args.Cursor, "state": args.State, "visibility": args.Visibility} {
-		if value != "" {
-			query.Set(key, value)
-		}
+	query := args.listValues()
+	if args.Cursor != "" {
+		query.Set("cursor", args.Cursor)
 	}
 	if args.Limit > 0 {
 		query.Set("limit", strconv.Itoa(args.Limit))
-	}
-	if args.HasDraft {
-		query.Set("has_draft", "true")
 	}
 	return kbArticlePage(c, "/api/v1/kb/articles", query)
 }

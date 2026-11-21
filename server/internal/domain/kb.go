@@ -591,3 +591,9 @@ type PublicKBVideo struct {
 	Width, Height int
 	PosterVersion string
 }
+
+// KBTagCount is a tag the workspace's articles have, with how many articles outside the trash have it.
+type KBTagCount struct {
+	Tag          string `json:"tag"`
+	ArticleCount int    `json:"article_count"`
+}

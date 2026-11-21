@@ -78,3 +78,21 @@ func fillKBDraftTags(ctx context.Context, tx pgx.Tx, workspaceID string, article
 	article.Draft.Tags = tags
 	return nil
 }
+
+// ListKBTags returns every published tag of the workspace's articles outside the trash, by name, with
+// how many of them have it.
+func (s *Store) ListKBTags(ctx context.Context, workspaceID string) ([]domain.KBTagCount, error) {
+	tags, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.KBTagCount, error) {
+		rows, err := tx.Query(ctx, `SELECT t.tag, count(*) FROM kb_article_tags t
+			JOIN kb_articles a ON a.workspace_id=t.workspace_id AND a.id=t.article_id AND a.deleted_at IS NULL
+			WHERE t.workspace_id=$1 GROUP BY t.tag ORDER BY t.tag`, workspaceID)
+		if err != nil {
+			return nil, err
+		}
+		return pgx.CollectRows(rows, pgx.RowToStructByPos[domain.KBTagCount])
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list knowledge base tags: %w", err)
+	}
+	return tags, nil
+}

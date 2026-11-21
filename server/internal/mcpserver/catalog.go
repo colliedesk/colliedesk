@@ -46,7 +46,7 @@ func Catalog() []Spec {
 		kbCollectionsListSpec(), kbCollectionCreateSpec(), kbCollectionUpdateSpec(), kbCollectionDeleteSpec(), kbCollectionsTrashSpec(), kbCollectionUndeleteSpec(), kbOrderSetSpec(),
 		kbTemplatesListSpec(), kbTemplateGetSpec(), kbTemplateCreateSpec(), kbTemplateUpdateSpec(), kbTemplateDeleteSpec(), kbTemplateUndeleteSpec(),
 		kbTemplateHistorySpec(), kbTemplateVersionRestoreSpec(),
-		kbArticlesSearchSpec(), kbArticleGetSpec(), kbArticleCreateSpec(), kbArticleUpdateSpec(), kbArticleDeleteSpec(), kbArticlesTrashSpec(), kbArticleUndeleteSpec(),
+		kbArticlesSearchSpec(), kbArticlesExportSpec(), kbTagsListSpec(), kbArticleGetSpec(), kbArticleCreateSpec(), kbArticleUpdateSpec(), kbArticleDeleteSpec(), kbArticlesTrashSpec(), kbArticleUndeleteSpec(),
 		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbArticleAIExcludeSpec(), kbArticleAIIncludeSpec(), kbArticleDraftPublishSpec(), kbArticleDraftDiscardSpec(), kbArticleVotesGetSpec(), kbArticleVotesResetSpec(), kbArticleSendForReviewSpec(), kbReviewsListSpec(), kbReviewGetSpec(), kbReviewApproveSpec(), kbReviewRequestChangesSpec(), kbReviewWithdrawSpec(), kbArticlesPublishSpec(), kbImageUploadSpec(), kbImageImportSpec(), kbImageGetSpec(),
 		kbMediaListSpec(), kbMediaGetSpec(), kbMediaUpdateSpec(), kbMediaTrashSpec(), kbMediaTrashListSpec(), kbMediaUndeleteSpec(), kbMediaPurgeSpec(), kbMediaReplaceSpec(), kbMediaReplaceUndoSpec(),
 		kbFileUploadSpec(), kbArticleAttachmentsSetSpec(), kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
