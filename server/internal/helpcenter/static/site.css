@@ -36,6 +36,10 @@
   --callout-important: #8250df;
   --callout-warning: #9a6700;
   --callout-caution: #cf222e;
+  /* An article's coloured text (kb-color-*): each readable (4.5:1) on --paper and on its kb-bg-*. */
+  --kb-success: #1a7f37;
+  --kb-warning: #9a6700;
+  --kb-danger: #cf222e;
   --code-keyword: #cf222e;
   --code-string: #0a3069;
   --code-comment: #59636e;
@@ -63,6 +67,9 @@
     --callout-important: #ab7df8;
     --callout-warning: #d29922;
     --callout-caution: #f85149;
+    --kb-success: #3fb950;
+    --kb-warning: #d29922;
+    --kb-danger: #f85149;
     --code-keyword: #ff7b72;
     --code-string: #a5d6ff;
     --code-comment: #9198a1;
@@ -335,6 +342,27 @@ a:hover { text-decoration-thickness: 2px; }
 .prose th { background: var(--tab); font-weight: 600; }
 .prose th[align="center"], .prose td[align="center"] { text-align: center; }
 .prose th[align="right"], .prose td[align="right"] { text-align: right; }
+/* An article's formatting (docs/internals/knowledge-base.md): classes only, the page allows no style
+   attribute. Accent follows the help center's theme. */
+.prose .kb-align-center { text-align: center; }
+.prose .kb-align-right { text-align: right; }
+.prose .kb-indent-1 { margin-left: 2rem; }
+.prose .kb-indent-2 { margin-left: 4rem; }
+.prose .kb-indent-3 { margin-left: 6rem; }
+.prose .kb-indent-4 { margin-left: 8rem; }
+.prose .kb-color-accent { color: var(--accent); }
+.prose .kb-color-success { color: var(--kb-success); }
+.prose .kb-color-warning { color: var(--kb-warning); }
+.prose .kb-color-danger { color: var(--kb-danger); }
+.prose .kb-color-muted { color: var(--muted); }
+.prose .kb-bg-accent { background: var(--accent-soft); }
+.prose .kb-bg-success { background: color-mix(in srgb, var(--kb-success) 14%, transparent); }
+.prose .kb-bg-warning { background: color-mix(in srgb, var(--kb-warning) 14%, transparent); }
+.prose .kb-bg-danger { background: color-mix(in srgb, var(--kb-danger) 14%, transparent); }
+.prose .kb-bg-muted { background: var(--tab); }
+.prose mark { background: color-mix(in srgb, var(--kb-warning) 28%, transparent); color: inherit; padding: 0 0.1em; border-radius: 3px; }
+.prose th > p, .prose td > p { margin: 0 0 0.5rem; }
+.prose th > :last-child, .prose td > :last-child { margin-bottom: 0; }
 .prose .footnotes { font-size: 0.9375rem; color: var(--muted); }
 
 /* Files the article lists for download */

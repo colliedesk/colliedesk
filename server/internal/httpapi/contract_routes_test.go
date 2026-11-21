@@ -267,6 +267,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/workspace/setup":                                {"/api/v1/workspace/setup", nil, admin, 200, ""},
 		"PUT /api/v1/agents/me/setup-guide":                          {"/api/v1/agents/me/setup-guide", map[string]any{"hidden": false}, admin, 200, ""},
 		"PUT /api/v1/agents/me/kb-list-columns":                      {"/api/v1/agents/me/kb-list-columns", map[string]any{"columns": []any{"status", "votes"}}, admin, 200, ""},
+		"PUT /api/v1/agents/me/kb-editor":                            {"/api/v1/agents/me/kb-editor", map[string]any{"editor": "markdown"}, admin, 200, ""},
 		"POST /api/v1/tags":                                          {"/api/v1/tags", map[string]any{"name": "Created contract tag"}, admin, 201, ""},
 		"PATCH /api/v1/tags/{id}":                                    {"/api/v1/tags/" + f.updateTagID, map[string]any{"name": "Updated contract tag"}, admin, 200, ""},
 		"DELETE /api/v1/tags/{id}":                                   {"/api/v1/tags/" + f.deleteTagID, nil, admin, 204, ""},

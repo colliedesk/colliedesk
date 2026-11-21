@@ -7,26 +7,16 @@ import { redoDepth, undoDepth } from '@codemirror/commands';
 // The toolbar edits Markdown source: it adds or takes away the syntax around the selection, it never parses into a
 // document model, so the text stays exactly what is stored in body_md.
 
-export type Block = 'paragraph' | 'h1' | 'h2' | 'h3';
+import type { Active, Block, LineKind } from './editor-types';
+import { formatActive } from './format-commands';
 
-export interface Active {
-  block: Block;
-  strong: boolean;
-  emphasis: boolean;
-  code: boolean;
-  link: boolean;
-  bullet: boolean;
-  ordered: boolean;
-  task: boolean;
-  quote: boolean;
-  canUndo: boolean;
-  canRedo: boolean;
-}
+export type { Active, Block, LineKind } from './editor-types';
+export { sameActive } from './editor-types';
 
 const headingOf = (line: string): Block => {
   const match = /^(#{1,6})\s/.exec(line);
   if (!match) return 'paragraph';
-  return match[1].length <= 3 ? (`h${match[1].length}` as Block) : 'paragraph';
+  return match[1].length <= 4 ? (`h${match[1].length}` as Block) : 'paragraph';
 };
 
 // inside reports whether the cursor sits in a node of one of the names (Emphasis, StrongEmphasis…).
@@ -58,13 +48,12 @@ export function activeOf(state: EditorState): Active {
     ordered: /^\s*\d+[.)]\s/.test(line),
     task: /^\s*[-*+]\s\[[ xX]\]\s/.test(line),
     quote: /^\s*>/.test(line),
+    ...formatActive(state),
     canUndo: undoDepth(state) > 0,
     canRedo: redoDepth(state) > 0,
   };
 }
 
-export const sameActive = (a: Active | undefined, b: Active) =>
-  !!a && (Object.keys(b) as (keyof Active)[]).every((key) => a[key] === b[key]);
 
 // toggleMark wraps each selection in mark (** for bold), or takes the mark off when it is already there, inside or
 // just outside the selection. An empty selection gets the pair with the cursor between.
@@ -146,7 +135,6 @@ const linesOf = (state: EditorState) => {
   return lines;
 };
 
-export type LineKind = 'bullet' | 'ordered' | 'task' | 'quote';
 const prefixOf: Record<LineKind, (index: number) => string> = {
   bullet: () => '- ',
   ordered: (index) => `${index + 1}. `,

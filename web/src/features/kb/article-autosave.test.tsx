@@ -126,6 +126,31 @@ test('an autosave over a newer server copy shows both versions to choose from an
   expect(patches(calls)).toHaveLength(1);
 }, 12_000);
 
+test('a text the server stores with its formatting tags respelled counts as saved and is not sent again', async () => {
+  const calls = serve({ ...base, [`GET ${articlePath}`]: () => json(200, article()),
+    [`PATCH ${articlePath}`]: () => json(200, article({ body_md: 'Say <u>this</u>.', updated_at: '2026-10-03T00:04:00Z' })) });
+  open({ articleId: ids.article });
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Say <U>this</U>.' } });
+  await settle();
+  await waitFor(() => expect(patches(calls)).toHaveLength(1), slow);
+  expect(await screen.findByText('· Saved Oct 3, 12:04 AM')).toBeInTheDocument();
+  expect(localStorage.getItem(mine)).toBeNull();
+  await wait(3500);
+  expect(patches(calls)).toHaveLength(1);
+}, 12_000);
+
+test('a manual save whose tags the server respells leaves nothing unsaved', async () => {
+  const calls = serve({ ...base, [`GET ${articlePath}`]: () => json(200, article()),
+    [`PATCH ${articlePath}`]: () => json(200, article({ body_md: 'Say <mark>this</mark>.', updated_at: '2026-10-03T00:04:00Z' })) });
+  open({ articleId: ids.article });
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Say <MARK>this</MARK>.' } });
+  await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(patches(calls)).toHaveLength(1));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
+  expect(screen.queryByText(/Unsaved/)).toBeNull();
+});
+
 test('a new article is never autosaved', async () => {
   const calls = serve({ ...base });
   open({ collectionId: ids.setup });

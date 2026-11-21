@@ -1,71 +1,29 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EditorState, Prec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, drawSelection, dropCursor, highlightSpecialChars, keymap, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, redo, undo } from '@codemirror/commands';
 import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
-import { HelpTip } from '../../../ui/help-tip';
 import { kbMessages } from '../kb-messages';
 import { activeOf, callout, codeBlock, inlineCode, insertBlock, insertLink, sameActive, setHeading, tableTemplate, toggleLines, toggleMark } from './commands';
-import type { Active, Block, LineKind } from './commands';
 import { insertArticleLink } from './article-link';
-import { ArticleLinkPicker } from '../article-link-picker';
-import { Icon } from './icons';
-import type { IconName } from './icons';
+import { setBlockFormat, setColor, toggleWrap } from './format-commands';
 import { markdownHighlight, markdownLanguage } from './theme';
-import { CodeBlockDialog } from './code-block-dialog';
-import { calloutTypes } from '../callouts';
-import { embedSnippet, parseVideoLink } from '../video-link';
 import { startUpload, uploadEvents, uploads as uploadField, uploadsPending } from './upload';
 import { pasteEvents } from './paste-formatted';
 import type { Pasted } from './paste-formatted';
 import { PasteToast } from './paste-toast';
-import { MediaPicker } from '../media-picker';
-import { KBDialog, KBMenu, usePhone } from '../kb-ui';
-import type { MenuItem } from '../kb-ui';
-import { embedFor } from '../media-grid';
-import type { UploadHooks } from './upload';
-import './editor.css';
+import { EditorFrame } from './editor-frame';
+import type { Active, EditorProps, MarkKind, ToolTarget, UploadHooks } from './editor-types';
 
-export type { UploadHooks };
-
-// EditorHandle is what the article page asks of the editor.
-export interface EditorHandle {
-  // markdown is the text as it would be saved, now (onChange runs a moment after typing stops).
-  markdown(): string;
-  // load replaces the text, with a fresh undo history.
-  load(markdown: string): void;
-  uploading(): boolean;
-  focus(): void;
-  // replace changes the first place the text holds find into by (an image's alt text, set from the page); false
-  // when the text no longer holds it.
-  replace(find: string, by: string): boolean;
-  // insert puts a block of Markdown (a template's text) at the cursor, on lines of its own.
-  insert(markdown: string): void;
-}
-
-export type ViewMode = 'edit' | 'split' | 'preview';
-
-export interface CodeMirrorEditorProps {
-  initial: string;
-  uploads: UploadHooks;
-  label: string;
-  describedBy: string;
-  invalid: boolean;
-  mode: ViewMode;
-  // The article being edited, left out of the list a link to an article is picked from.
-  articleId?: string;
-  // preview is shown beside the text (split) or instead of it (preview).
-  preview?: ReactNode;
-  onChange: (markdown: string) => void;
-  onReady: (handle: EditorHandle) => void;
-}
+export type { EditorHandle, UploadHooks, ViewMode } from './editor-types';
+export type CodeMirrorEditorProps = EditorProps;
 
 const formatKeys = Prec.high(keymap.of([
   // defaultKeymap binds Mod-i to selectParentSyntax; this one comes first.
   { key: 'Mod-b', run: (view) => (toggleMark(view, '**'), true) },
   { key: 'Mod-i', run: (view) => (toggleMark(view, '*'), true) },
+  { key: 'Mod-u', run: (view) => (toggleWrap(view, '<u>', '</u>'), true) },
   { key: 'Mod-e', run: (view) => (inlineCode(view), true) },
   { key: 'Mod-k', run: (view) => (insertLink(view), true) },
 ]));
@@ -74,50 +32,44 @@ const phrases = EditorState.phrases.of({
   Find: 'Find', Replace: 'Replace', next: 'Next', previous: 'Previous', all: 'All', 'match case': 'Match case', regexp: 'Regular expression',
   'by word': 'Whole words', replace: 'Replace', 'replace all': 'Replace all', close: 'Close',
 });
-// Under this width (px) the whole desktop toolbar does not fit on one row.
-const compactWidth = 720;
-const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl+';
+const marks: Record<Exclude<MarkKind, 'code' | 'underline' | 'highlight'>, string> = { bold: '**', italic: '*', strike: '~~' };
+const wraps = { underline: ['<u>', '</u>'], highlight: ['<mark>', '</mark>'] } as const;
+
+// sourceTarget is what the toolbar does to the Markdown source: it adds or takes away syntax, never parses.
+function sourceTarget(view: EditorView, hooks: { current: UploadHooks }): ToolTarget {
+  return {
+    mark: (kind) => (kind === 'code' ? inlineCode(view) : kind === 'underline' || kind === 'highlight' ? toggleWrap(view, wraps[kind][0], wraps[kind][1]) : toggleMark(view, marks[kind])),
+    color: (color) => setColor(view, color),
+    align: (align) => setBlockFormat(view, { align }),
+    indent: (delta) => setBlockFormat(view, { indent: delta }),
+    link: () => insertLink(view),
+    block: (block) => setHeading(view, block),
+    lines: (kind) => toggleLines(view, kind),
+    insert: (markdown, select) => insertBlock(view, markdown, select),
+    callout: (type) => insertBlock(view, ...callout(type)),
+    codeBlock: (language) => insertBlock(view, ...codeBlock(language)),
+    table: () => insertBlock(view, tableTemplate, [2, 8]),
+    rule: () => insertBlock(view, '---'),
+    articleLink: (article) => insertArticleLink(view, article),
+    upload: (files) => startUpload(view, files, view.state.selection.main.head, hooks.current),
+    search: () => openSearchPanel(view),
+    undo: () => undo(view),
+    redo: () => redo(view),
+    focus: () => view.focus(),
+  };
+}
 
 // CodeMirrorEditor is the article's text as Markdown source: what is typed is what body_md stores, byte for byte
 // (line endings aside: CodeMirror writes \n for \r\n and \r, and the page does not count that as a change).
 // CodeMirror 6 with the bare @lezer/markdown GFM parser for highlighting (not @codemirror/lang-markdown, which
 // brings the HTML, CSS and JavaScript languages along), history and search.
-export default function CodeMirrorEditor({ initial, uploads, label, describedBy, invalid, mode, articleId, preview, onChange, onReady }: CodeMirrorEditorProps) {
-  const id = useId();
+export default function CodeMirrorEditor({ initial, uploads, label, describedBy, invalid, mode, articleId, preview, onChange, onReady }: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const videoLink = useRef<HTMLInputElement>(null);
-  // video is the YouTube or Vimeo dialog: closed, open, or open with why the link cannot be used.
-  const [video, setVideo] = useState<{ error: string } | undefined>();
-  // picking is the media library picker, open or not.
-  const [picking, setPicking] = useState(false);
-  const [coding, setCoding] = useState(false);
-  // full: the text and its toolbar fill the window until the button or Escape leaves.
-  const [full, setFull] = useState(false);
+  const [target, setTarget] = useState<ToolTarget>();
   // pasted: the last formatted paste, offered as plain text until the person types on.
   const [pasted, setPasted] = useState<Pasted>();
-  // linkAt is where the list of articles to link to opens, measured from the bar's left edge: under the button
-  // that opened it. Undefined while the list is closed.
-  const [linkAt, setLinkAt] = useState<number>();
-  const bar = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<Active>();
-  // rover is the toolbar button that is the Tab stop; when it is disabled (Undo with nothing to undo), the first
-  // button is, so the toolbar never loses its stop.
-  const [rover, setRover] = useState<string>('bold');
-  const phone = usePhone();
-  // compact: the toolbar of a phone, also in a column too narrow for every tool (a tablet held upright, where the
-  // side column takes its share): Insert, Bold, Italic, Link, and the rest under More. Measured on the editor itself.
-  const shell = useRef<HTMLDivElement>(null);
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const box = shell.current;
-    if (!box || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(([entry]) => setNarrow((entry?.contentRect.width ?? 1000) < compactWidth));
-    observer.observe(box);
-    return () => observer.disconnect();
-  }, []);
-  const compact = phone || narrow;
   // The view is made once; what its callbacks call reads the latest props through this.
   const latest = useRef({ uploads, onChange, onReady, initial, label, describedBy });
   useEffect(() => { latest.current = { uploads, onChange, onReady, initial, label, describedBy }; });
@@ -162,6 +114,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     viewRef.current = view;
     emitted = view.state.doc.toString();
     setActive(activeOf(view.state));
+    setTarget(sourceTarget(view, hooks));
     latest.current.onReady({
       markdown: () => emit(view),
       load: (markdown) => {
@@ -196,171 +149,10 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     };
   }, []);
 
-  const act = (run: (view: EditorView) => unknown) => {
-    const view = viewRef.current;
-    if (!view) return;
-    run(view);
-    view.focus();
-  };
-  // Roving focus: the toolbar is one Tab stop, arrows (and Home, End) move between its buttons.
-  const onToolbarKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button[data-tool]:not(:disabled)')];
-    const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    if (at < 0) return;
-    event.preventDefault();
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (at + (event.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length;
-    setRover(buttons[next].dataset.tool ?? 'bold');
-    buttons[next].focus();
-  };
-
-  const closeVideo = () => {
-    setVideo(undefined);
-    viewRef.current?.focus();
-  };
-  // insertVideo puts the player of a YouTube or Vimeo link in a block of its own, or says why it cannot.
-  const insertVideo = () => {
-    const parsed = parseVideoLink(videoLink.current?.value ?? '');
-    if ('error' in parsed) {
-      setVideo({ error: parsed.error });
-      videoLink.current?.focus();
-      return;
-    }
-    setVideo(undefined);
-    act((view) => insertBlock(view, embedSnippet(parsed)));
-  };
-
-  const editing = mode !== 'preview' && !!active;
-  // A phone's toolbar keeps Link to article under More formatting, so the list opens under that button.
-  const openLinking = () => {
-    const trigger = bar.current?.querySelector(`[data-tool="${compact ? 'more' : 'article'}"]`);
-    setLinkAt(trigger && bar.current ? trigger.getBoundingClientRect().left - bar.current.getBoundingClientRect().left : 0);
-  };
-  // The Tab stop falls back to Bold when its button is disabled (Undo with nothing to undo) or not in this layout
-  // (a phone's toolbar has Insert, Bold, Italic, Link and More only).
-  const onPhone = ['insert', 'bold', 'italic', 'link', 'more'];
-  const stop = (rover === 'undo' && !active?.canUndo) || (rover === 'redo' && !active?.canRedo) || (compact && !onPhone.includes(rover)) ? 'bold' : rover;
-  const t = kbMessages.tools;
-  const tool = (name: IconName, text: string, keys: string, run: (view: EditorView) => unknown, pressed?: boolean, disabled?: boolean) => (
-    <button type="button" data-tool={name} className="md-tool" aria-label={`${text}${keys ? ` (${keys})` : ''}`} data-tip={text} aria-pressed={pressed}
-      disabled={disabled || !editing} tabIndex={stop === name ? 0 : -1} onMouseDown={(event) => event.preventDefault()} onClick={() => act(run)}>
-      <Icon name={name} />
-    </button>
-  );
-  const line = (kind: LineKind) => (view: EditorView) => toggleLines(view, kind);
-  const item = (label: string, icon: IconName, run: (view: EditorView) => unknown, disabled = false): MenuItem => ({ label, icon, disabled: disabled || !editing, onSelect: () => act(run) });
-  const heading = (block: Block, label: string, icon: IconName): MenuItem => ({ label, icon, disabled: !editing || active?.block === block, onSelect: () => act((view) => setHeading(view, block)) });
-  // Formatting a phone has no room for, and on a computer the less used tools: in the menu at the end.
-  const more: MenuItem[] = [
-    ...(compact ? [heading('paragraph', t.paragraph, 'text'), heading('h2', t.h2, 'h2'), heading('h3', t.h3, 'h3'),
-      { ...item(t.ordered, 'ordered', line('ordered')), separated: true }, item(t.bullet, 'bullet', line('bullet')), item(t.quote, 'quote', line('quote')),
-      item(t.table, 'table', (view) => insertBlock(view, tableTemplate, [2, 8]))] : []),
-    { ...item(t.strike, 'strike', (view) => toggleMark(view, '~~')), separated: compact }, item(t.code, 'code', inlineCode), item(t.task, 'task', line('task')),
-    { label: t.codeBlock, icon: 'codeBlock', disabled: !editing, onSelect: () => setCoding(true) }, item(t.hr, 'hr', (view) => insertBlock(view, '---')),
-    ...(compact ? [{ label: t.articleLink, icon: 'article' as const, disabled: !editing, onSelect: openLinking, separated: true }] : []),
-    ...(compact ? [item(t.search, 'search', openSearchPanel), item(t.undo, 'undo', undo, !active?.canUndo)] : []),
-    item(t.redo, 'redo', redo, !active?.canRedo),
-    ...(compact ? [{ label: full ? t.exitFullscreen : t.fullscreen, icon: 'fullscreen' as const, onSelect: () => setFull(!full), separated: true }] : []),
-  ];
-  const insert: MenuItem[] = [
-    { label: t.fromLibrary, hint: t.fromLibraryHint, icon: 'library', disabled: !editing, onSelect: () => setPicking(true) },
-    { label: t.fromDevice, hint: t.fromDeviceHint, icon: 'upload', disabled: !editing, onSelect: () => fileInput.current?.click() },
-    { label: t.videoLink, hint: t.videoLinkHint, icon: 'video', disabled: !editing, onSelect: () => setVideo({ error: '' }) },
-    ...calloutTypes.map((type, at) => ({ ...item(t.callouts[type], 'info', (view) => insertBlock(view, ...callout(type))), separated: at === 0 })),
-  ];
-  const insertMenu = <KBMenu label={t.insertMenuLong} title={t.insertMenuLong} align="start" describe items={insert} className="md-insert" buttonClassName="md-insert-button"
-    tool="insert" tabIndex={stop === 'insert' ? 0 : -1} disabled={!editing}
-    trigger={<><Icon name="image" /><span>{t.insertMenu}</span><span className="md-insert-long">{t.insertMenuMore}</span><Icon name="chevronDown" /></>} />;
-  // Full screen works in the preview too, so its button is never disabled. A dialog, a menu or the search panel
-  // takes its own Escape first (each prevents it); a plain Escape in the text leaves full screen.
-  const fullscreen = (
-    <button type="button" data-tool="fullscreen" className="md-tool" aria-label={`${t.fullscreen} (${t.fullscreenKeys})`} data-tip={full ? t.exitFullscreen : t.fullscreen}
-      aria-pressed={full} tabIndex={stop === 'fullscreen' ? 0 : -1} onMouseDown={(event) => event.preventDefault()} onClick={() => setFull(!full)}>
-      <Icon name="fullscreen" />
-    </button>
-  );
-  const onShellKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Escape' || !full || event.defaultPrevented) return;
-    event.preventDefault();
-    setFull(false);
-  };
   return (
-    <div ref={shell} className="md-shell" data-mode={mode} data-compact={compact ? 'true' : undefined} data-fullscreen={full ? 'true' : undefined} onKeyDown={onShellKey}>
-      {/* The bar holds the toolbar and the article list that opens over the text just under it. */}
-      <div ref={bar} className="md-bar" style={linkAt === undefined ? undefined : { '--link-at': `${linkAt}px` } as CSSProperties}>
-        <div className="md-toolbar" role="toolbar" aria-label={kbMessages.formatting} onKeyDown={onToolbarKey}>
-          {compact && insertMenu}
-          {!compact && <>
-            <label className="sr-only" htmlFor={`${id}-block`}>{kbMessages.blockType}</label>
-            <select id={`${id}-block`} className="md-block" value={active?.block ?? 'paragraph'} disabled={!editing}
-              onChange={(event) => act((view) => setHeading(view, event.target.value as Block))}>
-              <option value="paragraph">{t.paragraph}</option>
-              {/* The article page shows the title as its h1, so the text offers no Heading 1; a stored one still shows here. */}
-              {active?.block === 'h1' && <option value="h1">{t.h1}</option>}
-              <option value="h2">{t.h2}</option>
-              <option value="h3">{t.h3}</option>
-            </select>
-            <span className="md-sep" aria-hidden="true" />
-          </>}
-          {compact && <span className="md-grow" />}
-          {tool('bold', t.bold, `${mod}B`, (view) => toggleMark(view, '**'), active?.strong)}
-          {tool('italic', t.italic, `${mod}I`, (view) => toggleMark(view, '*'), active?.emphasis)}
-          {tool('link', t.link, `${mod}K`, insertLink, active?.link)}
-          {!compact && tool('article', t.articleLink, '', openLinking)}
-          {!compact && <>
-            <span className="md-sep" aria-hidden="true" />
-            {tool('ordered', t.ordered, '', line('ordered'), active?.ordered)}
-            {tool('bullet', t.bullet, '', line('bullet'), active?.bullet)}
-            {tool('quote', t.quote, '', line('quote'), active?.quote)}
-            {tool('table', t.table, '', (view) => insertBlock(view, tableTemplate, [2, 8]))}
-            <span className="md-sep" aria-hidden="true" />
-            {insertMenu}
-            <span className="md-grow" />
-            {fullscreen}
-            {tool('search', t.search, `${mod}F`, openSearchPanel)}
-            {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
-          </>}
-          <KBMenu label={t.moreFormatting} title={t.moreFormatting} items={more} grid className="md-more" buttonClassName="md-tool" tool="more" tabIndex={stop === 'more' ? 0 : -1}
-            disabled={!editing} trigger={<Icon name="more" />} />
-        </div>
-        {linkAt !== undefined && editing && <ArticleLinkPicker exclude={articleId}
-          onPick={(article) => { setLinkAt(undefined); act((view) => insertArticleLink(view, article)); }}
-          onClose={(restoreFocus) => { setLinkAt(undefined); if (restoreFocus) viewRef.current?.focus(); }} />}
-      </div>
-      {picking && editing && <MediaPicker onClose={() => { setPicking(false); viewRef.current?.focus(); }}
-        onUpload={() => { setPicking(false); fileInput.current?.click(); }}
-        onInsert={(items) => { setPicking(false); act((view) => insertBlock(view, items.map(embedFor).join('\n\n'))); }} />}
-      {coding && editing && <CodeBlockDialog onClose={() => { setCoding(false); viewRef.current?.focus(); }}
-        onInsert={(language) => { setCoding(false); act((view) => insertBlock(view, ...codeBlock(language))); }} />}
-      {video && editing && <KBDialog title={t.videoLink} closeLabel={kbMessages.close} returnFocus={false} onClose={closeVideo} footer={<>
-        <button type="button" onClick={closeVideo}>{kbMessages.cancel}</button>
-        <button type="button" className="primary-action" onClick={insertVideo}>{kbMessages.insert}</button>
-      </>}>
-        <div className="field md-video">
-          <label htmlFor={`${id}-video-link`}>{kbMessages.videoLink}</label>
-          <input ref={videoLink} id={`${id}-video-link`} type="url" inputMode="url" autoComplete="off" placeholder="https://www.youtube.com/watch?v=…"
-            aria-invalid={video.error ? true : undefined} aria-describedby={video.error ? `${id}-video-help` : `${id}-video-help ${id}-video-tip`} onChange={() => { if (video.error) setVideo({ error: '' }); }}
-            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); insertVideo(); } }} />
-          <small className={video.error ? 'error-copy' : 'kb-hint'} role={video.error ? 'alert' : undefined}>
-            <span id={`${id}-video-help`}>{video.error || kbMessages.videoLinkHelp}</span>
-            {!video.error && <>{' '}<HelpTip label={kbMessages.videoLink} text={kbMessages.videoLinkTip} id={`${id}-video-tip`} /></>}
-          </small>
-        </div>
-      </KBDialog>}
-      <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime,.mov" multiple hidden tabIndex={-1} aria-hidden="true"
-        onChange={(event) => {
-          const files = [...(event.target.files ?? [])];
-          event.target.value = '';
-          const view = viewRef.current;
-          if (!view || files.length === 0) return;
-          startUpload(view, files, view.state.selection.main.head, hooks.current);
-          view.focus();
-        }} />
-      {pasted && editing && <PasteToast pasted={pasted} view={viewRef.current} onChange={setPasted} />}
-      <div className="cm-area">
-        <div ref={host} className="cm-host" hidden={mode === 'preview'} />
-        {mode !== 'edit' && <section className="cm-preview kb-preview-panel" tabIndex={0} aria-label={kbMessages.preview}>{preview}</section>}
-      </div>
-    </div>
+    <EditorFrame mode={mode} articleId={articleId} preview={preview} target={target} active={active}
+      overlay={pasted && <PasteToast pasted={pasted} view={viewRef.current} onChange={setPasted} />}>
+      <div ref={host} className="cm-host" hidden={mode === 'preview'} />
+    </EditorFrame>
   );
 }

@@ -492,7 +492,7 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 	} else if err := domain.CheckKBSlug(input.Slug); err != nil {
 		return domain.KBArticle{}, err
 	}
-	if err := domain.CheckKBBody(input.BodyMD); err != nil {
+	if err := cleanKBBody(&input.BodyMD); err != nil {
 		return domain.KBArticle{}, err
 	}
 	if input.SEOTitle, err = domain.CleanKBSEO("search title", input.SEOTitle, domain.MaxKBSEOTitle); err != nil {
@@ -603,7 +603,7 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 		}
 	}
 	if change.BodyMD != nil {
-		if err := domain.CheckKBBody(*change.BodyMD); err != nil {
+		if err := cleanKBBody(change.BodyMD); err != nil {
 			return domain.KBArticle{}, err
 		}
 	}

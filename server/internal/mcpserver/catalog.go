@@ -59,7 +59,7 @@ func Catalog() []Spec {
 		replyDraftRestoreSpec(),
 		workspaceExportSpec(), billingActionSpec(), trialOfferAcceptSpec(), emailChannelDisconnectSpec(),
 		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), myMentionEmailSetSpec(), myKBListColumnsSetSpec(), problemReportSpec(),
-		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
+		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), myKBEditorSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
 		rolesListSpec(), roleCreateSpec(), roleUpdateSpec(), roleDeleteSpec(), roleResetSpec(), roleRestoreSpec(), memberRolesSetSpec(),
 		helpCenterUpdateSpec(), helpCenterThemeUpdateSpec(), helpCenterSearchConsoleUpdateSpec(), helpCenterDomainSetSpec(), helpCenterDomainCheckSpec(), helpCenterDomainRemoveSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), emailTestMessageSendSpec(), emailForwardingConfirmationGetSpec(), billingGetSpec(),

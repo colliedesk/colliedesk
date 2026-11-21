@@ -255,6 +255,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_workspace_rename` | Renames the workspace (replies never carry this name; it is the help center title while the help center has none) | `workspace:update` |
 | `colliedesk_my_timezone_set` | Sets or clears your own timezone | `profile:update` |
 | `colliedesk_my_display_name_set` | Sets or clears your own display name | `profile:update` |
+| `colliedesk_my_kb_editor_set` | Chooses the editor you write articles in: visual or Markdown | `profile:update` |
 | `colliedesk_team_member_update` | Renames, deactivates or reactivates a team member | `team:manage_roles`, `team:read` |
 | `colliedesk_invites_list` | Lists invites and their state, never their links | `team:read` |
 | `colliedesk_invite_create` | Invites a person with roles by name and returns the one-time link | `team:invite` |

@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { googleDocsHTML } from '../src/features/kb/editor/paste-html.test.fixture';
 import { servers } from './support/cli';
 import { createWorkspaceWithSlug } from './support/workspace';
+import { writeInMarkdown } from './support/kb-editor';
 
 // The smallest PNG there is: one transparent pixel.
 const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -28,7 +29,7 @@ test('knowledge base: text typed into a published article survives closing the t
 
   const tab = await context.newPage();
   await tab.goto(`${servers.main}/knowledge/articles/${article.id}`);
-  await tab.getByRole('textbox', { name: 'Text (Markdown)' }).click();
+  await (await writeInMarkdown(tab)).click();
   await tab.keyboard.press('ControlOrMeta+End');
   await tab.keyboard.type(' Or call the billing desk.');
   // No Save: the person stops typing and closes the tab 5 s later.
@@ -36,7 +37,7 @@ test('knowledge base: text typed into a published article survives closing the t
   await tab.close({ runBeforeUnload: true });
 
   await page.goto(`${servers.main}/knowledge/articles/${article.id}`);
-  await expect(page.getByRole('textbox', { name: 'Text (Markdown)' })).toHaveText('Ask within 30 days. Or call the billing desk.');
+  await expect(await writeInMarkdown(page)).toHaveText('Ask within 30 days. Or call the billing desk.');
   await expect(page.getByRole('group', { name: 'Unpublished changes' })).toBeVisible();
   // The server copy is the newest, so nothing is offered back from the device.
   await expect(page.getByRole('group', { name: /^Restore unsaved text from/ })).toHaveCount(0);
@@ -49,7 +50,7 @@ test('knowledge base: a Google Docs copy pastes as Markdown with its image store
   const article = await (await page.request.post(`${servers.main}/api/v1/kb/articles`, { headers,
     data: { collection_id: collection, title: 'Getting started', body_md: 'Draft', status: 'draft' } })).json() as { id: string };
   await page.goto(`${servers.main}/knowledge/articles/${article.id}`);
-  const text = page.getByRole('textbox', { name: 'Text (Markdown)' });
+  const text = await writeInMarkdown(page);
   await text.click();
   await page.keyboard.press('ControlOrMeta+A');
   const copy = googleDocsHTML.replace('https://lh7-rt.googleusercontent.com/docsz/AD_4nXcopy/photo.png', pixel);

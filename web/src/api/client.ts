@@ -11,7 +11,7 @@ import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, cloudWorkspacesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
-  inviteCreatedSchema, inviteListSchema, invitePreviewSchema, markMentionsResultSchema, mentionEmailSchema, mentionListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
+  inviteCreatedSchema, inviteListSchema, invitePreviewSchema, markMentionsResultSchema, mentionEmailSchema, mentionListSchema, meSchema, oauthAllowedSchema, oauthClientSchema, setupGuideHiddenSchema, kbEditorChoiceSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentTokenSchema, roleListSchema, roleSchema, billingLinkSchema, bulkUpdateResultSchema, spamResultSchema, billingSchema, foundingSlotsSchema, migrationRequestSchema, trialOfferSchema, trialOfferAcceptedSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, noContentSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import { forgetSignOut, rememberSignOut } from '../lib/sign-out-intent';
@@ -432,6 +432,7 @@ export const api = {
     { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'allowOAuthClient'>(input) }),
   setupProgress: () => request('/api/v1/workspace/setup', setupProgressSchema),
   setSetupGuideHidden: (hidden: RequestBody<'setSetupGuideHidden'>['hidden']) => request('/api/v1/agents/me/setup-guide', setupGuideHiddenSchema, { method: 'PUT', body: json<'setSetupGuideHidden'>({ hidden }) }),
+  setKBEditor: (editor: RequestBody<'setKBEditor'>['editor']) => request('/api/v1/agents/me/kb-editor', kbEditorChoiceSchema, { method: 'PUT', body: json<'setKBEditor'>({ editor }) }),
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),
   updateWorkspaceName: (name: RequestBody<'updateWorkspaceName'>['name']) => request('/api/v1/workspace/name', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceName'>({ name }) }),
   // On the workspace's own host the answer carries continue_url: the desk moved to the new host.

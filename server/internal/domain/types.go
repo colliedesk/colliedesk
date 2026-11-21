@@ -24,6 +24,8 @@ type Agent struct {
 	// KBListColumns is the agent's stored choice of knowledge base list columns, nil before they chose;
 	// GET /auth/me returns what they see (EffectiveKBListColumns).
 	KBListColumns []string `json:"-"`
+	// KBEditor is the article editor the agent chose, "visual" or "markdown"; nil until they choose.
+	KBEditor *string `json:"-"`
 }
 
 // Session is a sign-in. Token is what an agent token was given, nil for a person's session; Role is

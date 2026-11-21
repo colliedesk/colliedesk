@@ -183,9 +183,10 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
       return;
     }
     const text = editableTranslation(against);
+    const sent = draft.body_md;
     const change = {
       ...(draft.title !== text.title ? { title: draft.title } : {}),
-      ...(draft.body_md !== text.body_md ? { body_md: draft.body_md } : {}),
+      ...(sent !== text.body_md ? { body_md: sent } : {}),
       ...(draft.slug.trim() && draft.slug !== text.slug ? { slug: draft.slug.trim() } : {}),
       ...(draft.seo_title !== text.seo_title ? { seo_title: draft.seo_title } : {}),
       ...(draft.seo_description !== text.seo_description ? { seo_description: draft.seo_description } : {}),
@@ -193,10 +194,13 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
       ...(upToDate && against.outdated ? { outdated: false } : {}),
     };
     // Text an autosave stored has no version yet: Save sends it again, and the server adds the version.
-    if (Object.keys(change).length === 0 && autosave.pending) Object.assign(change, { body_md: draft.body_md });
+    if (Object.keys(change).length === 0 && autosave.pending) Object.assign(change, { body_md: sent });
     const answer = await kbApi.updateTranslation(articleId, locale, { updated_at: against.updated_at, ...change });
     saved(answer);
     autosave.saved(answer.updated_at);
+    // The server respells formatting tags (<U> as <u>): the form shows the stored text unless typing went on.
+    const stored = editableTranslation(answer).body_md;
+    setDraft((now) => (now.body_md === sent ? { ...now, body_md: stored } : now));
     setStale(false);
     setTheirs(undefined);
   }, t.saved);

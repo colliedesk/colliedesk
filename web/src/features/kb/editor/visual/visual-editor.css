@@ -1,0 +1,37 @@
+/* The visual editor: the article as the help center shows it (the preview's own classes), in the editor's frame.
+   It scrolls inside its host like the Markdown source does, with the same tokens, light and dark. */
+
+.kb-editor-card:has(.kb-visual.ProseMirror-focused) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.kb-visual-host { min-width: 0; min-height: 12rem; overflow: auto; overscroll-behavior: contain; contain: content; background: var(--surface-1); }
+.kb-visual-host[hidden] { display: none; }
+.kb-visual { min-height: 100%; padding: var(--space-5) var(--space-6); color: var(--text-1); caret-color: var(--text-1); outline: none; }
+/* ProseMirror's own rules (injectCSS is off, as the page's styles carry no inline sheet). */
+.kb-visual.ProseMirror { position: relative; white-space: pre-wrap; word-wrap: break-word; font-variant-ligatures: none; font-feature-settings: "liga" 0; }
+.kb-visual.ProseMirror pre { white-space: pre-wrap; }
+.kb-visual .ProseMirror-gapcursor { display: none; pointer-events: none; position: absolute; }
+.kb-visual.ProseMirror-focused .ProseMirror-gapcursor { display: block; }
+.kb-visual .ProseMirror-gapcursor::after { content: ''; display: block; position: absolute; top: -2px; width: 20px; border-top: 1px solid var(--text-1); }
+.kb-visual ::selection { background: var(--select-bg); }
+.kb-visual .ProseMirror-selectednode { outline: 2px solid var(--focus); outline-offset: 2px; }
+.kb-visual img.ProseMirror-separator { display: inline !important; border: none !important; margin: 0 !important; }
+.kb-visual .ProseMirror-trailingBreak { display: inline; }
+/* A link in the text is edited, not followed: Ctrl+K or the Link tool changes its address. */
+.kb-visual a { cursor: text; }
+.kb-visual ul[data-type="taskList"] { list-style: none; padding-left: var(--space-1); }
+.kb-visual ul[data-type="taskList"] li { display: flex; gap: var(--space-2); align-items: flex-start; }
+.kb-visual ul[data-type="taskList"] li > label { flex: none; padding-top: 0.2em; }
+.kb-visual ul[data-type="taskList"] li > div { flex: 1 1 auto; min-width: 0; }
+.kb-visual .selectedCell { background: var(--select-bg); }
+/* A block the editor cannot show as itself stays its Markdown, read-only, in its place. */
+.kb-visual .kb-markdown-block {
+  margin: var(--space-3) 0; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-0);
+  padding: var(--space-2) var(--space-3); color: var(--text-2); user-select: none;
+}
+.kb-visual .kb-markdown-block pre { margin: 0; background: none; padding: 0; font-family: var(--font-mono); font-size: var(--fs-small); }
+.kb-visual .cm-uploading { margin: var(--space-2) 0; }
+.kb-visual span.cm-uploading { display: inline-flex; margin: 0 var(--space-1); }
+
+@media (max-width: 44rem) {
+  .kb-visual-host { height: 60dvh; min-height: 18rem; }
+  .kb-visual { padding: var(--space-4) var(--space-3); font-size: 16px; }
+}

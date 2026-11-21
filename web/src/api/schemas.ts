@@ -343,12 +343,17 @@ export type ReplyTargetPresetKey = ReplyTargetPreset['key'];
 export const setupGuideHiddenSchema = z.object({ hidden: z.boolean() }) satisfies z.ZodType<JsonResponse<'setSetupGuideHidden', 200>>;
 export const kbListColumnSchema = z.enum(['status', 'collection', 'author', 'tags', 'languages', 'created', 'updated', 'votes']) satisfies z.ZodType<Generated<'KBListColumn'>>;
 export type KBListColumn = z.infer<typeof kbListColumnSchema>;
+export const kbEditorSchema = z.enum(['visual', 'markdown']);
+export type KBEditor = z.infer<typeof kbEditorSchema>;
+export const kbEditorChoiceSchema = z.object({ editor: kbEditorSchema }) satisfies z.ZodType<JsonResponse<'setKBEditor', 200>>;
 export const meSchema = z.object({
   agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), token: tokenGrantSchema.nullable(), permissions: z.array(tokenPermissionSchema).catch([]),
   // An older server sends no goal; a goal this client does not know yet orders nothing.
   onboarding_goal: onboardingGoalSchema.nullable().catch(null),
   // An older server has no setup guide to hide.
   setup_guide_hidden: z.boolean().catch(false),
+  // Null until the member chooses; the article editor then opens in visual mode.
+  kb_editor: kbEditorSchema.nullable().catch(null),
   // An older server offers no AI feature.
   ai_features: z.object({ triage: z.boolean(), draft: z.boolean() }).catch({ triage: false, draft: false }),
   // An older server stores no columns: the list shows the default ones.

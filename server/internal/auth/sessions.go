@@ -83,7 +83,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 		// One query: the session, its person's roles (with their permissions) and the role the session is
 		// limited to or follows. The permissions are worked out from these in Go (principalFrom).
 		err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,
-			a.timezone_override,a.setup_guide_hidden,a.kb_list_columns,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),s.permissions,s.legacy,
+			a.timezone_override,a.setup_guide_hidden,a.kb_list_columns,a.kb_editor,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),s.permissions,s.legacy,
 			w.trial_extended_at IS NOT NULL,s.created_at,s.last_seen_at,`+countAgents+`,
 			`+personRolesColumn+`,
 			COALESCE(sr.id::text,''),COALESCE(sr.name,''),sr.system,sr.permissions,COALESCE(s.oauth_resource,'')
@@ -92,7 +92,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 			WHERE s.workspace_id=$3 AND `+match+` AND s.revoked_at IS NULL AND s.expires_at>$2 AND a.deactivated_at IS NULL`, args...).
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,
 				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName,
-				&principal.Agent.TimezoneOverride, &principal.Agent.SetupGuideHidden, &principal.Agent.KBListColumns, &principal.SessionID, &trialEndsAt, &scope, &tokenPermissions, &legacy,
+				&principal.Agent.TimezoneOverride, &principal.Agent.SetupGuideHidden, &principal.Agent.KBListColumns, &principal.Agent.KBEditor, &principal.SessionID, &trialEndsAt, &scope, &tokenPermissions, &legacy,
 				&trialExtended, &createdAt, &lastSeenAt, &activeAgents, &roles, &limit.ID, &limit.Name, &limit.System, &limit.Permissions, &principal.Resource)
 		if errors.Is(err, pgx.ErrNoRows) {
 			if viaCookie && !oauthAccess {

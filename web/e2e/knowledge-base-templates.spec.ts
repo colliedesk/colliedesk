@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { servers } from './support/cli';
 import { createWorkspaceWithSlug } from './support/workspace';
+import { writeInMarkdown } from './support/kb-editor';
 
 // The How-to starter every new workspace has, word for word.
 const howTo = 'Say in one sentence what the reader can do after these steps.\n\n## Before you start\n\n- What the reader needs (a role, a plan, a setting).\n\n'
@@ -29,7 +30,7 @@ test('knowledge base templates: a new workspace has the starters, an article sta
   await page.getByRole('link', { name: 'Getting started, 0 articles' }).click();
   await page.getByRole('button', { name: 'New article' }).click();
   await page.getByRole('menuitem', { name: /^How-to/ }).click();
-  const text = page.getByRole('textbox', { name: 'Text (Markdown)' });
+  const text = await writeInMarkdown(page);
   await expect(text).toContainText('## Before you start');
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Install the app');
   await page.getByRole('button', { name: 'Save draft' }).click();

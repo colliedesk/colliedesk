@@ -2,37 +2,12 @@ import { EditorView } from '@codemirror/view';
 import { kbMessages } from '../kb-messages';
 import { activeOf } from './commands';
 import { pastedMarkdown } from './paste-html';
-import { markdownAddress } from './paste-html-inline';
+import { nameOf, stored } from './paste-images';
 import { holdPlace, releasePlace, where } from './upload';
-import type { Named, UploadHooks } from './upload';
+import type { UploadHooks } from './upload';
 
 // Pasted is the last paste of formatted text: where it went, both ways to write it, and the one shown.
 export type Pasted = { from: number; formatted: string; plain: string; shown: 'formatted' | 'plain' };
-
-// An image pasted by its address is named after its file; one the browser holds (blob:, data:) is "image".
-const nameOf = (src: string): Named => {
-  if (!/^https?:/i.test(src)) return { name: 'image' };
-  try {
-    return { name: decodeURIComponent(new URL(src).pathname.split('/').pop() ?? '') || 'image' };
-  } catch {
-    return { name: 'image' };
-  }
-};
-
-const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-// stored writes each image at the address the library gave it; one it could not store is left out, and the
-// blank lines it leaves close up.
-function stored(markdown: string, images: string[], urls: (string | undefined)[]) {
-  let text = markdown;
-  images.forEach((src, at) => {
-    const address = markdownAddress(src);
-    const url = urls[at];
-    text = url ? text.split(`](${address})`).join(`](${markdownAddress(url)})`)
-      : text.replace(new RegExp(`!\\[(?:\\\\.|[^\\]\\\\])*\\]\\(${escaped(address)}\\)`, 'g'), '');
-  });
-  return text.replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
-}
 
 function put(view: EditorView, from: number, to: number, text: string, plain: string, onPasted: (pasted: Pasted) => void) {
   view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length }, userEvent: 'input.paste', scrollIntoView: true });
