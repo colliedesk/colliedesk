@@ -206,7 +206,7 @@ a:hover { text-decoration-thickness: 2px; }
 .crumbs a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; min-height: 2.75rem; }
 .crumbs a:hover { color: var(--link); text-decoration: underline; }
 /* A deep trail stays on one line: the levels between the first and the last two fold into "…",
-   which opens the full path below it (a <details>, since the help center runs no script). */
+   which opens the full path below it (a details element, since the help center runs no script). */
 .crumbs-folded { flex-wrap: nowrap; }
 .crumbs-folded > li { min-width: 0; }
 .crumbs-folded > li > a { display: block; line-height: 2.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
