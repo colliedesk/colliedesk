@@ -393,16 +393,20 @@ size with four tools:
 
 **Undo last** takes back the last mark. **Save copy** saves the drawn image as a new library item
 named after the original, "Settings page (annotated).png" for example, and puts it in the place of the
-original in this article only (and its translations), as a new version of the article. A JPEG stays a
-JPEG; any other image is saved as a PNG, and an animated GIF keeps only its first frame. The copy
-counts toward your storage like any upload.
+original in this article only (and its translations). A draft article gets it as a new version. A
+published article keeps showing the original on the help center: the copy goes into its unpublished
+changes (and those of its published translations), and readers see it once you publish them. A JPEG
+stays a JPEG; any other image is saved as a PNG, and an animated GIF keeps only its first frame. The
+copy counts toward your storage like any upload.
 
 The original is not changed. It stays in the library, and the copy's panel lists it under **Earlier
 version** with **Undo**, which puts the original back in the article. Other articles that show the
 original keep it.
 
 Save or undo your changes before you annotate: the copy goes in the saved text. A new article must be
-saved first. Only an image from the media library can be annotated.
+saved first. Only an image from the media library can be annotated. When the article no longer shows the
+image (someone saved it without the image meanwhile), the dialog says so and keeps what you drew; the
+copy goes to the library's trash.
 
 ### Media library
 
@@ -461,8 +465,8 @@ showed one then say "Media no longer exists").
 **Replacing** an item puts another image (or video, for a video) in its place in every article that
 shows it, as a new version of each article; published ones change on the help center at once. Undo
 the replacement to put the first one back. An [annotated copy](#annotate-an-image) replaces its
-original in one article only; the copy's panel shows the original under **Earlier version**, with
-**Undo**. A replaced item stays as that earlier version: it may go to the trash, but it cannot be
+original in one article only, in the unpublished changes of a published one; the copy's panel shows
+the original under **Earlier version**, with **Undo**. A replaced item stays as that earlier version: it may go to the trash, but it cannot be
 deleted forever, and the 30-day purge skips it, until the replacement is undone. An article saved with an image that no longer exists is
 saved all the same, and the answer names the missing image.
 

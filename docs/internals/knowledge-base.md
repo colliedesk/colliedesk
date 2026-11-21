@@ -576,6 +576,22 @@ in a workspace's custom CSS.
   translations only. The replacement row is the copy's history: `GET /api/v1/kb/media/{copy}` lists the
   original under `earlier_versions`, and undoing the replacement puts it back. The editor refuses
   while the text on screen differs from what is saved, since the replace rewrites the saved text.
+  When the replace is refused, the editor moves the copy to the trash (it is in no article) and the
+  dialog keeps the drawing and shows the refusal.
+- **A one-article replace never changes the help center.** With `article_id`, a published article and
+  its published translations keep their text: the new item goes into their unpublished changes, made
+  from the published text when there are none (`replaceInOneKBArticle`), so the call needs
+  `kb_articles:update`, not `kb_articles:publish`. A draft article is rewritten as a new version. The
+  article is locked before its text is read, so a save that drops the item meanwhile is seen; when
+  nothing is rewritten the call answers 409 `media_not_in_article` and records no replacement. Such a
+  replacement lists the published article with version 0, so its undo needs no publish either
+  (`KBReplacementTouchesPublished` counts only versions above 0).
+- **A figure's lines are set apart.** An HTML block runs to the next blank line, so a `<figure>` or
+  `<figcaption>` tag with the image or caption right under it would show that Markdown as text. The
+  normalizer (`kbformat/figure-apart.go`) puts a blank line before and after each such tag of a
+  top-level block; code and figures inside a list item or a quote are left as they are. Titles of the
+  image and of its link (`![a](src "t")`, `[…](href "t")`) round-trip through the visual editor
+  (`linkTitle` on the figure node).
 - **A replacement not undone keeps its earlier version.** `kbMediaKeptByReplacement` (a row of
   `kb_media_replacements` with this `from_media_id`, `undone_at IS NULL` and not `in_place`) keeps the
   item from every purge: `PurgeKBMediaNow` deletes nothing and answers 409 `media_kept` with the
