@@ -340,7 +340,7 @@ the same article, as Freshdesk does it, never an article of its own.
   starts it with the article, and a pointer or the focus on the list or on New article preloads it.
   The first bundle's Tailwind scan skips `features/kb/editor/` (`@source not` in `styles/base.css`):
   words in its code (`italic`, `underline`) would otherwise become utilities in the first CSS.
-- **The editor is CodeMirror 6 on Markdown source, byte for byte** (`editor/codemirror-editor.tsx`):
+- **The Markdown editor is CodeMirror 6 on Markdown source, byte for byte** (`editor/codemirror-editor.tsx`):
   what the person types is what `body_md` stores, so opening and saving an article an AI agent or an
   import wrote never rewrites its syntax. One exception: CodeMirror splits lines on `\r\n`, `\r` and `\n`
   and writes `\n`. The page compares bodies with line endings normalized (`sameBody`), so opening,
@@ -390,14 +390,14 @@ the same article, as Freshdesk does it, never an article of its own.
   `server/internal/freshdesk/testdata/html-markdown-cases.json` (vitest and
   `TestArticleMarkdownMatchesTheSharedPasteCases`), so a rule change in one fails the other. The paste is
   stricter than an import: players, frames, forms and SVG are dropped, an image keeps only an
-  `http(s)`, `data:` or `blob:` address, underline becomes plain text (the help center allowlist has
-  no `<u>`), styled spans become bold or italic only from weight and style, and a table without a
+  `http(s)`, `data:` or `blob:` address, underline and colours become plain text (on a copied page
+  they are styling, rarely meaning; the person adds them with the tools), styled spans become bold or italic only from weight and style, and a table without a
   header row gets an empty one (GFM needs one). A relative image address from a web page stays as
   written and shows as a broken image. The result is Markdown, rendered later by kbhtml's allowlist,
   so no pasted tag reaches the help center that a typed one could not.
 - **Plain text wins in code and from code editors.** Inside a fenced block or inline code, and for a
-  clipboard that carries `vscode-editor-data`, the paste is the plain text. After a formatted paste a
-  bar offers "Keep formatting · Paste as plain text"; each swaps the inserted range, as one undo step.
+  clipboard that carries `vscode-editor-data`, the paste is the plain text. In the Markdown editor, after a
+  formatted paste a bar offers "Keep formatting · Paste as plain text"; each swaps the inserted range, as one undo step.
 - **Pasted images go to the media library.** `data:` and `blob:` images are uploaded like a dropped
   file (type and 5 MiB checked first); a web address goes to `POST /api/v1/kb/images/import`, which the
   server downloads through the same `netguard` dialer as mail images: private, loopback, link-local and
@@ -423,6 +423,73 @@ the same article, as Freshdesk does it, never an article of its own.
   take about 100 ms, or about 260 ms with 900 players, nearly all of it the browser creating the iframes.
 - **History and trash are the saved reply panels** (`saved-reply-panels.tsx`), made generic with
   optional props; the change line reads the same, with `import` added.
+
+### Visual editor
+
+- **Two editors on one stored text.** `body_md` stays Markdown; the visual editor
+  (`editor/visual/`, Tiptap 3 on ProseMirror, a chunk of its own with no CodeMirror) reads it into a
+  document and writes it back. Visual is the default; the choice is the person's, stored on the server
+  (`agents.kb_editor`, `PUT /api/v1/agents/me/kb-editor`, read in `GET /api/v1/auth/me`), so it follows
+  them to every device. Both editors share one toolbar (`editor/editor-frame.tsx`), one handle
+  (`markdown()`, `focus()`), autosave and the conflict view, so the page does not know which one runs.
+- **The schema holds exactly what can be stored** (`visual/schema.ts`): CommonMark and GFM blocks and
+  marks, callouts, images, and the formatting forms below. No node exists that Markdown and those forms
+  cannot write, so the visual editor never saves something the source could not hold.
+- **What it cannot show stays as written.** `markdownToDoc` (`visual/from-markdown.ts`) turns a top-level
+  block it cannot show as itself (raw HTML other than the forms, a footnote, a link reference
+  definition, a video, a table that is not a grid) into a read-only Markdown block: a dashed box with the
+  source, saved byte for byte. Converting it would rewrite what an import or an agent wrote; the person
+  edits it in Markdown.
+- **Conversion goes through mdast.** Reading uses the micromark/mdast parse (`mdast-util-from-markdown` with GFM) that the preview's remark uses; writing
+  builds mdast and prints it with `mdast-util-to-markdown` (`visual/to-markdown.ts`), with the forms
+  written by `tagString` in the server's spelling. Three gates keep it honest:
+  `server/internal/kbformat/testdata/visual-editor.md` holds every element, and the visual editor saves it
+  to the same bytes (`convert.test.ts`) and `Normalize` leaves it as it is
+  (`TestNormalizeKeepsWhatTheVisualEditorWrites`); any text saved twice changes no more after the first
+  save; and a corpus of other spellings (setext headings, `__bold__`, `*` and `+` lists, indented code)
+  renders the same page after a visual save (`save-shows-the-same.test.tsx`), though its source changes
+  to the editor's spelling. While the document equals what it read, `markdown()` answers the stored text
+  itself (`visual-editor.tsx`), so opening an article in the visual editor and leaving it sends nothing.
+- **A table stays GFM when GFM can hold it** (`visual/to-markdown-table.ts`): one header row over plain
+  rows, every cell one paragraph with no hard break, merge, background, alignment or indent of its own,
+  and each column one alignment. Anything else is written as an HTML table in the forms below. A GFM
+  table is what an agent or a person reads most easily in the source, so it is never given up for less.
+- **Align and indent belong to top-level paragraphs and headings**, and to selected cells of a table in
+  the visual editor. A wrapper inside a list item, a quote or a callout would need HTML around Markdown
+  inside a container, which CommonMark parses differently by indentation; the tools are off there. The
+  server still keeps a wrapper it finds inside one (`normalize.json`), so nothing typed by hand is lost.
+- **A paste in the visual editor uses the Markdown editor's converter** (`visual/visual-paste.ts`,
+  `pastedMarkdown`), then reads the Markdown back: what shows after a paste is what is saved. There is no
+  "Keep formatting" bar: `Ctrl+Z` takes the paste back and `Ctrl+Shift+V` pastes plain text.
+- **Side by side is Markdown only.** The visual editor already shows the page; a preview beside it
+  would show the same thing twice. A stored Side by side falls back to Write there.
+
+## Formatting beyond Markdown
+
+The help center keeps a small set of HTML forms beyond Markdown (`server/internal/kbhtml/allowlist.json`,
+`"formatting"`), so the visual editor can underline, highlight, colour, align, indent and merge cells
+without a `style` attribute: the help center's CSP and its page CSS stay as they are, and the colours are
+the theme's classes (`kb-color-*`, `kb-bg-*` in the help center's `site.css`), right in light and dark and
+in a workspace's custom CSS.
+
+| Form | Means |
+| --- | --- |
+| `<u>…</u>`, `<mark>…</mark>` | underline, highlight |
+| `<span data-color="accent\|success\|warning\|danger\|muted">…</span>` | text colour from the palette |
+| `<p data-align="center\|right" data-indent="1..4">`, blank line, Markdown, blank line, `</p>` | a top-level paragraph's alignment and indent; `<h1>`…`<h6>` the same for a heading |
+| `<table>` with `<th>`/`<td>` and `colspan`, `rowspan` (each up to 20), `data-align`, `data-bg` | a table GFM cannot hold |
+
+- **One spelling.** `kbformat.Normalize` (`server/internal/store/kb-body.go`, on every save of an article,
+  translation, draft or template) lowercases the tags, writes double quotes, keeps only those attributes,
+  in the order `colspan`, `rowspan`, `data-align`, `data-indent`, `data-color`, `data-bg`, drops a colour
+  outside the palette and a span of 1. The editors write that spelling (`editor/format-tags.ts`
+  `tagString`), so a save never changes what the person sees in the source. The cases are
+  `server/internal/kbformat/testdata/normalize.json`, run by Go and by vitest (`format-tags.test.ts`).
+- **One render.** `kbformat.Extension` renders the forms in the help center's goldmark with the classes
+  above (`kb-align-*`, `kb-indent-*`, `kb-color-*`, `kb-bg-*`); the preview and the visual editor give
+  the same classes their look in `editor/formatting.css`. `testdata/render.json` is the expected HTML of
+  each form, run by `server/internal/helpcenter/formatting_test.go` and by vitest
+  (`markdown-preview.test.tsx`).
 
 ## Files
 

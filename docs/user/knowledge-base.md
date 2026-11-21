@@ -1,6 +1,7 @@
 # Knowledge base
 
-The knowledge base holds your team's help articles, written in Markdown and grouped in collections.
+The knowledge base holds your team's help articles, written in a visual editor or in Markdown and
+grouped in collections.
 Every agent can write, edit, publish and delete articles. A published article appears on the public
 help center while an admin has it turned on; a draft is seen only by agents. Every change is kept as
 a version you can restore, and a deleted article or collection waits in a trash for 30 days. AI
@@ -95,21 +96,27 @@ the end of a published article's row opens its public page.
 ## Write an article
 
 1. Select **New article** (inside a collection, it starts there).
-2. Type a **Title** and the **Text** in Markdown: `**bold**`, `_italic_`, `#` headings, `-` and `1.`
-   lists, `- [ ]` checklists, `[links](https://example.com)`, tables, `> quotes` and code. The Markdown
-   is colored as you type, and what you type is exactly what is stored. Raw HTML in the text is not
-   shown, except a [YouTube or Vimeo video](#videos).
-   - The toolbar sets the block (**Text**, **Heading 2**, **Heading 3**; the title is the article's
-     Heading 1, so the text starts at Heading 2, and a `#` line written before still shows as **Heading 1**)
-     and adds bold, italic, a link, numbered and bulleted lists, a quote and a table; **Insert image, video
-     or callout** adds an [image](#images), a [video](#videos) or a [callout](#callouts); **Link to article** links
-     [another article](#link-another-article-from-the-editor); **⋯** (More formatting) holds
-     strikethrough, code, a checklist, a [code block](#code-blocks), a divider and redo. On a phone, and in an editor
-     narrower than 720 pixels, the toolbar keeps **Insert**, bold,
-     italic and link, and the rest, **Link to article** included, is under **⋯**. With the keyboard, Tab reaches the toolbar and the
-     arrow keys move along it.
-   - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
-     `Ctrl+F` find and replace (`Cmd` on a Mac).
+2. Type a **Title** and the **Text**. The text opens in the **Visual** editor: it looks as the article
+   reads on the help center, and the toolbar formats it. Markdown shortcuts work as you type: `#` and a
+   space for a heading, `**bold**`, `_italic_`, `-` or `1.` and a space for a list, `>` for a quote.
+   - The toolbar sets the block (**Text**, **Heading 1** to **Heading 4**) and adds bold, italic,
+     **Underline**, **Highlight**, **Text colour**, **Align and indent**, a link, **Link to article**
+     ([another article](#link-another-article-from-the-editor)), numbered and bulleted lists, a quote and
+     a table; **Insert image, video or callout** adds an [image](#images), a [video](#videos) or a
+     [callout](#callouts); **⋯** (More formatting) holds strikethrough, code, a checklist, a
+     [code block](#code-blocks), a divider and redo. The [formatting](#formatting) below says what each
+     one keeps.
+   - In a table, **Table tools** replaces the table button: header row, add a row or column, merge and
+     split cells, a cell background, and delete a row, a column or the table.
+   - On a phone, and in an editor narrower than 720 pixels, the toolbar keeps **Insert**, bold, italic,
+     link and, in a table, **Table tools**; the rest, headings, colour, alignment and **Link to article**
+     included, is under **⋯**. With the keyboard, Tab reaches the toolbar and the arrow keys move along it.
+   - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+U` underline, `Ctrl+E` code, `Ctrl+K` link,
+     `Ctrl+Z` undo (`Cmd` on a Mac). In a list, Tab indents the item and Shift+Tab moves it back; in a
+     table, Tab goes to the next cell.
+   - A block the visual editor cannot show as it reads (a video, other HTML, a footnote, a table that is
+     not a plain grid) stays as a **Markdown block**, a dashed box with its text as written. It is saved
+     unchanged; switch to **Markdown** to edit it.
 3. Choose the **Collection** (under **Placement** on the right; on a phone, under **Details**).
 4. Select **Save draft** to keep it for agents only, or **Save and publish**.
 
@@ -120,14 +127,27 @@ help center** while it is off), the images that still need alt text, and its **P
 (collection and address name). On a phone the bar is at the bottom of the screen: the status,
 **Details** (visibility, alt text, collections, address), **⋯** and **Save**.
 
-**Write** shows the Markdown, **Preview** shows how the article reads, and **Side by side** (in a wide
-window) shows both. A wide window opens an article side by side, unless it is longer than 20,000
-characters: then it opens in **Write**, which stays fast at any length. Raw HTML in the text never runs:
-the preview and the help center show only [YouTube and Vimeo players](#videos) and leave the rest out.
+### Visual or Markdown
 
-Enter starts a plain new line (type `- ` or `> ` again to go on with a list or quote), and Tab moves on
-to the next control instead of indenting, so the keyboard never gets stuck in the text; indent with
-spaces.
+**Visual** and **Markdown** above the text switch the editor. Your choice is kept for you on every
+device, and new articles open in it; until you choose, it is **Visual**. An AI agent sets it for the
+person whose token it uses with `colliedesk_my_kb_editor_set`. Switching keeps the text: what one
+editor saves, the other opens unchanged. The switch waits while an image uploads.
+
+**Markdown** shows the text as it is stored: `**bold**`, `_italic_`, `#` headings, `-` and `1.` lists,
+`- [ ]` checklists, `[links](https://example.com)`, tables, `> quotes`, code and the
+[formatting tags](#formatting). The Markdown is colored as you type, and what you type is exactly
+what is stored, except that a formatting tag is saved in one spelling. The same toolbar writes the
+Markdown and the tags for you (**Table tools** is in the visual editor only, as a merged cell is HTML).
+`Ctrl+F` finds and replaces. Enter starts a plain new line (type `- ` or `> ` again to go on with a list
+or quote), and Tab moves on to the next control instead of indenting, so the keyboard never gets stuck
+in the text; indent with spaces.
+
+**Write** shows the editor, **Preview** shows how the article reads, and, in **Markdown** in a wide
+window, **Side by side** shows both. A wide window opens a Markdown article side by side, unless it is
+longer than 20,000 characters: then it opens in **Write**, which stays fast at any length. Raw HTML
+other than the formatting tags never runs: the preview and the help center show only
+[YouTube and Vimeo players](#videos) and leave the rest out.
 
 `Ctrl+S` (`Cmd+S` on a Mac) saves. The text holds at most 100,000 characters and a title 300. A longer
 text is never cut: the counter turns red and saving waits until you shorten it, or split it into
@@ -161,6 +181,54 @@ history) or **Discard mine and show theirs**. A translation does the same.
 Select **Full screen** in the toolbar to write with the whole window. The toolbar stays. Press `Esc`
 or select **Leave full screen** to go back. `Esc` first closes an open menu or dialog.
 
+### Formatting
+
+Beyond Markdown, an article keeps underline, highlight, five text colours, alignment, indent, and tables
+with merged or coloured cells. The toolbar sets them in both editors. In the Markdown they are a few HTML
+tags, the only HTML the help center shows besides [videos](#videos):
+
+| Formatting | In the Markdown |
+|---|---|
+| Underline | `<u>words</u>` |
+| Highlight | `<mark>words</mark>` |
+| Text colour | `<span data-color="danger">words</span>`: `accent`, `success` (green), `warning` (amber), `danger` (red) or `muted` (grey) |
+| Aligned or indented paragraph | the paragraph between `<p data-align="center">` and `</p>`, each on a line of its own with a blank line before and after the paragraph; `data-align` is `center` or `right`, `data-indent` is `1` to `4` |
+| Aligned or indented heading | the same with `<h2 …>` and `</h2>` around a `## Heading` (any level 1 to 6) |
+| Merged or coloured cells | an HTML `<table>` with `<tr>`, `<th>` and `<td>`; a cell may have `colspan` and `rowspan` (up to 20), `data-align` and `data-bg` (a colour name), and holds Markdown between blank lines |
+
+```html
+<p data-align="center" data-indent="1">
+
+Read this **first**.
+
+</p>
+
+<table>
+<tr>
+<th colspan="2" data-bg="accent">
+
+Plans
+
+</th>
+</tr>
+</table>
+```
+
+- The colours come from the help center's style sheet, so they follow its light and dark look, its
+  brand colour and its [custom CSS](#custom-css). A `style` attribute, a class or any other attribute or
+  value is never kept.
+- A table that Markdown can hold (a header row over cells of one line each, every column aligned one
+  way) stays a Markdown table. The visual editor writes an HTML table only when a cell needs it: a merged
+  or coloured cell, a cell aligned apart from its column, a table with no header row, or a cell of more
+  than one paragraph. It goes back to Markdown once no cell needs it.
+- Alignment and indent belong to a paragraph or heading at the top level of the article. In a table of
+  the visual editor, **Align and indent** aligns the selected cells instead; in a list, a quote or a
+  callout it is off.
+- Saving writes each tag in one spelling: lowercase, double quotes, these attributes only, in the order
+  `colspan`, `rowspan`, `data-align`, `data-indent`, `data-color`, `data-bg`. For example
+  `<SPAN DATA-COLOR='danger'>` is saved as `<span data-color="danger">`. The rest of the text keeps every
+  byte. The editors already write that spelling, so what you see is what is saved.
+
 ### Paste from Word, Google Docs or a web page
 
 Copied text from Word, Google Docs, Notion or a web page goes in as Markdown. Headings, bold, italic,
@@ -171,8 +239,9 @@ frames and scripts are left out too.
   a web address is downloaded by Colliedesk and stored. While they upload, a box at the cursor says
   so; **Cancel** there drops the paste.
 - An image that cannot be stored is left out, and the editor says why. The rest of the paste goes in.
-- After the paste, a bar offers **Keep formatting · Paste as plain text**. One click writes the paste
-  the other way. The bar goes when you type on.
+- In **Markdown**, a bar after the paste offers **Keep formatting · Paste as plain text**. One click
+  writes the paste the other way. The bar goes when you type on. In **Visual**, `Ctrl+Z` takes the paste
+  back, and `Ctrl+Shift+V` pastes plain text.
 - In a code block, and from a code editor such as VS Code, a paste stays plain text.
 
 ### Callouts
@@ -364,7 +433,7 @@ after it, for example the code from YouTube's **Share → Embed**:
   site, an `<audio>` file, a script, a `style`, a form. Words on the same lines as the HTML count as part of it and go
   too, so start your text after a blank line. Inside a paragraph only the tags are left out and the
   words between them stay, except the content of a `<script>`, `<style>` or similar element. **Preview** names what it left out on a line above the article; the saved text
-  keeps the HTML as you wrote it.
+  keeps the HTML as you wrote it, except the [formatting tags](#formatting), which are saved in one spelling.
 - A video file of your own goes into the media library (below), not as `<video>` HTML of another site.
 
 **Video files.** The media library also holds videos you upload: MP4 (H.264 or AV1 video with AAC
@@ -968,7 +1037,8 @@ to serve on the domain again.
 - Files listed under an article are offered for download below its text, while a published article lists them.
 - Images you added to an article are shown while a published article uses them. An image from
   another site is shown as a link to it: the help center loads nothing from other sites.
-- Raw HTML in the text is not shown, except [YouTube and Vimeo videos](#videos), and links work only
+- Raw HTML in the text is not shown, except [YouTube and Vimeo videos](#videos) and the
+  [formatting tags](#formatting), and links work only
   for `http`, `https`, `mailto` and `tel`. A video's site sees the reader's address when the video
   loads, as with any embedded video.
 - Every article ends with **Was this article helpful?** and **Yes** / **No**, with the count so far
@@ -1151,6 +1221,11 @@ Articles and collections:
   unpublished changes. Every `PATCH` sends the `updated_at` it started from; a newer copy on the server
   refuses it with 409 `changed_elsewhere`. An agent saves with `colliedesk_kb_article_update` as before,
   which adds a version.
+- Formatting: `body_md` may hold the [formatting tags](#formatting). Saving writes each one in its one
+  spelling, so the `body_md` an answer carries can differ from what was sent in those tags only.
+- [Editor](#visual-or-markdown): `colliedesk_my_kb_editor_set` (`PUT /api/v1/agents/me/kb-editor`, with
+  `profile:update`) sets `visual` or `markdown` for the person the token belongs to and answers the
+  editor set; `kb_editor` in `GET /api/v1/auth/me` reads it.
 - [Readers' votes](#votes-from-readers): `colliedesk_kb_article_votes_get` or
   `GET /api/v1/kb/articles/{id}/votes` reads the count, each vote with its line, and the earlier counts
   (`kb_articles:read`). `colliedesk_kb_article_votes_reset` or `POST /api/v1/kb/articles/{id}/votes/reset`
