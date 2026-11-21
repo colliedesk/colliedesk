@@ -43,6 +43,19 @@ func TestArticleFormattingRendersWithHelpCenterClasses(t *testing.T) {
 	}
 }
 
+// A cell of a formatted table may hold an aligned or indented paragraph of its own.
+func TestArticleFormattingAlignsAParagraphInsideACell(t *testing.T) {
+	body := "<table>\n<tr>\n<td rowspan=\"2\">\n\n<p data-align=\"right\">\n\nx\n\n</p>\n\ny\n\n</td>\n</tr>\n</table>\n"
+	out, err := renderArticle(body, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "<table>\n<tbody>\n<tr>\n<td rowspan=\"2\"><p class=\"kb-align-right\">x</p>\n<p>y</p>\n</td>\n</tr>\n</tbody>\n</table>\n"
+	if string(out) != want {
+		t.Fatalf("rendered\n%s\nwant\n%s", out, want)
+	}
+}
+
 // An inline formatting tag without its partner, or across another element's edge, is left out with
 // its text kept, so it can never wrap the rest of the page.
 func TestArticleFormattingLeavesOutUnpairedTags(t *testing.T) {

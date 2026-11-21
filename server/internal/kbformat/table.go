@@ -1,6 +1,8 @@
 package kbformat
 
 import (
+	"slices"
+
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/util"
@@ -79,7 +81,8 @@ func readTable(first ast.Node, source []byte) (*Table, ast.Node) {
 	inRow := false
 	for node := first; node != nil; node = node.NextSibling() {
 		tags, ok := tagsOf(node, source)
-		if !ok {
+		// A block with no table tag in it is the cell's content, a paragraph's wrapper too.
+		if !ok || !slices.ContainsFunc(tags, Tag.IsTable) {
 			if cell == nil {
 				return nil, nil
 			}
