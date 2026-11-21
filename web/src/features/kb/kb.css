@@ -289,6 +289,11 @@ span.kb-article-open { opacity: 0.35; }
 .kb-side-box .field label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
 .kb-side-box .field small { font-size: var(--fs-label); }
 .kb-side-box .button-link { justify-self: start; }
+.kb-tag-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.kb-tag-chips li { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); padding: 0 2px 0 var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
+.kb-tag-chips li > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-tag-chips button { min-width: 24px; min-height: 24px; border: 0; background: none; color: var(--text-3); cursor: pointer; }
+.kb-tag-chips button:hover { color: var(--text-1); }
 .kb-side-status { display: grid; gap: 4px; color: var(--text-2); font-size: var(--fs-small); }
 /* Collections: the home select marked Home, a row with × for each other collection, then "Also list in…". */
 .kb-collections-field { gap: var(--space-2); }
