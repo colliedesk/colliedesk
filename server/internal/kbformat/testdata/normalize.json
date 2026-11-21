@@ -68,5 +68,20 @@
     "name": "only a figure takes a width, a border, or the left and inline alignments",
     "in": "<p data-align=\"left\" data-width=\"small\" data-border>\n\nx\n\n</p>\n\n<figure data-width=\"medium\" data-indent=\"1\">\n\n![d](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n",
     "out": "<p>\n\nx\n\n</p>\n\n<figure data-width=\"medium\">\n\n![d](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n"
+  },
+  {
+    "name": "a figure written without blank lines gets them, so its image and caption read as Markdown",
+    "in": "Intro text\n<FIGURE data-width=\"480\">\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n<figcaption>\nThe **settings** page\n</figcaption>\n</figure>\nAfter it.\n",
+    "out": "Intro text\n\n<figure data-width=\"480\">\n\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n<figcaption>\n\nThe **settings** page\n\n</figcaption>\n\n</figure>\n\nAfter it.\n"
+  },
+  {
+    "name": "a figure's closing tag right under its image is set apart from it",
+    "in": "<figure>\n\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n</figure>\n",
+    "out": "<figure>\n\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n"
+  },
+  {
+    "name": "a figure shown as code keeps its lines as they are",
+    "in": "```html\n<figure>\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n</figure>\n```\n\n    <figure>\n    ![Alt](/a.png)\n    </figure>\n",
+    "out": "```html\n<figure>\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n</figure>\n```\n\n    <figure>\n    ![Alt](/a.png)\n    </figure>\n"
   }
 ]
