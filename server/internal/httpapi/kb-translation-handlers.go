@@ -273,15 +273,16 @@ func (a *API) updateKBTranslation(response http.ResponseWriter, request *http.Re
 		return
 	}
 	who := principal(request)
+	// Publishing or unpublishing changes the help center; a change to a published translation is saved
+	// as its draft, which the help center does not show.
 	publishes := func() (bool, error) {
-		if input.Status != nil && *input.Status == domain.KBPublished {
-			return true, nil
+		if input.Status == nil {
+			return false, nil
 		}
-		return a.store.KBTranslationPublished(request.Context(), who.Workspace.ID, request.PathValue("id"), request.PathValue("locale"))
+		published, err := a.store.KBTranslationPublished(request.Context(), who.Workspace.ID, request.PathValue("id"), request.PathValue("locale"))
+		return (*input.Status == domain.KBPublished) != published, err
 	}
-	// Marking it up to date or outdated changes nothing customers read.
-	contentChanges := input.Title != nil || input.Slug != nil || input.BodyMD != nil || input.Status != nil || input.SEOTitle != nil || input.SEODesc != nil
-	if contentChanges && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, publishes) {
+	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, publishes) {
 		return
 	}
 	translation, err := a.store.UpdateKBTranslation(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), request.PathValue("locale"),

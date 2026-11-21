@@ -23,8 +23,8 @@ import (
 
 // kbTranslationSelect reads translations t with their newest version; extra columns follow the change columns.
 func kbTranslationSelect(extra, join string) string {
-	return `SELECT t.article_id::text,t.locale,t.title,t.slug,t.status,t.published_at,t.outdated,t.outdated_at,t.created_at,t.updated_at,t.deleted_at IS NOT NULL,` +
-		kbArticleChangeColumns + extra + `
+	return `SELECT t.article_id::text,t.locale,t.title,t.slug,t.status,t.published_at,t.outdated,t.outdated_at,t.created_at,` + kbTranslationToken +
+		`,t.deleted_at IS NOT NULL,` + kbTranslationHasDraft + `,` + kbArticleChangeColumns + extra + `
 	FROM kb_article_translations t
 	LEFT JOIN LATERAL (SELECT * FROM kb_article_translation_versions x WHERE x.workspace_id=t.workspace_id AND x.article_id=t.article_id AND x.locale=t.locale
 		ORDER BY x.version DESC LIMIT 1) v ON true
@@ -35,7 +35,7 @@ func scanKBTranslationSummary(row pgx.Row, extra ...any) (domain.KBTranslationSu
 	var item domain.KBTranslationSummary
 	var change changeRow
 	targets := append([]any{&item.ArticleID, &item.Locale, &item.Title, &item.Slug, &item.Status, &item.PublishedAt, &item.Outdated, &item.OutdatedAt,
-		&item.CreatedAt, &item.UpdatedAt, &item.InTrash}, change.targets()...)
+		&item.CreatedAt, &item.UpdatedAt, &item.InTrash, &item.HasDraft}, change.targets()...)
 	if err := row.Scan(append(targets, extra...)...); err != nil {
 		return item, err
 	}
@@ -82,8 +82,10 @@ func readKBTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID, l
 	}
 	original.UpdatedAt = domain.UTC(original.UpdatedAt)
 	item.KBTranslationSummary, item.DeletedAt, item.Original = summary, domain.UTCOptional(item.DeletedAt), original
-	item.Attachments, err = readKBAttachments(ctx, tx, workspaceID, articleID, &locale)
-	return item, err
+	if item.Attachments, err = readKBAttachments(ctx, tx, workspaceID, articleID, &locale); err != nil {
+		return item, err
+	}
+	return item, readKBTranslationDraft(ctx, tx, workspaceID, &item)
 }
 
 // translationKey refuses an id or locale that cannot name a translation.
@@ -150,17 +152,29 @@ func addKBTranslationVersion(ctx context.Context, tx pgx.Tx, workspaceID, articl
 
 // recordKBTranslationVersion records the translation as it is now as its next version.
 func recordKBTranslationVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string, actor Actor, kind string, restoredFrom *int) error {
+	status, err := insertKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, kind, restoredFrom, false)
+	if err != nil {
+		return err
+	}
+	return noteKBTextWriter(ctx, tx, workspaceID, articleID, &locale, actor, kind, status)
+}
+
+// insertKBTranslationVersion adds the next version of the translation with its live text, or with its
+// draft over the live text when drafted, and returns the status it records.
+func insertKBTranslationVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string, actor Actor, kind string, restoredFrom *int, drafted bool) (string, error) {
 	var status string
 	if err := tx.QueryRow(ctx, `INSERT INTO kb_article_translation_versions(workspace_id,article_id,locale,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,status,
 			changed_by_agent_id,token_id,token_label,agent_request_id,created_at)
 		SELECT t.workspace_id,t.article_id,t.locale,COALESCE((SELECT max(version) FROM kb_article_translation_versions WHERE workspace_id=$1 AND article_id=$2 AND locale=$3),0)+1,
-			$4,$5,t.title,t.slug,t.body_md,t.seo_title,t.seo_description,t.status,$6,s.id,s.label,$8,clock_timestamp()
+			$4,$5,COALESCE(d.title,t.title),COALESCE(d.slug,t.slug),COALESCE(d.body_md,t.body_md),COALESCE(d.seo_title,t.seo_title),COALESCE(d.seo_description,t.seo_description),
+			t.status,$6,s.id,s.label,$8,clock_timestamp()
 		FROM kb_article_translations t LEFT JOIN sessions s ON s.workspace_id=t.workspace_id AND s.id=$7
+		LEFT JOIN kb_article_drafts d ON $9 AND d.workspace_id=t.workspace_id AND d.article_id=t.article_id AND d.locale=t.locale
 		WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3 RETURNING status`,
-		workspaceID, articleID, locale, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID)).Scan(&status); err != nil {
-		return fmt.Errorf("record knowledge base translation version: %w", err)
+		workspaceID, articleID, locale, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID), drafted).Scan(&status); err != nil {
+		return "", fmt.Errorf("record knowledge base translation version: %w", err)
 	}
-	return noteKBTextWriter(ctx, tx, workspaceID, articleID, &locale, actor, kind, status)
+	return status, nil
 }
 
 // checkKBLanguage refuses a locale that is not a listed language of the help center (the primary one
@@ -283,10 +297,14 @@ func (s *Store) CreateKBTranslation(ctx context.Context, workspaceID string, act
 type KBTranslationChange struct {
 	Title, Slug, BodyMD, Status, SEOTitle, SEODescription *string
 	Outdated                                              *bool
+	// Autosave saves the draft of a published translation without recording a version.
+	Autosave bool
 }
 
-// UpdateKBTranslation changes a live translation and records the version. seen is the updated_at the
-// client read. A change of the flag alone is recorded as mark_current or mark_outdated.
+// UpdateKBTranslation changes a live translation and records the version. seen is the concurrency token
+// the client read. A change of the flag alone is recorded as mark_current or mark_outdated. A change of
+// the text of a published translation that stays published goes to its draft; one that unpublishes it
+// takes the draft's text along.
 func (s *Store) UpdateKBTranslation(ctx context.Context, workspaceID string, actor Actor, articleID, locale string, seen time.Time, change KBTranslationChange) (domain.KBArticleTranslation, error) {
 	if err := translationKey(articleID, locale); err != nil {
 		return domain.KBArticleTranslation{}, err
@@ -309,21 +327,30 @@ func (s *Store) UpdateKBTranslation(ctx context.Context, workspaceID string, act
 				return domain.KBArticleTranslation{}, err
 			}
 		}
-		if _, err := tx.Exec(ctx, `UPDATE kb_article_translations SET title=COALESCE($4,title), slug=COALESCE($5,slug), body_md=COALESCE($6,body_md),
-				status=COALESCE($7,status), published_at=CASE WHEN COALESCE($7,status)='published' THEN COALESCE(published_at, clock_timestamp()) END,
-				seo_title=COALESCE($8,seo_title), seo_description=COALESCE($9,seo_description),
-				outdated=COALESCE($10,outdated), outdated_at=CASE WHEN COALESCE($10,outdated) THEN COALESCE(outdated_at, clock_timestamp()) END,
-				updated_at=clock_timestamp()
-			WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`,
-			workspaceID, articleID, locale, change.Title, change.Slug, change.BodyMD, change.Status, change.SEOTitle, change.SEODescription, change.Outdated); err != nil {
-			return domain.KBArticleTranslation{}, err
+		if goesToKBTranslationDraft(before, change) {
+			// The flag is about the live translation; the text waits in the draft.
+			if change.Outdated != nil {
+				if err := markKBTranslationFlag(ctx, tx, workspaceID, actor, articleID, locale, *change.Outdated); err != nil {
+					return domain.KBArticleTranslation{}, err
+				}
+			}
+			return saveKBTranslationDraft(ctx, tx, workspaceID, actor, articleID, locale, change)
 		}
 		kind := domain.KBArticleEdited
-		if change.Title == nil && change.Slug == nil && change.BodyMD == nil && change.Status == nil && change.SEOTitle == nil && change.SEODescription == nil && change.Outdated != nil {
+		if !changesKBTranslationText(change) && change.Status == nil && change.Outdated != nil {
 			kind = domain.KBTranslationMarkedCurrent
 			if *change.Outdated {
 				kind = domain.KBTranslationMarkedOutdated
 			}
+		}
+		if before.HasDraft && change.Status != nil && *change.Status != domain.KBPublished {
+			// Unpublishing takes the unpublished changes along, so none are lost.
+			if change, err = foldKBTranslationDraft(ctx, tx, workspaceID, articleID, locale, change); err != nil {
+				return domain.KBArticleTranslation{}, err
+			}
+		}
+		if err := writeKBTranslationRow(ctx, tx, workspaceID, articleID, locale, change); err != nil {
+			return domain.KBArticleTranslation{}, err
 		}
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, kind, nil); err != nil {
 			return domain.KBArticleTranslation{}, err
@@ -336,31 +363,75 @@ func (s *Store) UpdateKBTranslation(ctx context.Context, workspaceID string, act
 	return item, kbError("change knowledge base translation", err)
 }
 
+// writeKBTranslationRow writes change to the live translation; a nil field stays.
+func writeKBTranslationRow(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string, change KBTranslationChange) error {
+	if _, err := tx.Exec(ctx, `UPDATE kb_article_translations SET title=COALESCE($4,title), slug=COALESCE($5,slug), body_md=COALESCE($6,body_md),
+			status=COALESCE($7,status), published_at=CASE WHEN COALESCE($7,status)='published' THEN COALESCE(published_at, clock_timestamp()) END,
+			seo_title=COALESCE($8,seo_title), seo_description=COALESCE($9,seo_description),
+			outdated=COALESCE($10,outdated), outdated_at=CASE WHEN COALESCE($10,outdated) THEN COALESCE(outdated_at, clock_timestamp()) END,
+			updated_at=clock_timestamp()
+		WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`,
+		workspaceID, articleID, locale, change.Title, change.Slug, change.BodyMD, change.Status, change.SEOTitle, change.SEODescription, change.Outdated); err != nil {
+		return fmt.Errorf("write knowledge base translation: %w", err)
+	}
+	return nil
+}
+
+// markKBTranslationFlag marks the live translation outdated or up to date and records it.
+func markKBTranslationFlag(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, articleID, locale string, outdated bool) error {
+	if err := writeKBTranslationRow(ctx, tx, workspaceID, articleID, locale, KBTranslationChange{Outdated: &outdated}); err != nil {
+		return err
+	}
+	kind := domain.KBTranslationMarkedCurrent
+	if outdated {
+		kind = domain.KBTranslationMarkedOutdated
+	}
+	return addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, kind, nil)
+}
+
 type lockedTranslation struct {
-	Status string
+	Status   string
+	HasDraft bool
+}
+
+// lockKBTranslation locks a translation in or out of the trash, after its article's row, and checks seen
+// against its concurrency token (kbTranslationToken). It also tells whether the translation is in the trash.
+func lockKBTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string, seen time.Time) (lockedTranslation, bool, error) {
+	var found lockedTranslation
+	if err := lockKBArticleRow(ctx, tx, workspaceID, articleID); err != nil {
+		return found, false, err
+	}
+	var updatedAt time.Time
+	var draftAt *time.Time
+	var deleted bool
+	err := tx.QueryRow(ctx, `SELECT t.updated_at, d.updated_at, t.deleted_at IS NOT NULL, t.status FROM kb_article_translations t
+		LEFT JOIN kb_article_drafts d ON d.workspace_id=t.workspace_id AND d.article_id=t.article_id AND d.locale=t.locale
+		WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3 FOR UPDATE OF t`,
+		workspaceID, articleID, locale).Scan(&updatedAt, &draftAt, &deleted, &found.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return found, false, domain.ErrKBTranslationNotFound
+	}
+	if err != nil {
+		return found, false, err
+	}
+	found.HasDraft = draftAt != nil
+	if draftAt != nil && draftAt.After(updatedAt) {
+		updatedAt = *draftAt
+	}
+	if !updatedAt.Equal(seen) {
+		return found, deleted, domain.ErrKBChanged
+	}
+	return found, deleted, nil
 }
 
 // lockLiveKBTranslation locks a live translation the client read at seen; the article's row is locked
 // first, as every write to an article and its translations does.
 func lockLiveKBTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string, seen time.Time) (lockedTranslation, error) {
-	var found lockedTranslation
-	if err := lockKBArticleRow(ctx, tx, workspaceID, articleID); err != nil {
-		return found, err
-	}
-	var updatedAt time.Time
-	var deleted bool
-	err := tx.QueryRow(ctx, `SELECT updated_at, deleted_at IS NOT NULL, status FROM kb_article_translations WHERE workspace_id=$1 AND article_id=$2 AND locale=$3 FOR UPDATE`,
-		workspaceID, articleID, locale).Scan(&updatedAt, &deleted, &found.Status)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && deleted) {
+	found, deleted, err := lockKBTranslation(ctx, tx, workspaceID, articleID, locale, seen)
+	if deleted {
 		return found, domain.ErrKBTranslationNotFound
 	}
-	if err != nil {
-		return found, err
-	}
-	if !updatedAt.Equal(seen) {
-		return found, domain.ErrKBChanged
-	}
-	return found, nil
+	return found, err
 }
 
 // lockKBArticleRow locks an article's row (in or out of the trash); domain.ErrKBArticleNotFound when it has none.
@@ -400,20 +471,12 @@ func (s *Store) UndeleteKBTranslation(ctx context.Context, workspaceID string, a
 		return domain.KBArticleTranslation{}, err
 	}
 	item, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticleTranslation, error) {
-		if err := lockKBArticleRow(ctx, tx, workspaceID, articleID); err != nil {
-			return domain.KBArticleTranslation{}, err
-		}
-		var updatedAt time.Time
-		err := tx.QueryRow(ctx, `SELECT updated_at FROM kb_article_translations WHERE workspace_id=$1 AND article_id=$2 AND locale=$3 AND deleted_at IS NOT NULL FOR UPDATE`,
-			workspaceID, articleID, locale).Scan(&updatedAt)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.KBArticleTranslation{}, domain.ErrKBTranslationNotFound
+		_, deleted, err := lockKBTranslation(ctx, tx, workspaceID, articleID, locale, seen)
+		if err == nil && !deleted {
+			err = domain.ErrKBTranslationNotFound
 		}
 		if err != nil {
 			return domain.KBArticleTranslation{}, err
-		}
-		if !updatedAt.Equal(seen) {
-			return domain.KBArticleTranslation{}, domain.ErrKBChanged
 		}
 		if _, err := tx.Exec(ctx, `UPDATE kb_article_translations SET deleted_at=NULL, deleted_by_agent_id=NULL, updated_at=clock_timestamp()
 			WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`, workspaceID, articleID, locale); err != nil {

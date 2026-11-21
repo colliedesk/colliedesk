@@ -120,18 +120,20 @@ type KBArticleSummary struct {
 // the lists of a language show it. Outdated is set when the article's own title or text changed after
 // the translation was last brought up to date.
 type KBTranslationSummary struct {
-	ArticleID   string           `json:"article_id"`
-	Locale      string           `json:"locale"`
-	Title       string           `json:"title"`
-	Slug        string           `json:"slug"`
-	Status      string           `json:"status"`
-	PublishedAt *time.Time       `json:"published_at"`
-	Outdated    bool             `json:"outdated"`
-	OutdatedAt  *time.Time       `json:"outdated_at"`
-	CreatedAt   time.Time        `json:"created_at"`
-	UpdatedAt   time.Time        `json:"updated_at"`
-	InTrash     bool             `json:"in_trash"`
-	LastChange  *KBArticleChange `json:"last_change"`
+	ArticleID   string     `json:"article_id"`
+	Locale      string     `json:"locale"`
+	Title       string     `json:"title"`
+	Slug        string     `json:"slug"`
+	Status      string     `json:"status"`
+	PublishedAt *time.Time `json:"published_at"`
+	Outdated    bool       `json:"outdated"`
+	OutdatedAt  *time.Time `json:"outdated_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	InTrash     bool       `json:"in_trash"`
+	// HasDraft is set while a published translation has unpublished changes.
+	HasDraft   bool             `json:"has_draft"`
+	LastChange *KBArticleChange `json:"last_change"`
 	// URL is the public address in its language; the API fills it in.
 	URL string `json:"url"`
 }
@@ -167,6 +169,8 @@ type KBArticleTranslation struct {
 	Original        KBTranslationOriginal `json:"original"`
 	// Attachments are the files the translation lists; empty shows the article's on its page.
 	Attachments KBAttachments `json:"attachments"`
+	// Draft is the unpublished changes of a published translation, nil without them.
+	Draft *KBTranslationDraft `json:"draft"`
 }
 
 // TrashedKBTranslation is a deleted translation, restorable until PurgesAt.
