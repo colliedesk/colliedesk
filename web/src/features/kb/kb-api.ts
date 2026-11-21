@@ -12,6 +12,9 @@ const statusSchema = z.enum(['draft', 'published']) satisfies z.ZodType<Generate
 const reviewKinds = ['review_request', 'review_approve', 'review_changes', 'review_withdraw'] as const;
 // A help center or a collection that requires approval publishes only text a teammate approved; inherit follows the help center.
 export const approvalModeSchema = z.enum(['inherit', 'on', 'off']) satisfies z.ZodType<Generated<'KBApprovalMode'>>;
+// Who can see an article or a collection: the help center and help chat, help chat only, or only the team.
+export const visibilitySchema = z.enum(['everyone', 'help_chat', 'agents']) satisfies z.ZodType<Generated<'KBVisibility'>>;
+const visibilityFields = { visibility: visibilitySchema, effective_visibility: visibilitySchema };
 const changeFields = {
   version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft', ...reviewKinds]), restored_from_version: z.number().int().nullable(),
   changed_by: personSchema.nullable(), token: z.object({ id: z.string().uuid().nullable(), label: z.string() }).nullable(),
@@ -25,9 +28,9 @@ const collectionFields = {
   id: z.string().uuid(), parent_id: z.string().uuid().nullable(), name: z.string(), slug: z.string(), description: z.string(),
   position: z.number().int(), article_count: z.number().int(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 };
-export const kbCollectionSchema = z.object({ ...collectionFields, default_template_id: z.string().uuid().nullable(), require_approval: approvalModeSchema, translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
+export const kbCollectionSchema = z.object({ ...collectionFields, ...visibilityFields, default_template_id: z.string().uuid().nullable(), require_approval: approvalModeSchema, translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
 const trashedCollectionSchema = z.object({
-  ...collectionFields, default_template_id: z.string().uuid().nullable().optional(), require_approval: approvalModeSchema.optional(), translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
+  ...collectionFields, visibility: visibilitySchema.optional(), effective_visibility: visibilitySchema.optional(), default_template_id: z.string().uuid().nullable().optional(), require_approval: approvalModeSchema.optional(), translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBCollection'>>;
 const translationChangeSchema = z.object({
   ...changeFields, kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'mark_current', 'mark_outdated', ...reviewKinds]),
@@ -44,6 +47,7 @@ const summaryFields = {
   last_change: changeSchema.nullable(), url: z.string(),
   // has_draft: a published article with unpublished changes; the help center still shows the published text.
   has_draft: z.boolean(),
+  ...visibilityFields,
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
 // A file listed under an article or translation, in the order the reader sees.
@@ -62,6 +66,8 @@ export const kbArticleSchema = z.object({
   ai_drafts_this_month: z.number().int().optional(),
   translations: z.array(translationSummarySchema), attachments: z.array(attachmentSchema),
   draft: draftSchema.nullable(),
+  // The collection that keeps the article more restricted than its own visibility; null when its own decides.
+  visibility_from: z.object({ id: z.string().uuid(), name: z.string(), visibility: visibilitySchema }).nullable(),
 }) satisfies z.ZodType<Generated<'KBArticle'>>;
 export const kbTranslationSchema = z.object({
   ...translationSummaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), has_source_html: z.boolean(), deleted_at: nullableDate,
@@ -135,6 +141,7 @@ export type KBTranslationVersion = z.infer<typeof translationVersionSchema>;
 export type KBLanguageItem = z.infer<typeof languageItemSchema>;
 export type HelpCenterLanguages = z.infer<typeof helpCenterLanguagesSchema>;
 export type KBApprovalMode = z.infer<typeof approvalModeSchema>;
+export type KBVisibility = z.infer<typeof visibilitySchema>;
 export type KBLanguageState = 'missing' | 'outdated' | 'translated';
 
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
@@ -149,7 +156,7 @@ const noContent = z.undefined();
 // sort is the order without q: recent (the default without collection_id) or manual, the help center's.
 // limit is the page size, 1 to 200 (50 when left out). has_draft 'true' keeps the articles with unpublished changes.
 // state keeps the articles whose unpublished text waits for a reviewer (in_review) or was approved as it is (approved).
-export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string; has_draft?: 'true'; state?: 'in_review' | 'approved' };
+export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string; has_draft?: 'true'; state?: 'in_review' | 'approved'; visibility?: KBVisibility };
 
 // query is called with a variable, never an object literal, inside a path: the gate that checks every path
 // the web app calls is a route (web_routes_test.go) reads a path up to its first closing brace.

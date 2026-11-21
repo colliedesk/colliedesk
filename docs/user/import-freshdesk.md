@@ -84,9 +84,14 @@ The whole knowledge base is imported on every run, whatever `--since` says:
 | Category and folder names in other languages | The collection's [names in other languages](knowledge-base.md#collection-names) |
 | Supported languages | The help center's [languages](knowledge-base.md#languages): those your Freshdesk portal shows (`portal_languages`) are shown, the others hidden. The Freshdesk primary language becomes the help center's while it has no languages or articles of its own; otherwise it stays and the report warns `kb_primary_language_differs`. `import undo` gives back the primary language the help center had, unless someone changed it since (undo then says it kept it) |
 
-An article is **published** only when it is published in Freshdesk, every folder above it is
-visible to **All Users**, and its category is in your help center's portal. Everything else is
-imported as a **draft**, so an internal article never becomes public by mistake. The report lists the
+An article is **published** only when it is published in Freshdesk and its category is in your
+help center's portal. Everything else is imported as a **draft**. Each folder's visibility becomes its
+collection's [visibility](knowledge-base.md#visibility), so an internal article never becomes public by
+mistake: **All Users** is Everyone, **Agents** is Agents only, **Bots** is Help chat only. A folder
+limited to some customers (logged-in users, selected companies or segments) is kept for **Agents
+only** until Colliedesk has that limit; the report lists each one under
+`kb_folder_limited_to_some_customers`. A subfolder that becomes a collection beside its parent gets
+the most restrictive visibility of the folders it no longer sits in. The report lists the
 drafts by reason; publish the ones that should be public. If your Freshdesk account has several
 portals, choose the one whose articles stay published with `--help-center-portal <id>` (the portal ids
 are in the report under `knowledge_base.portals`); without it, all articles of those categories are
@@ -116,11 +121,12 @@ library (counting its trash and every image and file the import would bring in),
 Running the import again updates an article that changed in Freshdesk, unless your team changed it in
 Colliedesk since, or it has [unpublished changes](knowledge-base.md#unpublished-changes): then your
 version stays, published text and unpublished changes alike, and the report lists the article under
-`kb_article_changed_in_both`. Unpublished changes you discarded do not count. If an article is no longer public in Freshdesk (its folder became
-private, or its category left the portal), the next run makes it a draft again, unless your team
-changed it since: then it stays published and the report warns (`kb_article_published_but_not_public`).
-When only a folder or a portal changes the other way, the article stays a draft; publish it in
-Colliedesk. The same goes for each translation: a newer Freshdesk translation replaces one nobody
+`kb_article_changed_in_both`. Unpublished changes you discarded do not count. If a folder is shown to fewer people in Freshdesk, the next run
+restricts its collection to match and the report lists it under `kb_collection_restricted`; a folder
+shown to more people never opens its collection, so change it in Colliedesk. If an article's category
+left the portal, the next run makes it a draft again, unless your team changed it since: then it stays
+published and the report warns (`kb_article_published_but_not_public`). When a portal changes the
+other way, the article stays a draft; publish it in Colliedesk. The same goes for each translation: a newer Freshdesk translation replaces one nobody
 changed in Colliedesk, and the report lists the others under `kb_translation_changed_in_both`. An
 article whose text changed in Freshdesk while its translation did not gets that translation marked
 **Outdated**. `import undo` removes the imported articles and collections, but keeps an

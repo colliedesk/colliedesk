@@ -13,7 +13,8 @@ import { SavedReplyTrash } from '../settings/saved-reply-panels';
 import { CollectionForm, CollectionTree } from './collection-panel';
 import type { CollectionValues } from './collection-panel';
 import { kbApi } from './kb-api';
-import type { KBArticleStatus, KBArticleSummary, KBCollection } from './kb-api';
+import type { KBArticleStatus, KBArticleSummary, KBCollection, KBVisibility } from './kb-api';
+import { VisibilityBadge, VisibilityFilter } from './visibility-badge';
 import { kbMessages } from './kb-messages';
 import { CollectionNames } from './collection-names';
 import { NewArticleMenu } from './new-article-menu';
@@ -34,6 +35,8 @@ export interface KnowledgeSearch {
   status?: KBArticleStatus;
   // has_draft keeps the published articles with unpublished changes.
   has_draft?: 'true';
+  // visibility keeps the articles one audience sees (their effective visibility).
+  visibility?: KBVisibility;
 }
 
 // The status filter: each choice sets both status and has_draft, so one choice never keeps the other's.
@@ -58,7 +61,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const tree = useMemo(() => buildTree(collections.data?.items ?? []), [collections.data]);
   const nodes = useMemo(() => flatten(tree), [tree]);
   const selected = search.collection ? nodes.find((node) => node.collection.id === search.collection) : undefined;
-  const filter = { q: search.q, status: search.status, collection_id: search.collection, has_draft: search.has_draft };
+  const filter = { q: search.q, status: search.status, collection_id: search.collection, has_draft: search.has_draft, visibility: search.visibility };
   const articles = useInfiniteQuery({
     queryKey: ['kb-articles', filter],
     queryFn: ({ pageParam, signal }) => kbApi.articles({ ...filter, cursor: pageParam }, signal),
@@ -77,6 +80,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
     if (search.q) params.set('q', search.q);
     if (search.status) params.set('status', search.status);
     if (search.has_draft) params.set('has_draft', search.has_draft);
+    if (search.visibility) params.set('visibility', search.visibility);
     if (collection) params.set('collection', collection.id);
     return `/knowledge${params.size > 0 ? `?${params}` : ''}`;
   };
@@ -108,13 +112,15 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
         ...(values.parent_id !== original.parent_id ? { parent_id: values.parent_id } : {}),
         ...(values.default_template_id !== (original.default_template_id ?? null) ? { default_template_id: values.default_template_id } : {}),
         ...(values.require_approval !== original.require_approval ? { require_approval: values.require_approval } : {}),
+        ...(values.visibility !== original.visibility ? { visibility: values.visibility } : {}),
       });
       await refresh();
       setForm(null);
       return;
     }
     const created = await createCollection.run({ name: values.name, ...(values.description ? { description: values.description } : {}), parent_id: values.parent_id,
-      ...(values.default_template_id ? { default_template_id: values.default_template_id } : {}) });
+      ...(values.default_template_id ? { default_template_id: values.default_template_id } : {}),
+      ...(values.visibility === 'everyone' ? {} : { visibility: values.visibility }) });
     await refresh();
     setForm(null);
     setSearch({ collection: created.id });
@@ -136,7 +142,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   // shown after its move leaves the focus on the list's heading.
   const focusHeading = () => document.getElementById('kb-articles-heading')?.focus();
   const moves = useOrderMoves(refresh, focusHeading);
-  const ordered = selected && !search.q && !search.status && !search.has_draft ? selected : undefined;
+  const ordered = selected && !search.q && !search.status && !search.has_draft && !search.visibility ? selected : undefined;
   const articleIds = items.map((article) => article.id);
   const parent = selected ? nodes.find((node) => node.collection.id === selected.collection.parent_id) : undefined;
   const siblings = selected ? parent?.children ?? tree : [];
@@ -227,6 +233,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
                   onChange={() => setSearch(choice)} />{label}</label>
               ))}
             </fieldset>
+            <VisibilityFilter value={search.visibility} onChange={(visibility) => setSearch({ visibility })} />
           </div>
           <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span><span>{kbMessages.statusFilter}</span><span>{kbMessages.updatedColumn}</span><span />{ordered && <span />}</div>
           <div className="kb-list-scroll">
@@ -312,8 +319,9 @@ interface ArticleRowProps {
 function ArticleRow({ article, collection, timezone, isPublic, order }: ArticleRowProps) {
   const change = article.last_change;
   const published = article.status === 'published';
-  // Readers can open it only while it is published and the help center is on.
-  const open = published && isPublic === true;
+  // Readers can open it only while it is published, for everyone, and the help center is on.
+  const everyone = article.effective_visibility === 'everyone';
+  const open = published && everyone && isPublic === true;
   return (
     <li className="kb-article-item">
       <a className="kb-article-row" href={`/knowledge/articles/${article.id}`}>
@@ -323,7 +331,9 @@ function ArticleRow({ article, collection, timezone, isPublic, order }: ArticleR
         </span>
         <span className="kb-article-status">
           <span className="kb-dot-status" data-status={article.status}>{published ? kbMessages.published : kbMessages.draft}</span>
-          <small>{published ? (isPublic === false ? kbMessages.notPublic : isPublic ? kbMessages.public : '') : kbMessages.agentsOnly}</small>
+          {everyone
+            ? <small>{published ? (isPublic === false ? kbMessages.notPublic : isPublic ? kbMessages.public : '') : kbMessages.agentsOnly}</small>
+            : <VisibilityBadge visibility={article.effective_visibility} />}
           {article.has_draft && <small className="kb-changes-mark">{kbMessages.unpublishedChanges}</small>}
         </span>
         <span className="kb-article-when"><time dateTime={article.updated_at}>{formatDate(article.updated_at, timezone)}</time>
@@ -331,7 +341,7 @@ function ArticleRow({ article, collection, timezone, isPublic, order }: ArticleR
       </a>
       {open
         ? <a className="kb-article-open icon-button" href={article.url} target="_blank" rel="noreferrer" aria-label={kbMessages.openPublic(article.title)} data-tip={kbMessages.openOnHelpCenter}><Icon name="external" /></a>
-        : <span className="kb-article-open" aria-hidden="true" title={published ? kbMessages.turnOnToOpen : undefined}><Icon name="external" /></span>}
+        : <span className="kb-article-open" aria-hidden="true" title={published && everyone ? kbMessages.turnOnToOpen : undefined}><Icon name="external" /></span>}
       {order}
     </li>
   );

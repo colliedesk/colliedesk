@@ -54,4 +54,14 @@ func TestImportedVotesCountOnlyTheTranslationsReadersCanSee(t *testing.T) {
 	}
 	wantPage(t, visit(site, fmt.Sprintf("/help/%s/a/%d-%s", slug, article.Number, article.Slug), "192.0.2.64"), http.StatusOK,
 		[]string{"17 out of 20 found this helpful"}, nil)
+
+	// Kept for agents, the article leaves the help center, but the team still reads every vote it brought in.
+	if _, err := pool.Exec(context.Background(), `UPDATE kb_collections SET visibility='agents' WHERE id=$1`, collection.ID); err != nil {
+		t.Fatal(err)
+	}
+	var votes kbVotesView
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+article.ID+"/votes", nil, admin, http.StatusOK, &votes)
+	if votes.Imported.Helpful != 17 || votes.Imported.NotHelpful != 3 {
+		t.Fatalf("imported votes of an agents only article = %+v, want 17 helpful and 3 not", votes.Imported)
+	}
 }

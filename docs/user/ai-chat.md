@@ -16,8 +16,10 @@ Both must be on. Off, the chat pages answer `404`, as a help center that is off.
 
 ## What the AI reads and says
 
-1. **Your published articles**, the ones the help center shows, except those marked **Keep away from
-   AI**. On a page of another [language you show](knowledge-base.md#in-other-languages), each article
+1. **Your published articles**, the ones the help center shows and those for
+   [help chat only](knowledge-base.md#visibility), except those marked **Keep away from AI**. It quotes
+   a help chat article as "Our help notes", with no title or link. It never reads an article for agents
+   only. On a page of another [language you show](knowledge-base.md#in-other-languages), each article
    published in that language is read in it (and its sources link that language's pages); the others
    in their own language. Drafts, articles and translations in the trash, and languages you hide are
    never read. With no published article the

@@ -57,7 +57,8 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 	for _, category := range kb.categories {
 		key := strconv.FormatInt(category.ID, 10)
 		meta := map[string]any{"freshdesk_id": category.ID, "kind": "category", "visible_in_portals": category.VisibleInPortals}
-		id, err := r.ensureCollection(ctx, entityKBCategory, key, nil, category.Name, deref(category.Description), meta, category.CreatedAt, category.UpdatedAt)
+		id, err := r.ensureCollection(ctx, entityKBCategory, key, nil, category.Name, deref(category.Description), domain.KBVisibleEveryone, meta,
+			category.CreatedAt, category.UpdatedAt)
 		if err != nil {
 			return err
 		}
@@ -82,13 +83,18 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 			r.itemFailed(ctx, entityKBFolder, key, "", errors.New("the collection it belongs in was not imported; see its failure"))
 			continue
 		}
+		if _, limited := folderVisibility(folder.Visibility); limited {
+			r.warn("kb_folder_limited_to_some_customers", "This folder is limited to some customers in Freshdesk; kept for agents only until that limit exists here. "+
+				"Freshdesk limits a folder to logged-in users, selected companies or segments.", key)
+		}
 		if flattened {
 			r.warn("kb_folder_flattened", "Colliedesk collections nest three levels deep. This Freshdesk folder sits deeper, so it became a collection named after the folders from the third level down (\"Advanced / Deep\") beside them.", key)
 		}
 		meta := map[string]any{"freshdesk_id": folder.ID, "kind": "folder", "category_id": folder.categoryID, "parent_folder_id": folder.ParentFolderID,
 			"visibility": folder.Visibility, "company_ids": folder.CompanyIDs, "contact_segment_ids": folder.ContactSegmentIDs, "company_segment_ids": folder.CompanySegmentIDs,
 			"name": folder.Name, "path": kb.pathNames(folder)}
-		id, err := r.ensureCollection(ctx, entityKBFolder, key, &parentID, name, deref(folder.Description), meta, folder.CreatedAt, folder.UpdatedAt)
+		id, err := r.ensureCollection(ctx, entityKBFolder, key, &parentID, name, deref(folder.Description), kb.collectionVisibility(folder), meta,
+			folder.CreatedAt, folder.UpdatedAt)
 		if err != nil {
 			return err
 		}
@@ -130,10 +136,12 @@ func fitName(name string) string {
 	return name
 }
 
-// ensureCollection returns the collection of a category or folder, creating it on the first run. An
-// imported collection is never renamed again, so an agent's change survives a rerun. It returns ""
-// when the collection could not be created (recorded in the ledger).
-func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID *string, name, description string, meta map[string]any, created, updated time.Time) (string, error) {
+// ensureCollection returns the collection of a category or folder, creating it on the first run with
+// visibility. An imported collection is never renamed again, so an agent's change survives a rerun; it is
+// only restricted when Freshdesk shows the folder to fewer people. It returns "" when the collection
+// could not be created (recorded in the ledger).
+func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID *string, name, description, visibility string, meta map[string]any,
+	created, updated time.Time) (string, error) {
 	target, done, err := r.ledger.done(ctx, entity, key)
 	if err != nil {
 		return "", err
@@ -146,7 +154,7 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 			return "", fmt.Errorf("read knowledge base collection: %w", err)
 		}
 		if exists {
-			return target, nil
+			return target, r.restrictKBCollection(ctx, key, target, visibility)
 		}
 	}
 	if r.opts.DryRun {
@@ -162,7 +170,7 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	id, err := store.ImportKBCollection(ctx, tx, r.workspaceID, store.KBImportCollection{ParentID: parentID, Name: name, Description: description,
-		SlugSuffix: key, SourceMeta: encoded, CreatedAt: created.UTC(), UpdatedAt: updated.UTC()})
+		Visibility: visibility, SlugSuffix: key, SourceMeta: encoded, CreatedAt: created.UTC(), UpdatedAt: updated.UTC()})
 	if err != nil {
 		_ = tx.Rollback(ctx)
 		r.itemFailed(ctx, entity, key, "", err)
@@ -330,7 +338,7 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 	updated := article.UpdatedAt.UTC()
 	if found && entry.Status == ledgerDone && entry.SourceUpdatedAt != nil && !updated.After(*entry.SourceUpdatedAt) {
 		if reason != "" && entry.TargetID != nil {
-			// A folder's visibility or a category's portal can change without changing the article.
+			// A category's portal can change without changing the article.
 			return r.unpublishKBArticle(ctx, key, *entry.TargetID, reason)
 		}
 		return nil
@@ -453,9 +461,9 @@ func (r *run) unpublishKBArticle(ctx context.Context, key, target, reason string
 		return r.internalErr
 	case outcome == store.KBReimported:
 		state.unpublished = append(state.unpublished, key)
-		r.warn("kb_article_unpublished", "This article is no longer public in Freshdesk (its folder's visibility or its category's portal changed), so it is a draft again in Colliedesk.", key)
+		r.warn("kb_article_unpublished", "This article is no longer public in Freshdesk (its category's portal changed), so it is a draft again in Colliedesk.", key)
 	case outcome == store.KBKept:
-		r.warn("kb_article_published_but_not_public", "This article is published in Colliedesk, but Freshdesk no longer shows it to everyone (a folder's visibility or a category's portal changed). Someone changed it in Colliedesk since the import, so it was left published; check whether it should be public.", key)
+		r.warn("kb_article_published_but_not_public", "This article is published in Colliedesk, but Freshdesk no longer shows it to everyone (its category's portal changed). Someone changed it in Colliedesk since the import, so it was left published; check whether it should be public.", key)
 	case outcome == store.KBGone:
 		state.gone = append(state.gone, key)
 	}

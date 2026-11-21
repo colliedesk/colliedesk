@@ -529,6 +529,42 @@ Migration `20261120184320-kb-article-reviews`; code `store/kb-reviews.go`, `kb-r
 - **Not gated on purpose.** A media replacement already needs `kb_articles:publish` and changes every
   article that shows the item; a Freshdesk import writes the source's status. Neither opens a review.
 
+## Visibility
+
+Migration `kb-visibility`; code in `server/internal/store/kb-visibility*.go`. User page:
+[knowledge-base.md](../user/knowledge-base.md#visibility).
+
+- **One public definition.** `kb_articles.visibility` and `kb_collections.visibility` hold `everyone`,
+  `help_chat` or `agents`. What a customer may read is decided only by the `security_invoker` views:
+  `kb_article_visibility` (the effective rank), `kb_public_articles` (help center), `kb_help_chat_articles`
+  (help chat) and `kb_published_articles` (team-side AI), with the `*_translations` views beside them.
+  Forced row-level security still applies, since the views run as the caller.
+- **Most restrictive wins, and it fails closed.** The effective rank is the greatest of the article's
+  own, its home's and every live extra collection's, each with its live parents. A home that is not
+  live counts as `agents`, and `kb_visibility_rank` ranks any unknown value as `agents`
+  (`domain.KBVisibilityRank` agrees), so a mistake hides an article rather than showing it.
+- **Raising is a publish.** Any write that may show a published article to more people (its own
+  value, a collection's value or parent, publishing a draft that moves it, restoring a collection from
+  the trash) takes a `kbVisibilitySnapshot` first and calls `guardKBVisibilityRaise` after the write,
+  in the same transaction. An article whose rank fell, in a collection that needs approval, without an
+  approved review of its published text, rolls the write back: 409 `approval_required` with the ids.
+  The handlers ask for `kb_articles:publish` before a raise (`KBArticleVisibilityRaises`,
+  `KBCollectionVisibilityRaises`); lowering needs only `kb_articles:update`.
+- **A restricted page is a missing page.** The help center, its search, the sitemap, `llms.txt`, the
+  `.md` copy and legacy addresses read `kb_public_articles`, so a restricted article is 404 (a legacy
+  address goes to search) like an article that does not exist. Help chat quotes a `help_chat` article
+  as "Our help notes" with no title, collection or address. AI drafts and triage read every published
+  article, restricted ones included; a draft is given no article address, so it cannot link one.
+
+### Traps
+
+- **Never read `status = 'published'` for a customer.** `TestOnlyTeamSideFilesReadThePublishedStatusDirectly`
+  fails when a file outside the team-side list (`teamSideKBFiles` in `kb_visibility_gate_test.go`)
+  decides on its own that an article is published. Read through the views instead. Add a file to the
+  list only when it serves the team's own screens or writes.
+- **A new write that reshapes the tree needs the guard.** A path that changes a parent, a collection
+  list or the trash state of a collection and skips `guardKBVisibilityRaise` can publish unreviewed text.
+
 ## Traps
 
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges

@@ -6,6 +6,8 @@ import { typingDelayMs } from '../inbox/inbox-filters';
 import { kbApi } from './kb-api';
 import type { KBArticleSummary } from './kb-api';
 import { kbMessages } from './kb-messages';
+import { VisibilityBadge } from './visibility-badge';
+import { visibilityMessages as v } from './visibility-messages';
 
 interface ArticleLinkPickerProps {
   // The reply box, read for where its cursor is.
@@ -36,12 +38,15 @@ export function articleLink(article: Pick<KBArticleSummary, 'title' | 'url'>, te
 // reply box holds only the button.
 // The settings open in a new tab, so the draft and the files in the reply box stay where they are.
 const openHelpCenterSettings = () => { window.open('/knowledge/settings#help-center-heading', '_blank', 'noopener'); };
+// An article only help chat or the team sees has no public page: a reply takes its text, an article links none.
+const restricted = (article: KBArticleSummary) => article.effective_visibility !== 'everyone';
 
 export function ArticleLinkPicker({ box, onInsert, onPick, exclude, onClose, canManage = false }: ArticleLinkPickerProps) {
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
   // Enter pressed before the list answered what is in the search box, kept until it has.
   const [queued, setQueued] = useState(false);
+  const [problem, setProblem] = useState<string>();
   useEffect(() => { const timer = window.setTimeout(() => setQ(text.trim()), typingDelayMs); return () => window.clearTimeout(timer); }, [text]);
   // Opening the list asks again, past the app's 15 seconds: the help center may have been turned on in the
   // Settings tab the list itself opens, or an article published a moment ago.
@@ -57,12 +62,18 @@ export function ArticleLinkPicker({ box, onInsert, onPick, exclude, onClose, can
     queryFn: ({ signal }) => kbApi.articles({ q: q || undefined, status: 'published', sort: 'manual' }, signal),
     enabled: !off, placeholderData: keepPreviousData, refetchOnMount: 'always',
   });
-  const items = enabled ? (list.data?.items ?? []).filter((article) => article.id !== exclude) : [];
+  const items = enabled ? (list.data?.items ?? []).filter((article) => article.id !== exclude && !(onPick && restricted(article))) : [];
   // Until the list answers what is in the search box, it shows the answer to the search before.
   // Until the help center answered (or answered again) nothing is offered yet, so Enter waits for that too.
   const pending = !off && (!enabled || text.trim() !== q || list.isPending || list.isPlaceholderData);
   const insert = (article: KBArticleSummary) => {
     if (onPick) { onPick(article); return; }
+    // The published text, as the help center would show it; the box puts it at the cursor.
+    if (restricted(article)) {
+      setProblem(undefined);
+      kbApi.article(article.id).then((full) => onInsert?.(full.body_md), () => setProblem(v.insertFailed));
+      return;
+    }
     const field = box?.current;
     const value = field?.value ?? '';
     onInsert?.(articleLink(article, value, Math.min(field?.selectionStart ?? value.length, value.length)));
@@ -88,7 +99,9 @@ export function ArticleLinkPicker({ box, onInsert, onPick, exclude, onClose, can
     }}>
       <SavedReplyPicker replies={items} onPick={insert} onClose={onClose} state={state} texts={texts}
         onQueryChange={off ? undefined : (value) => { setText(value); setQueued(false); }} onManage={off && canManage ? openHelpCenterSettings : undefined}
-        detail={(article) => article.url.replace(/^https?:\/\//, '')} />
+        detail={(article) => restricted(article) ? v.insertText : article.url.replace(/^https?:\/\//, '')}
+        badge={(article) => restricted(article) ? <VisibilityBadge visibility={article.effective_visibility} /> : undefined} />
+      {problem && <p role="alert" className="error-copy">{problem}</p>}
     </div>
   );
 }
