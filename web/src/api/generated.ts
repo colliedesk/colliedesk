@@ -4094,6 +4094,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/articles/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Apply one action to up to 500 articles, named by `ids` or by `filter` (the query of GET /api/v1/kb/articles as an object, every page of it; more than 500 matches is 400). `action` needs kb_articles:update for move, visibility, author, tags_add, tags_remove and send_for_review, kb_articles:publish for approve, publish and unpublish, and kb_articles:delete for trash. Each article is answered on its own in `results`, in order: `done`, `unchanged` (it already was as asked) or `refused` with the error the call for that article alone gives, such as 409 `approval_required`, `permission_missing` for a visibility raise or for trashing a published article without kb_articles:publish, or `not_found` for an id this workspace does not have. A move or tag change of a published article goes to its draft. When something can be put back, `operation` is the undo record: POST /api/v1/kb/bulk-operations/{id}/undo before `undo_until` (10 minutes). A repeat with the same Idempotency-Key answers what the first one got. x-permission is what most actions need; the handler checks the one `action` needs. */
+        post: operations["bulkKBArticles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/bulk-operations/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Put back what a bulk action changed, once and within 10 minutes of it. An article changed since the action is left as it is and listed as `not_undone` with 409 `changed_elsewhere`; one that needs a permission the caller lacks (publish, to put a published article back on the help center) is `not_undone` with `permission_missing`. Each article put back gets its own history entry. 404 `not_found` for an id this workspace has no bulk action for, 409 `already_undone` and 409 `undo_expired`. A repeat with the same Idempotency-Key answers what the first one got. */
+        post: operations["undoKBBulkOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles": {
         parameters: {
             query?: never;
@@ -11061,6 +11095,79 @@ export interface components {
             trial_ends_at: string;
             /** @description False when the trial already ended later than 14 days from now and was kept. */
             extended: boolean;
+        };
+        /** @description One action and its articles, by ids or by filter (exactly one of them), with what the action needs. */
+        KBBulkInput: {
+            /** @enum {string} */
+            action: "move" | "visibility" | "author" | "tags_add" | "tags_remove" | "send_for_review" | "approve" | "publish" | "unpublish" | "trash";
+            ids?: string[];
+            filter?: components["schemas"]["KBArticleFilters"];
+            /**
+             * Format: uuid
+             * @description move: the collection to move the articles to.
+             */
+            collection_id?: string;
+            visibility?: components["schemas"]["KBVisibility"];
+            /**
+             * Format: uuid
+             * @description author: the team member to credit the articles to.
+             */
+            author_agent_id?: string;
+            /** @description tags_add, tags_remove: the tags. */
+            tags?: string[];
+            /** @description send_for_review: teammates who may publish. */
+            reviewer_ids?: string[];
+            /** @description send_for_review, approve: a note for the review. */
+            note?: string;
+        };
+        KBBulkResult: {
+            /** @description The undo record; null when nothing can be put back. */
+            operation: null | {
+                /** Format: uuid */
+                id: string;
+                action: string;
+                /** Format: date-time */
+                undo_until: string;
+            };
+            counts: {
+                done: number;
+                unchanged: number;
+                refused: number;
+            };
+            results: {
+                id: string;
+                /** Format: int64 */
+                number?: number;
+                /** @description Absent for an id this workspace does not have. */
+                title?: string;
+                /** @enum {string} */
+                outcome: "done" | "unchanged" | "refused";
+                /** @description true when undo can put this article back. */
+                undoable: boolean;
+                error?: components["schemas"]["BulkItemError"];
+            }[];
+        };
+        KBBulkUndoResult: {
+            operation: {
+                /** Format: uuid */
+                id: string;
+                action: string;
+                /** Format: date-time */
+                undone_at: string;
+            };
+            counts: {
+                undone: number;
+                not_undone: number;
+            };
+            results: {
+                id: string;
+                /** Format: int64 */
+                number?: number;
+                title?: string;
+                /** @enum {string} */
+                outcome: "undone" | "not_undone";
+                error?: components["schemas"]["BulkItemError"];
+            }[];
         };
         /** @description Why one item of a bulk request was not done; the same code and message a call for that item alone answers. */
         BulkItemError: {
@@ -20758,6 +20865,71 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    bulkKBArticles: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KBBulkInput"];
+            };
+        };
+        responses: {
+            /** @description One result per article, and the undo record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBBulkResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    undoKBBulkOperation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description One result per article the bulk action changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBBulkUndoResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["IdempotencyKeyReused"];
         };

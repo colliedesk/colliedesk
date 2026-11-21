@@ -24,7 +24,6 @@ import { ListColumns, gridOf } from './list-columns';
 import { ListFilters } from './list-filters';
 import { listMessages } from './list-messages';
 import { NewArticleMenu } from './new-article-menu';
-import { KBHead } from './kb-ui';
 import { HelpTip } from '../../ui/help-tip';
 import { Icon } from './editor/icons';
 import { buildTree, flatten, indent, reason } from './kb-tree';
@@ -33,6 +32,10 @@ import { OrderAnnouncement, OrderButtons, allArticleIds, useOrderMoves } from '.
 import type { Step } from './order-buttons';
 import { useCreateAction } from '../../api/use-create';
 import { useHolds } from '../../lib/permissions-context';
+import { KBBulkBar } from './kb-bulk-bar';
+import { kbBulkMessages } from './kb-bulk-messages';
+import { useKBBulk } from './use-kb-bulk';
+import { KBHead, KBToast } from './kb-ui';
 
 export type { KnowledgeSearch } from './knowledge-search';
 export { useRefreshKB } from './kb-refresh';
@@ -166,6 +169,8 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   // Published is not public while the help center is off: the page says so, and how to turn it on.
   const holds = useHolds();
   const creates = holds('kb_articles:create');
+  const bulk = useKBBulk(filter, refresh);
+  const selects = holds('kb_articles:update');
   const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter, enabled: holds('help_center:read') });
   const publicNow = center.data?.enabled;
   const newCollection = () => { setProblem(undefined); setForm(form === 'new' ? null : 'new'); };
@@ -194,7 +199,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
           {noCollections && <p className="muted-copy">{creates ? <>{kbMessages.noCollections} <HelpTip label={kbMessages.collections} text={kbMessages.noCollectionsTip} /></> : kbMessages.noCollectionsYet}</p>}
           {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} hrefTo={(collection?: KBCollection) => collectionHref(search, collection?.id)} /></div>}
         </nav>
-        <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined} style={gridOf(columns, Boolean(ordered))}>
+        <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined} data-select={selects ? 'true' : undefined} style={gridOf(columns, Boolean(ordered))}>
           {selected && <CollectionHead node={selected} tree={tree} form={form} confirming={confirming} problem={problem}
             onForm={(next) => { setProblem(undefined); setConfirming(false); setForm(next); }} onSave={save}
             onConfirm={setConfirming} onDelete={() => void remove(selected.collection)}
@@ -229,6 +234,8 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             <KBSavedViews search={search} timezone={timezone} onApply={(next) => void navigate({ to: '/knowledge', search: next, replace: false })} />
             <a className="button-link kb-export" href={kbApi.exportHref(filter)} download data-tip={listMessages.exportTip}>{listMessages.exportCsv}</a>
           </div>
+          {(bulk.count > 0 || bulk.all) && <KBBulkBar count={bulk.count} all={bulk.all} nodes={nodes} meId={me.data?.agent.id} busy={bulk.busy}
+            onSelectAll={bulk.selectAll} onApply={(change) => void bulk.run(change)} onClear={bulk.clear} />}
           <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span>
             {columns.map((column, index) => <span key={column} data-extra={index > 0 ? 'true' : undefined}>{columnHead(column)}</span>)}<span />{ordered && <span />}</div>
           <div className="kb-list-scroll">
@@ -241,6 +248,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
               onPointerOver={preloadEditor} onFocus={preloadEditor}>
               {items.map((article) => <ArticleRow key={article.id} article={article} columns={columns} timezone={timezone} isPublic={publicNow}
                 collection={names.get(article.collection_id)}
+                select={selects ? { checked: bulk.all || bulk.ids.includes(article.id), onChange: () => bulk.toggle(article.id, articleIds) } : undefined}
                 order={ordered && <OrderButtons ids={articleIds} id={article.id} name={article.title} more={articles.hasNextPage} busy={moves.moving} onAnnounce={moves.announce}
                   focus={moves.focus} onMove={(_next, step) => moveArticle(ordered, article.id, step)} />} />)}
               {articles.hasNextPage && <li className="kb-more-row"><button type="button" className="kb-more" disabled={articles.isFetchingNextPage} onClick={() => void articles.fetchNextPage()}>
@@ -249,6 +257,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
           </div>
         </section>
       </div>
+      {bulk.toast && <KBToast text={bulk.toast.text} undo={bulk.toast.operation && kbBulkMessages.undo} onUndo={() => void bulk.undo()} onDismiss={bulk.dismiss} />}
     </main>
   );
 }

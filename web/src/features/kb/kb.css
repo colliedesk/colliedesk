@@ -1054,3 +1054,13 @@ span.kb-article-open { opacity: 0.35; }
 .kb-attachment-text { display: grid; min-width: 0; }
 .kb-attachment-text a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kb-attachment-text small { color: var(--text-3); font-size: var(--fs-label); }
+
+/* Bulk selection: a tick box at the start of each row, outside the row link, and the bar of actions above the list. */
+.kb-article-item { position: relative; }
+.kb-article-select { position: absolute; left: var(--space-4); top: 50%; translate: 0 -50%; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.kb-list[data-select="true"] :is(.kb-article-row, .kb-cols-head) { padding-left: calc(var(--space-4) + 16px + var(--space-3)); }
+.kb-article-item[data-selected="true"] { background: var(--surface-2); }
+.kb-bulk-bar { flex-wrap: wrap; row-gap: var(--space-2); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); background: var(--surface-1); }
+.kb-bulk-bar .bulk-actions { margin-left: auto; }
+.kb-bulk-new-tag { display: flex; gap: var(--space-2); padding: var(--space-2); border-top: 1px solid var(--line); }
+.kb-bulk-new-tag input { flex: 1; min-width: 0; }
