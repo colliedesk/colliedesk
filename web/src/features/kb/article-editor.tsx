@@ -12,13 +12,14 @@ import { SavedReplyHistory } from '../settings/saved-reply-panels';
 import { ArticleTranslationsBox } from './article-translations';
 import { ArticleVotesBox } from './article-votes';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
+import { ArticleVisibilityBox } from './article-visibility';
 import { ArticleAttachments } from './article-attachments';
 import { ArticleDraftBar, draftMessages, editable } from './article-draft';
 import { ArticleReviewBox, useTextApproval } from './article-review';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
 import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
-import type { KBArticle, KBArticleStatus, KBArticleVersion, KBAttachment } from './kb-api';
+import type { KBArticle, KBArticleStatus, KBArticleVersion, KBAttachment, KBVisibility } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { CollectionsField, withHome } from './collections-field';
 import { buildTree, flatten, reason } from './kb-tree';
@@ -154,6 +155,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const [raw, setBase] = useState(article);
   const base = useMemo(() => raw && editable(raw), [raw]);
   const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(editable(article)) : { title: '', slug: '', body: startBody, collection_id: defaultCollection, extras: [], seo_title: '', seo_description: '', show_contents: true }));
+  // Who can see a new article, sent when it is created; a saved one changes it at once (ArticleVisibilityBox).
+  const [newVisibility, setNewVisibility] = useState<KBVisibility>('everyone');
   const wide = useSyncExternalStore(subscribeWide, isWide);
   const [chosen, setMode] = useState<ViewMode>(() => (isWide() && (!article || characters(article.body_md) <= splitLimit) ? 'split' : 'edit'));
   const mode: ViewMode = chosen === 'split' && !wide ? 'edit' : chosen;
@@ -217,7 +220,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         const value = { ...(sent.extras.length > 0 ? { collection_ids: [sent.collection_id, ...sent.extras] } : { collection_id: sent.collection_id }), title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft',
           ...(seoValue(sent.seo_title) ? { seo_title: seoValue(sent.seo_title) } : {}),
           ...(seoValue(sent.seo_description) ? { seo_description: seoValue(sent.seo_description) } : {}),
-          ...(sent.show_contents ? {} : { show_contents: false }) } as const;
+          ...(sent.show_contents ? {} : { show_contents: false }),
+          ...(newVisibility === 'everyone' ? {} : { visibility: newVisibility }) } as const;
         const created = await createArticle.run(value);
         client.setQueryData(['kb-article', created.id], created);
         void refresh();
@@ -453,7 +457,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     return editable(changed).attachments;
   };
 
-  // Excluding from AI or including again changes neither the text nor updated_at, so an edit in progress stays.
+  // Excluding from AI, including again or changing who can see it leaves the text as it is, so an edit in progress stays.
   const aiChanged = (changed: KBArticle, text: string) => {
     setBase(changed);
     client.setQueryData(['kb-article', changed.id], changed);
@@ -541,7 +545,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const details = (
     <>
       <section className="kb-side-box" aria-labelledby={`${id}-visibility`}>
-        <h3 id={`${id}-visibility`}>{kbMessages.visibility}</h3>
+        <h3 id={`${id}-visibility`}>{kbMessages.articleStatus}</h3>
         <div className="kb-side-status">
           <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
           <span>{status === 'published' ? (isPublic === false ? kbMessages.notPublicHelpCenter : kbMessages.statusPublished) : kbMessages.statusDraft}</span>
@@ -549,6 +553,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {isPublic === false && <a className="button-link" href="/knowledge/settings#help-center-heading">
           <Icon name="globe" />{kbMessages.turnOnHelpCenter}</a>}
       </section>
+      <ArticleVisibilityBox headingId={`${id}-who`} article={raw} onChanged={aiChanged} value={newVisibility} onChoose={setNewVisibility} />
       {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {(!base || status !== 'published' || raw?.has_draft || dirty) && <ArticleReviewBox articleId={base?.id} approval={approval} dirty={dirty} saved={base !== undefined}
         headingId={`${id}-review`} reasonId={reasonId} />}

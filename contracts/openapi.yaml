@@ -12355,12 +12355,11 @@ components:
         default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in this collection starts from; null for none. A template in the trash is 409 template_in_trash; trashing the template sets this to null.'}
         visibility:
           allOf: [{$ref: '#/components/schemas/KBVisibility'}]
-          default: everyone
-          description: 'Who can see the collection and every article in it, its collections included.'
+          description: 'Who can see the collection and every article in it, its collections included. Left out, everyone.'
     KBVisibility:
       type: string
       enum: [everyone, help_chat, agents]
-      description: 'Who can see it. everyone: the help center, help chat and the team. help_chat: help chat may quote it without linking it; the help center never shows it, its search, sitemap.xml, llms.txt and feeds leave it out, and its address is 404. agents: only the team (reply suggestions and AI drafts, which never link it). An article is as restricted as the most restrictive of itself and every collection it is in, their parents included (effective_visibility).'
+      description: 'Who can see it. everyone: the help center, help chat and the team. help_chat: help chat may quote it without linking it; the help center never shows it, its search, sitemap.xml and llms.txt leave it out, and its address is 404. agents: only the team (reply suggestions and AI drafts, which never link it). An article is as restricted as the most restrictive of itself and every collection it is in, their parents included (effective_visibility).'
     KBVisibilityFrom:
       type: object
       required: [id, name, visibility]
@@ -12433,8 +12432,7 @@ components:
         show_contents: {type: boolean, description: 'Left out, it is on. The help center lists its H2 and H3 headings as On this page when it has 3 or more; false turns the list off for the article in every language. A version restore leaves it as it is.'}
         visibility:
           allOf: [{$ref: '#/components/schemas/KBVisibility'}]
-          default: everyone
-          description: 'Who can see the article; a collection it is in can restrict it further.'
+          description: 'Who can see the article; a collection it is in can restrict it further. Left out, everyone.'
     KBArticleStatus:
       type: string
       enum: [draft, published]
