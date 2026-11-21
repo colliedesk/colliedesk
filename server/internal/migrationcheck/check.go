@@ -39,6 +39,9 @@ func Check(repo, base string) error {
 		if len(directions) != 2 {
 			return fmt.Errorf("migration %q must have matching up and down SQL files", stem)
 		}
+		if err := checkTableSecurity(dir, stem, directions); err != nil {
+			return err
+		}
 	}
 	if base == "" {
 		return nil
