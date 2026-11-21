@@ -99,10 +99,10 @@ func TestEquivalentAllowsAFunctionDefinedEarlier(t *testing.T) {
 
 func TestCheckRefusesAModifiedBaseMigrationWithoutADatabase(t *testing.T) {
 	repo := gitMigrationRepo(t, map[string]string{
-		"20261014060000-notes.up.sql":   "CREATE TABLE notes (id int);\n",
+		"20261014060000-notes.up.sql":   "-- Notes.\nCREATE TABLE notes (id int);\n",
 		"20261014060000-notes.down.sql": "DROP TABLE notes;\n",
 	})
-	writeMigration(t, repo, "20261014060000-notes.up.sql", "CREATE TABLE notes (\n    id int\n);\n")
+	writeMigration(t, repo, "20261014060000-notes.up.sql", "-- Notes.\nCREATE TABLE notes (\n    id int\n);\n")
 	err := Check(repo, Options{Base: "HEAD"})
 	if err == nil || !strings.Contains(err.Error(), "was modified") || !strings.Contains(err.Error(), "--database") {
 		t.Fatalf("want a modified-migration error naming --database, got %v", err)
@@ -112,14 +112,14 @@ func TestCheckRefusesAModifiedBaseMigrationWithoutADatabase(t *testing.T) {
 func TestCheckAcceptsAModifiedBaseMigrationThatKeepsTheSchema(t *testing.T) {
 	url := equivalenceDatabase(t)
 	repo := gitMigrationRepo(t, map[string]string{
-		"20261014060000-notes.up.sql":   "CREATE TABLE notes (id int);\n",
+		"20261014060000-notes.up.sql":   "-- Notes.\nCREATE TABLE notes (id int);\n",
 		"20261014060000-notes.down.sql": "DROP TABLE notes;\n",
 	})
 	writeMigration(t, repo, "20261014060000-notes.up.sql", "-- Notes.\nCREATE TABLE notes (\n    id int\n);\n")
 	if err := Check(repo, Options{Base: "HEAD", DatabaseURL: url}); err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	writeMigration(t, repo, "20261014060000-notes.up.sql", "CREATE TABLE notes (id bigint);\n")
+	writeMigration(t, repo, "20261014060000-notes.up.sql", "-- Notes.\nCREATE TABLE notes (id bigint);\n")
 	if err := Check(repo, Options{Base: "HEAD", DatabaseURL: url}); err == nil || !strings.Contains(err.Error(), "20261014060000-notes.up.sql") {
 		t.Fatalf("want the changed schema refused, got %v", err)
 	}

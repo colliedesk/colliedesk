@@ -9,7 +9,7 @@ import (
 
 func TestCheckAcceptsPairedDomainNamedMigrations(t *testing.T) {
 	repo := migrationRepo(t, map[string]string{
-		"20261014060000-core-helpdesk.up.sql":   "SELECT 1;\n",
+		"20261014060000-core-helpdesk.up.sql":   "-- Core.\nSELECT 1;\n",
 		"20261014060000-core-helpdesk.down.sql": "SELECT 1;\n",
 	})
 	if err := Check(repo, Options{}); err != nil {
@@ -53,7 +53,7 @@ func TestCheckRejectsHandWrittenRowSecurityAfterTheHelpers(t *testing.T) {
 		"SELECT '--'; CREATE POLICY everyone ON notes USING (true);",
 	} {
 		repo := migrationRepo(t, map[string]string{
-			"20261201000000-notes.up.sql":   "CREATE TABLE notes (workspace_id uuid);\n" + statement + "\n",
+			"20261201000000-notes.up.sql":   "-- Notes.\nCREATE TABLE notes (workspace_id uuid);\n" + statement + "\n",
 			"20261201000000-notes.down.sql": "DROP TABLE notes;\n",
 		})
 		err := Check(repo, Options{})
@@ -65,7 +65,7 @@ func TestCheckRejectsHandWrittenRowSecurityAfterTheHelpers(t *testing.T) {
 
 func TestCheckAcceptsHandWrittenRowSecurityBeforeTheHelpers(t *testing.T) {
 	repo := migrationRepo(t, map[string]string{
-		"20261014135950-workspace-row-level-security.up.sql":   "ALTER TABLE notes ENABLE ROW LEVEL SECURITY;\nSELECT 1 FROM pg_policies;\n",
+		"20261014135950-workspace-row-level-security.up.sql":   "-- Bootstrap.\nALTER TABLE notes ENABLE ROW LEVEL SECURITY;\nSELECT 1 FROM pg_policies;\n",
 		"20261014135950-workspace-row-level-security.down.sql": "SELECT set_config('app.privileged', 'on', true);\n",
 	})
 	if err := Check(repo, Options{}); err != nil {
@@ -75,7 +75,7 @@ func TestCheckAcceptsHandWrittenRowSecurityBeforeTheHelpers(t *testing.T) {
 
 func TestCheckAcceptsTheHelperCalls(t *testing.T) {
 	repo := migrationRepo(t, map[string]string{
-		"20261201000000-notes.up.sql": "CREATE TABLE notes (workspace_id uuid);\nSELECT secure_workspace_table('notes');\n" +
+		"20261201000000-notes.up.sql": "-- Notes.\nCREATE TABLE notes (workspace_id uuid);\nSELECT secure_workspace_table('notes');\n" +
 			"SELECT limit_app_role('notes', 'SELECT', 'INSERT');\n",
 		"20261201000000-notes.down.sql": "DROP TABLE notes;\n",
 	})

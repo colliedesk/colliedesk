@@ -3,6 +3,7 @@ package migrationcheck
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -45,13 +46,28 @@ func Check(repo string, options Options) error {
 		}
 		pairs[stem][match[3]] = entry.Name()
 	}
-	for stem, directions := range pairs {
+	stems := make([]string, 0, len(pairs))
+	for stem := range pairs {
+		stems = append(stems, stem)
+	}
+	sort.Strings(stems)
+	// Every migration is checked, so one run lists everything to fix.
+	var problems []error
+	for _, stem := range stems {
+		directions := pairs[stem]
 		if len(directions) != 2 {
-			return fmt.Errorf("migration %q must have matching up and down SQL files", stem)
+			problems = append(problems, fmt.Errorf("migration %q must have matching up and down SQL files", stem))
+			continue
 		}
 		if err := checkTableSecurity(dir, stem, directions); err != nil {
-			return err
+			problems = append(problems, err)
 		}
+		if err := checkStyle(dir, stem, directions); err != nil {
+			problems = append(problems, err)
+		}
+	}
+	if len(problems) > 0 {
+		return errors.Join(problems...)
 	}
 	if options.Base == "" {
 		return nil
