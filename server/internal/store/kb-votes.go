@@ -58,12 +58,11 @@ const (
 
 // lockKBVotes locks the votes version of article articleID, making the row on the first vote: the votes
 // and resets of one article take their turns on it, so the readers an address added are counted
-// without a race and a reset counts or closes every vote. Other articles' votes never wait.
+// without a race and a reset counts or closes every vote. Other articles' votes never wait. One
+// statement makes the row or locks the one there (ON CONFLICT DO SELECT FOR UPDATE).
 func lockKBVotes(ctx context.Context, tx pgx.Tx, workspaceID, articleID string) error {
-	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_vote_versions (workspace_id, article_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, workspaceID, articleID); err != nil {
-		return fmt.Errorf("make votes version: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM kb_article_vote_versions WHERE workspace_id=$1 AND article_id=$2 FOR UPDATE`, workspaceID, articleID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_vote_versions (workspace_id, article_id) VALUES ($1, $2)
+		ON CONFLICT (workspace_id, article_id) DO SELECT FOR UPDATE RETURNING 1`, workspaceID, articleID); err != nil {
 		return fmt.Errorf("lock votes version: %w", err)
 	}
 	return nil
