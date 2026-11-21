@@ -248,8 +248,13 @@ Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
 - **Export** writes `kb-article-drafts.ndjson`; the versions file carries the `draft` kind.
 - **Agents:** `kb_article_update` saves the draft, `kb_article_get` returns `draft` in the same call
   (no separate draft tool, the tool list is near its budget), and `kb_article_draft_publish` /
-  `kb_article_draft_discard` act on it. Translations still write their live row until #694 gives them
-  the same flow on this table.
+  `kb_article_draft_discard` act on it; with `locale` they act on a translation's row
+  (`…/translations/{locale}/draft[/publish]`).
+- **A translation's row follows the article's rules** (`kb-translation-drafts.go`). Its token is the
+  later of the translation's and the row's `updated_at`; save, autosave, restore and media replace
+  write the row, unpublish folds it into the translation, delete and undelete keep it. Its
+  `attachment_ids` are the files the row shows, copied to the translation on publish. A Freshdesk
+  rerun or undo treats a translation with a row as changed in Colliedesk.
 ## Votes
 
 Migration `20261120073704-kb-article-votes`; code `helpcenter/votes.go` (form, cookie, redirect),
@@ -436,9 +441,10 @@ the same article, as Freshdesk does it, never an article of its own.
   `updated_at`; theirs stays in the history) or "Discard mine and show theirs". Autosave stops until
   the person picks one. Every save takes the answer's `updated_at`, so a second save does not race itself.
 - **Autosave runs 3 s after typing stops, and on blur, `visibilitychange` to hidden, `pagehide` and
-  coming back online** (`use-autosave.ts`, `article-autosave.tsx`). A new article (no row yet) and a
-  translation are not autosaved: the first needs a collection and a Save to exist, and a translation
-  has no draft row before #694, so its autosave would change the live page. A save while the page
+  coming back online** (`use-autosave.ts`, `article-autosave.tsx`, `translation-autosave.ts`). A new
+  article or translation (no row yet) is not autosaved: it needs a Save to exist. A translation sends
+  only `title` and `body_md` with `autosave: true`, keeps no device copy, and its other actions wait
+  for an autosave in flight so they never send the same `updated_at`. A save while the page
   closes uses `keepalive` below 60,000 bytes (the browser holds at most 64 KiB of keepalive bodies);
   a longer text relies on the device copy.
 - **The device copy is per workspace, person and article.** `unsaved-store.ts` keys it
@@ -582,9 +588,9 @@ Migration `20261120184320-kb-article-reviews`; code `store/kb-reviews.go`, `kb-r
   points at the old one (`supersedes_review_id`) and drops the reviewer who edited, so a second
   person still approves. With nobody left it stays superseded
   (`TestAnEditInReviewReopensTheReviewWithoutTheReviewerWhoEdited`).
-- **A translation has no draft layer.** Its pending text is a translation in draft status; saving a
-  published one where approval is required is refused (`ErrKBTranslationApprovalRequired`) and the
-  error says to set it to draft first.
+- **A published translation is reviewed through its draft row.** A save writes the row and supersedes
+  an open review; `…/translations/{locale}/draft/publish` needs an approved review of the row's hash
+  where approval is required, else `ErrKBTranslationApprovalRequired`.
 - **Mail goes through the outbox columns.** `kb_review_reviewers.email` and `kb_reviews.author_email`
   move `queued` → `sending` → `sent` (or `rejected`, or `off` for a deactivated person or a closed
   review); the `kbreviewmail` sender claims each row right before it sends, so two servers never send
@@ -634,7 +640,7 @@ Migration `kb-visibility`; code in `server/internal/store/kb-visibility*.go`. Us
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges
   give the app role all four rights, so `GRANT SELECT, INSERT` alone does not make a table append-only.
   The migration revokes all rights on `kb_article_versions` first; `TestKnowledgeBaseVersionsAreAppendOnlyForTheAppRole`
-  pins it. (`saved_reply_versions` was created with only the grant, so the app role can still change it.)
+  pins it. A new table uses `limit_app_role` ([workspace isolation](workspace-isolation.md#securing-a-new-table)).
 - **"Unused" is more than "no article".** The help center's logo and favicon (`help_centers.logo_media_id`,
   `favicon_media_id`) are library items no article links. `kbMediaNamedByHelpCenter` is part of the
   purge rule (`kbMediaPurgeable`), the `unused` and `in_use` filters, trash-unused and the admin's

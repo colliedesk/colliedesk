@@ -776,18 +776,16 @@ func (s *OperatorService) Once(ctx context.Context, operatorID, operation, key s
 		if _, err := tx.Exec(ctx, `DELETE FROM operator_idempotency WHERE created_at < $1`, s.now().Add(-operatorIdempotencyLifetime)); err != nil {
 			return err
 		}
-		tag, err := tx.Exec(ctx, `INSERT INTO operator_idempotency(operator_id, operation, key, fingerprint) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-			operatorID, operation, key, fingerprint)
-		if err != nil {
+		var seen []byte
+		var repeat bool
+		if err := tx.QueryRow(ctx, `INSERT INTO operator_idempotency(operator_id, operation, key, fingerprint) VALUES($1,$2,$3,$4)
+			ON CONFLICT (operator_id, operation, key) DO SELECT RETURNING fingerprint, answer, old.key IS NOT NULL`,
+			operatorID, operation, key, fingerprint).Scan(&seen, &stored, &repeat); err != nil {
 			return err
 		}
-		if tag.RowsAffected() == 1 {
+		if !repeat {
 			claimed = true
 			return nil
-		}
-		var seen []byte
-		if err := tx.QueryRow(ctx, `SELECT fingerprint, answer FROM operator_idempotency WHERE operator_id=$1 AND operation=$2 AND key=$3`, operatorID, operation, key).Scan(&seen, &stored); err != nil {
-			return err
 		}
 		switch {
 		case string(seen) != string(fingerprint):

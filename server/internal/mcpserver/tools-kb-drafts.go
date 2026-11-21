@@ -54,33 +54,58 @@ func (c *call) forArticleDraft(id string) {
 		"(its published text is the current one) or it is not here. Read it with colliedesk_kb_article_get, or find it with colliedesk_kb_articles_search."
 }
 
+// forTranslationDraft words a 404 of a translation draft call: no such translation here, or it has no draft.
+func (c *call) forTranslationDraft(articleID, locale string) {
+	c.notFound = "Article " + articleID + " has no " + locale + " translation with a draft in this workspace: either it has no unpublished changes " +
+		"(its published text is the current one) or it is not here. Read it with colliedesk_kb_translation_get."
+}
+
+// draftArguments names the article, or its translation when locale is given, whose draft a call acts on.
+type draftArguments struct {
+	ID        string `json:"article_id"`
+	UpdatedAt string `json:"updated_at"`
+	Locale    string `json:"locale"`
+}
+
 func kbArticleDraftPublish(c *call, arguments map[string]any) (any, error) {
-	args, err := decodeArguments[struct {
-		ID        string `json:"article_id"`
-		UpdatedAt string `json:"updated_at"`
-	}](arguments)
+	args, err := decodeArguments[draftArguments](arguments)
 	if err != nil {
 		return nil, err
 	}
+	body := map[string]any{"updated_at": args.UpdatedAt}
+	if args.Locale != "" {
+		c.forTranslationDraft(args.ID, args.Locale)
+		var published restKBTranslation
+		if err := c.send(http.MethodPost, kbTranslationPath(args.ID, args.Locale, "/draft/publish"), body, &published); err != nil {
+			return nil, err
+		}
+		return map[string]any{"translation": kbTranslationRow(published)}, nil
+	}
 	c.forArticleDraft(args.ID)
 	var published restKBArticle
-	if err := c.send(http.MethodPost, kbArticlePath(args.ID, "/draft/publish"), map[string]any{"updated_at": args.UpdatedAt}, &published); err != nil {
+	if err := c.send(http.MethodPost, kbArticlePath(args.ID, "/draft/publish"), body, &published); err != nil {
 		return nil, err
 	}
 	return map[string]any{"article": kbArticleRow(published)}, nil
 }
 
 func kbArticleDraftDiscard(c *call, arguments map[string]any) (any, error) {
-	args, err := decodeArguments[struct {
-		ID        string `json:"article_id"`
-		UpdatedAt string `json:"updated_at"`
-	}](arguments)
+	args, err := decodeArguments[draftArguments](arguments)
 	if err != nil {
 		return nil, err
 	}
+	query := "/draft?updated_at=" + url.QueryEscape(args.UpdatedAt)
+	if args.Locale != "" {
+		c.forTranslationDraft(args.ID, args.Locale)
+		var kept restKBTranslation
+		if err := c.send(http.MethodDelete, kbTranslationPath(args.ID, args.Locale, query), nil, &kept); err != nil {
+			return nil, err
+		}
+		return map[string]any{"translation": kbTranslationRow(kept)}, nil
+	}
 	c.forArticleDraft(args.ID)
 	var kept restKBArticle
-	if err := c.send(http.MethodDelete, kbArticlePath(args.ID, "/draft?updated_at=", url.QueryEscape(args.UpdatedAt)), nil, &kept); err != nil {
+	if err := c.send(http.MethodDelete, kbArticlePath(args.ID, query), nil, &kept); err != nil {
 		return nil, err
 	}
 	return map[string]any{"article": kbArticleRow(kept)}, nil

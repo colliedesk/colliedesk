@@ -46,16 +46,7 @@ if run READY_AFTER=0 CI_SERVICES_TIMEOUT=30 CI_SERVICES_DIR="$TMP/state" sh "$SC
 fi
 grep -q "could not start" "$TMP/err" || fail "a failed docker run is not reported: $(cat "$TMP/err")"
 run READY_AFTER=1 CI_SERVICES_DIR="$TMP/ok" sh "$SCRIPT" start postgres mailpit >/dev/null || fail "start failed for known services"
-# The PostgreSQL image is chosen by CI_POSTGRES_IMAGE (the floor job runs older majors), always by
-# digest: a moved tag must never change what CI runs.
-pinned16=postgres:16.16-bookworm@sha256:ce3efec6bc404f6b15ebf5d9bed6b45a9d4655aea238d7dacc3467ccb05a1175
-out=$(run READY_AFTER=1 CI_SERVICES_DIR="$TMP/pg16" CI_POSTGRES_IMAGE="$pinned16" sh "$SCRIPT" start postgres) ||
-  fail "start refused a pinned CI_POSTGRES_IMAGE"
-case "$out" in *"$pinned16"*) ;; *) fail "start does not say it runs CI_POSTGRES_IMAGE: $out" ;; esac
+# CI runs the PostgreSQL Colliedesk Cloud runs, by digest: a moved tag must never change what CI runs.
 out=$(run READY_AFTER=1 CI_SERVICES_DIR="$TMP/pg19" sh "$SCRIPT" start postgres) || fail "start failed with the default image"
-case "$out" in *postgres:19.*@sha256:*) ;; *) fail "the default image is not a pinned PostgreSQL 19: $out" ;; esac
-if run READY_AFTER=1 CI_SERVICES_DIR="$TMP/tag" CI_POSTGRES_IMAGE=postgres:16-bookworm sh "$SCRIPT" start postgres >/dev/null 2>"$TMP/err"; then
-  fail "start accepted a PostgreSQL image without a digest"
-fi
-grep -q "digest" "$TMP/err" || fail "an unpinned image is refused without saying why: $(cat "$TMP/err")"
+case "$out" in *postgres:19.*@sha256:*) ;; *) fail "the PostgreSQL image is not a pinned PostgreSQL 19: $out" ;; esac
 echo "ci-services waits for readiness and fails closed"

@@ -30,7 +30,7 @@ func TestCheckPostgresVersionAcceptsEverySupportedServer(t *testing.T) {
 	if err := New(testPool(t)).CheckPostgresVersion(context.Background(), MinPostgresMajor); err != nil {
 		t.Fatalf("the test server is supported, yet: %v", err)
 	}
-	if MinPostgresMajor != 16 {
-		t.Fatalf("MinPostgresMajor = %d; external databases on 16 stay supported", MinPostgresMajor)
+	if MinPostgresMajor != 19 {
+		t.Fatalf("MinPostgresMajor = %d; Colliedesk runs on PostgreSQL 19 or newer", MinPostgresMajor)
 	}
 }

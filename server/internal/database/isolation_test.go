@@ -204,40 +204,89 @@ func TestPrivilegedReadOnlySnapshotSeesEveryWorkspaceAndRefusesWrites(t *testing
 	}
 }
 
-// securityGaps lists every table of the current schema that needs row-level security and lacks
-// ENABLE, FORCE or the workspace_isolation policy for the app role.
+// securityGaps lists every table of the current schema whose row-level security differs from the
+// one shape each kind of table gets (docs/internals/workspace-isolation.md): a workspace table enables
+// and forces it and carries exactly the workspace_isolation policy for the app role and the
+// privileged_access policy for the owner; a server-wide table carries only privileged_access; neither
+// a server-wide table nor a table without row-level security is reachable by the app role. Policies
+// are compared as PostgreSQL prints them, so a policy that only mentions app.workspace_id, or one
+// more permissive policy on the table, is a gap.
 func securityGaps(t *testing.T, pool *pgxpool.Pool) (checked, gaps []string) {
 	t.Helper()
+	appRole := policyRole(t, pool)
+	var owner string
+	if err := pool.QueryRow(context.Background(), `SELECT current_user`).Scan(&owner); err != nil {
+		t.Fatal(err)
+	}
 	rows, err := pool.Query(context.Background(), `
 		SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
-			EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname = n.nspname AND p.tablename = c.relname
-				AND p.policyname = 'workspace_isolation' AND p.cmd = 'ALL' AND p.roles = ARRAY[$1]::name[]
-				AND p.qual LIKE '%app.workspace_id%' AND p.with_check LIKE '%app.workspace_id%')
+			has_table_privilege($1, c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER'),
+			coalesce((SELECT array_agg(concat_ws(' | ', p.policyname, p.permissive, p.cmd, p.roles::text, p.qual, p.with_check)
+				ORDER BY p.policyname) FROM pg_policies p WHERE p.schemaname = n.nspname AND p.tablename = c.relname), '{}')
 		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')
-			AND (c.relname = 'workspaces'
-				OR EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'workspace_id' AND NOT a.attisdropped)
-				OR has_table_privilege($1, c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER'))
-		ORDER BY c.relname`, policyRole(t, pool))
+		ORDER BY c.relname`, appRole)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var name string
-		var enabled, forced, policy bool
-		if err := rows.Scan(&name, &enabled, &forced, &policy); err != nil {
+		var enabled, forced, reachable bool
+		var policies []string
+		if err := rows.Scan(&name, &enabled, &forced, &reachable, &policies); err != nil {
 			t.Fatal(err)
 		}
 		checked = append(checked, name)
-		if !enabled || !forced || !policy {
-			gaps = append(gaps, fmt.Sprintf("%s (enabled=%v forced=%v workspace_isolation policy=%v)", name, enabled, forced, policy))
+		var want []string
+		switch {
+		case slices.Contains(tablesWithoutRowSecurity, name):
+			if reachable {
+				gaps = append(gaps, name+" (the app role can reach a table without row-level security)")
+			}
+			continue
+		case slices.Contains(serverWideTables, name):
+			want = []string{privilegedAccessPolicy(owner)}
+			if reachable {
+				gaps = append(gaps, name+" (the app role can reach a server-wide table)")
+			}
+		default:
+			key := "workspace_id"
+			if name == "workspaces" {
+				key = "id"
+			}
+			want = []string{privilegedAccessPolicy(owner), workspaceIsolationPolicy(appRole, key)}
+		}
+		if !enabled || !forced || !slices.Equal(policies, want) {
+			gaps = append(gaps, fmt.Sprintf("%s (enabled=%v forced=%v policies=%q, want %q)", name, enabled, forced, policies, want))
 		}
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
 	return checked, gaps
+}
+
+// tablesWithoutRowSecurity hold no workspace data and are never read by the app role.
+var tablesWithoutRowSecurity = []string{"channel_types", "schema_migrations"}
+
+// serverWideTables belong to the server, not to a workspace: only a privileged transaction reads them.
+var serverWideTables = []string{
+	"autofix_webhook_deliveries", "cloud_signups", "instance", "operator_audit", "operator_idempotency",
+	"operator_links", "operator_requests", "operator_sessions", "operators", "polar_products",
+	"retention_deletions", "server_config_state", "server_config_values", "server_config_versions",
+	"server_processes", "server_secrets",
+}
+
+// The two policies as PostgreSQL 16 to 19 print them in pg_policies.
+func workspaceIsolationPolicy(appRole, key string) string {
+	scope := fmt.Sprintf(`(%s = ( SELECT (NULLIF(current_setting('app.workspace_id'::text, true), ''::text))::uuid AS "nullif"))`, key)
+	return fmt.Sprintf("workspace_isolation | PERMISSIVE | ALL | {%s} | %s | %s", appRole, scope, scope)
+}
+
+func privilegedAccessPolicy(owner string) string {
+	check := `( SELECT (current_setting('app.privileged'::text, true) = 'on'::text))`
+	return fmt.Sprintf("privileged_access | PERMISSIVE | ALL | {%s} | %s | %s", owner, check, check)
 }
 
 // TestEveryWorkspaceTableEnforcesRowLevelSecurity is the gate for future tables: a table with a

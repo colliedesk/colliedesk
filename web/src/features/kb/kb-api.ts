@@ -33,12 +33,14 @@ const trashedCollectionSchema = z.object({
   ...collectionFields, visibility: visibilitySchema.optional(), effective_visibility: visibilitySchema.optional(), default_template_id: z.string().uuid().nullable().optional(), require_approval: approvalModeSchema.optional(), translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBCollection'>>;
 const translationChangeSchema = z.object({
-  ...changeFields, kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'mark_current', 'mark_outdated', ...reviewKinds]),
+  ...changeFields, kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'mark_current', 'mark_outdated', 'draft', ...reviewKinds]),
 }) satisfies z.ZodType<Generated<'KBTranslationChange'>>;
 const translationSummaryFields = {
   article_id: z.string().uuid(), locale: z.string(), title: z.string(), slug: z.string(), status: statusSchema, published_at: nullableDate,
   outdated: z.boolean(), outdated_at: nullableDate, created_at: z.string().datetime(), updated_at: z.string().datetime(), in_trash: z.boolean(),
   last_change: translationChangeSchema.nullable(), url: z.string(),
+  // has_draft: a published translation with unpublished changes; the help center still shows the published text.
+  has_draft: z.boolean(),
 };
 const translationSummarySchema = z.object(translationSummaryFields) satisfies z.ZodType<Generated<'KBTranslationSummary'>>;
 const summaryFields = {
@@ -69,6 +71,11 @@ export const kbArticleSchema = z.object({
   // The collection that keeps the article more restricted than its own visibility; null when its own decides.
   visibility_from: z.object({ id: z.string().uuid(), name: z.string(), visibility: visibilitySchema }).nullable(),
 }) satisfies z.ZodType<Generated<'KBArticle'>>;
+// The unpublished changes of a published translation: what publishing them puts live.
+const translationDraftSchema = z.object({
+  title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), attachments: z.array(attachmentSchema),
+  created_at: z.string().datetime(), updated_at: z.string().datetime(), updated_by: personSchema.nullable(),
+}) satisfies z.ZodType<Generated<'KBTranslationDraft'>>;
 export const kbTranslationSchema = z.object({
   ...translationSummaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), has_source_html: z.boolean(), deleted_at: nullableDate,
   language_visible: z.boolean(), missing_media: z.array(z.string().uuid()).optional(), attachments: z.array(attachmentSchema),
@@ -76,6 +83,7 @@ export const kbTranslationSchema = z.object({
     id: z.string().uuid(), number: z.number().int(), locale: z.string(), title: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(),
     status: statusSchema, collection_id: z.string().uuid(), collection_name: z.string(), version: z.number().int(), updated_at: z.string().datetime(),
   }),
+  draft: translationDraftSchema.nullable(),
 }) satisfies z.ZodType<Generated<'KBArticleTranslation'>>;
 const trashedTranslationSchema = z.object({
   ...translationSummaryFields, article_title: z.string(), article_number: z.number().int(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(),
@@ -146,7 +154,7 @@ export type KBLanguageState = 'missing' | 'outdated' | 'translated';
 
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
   | 'restoreKBArticleVersion' | 'putHelpCenter' | 'setKBOrder' | 'putHelpCenterLanguages' | 'createKBTranslation' | 'updateKBTranslation' | 'restoreKBTranslation'
-  | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation' | 'publishKBArticleDraft'
+  | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation' | 'publishKBArticleDraft' | 'publishKBTranslationDraft'
   | 'setKBArticleAttachments' | 'setKBTranslationAttachments';
 const json = <O extends Operation>(value: RequestBody<O>): string => JSON.stringify(value);
 
@@ -223,8 +231,9 @@ export const kbApi = {
   translation: (id: string, locale: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}`, kbTranslationSchema),
   createTranslation: (id: string, value: RequestBody<'createKBTranslation'>, key: string) => request(`/api/v1/kb/articles/${id}/translations`, kbTranslationSchema,
     { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createKBTranslation'>(value) }),
-  updateTranslation: (id: string, locale: string, value: RequestBody<'updateKBTranslation'>) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}`, kbTranslationSchema,
-    { method: 'PATCH', body: json<'updateKBTranslation'>(value) }),
+  // init carries keepalive for an autosave sent as the page closes.
+  updateTranslation: (id: string, locale: string, value: RequestBody<'updateKBTranslation'>, init?: RequestInit) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}`, kbTranslationSchema,
+    { ...init, method: 'PATCH', body: json<'updateKBTranslation'>(value) }),
   deleteTranslation: (id: string, locale: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
   // key names this press (Idempotency-Key): a repeat answers the first restore.
   restoreTranslation: (id: string, locale: string, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/restore`, kbTranslationSchema,
@@ -233,6 +242,11 @@ export const kbApi = {
     translationVersionPageSchema),
   restoreTranslationVersion: (id: string, locale: string, version: number, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/versions/${version}/restore`,
     kbTranslationSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'restoreKBTranslationVersion'>({ updated_at: updatedAt }) }),
+  // As an article's: publishing a published translation's unpublished changes puts them live, discarding them keeps it as it is.
+  publishTranslationDraft: (id: string, locale: string, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/draft/publish`,
+    kbTranslationSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'publishKBTranslationDraft'>({ updated_at: updatedAt }) }),
+  discardTranslationDraft: (id: string, locale: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/draft${version(updatedAt)}`,
+    kbTranslationSchema, { method: 'DELETE' }),
   // A translation's own files apply at once; with none, the help center lists the article's.
   setTranslationAttachments: (id: string, locale: string, mediaIds: string[], updatedAt: string) => request(`/api/v1/kb/articles/${id}/translations/${encodeURIComponent(locale)}/attachments`,
     kbTranslationSchema, { method: 'PUT', body: json<'setKBTranslationAttachments'>({ media_ids: mediaIds, updated_at: updatedAt }) }),

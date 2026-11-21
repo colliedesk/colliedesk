@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
@@ -53,17 +52,14 @@ func (a *API) setKBArticleAttachments(response http.ResponseWriter, request *htt
 	a.answerKBArticle(response, request, article)
 }
 
-// setKBTranslationAttachments sets the files a translation lists. A translation has no draft, so on a
-// published one the help center changes at once and the call needs the publish permission.
+// setKBTranslationAttachments sets the files a translation lists; a published one keeps them in its
+// draft, so the call never changes the help center.
 func (a *API) setKBTranslationAttachments(response http.ResponseWriter, request *http.Request) {
 	ids, seen, ok := readKBAttachmentList(response, request)
 	if !ok {
 		return
 	}
 	who := principal(request)
-	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, a.translationIsPublished(request, who)) {
-		return
-	}
 	translation, err := a.store.SetKBTranslationAttachments(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), request.PathValue("locale"), ids, seen)
 	if err != nil {
 		writeKBAttachmentError(response, err)

@@ -897,6 +897,9 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/kb/templates/{id}/restore", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/templates/{id}/versions", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/templates/{id}/versions/{version}/restore", auth.PermissionSession},
+		// The unpublished changes of a published translation.
+		{http.MethodPost, "/api/v1/kb/articles/{id}/translations/{locale}/draft/publish", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/kb/articles/{id}/translations/{locale}/draft", auth.PermissionSession},
 	}
 }
 

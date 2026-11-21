@@ -59,3 +59,9 @@ A self-hosted server runs the same releases and the same migrations as Colliedes
 release passes the same upgrade test. The Cloud backups and the uptime commitment do not cover it:
 backups and uptime are the operator's job. See [backups and database](self-host/database.md),
 [upgrade a self-hosted install](self-host/upgrade.md) and [support](self-host/support.md).
+
+Colliedesk needs PostgreSQL 19 or newer after v1.0.1. A release never starts on an older database:
+every command that reads or writes it stops first and says how to upgrade. `upgrade-postgres.sh`
+moves the bundled database to 19 and keeps the old volume to roll back to; every pull request and
+every release tests that move on an install of v1.0.1
+([PostgreSQL versions](self-host/upgrade.md#postgresql-versions)).

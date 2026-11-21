@@ -60,8 +60,8 @@ func TestAFileListChangedAfterTheApprovalNeedsANewApproval(t *testing.T) {
 	}
 }
 
-// A published translation's file list changes the help center at once, so in a collection that needs
-// approval it is refused like an edit of its text.
+// A published translation's file list waits in its draft, and in a collection that needs approval the
+// draft publishes only once a review approved it, like an edit of its text.
 func TestAPublishedTranslationsFileListNeedsAnApproval(t *testing.T) {
 	api, service, _, _ := testAPIWithStorage(t)
 	admin := createSession(t, api, service, "KB Review Translation Files", "admin@kb-review-translation-files.example.com")
@@ -80,9 +80,14 @@ func TestAPublishedTranslationsFileListNeedsAnApproval(t *testing.T) {
 	kbCall(t, api, http.MethodGet, kbTranslationPath(article.ID, "fr"), nil, admin, http.StatusOK, &published)
 	kbCall(t, api, http.MethodPatch, kbTranslationPath(article.ID, "fr"), map[string]any{"updated_at": published.UpdatedAt, "status": "published"}, admin, http.StatusOK, nil)
 
-	response := kbCall(t, api, http.MethodPut, kbTranslationPath(article.ID, "fr", "/attachments"), map[string]any{"media_ids": []string{form.ID}}, admin, http.StatusConflict, nil)
+	var listed kbTranslationWithFiles
+	kbCall(t, api, http.MethodPut, kbTranslationPath(article.ID, "fr", "/attachments"), map[string]any{"media_ids": []string{form.ID}}, admin, http.StatusOK, &listed)
+	if len(listed.Attachments) != 0 || listed.Draft == nil || attachmentNames(listed.Draft.Attachments) != "Formulaire.pdf" {
+		t.Fatalf("listed = %+v", listed)
+	}
+	response := kbCall(t, api, http.MethodPost, kbTranslationPath(article.ID, "fr", "/draft/publish"), map[string]any{"updated_at": listed.UpdatedAt}, admin, http.StatusConflict, nil)
 	if code := errorCode(t, response); code != "approval_required" {
-		t.Fatalf("listing a file under the live translation: code=%s", code)
+		t.Fatalf("publishing the draft that lists a file: code=%s", code)
 	}
 	var live struct {
 		Attachments []kbAttachmentView `json:"attachments"`

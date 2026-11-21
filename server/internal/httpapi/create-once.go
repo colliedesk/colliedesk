@@ -19,6 +19,7 @@ const (
 	restoreKBTranslationOperation        = "kb_translation_restore"
 	restoreKBTranslationVersionOperation = "kb_translation_version_restore"
 	publishKBArticleDraftOperation       = "kb_article_draft_publish"
+	publishKBTranslationDraftOperation   = "kb_translation_draft_publish"
 	createSavedReplyOperation            = "saved_reply"
 	createKBTemplateOperation            = "kb_template"
 	restoreKBTemplateOperation           = "kb_template_restore"

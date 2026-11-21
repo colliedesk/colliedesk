@@ -232,21 +232,25 @@ type KBImportTranslation struct {
 	CreatedAt, UpdatedAt          time.Time
 }
 
-// KBTranslationImportedLast tells whether a translation exists and whether its newest version is an import.
+// KBTranslationImportedLastSQL is the SQL condition that the import wrote the translation aliased t
+// last, as KBImportedLastSQL for an article: its newest version that is not a draft save or a review
+// is an import (a translation with no version at all was written before versions existed: the
+// import's), and it has no unpublished changes, not even an autosave that recorded no version.
+func KBTranslationImportedLastSQL(t string) string {
+	return `(COALESCE((SELECT v.kind FROM kb_article_translation_versions v WHERE v.workspace_id=` + t + `.workspace_id AND v.article_id=` + t + `.article_id
+		AND v.locale=` + t + `.locale AND ` + kbTextVersion("v.") + ` ORDER BY v.version DESC LIMIT 1), '` + domain.KBArticleImported + `')='` + domain.KBArticleImported + `'
+		AND NOT EXISTS (SELECT 1 FROM kb_article_drafts d WHERE d.workspace_id=` + t + `.workspace_id AND d.article_id=` + t + `.article_id AND d.locale=` + t + `.locale))`
+}
+
+// KBTranslationImportedLast tells whether a translation exists and whether the import wrote it last
+// (KBTranslationImportedLastSQL).
 func KBTranslationImportedLast(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string) (exists, imported bool, err error) {
-	var kind string
-	err = tx.QueryRow(ctx, `SELECT kind FROM kb_article_translation_versions WHERE workspace_id=$1 AND article_id=$2 AND locale=$3 ORDER BY version DESC LIMIT 1`,
-		workspaceID, articleID, locale).Scan(&kind)
+	err = tx.QueryRow(ctx, `SELECT `+KBTranslationImportedLastSQL("t")+` FROM kb_article_translations t WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3`,
+		workspaceID, articleID, locale).Scan(&imported)
 	if errors.Is(err, pgx.ErrNoRows) {
-		var found bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_article_translations WHERE workspace_id=$1 AND article_id=$2 AND locale=$3)`,
-			workspaceID, articleID, locale).Scan(&found); err != nil {
-			return false, false, err
-		}
-		// A translation with no version at all was written before versions existed: the import's.
-		return found, found, nil
+		return false, false, nil
 	}
-	return err == nil, kind == domain.KBArticleImported, err
+	return err == nil, imported, err
 }
 
 // PutKBArticleTranslation adds a translation of an article, or writes the source's newer one over it

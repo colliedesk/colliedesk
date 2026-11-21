@@ -19,7 +19,7 @@ func kbApprovalTranslationFixture(t *testing.T, api http.Handler, admin string) 
 
 // A translation in a collection that needs approval goes on the help center only with the text a
 // teammate approved: created or switched to published without it, it is refused; once approved it
-// publishes; a later edit of the live translation needs a new approval.
+// publishes; a later edit waits in its draft, and publishing that draft needs an approval of its text.
 func TestATranslationThatNeedsApprovalPublishesOnlyTheApprovedText(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "KB Review Translations", "admin@kb-review-translations.example.com")
@@ -66,13 +66,52 @@ func TestATranslationThatNeedsApprovalPublishesOnlyTheApprovedText(t *testing.T)
 	if published.Status != "published" {
 		t.Fatalf("approved translation = %+v", published)
 	}
-	response = kbCall(t, api, http.MethodPatch, kbTranslationPath(article.ID, "fr"), map[string]any{"updated_at": published.UpdatedAt, "body_md": "Sous 30 jours."}, admin, http.StatusConflict, nil)
-	if code := errorCode(t, response); code != "approval_required" {
-		t.Fatalf("editing the live translation: code=%s", code)
+	// An edit of the published translation waits in its draft; publishing the draft needs an approval of its text.
+	var saved kbDraftedTranslation
+	kbCall(t, api, http.MethodPatch, kbTranslationPath(article.ID, "fr"), map[string]any{"updated_at": published.UpdatedAt, "body_md": "Sous 30 jours."}, admin, http.StatusOK, &saved)
+	if saved.BodyMD != "Sous 14 jours." || saved.Draft == nil || saved.Draft.BodyMD != "Sous 30 jours." {
+		t.Fatalf("edit of the published translation = %+v draft=%+v", saved.kbTranslationView, saved.Draft)
 	}
-	// A translation has no draft beside its live text: the refusal says how to get a change reviewed.
-	if body := response.Body.String(); !strings.Contains(body, "status draft") || !strings.Contains(body, "/translations/{locale}/reviews") {
-		t.Fatalf("refusal of a live translation edit does not say how to review it: %s", body)
+	publishDraft := func(want int) *kbDraftedTranslation {
+		t.Helper()
+		var answer kbDraftedTranslation
+		response := kbCall(t, api, http.MethodPost, kbTranslationPath(article.ID, "fr", "/draft/publish"), map[string]any{"updated_at": saved.UpdatedAt}, admin, want, &answer)
+		if want == http.StatusConflict {
+			if body := response.Body.String(); errorCode(t, response) != "approval_required" || !strings.Contains(body, "/translations/{locale}/draft/publish") ||
+				!strings.Contains(body, "/translations/{locale}/reviews") {
+				t.Fatalf("refusal of an unapproved translation draft does not say how to review it: %s", body)
+			}
+		}
+		return &answer
+	}
+	publishDraft(http.StatusConflict)
+
+	var second kbReviewView
+	kbCall(t, api, http.MethodPost, kbTranslationPath(article.ID, "fr", "/reviews"), map[string]any{"reviewer_ids": []string{agentID(t, api, reviewer)}}, admin, http.StatusCreated, &second)
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/reviews/"+second.ID, nil, reviewer, http.StatusOK, &detail)
+	if detail.Proposed.BodyMD != "Sous 30 jours." || detail.Live == nil || detail.Live.BodyMD != "Sous 14 jours." {
+		t.Fatalf("review of the translation draft = %+v live=%+v", detail.Proposed, detail.Live)
+	}
+	// A further edit supersedes the open review and opens one of the new text for the same reviewer.
+	kbCall(t, api, http.MethodPatch, kbTranslationPath(article.ID, "fr"), map[string]any{"updated_at": saved.UpdatedAt, "body_md": "Sous 45 jours."}, admin, http.StatusOK, &saved)
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/reviews/"+second.ID, nil, admin, http.StatusOK, &detail)
+	if detail.State != "superseded" {
+		t.Fatalf("review after an edit of the draft = %s, want superseded", detail.State)
+	}
+	kbCall(t, api, http.MethodGet, kbTranslationPath(article.ID, "fr", "/reviews"), nil, admin, http.StatusOK, &listed)
+	if len(listed.Reviews) != 3 || listed.Reviews[0].State != "open" {
+		t.Fatalf("translation reviews after the edit = %+v", listed.Reviews)
+	}
+	kbDecide(t, api, reviewer, listed.Reviews[0].ID, "approve", map[string]any{}, http.StatusOK)
+
+	// An edit after the approval is not approved; the approved text publishes.
+	kbCall(t, api, http.MethodPatch, kbTranslationPath(article.ID, "fr"), map[string]any{"updated_at": saved.UpdatedAt, "body_md": "Sous 60 jours."}, admin, http.StatusOK, &saved)
+	publishDraft(http.StatusConflict)
+	kbCall(t, api, http.MethodPatch, kbTranslationPath(article.ID, "fr"), map[string]any{"updated_at": saved.UpdatedAt, "body_md": "Sous 45 jours."}, admin, http.StatusOK, &saved)
+	if live := publishDraft(http.StatusOK); live.BodyMD != "Sous 45 jours." || live.HasDraft {
+		t.Fatalf("published approved draft = %+v", live.kbTranslationView)
+	} else {
+		published = live.kbTranslationView
 	}
 	kbCall(t, api, http.MethodPatch, kbTranslationPath(article.ID, "fr"), map[string]any{"updated_at": published.UpdatedAt, "outdated": true}, admin, http.StatusOK, nil)
 
@@ -86,7 +125,7 @@ func TestATranslationThatNeedsApprovalPublishesOnlyTheApprovedText(t *testing.T)
 	for _, v := range versions.Items {
 		kinds = append(kinds, v.Kind)
 	}
-	if got := strings.Join(kinds, ","); got != "mark_outdated,edit,review_approve,review_request,create" {
+	if got := strings.Join(kinds, ","); got != "mark_outdated,edit,draft,draft,review_approve,draft,review_request,draft,edit,review_approve,review_request,create" {
 		t.Fatalf("translation history = %s", got)
 	}
 }

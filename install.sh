@@ -208,8 +208,9 @@ volumes:
   postgres-data:
   attachments-data:
 COMPOSE
-# PostgreSQL cannot open data written by another major, so the image follows the data volume: a fresh
-# install gets 19, a volume made by 16, 17 or 18 keeps that major (docs/self-host/upgrade.md#postgresql-versions).
+# PostgreSQL cannot open data written by another major, and Colliedesk runs on 19: a fresh install gets 19,
+# and a bundled volume made by 16, 17 or 18 stops the installer until upgrade-postgres.sh moved it
+# (docs/self-host/upgrade.md#postgresql-versions).
 # PG_VERSION is read with the compose file that runs the install today, or with this run's when there is none.
 cd "$TARGET_DIR"
 # The data stays in the volume compose.yaml names: postgres19-data once upgrade-postgres.sh moved it.
@@ -259,9 +260,14 @@ case $PG_MAJOR in
     PG_IMAGE=$POSTGRES_IMAGE ;;
   19) PG_IMAGE=$POSTGRES_IMAGE ;;
   16 | 17 | 18)
-    PG_IMAGE=postgres:$PG_MAJOR-bookworm
-    [ -z "$BUNDLED" ] || printf 'Your database stays on PostgreSQL %s, which Colliedesk supports. upgrade-postgres.sh moves it to 19 when you choose: https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/upgrade.md#postgresql-versions\n' "$PG_MAJOR" >&2 ;;
-  *) refuse "the database volume holds PostgreSQL $PG_MAJOR, which this installer does not run (16 to 19). compose.yaml was not changed." ;;
+    # The script comes from main, like this installer, so the two agree on the image and the volume.
+    [ -z "$BUNDLED" ] || refuse "the database volume holds PostgreSQL $PG_MAJOR; Colliedesk runs on PostgreSQL 19 or newer. compose.yaml was not changed. Move the database to 19 in $TARGET_DIR, then run the installer again:
+  curl -fsSLO https://raw.githubusercontent.com/colliedesk/colliedesk/main/upgrade-postgres.sh
+  sh upgrade-postgres.sh
+See https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/upgrade.md#postgresql-versions"
+    # An external database leaves the bundled volume unused; the server checks the version of the one it uses.
+    PG_IMAGE=postgres:$PG_MAJOR-bookworm ;;
+  *) refuse "the database volume holds PostgreSQL $PG_MAJOR, which this installer does not run (19, or 16 to 18 for an install on an external database). compose.yaml was not changed." ;;
 esac
 render_compose "$PG_IMAGE" compose.yaml.tmp
 mv compose.yaml.tmp compose.yaml.next

@@ -24,7 +24,10 @@ type contractKB struct {
 	// Published articles with unpublished changes: one to publish, one to discard.
 	publishDraftID, publishDraftSeen string
 	discardDraftID, discardDraftSeen string
-	imageID, imageSeen               string
+	// Published French translations with unpublished changes: one to publish, one to discard.
+	publishTranslationDraftID, publishTranslationDraftSeen string
+	discardTranslationDraftID, discardTranslationDraftSeen string
+	imageID, imageSeen                                     string
 	// Library items: one to move to the trash, one to delete, two already in the trash.
 	trashMediaID, deleteMediaID  string
 	restoreMediaID, purgeMediaID string
@@ -120,7 +123,26 @@ func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+versioned.ID+"/translations/es", nil, admin, http.StatusOK, &translation)
 	kb.esTrashSeen = translation.UpdatedAt
 	kbCall(t, api, http.MethodPut, "/api/v1/kb/collections/"+collection.ID+"/translations/de", map[string]any{"name": "Vertragssammlung"}, admin, http.StatusOK, nil)
+	kb.publishTranslationDraftID, kb.publishTranslationDraftSeen = contractTranslationDraft(t, api, admin, collection.ID, "Contract translation with changes to publish")
+	kb.discardTranslationDraftID, kb.discardTranslationDraftSeen = contractTranslationDraft(t, api, admin, collection.ID, "Contract translation with changes to discard")
 	return kb
+}
+
+// contractTranslationDraft makes an article with a published French translation that has unpublished
+// changes, and answers the article's id and the translation's updated_at.
+func contractTranslationDraft(t *testing.T, api http.Handler, admin, collectionID, title string) (string, string) {
+	t.Helper()
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": collectionID, "title": title, "body_md": "Published", "status": "published"})
+	var translation kbTranslationView
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/"+article.ID+"/translations",
+		map[string]any{"locale": "fr", "title": "Traduction", "body_md": "Publiée", "status": "published"}, admin, http.StatusCreated, &translation)
+	var saved kbDraftedTranslation
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID+"/translations/fr",
+		map[string]any{"updated_at": translation.UpdatedAt, "body_md": "Pas encore publiée"}, admin, http.StatusOK, &saved)
+	if saved.Draft == nil {
+		t.Fatalf("%s has no translation draft", title)
+	}
+	return article.ID, saved.UpdatedAt
 }
 
 // contractDraft makes a published article with unpublished changes and answers its id and the
@@ -234,6 +256,10 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"PUT /api/v1/kb/articles/{id}/attachments":                 {"/api/v1/kb/articles/" + kb.articleID + "/attachments", map[string]any{"media_ids": []string{}}, admin, 200, ""},
 		"PUT /api/v1/kb/articles/{id}/translations/{locale}/attachments": {"/api/v1/kb/articles/" + kb.articleID + "/translations/fr/attachments",
 			map[string]any{"media_ids": []string{}}, admin, 200, ""},
+		"POST /api/v1/kb/articles/{id}/translations/{locale}/draft/publish": {"/api/v1/kb/articles/" + kb.publishTranslationDraftID + "/translations/fr/draft/publish",
+			map[string]any{"updated_at": kb.publishTranslationDraftSeen}, admin, 200, ""},
+		"DELETE /api/v1/kb/articles/{id}/translations/{locale}/draft": {"/api/v1/kb/articles/" + kb.discardTranslationDraftID + "/translations/fr/draft?updated_at=" +
+			url.QueryEscape(kb.discardTranslationDraftSeen), nil, admin, 200, ""},
 		// The contract server has no HELP_CENTER_DOMAIN, so every host name is refused.
 		"GET /api/v1/public/help-center/tls-ask": {"/api/v1/public/help-center/tls-ask?domain=acme.help.example.net", nil, "", 404, ""},
 	}
