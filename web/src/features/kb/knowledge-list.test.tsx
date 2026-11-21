@@ -54,6 +54,26 @@ test('the list shows the columns the person chose, and a change is saved for the
   await waitFor(() => expect(screen.getByRole('link', { name: /Refund rules/ })).toHaveTextContent('billing'));
 });
 
+test('a list menu closes when the pointer presses outside it, even after its focused button went away', async () => {
+  serve({ ...base,
+    'GET /api/v1/auth/me': () => json(200, { ...me, kb_list_columns: { columns: ['status', 'author', 'updated'], default: false } }),
+    'PUT /api/v1/agents/me/kb-list-columns': () => json(200, { columns: ['status', 'author', 'tags', 'updated'], default: true }) });
+  open();
+  await screen.findByRole('link', { name: /Refund rules/ });
+  const columns = screen.getByText('Columns').closest('details') as HTMLDetailsElement;
+  fireEvent.click(screen.getByText('Columns'));
+  expect(columns.open).toBe(true);
+  const reset = within(screen.getByRole('group', { name: 'Columns' })).getByRole('button', { name: 'Reset columns' });
+  reset.focus();
+  fireEvent.click(reset);
+  // Back to the default, the Reset button is gone and the focus with it.
+  await waitFor(() => expect(within(screen.getByRole('group', { name: 'Columns' })).queryByRole('button', { name: 'Reset columns' })).not.toBeInTheDocument());
+  fireEvent.pointerDown(within(screen.getByRole('group', { name: 'Columns' })).getByRole('checkbox', { name: 'Status' }));
+  expect(columns.open).toBe(true);
+  fireEvent.pointerDown(screen.getByText('Filters'));
+  expect(columns.open).toBe(false);
+});
+
 test('filters in the address go to the list and its CSV export, and a filtered collection cannot be reordered', async () => {
   const calls = serve(base);
   open({ collection: ids.setup, subcollections: 'true', tag: ['faq', 'a, b'], tag_match: 'all', author: [bea], created_after: '2026-10-01', created_before: '2026-10-08',
