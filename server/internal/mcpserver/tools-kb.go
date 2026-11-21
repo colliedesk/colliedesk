@@ -94,6 +94,7 @@ type restKBArticle struct {
 	Attachments   []restKBAttachment    `json:"attachments"`
 	Tags          []string              `json:"tags"`
 	Author        *kbAuthorOut          `json:"author"`
+	Languages     []kbLanguageOut       `json:"languages"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
 	AIExclusion    *struct {
@@ -138,7 +139,14 @@ type kbArticleRowOut struct {
 	PurgesAt      string               `json:"purges_at,omitempty"`
 	Tags          []string             `json:"tags"`
 	Author        *kbAuthorOut         `json:"author"`
+	Languages     []kbLanguageOut      `json:"languages"`
 	kbVisibilityOut
+}
+
+// kbLanguageOut is one translation of an article as a search row carries it.
+type kbLanguageOut struct {
+	Locale   string `json:"locale"`
+	Outdated bool   `json:"outdated"`
 }
 
 // kbTags is an article's tags as an answer carries them: never null.
@@ -160,7 +168,10 @@ func kbCollectionIDs(article restKBArticle) []string {
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
 	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Position: article.Position, Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, HasDraft: article.HasDraft, PurgesAt: article.PurgesAt,
-		Tags: kbTags(article.Tags), Author: article.Author, kbVisibilityOut: article.kbVisibilityOut}
+		Tags: kbTags(article.Tags), Author: article.Author, Languages: article.Languages, kbVisibilityOut: article.kbVisibilityOut}
+	if out.Languages == nil {
+		out.Languages = []kbLanguageOut{}
+	}
 	if article.DeletedAt != nil {
 		out.DeletedAt = *article.DeletedAt
 	}
@@ -364,11 +375,12 @@ func kbArticlesSearch(c *call, arguments map[string]any) (any, error) {
 		Visibility   string `json:"visibility"`
 		Limit        int    `json:"limit"`
 		Cursor       string `json:"cursor"`
+		kbListFilterArguments
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
-	query := url.Values{}
+	query := args.kbListFilterArguments.values()
 	for key, value := range map[string]string{"q": args.Query, "status": args.Status, "collection_id": args.CollectionID, "sort": args.Sort, "cursor": args.Cursor, "state": args.State, "visibility": args.Visibility} {
 		if value != "" {
 			query.Set(key, value)

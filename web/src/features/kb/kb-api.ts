@@ -51,6 +51,8 @@ const summaryFields = {
   has_draft: z.boolean(),
   // The published tags, shared by its translations; a published article's tag change waits in draft.tags.
   tags: z.array(z.string()),
+  // Its translations outside the trash; a help center language not listed is missing.
+  languages: z.array(z.object({ locale: z.string(), outdated: z.boolean() })),
   ...visibilityFields,
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;

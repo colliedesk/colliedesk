@@ -304,43 +304,19 @@ func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request
 		return
 	}
 	query := request.URL.Query()
-	filter := store.KBArticleFilter{Query: query.Get("q"), Status: query.Get("status"), CollectionID: query.Get("collection_id"), Sort: query.Get("sort"),
-		Limit: limit, Cursor: query.Get("cursor"), ReviewState: query.Get("state"), Visibility: query.Get("visibility")}
-	if filter.Visibility != "" && domain.CheckKBVisibility(filter.Visibility) != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "visibility is everyone, help_chat or agents: who can see the article now.")
+	filter, err := kbArticleFilter(query, principal(request).Workspace.Timezone)
+	if message, invalid := isFilterError(err); invalid {
+		writeError(response, http.StatusBadRequest, "invalid_request", message)
 		return
 	}
-	if filter.ReviewState != "" && filter.ReviewState != store.KBInReview && filter.ReviewState != store.KBApproved {
-		writeError(response, http.StatusBadRequest, "invalid_request", "state is in_review or approved.")
-		return
-	}
-	switch query.Get("has_draft") {
-	case "", "false":
-	case "true":
-		filter.HasDraft = true
-	default:
-		writeError(response, http.StatusBadRequest, "invalid_request", "has_draft is true or false.")
-		return
-	}
-	if filter.Sort != "" && filter.Sort != store.KBSortRecent && filter.Sort != store.KBSortManual {
-		writeError(response, http.StatusBadRequest, "invalid_request", "sort is recent or manual.")
-		return
-	}
-	if len([]rune(filter.Query)) > 200 {
-		writeError(response, http.StatusBadRequest, "invalid_request", "q holds at most 200 characters.")
-		return
-	}
-	if filter.Status != "" && domain.CheckKBStatus(filter.Status) != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "status is draft or published.")
-		return
-	}
+	filter.Limit, filter.Cursor = limit, query.Get("cursor")
 	items, next, err := a.store.ListKBArticles(request.Context(), principal(request).Workspace.ID, filter)
 	if errors.Is(err, store.ErrBadCursor) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "cursor must be the next_cursor of the previous page.")
 		return
 	}
 	if err != nil {
-		writeStoreError(response, err)
+		writeKBError(response, err)
 		return
 	}
 	home, ok := a.helpCenterHome(response, request)

@@ -49,7 +49,7 @@ const (
 		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made it; null when a person made it in the web app."},` +
 		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
 
-	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility","tags","author"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` +
+	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility","tags","author","languages"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` + kbLanguagesOutput + `,` +
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,` +
 		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
@@ -179,13 +179,14 @@ func kbArticlesSearchSpec() Spec {
 		Description: `List or search the articles outside the trash, without their text, one page at a time. With query, articles whose title or text hold every word of it as a word or the start of one ` +
 			`(or whose title holds it) come first by relevance. Without it the order is sort: recent (most recently updated first) or manual (the help center's order, set with colliedesk_kb_order_set; ` +
 			`collections in their order, each with its own articles before those of its collections). With collection_id the default is manual, otherwise recent. Filter by status, collection_id or visibility (who can see it now); has_draft true keeps the published articles with unpublished changes. ` +
+			`The other filters are those of the list page and combine: author, tags, dates, translation. ` +
 			`Words are matched with no language rules: a word inside another word, or text in scripts written without spaces (Chinese, Japanese, Thai), is found only where it starts a word or in the title. ` +
 			`Read one whole with colliedesk_kb_article_get. For the next page pass next_cursor as cursor. ` +
 			`Each article has its public address (url); to link one in a reply, search with status published.` + "\n\n" + kbTextNotice,
 		REST: []string{"GET /api/v1/kb/articles"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","maxLength":200},"status":{"type":"string","enum":["draft","published"]},` +
 			`"collection_id":{"type":"string",` + uuid + `},"has_draft":{"type":"boolean"},"state":{"type":"string","enum":["in_review","approved"],` +
-			`"description":"in_review: with an open review; approved: their unpublished text is approved and can be published (colliedesk_kb_articles_publish)."},` + kbVisibilityFilter + `,"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
+			`"description":"in_review: with an open review; approved: their unpublished text is approved and can be published (colliedesk_kb_articles_publish)."},` + kbVisibilityFilter + `,` + kbListFilterProperties + `,"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
 		Output: `{"type":"object","required":["articles","next_cursor"],"properties":{"articles":{"type":"array","items":` + kbArticleRowSchema + `},` +
 			`"next_cursor":{"type":["string","null"],"description":"Null on the last page."}}}`,
 		run: kbArticlesSearch,

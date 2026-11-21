@@ -6973,19 +6973,23 @@ paths:
         another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found
         only when they start a word or match the title.
       parameters:
-        - {name: q, in: query, schema: {type: string, maxLength: 200}}
-        - {name: status, in: query, schema: {type: string, enum: [draft, published]}}
-        - {name: collection_id, in: query, description: Only the articles directly in this collection., schema: {type: string, format: uuid}}
-        - {name: has_draft, in: query, description: 'true: only the published articles with unpublished changes (has_draft).', schema: {type: boolean}}
-        - {name: visibility, in: query, description: 'Only the articles with this effective_visibility.', schema: {$ref: '#/components/schemas/KBVisibility'}}
-        - name: state
-          in: query
-          description: >-
-            in_review: only the articles whose unpublished text waits for a reviewer. approved: only the
-            ones whose unpublished text a reviewer approved as it is now, ready to publish
-            (POST /api/v1/kb/articles/publish). Translations are left out.
-          schema: {type: string, enum: [in_review, approved]}
-        - {name: sort, in: query, description: The order without `q`; ignored with `q`., schema: {type: string, enum: [recent, manual]}}
+        - {$ref: '#/components/parameters/KBListQ'}
+        - {$ref: '#/components/parameters/KBListStatus'}
+        - {$ref: '#/components/parameters/KBListCollectionId'}
+        - {$ref: '#/components/parameters/KBListIncludeSubcollections'}
+        - {$ref: '#/components/parameters/KBListAuthor'}
+        - {$ref: '#/components/parameters/KBListTag'}
+        - {$ref: '#/components/parameters/KBListTagMatch'}
+        - {$ref: '#/components/parameters/KBListCreatedAfter'}
+        - {$ref: '#/components/parameters/KBListCreatedBefore'}
+        - {$ref: '#/components/parameters/KBListUpdatedAfter'}
+        - {$ref: '#/components/parameters/KBListUpdatedBefore'}
+        - {$ref: '#/components/parameters/KBListTranslation'}
+        - {$ref: '#/components/parameters/KBListLocale'}
+        - {$ref: '#/components/parameters/KBListHasDraft'}
+        - {$ref: '#/components/parameters/KBListVisibility'}
+        - {$ref: '#/components/parameters/KBListState'}
+        - {$ref: '#/components/parameters/KBListSort'}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
       responses:
@@ -9622,6 +9626,62 @@ components:
     resendWebhook: {type: apiKey, in: header, name: svix-signature}
     githubWebhook: {type: apiKey, in: header, name: X-Hub-Signature-256}
   parameters:
+    KBListQ: {name: q, in: query, schema: {type: string, maxLength: 200}}
+    KBListStatus: {name: status, in: query, schema: {type: string, enum: [draft, published]}}
+    KBListCollectionId: {name: collection_id, in: query, description: 'Only the articles directly in this collection (their home, collection_id). Another workspace''s or an unknown collection gives no articles.', schema: {type: string, format: uuid}}
+    KBListIncludeSubcollections:
+      name: include_subcollections
+      in: query
+      description: >-
+        true with collection_id: also the articles in its collections, at every depth, and the ones
+        listed in any of them (collection_ids). Collections in the trash are left out. The order is
+        `recent` unless `sort` is given.
+      schema: {type: boolean}
+    KBListAuthor:
+      name: author
+      in: query
+      description: 'Only the articles credited to one of these team members (author_agent_id), comma-separated, at most 50. Another workspace''s or an unknown id gives no articles.'
+      schema: {type: string, maxLength: 2000}
+    KBListTag:
+      name: tag
+      in: query
+      description: 'Only the articles with these published tags; repeat it for each tag (tags may hold commas). Cleaned as tags are (lowercase, spaces collapsed), at most 20.'
+      style: form
+      explode: true
+      schema: {type: array, maxItems: 20, items: {type: string, minLength: 1, maxLength: 40}}
+    KBListTagMatch: {name: tag_match, in: query, description: 'any (the default): the articles with at least one of the tag values. all: only the ones with every one.', schema: {type: string, enum: [any, all], default: any}}
+    KBListCreatedAfter:
+      name: created_after
+      in: query
+      description: >-
+        A date range, half-open: `_after` keeps the articles at or after it, `_before` the ones
+        strictly before it. Either an RFC 3339 time with an offset (2026-10-01T00:00:00Z) or a date
+        (2026-10-01), which is midnight starting that day in the workspace's timezone. For the days
+        1 to 31 October: created_after=2026-10-01&created_before=2026-11-01.
+      schema: {type: string, maxLength: 40}
+    KBListCreatedBefore: {name: created_before, in: query, description: 'The end of the created_at range, excluded; a time or a date, as created_after.', schema: {type: string, maxLength: 40}}
+    KBListUpdatedAfter: {name: updated_after, in: query, description: 'The start of the updated_at range (which unpublished changes move too), included; a time or a date, as created_after.', schema: {type: string, maxLength: 40}}
+    KBListUpdatedBefore: {name: updated_before, in: query, description: 'The end of the updated_at range, excluded; a time or a date, as created_after.', schema: {type: string, maxLength: 40}}
+    KBListTranslation:
+      name: translation
+      in: query
+      description: >-
+        missing: only the articles without a translation (outside the trash) in `locale`, or without
+        one in at least one of the help center's languages when `locale` is not given. outdated: only
+        the ones with an outdated translation in `locale`, or in any language.
+      schema: {type: string, enum: [missing, outdated]}
+    KBListLocale: {name: locale, in: query, description: 'The language translation looks at; it must be a language of the help center.', schema: {type: string, maxLength: 35}}
+    KBListHasDraft: {name: has_draft, in: query, description: 'true: only the published articles with unpublished changes (has_draft).', schema: {type: boolean}}
+    KBListVisibility: {name: visibility, in: query, description: 'Only the articles with this effective_visibility.', schema: {$ref: '#/components/schemas/KBVisibility'}}
+    KBListState:
+      name: state
+      in: query
+      description: >-
+        in_review: only the articles whose unpublished text waits for a reviewer. approved: only the
+        ones whose unpublished text a reviewer approved as it is now, ready to publish
+        (POST /api/v1/kb/articles/publish). Translations are left out.
+      schema: {type: string, enum: [in_review, approved]}
+    KBListSort: {name: sort, in: query, description: The order without `q`; ignored with `q`., schema: {type: string, enum: [recent, manual]}}
     RoleKey:
       name: id
       in: path
@@ -12558,9 +12618,19 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags, languages]
       properties:
         tags: {allOf: [{$ref: '#/components/schemas/KBArticleTags'}], description: 'Its published tags, sorted; a published article''s unpublished tags are in draft.tags.'}
+        languages:
+          type: array
+          maxItems: 200
+          description: 'Its translations outside the trash, by locale; outdated is set when the article changed after the translation was last brought up to date. A language of the help center that is not here is missing.'
+          items:
+            type: object
+            required: [locale, outdated]
+            properties:
+              locale: {type: string}
+              outdated: {type: boolean}
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1, description: 'Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>.'}
         collection_id: {type: string, format: uuid, description: 'Its home collection: the breadcrumb and its place among siblings.'}

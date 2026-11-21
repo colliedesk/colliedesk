@@ -128,6 +128,14 @@ type KBArticleSummary struct {
 	EffectiveVisibility string `json:"effective_visibility"`
 	// Tags are the published tags, sorted (CleanKBTags); a published article's draft has its own.
 	Tags []string `json:"tags"`
+	// Languages are its translations outside the trash, by locale.
+	Languages []KBArticleLanguage `json:"languages"`
+}
+
+// KBArticleLanguage is one translation of an article as lists show it.
+type KBArticleLanguage struct {
+	Locale   string `json:"locale"`
+	Outdated bool   `json:"outdated"`
 }
 
 // KBTranslationSummary is one language version of an article without its text, as the article and

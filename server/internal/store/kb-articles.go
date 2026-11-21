@@ -99,6 +99,9 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 	if err := fillKBTags(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
 		return article, err
 	}
+	if err := fillKBLanguages(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
+		return article, err
+	}
 	if err := fillKBAuthors(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
 		return article, err
 	}
@@ -133,22 +136,6 @@ const (
 	KBSortManual = "manual"
 )
 
-// KBArticleFilter selects articles outside the trash. Query matches every word of Query as a word or
-// the start of one, or Query inside the title; a search orders by relevance. Without one, Sort orders
-// the list; empty is KBSortManual inside a collection and KBSortRecent otherwise.
-type KBArticleFilter struct {
-	Query, Status, CollectionID, Sort string
-	Limit                             int
-	Cursor                            string
-	// HasDraft keeps only the articles with unpublished changes.
-	HasDraft bool
-	// Visibility keeps only the articles whose effective visibility is this one.
-	Visibility string
-	// ReviewState keeps only the articles whose own unpublished text waits for a reviewer
-	// (KBInReview) or was approved as it is now (KBApproved).
-	ReviewState string
-}
-
 // The review states of an article's unpublished text an article list narrows to.
 const (
 	KBInReview = "in_review"
@@ -180,39 +167,18 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 	}
 	query := strings.TrimSpace(filter.Query)
 	args := []any{workspaceID, query, filter.Limit + 1, offset}
-	where := ` WHERE a.workspace_id=$1 AND a.deleted_at IS NULL`
-	if filter.Status != "" {
-		args = append(args, filter.Status)
-		where += fmt.Sprintf(` AND a.status=$%d`, len(args))
-	}
-	if filter.CollectionID != "" {
-		if !savedReplyID.MatchString(filter.CollectionID) {
-			return []domain.KBArticleSummary{}, "", nil
-		}
-		args = append(args, filter.CollectionID)
-		where += fmt.Sprintf(` AND a.collection_id=$%d`, len(args))
-	}
-	if filter.HasDraft {
-		where += ` AND ` + kbHasDraft
-	}
-	if filter.Visibility != "" {
-		args = append(args, filter.Visibility)
-		where += fmt.Sprintf(` AND EXISTS (SELECT 1 FROM kb_article_visibility w WHERE w.workspace_id=a.workspace_id AND w.id=a.id AND w.visibility_rank=kb_visibility_rank($%d))`, len(args))
-	}
-	switch filter.ReviewState {
-	case KBInReview:
-		where += ` AND EXISTS (SELECT 1 FROM kb_reviews r WHERE r.workspace_id=a.workspace_id AND r.article_id=a.id AND r.locale IS NULL AND r.state='open')`
-	case KBApproved:
-		where += ` AND EXISTS (SELECT 1 FROM kb_reviews r WHERE r.workspace_id=a.workspace_id AND r.article_id=a.id AND r.locale IS NULL AND r.approves_pending)`
+	where, args, ok := filter.where(args)
+	if !ok {
+		return []domain.KBArticleSummary{}, "", nil
 	}
 	sort := filter.Sort
-	if sort == "" && filter.CollectionID != "" {
+	if sort == "" && filter.CollectionID != "" && !filter.IncludeSubcollections {
 		sort = KBSortManual
 	}
 	order := ` ORDER BY a.updated_at DESC, a.id DESC`
 	join, with := ``, ``
 	switch {
-	case query == "" && sort == KBSortManual && filter.CollectionID != "":
+	case query == "" && sort == KBSortManual && filter.CollectionID != "" && !filter.IncludeSubcollections:
 		order = ` ORDER BY a.position, lower(a.title), a.number`
 	case query == "" && sort == KBSortManual:
 		// Across collections, as the help center lists them: a collection's articles, then its collections'.
@@ -228,6 +194,9 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 		where += ` AND $2::text = ''`
 	}
 	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.KBArticleSummary, error) {
+		if err := checkKBFilterLocale(ctx, tx, workspaceID, filter.Locale); err != nil {
+			return nil, err
+		}
 		rows, err := tx.Query(ctx, with+kbArticleSelect(``, join)+where+order+` LIMIT $3 OFFSET $4`, args...)
 		if err != nil {
 			return nil, err
@@ -241,6 +210,9 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 			pointers[index] = &items[index]
 		}
 		if err := fillKBTags(ctx, tx, workspaceID, pointers...); err != nil {
+			return nil, err
+		}
+		if err := fillKBLanguages(ctx, tx, workspaceID, pointers...); err != nil {
 			return nil, err
 		}
 		if err := fillKBAuthors(ctx, tx, workspaceID, pointers...); err != nil {
@@ -297,6 +269,9 @@ func (s *Store) ListTrashedKBArticles(ctx context.Context, workspaceID string, l
 			pointers[index] = &items[index].KBArticleSummary
 		}
 		if err := fillKBTags(ctx, tx, workspaceID, pointers...); err != nil {
+			return nil, err
+		}
+		if err := fillKBLanguages(ctx, tx, workspaceID, pointers...); err != nil {
 			return nil, err
 		}
 		if err := fillKBAuthors(ctx, tx, workspaceID, pointers...); err != nil {

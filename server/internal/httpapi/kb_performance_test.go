@@ -139,7 +139,8 @@ func TestMain(m *testing.M) {
 
 // TestKnowledgeBaseSearchLatencyBudget holds the article list and search to the inbox budget at the
 // article cap: two workspaces of domain.MaxKBArticles articles each, a search with two words, a
-// short prefix, a search that matches nothing, a title search, the published articles, and the
+// short prefix, a search that matches nothing, a title search, the published articles, the list
+// filters (tags, author, dates, missing translations, a collection with its sub-collections), and the
 // articles of the collection and the published ones in the help center's order, each at the largest page.
 func TestKnowledgeBaseSearchLatencyBudget(t *testing.T) {
 	api, pool, token, _ := sharedKBBudget(t)
@@ -153,6 +154,11 @@ func TestKnowledgeBaseSearchLatencyBudget(t *testing.T) {
 		"title":      "/api/v1/kb/articles?limit=200&q=Article+1999",
 		"published":  "/api/v1/kb/articles?limit=200&status=published",
 		"collection": "/api/v1/kb/collections",
+		"tags":       "/api/v1/kb/articles?limit=200&tag=billing&tag=refund&tag_match=all",
+		"author":     "/api/v1/kb/articles?limit=200&author=00000000-0000-4000-8000-000000000000",
+		"updated":    "/api/v1/kb/articles?limit=200&updated_after=2000-01-01&created_before=2100-01-01",
+		"missing":    "/api/v1/kb/articles?limit=200&translation=missing",
+		"subtree":    "/api/v1/kb/articles?limit=200&include_subcollections=true&collection_id=" + collection,
 	}
 	// The orders set by hand are called 20 times, not 50, to spare the shared latency runner.
 	ordered := map[string]string{

@@ -8284,6 +8284,11 @@ export interface components {
         KBArticleSummary: {
             /** @description Its published tags, sorted; a published article's unpublished tags are in draft.tags. */
             tags: components["schemas"]["KBArticleTags"];
+            /** @description Its translations outside the trash, by locale; outdated is set when the article changed after the translation was last brought up to date. A language of the help center that is not here is missing. */
+            languages: {
+                locale: string;
+                outdated: boolean;
+            }[];
             /** Format: uuid */
             id: string;
             /** @description Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>. */
@@ -11480,6 +11485,38 @@ export interface components {
         };
     };
     parameters: {
+        KBListQ: string;
+        KBListStatus: "draft" | "published";
+        /** @description Only the articles directly in this collection (their home, collection_id). Another workspace's or an unknown collection gives no articles. */
+        KBListCollectionId: string;
+        /** @description true with collection_id: also the articles in its collections, at every depth, and the ones listed in any of them (collection_ids). Collections in the trash are left out. The order is `recent` unless `sort` is given. */
+        KBListIncludeSubcollections: boolean;
+        /** @description Only the articles credited to one of these team members (author_agent_id), comma-separated, at most 50. Another workspace's or an unknown id gives no articles. */
+        KBListAuthor: string;
+        /** @description Only the articles with these published tags; repeat it for each tag (tags may hold commas). Cleaned as tags are (lowercase, spaces collapsed), at most 20. */
+        KBListTag: string[];
+        /** @description any (the default): the articles with at least one of the tag values. all: only the ones with every one. */
+        KBListTagMatch: "any" | "all";
+        /** @description A date range, half-open: `_after` keeps the articles at or after it, `_before` the ones strictly before it. Either an RFC 3339 time with an offset (2026-10-01T00:00:00Z) or a date (2026-10-01), which is midnight starting that day in the workspace's timezone. For the days 1 to 31 October: created_after=2026-10-01&created_before=2026-11-01. */
+        KBListCreatedAfter: string;
+        /** @description The end of the created_at range, excluded; a time or a date, as created_after. */
+        KBListCreatedBefore: string;
+        /** @description The start of the updated_at range (which unpublished changes move too), included; a time or a date, as created_after. */
+        KBListUpdatedAfter: string;
+        /** @description The end of the updated_at range, excluded; a time or a date, as created_after. */
+        KBListUpdatedBefore: string;
+        /** @description missing: only the articles without a translation (outside the trash) in `locale`, or without one in at least one of the help center's languages when `locale` is not given. outdated: only the ones with an outdated translation in `locale`, or in any language. */
+        KBListTranslation: "missing" | "outdated";
+        /** @description The language translation looks at; it must be a language of the help center. */
+        KBListLocale: string;
+        /** @description true: only the published articles with unpublished changes (has_draft). */
+        KBListHasDraft: boolean;
+        /** @description Only the articles with this effective_visibility. */
+        KBListVisibility: components["schemas"]["KBVisibility"];
+        /** @description in_review: only the articles whose unpublished text waits for a reviewer. approved: only the ones whose unpublished text a reviewer approved as it is now, ready to publish (POST /api/v1/kb/articles/publish). Translations are left out. */
+        KBListState: "in_review" | "approved";
+        /** @description The order without `q`; ignored with `q`. */
+        KBListSort: "recent" | "manual";
         /** @description The role's id, or its name (matched without regard to case). A key shaped like a uuid is always read as an id. */
         RoleKey: string;
         ID: string;
@@ -20315,18 +20352,38 @@ export interface operations {
     listKBArticles: {
         parameters: {
             query?: {
-                q?: string;
-                status?: "draft" | "published";
-                /** @description Only the articles directly in this collection. */
-                collection_id?: string;
+                q?: components["parameters"]["KBListQ"];
+                status?: components["parameters"]["KBListStatus"];
+                /** @description Only the articles directly in this collection (their home, collection_id). Another workspace's or an unknown collection gives no articles. */
+                collection_id?: components["parameters"]["KBListCollectionId"];
+                /** @description true with collection_id: also the articles in its collections, at every depth, and the ones listed in any of them (collection_ids). Collections in the trash are left out. The order is `recent` unless `sort` is given. */
+                include_subcollections?: components["parameters"]["KBListIncludeSubcollections"];
+                /** @description Only the articles credited to one of these team members (author_agent_id), comma-separated, at most 50. Another workspace's or an unknown id gives no articles. */
+                author?: components["parameters"]["KBListAuthor"];
+                /** @description Only the articles with these published tags; repeat it for each tag (tags may hold commas). Cleaned as tags are (lowercase, spaces collapsed), at most 20. */
+                tag?: components["parameters"]["KBListTag"];
+                /** @description any (the default): the articles with at least one of the tag values. all: only the ones with every one. */
+                tag_match?: components["parameters"]["KBListTagMatch"];
+                /** @description A date range, half-open: `_after` keeps the articles at or after it, `_before` the ones strictly before it. Either an RFC 3339 time with an offset (2026-10-01T00:00:00Z) or a date (2026-10-01), which is midnight starting that day in the workspace's timezone. For the days 1 to 31 October: created_after=2026-10-01&created_before=2026-11-01. */
+                created_after?: components["parameters"]["KBListCreatedAfter"];
+                /** @description The end of the created_at range, excluded; a time or a date, as created_after. */
+                created_before?: components["parameters"]["KBListCreatedBefore"];
+                /** @description The start of the updated_at range (which unpublished changes move too), included; a time or a date, as created_after. */
+                updated_after?: components["parameters"]["KBListUpdatedAfter"];
+                /** @description The end of the updated_at range, excluded; a time or a date, as created_after. */
+                updated_before?: components["parameters"]["KBListUpdatedBefore"];
+                /** @description missing: only the articles without a translation (outside the trash) in `locale`, or without one in at least one of the help center's languages when `locale` is not given. outdated: only the ones with an outdated translation in `locale`, or in any language. */
+                translation?: components["parameters"]["KBListTranslation"];
+                /** @description The language translation looks at; it must be a language of the help center. */
+                locale?: components["parameters"]["KBListLocale"];
                 /** @description true: only the published articles with unpublished changes (has_draft). */
-                has_draft?: boolean;
+                has_draft?: components["parameters"]["KBListHasDraft"];
                 /** @description Only the articles with this effective_visibility. */
-                visibility?: components["schemas"]["KBVisibility"];
+                visibility?: components["parameters"]["KBListVisibility"];
                 /** @description in_review: only the articles whose unpublished text waits for a reviewer. approved: only the ones whose unpublished text a reviewer approved as it is now, ready to publish (POST /api/v1/kb/articles/publish). Translations are left out. */
-                state?: "in_review" | "approved";
+                state?: components["parameters"]["KBListState"];
                 /** @description The order without `q`; ignored with `q`. */
-                sort?: "recent" | "manual";
+                sort?: components["parameters"]["KBListSort"];
                 limit?: number;
                 /** @description The next_cursor of the previous page. */
                 cursor?: string;
