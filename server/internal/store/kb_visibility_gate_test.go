@@ -18,14 +18,13 @@ var directPublishedRead = regexp.MustCompile(`(?i)status\s*(=\s*'published'|in\s
 // sees. Every other file reads published articles through the visibility views (kb_public_articles,
 // kb_help_chat_articles, kb_published_articles and their translations).
 var teamSideKBFiles = map[string]string{
-	"store/kb-articles.go":                "the team's article list, edits and publishing",
-	"store/kb-translations.go":            "the team's translations and their counts",
-	"store/kb-review-edits.go":            "the version a review compares with",
-	"store/kb-review-translations.go":     "the version a translation review compares with",
-	"store/kb-public.go":                  "whether a change needs kb_articles:publish",
-	"store/kb-visibility.go":              "which published articles a change shows to more people",
-	"store/setup-ai-and-targets.go":       "the setup step that asks for a first published article",
-	"freshdesk/solutions-link-targets.go": "where an imported link points",
+	"store/kb-articles.go":            "the team's article list, edits and publishing",
+	"store/kb-translations.go":        "the team's translations and their counts",
+	"store/kb-review-edits.go":        "the version a review compares with",
+	"store/kb-review-translations.go": "the version a translation review compares with",
+	"store/kb-public.go":              "whether a change needs kb_articles:publish",
+	"store/kb-visibility.go":          "which published articles a change shows to more people",
+	"store/setup-ai-and-targets.go":   "the setup step that asks for a first published article",
 }
 
 func directPublishedReads(source string) []string {

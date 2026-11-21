@@ -99,3 +99,53 @@ func TestSolutionsAFolderNoLongerPublicRestrictsItsCollection(t *testing.T) {
 		t.Fatalf("an import opened Basics again: help center articles = %s", got)
 	}
 }
+
+// A link to an article kept from the help center has no public page to point at: the import leaves
+// it as it was and reports it as not public, whether Freshdesk kept the folder for agents or the team
+// restricted its collection here. The old address of such an article is not counted as redirected.
+func TestImportLeavesLinksToARestrictedArticleAlone(t *testing.T) {
+	env := newImportEnv(t).withLinks()
+	env.setHelpCenter(t, true)
+	links := env.fake.solutionsEdit
+	env.editSolutions(func(fixture map[string]any) {
+		links(fixture)
+		setFolderVisibility(fixture, "1", 0, 3) // Basics (11), the home of 101: agents
+	})
+	report := env.linkRun(t)
+	reset := env.fake.api.URL + "/support/solutions/articles/101-reset-your-password"
+	if body := env.kbArticles(t, env.workspaceID)["106"].Body; !strings.Contains(body, "[reset]("+reset+")") {
+		t.Errorf("article 106 links an agents only article:\n%s", body)
+	}
+	if got := leftReason(report, "kb_article", "106", reset); got != freshdesk.LinkNotPublic {
+		t.Errorf("link from 106 to 101 left as %q, want %q; links=%+v", got, freshdesk.LinkNotPublic, report.Links)
+	}
+
+	env = newImportEnv(t).withLinks()
+	env.setHelpCenter(t, true)
+	env.linkRun(t)
+	if _, err := env.pool.Exec(context.Background(), `UPDATE kb_collections SET visibility='agents' WHERE workspace_id=$1 AND name='Basics'`,
+		env.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	again := env.linkRun(t)
+	unmapped := map[string]string{}
+	for _, address := range again.Links.OldAddresses.Unmapped {
+		unmapped[address.Path] = address.Reason
+	}
+	if unmapped["/support/solutions/articles/101"] != freshdesk.LinkNotPublic || unmapped["/support/solutions/folders/11"] != freshdesk.LinkNotPublic {
+		t.Errorf("old addresses = %+v, want articles/101 and folders/11 not public", again.Links.OldAddresses)
+	}
+}
+
+// leftReason is why the import left a link of an item as it was, or "" when it did not.
+func leftReason(report *freshdesk.Report, entity, freshdeskID, url string) string {
+	if report.Links == nil {
+		return ""
+	}
+	for _, link := range report.Links.Left {
+		if link.Entity == entity && link.FreshdeskID == freshdeskID && link.URL == url {
+			return link.Reason
+		}
+	}
+	return ""
+}

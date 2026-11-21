@@ -47,8 +47,8 @@ func (r *run) linkSite(ctx context.Context) (linkSite, error) {
 }
 
 // linkTargets maps "<entity>:<Freshdesk id>" of every knowledge base item this account's ledger
-// holds to where its old address leads: the new address of a published article or of a collection
-// with something published in or below it, else the reason. address is the help center's.
+// holds to where its old address leads: the new address of an article the help center shows or of a
+// collection with such an article in or below it, else the reason. address is the help center's.
 func (r *run) linkTargets(ctx context.Context, address string) (map[string]linkTarget, error) {
 	data := store.NewWithDB(r.db)
 	collections, err := data.HelpCenterCollections(ctx, r.workspaceID)
@@ -58,7 +58,8 @@ func (r *run) linkTargets(ctx context.Context, address string) (map[string]linkT
 	paths := helpcenter.PublicCollectionPaths(collections)
 	targets := map[string]linkTarget{}
 	err = r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT i.entity, i.source_id, i.status='done', a.number, a.slug, a.status='published' AND a.deleted_at IS NULL, c.id::text
+		rows, err := tx.Query(ctx, `SELECT i.entity, i.source_id, i.status='done', a.number, a.slug,
+				EXISTS (SELECT 1 FROM kb_public_articles kp WHERE kp.workspace_id=a.workspace_id AND kp.id=a.id), c.id::text
 			FROM import_items i
 			LEFT JOIN kb_articles a ON i.entity='kb_article' AND a.workspace_id=i.workspace_id AND a.id=i.target_id
 			LEFT JOIN kb_collections c ON i.entity IN ('kb_category','kb_folder') AND c.workspace_id=i.workspace_id AND c.id=i.target_id
