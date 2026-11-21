@@ -115,8 +115,8 @@ For the same window, in the workspace's timezone, today included:
   "80% · 4 of 5") and **Used in replies**: the sent replies that linked the article or were an AI draft
   that quoted it, each reply once. Click the title to open the article, and the number of replies for
   the replies themselves. Only articles your help center shows are listed: an article kept for
-  the team or for help chat is left out, since everyone who can see Results, a share link included,
-  would read its title.
+  the team or for help chat is left out, since a teammate who can see Results may not be allowed to
+  read the knowledge base.
 
 A view reaches this page within a minute. Colliedesk keeps only the number of views of each article,
 language and day: never the reader's address, browser or the page they came from. Links in a reply

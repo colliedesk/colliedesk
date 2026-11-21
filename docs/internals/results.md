@@ -110,7 +110,7 @@ is in docs/internals/knowledge-base.md › Views and uses.
 | The article rows are the articles viewed or used in a reply in the window, most viewed first, at most 50 (`MaxHelpCenterArticles`), with `articles_total` | The answer stays one call for an agent and a bounded size; the editor box and `/stats` read any one article |
 | `helpful`, `votes` and `helpful_percent` are what the article's page shows now, not votes cast in the window | Votes can be reset and a reader changes a vote; a per-window count would disagree with the article's own box |
 | `uses` counts distinct sent replies (a reply that links and quotes the article counts once) | It answers "how many replies used it"; it opens the list of those replies (`/stats`) |
-| The article rows list only articles the help center shows (`publicKBArticle`): an article kept for the team or for help chat that an AI draft quoted is left out, and out of `articles_total` | Results reach members with `results:read` and no knowledge base permission, share-link viewers and the results email; a team-only title must not reach them |
+| The article rows list only articles the help center shows (`publicKBArticle`): an article kept for the team or for help chat that an AI draft quoted is left out, and out of `articles_total` | Results reach members with `results:read` and no knowledge base permission; a team-only title must not reach them |
 | Not on the share page nor in the weekly email | `results.Shared` is pinned field by field; adding the block there is its own decision |
 
 ## Share link and weekly email

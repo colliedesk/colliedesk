@@ -71,7 +71,7 @@ var helpCenterArticleVotes = strings.ReplaceAll(kbVoteCountsSQL, "$2", "top.id")
 
 // helpCenterArticles are the articles viewed or used in a sent reply in [from, to), most viewed first.
 // Only articles the help center shows are listed: results reach members without a knowledge base
-// permission and share-link viewers, so an article kept for the team or for help chat is never named.
+// permission, so an article kept for the team or for help chat is never named.
 func helpCenterArticles(ctx context.Context, tx pgx.Tx, workspaceID string, from, to time.Time, loc *time.Location) ([]results.HelpCenterArticle, int, error) {
 	rows, err := tx.Query(ctx, `WITH v AS (
 			SELECT kb_article_id AS id, sum(views)::bigint AS views FROM kb_article_views

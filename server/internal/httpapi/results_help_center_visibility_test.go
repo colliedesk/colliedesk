@@ -8,8 +8,8 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
-// Results reach members without a knowledge base permission and anyone holding a share link, so its
-// article rows name only articles the help center shows: an article kept for the team or for help chat
+// Results reach members without a knowledge base permission, so its article rows name only articles
+// the help center shows: an article kept for the team or for help chat
 // that an AI draft quoted is not listed, nor counted in the total.
 func TestResultsListOnlyArticlesTheHelpCenterShows(t *testing.T) {
 	now := time.Date(2026, 11, 19, 15, 0, 0, 0, time.UTC)
