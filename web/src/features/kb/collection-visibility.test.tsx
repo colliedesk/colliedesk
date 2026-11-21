@@ -15,7 +15,8 @@ const base = {
   'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
 };
 const setup = collections.find((item) => item.id === ids.setup)!;
-const helpText = 'Applies to every article in it and its collections. An article is as restricted as the most restrictive of itself and its collections.';
+const helpText = 'Applies to every article in it and its collections.';
+const tipText = 'An article is as restricted as the most restrictive of itself and every collection it is in.';
 
 function open(search: KnowledgeSearch = { collection: ids.setup }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -31,6 +32,7 @@ test('a collection says who can see its articles, and sends only a changed choic
   expect(select).toHaveValue('everyone');
   expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual(['Everyone', 'Help chat only', 'Agents only']);
   expect(within(form).getByText(helpText)).toBeInTheDocument();
+  expect(within(form).getByRole('button', { name: 'About Who can see this' })).toHaveAccessibleDescription(tipText);
   fireEvent.change(select, { target: { value: 'agents' } });
   fireEvent.click(within(form).getByRole('button', { name: 'Save collection' }));
   await waitFor(() => expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: setup.updated_at, visibility: 'agents' }));

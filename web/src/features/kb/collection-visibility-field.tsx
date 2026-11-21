@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { HelpTip } from '../../ui/help-tip';
 import { visibilitySchema } from './kb-api';
 import type { KBVisibility } from './kb-api';
 import { visibilityMessages as v } from './visibility-messages';
@@ -11,5 +12,5 @@ export function CollectionVisibilityField({ value, onChange }: { value: KBVisibi
     <select id={id} value={value} aria-describedby={`${id}-help`} onChange={(event) => onChange(visibilitySchema.parse(event.target.value))}>
       {visibilitySchema.options.map((option) => <option key={option} value={option}>{v.names[option]}</option>)}
     </select>
-    <small id={`${id}-help`} className="muted-copy">{v.collectionHelp}</small></div>;
+    <small id={`${id}-help`} className="muted-copy">{v.collectionHelp} <HelpTip label={v.heading} text={v.collectionTip} /></small></div>;
 }
