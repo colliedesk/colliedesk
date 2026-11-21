@@ -30,6 +30,16 @@
     "out": "# Title\n\n<p data-align=\"center\">\n\nSay <u>this</u>, <mark>that</mark> and <span data-color=\"accent\">more</span>.\n\n</p>\n\n<table>\n<tr>\n<th colspan=\"2\" data-align=\"center\">\n\nHead\n\n</th>\n</tr>\n<tr>\n<td data-bg=\"warning\">\n\nA\n\n</td>\n<td>\n\nB\n\n</td>\n</tr>\n</table>\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
   },
   {
+    "name": "a wrapper inside a list item keeps its indent",
+    "in": "- item\n\n  <P DATA-ALIGN='center'>\n\n  nested <U>x</U>\n\n  </P>\n- next\n",
+    "out": "- item\n\n  <p data-align=\"center\">\n\n  nested <u>x</u>\n\n  </p>\n- next\n"
+  },
+  {
+    "name": "a wrapper inside a callout keeps its quote markers",
+    "in": "> [!NOTE]\n> <P data-indent=1 data-align=right>\n>\n> in callout\n>\n> </P>\n",
+    "out": "> [!NOTE]\n> <p data-align=\"right\" data-indent=\"1\">\n>\n> in callout\n>\n> </p>\n"
+  },
+  {
     "name": "code keeps its text",
     "in": "Type `<U>x</U>` here.\n\n```html\n<SPAN data-color='danger'>\n```\n\n    <P DATA-ALIGN='center'>\n",
     "out": "Type `<U>x</U>` here.\n\n```html\n<SPAN data-color='danger'>\n```\n\n    <P DATA-ALIGN='center'>\n"

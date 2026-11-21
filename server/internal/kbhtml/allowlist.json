@@ -1,5 +1,5 @@
 {
-  "about": "The only raw HTML a knowledge base article may show: these players, rebuilt; any other HTML is left out with its text. The help center (server/internal/kbhtml) and the editor preview (web/src/features/kb/kb-html.ts) both read this file; docs/internals/knowledge-base.md explains each rule. Attribute names are HTML names. The Markdown an author saves keeps every byte; only what is shown leaves HTML out.",
+  "about": "The only raw HTML a knowledge base article may show: these players, rebuilt; any other HTML is left out with its text. The help center (server/internal/kbhtml) and the editor preview (web/src/features/kb/kb-html.ts) both read this file; docs/internals/knowledge-base.md explains each rule. Attribute names are HTML names. The Markdown an author saves keeps every byte except the spelling of its formatting tags (server/internal/kbformat); only what is shown leaves HTML out.",
   "iframe": {
     "embeds": [
       {
