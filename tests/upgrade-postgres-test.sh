@@ -20,13 +20,17 @@
 # rollback, too little disk, an environment PGDATA cannot be added to, a rollback whose old volume
 # is gone, a finish whose 19 volume is gone, a first run or a rollback in another compose project,
 # another compose file changing the postgres service, a compose.yaml naming neither volume of the
-# upgrade) change nothing and print no password. Needs Docker with Compose v2 and curl.
+# upgrade) change nothing and print no password. All of that runs the server of v1.0.1, the last
+# release that runs on PostgreSQL 17. Then the install pulls IMAGE, which runs on 19 or newer only:
+# it refuses the 17 database and names upgrade-postgres.sh, which moves the install to 19 once the
+# 19 volume an earlier rollback kept is removed, and IMAGE then migrates and serves each workspace
+# its own inbox. Needs Docker with Compose v2 and curl.
 #   sh tests/upgrade-postgres-test.sh LAYOUT IMAGE
 # LAYOUT is the database login layout of the install:
 #   owner      POSTGRES_USER=postgres, the server logs in as the colliedesk owner role (install.sh
 #              since the request login)
 #   superuser  no POSTGRES_USER: colliedesk is the PostgreSQL superuser and the server's login
-# IMAGE is the Colliedesk server image the install runs (colliedesk:ci in CI).
+# IMAGE is the Colliedesk server image the install moves to (colliedesk:ci in CI).
 # UPGRADE_POSTGRES_TEST_KEEP=1 leaves the install running for a look.
 set -eu
 
@@ -36,6 +40,8 @@ IMAGE=${2:?usage: upgrade-postgres-test.sh owner|superuser IMAGE}
 case $LAYOUT in owner) SUPER=postgres ;; superuser) SUPER=colliedesk ;; *) echo 'LAYOUT is owner or superuser' >&2; exit 2 ;; esac
 DOCKER=${DOCKER:-docker}
 BASE_TAG=v1.0.1
+# The server of $BASE_TAG runs on PostgreSQL 17 and on 19; every later release needs 19.
+PREVIOUS=ghcr.io/colliedesk/colliedesk:${BASE_TAG#v}
 # Ports and names derive from the checkout path and the layout, so both layouts run at once.
 PORT=${COLLIEDESK_UPGRADE_POSTGRES_PORT:-$((20500 + $(printf '%s %s' "$ROOT" "$LAYOUT" | cksum | cut -d" " -f1) % 800))}
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/colliedesk-pgup.XXXXXX")
@@ -136,26 +142,33 @@ postgres_password=$(secret)
   fi
   echo "DATABASE_URL=postgres://colliedesk:$database_password@postgres:5432/colliedesk?sslmode=disable"
   echo "DATABASE_REQUEST_URL=postgres://colliedesk_request:$(secret)@postgres:5432/colliedesk?sslmode=disable"
-  echo "COLLIE_DESK_IMAGE=$IMAGE"
+  echo "COLLIE_DESK_IMAGE=$PREVIOUS"
   echo "COLLIE_DESK_PORT=$PORT"
   echo "APP_ORIGIN=http://localhost:$PORT"
   echo 'DISABLE_TELEMETRY=true'
 } >"$TMP/.env"
 "$DOCKER" image inspect "$IMAGE" >/dev/null 2>&1 || fail "no image $IMAGE"
+"$DOCKER" image inspect "$PREVIOUS" >/dev/null 2>&1 || "$DOCKER" pull -q "$PREVIOUS" >/dev/null || fail "cannot pull $PREVIOUS"
 dc up -d --wait postgres >/dev/null 2>&1 || fail 'postgres did not start'
 [ "$(pg_major)" = 17 ] || fail "the $BASE_TAG install does not run PostgreSQL 17"
 old_volume=$(data_volume)
 compose_mode=$(mode "$TMP/compose.yaml")
 
-# The fixture: every migration of this checkout in order, as the owner and with the setting
-# `collie migrate` uses, each followed by its fixture file, in one psql session.
-step 'building the fixture'
+# The fixture: every migration of $BASE_TAG in order, as the owner and with the setting
+# `collie migrate` uses, each followed by its fixture file, in one psql session. Migration files
+# never change once merged (migration-check), so the files of this checkout are the ones it ran.
+git -C "$ROOT" ls-tree --name-only "$BASE_TAG" server/migrations/ | sed -n 's#^server/migrations/\(.*\.up\.sql\)$#\1#p' >"$TMP/base-migrations"
+[ -s "$TMP/base-migrations" ] || fail "cannot list the migrations of $BASE_TAG"
+while read -r name; do
+  [ -f "$ROOT/server/migrations/$name" ] || fail "migration $name of $BASE_TAG is not in this checkout"
+done <"$TMP/base-migrations"
+step "building the fixture on the $(grep -c . "$TMP/base-migrations") migrations of $BASE_TAG"
 {
   echo 'SET ROLE colliedesk;'
   echo 'CREATE TABLE schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());'
   echo 'RESET ROLE;'
-  for file in "$ROOT"/server/migrations/*.up.sql; do
-    name=${file##*/}
+  while read -r name; do
+    file=$ROOT/server/migrations/$name
     echo 'BEGIN;'
     echo 'SET LOCAL ROLE colliedesk;'
     echo "SELECT set_config('app.privileged', 'on', true) \\g /dev/null"
@@ -170,12 +183,12 @@ step 'building the fixture'
       echo
       echo 'COMMIT;'
     fi
-  done
+  done <"$TMP/base-migrations"
 } | psql_as "$SUPER" colliedesk >/dev/null || fail 'the fixture did not build'
 psql_as "$SUPER" colliedesk -At -F "$tab" <"$FIXTURE/files.sql" |
   server_run "while IFS='$tab' read -r key content; do mkdir -p \"/data/attachments/\${key%/*}\" && printf '%s' \"\$content\" >\"/data/attachments/\$key\"; done" 2>/dev/null ||
   fail 'could not write the fixture files'
-migrate || fail "$IMAGE did not accept the fixture database"
+migrate || fail "$PREVIOUS did not accept the fixture database"
 
 files() {
   server_run 'cd /data/attachments && find . -type f ! -path "./.incoming/*" | sort | while read -r f; do
@@ -232,7 +245,7 @@ same_data() {
   fi
   dc up -d --wait >/dev/null 2>&1 || fail "the install did not start again $1"
 }
-dc up -d --wait >/dev/null 2>&1 || fail "$IMAGE did not become healthy on the fixture"
+dc up -d --wait >/dev/null 2>&1 || fail "$PREVIOUS did not become healthy on the fixture"
 baseline before
 step "fixture: $(grep -c '^rows' "$TMP/before") tables, $(grep -c . "$TMP/before.files") files, serving on PostgreSQL 17"
 
@@ -334,12 +347,15 @@ rolled_back() {
   step 'rolled back: PostgreSQL 17 on its old volume, data as before, the 19 volume kept'
 }
 
-# The installer, run again: it must keep the major and the volume the install runs on.
+# The server image .env names: the one the install runs.
+env_image() { sed -n 's/^COLLIE_DESK_IMAGE=//p' "$TMP/.env"; }
+# The installer, run again with the image the install runs: it must keep the major and the volume
+# the install runs on.
 rerun_installer() {
   base=$1
   touch "$TMP/.initialized"
   major=$(pg_major) volume=$(data_volume)
-  out=$(COLLIE_DESK_IMAGE=$IMAGE sh "$ROOT/install.sh" --dir "$TMP" --name 'Upgrade Desk' --email owner@acme.example </dev/null 2>&1) ||
+  out=$(COLLIE_DESK_IMAGE=$(env_image) sh "$ROOT/install.sh" --dir "$TMP" --name 'Upgrade Desk' --email owner@acme.example </dev/null 2>&1) ||
     { printf '%s\n' "$out" >&2; fail 'the installer failed on the install'; }
   dc up -d --wait >/dev/null 2>&1 || fail 'the install is not healthy after the installer'
   [ "$(pg_major)" = "$major" ] || fail "the installer moved the database off PostgreSQL $major"
@@ -514,9 +530,29 @@ EOF
     fail 'an upgrade in another compose project made containers or volumes there'
   step 'upgrade in another compose project: refused, nothing made there'
 else
-  # The installer of this checkout first: it keeps 17 and writes the PGDATA line.
-  rerun_installer before
-  grep -qx '    image: postgres:17-bookworm' "$TMP/compose.yaml" || fail 'the installer did not keep postgres:17-bookworm'
+  # The installer of this checkout stops on the bundled PostgreSQL 17 database before it changes
+  # compose.yaml, and says how to move it to 19.
+  cp "$TMP/compose.yaml" "$TMP/compose.before-installer"
+  touch "$TMP/.initialized"
+  if out=$(COLLIE_DESK_IMAGE=$(env_image) sh "$ROOT/install.sh" --dir "$TMP" --name 'Upgrade Desk' --email owner@acme.example </dev/null 2>&1); then
+    printf '%s\n' "$out" >&2
+    fail 'the installer ran on a bundled PostgreSQL 17 database'
+  fi
+  printf '%s\n' "$out" | grep -qF 'the database volume holds PostgreSQL 17' && printf '%s\n' "$out" | grep -qF 'sh upgrade-postgres.sh' ||
+    { printf '%s\n' "$out" >&2; fail 'the installer did not say how to move PostgreSQL 17 to 19'; }
+  cmp -s "$TMP/compose.before-installer" "$TMP/compose.yaml" || fail 'the installer refusing PostgreSQL 17 changed compose.yaml'
+  server_running || fail 'the installer refusing PostgreSQL 17 stopped the server'
+  step 'installer on PostgreSQL 17: refused, compose.yaml unchanged'
+  # The compose file the installer wrote on a rerun before Colliedesk needed 19: PostgreSQL 17 with
+  # the PGDATA line.
+  awk '/^  postgres:$/ { b = 1; print; next }
+    b && (/^  [^ ]/ || /^[^ ]/) { b = 0 }
+    b && $0 == "    environment:" { print; print "      PGDATA: /var/lib/postgresql/data"; next }
+    { print }' "$TMP/compose.before-installer" >"$TMP/compose.yaml"
+  rm "$TMP/compose.before-installer"
+  grep -qx '      PGDATA: /var/lib/postgresql/data' "$TMP/compose.yaml" || fail 'could not add the PGDATA line to compose.yaml'
+  dc up -d --wait >/dev/null 2>&1 || fail 'the install did not start with the PGDATA line'
+  [ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] || fail 'the PGDATA line moved PostgreSQL 17 off its data'
 
   # Refusals that change nothing.
   printf '#!/bin/sh\necho "Filesystem 1024-blocks Used Available Capacity Mounted on"\necho "/dev/x 1048576 1047552 1024 99%% /"\n' >"$TMP/df"
@@ -739,4 +775,42 @@ EOF
   step 'hangup in the rollback: compose.yaml stays on 17'
   rolled_back gone
 fi
+
+# Both layouts end rolled back: PostgreSQL 17 on its old volume, the 19 volume kept. The install
+# pulls IMAGE, which does not start on PostgreSQL 17 and names upgrade-postgres.sh, and changes
+# nothing in the database.
+migrations=$(echo 'SELECT count(*) FROM schema_migrations;' | psql_as "$SUPER" colliedesk -At)
+sed "s#^COLLIE_DESK_IMAGE=.*#COLLIE_DESK_IMAGE=$IMAGE#" "$TMP/.env" >"$TMP/.env.next"
+cat "$TMP/.env.next" >"$TMP/.env"
+rm "$TMP/.env.next"
+if dc up -d --wait >/dev/null 2>&1; then fail "$IMAGE started on PostgreSQL 17"; fi
+dc logs --no-color server >"$TMP/server.log" 2>&1 || :
+grep -qF 'PostgreSQL 19 or newer is required' "$TMP/server.log" && grep -qF 'sh upgrade-postgres.sh' "$TMP/server.log" ||
+  { grep -v -i -E 'password|DATABASE_URL' "$TMP/server.log" | tail -n 20 >&2; fail "$IMAGE on PostgreSQL 17 did not say it needs 19 and how to move"; }
+[ "$(pg_major)" = 17 ] || fail "$IMAGE moved the database off PostgreSQL 17"
+[ "$(echo 'SELECT count(*) FROM schema_migrations;' | psql_as "$SUPER" colliedesk -At)" = "$migrations" ] ||
+  fail "$IMAGE migrated the PostgreSQL 17 database it refused"
+step "$IMAGE on PostgreSQL 17: refused, names upgrade-postgres.sh"
+# The 19 volume the rollback kept holds what the server wrote on 19: the run refuses until the
+# operator removes it, as docs/self-host/upgrade.md says, and then moves the install to 19.
+if upgrade; then cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh upgraded over the PostgreSQL 19 volume a rollback kept'; fi
+grep -qF 'postgres19-data' "$TMP/upgrade.out" || { cat "$TMP/upgrade.out" >&2; fail 'refusing the kept 19 volume, upgrade-postgres.sh did not name it'; }
+no_secret_printed 'refusing the kept 19 volume'
+[ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] || fail 'refusing the kept 19 volume moved PostgreSQL 17 off its volume'
+"$DOCKER" volume rm "$(volume_for postgres19-data)" >/dev/null
+upgrade || { cat "$TMP/upgrade.out" >&2; fail "upgrade-postgres.sh did not move the install to PostgreSQL 19 for $IMAGE"; }
+grep -q 'is on PostgreSQL 19' "$TMP/upgrade.out" || { cat "$TMP/upgrade.out" >&2; fail 'upgrade-postgres.sh did not say the install is on PostgreSQL 19'; }
+no_secret_printed "moving to PostgreSQL 19 for $IMAGE"
+[ "$(pg_major)" = 19 ] && [ "$(data_volume)" = "$(volume_for postgres19-data)" ] || fail "the install does not run PostgreSQL 19 on postgres19-data for $IMAGE"
+[ "$(volume_for postgres-data)" = "$old_volume" ] || fail 'the PostgreSQL 17 volume is gone after the upgrade'
+server_running || fail "$IMAGE is not running on PostgreSQL 19"
+# IMAGE applied every migration of this checkout on start.
+echo 'SELECT name FROM schema_migrations;' | psql_as "$SUPER" colliedesk -At | LC_ALL=C sort >"$TMP/applied"
+(cd "$ROOT/server/migrations" && ls -- *.up.sql) | LC_ALL=C sort | diff - "$TMP/applied" >&2 ||
+  fail "$IMAGE did not apply the migrations of this checkout on PostgreSQL 19 (above)"
+check_inbox acme owner@acme.example
+check_inbox beta admin@beta.example
+baseline candidate
+rerun_installer candidate
+step "$IMAGE on PostgreSQL 19: migrated, each inbox its own, the installer keeps it"
 step 'passed'
