@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { sharedResults } from '../../api/results';
-import type { Results, SharedResults, WindowKey } from '../../api/results';
+import type { SharedResults, WindowKey } from '../../api/results';
 import { resultsMessages as m } from './results-messages';
 import { ResultsPage } from './results-page';
-import type { NumberLink } from './results-page';
+import type { NumberLink, PageResults } from './results-page';
 import './results.css';
 
 // Numbers on the share page open nothing: the conversations need a seat.
 const plainNumber: NumberLink = ({ className, children }) => <span className={className === 'results-number' ? 'results-number results-number-plain' : undefined}>{children}</span>;
 
 // asResults turns the shared totals into the page's shape. Snapshot ids stay empty: nothing links.
-function asResults(shared: SharedResults): Results {
+function asResults(shared: SharedResults): PageResults {
   const side = (value: SharedResults['current'], extra: object) => (value ? { id: '', computed_at: shared.computed_at ?? value.measured_at, measured_at: value.measured_at, windows: value.windows, ...extra } : null);
   return {
     current: side(shared.current, {}),

@@ -32,8 +32,11 @@ const baselineWindow = window({
   handle: { median_minutes: 15, conversations: 212 },
 });
 
+const quietHelpCenter = { from: '2026-09-23T12:00:00Z', to: '2026-10-23T12:00:00Z', views: 0, requests: 0, score: null, weeks: [], days: [], articles: [], articles_total: 0 };
+
 function results(overrides: Partial<Results> = {}): Results {
   return resultsSchema.parse({
+    help_center: { timezone: 'Europe/Berlin', windows: { '30d': quietHelpCenter, '7d': quietHelpCenter } },
     current: { id: '11111111-1111-4111-8111-111111111111', computed_at: '2026-10-23T11:20:00Z', measured_at: '2026-10-23T11:20:00Z',
       history_since: '2026-06-01T00:00:00Z', stats_read: 0, windows: { '30d': window(), '7d': window() } },
     baseline: { id: '22222222-2222-4222-8222-222222222222', computed_at: '2026-09-01T09:20:00Z', measured_at: '2026-09-01T09:12:00Z',
@@ -58,6 +61,17 @@ function renderPage(props: Partial<ResultsPageProps> = {}) {
 }
 
 describe('ResultsPage', () => {
+  it('shows the help center section on the team page and never on a share page', () => {
+    const help = <section aria-label="Help center" />;
+    const { unmount } = render(<ResultsPage results={results()} loading={false} failed={false} onRetry={() => {}} window="30d" onWindow={() => {}} timezone="UTC"
+      isAdmin now={now} link={({ children }) => <span>{children}</span>} importLink={null} helpCenter={help} />);
+    expect(screen.getByRole('region', { name: 'Help center' })).toBeInTheDocument();
+    unmount();
+    render(<ResultsPage results={results()} loading={false} failed={false} onRetry={() => {}} window="30d" onWindow={() => {}} timezone="UTC"
+      isAdmin now={now} link={({ children }) => <span>{children}</span>} importLink={null} helpCenter={help} shared={{ workspace: 'Acme' }} />);
+    expect(screen.queryByRole('region', { name: 'Help center' })).toBeNull();
+  });
+
   it('shows each number next to the baseline, how it is counted, and the conversations it counts', () => {
     const { onWindow } = renderPage();
     const first = screen.getByRole('region', { name: 'First response time' });
