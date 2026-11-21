@@ -30,8 +30,13 @@ type Sender struct {
 	mu      sync.Mutex
 	targets map[string]Target
 	results map[string]Result
-	keyDay  string
-	key     []byte
+	failing map[string]failing
+	// generation counts single-workspace reloads; changed holds the generation of each one that a
+	// full reload in progress may not have seen.
+	generation uint64
+	changed    map[string]uint64
+	keyDay     string
+	key        []byte
 }
 
 // delivery is one page view on its way to one target.
@@ -47,13 +52,16 @@ type delivery struct {
 func New(store Store, options Options) *Sender {
 	options = options.withDefaults()
 	return &Sender{store: store, options: options, client: guardedClient(options.AllowDial, options.Timeout),
-		queue: make(chan *delivery, options.QueueSize), targets: map[string]Target{}, results: map[string]Result{}}
+		queue: make(chan *delivery, options.QueueSize), targets: map[string]Target{}, results: map[string]Result{},
+		failing: map[string]failing{}, changed: map[string]uint64{}}
 }
 
-// PageViewed implements pageview.Consumer: it queues the view for the workspace's target, if any.
+// PageViewed implements pageview.Consumer: it queues the view for the workspace's target, if any
+// and not paused.
 func (s *Sender) PageViewed(event pageview.Event) {
 	s.mu.Lock()
 	target, ok := s.targets[event.WorkspaceID]
+	ok = ok && !s.pausedLocked(event.WorkspaceID)
 	var clientID, session string
 	if ok && target.Provider == GA4 {
 		clientID, session = s.readerIDs(event)
@@ -68,15 +76,16 @@ func (s *Sender) PageViewed(event pageview.Event) {
 	s.enqueue(&delivery{target: target, event: event, clientID: clientID, session: session})
 }
 
-// readerIDs returns the GA4 client id, an HMAC of the reader's address and browser under the key
-// of the day, and a session id from the same HMAC. The key lives only in memory, so the ids cannot
-// be traced back to a reader and change every day. s.mu must be held.
+// readerIDs returns the GA4 client id, an HMAC of the workspace, the reader's address and browser
+// under the key of the day, and a session id from the same HMAC. The key lives only in memory, so
+// the ids cannot be traced back to a reader, change every day and differ between workspaces.
+// s.mu must be held.
 func (s *Sender) readerIDs(event pageview.Event) (string, string) {
 	if day := s.options.Now().UTC().Format(time.DateOnly); day != s.keyDay {
 		s.keyDay, s.key = day, s.options.NewKey()
 	}
 	mac := hmac.New(sha256.New, s.key)
-	mac.Write([]byte(event.Client + "\n" + event.UserAgent))
+	mac.Write([]byte(event.WorkspaceID + "\n" + event.Client + "\n" + event.UserAgent))
 	sum := mac.Sum(nil)
 	return hex.EncodeToString(sum[:16]), strconv.FormatUint(uint64(binary.BigEndian.Uint32(sum[:4])), 10)
 }
@@ -97,6 +106,16 @@ func (s *Sender) enqueue(item *delivery) {
 	}
 }
 
+// enqueueRetry queues a retry only when there is room: a newer page view is worth more than a
+// retry of an older one.
+func (s *Sender) enqueueRetry(item *delivery) {
+	select {
+	case s.queue <- item:
+	default:
+		s.dropped.Add(1)
+	}
+}
+
 // Dropped is how many deliveries a full queue has dropped since the server started.
 func (s *Sender) Dropped() int64 { return s.dropped.Load() }
 
@@ -114,13 +133,16 @@ func (s *Sender) Run(ctx context.Context) {
 				case <-ctx.Done():
 					return
 				case item := <-s.queue:
-					s.send(ctx, item)
+					if s.stillCurrent(item) {
+						s.send(ctx, item)
+					}
 				}
 			}
 		})
 	}
 	ticker := time.NewTicker(s.options.FlushEvery)
 	defer ticker.Stop()
+	var dropped int64
 	for {
 		select {
 		case <-ctx.Done():
@@ -128,7 +150,11 @@ func (s *Sender) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if err := s.Flush(ctx); err != nil {
-				slog.Warn("help center analytics: recording send results failed", "error", err)
+				slog.Warn("help center analytics: recording send results failed; the next flush tries again", "error", err)
+			}
+			if now := s.Dropped(); now != dropped {
+				slog.Warn("help center analytics: the queue was full and dropped page views", "dropped", now-dropped)
+				dropped = now
 			}
 			if err := s.Reload(ctx, ""); err != nil {
 				slog.Warn("help center analytics: reloading targets failed", "error", err)
@@ -137,41 +163,29 @@ func (s *Sender) Run(ctx context.Context) {
 	}
 }
 
-// send delivers one item; a failure is queued again after the next retry delay, and the last
-// failure is recorded.
+// send delivers one item; a failure is queued again after the next retry delay while its target is
+// still current, and the last failure is recorded.
 func (s *Sender) send(ctx context.Context, item *delivery) {
 	failure := s.deliver(ctx, item)
 	if ctx.Err() != nil {
 		return
 	}
-	now := s.options.Now()
-	if failure == "" {
-		s.record(item.target.WorkspaceID, func(r *Result) { r.SentAt = now })
+	retry := failure != "" && item.tries < len(s.options.RetryDelays)
+	s.sent(item, failure, !retry)
+	if !retry {
 		return
 	}
-	if item.tries < len(s.options.RetryDelays) {
-		delay := s.options.RetryDelays[item.tries]
-		item.tries++
-		time.AfterFunc(delay, func() {
-			if ctx.Err() == nil {
-				s.enqueue(item)
-			}
-		})
-		return
-	}
-	s.record(item.target.WorkspaceID, func(r *Result) { r.Error, r.ErrorAt = failure, now })
+	delay := s.options.RetryDelays[item.tries]
+	item.tries++
+	time.AfterFunc(delay, func() {
+		if ctx.Err() == nil && s.stillCurrent(item) {
+			s.enqueueRetry(item)
+		}
+	})
 }
 
-func (s *Sender) record(workspaceID string, change func(*Result)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	result := s.results[workspaceID]
-	result.WorkspaceID = workspaceID
-	change(&result)
-	s.results[workspaceID] = result
-}
-
-// Flush writes the results gathered since the last flush.
+// Flush writes the results gathered since the last flush. Results a failed write could not record
+// wait for the next flush, unless newer ones replaced them.
 func (s *Sender) Flush(ctx context.Context) error {
 	s.mu.Lock()
 	if len(s.results) == 0 {
@@ -184,38 +198,32 @@ func (s *Sender) Flush(ctx context.Context) error {
 	}
 	s.results = map[string]Result{}
 	s.mu.Unlock()
-	return s.store.RecordHelpCenterAnalyticsResults(ctx, results)
+	err := s.store.RecordHelpCenterAnalyticsResults(ctx, results)
+	if err != nil {
+		s.mu.Lock()
+		for _, result := range results {
+			s.results[result.WorkspaceID] = mergeOlder(s.results[result.WorkspaceID], result)
+		}
+		s.mu.Unlock()
+	}
+	return err
 }
 
-// Reload reads the targets again: every workspace's for "", one workspace's otherwise (after a
-// team changes its settings, so the change applies to the next page view).
-func (s *Sender) Reload(ctx context.Context, workspaceID string) error {
-	if workspaceID == "" {
-		targets, err := s.store.HelpCenterAnalyticsTargets(ctx)
-		if err != nil {
-			return err
-		}
-		next := make(map[string]Target, len(targets))
-		for _, target := range targets {
-			next[target.WorkspaceID] = target
-		}
-		s.mu.Lock()
-		s.targets = next
-		s.mu.Unlock()
-		return nil
+// mergeOlder fills what newer lacks from older, a result gathered before it.
+func mergeOlder(newer, older Result) Result {
+	if newer.WorkspaceID == "" {
+		return older
 	}
-	target, err := s.store.HelpCenterAnalyticsTarget(ctx, workspaceID)
-	if err != nil {
-		return err
+	if newer.Version != older.Version {
+		return newer
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if target == nil || !target.Enabled {
-		delete(s.targets, workspaceID)
-	} else {
-		s.targets[workspaceID] = *target
+	if newer.SentAt.IsZero() {
+		newer.SentAt = older.SentAt
 	}
-	return nil
+	if newer.ErrorAt.IsZero() {
+		newer.Error, newer.ErrorAt = older.Error, older.ErrorAt
+	}
+	return newer
 }
 
 func randomKey() []byte {

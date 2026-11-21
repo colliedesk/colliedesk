@@ -27,12 +27,19 @@ type Target struct {
 	Domain        string
 	BaseURL       string
 	Enabled       bool
+	// Version names the saved settings (their update time in microseconds), so a result of a send
+	// to older settings never lands on newer ones.
+	Version int64
+	// Problem, when set, says why the store could not read this target, and the rest is empty.
+	Problem string
 }
 
 // Result is what the sender learned about one workspace's sends since the last flush: the time of
-// the last send a service accepted, or the last error and when it happened.
+// the last send a service accepted, or the last error and when it happened, for the settings of
+// Version.
 type Result struct {
 	WorkspaceID string
+	Version     int64
 	SentAt      time.Time
 	Error       string
 	ErrorAt     time.Time
@@ -69,6 +76,10 @@ type Options struct {
 	Senders int
 	// FlushEvery is how often Run records the results and reloads the targets, 30 seconds by default.
 	FlushEvery time.Duration
+	// PauseAfter failed sends in a row pause a workspace for PauseFor (5 and 5 minutes by default), so
+	// one service that hangs never holds the senders every workspace shares.
+	PauseAfter int
+	PauseFor   time.Duration
 }
 
 func (o Options) withDefaults() Options {
@@ -95,6 +106,12 @@ func (o Options) withDefaults() Options {
 	}
 	if o.FlushEvery <= 0 {
 		o.FlushEvery = 30 * time.Second
+	}
+	if o.PauseAfter <= 0 {
+		o.PauseAfter = 5
+	}
+	if o.PauseFor <= 0 {
+		o.PauseFor = 5 * time.Minute
 	}
 	return o
 }

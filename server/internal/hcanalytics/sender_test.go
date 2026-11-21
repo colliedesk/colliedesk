@@ -3,6 +3,7 @@ package hcanalytics_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -79,17 +80,39 @@ func (s *stub) snapshot() []hit {
 	return append([]hit(nil), s.hits...)
 }
 
-// memoryStore holds the targets and the recorded results in memory.
+// memoryStore holds the targets and the recorded results in memory. A full read that finds hold set
+// copies the targets, tells listed and waits for hold, like a slow read a save overtakes. failRecord
+// failures are returned by the next result writes.
 type memoryStore struct {
-	mu      sync.Mutex
-	targets []hcanalytics.Target
-	results []hcanalytics.Result
+	mu         sync.Mutex
+	targets    []hcanalytics.Target
+	results    []hcanalytics.Result
+	hold       chan struct{}
+	listed     chan struct{}
+	failRecord int
 }
 
 func (m *memoryStore) HelpCenterAnalyticsTargets(context.Context) ([]hcanalytics.Target, error) {
 	m.mu.Lock()
+	targets, hold, listed := append([]hcanalytics.Target(nil), m.targets...), m.hold, m.listed
+	m.mu.Unlock()
+	if hold != nil {
+		listed <- struct{}{}
+		<-hold
+	}
+	return targets, nil
+}
+
+func (m *memoryStore) set(targets ...hcanalytics.Target) {
+	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]hcanalytics.Target(nil), m.targets...), nil
+	m.targets = targets
+}
+
+func (m *memoryStore) recorded() []hcanalytics.Result {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]hcanalytics.Result(nil), m.results...)
 }
 
 func (m *memoryStore) HelpCenterAnalyticsTarget(_ context.Context, workspaceID string) (*hcanalytics.Target, error) {
@@ -106,6 +129,10 @@ func (m *memoryStore) HelpCenterAnalyticsTarget(_ context.Context, workspaceID s
 func (m *memoryStore) RecordHelpCenterAnalyticsResults(_ context.Context, results []hcanalytics.Result) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failRecord > 0 {
+		m.failRecord--
+		return errors.New("the database is away")
+	}
 	m.results = append(m.results, results...)
 	return nil
 }
@@ -152,8 +179,8 @@ func TestAGA4PageViewReachesTheMeasurementProtocolWithTheArticleAddressAndTitle(
 	if query.Get("measurement_id") != "G-TEST1234" || query.Get("api_secret") != "secret-canary-value" {
 		t.Fatalf("query = %q", got.query)
 	}
-	if got.body["client_id"] != "a0f5108170e7a3850aa6cfa5881afaa3" {
-		t.Fatalf("client_id = %v, want the HMAC of the reader's address and agent under the day key", got.body["client_id"])
+	if got.body["client_id"] != "74a25aed764a4b2d45ae09d8da0d51b5" {
+		t.Fatalf("client_id = %v, want the HMAC of the workspace, the reader's address and agent under the day key", got.body["client_id"])
 	}
 	if got.body["timestamp_micros"] != float64(1795262640000000) {
 		t.Fatalf("timestamp_micros = %v", got.body["timestamp_micros"])
@@ -164,7 +191,7 @@ func TestAGA4PageViewReachesTheMeasurementProtocolWithTheArticleAddressAndTitle(
 	want := map[string]any{"page_location": "https://desk.example.com/help/acme/a/7-reset-a-password", "page_title": "Reset a password",
 		"page_referrer": "https://www.example.org/forum", "language": "en",
 		// Google shows a Measurement Protocol event in its reports only with a session and an engagement time.
-		"session_id": "2700415105", "engagement_time_msec": float64(1)}
+		"session_id": "1956797165", "engagement_time_msec": float64(1)}
 	if event["name"] != "page_view" || len(params) != len(want) {
 		t.Fatalf("event = %v", event)
 	}
