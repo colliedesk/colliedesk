@@ -167,3 +167,19 @@ func TestEquivalentRollsBothChainsBack(t *testing.T) {
 		t.Fatalf("want the down of 2-note-size refused, got %v", err)
 	}
 }
+
+// A style problem in one migration must not hide that an edited applied migration changes the schema.
+func TestCheckComparesTheSchemaEvenWhenAnotherMigrationHasAStyleProblem(t *testing.T) {
+	url := equivalenceDatabase(t)
+	repo := gitMigrationRepo(t, map[string]string{
+		"20261014060000-notes.up.sql":   "-- Notes.\nCREATE TABLE notes (id int);\n",
+		"20261014060000-notes.down.sql": "DROP TABLE notes;\n",
+	})
+	writeMigration(t, repo, "20261014060000-notes.up.sql", "-- Notes.\nCREATE TABLE notes (id bigint);\n")
+	writeMigration(t, repo, "20261201000000-tags.up.sql", "CREATE TABLE tags (id int);\n")
+	writeMigration(t, repo, "20261201000000-tags.down.sql", "DROP TABLE tags;\n")
+	err := Check(repo, Options{Base: "HEAD", DatabaseURL: url})
+	if err == nil || !strings.Contains(err.Error(), "open with") || !strings.Contains(err.Error(), "different schema") {
+		t.Fatalf("want both the style problem and the schema difference, got %v", err)
+	}
+}

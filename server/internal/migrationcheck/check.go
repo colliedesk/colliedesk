@@ -53,10 +53,12 @@ func Check(repo string, options Options) error {
 	sort.Strings(stems)
 	// Every migration is checked, so one run lists everything to fix.
 	var problems []error
+	paired := true
 	for _, stem := range stems {
 		directions := pairs[stem]
 		if len(directions) != 2 {
 			problems = append(problems, fmt.Errorf("migration %q must have matching up and down SQL files", stem))
+			paired = false
 			continue
 		}
 		if err := checkTableSecurity(dir, stem, directions); err != nil {
@@ -66,13 +68,13 @@ func Check(repo string, options Options) error {
 			problems = append(problems, err)
 		}
 	}
-	if len(problems) > 0 {
-		return errors.Join(problems...)
+	// A style problem does not stop the comparison with the base: both are worth knowing in one run.
+	if options.Base != "" && paired {
+		if err := checkBase(repo, dir, options); err != nil {
+			problems = append(problems, err)
+		}
 	}
-	if options.Base == "" {
-		return nil
-	}
-	return checkBase(repo, dir, options)
+	return errors.Join(problems...)
 }
 
 // checkBase refuses a deleted or renamed applied migration. An edited one, up or down, is accepted
