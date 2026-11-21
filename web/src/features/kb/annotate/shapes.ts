@@ -16,8 +16,12 @@ const edge = '#ffffff';
 
 const sizes = (width: number, height: number) => {
   const short = Math.min(width, height);
-  return { stroke: Math.max(2, Math.round(short / 150)), block: Math.max(8, Math.round(short / 40)), font: Math.max(14, Math.round(short / 25)) };
+  return { stroke: Math.max(2, Math.round(short / 150)), font: Math.max(14, Math.round(short / 25)) };
 };
+
+// blurBlock is the square size for a blurred area: about three squares across its short side and never
+// under 16 pixels, so the average colours give back nothing readable of a short word or a few digits.
+export const blurBlock = (width: number, height: number) => Math.max(16, Math.ceil(Math.min(width, height) / 3));
 
 // A shape smaller than this in both directions is a stray click, not a mark.
 export const big = (shape: Shape) => shape.tool === 'text' || Math.abs(shape.to.x - shape.from.x) >= 4 || Math.abs(shape.to.y - shape.from.y) >= 4;
@@ -35,8 +39,9 @@ export function draw(context: CanvasRenderingContext2D, image: CanvasImageSource
     const w = area.right - area.left;
     const h = area.bottom - area.top;
     if (w < 1 || h < 1) continue;
+    // The squares start at the area's corner, and those at its far edges are cut to fit.
     const pixels = context.getImageData(area.left, area.top, w, h);
-    pixelate(pixels, { x: 0, y: 0, width: w, height: h }, size.block);
+    pixelate(pixels, { x: 0, y: 0, width: w, height: h }, blurBlock(w, h));
     context.putImageData(pixels, area.left, area.top);
   }
   context.lineCap = 'round';
