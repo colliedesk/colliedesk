@@ -398,7 +398,8 @@ func CleanKBSEO(what, value string, limit int) (string, error) {
 	return value, nil
 }
 
-// CheckKBBody refuses a text longer than MaxKBArticleBody. It is stored as written, never cut.
+// CheckKBBody refuses a text longer than MaxKBArticleBody. It is never cut; only its formatting tags
+// are respelled first (kbformat.Normalize).
 func CheckKBBody(body string) error {
 	if utf8.RuneCountInString(body) > MaxKBArticleBody {
 		return invalidKB("The text holds at most %d characters; it was not cut, split it into several articles.", MaxKBArticleBody)

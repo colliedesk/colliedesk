@@ -3,24 +3,9 @@ import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
 import { kbMessages } from '../kb-messages';
 import { blockAt, blockChange } from './commands';
+import type { UploadHooks } from './editor-types';
 
-// UploadHooks connect the editor to the article page: which files it accepts (refusing the others with a
-// reason), how one is sent and how it is described, and what the page shows meanwhile.
-// Named is what the page hears of an upload: a file, or an image a paste holds by its address.
-export type Named = { name: string };
-export interface UploadHooks {
-  accept(files: File[]): File[];
-  // upload sends a file and gives what the article holds for it (an image's Markdown, a video's HTML);
-  // progress (0 to 1) shows in its place while a large file goes.
-  // signal aborts when the person cancels the upload from its place in the text.
-  upload(file: File, progress: (done: number) => void, signal: AbortSignal): Promise<{ snippet: string }>;
-  // store puts an image a paste holds by its address (web, blob: or data:) in the media library, and gives
-  // the address the article uses for it.
-  store(src: string, signal: AbortSignal): Promise<string>;
-  onStart(item: Named): void;
-  onDone(item: Named): void;
-  onError(item: Named, error: unknown): void;
-}
+export type { Named, UploadHooks } from './editor-types';
 
 class UploadingWidget extends WidgetType {
   constructor(readonly name: string, readonly cancel: () => void, readonly inline: boolean, readonly percent?: number) {

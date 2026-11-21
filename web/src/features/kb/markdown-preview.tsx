@@ -3,12 +3,13 @@ import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { callouts } from './callouts';
+import { formatting } from './format-preview';
 import { closes, fragment, hidesWhatFollows } from './kb-html';
 import type { HtmlNode } from './kb-html';
 import { kbMessages } from './kb-messages';
 
 // Blocks whose raw HTML is an HTML block of its own; anywhere else it is inline.
-const blockParents = ['root', 'listItem', 'blockquote', 'footnoteDefinition'];
+const blockParents = ['root', 'listItem', 'blockquote', 'footnoteDefinition', 'kbCell'];
 
 // hiddenText removes what inline raw HTML hides, as the help center does: the words between an inline
 // <script>, <style>, <iframe>… and its closing tag (or the end of the paragraph).
@@ -31,7 +32,8 @@ function hiddenText() {
   return (tree: Tree) => visit(tree);
 }
 
-const plugins = [remarkGfm, hiddenText, callouts];
+// Formatting is read before hidden text goes, as on the server.
+const plugins = [remarkGfm, formatting, hiddenText, callouts];
 
 interface Tree {
   type: string;

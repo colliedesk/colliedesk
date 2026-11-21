@@ -95,7 +95,8 @@ func CleanKBTemplateDescription(description string) (string, error) {
 	return description, nil
 }
 
-// CheckKBTemplateBody refuses an empty body or one that is too long. The body is stored as written.
+// CheckKBTemplateBody refuses an empty body or one that is too long. Only the body's formatting tags
+// are respelled before it is stored (kbformat.Normalize).
 func CheckKBTemplateBody(body string) error {
 	switch {
 	case strings.TrimSpace(body) == "":

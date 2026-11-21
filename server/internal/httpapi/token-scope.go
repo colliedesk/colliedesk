@@ -209,6 +209,7 @@ var routeAccess = map[string]TokenAccess{
 	"PATCH /api/v1/agents/me/results-email":      need(auth.PermProfileUpdate),
 	"GET /api/v1/workspace/setup":                need(auth.PermConversationsRead),
 	"PUT /api/v1/agents/me/setup-guide":          need(auth.PermProfileUpdate),
+	"PUT /api/v1/agents/me/kb-editor":            need(auth.PermProfileUpdate),
 	"POST /api/v1/tags":                          need(auth.PermTagsCreate),
 	"PATCH /api/v1/tags/{id}":                    need(auth.PermTagsUpdate),
 	"DELETE /api/v1/tags/{id}":                   need(auth.PermTagsDelete),

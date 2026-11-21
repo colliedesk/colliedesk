@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { editorPart } from './editor-part';
+import { usePreloadEditor } from './editor-part';
 import { Icon } from './editor/icons';
 import { kbTemplatesApi, templatesKey } from './kb-templates-api';
 import type { KBTemplate } from './kb-templates-api';
@@ -22,13 +22,14 @@ export function templateItems(templates: KBTemplate[], defaultId: string | null 
 // template to offer it stays one link.
 export function NewArticleMenu({ collectionId, defaultTemplateId }: { collectionId?: string; defaultTemplateId?: string | null }) {
   const navigate = useNavigate();
+  const preloadEditor = usePreloadEditor();
   const templates = useQuery({ queryKey: templatesKey, queryFn: kbTemplatesApi.list });
   const items = templates.data?.items ?? [];
   const start = (template: string) => void navigate({ to: '/knowledge/new', search: { ...(collectionId ? { collection: collectionId } : {}), template } });
   const label = <><Icon name="plus" />{t.newArticle}</>;
   return (
     // A pointer or the focus on New article loads the editor's chunk ahead of the click (editor-part.ts).
-    <span onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
+    <span onPointerOver={preloadEditor} onFocus={preloadEditor}>
       {items.length === 0
         ? <a className="button-link primary-action" href={`/knowledge/new${collectionId ? `?${new URLSearchParams({ collection: collectionId })}` : ''}`}>{label}</a>
         : <KBMenu label={t.newArticle} title={t.newArticle} trigger={label} buttonClassName="primary-action" describe items={[

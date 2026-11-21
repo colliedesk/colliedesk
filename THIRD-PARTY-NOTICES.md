@@ -158,6 +158,16 @@ these packages (read from the build's source map):
 | `@lezer/common`, `@lezer/highlight`, `@lezer/markdown` | 1.5.3, 1.2.5, 1.8.0 | MIT | Copyright (C) 2018, 2020 by Marijn Haverbeke and others |
 | `style-mod`, `w3c-keyname`, `crelt`, `@marijn/find-cluster-break` | 4.1.4, 2.2.8, 1.0.7, 1.0.4 | MIT | Copyright (C) 2016-2024 by Marijn Haverbeke and others |
 
+The visual editor (`web/src/features/kb/editor/visual/`) is a chunk of its own, built on Tiptap and
+ProseMirror. It holds exactly these packages (read from the build's source map):
+
+| Package | Version | License | Copyright |
+| --- | --- | --- | --- |
+| `@tiptap/core`, `@tiptap/extensions` and the `@tiptap/extension-*` packages it uses (blockquote, bold, code, code-block, document, hard-break, heading, horizontal-rule, image, italic, list, paragraph, strike, table, text, underline) | 3.33.0 | MIT | Copyright (c) 2025, Tiptap GmbH |
+| `prosemirror-model`, `prosemirror-state`, `prosemirror-transform`, `prosemirror-view`, `prosemirror-commands`, `prosemirror-keymap`, `prosemirror-history`, `prosemirror-schema-list`, `prosemirror-tables`, `prosemirror-gapcursor`, `prosemirror-dropcursor` | 1.25.13, 1.4.4, 1.12.7, 1.43.0, 1.7.2, 1.2.3, 1.5.2, 1.6.1, 1.8.5, 1.4.1, 1.8.4 | MIT | Copyright (C) 2015-2017 by Marijn Haverbeke and others |
+| `orderedmap`, `rope-sequence` | 2.1.1, 1.3.4 | MIT | Copyright (C) 2016 by Marijn Haverbeke and others |
+| `mdast-util-to-markdown`, `zwitch` | 2.2.0, 2.0.4 | MIT | Copyright (c) Titus Wormer |
+
 The preview beside it uses `react-markdown` and `remark-gfm` with the unified, mdast and micromark
 packages they depend on (MIT, Copyright (c) Titus Wormer and the unified collective;
 `escape-string-regexp`: Copyright (c) Sindre Sorhus).

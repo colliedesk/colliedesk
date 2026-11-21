@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
+import { writeInMarkdown } from './support/kb-editor';
 
 // docs/user/knowledge-base.md "Link another article from the editor": two actions, Link to article and
 // the article, and the Markdown holds the relative address, which works on every host of the help center.
@@ -26,6 +27,7 @@ test('knowledge base: Link to article in the editor writes a relative link to an
   expect(on.status()).toBe(200);
 
   await page.goto(`${baseURL}/knowledge/articles/${editing.id}`);
+  await writeInMarkdown(page);
   // Below 720px of editor the toolbar keeps this tool under More formatting (one action more); the sidebar and
   // the article's side panel leave that much only on a wide screen, in the Write tab.
   await page.setViewportSize({ width: 1800, height: 900 });
@@ -101,6 +103,7 @@ test('knowledge base: on a phone, Link to article under More formatting is above
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${baseURL}/knowledge/articles/${editing.id}`);
+  await writeInMarkdown(page);
   await page.getByRole('tab', { name: 'Write' }).click();
   const text = page.getByRole('textbox', { name: 'Text (Markdown)' });
   await text.click();
