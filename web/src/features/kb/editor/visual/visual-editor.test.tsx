@@ -32,6 +32,19 @@ test('an image from another site is never loaded: the editor says so in its plac
   expect(handle.markdown()).toBe(article);
 });
 
+test('nothing pasted or written in an article runs a script in the editor', async () => {
+  const { handle, text, editor } = await make('Start\n\n[Open](javascript:alert(1))\n');
+  act(() => { editor.commands.setTextSelection(6); });
+  const html = '<script>alert(2)</script><p><img src="x" onerror="alert(3)">Hi &lt;img src=x onerror=alert(4)&gt;</p>'
+    + '<p><a href="javascript:alert(5)">Click</a></p>';
+  fireEvent.paste(text, { clipboardData: { files: [], types: ['text/html', 'text/plain'], getData: (type: string) => (type === 'text/html' ? html : 'Hi') } });
+  expect(text.querySelector('script')).toBeNull();
+  const handlers = [...text.querySelectorAll('*')].flatMap((el) => [...el.attributes].map((a) => a.name)).filter((name) => name.startsWith('on'));
+  expect(handlers).toEqual([]);
+  expect([...text.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual([null]);
+  expect(handle.markdown()).toBe('Start![](x)Hi \\<img src=x onerror=alert(4)>\n\nClick\n\n[Open](javascript:alert\\(1\\))\n');
+});
+
 test('load shows other text with a fresh undo history, and is no change', async () => {
   const { handle, onChange, editor } = await make('One\n');
   act(() => { editor.commands.insertContentAt(4, ' more'); });

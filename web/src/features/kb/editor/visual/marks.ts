@@ -2,11 +2,13 @@ import { Mark } from '@tiptap/core';
 import Code from '@tiptap/extension-code';
 import type { Palette } from '../format-tags';
 import { rules } from '../format-tags';
+import { linkAllowed } from '../paste-html-inline';
 
 // The marks an article's text can carry beyond Markdown's own: each is one formatting tag the server keeps
 // (allowlist.json "formatting"), shown with the help center's classes (formatting.css).
 
-// Link is a Markdown link: [text](href "title").
+// Link is a Markdown link: [text](href "title"). A javascript: or data: address shows as a link with no address,
+// so a click never runs it; the article keeps the address, and the help center drops it as before.
 export const Link = Mark.create({
   name: 'link',
   inclusive: false,
@@ -15,7 +17,10 @@ export const Link = Mark.create({
     tag: 'a[href]',
     getAttrs: (element) => ({ href: element.getAttribute('href'), title: element.getAttribute('title') }),
   }],
-  renderHTML: ({ HTMLAttributes }) => ['a', { href: HTMLAttributes.href, title: HTMLAttributes.title, rel: 'noopener noreferrer' }, 0],
+  renderHTML: ({ HTMLAttributes }) => {
+    const href = String(HTMLAttributes.href ?? '');
+    return ['a', { href: linkAllowed(href) ? href : null, title: HTMLAttributes.title, rel: 'noopener noreferrer' }, 0];
+  },
 });
 
 const palette: readonly string[] = rules.colors;
