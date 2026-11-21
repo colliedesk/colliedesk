@@ -41,6 +41,14 @@ export interface UploadHooks {
   onError(item: Named, error: unknown): void;
 }
 
+// ImageAnnotation lets the visual editor offer Annotate on an image of the media library. check says why the
+// article cannot take an annotated copy now (unsaved changes, not saved yet); save stores the drawn image as a
+// new library item that takes the original's place in the article, the original staying as its earlier version.
+export interface ImageAnnotation {
+  check(): string | undefined;
+  save(src: string, image: Blob): Promise<void>;
+}
+
 export interface EditorProps {
   initial: string;
   uploads: UploadHooks;
@@ -52,6 +60,8 @@ export interface EditorProps {
   articleId?: string;
   // preview is shown beside the text (split) or instead of it (preview).
   preview?: ReactNode;
+  // annotate is left out where the text is not an article's (a template, a translation).
+  annotate?: ImageAnnotation;
   onChange: (markdown: string) => void;
   onReady: (handle: EditorHandle) => void;
 }

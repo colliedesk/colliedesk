@@ -9,6 +9,8 @@ import { sameActive } from '../editor-types';
 import { pickedImage, samePicked } from './figure-commands';
 import type { Picked } from './figure-commands';
 import { ImageBar } from './image-bar';
+import { AnnotateButton } from './annotate-button';
+import { libraryImageID } from '../../annotate/library-image';
 import { LinkDialog } from './link-dialog';
 import { articleContent } from './schema';
 import { docToMarkdown } from './to-markdown';
@@ -22,7 +24,7 @@ import './visual-editor.css';
 // VisualEditor shows the article as it reads (Tiptap on ProseMirror), holding only what an article can store.
 // What it saves is the Markdown the document reads to, except that an article nobody changed is saved exactly as
 // it was written: opening and saving an article never rewrites its text.
-export default function VisualEditor({ initial, uploads, label, describedBy, invalid, mode, articleId, preview, onChange, onReady }: EditorProps) {
+export default function VisualEditor({ initial, uploads, label, describedBy, invalid, mode, articleId, preview, annotate, onChange, onReady }: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | undefined>(undefined);
   const [target, setTarget] = useState<ToolTarget>();
@@ -151,7 +153,8 @@ export default function VisualEditor({ initial, uploads, label, describedBy, inv
   const closeLink = () => { setLinking(undefined); editor?.commands.focus(); };
   return (
     <EditorFrame mode={mode} articleId={articleId} preview={preview} target={target} active={active}
-      overlay={picked && editor && <ImageBar key={picked.pos} editor={editor} picked={picked} />}>
+      overlay={picked && editor && <ImageBar key={picked.pos} editor={editor} picked={picked}
+      extra={annotate && libraryImageID(picked.attrs.src) ? <AnnotateButton src={picked.attrs.src} annotate={annotate} /> : undefined} />}>
       <div ref={host} className="kb-visual-host" hidden={mode === 'preview'} />
       {linking !== undefined && editor && <LinkDialog current={linking} onClose={closeLink}
         onRemove={() => { setLinking(undefined); editor.chain().focus().extendMarkRange('link').unsetMark('link').run(); }}

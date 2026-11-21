@@ -15,6 +15,7 @@ import { ArticleStatsBox } from './article-stats';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
 import { ArticleVisibilityBox } from './article-visibility';
 import { ArticleAttachments } from './article-attachments';
+import { useImageAnnotation } from './article-annotate';
 import { ArticleDraftBar, draftMessages, editable } from './article-draft';
 import { sameBody, storedAs, useArticleAutosave } from './article-autosave';
 import { ConflictCompare } from './conflict-compare';
@@ -497,6 +498,16 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       submit.current();
     }
   };
+  // An image annotated in the visual editor replaces the original in the saved text, which then shows.
+  const annotation = useImageAnnotation({ article: base, blocked: busy || conflict, unsaved: () => saving.current || unsaved.current(),
+    reload: async () => {
+      const fresh = await latest();
+      if (!fresh) return;
+      show(fresh);
+      client.setQueryData(['kb-article', fresh.id], fresh);
+      void refresh();
+    },
+    notice: setNotice });
   const restoreVersion = async (version: number) => {
     if (!base) return;
     // Restoring replaces the text on screen, so unsaved edits are saved or dropped first, never lost.
@@ -730,7 +741,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
               <Part key={kind} part={kind === 'visual' ? visualPart : editorPart} failed={<div className="kb-editor-loading"><PartUnavailable /></div>} render={({ default: Editor }) => {
                 madeWith.current ??= draft.body;
                 return <Editor initial={madeWith.current} uploads={imageHooks} label={kind === 'visual' ? kbMessages.bodyVisual : kbMessages.body} describedBy={`${id}-help ${id}-count`} invalid={tooLong} mode={mode}
-                  preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} library={library} />} articleId={article?.id} onChange={(text) => set({ body: text })} onReady={onReady} />;
+                  preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} library={library} />} articleId={article?.id} annotate={annotation} onChange={(text) => set({ body: text })} onReady={onReady} />;
               }} />
               {!handle && <p role="status" className="kb-editor-loading kb-hint">{kbMessages.loadingEditor}</p>}
             </div>
