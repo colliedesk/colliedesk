@@ -7,7 +7,8 @@ import (
 )
 
 // The export keeps an article's published tags, the tags waiting in its draft and every author change
-// with the author before and after, so a restored workspace loses none of them.
+// with the author before and after, and whether the help center shows tags, so a restored workspace
+// loses none of them.
 func TestTheExportKeepsArticleTagsAndAuthorChanges(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Tag Export", "admin@tag-export.example.com")
@@ -19,6 +20,7 @@ func TestTheExportKeepsArticleTagsAndAuthorChanges(t *testing.T) {
 	var article kbAuthoredArticle
 	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+created.ID, map[string]any{"updated_at": created.UpdatedAt, "tags": []string{"money"}}, admin, http.StatusOK, &article)
 	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+created.ID, map[string]any{"updated_at": article.UpdatedAt, "author_agent_id": writerID}, admin, http.StatusOK, &article)
+	putHelpCenterShowTags(t, api, admin, true)
 
 	exported := request(t, api, http.MethodGet, "/api/v1/export", nil, admin, nil)
 	if exported.Code != http.StatusOK {
@@ -37,6 +39,9 @@ func TestTheExportKeepsArticleTagsAndAuthorChanges(t *testing.T) {
 	last := versions[len(versions)-1]
 	if last["kind"] != "author_change" || last["author_from_agent_id"] != adminID || last["author_to_agent_id"] != writerID {
 		t.Fatalf("last version = %+v, want author_change from the admin to the writer", last)
+	}
+	if center := ndjsonLines(t, entries["help-center.ndjson"]); len(center) != 1 || center[0]["show_tags"] != true {
+		t.Fatalf("help center = %+v, want show_tags true", center)
 	}
 	if first := versions[0]; first["author_from_agent_id"] != nil || first["author_to_agent_id"] != nil {
 		t.Fatalf("first version = %+v, want no author change on the create", first)

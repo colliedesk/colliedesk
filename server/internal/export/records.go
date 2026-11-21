@@ -671,7 +671,9 @@ type HelpCenter struct {
 	Languages []HelpCenterLanguage `json:"languages"`
 	// RequireApproval: publishing an article or a translation needs a teammate's approval, unless a
 	// collection it is in says otherwise (kb-collections.ndjson).
-	RequireApproval   bool      `json:"require_approval"`
+	RequireApproval bool `json:"require_approval"`
+	// ShowTags: an article's page shows its published tags to readers.
+	ShowTags          bool      `json:"show_tags"`
 	ContentVersion    int64     `json:"content_version"`
 	LastArticleNumber int64     `json:"last_article_number"`
 	UpdatedAt         time.Time `json:"updated_at"`

@@ -81,10 +81,12 @@ const (
 	kbCollectionOutput = `{"type":"object","required":["collection"],"properties":{"collection":` + kbCollectionSchema + `}}`
 
 	helpCenterSchema = `{"type":"object","required":["enabled","title","locale","content_version","url"],"properties":{"enabled":{"type":"boolean"},"title":{"type":"string"},` +
-		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"},` + kbHelpCenterApprovalProperty + `}}`
+		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"},` + kbHelpCenterApprovalProperty + `,` + kbHelpCenterShowTagsProperty + `}}`
 
 	kbHelpCenterApprovalProperty = `"require_approval":{"type":"boolean","description":"true: an article is published only once a teammate approved exactly its text ` +
 		`(colliedesk_kb_article_send_for_review); a collection's require_approval can override it."}`
+
+	kbHelpCenterShowTagsProperty = `"show_tags":{"type":"boolean","description":"true: an article's page shows its published tags to readers. Search finds articles by tag either way."}`
 )
 
 func kbCollectionsListSpec() Spec {
@@ -420,11 +422,11 @@ func helpCenterUpdateSpec() Spec {
 		Title: "Turn the help center on or off",
 		Description: `Turn the public help center on or off and set its title (empty uses the workspace name) and language (a BCP 47 tag such as en or pt-BR). ` +
 			`Turning it on publishes every article marked published; turning it off takes every page off line at once. ` +
-			`require_approval (needs kb_articles:publish; left out, it stays as it is) makes every article need a teammate's approval before it is published. It is safe to repeat.`,
+			`require_approval (needs kb_articles:publish; left out, it stays as it is) makes every article need a teammate's approval before it is published. show_tags (left out, it stays as it is) shows each article's tags on its page. It is safe to repeat.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/help-center"},
 		Input: `{"type":"object","additionalProperties":false,"required":["enabled","title","locale"],"properties":{"enabled":{"type":"boolean"},` +
-			`"title":{"type":"string","maxLength":200},"locale":{"type":"string","minLength":2,"maxLength":35},` + kbHelpCenterApprovalProperty + `}}`,
+			`"title":{"type":"string","maxLength":200},"locale":{"type":"string","minLength":2,"maxLength":35},` + kbHelpCenterApprovalProperty + `,` + kbHelpCenterShowTagsProperty + `}}`,
 		Output: `{"type":"object","required":["help_center"],"properties":{"help_center":` + helpCenterSchema + `}}`,
 		run:    helpCenterUpdate,
 	}

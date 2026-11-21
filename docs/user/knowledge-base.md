@@ -768,7 +768,8 @@ Open **Knowledge base → Settings**. It needs only
 role reads neither articles nor media. Everyone who opens it sees whether the help center is on. An admin can turn
 it on or off with **Publish the help center** and set its **Title** (empty uses the workspace name).
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
-published.
+published. **Show tags on articles** shows each article's published [tags](#tags) on its page; search
+finds articles by tag either way.
 
 ### Brand
 

@@ -96,3 +96,18 @@ func (s *Store) ListKBTags(ctx context.Context, workspaceID string) ([]domain.KB
 	}
 	return tags, nil
 }
+
+// kbTagWords is the search vector of the published tags of the article aliased a, empty without any:
+// the help center and help chat find an article by a tag as by a word of its title.
+const kbTagWords = `COALESCE((SELECT kb_search_vector(string_agg(kt.tag, ' ')) FROM kb_article_tags kt
+	WHERE kt.workspace_id=a.workspace_id AND kt.article_id=a.id), ''::tsvector)`
+
+// shownKBTags returns the published tags of the article, sorted, when the help center shows tags, and
+// none when it does not.
+func shownKBTags(ctx context.Context, tx pgx.Tx, workspaceID, id string) ([]string, error) {
+	var tags []string
+	err := tx.QueryRow(ctx, `SELECT COALESCE(array_agg(t.tag ORDER BY t.tag), '{}') FROM kb_article_tags t
+		JOIN help_centers h ON h.workspace_id=t.workspace_id AND h.show_tags
+		WHERE t.workspace_id=$1 AND t.article_id=$2`, workspaceID, id).Scan(&tags)
+	return tags, err
+}

@@ -851,6 +851,7 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 		Title           *string `json:"title"`
 		Locale          *string `json:"locale"`
 		RequireApproval *bool   `json:"require_approval"`
+		ShowTags        *bool   `json:"show_tags"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil || input.Title == nil || input.Locale == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send enabled, title and locale.")
@@ -862,7 +863,7 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID,
-		store.HelpCenterChange{Enabled: *input.Enabled, Title: *input.Title, Locale: *input.Locale, RequireApproval: input.RequireApproval})
+		store.HelpCenterChange{Enabled: *input.Enabled, Title: *input.Title, Locale: *input.Locale, RequireApproval: input.RequireApproval, ShowTags: input.ShowTags})
 	if err != nil {
 		writeKBError(response, err)
 		return

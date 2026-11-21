@@ -595,10 +595,11 @@ type aiDocRows struct {
 	updated                          []time.Time
 }
 
-func (r *aiDocRows) add(article, locale, conversation *string, title, body string, updated time.Time) {
+// add adds a row; words are found like the title but are not text the model reads (an article's tags).
+func (r *aiDocRows) add(article, locale, conversation *string, title, words, body string, updated time.Time) {
 	r.articles, r.locales, r.conversations = append(r.articles, article), append(r.locales, locale), append(r.conversations, conversation)
 	r.titles, r.bodies = append(r.titles, title), append(r.bodies, body)
-	r.folded = append(r.folded, FoldForAIRetrieval(title+"\n"+body))
+	r.folded = append(r.folded, FoldForAIRetrieval(title+"\n"+words+"\n"+body))
 	r.tokens, r.updated = append(r.tokens, aiTokens(title)+aiTokens(body)), append(r.updated, updated)
 }
 
@@ -622,24 +623,25 @@ func buildAIArticles(ctx context.Context, tx pgx.Tx, workspaceID string, ids []s
 	if _, err := tx.Exec(ctx, `DELETE FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id=ANY($2::uuid[])`, workspaceID, ids); err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `SELECT a.id::text, NULL::text, a.title, a.body_md, a.updated_at FROM kb_articles a
+	tags := `(SELECT COALESCE(string_agg(tg.tag, ' '), '') FROM kb_article_tags tg WHERE tg.workspace_id=a.workspace_id AND tg.article_id=a.id)`
+	rows, err := tx.Query(ctx, `SELECT a.id::text, NULL::text, a.title, `+tags+`, a.body_md, a.updated_at FROM kb_articles a
 			WHERE a.workspace_id=$1 AND a.id=ANY($2::uuid[]) AND NOT a.ai_excluded AND EXISTS (SELECT 1 FROM kb_published_articles kv WHERE kv.workspace_id=a.workspace_id AND kv.id=a.id)
 		UNION ALL
-		SELECT a.id::text, t.locale, t.title, t.body_md, t.updated_at FROM kb_articles a JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id
+		SELECT a.id::text, t.locale, t.title, `+tags+`, t.body_md, t.updated_at FROM kb_articles a JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id
 			WHERE a.workspace_id=$1 AND a.id=ANY($2::uuid[]) AND NOT a.ai_excluded
 				AND EXISTS (SELECT 1 FROM kb_published_translations kt WHERE kt.workspace_id=t.workspace_id AND kt.article_id=t.article_id AND kt.locale=t.locale)`, workspaceID, ids)
 	if err != nil {
 		return err
 	}
 	type source struct {
-		article     string
-		locale      *string
-		title, body string
-		updated     time.Time
+		article           string
+		locale            *string
+		title, tags, body string
+		updated           time.Time
 	}
 	sources, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (source, error) {
 		var s source
-		err := row.Scan(&s.article, &s.locale, &s.title, &s.body, &s.updated)
+		err := row.Scan(&s.article, &s.locale, &s.title, &s.tags, &s.body, &s.updated)
 		return s, err
 	})
 	if err != nil {
@@ -656,7 +658,7 @@ func buildAIArticles(ctx context.Context, tx pgx.Tx, workspaceID string, ids []s
 		if s.locale != nil {
 			locale = *s.locale
 		}
-		docs.add(&s.article, s.locale, nil, s.title, s.body+kbFilesText(s.title, files.shown(s.article, locale)), s.updated)
+		docs.add(&s.article, s.locale, nil, s.title, s.tags, s.body+kbFilesText(s.title, files.shown(s.article, locale)), s.updated)
 	}
 	return docs.insert(ctx, tx, workspaceID)
 }
@@ -711,7 +713,7 @@ func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, id
 			body += "\n\nReply: " + IndentFollowingLines(maskAIText(strings.TrimSpace(*reply), contact))
 		}
 		title := cutRunes(maskAIText(subject, contact), 300)
-		docs.add(nil, nil, &id, title, cutRunes(body, aiConversationRunes-utf8.RuneCountInString(title)), updated)
+		docs.add(nil, nil, &id, title, "", cutRunes(body, aiConversationRunes-utf8.RuneCountInString(title)), updated)
 	}
 	if err := rows.Err(); err != nil {
 		return err

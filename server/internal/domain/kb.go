@@ -362,9 +362,11 @@ type HelpCenter struct {
 	Locale  string `json:"locale"`
 	// RequireApproval makes an article need an approved version to be published, in every
 	// collection that inherits the setting.
-	RequireApproval bool       `json:"require_approval"`
-	ContentVersion  int64      `json:"content_version"`
-	UpdatedAt       *time.Time `json:"updated_at"`
+	RequireApproval bool `json:"require_approval"`
+	// ShowTags shows readers each article's tags on its page.
+	ShowTags       bool       `json:"show_tags"`
+	ContentVersion int64      `json:"content_version"`
+	UpdatedAt      *time.Time `json:"updated_at"`
 	// URL is the public address; the API sets it, the store leaves it empty.
 	URL string `json:"url"`
 }
@@ -574,6 +576,9 @@ type PublicKBArticle struct {
 	// Attachments are the files the page lists for download under the text, read with the article
 	// page and the help center index only; URL is left empty, the help center gives each its own address.
 	Attachments KBAttachments
+	// Tags are the article's published tags, read with the article page only and only when the help
+	// center shows tags (HelpCenter.ShowTags).
+	Tags []string
 }
 
 // PublicKBTranslation is a published translation the help center shows, for sitemap.xml.

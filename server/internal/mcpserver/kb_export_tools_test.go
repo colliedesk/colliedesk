@@ -9,7 +9,8 @@ import (
 
 // An AI agent hands a person the article list as a spreadsheet: the CSV the list page downloads, with
 // its filters, a title that starts like a formula kept as text, and the link to the whole file when
-// the agent asked for fewer rows. The tag filter's values come from colliedesk_kb_tags_list.
+// the agent asked for fewer rows. The tag filter's values come from colliedesk_kb_tags_list, and
+// colliedesk_help_center_update shows the tags to readers.
 func TestKBArticlesExportAndTagsThroughMCP(t *testing.T) {
 	e := newEnv(t)
 	w := e.newWorkspace("KB Export Desk", "admin@kb-export.example.com")
@@ -32,6 +33,17 @@ func TestKBArticlesExportAndTagsThroughMCP(t *testing.T) {
 	e.requireMatchesOutputSchema(session, "colliedesk_kb_tags_list", tags)
 	if got := fmt.Sprint(tags["tags"]); got != "[map[article_count:2 tag:billing] map[article_count:1 tag:refund]]" {
 		t.Fatalf("tags = %s, want billing 2 and refund 1", got)
+	}
+
+	shown := e.ok(session, "colliedesk_help_center_update", map[string]any{"enabled": true, "title": "", "locale": "en", "show_tags": true})
+	e.requireMatchesOutputSchema(session, "colliedesk_help_center_update", shown)
+	if got := at(t, shown, "help_center", "show_tags"); got != true {
+		t.Fatalf("help center show_tags = %v, want true", got)
+	}
+	read := e.ok(session, "colliedesk_help_center_get", map[string]any{})
+	e.requireMatchesOutputSchema(session, "colliedesk_help_center_get", read)
+	if got := at(t, read, "help_center", "show_tags"); got != true {
+		t.Fatalf("help center get show_tags = %v, want true", got)
 	}
 
 	exported := e.ok(session, "colliedesk_kb_articles_export", map[string]any{"tags": []any{"billing"}})

@@ -8775,6 +8775,7 @@ paths:
         line at once; turning it on again publishes the articles marked published.
         `require_approval` makes publishing need an approved review in every collection that inherits
         it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes).
+        `show_tags` shows each article's tags on its page; left out, it stays as it is.
       requestBody:
         required: true
         content:
@@ -13306,14 +13307,16 @@ components:
             Whether an article needs a teammate's approval of its exact text before it is published, in
             every collection whose `require_approval` is `inherit`. Left out, it stays as it is. Sending it
             needs kb_articles:publish too.
+        show_tags: {type: boolean, description: 'Whether an article page shows the article''s tags to readers. Left out, it stays as it is.'}
     HelpCenter:
       type: object
-      required: [enabled, title, locale, require_approval, content_version, updated_at, url]
+      required: [enabled, title, locale, require_approval, show_tags, content_version, updated_at, url]
       properties:
         enabled: {type: boolean}
         title: {type: string}
         locale: {type: string}
         require_approval: {type: boolean, description: 'Articles in collections that inherit the setting need an approved version to be published (POST /api/v1/kb/articles/{id}/reviews).'}
+        show_tags: {type: boolean, description: 'Article pages show the article''s published tags. Help center search finds an article by its tags either way.'}
         content_version: {type: integer, minimum: 0}
         updated_at: {type: [string, 'null'], format: date-time, description: Null until the knowledge base or its settings were first changed.}
         url:

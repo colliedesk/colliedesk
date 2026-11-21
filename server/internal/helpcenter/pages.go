@@ -139,6 +139,8 @@ type page struct {
 	Votes *voteBox
 	// Files are the files the article lists for download under its text (files.go).
 	Files []fileLink
+	// Tags are the article's tags, when the help center shows them.
+	Tags []string
 
 	Searched bool
 	Results  []searchResult
@@ -656,6 +658,7 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 	if len(article.Attachments) > 0 {
 		data.Files = v.fileLinks(article.Attachments)
 	}
+	data.Tags = article.Tags
 	paths := pagePaths{}
 	for lang, slug := range article.Alternates {
 		paths[lang] = ArticlePath(article.Number, slug)
