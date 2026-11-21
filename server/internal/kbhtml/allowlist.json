@@ -41,6 +41,15 @@
     "preload": ["none", "metadata"],
     "flags": ["muted", "loop", "playsinline"]
   },
+  "formatting": {
+    "about": "Formatting an article may hold as raw HTML (server/internal/kbformat reads it, and the editor's visual mode writes exactly this): <u> and <mark>, a <span> with a data-color, a paragraph or heading wrapped in <p>/<hN> with data-align and data-indent, and a <table> whose cells carry colspan, rowspan, data-align and data-bg. The help center maps each value to a class of its own style sheet; a style attribute, or any other attribute or value, is never kept.",
+    "marks": ["u", "mark"],
+    "colors": ["accent", "success", "warning", "danger", "muted"],
+    "align": ["center", "right"],
+    "indent": 4,
+    "blocks": ["p", "h1", "h2", "h3", "h4", "h5", "h6"],
+    "span": 20
+  },
   "dimension": { "pattern": "^[0-9]{1,4}$", "min": 1, "max": 4096 },
   "dropWithContent": [
     "applet", "audio", "canvas", "embed", "frame", "frameset", "iframe", "math", "noembed", "noframes", "noscript",

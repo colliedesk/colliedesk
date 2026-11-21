@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/kbformat"
 	"github.com/colliedesk/colliedesk/server/internal/kbhtml"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -29,7 +30,7 @@ var markdown = goldmark.New(
 	goldmark.WithExtensions(
 		// Alignment as an attribute: a style attribute would be refused by the page's CSP.
 		extension.NewTable(extension.WithTableCellAlignMethod(extension.TableCellAlignAttribute)),
-		extension.Strikethrough, linkify{}, extension.TaskList, extension.Footnote),
+		extension.Strikethrough, linkify{}, extension.TaskList, extension.Footnote, kbformat.Extension),
 	goldmark.WithParserOptions(parser.WithAutoHeadingID(), parser.WithASTTransformers(util.Prioritized(publicLinks{}, 100), util.Prioritized(hiddenText{}, 200), util.Prioritized(callouts{}, 300))),
 	// Below the default renderers' 1000, so these functions replace theirs.
 	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(rawHTML{}, 100), util.Prioritized(calloutHTML{}, 100), util.Prioritized(codeHTML{}, 100))),
