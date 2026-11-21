@@ -127,6 +127,7 @@ var toolDocs = map[string]string{
 	"colliedesk_kb_review_withdraw":                  "Takes back a review you sent",
 	"colliedesk_kb_articles_publish":                 "Publishes several articles at once, each answered on its own; text that needs an approval is refused without one",
 	"colliedesk_kb_image_upload":                     "Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one",
+	"colliedesk_kb_image_import":                     "Stores an image found at a public web address in the media library and gives the link to put in an article",
 	"colliedesk_kb_image_get":                        "Shows a knowledge base image to the model",
 	"colliedesk_kb_media_list":                       "Lists the media library: what no article uses (with the space it takes) and images missing alt text",
 	"colliedesk_kb_media_get":                        "Shows one library item, its thumbnail and the articles that use it",

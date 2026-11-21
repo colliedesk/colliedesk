@@ -82,12 +82,32 @@ func saveKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 		change.ExtraCollectionIDs != nil, extras, optionalID(actor.AgentID), change.ShowContents); err != nil {
 		return domain.KBArticle{}, fmt.Errorf("save knowledge base article draft: %w", err)
 	}
-	return recordKBArticleDraft(ctx, tx, workspaceID, actor, id)
+	return recordKBArticleDraft(ctx, tx, workspaceID, actor, id, !change.Autosave)
 }
 
 // recordKBArticleDraft records the article's draft as a version of kind draft, with the live status,
-// links the media the draft names and returns the article.
-func recordKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id string) (domain.KBArticle, error) {
+// links the media the draft names, settles an open review of the text and returns the article. An
+// autosave (versioned false) records no version: the next save does.
+func recordKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id string, versioned bool) (domain.KBArticle, error) {
+	if versioned {
+		if err := addKBArticleDraftVersion(ctx, tx, workspaceID, actor, id); err != nil {
+			return domain.KBArticle{}, err
+		}
+	}
+	if err := noteKBTextWriter(ctx, tx, workspaceID, id, nil, actor, domain.KBArticleDrafted, ""); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if _, err := linkKBMedia(ctx, tx, workspaceID, id); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id, nil); err != nil {
+		return domain.KBArticle{}, err
+	}
+	return readKBArticle(ctx, tx, workspaceID, id)
+}
+
+// addKBArticleDraftVersion records the article's draft as its next version, of kind draft.
+func addKBArticleDraftVersion(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id string) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,title,slug,body_md,seo_title,seo_description,status,collection_id,
 			show_contents,changed_by_agent_id,token_id,token_label,agent_request_id,created_at)
 		SELECT a.workspace_id,a.id,COALESCE((SELECT max(version) FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2),0)+1,
@@ -97,15 +117,9 @@ func recordKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, ac
 		LEFT JOIN sessions t ON t.workspace_id=a.workspace_id AND t.id=$5
 		WHERE a.workspace_id=$1 AND a.id=$2`,
 		workspaceID, id, domain.KBArticleDrafted, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID)); err != nil {
-		return domain.KBArticle{}, fmt.Errorf("record knowledge base article draft: %w", err)
+		return fmt.Errorf("record knowledge base article draft: %w", err)
 	}
-	if _, err := linkKBMedia(ctx, tx, workspaceID, id); err != nil {
-		return domain.KBArticle{}, err
-	}
-	if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id, nil); err != nil {
-		return domain.KBArticle{}, err
-	}
-	return readKBArticle(ctx, tx, workspaceID, id)
+	return nil
 }
 
 // foldKBArticleDraft fills the fields change leaves out from the article's draft, then deletes the
@@ -195,7 +209,7 @@ func restoreKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, a
 	if tag.RowsAffected() == 0 {
 		return domain.KBArticle{}, domain.ErrKBArticleVersionNotFound
 	}
-	return recordKBArticleDraft(ctx, tx, workspaceID, actor, id)
+	return recordKBArticleDraft(ctx, tx, workspaceID, actor, id, true)
 }
 
 // readKBArticleDraft reads the article's draft, or nil without one. collection_ids is the draft's home

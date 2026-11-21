@@ -41,6 +41,20 @@ export default function FakeEditor({ initial, uploads, label, describedBy, inval
   }, []);
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = [...event.clipboardData.files];
+    // Copied HTML: each image in it is stored through the hooks and goes in as its own paragraph.
+    const images = [...(event.clipboardData.getData?.('text/html') ?? '').matchAll(/<img[^>]*\ssrc="([^"]+)"/g)].map((found) => found[1]);
+    if (files.length === 0 && images.length > 0) {
+      event.preventDefault();
+      for (const src of images) {
+        pending.current += 1;
+        props.current.uploads.store(src, new AbortController().signal).then((url) => {
+          pending.current -= 1;
+          put(`${text.current}${text.current ? '\n\n' : ''}![](${url})`);
+          timer.current = window.setTimeout(emit, 120);
+        }, () => { pending.current -= 1; });
+      }
+      return;
+    }
     if (files.length === 0) return;
     event.preventDefault();
     for (const file of props.current.uploads.accept(files)) {

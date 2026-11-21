@@ -54,6 +54,7 @@ type contractFixture struct {
 	trashViewID                   string
 	attachmentID                  string
 	mailImagePath                 string
+	remoteImageURL                string
 	redeemToken, logoutToken      string
 	usedInviteToken               string
 	inboundSecret                 string
@@ -102,7 +103,13 @@ func newContractFixture(t *testing.T) contractFixture {
 	fakeGitHub := startContractGitHub(t)
 	cursorStandIn := cursortest.New(cursorCanaryKey)
 	t.Cleanup(cursorStandIn.Close)
-	imageHost := newImageHost(t, serveBytes("image/png", tinyPNG))
+	imageHost := newImageHost(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pasted.png" { // a whole image, as the media library takes it
+			serveBytes("image/png", kbPNG)(w, r)
+			return
+		}
+		serveBytes("image/png", tinyPNG)(w, r)
+	})
 	api, service, pool, dns := testAPIWithConfig(t, func(config *httpapi.Config) {
 		config.Attachments = storage
 		config.MailImages = mailimage.NewFetcher(allowing(imageHost))
@@ -309,7 +316,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	oauthClientID := registerContractOAuthClient(t, api)
 	return contractFixture{trialOfferToken: trialOfferToken, trialAcceptToken: trialAcceptToken, oauthClientID: oauthClientID, intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, noteID: noteID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
-		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), usedInviteToken: linkToken(t, agentURL), logoutToken: logout.Token, kb: kb, kbTemplates: kbTemplates, kbReviews: kbReviews}
+		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, remoteImageURL: imageHost.URL + "/pasted.png", redeemToken: linkToken(t, redeemURL), usedInviteToken: linkToken(t, agentURL), logoutToken: logout.Token, kb: kb, kbTemplates: kbTemplates, kbReviews: kbReviews}
 }
 
 // seedMailImage gives the conversation's incoming message HTML with one remote image and returns the

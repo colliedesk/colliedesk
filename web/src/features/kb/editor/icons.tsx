@@ -26,6 +26,7 @@ const paths = {
   h3: 'M4 6v12M12 6v12M4 12h8M16.5 8h4l-2.5 4a2.5 2.5 0 1 1-2 4',
   // The knowledge base pages around the editor.
   more: 'M5 12h.01M12 12h.01M19 12h.01',
+  fullscreen: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   close: 'M18 6 6 18M6 6l12 12',
   plus: 'M12 5v14M5 12h14',
   trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',

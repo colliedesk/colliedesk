@@ -21,7 +21,7 @@ vi.mock('./media-api', async (original) => ({
       expires_at: '2026-10-22T00:00:00Z', media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' }, offset: String(first + part.size) };
   },
 }));
-afterEach(() => { navigate.mockReset(); blocker.mockReset(); vi.unstubAllGlobals(); });
+afterEach(() => { navigate.mockReset(); blocker.mockReset(); vi.unstubAllGlobals(); localStorage.clear(); });
 
 // settle waits for the editor to tell the page of what was typed, as it does a moment after typing stops.
 const settle = () => act(() => new Promise((resolve) => { setTimeout(resolve, 150); }));
@@ -131,6 +131,19 @@ test('a pasted image is uploaded as raw bytes and goes in as a paragraph of its 
   const upload = calls.find((call) => call.path === '/api/v1/kb/images')!;
   expect(upload.headers['Content-Type']).toBe('image/png');
   expect(upload.body).toBe(file);
+});
+
+test('an image pasted at a web address is imported by the server under a key that names the paste', async () => {
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Before' })),
+    'POST /api/v1/kb/images/import': () => json(201, uploaded) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  const html = '<p><img src="https://example.com/i/login.png"></p>';
+  fireEvent.paste(text, { clipboardData: { files: [], getData: (type: string) => (type === 'text/html' ? html : '') } });
+  await waitFor(() => expect(text).toHaveValue(`Before\n\n![](/api/v1/kb/images/${ids.image})`));
+  const imported = calls.find((call) => call.path === '/api/v1/kb/images/import')!;
+  expect(imported.body).toEqual({ url: 'https://example.com/i/login.png' });
+  expect(imported.headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/);
 });
 
 test('an image the server refuses leaves no placeholder and says why; a wrong type is refused before any upload', async () => {

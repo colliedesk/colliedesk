@@ -8,7 +8,7 @@ import { article, change, collection, collections, ids, json, me, refusal, serve
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate, useBlocker: vi.fn() }));
 vi.mock('./editor/codemirror-editor', () => import('./editor/fake-editor.test.fixture'));
-afterEach(() => { navigate.mockReset(); vi.unstubAllGlobals(); });
+afterEach(() => { navigate.mockReset(); vi.unstubAllGlobals(); localStorage.clear(); });
 
 const howTo = {
   id: '99999999-9999-4999-8999-000000000001', name: 'How-to', description: 'Steps to get one thing done', body: '## Before you start\n\n## Steps\n',

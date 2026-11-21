@@ -179,7 +179,8 @@ export const kbApi = {
   // key names this save (Idempotency-Key): a retry with the same key returns the article the first stored.
   createArticle: (value: RequestBody<'createKBArticle'>, key: string) => request('/api/v1/kb/articles', kbArticleSchema,
     { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createKBArticle'>(value) }),
-  updateArticle: (id: string, value: RequestBody<'updateKBArticle'>) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema, { method: 'PATCH', body: json<'updateKBArticle'>(value) }),
+  // init carries keepalive for an autosave sent as the page closes.
+  updateArticle: (id: string, value: RequestBody<'updateKBArticle'>, init?: RequestInit) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema, { ...init, method: 'PATCH', body: json<'updateKBArticle'>(value) }),
   deleteArticle: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
   // Publishing the unpublished changes puts them on the help center; key names the press (Idempotency-Key).
   publishDraft: (id: string, updatedAt: string, key: string) => request(`/api/v1/kb/articles/${id}/draft/publish`, kbArticleSchema,

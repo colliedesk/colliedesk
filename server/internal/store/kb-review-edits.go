@@ -5,26 +5,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
 
-// kbTextChangeKinds are the versions in which someone wrote the article's text: its author, for the
-// four-eyes rule. A draft is one; a review event, a deletion or a move to and from the trash is not.
-const kbTextChangeKinds = `('` + domain.KBArticleCreated + `','` + domain.KBArticleEdited + `','` + domain.KBArticleRestored + `','` +
-	domain.KBArticleDrafted + `','` + domain.KBArticleImported + `','` + domain.KBArticleMediaReplaced + `')`
-
 // kbTextAuthors returns those of people who wrote part of the unpublished text of the article (locale
-// nil) or its translation: a version of a kbTextChangeKinds kind they made (themselves or through a
-// token) after the last version that put the text on the help center. They never review it.
+// nil) or its translation, themselves or through a token, in a version or an autosave, since it was
+// last put on the help center: its writers (noteKBTextWriter). They never review it.
 func kbTextAuthors(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, locale *string, people []string) ([]string, error) {
-	if locale != nil {
-		return kbTranslationTextAuthors(ctx, tx, workspaceID, articleID, *locale, people)
-	}
-	rows, err := tx.Query(ctx, `SELECT DISTINCT v.changed_by_agent_id::text FROM kb_article_versions v WHERE v.workspace_id=$1 AND v.article_id=$2
-		AND v.changed_by_agent_id=ANY($3::uuid[]) AND v.kind IN `+kbTextChangeKinds+` AND v.version > COALESCE((SELECT max(p.version) FROM kb_article_versions p
-			WHERE p.workspace_id=$1 AND p.article_id=$2 AND p.status='published' AND `+kbTextVersion("p.")+`),0)`,
-		workspaceID, articleID, people)
+	rows, err := tx.Query(ctx, `SELECT agent_id::text FROM kb_text_writers WHERE workspace_id=$1 AND article_id=$2 AND locale IS NOT DISTINCT FROM $3
+		AND agent_id=ANY($4::uuid[]) ORDER BY agent_id`, workspaceID, articleID, locale, people)
 	if err != nil {
 		return nil, fmt.Errorf("read knowledge base text authors: %w", err)
 	}

@@ -7,7 +7,7 @@ import { article, collections, ids, json, me, refusal, serve } from './kb.test.f
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate, useBlocker: vi.fn() }));
 vi.mock('./editor/codemirror-editor', () => import('./editor/fake-editor.test.fixture'));
-afterEach(() => { navigate.mockReset(); vi.unstubAllGlobals(); });
+afterEach(() => { navigate.mockReset(); vi.unstubAllGlobals(); localStorage.clear(); });
 
 const settle = () => act(() => new Promise((resolve) => { setTimeout(resolve, 150); }));
 const path = `/api/v1/kb/articles/${ids.article}`;

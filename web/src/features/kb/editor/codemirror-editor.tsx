@@ -18,6 +18,9 @@ import { CodeBlockDialog } from './code-block-dialog';
 import { calloutTypes } from '../callouts';
 import { embedSnippet, parseVideoLink } from '../video-link';
 import { startUpload, uploadEvents, uploads as uploadField, uploadsPending } from './upload';
+import { pasteEvents } from './paste-formatted';
+import type { Pasted } from './paste-formatted';
+import { PasteToast } from './paste-toast';
 import { MediaPicker } from '../media-picker';
 import { KBDialog, KBMenu, usePhone } from '../kb-ui';
 import type { MenuItem } from '../kb-ui';
@@ -90,6 +93,10 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   // picking is the media library picker, open or not.
   const [picking, setPicking] = useState(false);
   const [coding, setCoding] = useState(false);
+  // full: the text and its toolbar fill the window until the button or Escape leaves.
+  const [full, setFull] = useState(false);
+  // pasted: the last formatted paste, offered as plain text until the person types on.
+  const [pasted, setPasted] = useState<Pasted>();
   // linkAt is where the list of articles to link to opens, measured from the bar's left edge: under the button
   // that opened it. Undefined while the list is closed.
   const [linkAt, setLinkAt] = useState<number>();
@@ -138,7 +145,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
       keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap]), search({ top: true }), markdownLanguage, markdownHighlight,
       placeholder(kbMessages.writePlaceholder), phrases,
       EditorView.contentAttributes.of({ 'aria-label': latest.current.label, 'aria-describedby': latest.current.describedBy, 'aria-multiline': 'true', spellcheck: 'true' }),
-      uploadField, uploadEvents(hooks),
+      uploadField, uploadEvents(hooks), pasteEvents(hooks, (next) => { if (alive) setPasted(next); }),
       EditorView.updateListener.of((update) => {
         if (!alive) return;
         if (update.docChanged || update.selectionSet || update.transactions.length) {
@@ -146,6 +153,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           setActive((current) => (sameActive(current, next) ? current : next));
         }
         if (!update.docChanged) return;
+        if (!update.transactions.some((tr) => tr.isUserEvent('input.paste'))) setPasted(undefined);
         window.clearTimeout(timer);
         timer = window.setTimeout(() => { if (alive) emit(update.view); }, 120);
       }),
@@ -159,6 +167,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
       load: (markdown) => {
         window.clearTimeout(timer);
         view.setState(EditorState.create({ doc: markdown, extensions: build() }));
+        setPasted(undefined);
         view.scrollDOM.scrollTop = 0;
         emitted = view.state.doc.toString();
         setActive(activeOf(view.state));
@@ -251,6 +260,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     ...(compact ? [{ label: t.articleLink, icon: 'article' as const, disabled: !editing, onSelect: openLinking, separated: true }] : []),
     ...(compact ? [item(t.search, 'search', openSearchPanel), item(t.undo, 'undo', undo, !active?.canUndo)] : []),
     item(t.redo, 'redo', redo, !active?.canRedo),
+    ...(compact ? [{ label: full ? t.exitFullscreen : t.fullscreen, icon: 'fullscreen' as const, onSelect: () => setFull(!full), separated: true }] : []),
   ];
   const insert: MenuItem[] = [
     { label: t.fromLibrary, hint: t.fromLibraryHint, icon: 'library', disabled: !editing, onSelect: () => setPicking(true) },
@@ -261,8 +271,21 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const insertMenu = <KBMenu label={t.insertMenuLong} title={t.insertMenuLong} align="start" describe items={insert} className="md-insert" buttonClassName="md-insert-button"
     tool="insert" tabIndex={stop === 'insert' ? 0 : -1} disabled={!editing}
     trigger={<><Icon name="image" /><span>{t.insertMenu}</span><span className="md-insert-long">{t.insertMenuMore}</span><Icon name="chevronDown" /></>} />;
+  // Full screen works in the preview too, so its button is never disabled. A dialog, a menu or the search panel
+  // takes its own Escape first (each prevents it); a plain Escape in the text leaves full screen.
+  const fullscreen = (
+    <button type="button" data-tool="fullscreen" className="md-tool" aria-label={`${t.fullscreen} (${t.fullscreenKeys})`} data-tip={full ? t.exitFullscreen : t.fullscreen}
+      aria-pressed={full} tabIndex={stop === 'fullscreen' ? 0 : -1} onMouseDown={(event) => event.preventDefault()} onClick={() => setFull(!full)}>
+      <Icon name="fullscreen" />
+    </button>
+  );
+  const onShellKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape' || !full || event.defaultPrevented) return;
+    event.preventDefault();
+    setFull(false);
+  };
   return (
-    <div ref={shell} className="md-shell" data-mode={mode} data-compact={compact ? 'true' : undefined}>
+    <div ref={shell} className="md-shell" data-mode={mode} data-compact={compact ? 'true' : undefined} data-fullscreen={full ? 'true' : undefined} onKeyDown={onShellKey}>
       {/* The bar holds the toolbar and the article list that opens over the text just under it. */}
       <div ref={bar} className="md-bar" style={linkAt === undefined ? undefined : { '--link-at': `${linkAt}px` } as CSSProperties}>
         <div className="md-toolbar" role="toolbar" aria-label={kbMessages.formatting} onKeyDown={onToolbarKey}>
@@ -293,6 +316,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
             <span className="md-sep" aria-hidden="true" />
             {insertMenu}
             <span className="md-grow" />
+            {fullscreen}
             {tool('search', t.search, `${mod}F`, openSearchPanel)}
             {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
           </>}
@@ -332,6 +356,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           startUpload(view, files, view.state.selection.main.head, hooks.current);
           view.focus();
         }} />
+      {pasted && editing && <PasteToast pasted={pasted} view={viewRef.current} onChange={setPasted} />}
       <div className="cm-area">
         <div ref={host} className="cm-host" hidden={mode === 'preview'} />
         {mode !== 'edit' && <section className="cm-preview kb-preview-panel" tabIndex={0} aria-label={kbMessages.preview}>{preview}</section>}
