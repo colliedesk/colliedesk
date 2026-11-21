@@ -813,4 +813,21 @@ check_inbox beta admin@beta.example
 baseline candidate
 rerun_installer candidate
 step "$IMAGE on PostgreSQL 19: migrated, each inbox its own, the installer keeps it"
+# A rollback while .env names IMAGE: PostgreSQL 17 comes back on its old volume, IMAGE refuses it,
+# and the run says which setting to change instead of only "run --rollback again". With the
+# earlier release in .env, --rollback again finishes it.
+grep -qF 'COLLIE_DESK_IMAGE' "$TMP/upgrade.out" ||
+  { cat "$TMP/upgrade.out" >&2; fail 'moving to PostgreSQL 19, upgrade-postgres.sh did not say a rollback needs COLLIE_DESK_IMAGE set to an earlier release'; }
+if upgrade --rollback; then cat "$TMP/upgrade.out" >&2; fail "a rollback with $IMAGE in .env said it finished"; fi
+grep -qF 'COLLIE_DESK_IMAGE' "$TMP/upgrade.out" && grep -qF 'ghcr.io/colliedesk/colliedesk:1.0.1' "$TMP/upgrade.out" ||
+  { cat "$TMP/upgrade.out" >&2; fail "a rollback with $IMAGE in .env did not name COLLIE_DESK_IMAGE and the release to set"; }
+no_secret_printed "rolling back with $IMAGE in .env"
+[ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] || fail "a rollback with $IMAGE in .env left PostgreSQL 17 off its old volume"
+! server_running || fail "a rollback with $IMAGE in .env left a server running that refuses PostgreSQL 17"
+[ "$(state state)" = rolling_back ] || fail "a rollback with $IMAGE in .env left the state $(state state), want rolling_back"
+sed "s#^COLLIE_DESK_IMAGE=.*#COLLIE_DESK_IMAGE=$PREVIOUS#" "$TMP/.env" >"$TMP/.env.next"
+cat "$TMP/.env.next" >"$TMP/.env"
+rm "$TMP/.env.next"
+rolled_back
+step "a rollback with $IMAGE in .env names COLLIE_DESK_IMAGE; with $PREVIOUS it finishes"
 step 'passed'
