@@ -21,7 +21,7 @@ func kbArticlesExportSpec() Spec {
 		Name:  "colliedesk_kb_articles_export",
 		Title: "Export knowledge base articles as CSV",
 		Description: `Give the article list as the CSV file the list page downloads, with the same filters and order as colliedesk_kb_articles_search: one row per article with its title, address, collection, ` +
-			`status, author, tags, languages, created and updated times in your timezone, and vote counts. A cell that starts with =, +, - or @ starts with ' so a spreadsheet keeps it as text. ` +
+			`status, author, tags, languages, created and updated times in your timezone, and vote counts. A cell that starts with =, +, -, @, a tab or a carriage return starts with ' so a spreadsheet keeps it as text. ` +
 			`At most limit rows (5,000); truncated says more match, and download_path is the whole file for a person signed in to Colliedesk.` + "\n\n" + kbTextNotice,
 		REST: []string{"GET " + kbExportPath},
 		Input: `{"type":"object","additionalProperties":false,"properties":{` + kbArticleListInput +

@@ -11,7 +11,8 @@ import (
 const kbExportHeader = "\xEF\xBB\xBFtitle,address,collection,status,author,tags,languages,created_at,updated_at,helpful_votes,not_helpful_votes\n"
 
 // newKBExportFixture is the filter fixture with names on its team, a writer who has left, votes on the
-// card refund and a sixth article whose title a spreadsheet would read as a formula.
+// card refund, a sixth article whose title a spreadsheet would read as a formula, and a seventh whose
+// title starts with a tab in a collection whose name starts with a carriage return.
 func newKBExportFixture(t *testing.T) kbFilterFixture {
 	t.Helper()
 	f := newKBFilterFixture(t)
@@ -19,6 +20,10 @@ func newKBExportFixture(t *testing.T) kbFilterFixture {
 		"title": `=HYPERLINK("https://evil.example","Refund")`, "body_md": "Click."}).ID
 	f.ids["formula"] = formula
 	fixtureSQL(t, f.pool, `UPDATE kb_articles SET created_at='2026-09-01T00:00:00Z', updated_at='2026-09-01T00:00:00Z' WHERE id=$1`, formula)
+	staff := kbCollection(t, f.api, f.admin, map[string]any{"name": "Staff"}).ID
+	tab := kbArticle(t, f.api, f.admin, map[string]any{"collection_id": staff, "slug": "tab-first", "title": "Tab first", "body_md": "Hidden."}).ID
+	fixtureSQL(t, f.pool, `UPDATE kb_collections SET name=E'\rStaff' WHERE id=$1`, staff)
+	fixtureSQL(t, f.pool, `UPDATE kb_articles SET title=E'\tTab first', created_at='2026-08-01T00:00:00Z', updated_at='2026-08-01T00:00:00Z' WHERE id=$1`, tab)
 	fixtureSQL(t, f.pool, `UPDATE agents SET display_name=CASE WHEN id=$1 THEN 'Ana Admin' ELSE 'Wes Writer' END WHERE id IN ($1,$2)`, f.adminID, f.writerID)
 	fixtureSQL(t, f.pool, `UPDATE agents SET deactivated_at=now() WHERE id=$1`, f.writerID)
 	fixtureSQL(t, f.pool, `INSERT INTO kb_article_votes(workspace_id,article_id,voter,address,helpful)

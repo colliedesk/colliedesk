@@ -5,3 +5,4 @@ Tracking a parcel,https://desk.example.com/help/kb-filters/a/3-tracking-a-parcel
 Lost package,https://desk.example.com/help/kb-filters/a/5-lost-package,Shipping,approved,Ana Admin,,,2026-10-02T07:00:00+07:00,2026-10-02T07:00:00+07:00,0,0
 Return label,https://desk.example.com/help/kb-filters/a/4-return-label,Shipping,in_review,Ana Admin,,,2026-11-01T00:30:00+07:00,2026-10-01T07:00:00+07:00,0,0
 "'=HYPERLINK(""https://evil.example"",""Refund"")",https://desk.example.com/help/kb-filters/a/6-refund-link,Billing,draft,Ana Admin,,,2026-09-01T07:00:00+07:00,2026-09-01T07:00:00+07:00,0,0
+'	Tab first,https://desk.example.com/help/kb-filters/a/7-tab-first,"'Staff",draft,Ana Admin,,,2026-08-01T07:00:00+07:00,2026-08-01T07:00:00+07:00,0,0
