@@ -23,6 +23,7 @@ const me = {
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: 'Sam', roles: rolesOf('admin'), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC', token: null, permissions: permissionsOf('admin'), plan: null,
+  kb_list_columns: { columns: ['status', 'author', 'tags', 'updated'], default: true },
 };
 const config = { cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
   limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },

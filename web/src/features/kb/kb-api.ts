@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
-import type { Generated, JsonResponse } from '../../api/schemas';
+import { kbListColumnSchema } from '../../api/schemas';
+import type { Generated, JsonResponse, KBListColumn } from '../../api/schemas';
+import { articleQuery } from './knowledge-search';
+import type { KBArticleFilters } from './knowledge-search';
 
 // The knowledge base pages load in their own chunk, so their schemas and calls are not in the first bundle.
 
@@ -59,6 +62,7 @@ const summaryFields = {
   votes: z.object({ helpful: z.number().int(), not_helpful: z.number().int() }),
   ...visibilityFields,
 };
+const listColumnsSchema = z.object({ columns: z.array(kbListColumnSchema), default: z.boolean() }) satisfies z.ZodType<JsonResponse<'setKBListColumns', 200>>;
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
 // A file listed under an article or translation, in the order the reader sees.
 export const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
@@ -160,16 +164,16 @@ export type KBLanguageState = 'missing' | 'outdated' | 'translated';
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
   | 'restoreKBArticleVersion' | 'putHelpCenter' | 'setKBOrder' | 'putHelpCenterLanguages' | 'createKBTranslation' | 'updateKBTranslation' | 'restoreKBTranslation'
   | 'restoreKBTranslationVersion' | 'putKBCollectionTranslation' | 'publishKBArticleDraft'
-  | 'setKBArticleAttachments' | 'setKBTranslationAttachments';
+  | 'setKBArticleAttachments' | 'setKBTranslationAttachments' | 'setKBListColumns';
 const json = <O extends Operation>(value: RequestBody<O>): string => JSON.stringify(value);
+
+const tagListSchema = z.object({ items: z.array(z.object({ tag: z.string(), article_count: z.number().int() })) }) satisfies z.ZodType<JsonResponse<'listKBTags', 200>>;
 
 // The calls that answer 204 carry no body.
 const noContent = z.undefined();
 
-// sort is the order without q: recent (the default without collection_id) or manual, the help center's.
-// limit is the page size, 1 to 200 (50 when left out). has_draft 'true' keeps the articles with unpublished changes.
-// state keeps the articles whose unpublished text waits for a reviewer (in_review) or was approved as it is (approved).
-export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string; has_draft?: 'true'; state?: 'in_review' | 'approved'; visibility?: KBVisibility };
+// The list's filters (KBArticleFilters, as a saved view stores them); limit is the page size, 1 to 200 (50 when left out).
+export type ArticleQuery = KBArticleFilters & { limit?: number; cursor?: string };
 
 // query is called with a variable, never an object literal, inside a path: the gate that checks every path
 // the web app calls is a route (web_routes_test.go) reads a path up to its first closing brace.
@@ -193,7 +197,20 @@ export const kbApi = {
   deleteCollection: (id: string, updatedAt: string) => request(`/api/v1/kb/collections/${id}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
   restoreCollection: (id: string, updatedAt: string) => request(`/api/v1/kb/collections/${id}/restore`, kbCollectionSchema, { method: 'POST', body: json<'restoreKBCollection'>({ updated_at: updatedAt }) }),
   // signal lets a newer search cancel the request of the one it replaced.
-  articles: (filter: ArticleQuery, signal?: AbortSignal) => request(`/api/v1/kb/articles${query(filter)}`, articlePageSchema, { signal }),
+  articles: (filter: ArticleQuery, signal?: AbortSignal) => {
+    const filters = articleQuery(filter);
+    return request(`/api/v1/kb/articles${filters}`, articlePageSchema, { signal });
+  },
+  // The CSV of the articles these filters keep, every page of them: the browser downloads it with the session cookie.
+  exportHref: (filter: KBArticleFilters) => {
+    const filters = articleQuery(filter);
+    return `/api/v1/kb/articles/export.csv${filters}`;
+  },
+  // Every published tag, with how many articles have it, to pick from in the tag filter.
+  tags: () => request('/api/v1/kb/tags', tagListSchema),
+  // The list columns of the person signed in, on every device; null goes back to the default ones.
+  setListColumns: (columns: KBListColumn[] | null) => request('/api/v1/agents/me/kb-list-columns', listColumnsSchema,
+    { method: 'PUT', body: json<'setKBListColumns'>({ columns }) }),
   trashedArticles: (cursor?: string) => request(`/api/v1/kb/articles/trash${page(cursor)}`, trashedArticlePageSchema),
   article: (id: string) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema),
   // key names this save (Idempotency-Key): a retry with the same key returns the article the first stored.

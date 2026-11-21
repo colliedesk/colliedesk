@@ -1,55 +1,50 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api } from '../../api/client';
-import { formatDate } from '../../lib/format-date';
-import { savedReplyChangeText } from '../../lib/saved-reply-change';
+import type { KBListColumn } from '../../api/schemas';
 import { messages } from '../../messages';
 import { SearchIcon } from '../../ui/icons';
 import { typingDelayMs } from '../inbox/inbox-filters';
 import { editorPart } from './editor-part';
-import { SavedReplyTrash } from '../settings/saved-reply-panels';
+import { ArticleRow } from './article-row';
 import { CollectionForm, CollectionTree } from './collection-panel';
 import type { CollectionValues } from './collection-panel';
+import { CollectionHead } from './collection-head';
 import { kbApi } from './kb-api';
-import type { KBArticleStatus, KBArticleSummary, KBCollection, KBVisibility } from './kb-api';
-import { VisibilityBadge, VisibilityFilter } from './visibility-badge';
+import type { KBCollection } from './kb-api';
+import { useRefreshKB } from './kb-refresh';
+import { KBSavedViews } from './kb-saved-views';
+import { KBTrash } from './kb-trash';
+import { VisibilityFilter } from './visibility-badge';
 import { kbMessages } from './kb-messages';
-import { CollectionNames } from './collection-names';
+import { articleFiltersOf, collectionHref, filtersBeyondCollection } from './knowledge-search';
+import type { KnowledgeSearch } from './knowledge-search';
+import { ListColumns, gridOf } from './list-columns';
+import { ListFilters } from './list-filters';
+import { listMessages } from './list-messages';
 import { NewArticleMenu } from './new-article-menu';
-import { languageName, translationMessages } from './translation-messages';
-import { KBDialog, KBHead } from './kb-ui';
+import { KBHead } from './kb-ui';
 import { HelpTip } from '../../ui/help-tip';
 import { Icon } from './editor/icons';
-import { buildTree, flatten, indent, maxDepth, reason } from './kb-tree';
+import { buildTree, flatten, indent, reason } from './kb-tree';
 import type { TreeNode } from './kb-tree';
 import { OrderAnnouncement, OrderButtons, allArticleIds, useOrderMoves } from './order-buttons';
 import type { Step } from './order-buttons';
 import { useCreateAction } from '../../api/use-create';
 import { useHolds } from '../../lib/permissions-context';
 
-export interface KnowledgeSearch {
-  collection?: string;
-  q?: string;
-  status?: KBArticleStatus;
-  // has_draft keeps the published articles with unpublished changes.
-  has_draft?: 'true';
-  // visibility keeps the articles one audience sees (their effective visibility).
-  visibility?: KBVisibility;
-}
+export type { KnowledgeSearch } from './knowledge-search';
+export { useRefreshKB } from './kb-refresh';
+
+const defaultColumns: KBListColumn[] = ['status', 'author', 'tags', 'updated'];
+// The head of a column: status and updated keep the words the list always had.
+const columnHead = (column: KBListColumn) => (column === 'status' ? kbMessages.statusFilter : column === 'updated' ? kbMessages.updatedColumn : listMessages.columnNames[column]);
 
 // The status filter: each choice sets both status and has_draft, so one choice never keeps the other's.
 const statusChoices = [[{ status: undefined, has_draft: undefined }, kbMessages.anyStatus], [{ status: 'published', has_draft: undefined }, kbMessages.publishedFilter],
   [{ status: 'draft', has_draft: undefined }, kbMessages.drafts], [{ status: undefined, has_draft: 'true' }, kbMessages.unpublishedChanges]] as const;
 
-
-// Every write can change the counts in the tree, the list and the trash, so all three are read again.
-export function useRefreshKB() {
-  const client = useQueryClient();
-  return () => Promise.all([client.invalidateQueries({ queryKey: ['kb-collections'] }), client.invalidateQueries({ queryKey: ['kb-articles'] }),
-    client.invalidateQueries({ queryKey: ['kb-trash'] })]);
-}
 
 export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const navigate = useNavigate();
@@ -61,7 +56,8 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const tree = useMemo(() => buildTree(collections.data?.items ?? []), [collections.data]);
   const nodes = useMemo(() => flatten(tree), [tree]);
   const selected = search.collection ? nodes.find((node) => node.collection.id === search.collection) : undefined;
-  const filter = { q: search.q, status: search.status, collection_id: search.collection, has_draft: search.has_draft, visibility: search.visibility };
+  const filter = articleFiltersOf(search);
+  const columns = me.data?.kb_list_columns.columns ?? defaultColumns;
   const articles = useInfiniteQuery({
     queryKey: ['kb-articles', filter],
     queryFn: ({ pageParam, signal }) => kbApi.articles({ ...filter, cursor: pageParam }, signal),
@@ -74,16 +70,6 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   current.current = search;
   const setSearch = (change: Partial<KnowledgeSearch>, replace = false) =>
     void navigate({ to: '/knowledge', search: { ...current.current, ...change }, replace });
-  // A collection in the tree keeps the other filters, as choosing it always did.
-  const collectionHref = (collection?: KBCollection) => {
-    const params = new URLSearchParams();
-    if (search.q) params.set('q', search.q);
-    if (search.status) params.set('status', search.status);
-    if (search.has_draft) params.set('has_draft', search.has_draft);
-    if (search.visibility) params.set('visibility', search.visibility);
-    if (collection) params.set('collection', collection.id);
-    return `/knowledge${params.size > 0 ? `?${params}` : ''}`;
-  };
   // The search box writes the address as the person types, a moment after the last key.
   const [text, setText] = useState(search.q ?? '');
   useEffect(() => setText(search.q ?? ''), [search.q]);
@@ -142,7 +128,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   // shown after its move leaves the focus on the list's heading.
   const focusHeading = () => document.getElementById('kb-articles-heading')?.focus();
   const moves = useOrderMoves(refresh, focusHeading);
-  const ordered = selected && !search.q && !search.status && !search.has_draft && !search.visibility ? selected : undefined;
+  const ordered = selected && !filtersBeyondCollection(search) ? selected : undefined;
   const articleIds = items.map((article) => article.id);
   const parent = selected ? nodes.find((node) => node.collection.id === selected.collection.parent_id) : undefined;
   const siblings = selected ? parent?.children ?? tree : [];
@@ -202,9 +188,9 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             <button type="button" className="link-action" onClick={() => void collections.refetch()}>{kbMessages.retry}</button></p>}
           {creates && (form === 'new' || (noCollections && form === null)) && <CollectionForm tree={tree} onSubmit={save} onCancel={() => setForm(null)} />}
           {noCollections && <p className="muted-copy">{creates ? <>{kbMessages.noCollections} <HelpTip label={kbMessages.collections} text={kbMessages.noCollectionsTip} /></> : kbMessages.noCollectionsYet}</p>}
-          {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} hrefTo={collectionHref} /></div>}
+          {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} hrefTo={(collection?: KBCollection) => collectionHref(search, collection?.id)} /></div>}
         </nav>
-        <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined}>
+        <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined} style={gridOf(columns, Boolean(ordered))}>
           {selected && <CollectionHead node={selected} tree={tree} form={form} confirming={confirming} problem={problem}
             onForm={(next) => { setProblem(undefined); setConfirming(false); setForm(next); }} onSave={save}
             onConfirm={setConfirming} onDelete={() => void remove(selected.collection)}
@@ -234,8 +220,13 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
               ))}
             </fieldset>
             <VisibilityFilter value={search.visibility} onChange={(visibility) => setSearch({ visibility })} />
+            <ListFilters search={search} onChange={(change) => setSearch(change)} />
+            <ListColumns columns={columns} isDefault={me.data?.kb_list_columns.default ?? true} />
+            <KBSavedViews search={search} timezone={timezone} onApply={(next) => void navigate({ to: '/knowledge', search: next, replace: false })} />
+            <a className="button-link kb-export" href={kbApi.exportHref(filter)} download data-tip={listMessages.exportTip}>{listMessages.exportCsv}</a>
           </div>
-          <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span><span>{kbMessages.statusFilter}</span><span>{kbMessages.updatedColumn}</span><span />{ordered && <span />}</div>
+          <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span>
+            {columns.map((column, index) => <span key={column} data-extra={index > 0 ? 'true' : undefined}>{columnHead(column)}</span>)}<span />{ordered && <span />}</div>
           <div className="kb-list-scroll">
             {articles.isError && <p role="alert" className="error-copy kb-list-note">{kbMessages.listFailed}{' '}
               <button type="button" className="link-action" onClick={() => void articles.refetch()}>{kbMessages.retry}</button></p>}
@@ -243,7 +234,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             {articles.isSuccess && items.length === 0 && <p className="empty-copy kb-list-note">{search.q ? kbMessages.noMatches : kbMessages.noArticles}</p>}
             {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage}
               onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
-              {items.map((article) => <ArticleRow key={article.id} article={article} timezone={timezone} isPublic={publicNow}
+              {items.map((article) => <ArticleRow key={article.id} article={article} columns={columns} timezone={timezone} isPublic={publicNow}
                 collection={names.get(article.collection_id)}
                 order={ordered && <OrderButtons ids={articleIds} id={article.id} name={article.title} more={articles.hasNextPage} busy={moves.moving} onAnnounce={moves.announce}
                   focus={moves.focus} onMove={(_next, step) => moveArticle(ordered, article.id, step)} />} />)}
@@ -257,122 +248,3 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   );
 }
 
-interface CollectionHeadProps {
-  node: TreeNode;
-  tree: TreeNode[];
-  form: 'new' | 'new-inside' | 'edit' | null;
-  confirming: boolean;
-  problem?: string;
-  onForm: (form: 'new-inside' | 'edit' | null) => void;
-  onSave: (values: CollectionValues) => Promise<unknown>;
-  onConfirm: (confirming: boolean) => void;
-  onDelete: () => void;
-  // order holds the buttons that move the collection among the ones beside it.
-  order?: ReactNode;
-}
-
-// CollectionHead names the chosen collection, with its description and what can be done to it.
-function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave, onConfirm, onDelete, order }: CollectionHeadProps) {
-  const { collection } = node;
-  const [naming, setNaming] = useState(false);
-  const refresh = useRefreshKB();
-  return (
-    <div className="kb-collection-head">
-      <div className="kb-collection-title">
-        <h2 id="kb-articles-heading" tabIndex={-1}>{collection.name}</h2>
-        {collection.description && <p className="muted-copy">{collection.description}</p>}
-      </div>
-      {problem && <p role="alert" className="error-copy">{problem}</p>}
-      {confirming
-        ? <div role="group" aria-label={kbMessages.deleteCollectionName(collection.name)} className="kb-confirm">
-            <span>{kbMessages.confirmDeleteCollection(collection.name)}</span>
-            <div className="button-row">
-              <button type="button" className="danger-action" onClick={onDelete}>{kbMessages.confirmDelete}</button>
-              <button type="button" onClick={() => onConfirm(false)}>{kbMessages.cancel}</button>
-            </div>
-          </div>
-        : form === null && <div className="button-row">
-            <button type="button" aria-label={kbMessages.editCollectionName(collection.name)} onClick={() => onForm('edit')}>{kbMessages.editCollection}</button>
-            {node.depth < maxDepth
-              ? <button type="button" aria-label={kbMessages.newSubcollectionOf(collection.name)} onClick={() => onForm('new-inside')}>{kbMessages.newSubcollection}</button>
-              : <span className="kb-hint">{kbMessages.maxDepth}</span>}
-            <button type="button" aria-label={translationMessages.collectionNamesOf(collection.name)} onClick={() => setNaming(true)}>{translationMessages.namesInLanguages}</button>
-            <button type="button" className="danger-action" aria-label={kbMessages.deleteCollectionName(collection.name)} onClick={() => onConfirm(true)}>{kbMessages.deleteCollection}</button>
-            {order}
-          </div>}
-      {form === 'edit' && <CollectionForm key={collection.updated_at} tree={tree} node={node} onSubmit={onSave} onCancel={() => onForm(null)} />}
-      {form === 'new-inside' && <CollectionForm tree={tree} parentId={collection.id} onSubmit={onSave} onCancel={() => onForm(null)} />}
-      {naming && <CollectionNames collection={collection} onChanged={refresh} onClose={() => setNaming(false)} />}
-    </div>
-  );
-}
-
-interface ArticleRowProps {
-  article: KBArticleSummary;
-  collection?: string;
-  timezone: string;
-  isPublic?: boolean;
-  // order holds the buttons that move the article in its collection, while the list is the whole order.
-  order?: ReactNode;
-}
-
-function ArticleRow({ article, collection, timezone, isPublic, order }: ArticleRowProps) {
-  const change = article.last_change;
-  const published = article.status === 'published';
-  // Readers can open it only while it is published, for everyone, and the help center is on.
-  const everyone = article.effective_visibility === 'everyone';
-  const open = published && everyone && isPublic === true;
-  return (
-    <li className="kb-article-item">
-      <a className="kb-article-row" href={`/knowledge/articles/${article.id}`}>
-        <span className="kb-article-main">
-          <span className="kb-article-title">{article.title}</span>
-          <span className="kb-article-meta">{[collection, kbMessages.articleNumber(article.number)].filter(Boolean).join(' · ')}</span>
-        </span>
-        <span className="kb-article-status">
-          <span className="kb-dot-status" data-status={article.status}>{published ? kbMessages.published : kbMessages.draft}</span>
-          {everyone
-            ? <small>{published ? (isPublic === false ? kbMessages.notPublic : isPublic ? kbMessages.public : '') : kbMessages.agentsOnly}</small>
-            : <VisibilityBadge visibility={article.effective_visibility} />}
-          {article.has_draft && <small className="kb-changes-mark">{kbMessages.unpublishedChanges}</small>}
-        </span>
-        <span className="kb-article-when"><time dateTime={article.updated_at}>{formatDate(article.updated_at, timezone)}</time>
-          {change && <small>{savedReplyChangeText(change)}</small>}</span>
-      </a>
-      {open
-        ? <a className="kb-article-open icon-button" href={article.url} target="_blank" rel="noreferrer" aria-label={kbMessages.openPublic(article.title)} data-tip={kbMessages.openOnHelpCenter}><Icon name="external" /></a>
-        : <span className="kb-article-open" aria-hidden="true" title={published && everyone ? kbMessages.turnOnToOpen : undefined}><Icon name="external" /></span>}
-      {order}
-    </li>
-  );
-}
-
-// KBTrash holds the deleted articles and collections, each restorable for 30 days.
-function KBTrash({ timezone, onChanged, onClose }: { timezone: string; onChanged: () => void; onClose: () => void }) {
-  const [now] = useState(() => new Date());
-  // A translation's id here is "<article id>/<locale>"; one press is one restore (Idempotency-Key).
-  const undeleteTranslation = useCreateAction(({ id, updatedAt }: { id: string; updatedAt: string }, key: string) => {
-    const [articleId, locale] = id.split('/');
-    return kbApi.restoreTranslation(articleId!, locale!, updatedAt, key);
-  });
-  return (
-    <KBDialog title={kbMessages.trash} className="kb-trash" phone="full" closeLabel={kbMessages.closeTrash} onClose={onClose}>
-      <p className="muted-copy">{kbMessages.trashLead} <HelpTip label={kbMessages.trashLabel} text={kbMessages.trashTip} /></p>
-      <SavedReplyTrash timezone={timezone} now={now} heading={kbMessages.articleTrash} description={kbMessages.articleTrashDescription}
-        empty={kbMessages.articleTrashEmpty} failedMessage={kbMessages.articleActionFailed} text={() => ''}
-        load={(cursor) => kbApi.trashedArticles(cursor)}
-        onUndelete={async (id, updatedAt) => { await kbApi.restoreArticle(id, updatedAt); onChanged(); }} />
-      <SavedReplyTrash timezone={timezone} now={now} heading={kbMessages.collectionTrash} description={kbMessages.collectionTrashDescription}
-        empty={kbMessages.collectionTrashEmpty} failedMessage={kbMessages.collectionActionFailed} text={(item) => item.description}
-        load={async () => ({ items: (await kbApi.trashedCollections()).items.map((item) => ({ ...item, title: item.name })) })}
-        onUndelete={async (id, updatedAt) => { await kbApi.restoreCollection(id, updatedAt); onChanged(); }} />
-      <SavedReplyTrash timezone={timezone} now={now} heading={translationMessages.translationTrash} description={translationMessages.translationTrashDescription}
-        empty={translationMessages.translationTrashEmpty} failedMessage={kbMessages.articleActionFailed} text={() => ''}
-        load={async (cursor) => {
-          const page = await kbApi.trashedTranslations(cursor);
-          return { ...page, items: page.items.map((item) => ({ ...item, id: `${item.article_id}/${item.locale}`, title: `${item.title} · ${languageName(item.locale)} · ${item.article_title}` })) };
-        }}
-        onUndelete={async (id, updatedAt) => { await undeleteTranslation.run({ id, updatedAt }); onChanged(); }} />
-    </KBDialog>
-  );
-}
