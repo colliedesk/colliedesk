@@ -30,3 +30,15 @@ func TestNormalizeWritesEachFormattingTagOneWay(t *testing.T) {
 		})
 	}
 }
+
+// What the visual editor saves (web/src/features/kb/editor/visual/convert.test.ts) is already in the
+// form the server keeps, so saving it never rewrites it.
+func TestNormalizeKeepsWhatTheVisualEditorWrites(t *testing.T) {
+	raw, err := os.ReadFile("testdata/visual-editor.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := kbformat.Normalize(string(raw)); got != string(raw) {
+		t.Errorf("Normalize rewrote the visual editor's text:\n got %q\nwant %q", got, raw)
+	}
+}

@@ -10,8 +10,16 @@ export interface FormatNode {
   depth?: number;
   tag?: FormatTag;
   children?: FormatNode[];
+  position?: { start: Point; end: Point };
   data?: { kbWrap?: FormatTag; hName?: string; hProperties?: Record<string, unknown> } & Record<string, unknown>;
 }
+
+interface Point { line: number; column: number; offset?: number }
+
+// span is the source range from the first node's start to the last node's end, so a node formatTree
+// builds or unwraps still points at all of its text.
+const span = (first: FormatNode | undefined, last: FormatNode | undefined) =>
+  first?.position && last?.position ? { start: first.position.start, end: last.position.end } : undefined;
 
 // Parents whose children are blocks; their raw HTML is an HTML block of its own.
 export const flowParents = ['root', 'blockquote', 'listItem', 'footnoteDefinition', 'kbCell'];
@@ -70,6 +78,7 @@ function unwrapBlocks(parent: FormatNode) {
     const closing = tagsOf(children[at + 2]);
     if (closing?.length !== 1 || !closing[0]!.close || closing[0]!.name !== opening[0]!.name) continue;
     inner.data = { ...inner.data, kbWrap: opening[0]! };
+    inner.position = span(children[at], children[at + 2]) ?? inner.position;
     children.splice(at, 3, inner);
   }
 }
@@ -118,7 +127,9 @@ function readTable(nodes: FormatNode[], first: number): { table: FormatNode; las
         rows.push(row);
         inRow = false;
       } else if (tag.name === 'table' && tag.close && !inRow && rows.length > 0 && i === tags.length - 1) {
-        return { table: { type: 'kbTable', children: rows.map((cells) => ({ type: 'kbRow', children: cells })) }, last: at };
+        const table: FormatNode = { type: 'kbTable', children: rows.map((cells) => ({ type: 'kbRow', children: cells })) };
+        table.position = span(nodes[first], nodes[at]);
+        return { table, last: at };
       } else {
         return undefined;
       }
