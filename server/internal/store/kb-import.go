@@ -19,8 +19,10 @@ import (
 // KBImportCollection is a collection an import creates. Slug is made from Name; a slug taken by a
 // sibling gets "-" and SlugSuffix appended.
 type KBImportCollection struct {
-	ParentID             *string
-	Name, Description    string
+	ParentID          *string
+	Name, Description string
+	// Visibility is who can see it; empty is everyone.
+	Visibility           string
 	SlugSuffix           string
 	SourceMeta           []byte
 	CreatedAt, UpdatedAt time.Time
@@ -33,15 +35,22 @@ func ImportKBCollection(ctx context.Context, tx pgx.Tx, workspaceID string, inpu
 	if err := cleanKBCollection(&clean); err != nil {
 		return "", err
 	}
+	visibility := input.Visibility
+	if visibility == "" {
+		visibility = domain.KBVisibleEveryone
+	}
+	if err := domain.CheckKBVisibility(visibility); err != nil {
+		return "", err
+	}
 	if err := admitKBCollection(ctx, tx, workspaceID, input.ParentID); err != nil {
 		return "", err
 	}
 	insert := func(slug string) (string, error) {
 		return kbSavepoint(ctx, tx, func(sub pgx.Tx) (string, error) {
 			var id string
-			err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,source_meta,created_at,updated_at,position)
-				VALUES($1,$2,$3,$4,$5,$6,$7,$8,`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`) RETURNING id::text`,
-				workspaceID, input.ParentID, clean.Name, slug, clean.Description, input.SourceMeta, input.CreatedAt, input.UpdatedAt).Scan(&id)
+			err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,source_meta,created_at,updated_at,visibility,position)
+				VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`) RETURNING id::text`,
+				workspaceID, input.ParentID, clean.Name, slug, clean.Description, input.SourceMeta, input.CreatedAt, input.UpdatedAt, visibility).Scan(&id)
 			return id, err
 		})
 	}

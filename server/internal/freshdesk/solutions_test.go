@@ -113,10 +113,10 @@ func TestSolutionsBecomeTheKnowledgeBaseWithOriginalTimestampsDraftsAndTranslati
 	if kb.Images.Gone != 1 || kb.Images.GoneImages[0].ArticleID != "104" {
 		t.Fatalf("gone images = %+v", kb.Images)
 	}
-	if got := strings.Join(kb.Published, ","); got != "101,104,105,106" {
+	if got := strings.Join(kb.Published, ","); got != "101,103,104,105,106" {
 		t.Fatalf("published = %s", got)
 	}
-	if fmt.Sprint(kb.Drafts) != "map[draft_in_freshdesk:[102] folder_not_visible_to_all_users:[103]]" {
+	if fmt.Sprint(kb.Drafts) != "map[draft_in_freshdesk:[102]]" {
 		t.Fatalf("drafts = %v", kb.Drafts)
 	}
 	if strings.Join(kb.Languages, ",") != "es,fr" || len(kb.Portals) != 0 || !report.Verification.KnowledgeBase.Verified {
@@ -126,8 +126,8 @@ func TestSolutionsBecomeTheKnowledgeBaseWithOriginalTimestampsDraftsAndTranslati
 		t.Fatalf("warnings = %+v", report.Warnings)
 	}
 	markdown := report.Markdown()
-	for _, want := range []string{"| Knowledge base articles | 6 | 6 | 0 |", "Knowledge base: 4 published, 2 imported as drafts", "- **Knowledge base: verified.**",
-		"folder_not_visible_to_all_users (in a folder not visible to all users", "article 104: download image"} {
+	for _, want := range []string{"| Knowledge base articles | 6 | 6 | 0 |", "Knowledge base: 5 published, 1 imported as drafts", "- **Knowledge base: verified.**",
+		"article 104: download image"} {
 		if !strings.Contains(markdown, want) {
 			t.Fatalf("report lacks %q:\n%s", want, markdown)
 		}
@@ -159,7 +159,7 @@ func TestSolutionsBecomeTheKnowledgeBaseWithOriginalTimestampsDraftsAndTranslati
 	if !strings.Contains(reset.SourceHTML, "<b>Settings</b>") || !strings.Contains(reset.Meta, `"tags": ["password", "login"]`) || !strings.Contains(reset.Meta, `"hits": 42`) {
 		t.Fatalf("article 101 source = %q meta = %s", reset.SourceHTML, reset.Meta)
 	}
-	if articles["102"].Status != "draft" || articles["103"].Status != "draft" || articles["105"].Collection != "Advanced / Deep" {
+	if articles["102"].Status != "draft" || articles["103"].Status != "published" || articles["105"].Collection != "Advanced / Deep" {
 		t.Fatalf("articles = %+v", articles)
 	}
 	invoice := articles["106"].Body
@@ -290,13 +290,13 @@ func TestSolutionsArePublishedOnlyInTheHelpCenterPortal(t *testing.T) {
 		drafts    string
 	}{
 		// One portal: the docs give visible_in_portals only to accounts with several portals.
-		{"one portal, no field", []any{nil, nil}, 0, "101,104,105,106", "map[draft_in_freshdesk:[102] folder_not_visible_to_all_users:[103]]"},
-		{"one portal named", []any{[]any{5.0}, []any{5.0}}, 0, "101,104,105,106", "map[draft_in_freshdesk:[102] folder_not_visible_to_all_users:[103]]"},
+		{"one portal, no field", []any{nil, nil}, 0, "101,103,104,105,106", "map[draft_in_freshdesk:[102]]"},
+		{"one portal named", []any{[]any{5.0}, []any{5.0}}, 0, "101,103,104,105,106", "map[draft_in_freshdesk:[102]]"},
 		{"several portals, none chosen", []any{[]any{5.0}, []any{6.0}}, 0, "",
-			"map[category_in_another_portal:[101 104 105 106] draft_in_freshdesk:[102] folder_not_visible_to_all_users:[103]]"},
-		{"several portals, one chosen", []any{[]any{5.0}, []any{6.0}}, 5, "101,104,105", "map[category_in_another_portal:[106] draft_in_freshdesk:[102] folder_not_visible_to_all_users:[103]]"},
-		{"a category in no portal", []any{[]any{5.0}, []any{}}, 0, "101,104,105", "map[category_not_in_any_portal:[106] draft_in_freshdesk:[102] folder_not_visible_to_all_users:[103]]"},
-		{"a category without the field among others", []any{[]any{5.0}, nil}, 0, "101,104,105", "map[category_portal_unknown:[106] draft_in_freshdesk:[102] folder_not_visible_to_all_users:[103]]"},
+			"map[category_in_another_portal:[101 103 104 105 106] draft_in_freshdesk:[102]]"},
+		{"several portals, one chosen", []any{[]any{5.0}, []any{6.0}}, 5, "101,103,104,105", "map[category_in_another_portal:[106] draft_in_freshdesk:[102]]"},
+		{"a category in no portal", []any{[]any{5.0}, []any{}}, 0, "101,103,104,105", "map[category_not_in_any_portal:[106] draft_in_freshdesk:[102]]"},
+		{"a category without the field among others", []any{[]any{5.0}, nil}, 0, "101,103,104,105", "map[category_portal_unknown:[106] draft_in_freshdesk:[102]]"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -586,35 +586,6 @@ func TestSolutionsAnArticleDeletedForGoodIsNotBroughtBack(t *testing.T) {
 	report := env.mustRun(t)
 	if strings.Join(report.KnowledgeBase.DeletedInColliedesk, ",") != "102" || len(report.KnowledgeBase.ChangedInBoth) != 0 || env.count(t, "kb_articles") != 5 {
 		t.Fatalf("deleted=%v changed=%v articles=%d", report.KnowledgeBase.DeletedInColliedesk, report.KnowledgeBase.ChangedInBoth, env.count(t, "kb_articles"))
-	}
-}
-
-func TestSolutionsAFolderNoLongerPublicMakesItsArticlesDraftsAgain(t *testing.T) {
-	env := newImportEnv(t).withSolutions()
-	env.mustRun(t)
-	articles := env.kbArticles(t, env.workspaceID)
-	// An agent edits 104 (still published); 101 and 105 nobody touches.
-	env.editArticle(t, articles["104"].ID, "Edited in Colliedesk.")
-	// Only the folder changes in Freshdesk: Basics is now for agents only. No article's updated_at moves.
-	env.editSolutions(func(fixture map[string]any) {
-		fixture["category_folders"].(map[string]any)["1"].([]any)[0].(map[string]any)["visibility"] = 3.0
-	})
-	report := env.mustRun(t)
-	after := env.kbArticles(t, env.workspaceID)
-	if after["101"].Status != "draft" || after["101"].PublishedAt != nil || after["105"].Status != "draft" || after["106"].Status != "published" {
-		t.Fatalf("statuses: 101=%s 105=%s 106=%s", after["101"].Status, after["105"].Status, after["106"].Status)
-	}
-	if after["104"].Status != "published" || warningIDs(report, "kb_article_published_but_not_public") != "104" {
-		t.Fatalf("104=%s warnings=%+v", after["104"].Status, report.Warnings)
-	}
-	if strings.Join(report.KnowledgeBase.Unpublished, ",") != "101,105" || strings.Join(report.KnowledgeBase.Published, ",") != "106" || report.Status != freshdesk.StatusOK {
-		t.Fatalf("status=%s unpublished=%v published=%v", report.Status, report.KnowledgeBase.Unpublished, report.KnowledgeBase.Published)
-	}
-	// Making it public again in Freshdesk never publishes by itself.
-	env.editSolutions(nil)
-	env.mustRun(t)
-	if again := env.kbArticles(t, env.workspaceID); again["101"].Status != "draft" {
-		t.Fatalf("101 was published again by an import: %s", again["101"].Status)
 	}
 }
 

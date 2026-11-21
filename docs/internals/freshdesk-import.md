@@ -361,8 +361,12 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   `thumbs_*`, `type`, `status`, `hierarchy`, `agent_id` and the draft reason. Timestamps are
   Freshdesk's; `published_at` is `updated_at` (Freshdesk has no publish time). The author is the
   Colliedesk agent with the Freshdesk agent's email.
-- **Published only under the strictest reading.** `status` 2, every folder on the path
-  `visibility` 1 (All Users), and the category in the help center's portal. The docs say
+- **Published only under the strictest reading.** `status` 2 and the category in the help center's
+  portal. A folder's `visibility` does not make a draft: it becomes the collection's visibility
+  (1 everyone, 3 agents, 5 help_chat; 2, 4, 6 and 7 limit a folder to some customers, which has no
+  equivalent yet, so agents with `kb_folder_limited_to_some_customers`). Effective visibility is the
+  most restrictive along the collection path, so a collection takes only its own folder's; a folder
+  flattened beside its parents (`collectionPlacement`) takes the most restrictive of `chain[1:]`. The docs say
   `visible_in_portals` is "allowed only if the account is configured with multiple portals"
   (category attributes), so: no category with the field → one portal, every category in it; the
   field present → it must hold the portal (the only one the categories name, or
@@ -426,11 +430,13 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   ledger's or its last run failed, and only while its newest version is of kind `import`; the row is
   locked (`FOR UPDATE`) before that check. Otherwise Colliedesk's version stays and
   `kb_article_changed_in_both` lists it. An article deleted for good is not brought back. Collections
-  are never renamed by a rerun. A folder's visibility or a category's portal can change without
-  touching the article's `updated_at`, so every run judges publication again: an untouched published
-  article Freshdesk no longer shows to everyone becomes a draft (a new import version,
-  `kb_article_unpublished`); one changed in Colliedesk stays published with
-  `kb_article_published_but_not_public`. A folder or portal change the other way never publishes an unchanged article.
+  are never renamed by a rerun. A category's portal can change without touching the article's
+  `updated_at`, so every run judges publication again: an untouched published article whose category
+  left the portal becomes a draft (a new import version, `kb_article_unpublished`); one changed in
+  Colliedesk stays published with `kb_article_published_but_not_public`. A portal change the other
+  way never publishes an unchanged article. A folder shown to fewer people restricts an existing
+  collection (`RestrictImportedKBCollection`, only ever upward in rank, `kb_collection_restricted`);
+  one shown to more never opens it, and a restriction made in Colliedesk survives the rerun.
 - **Undo** keeps an article whose newest version is not the import's or that has a translation whose
   newest version is not (a person's translation would go by cascade otherwise); removes from kept
   articles the translations only the import wrote (`kb_translations`, kept ones in

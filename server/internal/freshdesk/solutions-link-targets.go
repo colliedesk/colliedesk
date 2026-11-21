@@ -116,7 +116,7 @@ func (r *run) oldAddresses(targets map[string]linkTarget, open bool) OldAddresse
 		var folders []string
 		for _, id := range kb.order {
 			folder := kb.folders[id]
-			if kb.draftReason(kbArticle{fdSolutionArticle: fdSolutionArticle{Status: 2}, folder: folder}, r.opts.HelpCenterPortal) == "" {
+			if kb.publicInFreshdesk(kbArticle{fdSolutionArticle: fdSolutionArticle{Status: 2}, folder: folder}, r.opts.HelpCenterPortal) {
 				publicCategories[folder.categoryID] = true
 				folders = append(folders, strconv.FormatInt(id, 10))
 			}
@@ -130,7 +130,7 @@ func (r *run) oldAddresses(targets map[string]linkTarget, open bool) OldAddresse
 			paths, entities = append(paths, "/support/solutions/folders/"+id), append(entities, entityKBFolder)
 		}
 		for _, article := range kb.articles {
-			if kb.draftReason(article, r.opts.HelpCenterPortal) == "" {
+			if kb.publicInFreshdesk(article, r.opts.HelpCenterPortal) {
 				paths, entities = append(paths, "/support/solutions/articles/"+strconv.FormatInt(article.ID, 10)), append(entities, entityKBArticle)
 			}
 		}

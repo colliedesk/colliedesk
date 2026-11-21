@@ -170,7 +170,6 @@ func goneLines(images []GoneImage) []string {
 // draftReasons explains each reason an article published in Freshdesk became a draft.
 var draftReasons = map[string]string{
 	draftInFreshdesk:    "a draft in Freshdesk",
-	draftFolderVisible:  "in a folder not visible to all users (logged-in users, agents, companies, segments or bots only)",
 	draftNotInPortal:    "its category is in no portal",
 	draftPortalUnknown:  "its category names no portal while others do, so its portal is unknown",
 	draftSeveralPortals: "its category is not in the help center's portal (choose one with --help-center-portal)",
