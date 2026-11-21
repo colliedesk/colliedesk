@@ -107,7 +107,7 @@ with `billing` and leave a note with a summary."
 <!-- generated:tools -->
 | Tool | What it does | Needs |
 |---|---|---|
-| `colliedesk_whoami` | Shows the workspace, the team member and their roles, the token's permissions and the tools you can use | any token |
+| `colliedesk_whoami` | Shows the workspace, the team member with their roles and chosen article editor, the token's permissions and the tools you can use | any token |
 | `colliedesk_inbox_search` | Lists conversations in pages by any [inbox filter](inbox.md#filter-and-sort) or a saved view, in any of the inbox orders | `contacts:read`, `conversations:read`, `saved_views:read`, `tags:read`, `team:read` |
 | `colliedesk_inbox_activity` | Lists what changed since the last call: new conversations, conversations assigned to you, conversations that changed | `conversations:read`, `team:read` |
 | `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer, and who else has it open | `contacts:read`, `conversations:read`, `messages:read`, `team:read` |

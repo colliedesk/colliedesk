@@ -19,7 +19,9 @@ type restMe struct {
 	Permissions []string `json:"permissions"`
 	// Token is nil for a person's own sign-in.
 	Token *restTokenGrant `json:"token"`
-	Plan  *struct {
+	// KBEditor is the article editor the member chose, "visual" or "markdown"; nil until they choose.
+	KBEditor *string `json:"kb_editor"`
+	Plan     *struct {
 		Locked bool `json:"locked"`
 	} `json:"plan"`
 }

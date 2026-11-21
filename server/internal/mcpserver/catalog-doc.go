@@ -47,7 +47,7 @@ var toolDocs = map[string]string{
 	"colliedesk_channels_credentials_set":            "Stores a channel's secret",
 	"colliedesk_channels_delete":                     "Removes a channel; its conversations stay",
 	"colliedesk_channels_held_discard":               "Discards the messages a channel held while it was off",
-	"colliedesk_whoami":                              "Shows the workspace, the team member and their roles, the token's permissions and the tools you can use",
+	"colliedesk_whoami":                              "Shows the workspace, the team member with their roles and chosen article editor, the token's permissions and the tools you can use",
 	"colliedesk_inbox_search":                        "Lists conversations in pages by any [inbox filter](inbox.md#filter-and-sort) or a saved view, in any of the inbox orders",
 	"colliedesk_inbox_activity":                      "Lists what changed since the last call: new conversations, conversations assigned to you, conversations that changed",
 	"colliedesk_conversation_get":                    "Reads one conversation with its messages, attachment ids and customer, and who else has it open",
