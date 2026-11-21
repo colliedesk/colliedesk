@@ -756,6 +756,15 @@ counting and leave the list; nothing is deleted. **Earlier counts** keeps the co
 and the [export](export.md) keeps every vote and reset. After a reset the Freshdesk votes no longer
 count. A reset cannot be undone.
 
+## Views and replies
+
+**Last 30 days** (on the right of the editor; on a phone, under the text) shows how many readers opened
+the article on the help center and how many sent replies used it: replies that linked it, and AI drafts
+that quoted it and were sent. Each reply opens its conversation; the newest 50 are listed. The same
+reader counts once per 30 minutes, and bots, link previews and your team's previews never count.
+[Reports](results.md#help-center) shows every article side by side. An article in the trash keeps its
+numbers.
+
 ## Keep an article away from AI
 
 AI features (reply drafts and triage suggestions, once an admin turns them on) find the published
@@ -1160,6 +1169,8 @@ Pages have no scripts, no cookies and no tracking, with two exceptions: a reader
 cookie of the help center's own (`cd_reader`, kept a year, never read by script), so a second vote
 changes the first; with the [help chat](help-chat.md) on, article pages and the chat page load the
 chat's one script from the help center itself, and the chat keeps one cookie once a customer asks.
+The server counts the [views](#views-and-replies) of each article without a script or a cookie, and
+stores only the number per article, language and day.
 Pages follow the visitor's light or dark setting, and
 fit a phone. The page labels (Search, Home and so on) are in English; the help center's language
 marks your articles' language for browsers and search engines.
@@ -1346,6 +1357,11 @@ Articles and collections:
   (`kb_articles:read`). `colliedesk_kb_article_votes_reset` or `POST /api/v1/kb/articles/{id}/votes/reset`
   resets them (`kb_articles:update`); a repeat of the same press, or a reset with nothing counted, stores
   no second reset. The reset names the token that made it.
+- [Views and replies](#views-and-replies): `colliedesk_kb_article_stats` or
+  `GET /api/v1/kb/articles/{id}/stats` (`kb_articles:read`) answers the views per day and the replies
+  that used the article, with their conversation's number and subject. Without `from` and `to` it is the
+  last 30 days; with them, the days from `from` up to (not including) `to`, at most 366.
+  `colliedesk_kb_article_get` carries `views_30d` and `uses_30d`.
 - Link an article in a reply: every article an agent reads or finds carries its public address in `url`
   (also in the API). An agent links an article the same way a person does: the title and the address on
   two lines, from a search with `status` published while the help center is on.

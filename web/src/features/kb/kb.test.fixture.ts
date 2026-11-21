@@ -43,6 +43,9 @@ export const article = (fields: Record<string, unknown> = {}) => ({
   ...withoutVotes(summary(7, 'Reset your password')), id: ids.article, body_md: 'Open **Settings**.', seo_title: '', seo_description: '', show_contents: true, has_source_html: false, translations: [], attachments: [], deleted_at: null, ai_exclusion: null, draft: null, visibility_from: null, ...fields,
 });
 
+// noStats is an article nobody read or used in a reply in the last 30 days.
+export const noStats = { article_id: ids.article, timezone: 'UTC', from: '2026-10-21T00:00:00Z', to: '2026-11-20T00:00:00Z', first_day: '2026-10-21', last_day: '2026-11-19',
+  views: 0, uses: 0, days: [], replies: [], replies_total: 0 };
 export const me = {
   agent: { id: '77777777-7777-4777-8777-777777777777', email: 'ada@example.com', display_name: 'Ada', role: 'admin', roles: rolesOf('admin'), timezone_override: null },
   workspace: { id: '88888888-8888-4888-8888-888888888888', slug: 'acme', name: 'Acme', timezone: 'UTC' }, timezone: 'UTC', token: null, permissions: permissionsOf('admin'), plan: null,

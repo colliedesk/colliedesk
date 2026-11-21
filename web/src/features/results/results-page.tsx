@@ -10,8 +10,11 @@ import type { NumberLink, Side } from './results-rows';
 
 export type { NumberLink };
 
+// The share page has no help center block: it is the team's own reading, not a comparison.
+export type PageResults = Omit<Results, 'help_center'>;
+
 export interface ResultsPageProps {
-  results?: Results;
+  results?: PageResults;
   loading: boolean;
   failed: boolean;
   onRetry: () => void;
@@ -26,6 +29,8 @@ export interface ResultsPageProps {
   admin?: ReactNode;
   // shared is the public page of a share link: the team's name, third person, no notices for the team.
   shared?: { workspace: string };
+  // helpCenter is the help center section (the team's page only).
+  helpCenter?: ReactNode;
 }
 
 function ChangeCell({ change }: { change?: Change }) {
@@ -38,7 +43,7 @@ function ChangeCell({ change }: { change?: Change }) {
 }
 
 export function ResultsPage(props: ResultsPageProps) {
-  const { results, loading, failed, onRetry, window: key, onWindow, timezone, isAdmin, now, link, importLink, admin, shared } = props;
+  const { results, loading, failed, onRetry, window: key, onWindow, timezone, isAdmin, now, link, importLink, admin, shared, helpCenter } = props;
   const header = <header className="results-header">
     <div className="results-title">
       <h1>{shared ? m.share.title(shared.workspace) : m.heading}</h1>
@@ -153,6 +158,7 @@ export function ResultsPage(props: ResultsPageProps) {
         <div className="results-saved"><p className="results-cell-title">{m.ai.hoursSaved}</p>{savedCell}</div>
       </div>
     </section>
+    {!shared && helpCenter}
     {!shared && (admin ?? (!isAdmin && <p className="results-muted results-agent-note">{m.agentNote}</p>))}
     <footer className="results-footer"><a href={m.definitionsURL} target="_blank" rel="noreferrer">{shared ? m.share.definitions : m.fullDefinitions}</a>
       <span className="results-muted">{shared ? m.share.madeWith : m.footer}</span></footer>

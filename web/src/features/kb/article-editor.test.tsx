@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { ArticleRoute } from './article-editor';
-import { article, collections, ids, json, me, refusal, serve } from './kb.test.fixture';
+import { article, collections, ids, json, me, refusal, serve, noStats } from './kb.test.fixture';
 
 const navigate = vi.hoisted(() => vi.fn());
 const blocker = vi.hoisted(() => vi.fn());
@@ -34,7 +34,7 @@ function open(props: { articleId?: string; collectionId?: string }) {
 
 const noVotes = { article_id: ids.article, helpful: 0, not_helpful: 0, imported: { helpful: 0, not_helpful: 0 }, votes: [], resets: [] };
 const base = { 'GET /api/v1/auth/me': () => json(200, me), 'GET /api/v1/kb/collections': () => json(200, { items: collections }),
-  [`GET /api/v1/kb/articles/${ids.article}/votes`]: () => json(200, noVotes) };
+  [`GET /api/v1/kb/articles/${ids.article}/votes`]: () => json(200, noVotes), [`GET /api/v1/kb/articles/${ids.article}/stats`]: () => json(200, noStats) };
 
 test('a new article is saved as a draft in the collection it was started from, then opens as itself', async () => {
   const calls = serve({ ...base, 'POST /api/v1/kb/articles': () => json(201, article({ title: 'Reset your password', body_md: '# Steps' })) });

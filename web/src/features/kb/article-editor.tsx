@@ -11,6 +11,7 @@ import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
 import { ArticleTranslationsBox } from './article-translations';
 import { ArticleVotesBox } from './article-votes';
+import { ArticleStatsBox } from './article-stats';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
 import { ArticleVisibilityBox } from './article-visibility';
 import { ArticleAuthorBox } from './article-author';
@@ -626,6 +627,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       {(!base || status !== 'published' || raw?.has_draft || dirty) && <ArticleReviewBox articleId={base?.id} approval={approval} dirty={dirty} saved={base !== undefined}
         headingId={`${id}-review`} reasonId={reasonId} />}
       {base && <ArticleTranslationsBox article={base} headingId={`${id}-translations`} />}
+      {base && <ArticleStatsBox articleId={base.id} headingId={`${id}-stats`} />}
       {base && <ArticleVotesBox articleId={base.id} title={base.title} timezone={timezone} headingId={`${id}-votes`} />}
       {missing.length > 0 && <section className="kb-alt-warn" aria-labelledby={`${id}-alt-warn`}>
         <strong id={`${id}-alt-warn`}>{kbMessages.imagesWithoutAlt(missing.length)}</strong>

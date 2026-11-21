@@ -663,6 +663,25 @@ type KBArticleVote struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// KBArticleView is how many times readers opened one language of an article on one day, the day in
+// the workspace's timezone (YYYY-MM-DD). Nothing about the readers is kept, so nothing is exported.
+type KBArticleView struct {
+	ArticleID string `json:"article_id"`
+	Locale    string `json:"locale"`
+	Day       string `json:"day"`
+	Views     int64  `json:"views"`
+}
+
+// KBArticleUse is a sent reply that used an article: Kind is link (the reply linked the article) or
+// ai_source (the reply was an AI draft that quoted it). A reply that did both has a line for each.
+type KBArticleUse struct {
+	ArticleID      string    `json:"article_id"`
+	ConversationID string    `json:"conversation_id"`
+	MessageID      string    `json:"message_id"`
+	Kind           string    `json:"kind"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 // HelpCenter is the public help center's settings, its theme and the knowledge base counters. A null
 // theme field is the default look; the logo and favicon are kb-images.ndjson ids.
 type HelpCenter struct {
@@ -1327,6 +1346,8 @@ type Sink interface {
 	KBMediaReplacement(KBMediaReplacement) error
 	KBArticleVoteReset(KBArticleVoteReset) error
 	KBArticleVote(KBArticleVote) error
+	KBArticleView(KBArticleView) error
+	KBArticleUse(KBArticleUse) error
 	KBReview(KBReview) error
 	KBReviewReviewer(KBReviewReviewer) error
 	HelpCenter(HelpCenter) error

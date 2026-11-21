@@ -74,6 +74,21 @@
 .results-saved { border-radius: 0; background: transparent; padding: 0; }
 .results-hours strong { font-size: var(--fs-heading, 24px); font-weight: 500; }
 
+/* Help center: three numbers, then the weeks and the articles as plain tables; a number that opens rows is a button. */
+.results-helpcenter { display: grid; gap: var(--space-3); padding: var(--space-5); min-width: 0; }
+.results-helpcenter > header { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.results-helpcenter h2 { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; }
+.results-helpcenter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.results-helpcenter-grid > div { display: grid; gap: 2px; align-content: start; min-width: 0; }
+.results-number-button { padding: 0; border: 0; background: none; cursor: pointer; }
+.results-helpcenter-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.results-helpcenter-table th { color: var(--text-2); font-weight: 500; text-align: left; }
+.results-helpcenter-table :is(th, td) { padding: var(--space-2) var(--space-3) var(--space-2) 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.results-helpcenter-table :is(th, td):not(:first-child) { text-align: right; }
+.results-helpcenter-table td[colspan] { text-align: left; }
+.results-helpcenter-replies { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.results-helpcenter-replies li { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: baseline; }
+
 /* Share and email (admins): a heading, then the share link and the weekly email side by side, each a card. */
 .results-admin { display: grid; gap: var(--space-3); min-width: 0; }
 .results-admin > header { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
@@ -120,6 +135,8 @@
   .results-change-cell .results-cell-label::after { content: ':'; }
   .results-ai { padding: var(--space-4); }
   .results-ai-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .results-helpcenter { padding: var(--space-4); }
+  .results-helpcenter-grid { grid-template-columns: minmax(0, 1fr); }
   .results-number, .results-sublink, .results-footer a, .results-notice a { display: inline-flex; align-items: center; min-height: var(--touch); }
   .results-number, .results-sublink { min-width: var(--touch); }
   .results-admin-grid { grid-template-columns: minmax(0, 1fr); }

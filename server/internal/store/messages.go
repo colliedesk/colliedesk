@@ -422,6 +422,11 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		if err := recordAIDraftSend(ctx, tx, workspaceID, conversationID, actor, messageID, draft, body); err != nil {
 			return domain.Message{}, err
 		}
+		if actor.NoticeKind == "" && actor.Via == nil {
+			if err := s.recordKBArticleUses(ctx, tx, workspaceID, conversationID, messageID, body, actor.AIDraftID); err != nil {
+				return domain.Message{}, err
+			}
+		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE conversations SET updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID); err != nil {
 		return domain.Message{}, fmt.Errorf("touch conversation: %w", err)

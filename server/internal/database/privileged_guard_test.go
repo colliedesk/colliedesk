@@ -59,6 +59,7 @@ var privilegedCallSites = []string{
 	"internal/store/help-center-domains.go: PrivilegeHelpCenterHost",
 	"internal/store/intake-ai.go: PrivilegeIntakeReasonPrune",
 	"internal/store/intake.go: PrivilegeIntakeDueClaim",
+	"internal/store/kb-article-views.go: PrivilegeKBArticleViews",
 	"internal/store/kb-images.go: PrivilegeKBPurge",
 	"internal/store/kb-media-uploads.go: PrivilegeKBUploadDisk",
 	"internal/store/kb-review-mail.go: PrivilegeKBReviewEmailClaim",

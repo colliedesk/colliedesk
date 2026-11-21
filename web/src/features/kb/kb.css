@@ -1031,6 +1031,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-article-status .kb-changes-mark { color: var(--text-1); font-weight: 500; }
 .kb-vote-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); }
 .kb-vote-list li { display: grid; gap: 2px; }
+.kb-stats-replies { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); }
 .kb-vote-line { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
 .kb-vote-answer { font-weight: 600; color: var(--text-2); }
 .kb-vote-missing { color: var(--text-2); overflow-wrap: anywhere; }

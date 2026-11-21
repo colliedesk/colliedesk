@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/pageview"
 )
 
 //go:embed templates/*.html static/site.css
@@ -372,6 +373,7 @@ func (s *Site) home(response http.ResponseWriter, request *http.Request, v view)
 		return
 	}
 	s.writePage(response, request, v, http.StatusOK, s.pages.render("home", data))
+	s.viewed(request, v, pageview.Home, data, "", "")
 }
 
 // homePage is what the home page shows: the top collections with their first articles.
@@ -519,6 +521,7 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 		data.Next = here + "?page=" + strconv.Itoa(pageNumber+1)
 	}
 	s.writePage(response, request, v, http.StatusOK, s.pages.render("collection", data))
+	s.viewed(request, v, pageview.Collection, data, "", "")
 }
 
 func (s *Site) article(response http.ResponseWriter, request *http.Request, v view, address string) {
@@ -604,6 +607,7 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		response.Header().Set("Cache-Control", "no-store")
 	}
 	s.writePage(response, request, v, http.StatusOK, s.pages.render("article", data))
+	s.viewed(request, v, pageview.Article, data, article.ID, "")
 }
 
 // articlePage is what an article's page shows. plain is true when it shows the text as written because
@@ -729,4 +733,5 @@ func (s *Site) search(response http.ResponseWriter, request *http.Request, v vie
 		}
 	}
 	s.writePage(response, request, v, http.StatusOK, s.pages.render("search", data))
+	s.viewed(request, v, pageview.Search, data, "", query)
 }

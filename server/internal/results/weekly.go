@@ -5,7 +5,8 @@ import "time"
 // The weekly email goes out on Monday at this hour, in the workspace's timezone.
 const weeklyHour = 8
 
-func location(timezone string) *time.Location {
+// Location is the IANA timezone, UTC when it is not one; every Results number buckets by it.
+func Location(timezone string) *time.Location {
 	if loc, err := time.LoadLocation(timezone); err == nil {
 		return loc
 	}
@@ -15,14 +16,14 @@ func location(timezone string) *time.Location {
 // WeekStart is the Monday 00:00 of now's week in the timezone, as an instant: the key that claims a
 // week's email.
 func WeekStart(now time.Time, timezone string) time.Time {
-	local := now.In(location(timezone))
+	local := now.In(Location(timezone))
 	days := (int(local.Weekday()) + 6) % 7
 	return time.Date(local.Year(), local.Month(), local.Day()-days, 0, 0, 0, 0, local.Location()).UTC()
 }
 
 // weeklyAt is the moment the email of the week starting at start goes out.
 func weeklyAt(start time.Time, timezone string) time.Time {
-	local := start.In(location(timezone))
+	local := start.In(Location(timezone))
 	return time.Date(local.Year(), local.Month(), local.Day(), weeklyHour, 0, 0, 0, local.Location()).UTC()
 }
 
@@ -32,6 +33,6 @@ func NextWeekly(now time.Time, timezone string) time.Time {
 	if at := weeklyAt(start, timezone); at.After(now) {
 		return at
 	}
-	local := start.In(location(timezone))
+	local := start.In(Location(timezone))
 	return weeklyAt(time.Date(local.Year(), local.Month(), local.Day()+7, 0, 0, 0, 0, local.Location()).UTC(), timezone)
 }

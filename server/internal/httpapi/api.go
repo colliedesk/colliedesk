@@ -34,6 +34,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
+	"github.com/colliedesk/colliedesk/server/internal/pageview"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
@@ -164,6 +165,9 @@ type Config struct {
 	// settings and what they hold stay: the app hides them, the routes that use them answer 409 feature_off,
 	// and what keeps their data whole (webhooks, inbound mail, keep-alive) runs on (feature-switches.go).
 	SwitchedOff map[string]bool
+	// PageViews receives an event for each public help center page a reader is served (the view counter,
+	// kbviews); nil sends none. The process owns it, so it outlives a configuration reload.
+	PageViews pageview.Consumer
 	// Carry is the state the APIs of one process share across configurations (re-serve); nil makes a new one.
 	Carry *Carry
 	// OperatorOrigin is OPERATOR_ORIGIN: the operator console's own host. Empty serves it at Origin/operator.
@@ -395,7 +399,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
-			WithSealKeys(config.Google.Keys)}
+			WithSealKeys(config.Google.Keys).WithHelpCenterHosts(config.Origin, config.HelpCenterDomain)}
 	api.store = api.store.WithChannels(Channels(config, outbound, helpchat.Config{HelpCenterRoutes: api.helpChatRoutes(), HelpCenterAdditions: api.helpChatAdditions,
 		ChatActive: func(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
 			return api.ai.ChatActiveIn(ctx, tx, workspaceID)
@@ -640,6 +644,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/kb/articles/{id}/draft", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/articles/{id}/votes", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/articles/{id}/votes/reset", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/articles/{id}/stats", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/articles/{id}/reviews", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/kb/reviews/{id}/approve", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/articles/{id}/reviews", auth.PermissionSession},

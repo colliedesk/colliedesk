@@ -100,6 +100,8 @@ type restKBArticle struct {
 	Votes         *domain.KBVoteTally   `json:"votes"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
+	Views30d       *int64               `json:"views_30d"`
+	Uses30d        *int64               `json:"uses_30d"`
 	AIExclusion    *struct {
 		At string      `json:"at"`
 		By *restPerson `json:"by"`
@@ -209,6 +211,9 @@ type kbArticleOut struct {
 	Author        *kbAuthorOut          `json:"author"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
+	// Views30d and Uses30d come with one article read on its own, not with a change.
+	Views30d *int64 `json:"views_30d,omitempty"`
+	Uses30d  *int64 `json:"uses_30d,omitempty"`
 }
 
 // kbTeamText is what the team wrote of an article: its title, text and search fields.
@@ -229,7 +234,7 @@ func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
 		ShowContents: article.ShowContents, InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}, Attachments: kbAttachmentsView(article.Attachments),
-		Tags: kbTags(article.Tags), Author: article.Author, kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom}
+		Tags: kbTags(article.Tags), Author: article.Author, kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom, Views30d: article.Views30d, Uses30d: article.Uses30d}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, kbTranslationRow(translation))
 	}

@@ -4280,6 +4280,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/articles/{id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description How much an article was read and used: its help center views and the sent replies that used it, per calendar day in the workspace's timezone, for the days [from, to) (to excluded). Without `from` and `to` it is the last 30 days, today included, the same days as `views_30d` and `uses_30d` on the article. A view is one reader opening the article in a browser, counted once per 30 minutes; bots, link previews, prefetches and the team's own previews are not counted. A use is a sent reply that linked the article (on any of the help center's addresses, old Freshdesk addresses included) or was an AI draft quoting it, each reply once. `replies` lists the newest 50 of those replies with their conversation. */
+        get: operations["getKBArticleStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/{id}/reviews": {
         parameters: {
             query?: never;
@@ -6847,6 +6866,7 @@ export interface components {
             resets_at: string;
         };
         Results: {
+            help_center: components["schemas"]["ResultsHelpCenter"];
             /** @description The caller's weekly email (people with results:share; null for others). */
             weekly_email: null | {
                 subscribed: boolean;
@@ -6880,6 +6900,71 @@ export interface components {
                 /** Format: date-time */
                 at: string;
             };
+        };
+        /** @description Help center article views next to the conversations opened, read live (not from the snapshot). A view is one reader opening an article in a browser, counted once per 30 minutes; bots, link previews, prefetches and the team's own previews are not counted. */
+        ResultsHelpCenter: {
+            /** @description The workspace's timezone (IANA); every day and week is a calendar day or week there. */
+            timezone: string;
+            windows: {
+                "30d": components["schemas"]["ResultsHelpCenterWindow"];
+                "7d": components["schemas"]["ResultsHelpCenterWindow"];
+            };
+        };
+        /** @description The last 30 or 7 calendar days, today included, as [from, to). */
+        ResultsHelpCenterWindow: {
+            /** Format: date-time */
+            from: string;
+            /**
+             * Format: date-time
+             * @description Excluded.
+             */
+            to: string;
+            /** @description Help center article views. */
+            views: number;
+            /** @description Conversations opened: the inbox list with source=native, created_after=from and created_before=to (every status but spam; imported conversations are not counted). */
+            requests: number;
+            /** @description The self-service score, views per conversation opened to one decimal; null when no conversation was opened. */
+            score: number | null;
+            /** @description Weeks from Monday, the first and the last cut to the window, so they add up to it. */
+            weeks: {
+                /** Format: date-time */
+                from: string;
+                /** Format: date-time */
+                to: string;
+                /** Format: date */
+                first_day: string;
+                /** Format: date */
+                last_day: string;
+                views: number;
+                requests: number;
+                /** @description Null when no conversation was opened that week. */
+                score: number | null;
+            }[];
+            /** @description Every day of the window, oldest first. */
+            days: {
+                /** Format: date */
+                day: string;
+                views: number;
+                requests: number;
+            }[];
+            /** @description The articles viewed or used in a sent reply in the window, most viewed first, at most 50. */
+            articles: {
+                /** Format: uuid */
+                id: string;
+                number: number;
+                title: string;
+                views: number;
+                /** @description Readers who found it helpful, as its page shows now (not only in the window). */
+                helpful: number;
+                /** @description All the votes its page counts now. */
+                votes: number;
+                /** @description Null without votes. */
+                helpful_percent: number | null;
+                /** @description Sent replies in the window that linked it or were an AI draft quoting it. */
+                uses: number;
+            }[];
+            /** @description All the articles viewed or used in the window. */
+            articles_total: number;
         };
         ResultsShareLink: {
             /** Format: date-time */
@@ -8700,6 +8785,10 @@ export interface components {
             tags: components["schemas"]["KBArticleTags"];
             /** @description Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source. */
             ai_drafts_this_month?: number;
+            /** @description Only when one article is read (GET): its help center views in the last 30 days, today included (GET /api/v1/kb/articles/{id}/stats has them per day). */
+            views_30d?: number;
+            /** @description Only when one article is read (GET): the sent replies in the last 30 days that linked it or were an AI draft quoting it. */
+            uses_30d?: number;
             /** Format: uuid */
             id: string;
             number: number;
@@ -8892,6 +8981,53 @@ export interface components {
         KBVoteTally: {
             helpful: number;
             not_helpful: number;
+        };
+        KBArticleStats: {
+            /** Format: uuid */
+            article_id: string;
+            /** @description The workspace's timezone (IANA); every day is a calendar day there. */
+            timezone: string;
+            /**
+             * Format: date-time
+             * @description The first day's start.
+             */
+            from: string;
+            /**
+             * Format: date-time
+             * @description The end of the last day, excluded.
+             */
+            to: string;
+            /** Format: date */
+            first_day: string;
+            /** Format: date */
+            last_day: string;
+            /** @description Help center views of the article in the days. */
+            views: number;
+            /** @description Sent replies that linked the article or were an AI draft quoting it. */
+            uses: number;
+            /** @description Every day of the range, oldest first, days without views included. */
+            days: {
+                /** Format: date */
+                day: string;
+                views: number;
+                uses: number;
+            }[];
+            /** @description The newest 50 replies that used the article, newest first. */
+            replies: {
+                /** Format: uuid */
+                conversation_id: string;
+                /** @description The conversation's code, as the inbox shows it. */
+                display_ref: string;
+                subject: string;
+                /** Format: uuid */
+                message_id: string;
+                /** @description `link`: the reply linked the article; `ai_source`: it was sent from an AI draft that quoted it. */
+                kinds: ("ai_source" | "link")[];
+                /** Format: date-time */
+                at: string;
+            }[];
+            /** @description All the replies that used it in the days; equals uses. */
+            replies_total: number;
         };
         KBArticleVotes: {
             /** Format: uuid */
@@ -21138,6 +21274,37 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    getKBArticleStats: {
+        parameters: {
+            query?: {
+                /** @description First day (YYYY-MM-DD, workspace timezone). Give from and to together. */
+                from?: string;
+                /** @description The day after the last one (YYYY-MM-DD), at most 366 days after from. */
+                to?: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article's views and uses */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleStats"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listKBArticleReviews: {

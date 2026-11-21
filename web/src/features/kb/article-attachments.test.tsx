@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { ArticleRoute } from './article-editor';
-import { article, collections, ids, json, me, refusal, serve } from './kb.test.fixture';
+import { article, collections, ids, json, me, refusal, serve, noStats } from './kb.test.fixture';
 import type { Call } from './kb.test.fixture';
 
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useBlocker: vi.fn() }));
@@ -31,7 +31,7 @@ const second = listed('77777777-0000-4000-8000-000000000022', 'Price list.xlsx',
 
 const noVotes = { article_id: ids.article, helpful: 0, not_helpful: 0, imported: { helpful: 0, not_helpful: 0 }, votes: [], resets: [] };
 const base = { 'GET /api/v1/auth/me': () => json(200, me), 'GET /api/v1/kb/collections': () => json(200, { items: collections }),
-  [`GET /api/v1/kb/articles/${ids.article}/votes`]: () => json(200, noVotes),
+  [`GET /api/v1/kb/articles/${ids.article}/votes`]: () => json(200, noVotes), [`GET /api/v1/kb/articles/${ids.article}/stats`]: () => json(200, noStats),
   'POST /api/v1/kb/media-uploads': () => json(201, upload), [`GET /api/v1/kb/media-uploads/${upload.id}`]: () => json(200, upload),
   [`POST /api/v1/kb/media-uploads/${upload.id}/complete`]: () => json(201, media) };
 const attachments = `PUT /api/v1/kb/articles/${ids.article}/attachments`;

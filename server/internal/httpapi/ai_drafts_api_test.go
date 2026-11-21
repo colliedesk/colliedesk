@@ -39,7 +39,7 @@ const (
 // newDraftDesk has two workspaces with reply drafts on their own providers. A has a knowledge base
 // article, a solved conversation and an open one with a customer message and a private note; B holds
 // canary text in its own article and conversations.
-func newDraftDesk(t *testing.T) draftDesk {
+func newDraftDesk(t *testing.T, configure ...func(*httpapi.Config)) draftDesk {
 	t.Helper()
 	fake := &aiprovider.Fake{}
 	var server *httpapi.Server
@@ -47,6 +47,9 @@ func newDraftDesk(t *testing.T) draftDesk {
 		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
 		config.Google = google.Config{Keys: keys}
 		config.AI = fakeAIConfig(fake)
+		for _, change := range configure {
+			change(config)
+		}
 	})
 	server = api.(*httpapi.Server)
 	d := draftDesk{api: api, pool: pool, fake: fake, service: server.AI()}
