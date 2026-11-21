@@ -107,6 +107,8 @@ type ChatSourceView struct {
 	Number int64  `json:"number"`
 	Title  string `json:"title"`
 	Folder string `json:"folder"`
+	// Public says the help center shows the article now: one kept for help chat has no address.
+	Public bool `json:"-"`
 }
 
 // ChatTurnView is a turn as the end user's browser reads it back.
@@ -203,7 +205,7 @@ func turnView(turn ChatTurn) ChatTurnView {
 		view.Redacted = strings.Contains(*turn.Answer, ChatHidden)
 	}
 	for _, source := range turn.Sources {
-		item := ChatSourceView{Number: source.Number}
+		item := ChatSourceView{Number: source.Number, Public: source.Public}
 		if source.Title != nil {
 			item.Title = *source.Title
 		}
@@ -513,7 +515,8 @@ func (s *Service) chatRelated(ctx context.Context, workspaceID, question string)
 			known[a.ID] = a
 		}
 		for _, doc := range docs {
-			if a, ok := known[doc.KBArticleID]; ok && doc.Kind == store.AIRetrievedKBArticle && len(related) < chatRelated {
+			// The paused chat offers articles to read instead: only those the help center shows.
+			if a, ok := known[doc.KBArticleID]; ok && a.Public && doc.Kind == store.AIRetrievedKBArticle && len(related) < chatRelated {
 				related = append(related, refOf(a))
 			}
 		}
@@ -618,7 +621,7 @@ func (c *chatCollector) Delta(text string) { c.answer.WriteString(text) }
 func (c *chatCollector) Error(code string) { c.failed = code }
 func (c *chatCollector) Sources(sources []ChatArticleRef) {
 	for _, source := range sources {
-		c.result.Sources = append(c.result.Sources, ChatSourceView{Number: source.Number, Title: source.Title, Folder: source.Folder})
+		c.result.Sources = append(c.result.Sources, ChatSourceView{Number: source.Number, Title: source.Title, Folder: source.Folder, Public: source.Public})
 	}
 }
 func (c *chatCollector) Done(status string, _ []string, redacted bool) {

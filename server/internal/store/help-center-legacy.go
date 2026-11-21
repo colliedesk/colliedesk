@@ -91,8 +91,8 @@ type HelpCenterLegacyItem struct {
 func (s *Store) HelpCenterLegacyItems(ctx context.Context, workspaceID, accountSource string) ([]HelpCenterLegacyItem, error) {
 	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]HelpCenterLegacyItem, error) {
 		rows, err := tx.Query(ctx, `SELECT i.entity, i.source_id, a.number, a.slug, c.id::text FROM import_items i
-			LEFT JOIN kb_articles a ON i.entity='kb_article' AND a.workspace_id=i.workspace_id AND a.id=i.target_id AND ` + publicKBArticleFlag + `
-			LEFT JOIN kb_collections c ON i.entity IN ('kb_category','kb_folder') AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND ` + publicKBCollection + `
+			LEFT JOIN kb_articles a ON i.entity='kb_article' AND a.workspace_id=i.workspace_id AND a.id=i.target_id AND `+publicKBArticleFlag+`
+			LEFT JOIN kb_collections c ON i.entity IN ('kb_category','kb_folder') AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND `+publicKBCollection+`
 			WHERE i.workspace_id=$1 AND i.source=$2 AND i.source LIKE 'freshdesk:%' AND i.status='done'
 				AND i.entity IN ('kb_article','kb_category','kb_folder') AND (a.id IS NOT NULL OR c.id IS NOT NULL)
 			ORDER BY i.entity, length(i.source_id), i.source_id`, workspaceID, accountSource)

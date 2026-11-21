@@ -428,6 +428,9 @@ type ChatKBArticle struct {
 	Locale, TextKey string
 	// FilesKey changes with the files the page lists; "" while it lists none.
 	FilesKey string
+	// Public says the help center shows the article (publicKBArticle): help chat may link it. One kept
+	// for help chat is quoted, never linked.
+	Public bool
 }
 
 // ChatKBArticles lists the articles the help center shows (helpChatKBArticle) that are not kept away
@@ -441,7 +444,7 @@ func ChatKBArticles(ctx context.Context, tx pgx.Tx, workspaceID string, withBodi
 // the others in their own ("" is the primary language).
 func chatKBSelect(body string) string {
 	return `SELECT a.id::text,a.number,COALESCE(v.version,1),COALESCE(t.title,a.title),COALESCE(ct.name,c.name),octet_length(COALESCE(t.body_md,a.body_md)),` + body + `,
-		COALESCE(t.locale,''),COALESCE(t.updated_at::text,'')
+		COALESCE(t.locale,''),COALESCE(t.updated_at::text,''),` + publicKBArticleFlag + `
 		FROM kb_articles a JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
 		LEFT JOIN LATERAL (SELECT max(version) AS version FROM kb_article_versions WHERE workspace_id=a.workspace_id AND article_id=a.id AND ` + kbTextVersion("") + `) v ON true
 		LEFT JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$2 AND $2 <> '' AND ` + helpChatKBTranslation + `
@@ -461,7 +464,7 @@ func ChatKBArticlesIn(ctx context.Context, tx pgx.Tx, workspaceID string, withBo
 	}
 	articles, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ChatKBArticle, error) {
 		var a ChatKBArticle
-		err := row.Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey)
+		err := row.Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey, &a.Public)
 		return a, err
 	})
 	if err != nil {
@@ -500,7 +503,7 @@ func ChatKBArticlesByIDIn(ctx context.Context, tx pgx.Tx, workspaceID string, id
 	}
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ChatKBArticle, error) {
 		var a ChatKBArticle
-		err := row.Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey)
+		err := row.Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey, &a.Public)
 		return a, err
 	})
 	if err != nil {
@@ -519,7 +522,7 @@ func ChatKBArticlesByIDIn(ctx context.Context, tx pgx.Tx, workspaceID string, id
 func ChatKBArticleByIDIn(ctx context.Context, tx pgx.Tx, workspaceID, id, locale string) (ChatKBArticle, bool, error) {
 	var a ChatKBArticle
 	err := tx.QueryRow(ctx, chatKBSelect(`COALESCE(t.body_md,a.body_md)`)+` WHERE `+helpChatKBArticle+` AND NOT a.ai_excluded AND a.id::text=$3`, workspaceID, locale, id).
-		Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey)
+		Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey, &a.Public)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ChatKBArticle{}, false, nil
 	}

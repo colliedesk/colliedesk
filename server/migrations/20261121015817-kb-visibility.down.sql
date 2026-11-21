@@ -18,6 +18,7 @@ DROP VIEW kb_public_articles;
 DROP VIEW kb_help_chat_articles;
 DROP VIEW kb_published_articles;
 DROP VIEW kb_article_visibility;
+DROP VIEW kb_article_collection_ranks;
 DROP VIEW kb_collection_visibility;
 DROP FUNCTION kb_visibility_name(integer);
 DROP FUNCTION kb_visibility_rank(text);

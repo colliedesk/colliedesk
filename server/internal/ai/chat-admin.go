@@ -76,6 +76,8 @@ type ChatSource struct {
 	Version   int     `json:"version"`
 	Title     *string `json:"title"`
 	Folder    *string `json:"folder"`
+	// Public says the help center shows the article now.
+	Public bool `json:"-"`
 }
 
 // ChatTurn is one question and answer of a transcript.
@@ -222,7 +224,8 @@ func readChatTurns(ctx context.Context, tx pgx.Tx, workspaceID, sessionID string
 	for i, turn := range turns {
 		index[turn.ID] = i
 	}
-	sources, err := tx.Query(ctx, `SELECT o.turn_id::text,o.ordinal,o.kb_article_id::text,o.article_number,o.article_version,o.title,o.folder
+	sources, err := tx.Query(ctx, `SELECT o.turn_id::text,o.ordinal,o.kb_article_id::text,o.article_number,o.article_version,o.title,o.folder,
+			EXISTS (SELECT 1 FROM kb_public_articles kp WHERE kp.workspace_id=o.workspace_id AND kp.id=o.kb_article_id)
 		FROM ai_chat_sources o JOIN ai_chat_turns t ON t.workspace_id=o.workspace_id AND t.id=o.turn_id
 		WHERE o.workspace_id=$1 AND t.session_id=$2 ORDER BY t.seq,o.ordinal`, workspaceID, sessionID)
 	if err != nil {
@@ -232,7 +235,7 @@ func readChatTurns(ctx context.Context, tx pgx.Tx, workspaceID, sessionID string
 	for sources.Next() {
 		var turnID string
 		var source ChatSource
-		if err := sources.Scan(&turnID, &source.Ordinal, &source.ArticleID, &source.Number, &source.Version, &source.Title, &source.Folder); err != nil {
+		if err := sources.Scan(&turnID, &source.Ordinal, &source.ArticleID, &source.Number, &source.Version, &source.Title, &source.Folder, &source.Public); err != nil {
 			return nil, err
 		}
 		if i, ok := index[turnID]; ok {

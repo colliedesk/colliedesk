@@ -35,29 +35,52 @@ LEFT JOIN kb_collections p ON p.workspace_id = c.workspace_id AND p.id = c.paren
 LEFT JOIN kb_collections g ON g.workspace_id = p.workspace_id AND g.id = p.parent_id AND g.deleted_at IS NULL
 WHERE c.deleted_at IS NULL;
 
--- Each article with the visibility its collections allow (collection_rank) and its effective
--- visibility. A home collection that is not live counts as agents.
-CREATE VIEW kb_article_visibility WITH (security_invoker = true) AS
-SELECT a.workspace_id, a.id, a.status, a.deleted_at, l.collection_rank,
-    GREATEST(kb_visibility_rank(a.visibility), l.collection_rank) AS visibility_rank
+-- What each collection an article is in allows: one row for its home (a home that is not live counts
+-- as agents) and one for each live collection it is also listed in.
+CREATE VIEW kb_article_collection_ranks WITH (security_invoker = true) AS
+SELECT a.workspace_id, a.id AS article_id, COALESCE(v.visibility_rank, 2) AS visibility_rank
 FROM kb_articles a
-CROSS JOIN LATERAL (SELECT GREATEST(
-        COALESCE((SELECT v.visibility_rank FROM kb_collection_visibility v
-            WHERE v.workspace_id = a.workspace_id AND v.id = a.collection_id), 2),
-        COALESCE((SELECT max(v.visibility_rank) FROM kb_article_collections x
-            JOIN kb_collection_visibility v ON v.workspace_id = x.workspace_id AND v.id = x.collection_id
-            WHERE x.workspace_id = a.workspace_id AND x.article_id = a.id), 0)) AS collection_rank) l;
+LEFT JOIN kb_collection_visibility v ON v.workspace_id = a.workspace_id AND v.id = a.collection_id
+UNION ALL
+SELECT x.workspace_id, x.article_id, v.visibility_rank
+FROM kb_article_collections x
+JOIN kb_collection_visibility v ON v.workspace_id = x.workspace_id AND v.id = x.collection_id;
+
+-- Each article with the visibility its collections allow (collection_rank) and its effective
+-- visibility.
+CREATE VIEW kb_article_visibility WITH (security_invoker = true) AS
+SELECT a.workspace_id, a.id, a.status, a.deleted_at, r.collection_rank,
+    GREATEST(kb_visibility_rank(a.visibility), r.collection_rank) AS visibility_rank
+FROM kb_articles a
+JOIN (SELECT workspace_id, article_id, max(visibility_rank) AS collection_rank
+    FROM kb_article_collection_ranks GROUP BY workspace_id, article_id) r
+    ON r.workspace_id = a.workspace_id AND r.article_id = a.id;
 
 CREATE VIEW kb_published_articles WITH (security_invoker = true) AS
-SELECT v.workspace_id, v.id FROM kb_article_visibility v WHERE v.status = 'published' AND v.deleted_at IS NULL;
+SELECT a.workspace_id, a.id FROM kb_articles a WHERE a.status = 'published' AND a.deleted_at IS NULL;
 
+-- The readers' views say the same as kb_article_visibility as conditions on the article row: its home
+-- is live and allows it, and no other collection it is listed in forbids it. The planner joins these
+-- set-wise; a rank computed per article (or a union with kb_articles) is read once per outer row. The
+-- visibility column is compared by name for the same reason (its CHECK allows only the three names, so
+-- this is kb_visibility_rank <= 1 and = 0).
 CREATE VIEW kb_help_chat_articles WITH (security_invoker = true) AS
-SELECT v.workspace_id, v.id FROM kb_article_visibility v
-WHERE v.status = 'published' AND v.deleted_at IS NULL AND v.visibility_rank <= 1;
+SELECT a.workspace_id, a.id FROM kb_articles a
+WHERE a.status = 'published' AND a.deleted_at IS NULL AND a.visibility IN ('everyone', 'help_chat')
+    AND EXISTS (SELECT 1 FROM kb_collection_visibility h
+        WHERE h.workspace_id = a.workspace_id AND h.id = a.collection_id AND h.visibility_rank <= 1)
+    AND NOT EXISTS (SELECT 1 FROM kb_article_collections x
+        JOIN kb_collection_visibility v ON v.workspace_id = x.workspace_id AND v.id = x.collection_id
+        WHERE x.workspace_id = a.workspace_id AND x.article_id = a.id AND v.visibility_rank > 1);
 
 CREATE VIEW kb_public_articles WITH (security_invoker = true) AS
-SELECT v.workspace_id, v.id FROM kb_article_visibility v
-WHERE v.status = 'published' AND v.deleted_at IS NULL AND v.visibility_rank = 0;
+SELECT a.workspace_id, a.id FROM kb_articles a
+WHERE a.status = 'published' AND a.deleted_at IS NULL AND a.visibility = 'everyone'
+    AND EXISTS (SELECT 1 FROM kb_collection_visibility h
+        WHERE h.workspace_id = a.workspace_id AND h.id = a.collection_id AND h.visibility_rank = 0)
+    AND NOT EXISTS (SELECT 1 FROM kb_article_collections x
+        JOIN kb_collection_visibility v ON v.workspace_id = x.workspace_id AND v.id = x.collection_id
+        WHERE x.workspace_id = a.workspace_id AND x.article_id = a.id AND v.visibility_rank > 0);
 
 -- A translation is shown where its article is, while it is published itself.
 CREATE VIEW kb_published_translations WITH (security_invoker = true) AS
@@ -85,7 +108,7 @@ BEGIN
     IF app_role IS NULL THEN
         RAISE EXCEPTION 'row-level security is not set up in this schema';
     END IF;
-    FOREACH kb_view IN ARRAY ARRAY['kb_collection_visibility', 'kb_article_visibility', 'kb_published_articles',
+    FOREACH kb_view IN ARRAY ARRAY['kb_collection_visibility', 'kb_article_collection_ranks', 'kb_article_visibility', 'kb_published_articles',
         'kb_help_chat_articles', 'kb_public_articles', 'kb_published_translations', 'kb_help_chat_translations',
         'kb_public_translations'] LOOP
         EXECUTE format('REVOKE ALL ON %I FROM %I', kb_view, app_role);

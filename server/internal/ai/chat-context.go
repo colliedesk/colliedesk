@@ -65,6 +65,8 @@ type ChatArticleRef struct {
 	Folder  string
 	// Locale is the language the article was given in ("" its own).
 	Locale string
+	// Public says the help center shows it: one kept for help chat is cited without its address.
+	Public bool
 }
 
 // ChatHistoryTurn is an earlier turn of the chat as the AI saw it.
@@ -185,7 +187,7 @@ func chatQuestion(question string) string {
 }
 
 func refOf(a store.ChatKBArticle) ChatArticleRef {
-	return ChatArticleRef{ID: a.ID, Number: a.Number, Version: a.Version, Title: a.Title, Folder: a.Folder, Locale: a.Locale}
+	return ChatArticleRef{ID: a.ID, Number: a.Number, Version: a.Version, Title: a.Title, Folder: a.Folder, Locale: a.Locale, Public: a.Public}
 }
 
 // chatSnapshot is what the server knows of a set of articles for a model.

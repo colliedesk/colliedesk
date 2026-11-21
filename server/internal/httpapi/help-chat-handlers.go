@@ -226,7 +226,12 @@ type helpChatSource struct {
 	Folder string `json:"folder"`
 }
 
-func (c *helpChat) source(number int64, title, folder string) helpChatSource {
+// source is a cited article as the end user may see it. One the help center does not show (kept for
+// help chat) is only "our help notes": no title, no collection and no address.
+func (c *helpChat) source(number int64, title, folder string, public bool) helpChatSource {
+	if !public {
+		return helpChatSource{Number: number}
+	}
 	// In a language, the article's page in it: the help center moves to the article's own page while
 	// no translation is published there.
 	prefix := ""
@@ -261,7 +266,7 @@ func (a *API) helpChatSession(c *helpChat) {
 func (c *helpChat) turnBody(turn ai.ChatTurnView) map[string]any {
 	sources := make([]helpChatSource, 0, len(turn.Sources))
 	for _, source := range turn.Sources {
-		sources = append(sources, c.source(source.Number, source.Title, source.Folder))
+		sources = append(sources, c.source(source.Number, source.Title, source.Folder, source.Public))
 	}
 	return map[string]any{"id": turn.ID, "question": turn.Question, "answer": turn.Answer, "status": turn.Status, "error_code": turn.ErrorCode,
 		"sources": sources, "feedback": turn.Feedback, "redacted": turn.Redacted, "created_at": turn.CreatedAt}
@@ -446,7 +451,7 @@ func (s *helpChatStream) Delta(text string) { s.line(map[string]any{"type": "del
 func (s *helpChatStream) Sources(sources []ai.ChatArticleRef) {
 	list := make([]helpChatSource, 0, len(sources))
 	for _, source := range sources {
-		list = append(list, s.chat.source(source.Number, source.Title, source.Folder))
+		list = append(list, s.chat.source(source.Number, source.Title, source.Folder, source.Public))
 	}
 	s.line(map[string]any{"type": "sources", "sources": list})
 }
@@ -766,7 +771,11 @@ func (c *helpChat) transcript(view ai.ChatSessionView) string {
 		}
 		text.WriteString("AI: " + answer + "\n\n")
 		for _, source := range turn.Sources {
-			s := c.source(source.Number, source.Title, source.Folder)
+			if !source.Public {
+				text.WriteString("Source: " + source.Title + " (help chat only, no link)\n\n")
+				continue
+			}
+			s := c.source(source.Number, source.Title, source.Folder, true)
 			link := s.URL
 			if strings.HasPrefix(link, "/") {
 				link = c.at.Address + link
