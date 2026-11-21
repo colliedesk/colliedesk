@@ -18,6 +18,7 @@ type kbFilterFixture struct {
 	ids map[string]string
 	// Another workspace's author and collection.
 	foreignAgentID, foreignCollectionID string
+	pool                                *pgxpool.Pool
 }
 
 func newKBFilterFixture(t *testing.T) kbFilterFixture {
@@ -25,7 +26,7 @@ func newKBFilterFixture(t *testing.T) kbFilterFixture {
 	api, service, pool := testAPIWithPool(t)
 	admin := createSession(t, api, service, "KB Filters", "admin@kb-filters.example.com")
 	writer := agentSession(t, api, admin, "writer@kb-filters.example.com")
-	f := kbFilterFixture{api: api, admin: admin, writerID: agentID(t, api, writer), adminID: agentID(t, api, admin), ids: map[string]string{}}
+	f := kbFilterFixture{api: api, pool: pool, admin: admin, writerID: agentID(t, api, writer), adminID: agentID(t, api, admin), ids: map[string]string{}}
 	kbCall(t, api, http.MethodPatch, "/api/v1/workspace/timezone", map[string]any{"timezone": "Asia/Ho_Chi_Minh"}, admin, http.StatusOK, nil)
 	kbCall(t, api, http.MethodPut, "/api/v1/help-center/languages", map[string]any{"languages": []map[string]any{{"locale": "fr", "visible": true}}}, admin, http.StatusOK, nil)
 

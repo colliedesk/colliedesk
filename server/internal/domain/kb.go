@@ -130,6 +130,9 @@ type KBArticleSummary struct {
 	Tags []string `json:"tags"`
 	// Languages are its translations outside the trash, by locale.
 	Languages []KBArticleLanguage `json:"languages"`
+	// ReviewState is "in_review" while its own unpublished text waits for a reviewer and "approved" once
+	// a reviewer approved that text as it is now; nil otherwise.
+	ReviewState *string `json:"review_state"`
 }
 
 // KBArticleLanguage is one translation of an article as lists show it.

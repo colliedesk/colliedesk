@@ -7038,6 +7038,72 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/export.csv:
+    get:
+      operationId: exportKBArticles
+      x-permission: kb_articles:read
+      description: >
+        The articles GET /api/v1/kb/articles lists with the same filters, in its order, as one CSV file to
+        download: UTF-8 with a byte order mark, a header row, then one row per article, at most 50,000.
+        Columns: title, address (its help center page), collection (its home, with the collections above it,
+        joined by " / "), status (draft, in_review, approved, published or unpublished_changes), author (a
+        team member who left the team ends in " (left)"), tags (joined by ", "), languages (its translations,
+        an outdated one followed by " (outdated)"), created_at and updated_at (RFC 3339 in the caller's
+        timezone), helpful_votes and not_helpful_votes (what the article's page counts). A cell that starts
+        with =, +, - or @ starts with ' instead, so a spreadsheet never reads it as a formula.
+      parameters:
+        - {$ref: '#/components/parameters/KBListQ'}
+        - {$ref: '#/components/parameters/KBListStatus'}
+        - {$ref: '#/components/parameters/KBListCollectionId'}
+        - {$ref: '#/components/parameters/KBListIncludeSubcollections'}
+        - {$ref: '#/components/parameters/KBListAuthor'}
+        - {$ref: '#/components/parameters/KBListTag'}
+        - {$ref: '#/components/parameters/KBListTagMatch'}
+        - {$ref: '#/components/parameters/KBListCreatedAfter'}
+        - {$ref: '#/components/parameters/KBListCreatedBefore'}
+        - {$ref: '#/components/parameters/KBListUpdatedAfter'}
+        - {$ref: '#/components/parameters/KBListUpdatedBefore'}
+        - {$ref: '#/components/parameters/KBListTranslation'}
+        - {$ref: '#/components/parameters/KBListLocale'}
+        - {$ref: '#/components/parameters/KBListHasDraft'}
+        - {$ref: '#/components/parameters/KBListVisibility'}
+        - {$ref: '#/components/parameters/KBListState'}
+        - {$ref: '#/components/parameters/KBListSort'}
+      responses:
+        '200':
+          description: The articles as CSV, sent as an attachment named knowledge-base-articles.csv
+          headers:
+            Content-Disposition: {schema: {type: string}}
+          content:
+            text/csv: {schema: {type: string}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/kb/tags:
+    get:
+      operationId: listKBTags
+      x-permission: kb_articles:read
+      description: >
+        Every tag the workspace's articles outside the trash have published, by name, with how many articles
+        have it. Use a name as a `tag` value of GET /api/v1/kb/articles.
+      responses:
+        '200':
+          description: The knowledge base tags
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [tag, article_count]
+                      properties:
+                        tag: {type: string, minLength: 1, maxLength: 40}
+                        article_count: {type: integer, minimum: 1}
+        '401': {$ref: '#/components/responses/Unauthorized'}
   /api/v1/kb/articles/trash:
     get:
       operationId: listTrashedKBArticles
@@ -12618,8 +12684,12 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags, languages]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags, languages, review_state]
       properties:
+        review_state:
+          type: [string, 'null']
+          enum: [in_review, approved, null]
+          description: 'in_review: its own unpublished text waits for a reviewer; approved: a reviewer approved that text as it is now, ready to publish (POST /api/v1/kb/articles/publish). Null without either.'
         tags: {allOf: [{$ref: '#/components/schemas/KBArticleTags'}], description: 'Its published tags, sorted; a published article''s unpublished tags are in draft.tags.'}
         languages:
           type: array

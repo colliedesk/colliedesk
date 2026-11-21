@@ -53,6 +53,8 @@ const summaryFields = {
   tags: z.array(z.string()),
   // Its translations outside the trash; a help center language not listed is missing.
   languages: z.array(z.object({ locale: z.string(), outdated: z.boolean() })),
+  // in_review: its own unpublished text waits for a reviewer; approved: a reviewer approved it, ready to publish.
+  review_state: z.enum(['in_review', 'approved']).nullable(),
   ...visibilityFields,
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;

@@ -93,16 +93,7 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 			article.AIExclusion.By = &domain.SavedReplyPerson{AgentID: excludedBy, Name: *excludedByName}
 		}
 	}
-	if err := fillKBCollectionIDs(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
-		return article, err
-	}
-	if err := fillKBTags(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
-		return article, err
-	}
-	if err := fillKBLanguages(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
-		return article, err
-	}
-	if err := fillKBAuthors(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
+	if err := fillKBSummaries(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
 		return article, err
 	}
 	if err := readKBVisibilityFrom(ctx, tx, workspaceID, &article); err != nil {
@@ -209,16 +200,7 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 		for index := range items {
 			pointers[index] = &items[index]
 		}
-		if err := fillKBTags(ctx, tx, workspaceID, pointers...); err != nil {
-			return nil, err
-		}
-		if err := fillKBLanguages(ctx, tx, workspaceID, pointers...); err != nil {
-			return nil, err
-		}
-		if err := fillKBAuthors(ctx, tx, workspaceID, pointers...); err != nil {
-			return nil, err
-		}
-		return items, fillKBCollectionIDs(ctx, tx, workspaceID, pointers...)
+		return items, fillKBSummaries(ctx, tx, workspaceID, pointers...)
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("list knowledge base articles: %w", err)
@@ -268,16 +250,7 @@ func (s *Store) ListTrashedKBArticles(ctx context.Context, workspaceID string, l
 		for index := range items {
 			pointers[index] = &items[index].KBArticleSummary
 		}
-		if err := fillKBTags(ctx, tx, workspaceID, pointers...); err != nil {
-			return nil, err
-		}
-		if err := fillKBLanguages(ctx, tx, workspaceID, pointers...); err != nil {
-			return nil, err
-		}
-		if err := fillKBAuthors(ctx, tx, workspaceID, pointers...); err != nil {
-			return nil, err
-		}
-		return items, fillKBCollectionIDs(ctx, tx, workspaceID, pointers...)
+		return items, fillKBSummaries(ctx, tx, workspaceID, pointers...)
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("list knowledge base article trash: %w", err)

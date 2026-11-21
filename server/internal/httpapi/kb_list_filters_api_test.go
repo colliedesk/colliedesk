@@ -120,3 +120,36 @@ func TestKnowledgeBaseListShowsEachArticlesLanguages(t *testing.T) {
 		}
 	}
 }
+
+// The list says which articles wait for a reviewer and which a reviewer approved, so the status
+// column reads draft, in review, approved, published or with unpublished changes without another call.
+func TestKnowledgeBaseListShowsEachArticlesReviewState(t *testing.T) {
+	f := newKBFilterFixture(t)
+	var page struct {
+		Items []struct {
+			ID          string  `json:"id"`
+			ReviewState *string `json:"review_state"`
+		} `json:"items"`
+	}
+	kbCall(t, f.api, http.MethodGet, "/api/v1/kb/articles", nil, f.admin, http.StatusOK, &page)
+	want := map[string]string{"card": "", "invoice": "", "parcel": "", "label": "in_review", "lost": "approved"}
+	seen := 0
+	for _, item := range page.Items {
+		for name, id := range f.ids {
+			if id != item.ID {
+				continue
+			}
+			seen++
+			got := ""
+			if item.ReviewState != nil {
+				got = *item.ReviewState
+			}
+			if got != want[name] {
+				t.Errorf("%s review_state = %q, want %q", name, got, want[name])
+			}
+		}
+	}
+	if seen != len(want) {
+		t.Fatalf("saw %d fixture articles, want %d", seen, len(want))
+	}
+}

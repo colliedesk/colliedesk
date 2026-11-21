@@ -1,0 +1,7 @@
+﻿title,address,collection,status,author,tags,languages,created_at,updated_at,helpful_votes,not_helpful_votes
+Invoice copy,https://desk.example.com/help/kb-filters/a/2-invoice-copy,Billing,draft,Ana Admin,billing,fr,2026-11-20T23:30:00+07:00,2026-11-12T07:00:00+07:00,0,0
+Card refund,https://desk.example.com/help/kb-filters/a/1-card-refund,Billing / Refunds,published,Wes Writer (left),"billing, refund",fr (outdated),2026-11-21T00:30:00+07:00,2026-11-10T07:00:00+07:00,2,1
+Tracking a parcel,https://desk.example.com/help/kb-filters/a/3-tracking-a-parcel,Shipping,unpublished_changes,Wes Writer (left),shipping,,2026-10-15T10:00:00+07:00,2026-11-15T07:00:00+07:00,0,0
+Lost package,https://desk.example.com/help/kb-filters/a/5-lost-package,Shipping,approved,Ana Admin,,,2026-10-02T07:00:00+07:00,2026-10-02T07:00:00+07:00,0,0
+Return label,https://desk.example.com/help/kb-filters/a/4-return-label,Shipping,in_review,Ana Admin,,,2026-11-01T00:30:00+07:00,2026-10-01T07:00:00+07:00,0,0
+"'=HYPERLINK(""https://evil.example"",""Refund"")",https://desk.example.com/help/kb-filters/a/6-refund-link,Billing,draft,Ana Admin,,,2026-09-01T07:00:00+07:00,2026-09-01T07:00:00+07:00,0,0

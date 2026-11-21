@@ -110,6 +110,7 @@ var routeAccess = map[string]TokenAccess{
 	"POST /api/v1/kb/collections/{id}/restore":                                       need(auth.PermKBArticlesDelete),
 	"GET /api/v1/kb/articles":                                                        need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/articles/trash":                                                  need(auth.PermKBArticlesRead),
+	"GET /api/v1/kb/articles/export.csv":                                             need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/articles/{id}":                                                   need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/articles/{id}/versions":                                          need(auth.PermKBArticlesRead),
 	"POST /api/v1/kb/articles":                                                       need(auth.PermKBArticlesCreate),

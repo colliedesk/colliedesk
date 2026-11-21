@@ -4078,6 +4078,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/articles/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The articles GET /api/v1/kb/articles lists with the same filters, in its order, as one CSV file to download: UTF-8 with a byte order mark, a header row, then one row per article, at most 50,000. Columns: title, address (its help center page), collection (its home, with the collections above it, joined by " / "), status (draft, in_review, approved, published or unpublished_changes), author (a team member who left the team ends in " (left)"), tags (joined by ", "), languages (its translations, an outdated one followed by " (outdated)"), created_at and updated_at (RFC 3339 in the caller's timezone), helpful_votes and not_helpful_votes (what the article's page counts). A cell that starts with =, +, - or @ starts with ' instead, so a spreadsheet never reads it as a formula. */
+        get: operations["exportKBArticles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Every tag the workspace's articles outside the trash have published, by name, with how many articles have it. Use a name as a `tag` value of GET /api/v1/kb/articles. */
+        get: operations["listKBTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/trash": {
         parameters: {
             query?: never;
@@ -8282,6 +8316,11 @@ export interface components {
             article_ids: string[];
         };
         KBArticleSummary: {
+            /**
+             * @description in_review: its own unpublished text waits for a reviewer; approved: a reviewer approved that text as it is now, ready to publish (POST /api/v1/kb/articles/publish). Null without either.
+             * @enum {string|null}
+             */
+            review_state: "in_review" | "approved" | null;
             /** @description Its published tags, sorted; a published article's unpublished tags are in draft.tags. */
             tags: components["schemas"]["KBArticleTags"];
             /** @description Its translations outside the trash, by locale; outdated is set when the article changed after the translation was last brought up to date. A language of the help center that is not here is missing. */
@@ -20451,6 +20490,89 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    exportKBArticles: {
+        parameters: {
+            query?: {
+                q?: components["parameters"]["KBListQ"];
+                status?: components["parameters"]["KBListStatus"];
+                /** @description Only the articles directly in this collection (their home, collection_id). Another workspace's or an unknown collection gives no articles. */
+                collection_id?: components["parameters"]["KBListCollectionId"];
+                /** @description true with collection_id: also the articles in its collections, at every depth, and the ones listed in any of them (collection_ids). Collections in the trash are left out. The order is `recent` unless `sort` is given. */
+                include_subcollections?: components["parameters"]["KBListIncludeSubcollections"];
+                /** @description Only the articles credited to one of these team members (author_agent_id), comma-separated, at most 50. Another workspace's or an unknown id gives no articles. */
+                author?: components["parameters"]["KBListAuthor"];
+                /** @description Only the articles with these published tags; repeat it for each tag (tags may hold commas). Cleaned as tags are (lowercase, spaces collapsed), at most 20. */
+                tag?: components["parameters"]["KBListTag"];
+                /** @description any (the default): the articles with at least one of the tag values. all: only the ones with every one. */
+                tag_match?: components["parameters"]["KBListTagMatch"];
+                /** @description A date range, half-open: `_after` keeps the articles at or after it, `_before` the ones strictly before it. Either an RFC 3339 time with an offset (2026-10-01T00:00:00Z) or a date (2026-10-01), which is midnight starting that day in the workspace's timezone. For the days 1 to 31 October: created_after=2026-10-01&created_before=2026-11-01. */
+                created_after?: components["parameters"]["KBListCreatedAfter"];
+                /** @description The end of the created_at range, excluded; a time or a date, as created_after. */
+                created_before?: components["parameters"]["KBListCreatedBefore"];
+                /** @description The start of the updated_at range (which unpublished changes move too), included; a time or a date, as created_after. */
+                updated_after?: components["parameters"]["KBListUpdatedAfter"];
+                /** @description The end of the updated_at range, excluded; a time or a date, as created_after. */
+                updated_before?: components["parameters"]["KBListUpdatedBefore"];
+                /** @description missing: only the articles without a translation (outside the trash) in `locale`, or without one in at least one of the help center's languages when `locale` is not given. outdated: only the ones with an outdated translation in `locale`, or in any language. */
+                translation?: components["parameters"]["KBListTranslation"];
+                /** @description The language translation looks at; it must be a language of the help center. */
+                locale?: components["parameters"]["KBListLocale"];
+                /** @description true: only the published articles with unpublished changes (has_draft). */
+                has_draft?: components["parameters"]["KBListHasDraft"];
+                /** @description Only the articles with this effective_visibility. */
+                visibility?: components["parameters"]["KBListVisibility"];
+                /** @description in_review: only the articles whose unpublished text waits for a reviewer. approved: only the ones whose unpublished text a reviewer approved as it is now, ready to publish (POST /api/v1/kb/articles/publish). Translations are left out. */
+                state?: components["parameters"]["KBListState"];
+                /** @description The order without `q`; ignored with `q`. */
+                sort?: components["parameters"]["KBListSort"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The articles as CSV, sent as an attachment named knowledge-base-articles.csv */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listKBTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The knowledge base tags */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            tag: string;
+                            article_count: number;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listTrashedKBArticles: {
