@@ -1,23 +1,27 @@
--- A conversation's response clocks (docs/user/response-targets.md): whether its workspace's targets apply
--- to it (decided when it is opened: the targets were on, its channel is one they cover, it is no import or
--- problem report; an import sets it itself), and the state of its first-response and resolution clocks,
--- with the times they are due and warn. The business-time arithmetic is the server's (domain.SLAPolicy):
--- what needs none is applied here at once (pending pauses, resolved or closed stops, the first reply meets
--- the first response), and the row is marked stale for the server to count again. sla_due_at and
--- sla_warn_at are the earliest of the running clocks', which the inbox filters and sorts by.
+-- A conversation's response clocks (docs/user/response-targets.md): whether its workspace's
+-- targets apply to it (decided when it is opened: the targets were on, its channel is one they
+-- cover, it is no import or problem report; an import sets it itself), and the state of its
+-- first-response and resolution clocks, with the times they are due and warn. The business-time
+-- arithmetic is the server's (domain.SLAPolicy): what needs none is applied here at once (pending
+-- pauses, resolved or closed stops, the first reply meets the first response), and the row is
+-- marked stale for the server to count again. sla_due_at and sla_warn_at are the earliest of the
+-- running clocks', which the inbox filters and sorts by.
 ALTER TABLE conversations ADD COLUMN sla_applies boolean,
     ADD COLUMN sla_stale boolean NOT NULL DEFAULT false,
-    ADD COLUMN sla_first_state text CHECK (sla_first_state IN ('running', 'paused', 'stopped', 'met')),
+    ADD COLUMN sla_first_state text
+        CHECK (sla_first_state IN ('running', 'paused', 'stopped', 'met')),
     ADD COLUMN sla_first_due_at timestamptz,
     ADD COLUMN sla_first_warn_at timestamptz,
     ADD COLUMN sla_first_met_at timestamptz,
-    ADD COLUMN sla_resolution_state text CHECK (sla_resolution_state IN ('running', 'paused', 'stopped', 'met')),
+    ADD COLUMN sla_resolution_state text
+        CHECK (sla_resolution_state IN ('running', 'paused', 'stopped', 'met')),
     ADD COLUMN sla_resolution_due_at timestamptz,
     ADD COLUMN sla_resolution_warn_at timestamptz,
     ADD COLUMN sla_due_at timestamptz,
     ADD COLUMN sla_warn_at timestamptz;
 UPDATE conversations SET sla_applies = false WHERE sla_applies IS NULL;
-CREATE INDEX conversations_sla_due ON conversations(workspace_id, sla_due_at, id) WHERE sla_due_at IS NOT NULL;
+CREATE INDEX conversations_sla_due ON conversations(workspace_id, sla_due_at, id)
+    WHERE sla_due_at IS NOT NULL;
 CREATE INDEX conversations_sla_stale ON conversations(workspace_id, id) WHERE sla_stale;
 
 CREATE FUNCTION conversations_sla_open() RETURNS trigger
@@ -68,7 +72,9 @@ BEGIN
 END
 $$;
 
-CREATE TRIGGER conversations_sla_open BEFORE INSERT ON conversations FOR EACH ROW EXECUTE FUNCTION conversations_sla_open();
-CREATE TRIGGER conversations_sla_change BEFORE UPDATE OF status, priority ON conversations FOR EACH ROW EXECUTE FUNCTION conversations_sla_change();
+CREATE TRIGGER conversations_sla_open BEFORE INSERT ON conversations
+    FOR EACH ROW EXECUTE FUNCTION conversations_sla_open();
+CREATE TRIGGER conversations_sla_change BEFORE UPDATE OF status, priority ON conversations
+    FOR EACH ROW EXECUTE FUNCTION conversations_sla_change();
 CREATE TRIGGER messages_sla_reply AFTER INSERT ON messages FOR EACH ROW
     WHEN (NEW.kind = 'outgoing' AND NEW.notice_kind IS NULL) EXECUTE FUNCTION messages_sla_reply();
