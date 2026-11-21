@@ -37,6 +37,11 @@
       "html": "<figure class=\"kb-figure kb-figure-small kb-figure-right kb-figure-border\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Chart\" loading=\"lazy\"></figure>\n<figure class=\"kb-figure kb-figure-medium kb-figure-left\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Left\" loading=\"lazy\"></figure>\n<figure class=\"kb-figure kb-figure-full\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Full\" loading=\"lazy\"></figure>\n"
     },
     {
+      "name": "a figure with only a caption shows the image at its own size with the caption under it",
+      "markdown": "<figure>\n\n![Settings](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n<figcaption>\n\nSettings page\n\n</figcaption>\n\n</figure>\n",
+      "html": "<figure class=\"kb-figure\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Settings\" loading=\"lazy\"><figcaption>Settings page</figcaption></figure>\n"
+    },
+    {
       "name": "an image's unknown width is left out and the image still shows",
       "markdown": "<figure data-width=\"huge\" data-align=\"inline\">\n\n![Wide](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n\n<figure data-width=\"5000\">\n\n![Big](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n</figure>\n",
       "html": "<figure class=\"kb-figure kb-figure-inline\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Wide\" loading=\"lazy\"></figure>\n<figure class=\"kb-figure\"><img src=\"/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97\" alt=\"Big\" loading=\"lazy\"></figure>\n"

@@ -50,6 +50,11 @@
     "out": "<div class=\"x\">\n\nText <kbd>Ctrl</kbd>\n\n</div>\n"
   },
   {
+    "name": "a figure with no attributes, as a caption alone makes it, is kept as it is",
+    "in": "<figure>\n\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n<figcaption>\n\nSettings page\n\n</figcaption>\n\n</figure>\n",
+    "out": "<figure>\n\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n<figcaption>\n\nSettings page\n\n</figcaption>\n\n</figure>\n"
+  },
+  {
     "name": "an image's figure writes its attributes in one order and the border with no value",
     "in": "<FIGURE data-border=\"\" data-align='center' DATA-WIDTH=\"480\">\n\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n<FIGCAPTION class=\"x\">\n\nCaption\n\n</FIGCAPTION>\n\n</FIGURE>\n",
     "out": "<figure data-width=\"480\" data-align=\"center\" data-border>\n\n![Alt](/api/v1/kb/images/5f0c6a52-8d1e-4b7a-9c3f-2e6d4a1b0c97)\n\n<figcaption>\n\nCaption\n\n</figcaption>\n\n</figure>\n"
