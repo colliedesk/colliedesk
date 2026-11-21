@@ -1,10 +1,12 @@
--- The people who run the whole server (the operator console), apart from every workspace's agents: their
--- one-time sign-in links, sessions and tokens, and the changes their tokens ask a person to approve
--- (docs/internals/operator-console.md). No workspace_id, no grant to the app role: the privileged owner
--- path only, as server_secrets.
+-- The people who run the whole server (the operator console), apart from every workspace's agents:
+-- their one-time sign-in links, sessions and tokens, and the changes their tokens ask a person to
+-- approve (docs/internals/operator-console.md). No workspace_id, no grant to the app role: the
+-- privileged owner path only, as server_secrets.
 CREATE TABLE operators (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    email text NOT NULL CHECK (email = lower(email) AND char_length(email) BETWEEN 3 AND 320 AND position('@' IN email) > 1),
+    email text NOT NULL CHECK (
+        email = lower(email) AND char_length(email) BETWEEN 3 AND 320 AND position('@' IN email) > 1
+    ),
     created_at timestamptz NOT NULL DEFAULT now(),
     created_by text NOT NULL CHECK (char_length(created_by) BETWEEN 1 AND 200),
     revoked_at timestamptz NULL,
@@ -19,8 +21,8 @@ CREATE TABLE operators (
 );
 CREATE UNIQUE INDEX operators_email ON operators (email);
 
--- A link works once, for 15 minutes; only its hash is stored. A sign-in link opens a ticket (also a link
--- row) for the authenticator step, which works once for 10 minutes.
+-- A link works once, for 15 minutes; only its hash is stored. A sign-in link opens a ticket (also a
+-- link row) for the authenticator step, which works once for 10 minutes.
 CREATE TABLE operator_links (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     operator_id uuid NOT NULL REFERENCES operators(id),
@@ -52,8 +54,9 @@ CREATE TABLE operator_sessions (
 );
 CREATE INDEX operator_sessions_operator ON operator_sessions (operator_id);
 
--- A change an operator token asked for, waiting for a person (an operator) to approve it. Its body never
--- holds a secret: the approver types any secret the change needs, and it is used once, never stored.
+-- A change an operator token asked for, waiting for a person (an operator) to approve it. Its body
+-- never holds a secret: the approver types any secret the change needs, and it is used once, never
+-- stored.
 CREATE TABLE operator_requests (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id uuid NOT NULL REFERENCES operator_sessions(id),
@@ -64,7 +67,8 @@ CREATE TABLE operator_requests (
     summary text NOT NULL CHECK (char_length(summary) BETWEEN 1 AND 500),
     note text NOT NULL DEFAULT '' CHECK (char_length(note) <= 500),
     needs_secrets text[] NOT NULL DEFAULT '{}',
-    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'expired', 'failed', 'cancelled')),
+    status text NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected', 'expired', 'failed', 'cancelled')),
     decided_by uuid NULL REFERENCES operators(id),
     decided_at timestamptz NULL,
     result_status int NULL,
@@ -72,10 +76,11 @@ CREATE TABLE operator_requests (
     created_at timestamptz NOT NULL DEFAULT now(),
     expires_at timestamptz NOT NULL
 );
-CREATE INDEX operator_requests_pending ON operator_requests (created_at) WHERE status = 'pending';
+CREATE INDEX operator_requests_pending ON operator_requests (created_at)
+    WHERE status = 'pending';
 
--- What an operator's POST answered for its Idempotency-Key, for a day: a repeated press answers the first
--- result (without anything shown once) instead of doing it twice.
+-- What an operator's POST answered for its Idempotency-Key, for a day: a repeated press answers the
+-- first result (without anything shown once) instead of doing it twice.
 CREATE TABLE operator_idempotency (
     operator_id uuid NOT NULL REFERENCES operators(id),
     operation text NOT NULL CHECK (char_length(operation) BETWEEN 1 AND 100),
@@ -86,23 +91,8 @@ CREATE TABLE operator_idempotency (
     PRIMARY KEY (operator_id, operation, key)
 );
 
-DO $$
-DECLARE
-    app_role text;
-    name text;
-BEGIN
-    SELECT roles[1]::text INTO app_role FROM pg_policies
-        WHERE schemaname = current_schema() AND tablename = 'workspaces' AND policyname = 'workspace_isolation';
-    IF app_role IS NULL THEN
-        RAISE EXCEPTION 'row-level security is not set up in this schema';
-    END IF;
-    FOREACH name IN ARRAY ARRAY['operators', 'operator_links', 'operator_sessions', 'operator_requests', 'operator_idempotency'] LOOP
-        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', name);
-        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', name);
-        EXECUTE format('REVOKE ALL ON %I FROM %I', name, app_role);
-        EXECUTE format($policy$CREATE POLICY privileged_access ON %1$I FOR ALL TO %2$I
-            USING ((SELECT current_setting('app.privileged', true) = 'on'))
-            WITH CHECK ((SELECT current_setting('app.privileged', true) = 'on'))$policy$, name, current_user);
-    END LOOP;
-END
-$$;
+SELECT secure_server_table('operators');
+SELECT secure_server_table('operator_links');
+SELECT secure_server_table('operator_sessions');
+SELECT secure_server_table('operator_requests');
+SELECT secure_server_table('operator_idempotency');
