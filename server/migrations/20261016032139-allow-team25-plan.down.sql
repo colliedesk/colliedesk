@@ -12,9 +12,11 @@ BEGIN
     PERFORM set_config('app.privileged', 'on', true);
     SELECT count(*) INTO in_use FROM workspace_billing WHERE plan = 'team25';
     IF in_use > 0 THEN
-        RAISE EXCEPTION 'cannot roll back: % subscription(s) are on the team25 plan; move them to another plan first', in_use;
+        RAISE EXCEPTION 'cannot roll back: % subscription(s) are on the team25 plan; '
+                'move them to another plan first', in_use;
     END IF;
 END
 $$;
 ALTER TABLE workspace_billing DROP CONSTRAINT workspace_billing_plan_check;
-ALTER TABLE workspace_billing ADD CONSTRAINT workspace_billing_plan_check CHECK (plan IN ('team', 'founding'));
+ALTER TABLE workspace_billing ADD CONSTRAINT workspace_billing_plan_check
+    CHECK (plan IN ('team', 'founding'));

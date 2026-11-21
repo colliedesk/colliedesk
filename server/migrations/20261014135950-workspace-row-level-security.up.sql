@@ -32,9 +32,11 @@ BEGIN
                 'CREATE ROLE %I NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT',
                 app_role);
         EXCEPTION
-            WHEN duplicate_object OR unique_violation THEN NULL; -- created by a concurrent migration
+            -- created by a concurrent migration
+            WHEN duplicate_object OR unique_violation THEN NULL;
             WHEN insufficient_privilege THEN
-                RAISE EXCEPTION 'cannot create role %: %. As a superuser run: CREATE ROLE % NOLOGIN; '
+                RAISE EXCEPTION 'cannot create role %: %. As a superuser run: '
+                        'CREATE ROLE % NOLOGIN; '
                         'GRANT % TO %; then run colliedesk migrate again',
                     app_role, SQLERRM, quote_ident(app_role), quote_ident(app_role),
                     quote_ident(current_user)
@@ -48,7 +50,8 @@ BEGIN
             WHEN insufficient_privilege THEN
                 RAISE EXCEPTION 'cannot grant role % to %: %. As a superuser run: GRANT % TO %; '
                         'then run colliedesk migrate again',
-                    app_role, current_user, SQLERRM, quote_ident(app_role), quote_ident(current_user)
+                    app_role, current_user, SQLERRM,
+                    quote_ident(app_role), quote_ident(current_user)
                     USING ERRCODE = 'insufficient_privilege';
         END;
     END IF;
@@ -64,7 +67,8 @@ BEGIN
     ALTER TABLE workspaces FORCE ROW LEVEL SECURITY;
     EXECUTE format($policy$CREATE POLICY workspace_isolation ON workspaces FOR ALL TO %I
         USING (id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))
-        WITH CHECK (id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))$policy$,
+        WITH CHECK (id =
+            (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))$policy$,
         app_role);
     EXECUTE format($policy$CREATE POLICY privileged_access ON workspaces FOR ALL TO %I
         USING ((SELECT current_setting('app.privileged', true) = 'on'))
