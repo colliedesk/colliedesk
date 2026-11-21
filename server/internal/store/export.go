@@ -879,6 +879,9 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	center.UpdatedAt = domain.UTC(center.UpdatedAt)
 	center.CustomDomainVerifiedAt = domain.UTCOptional(center.CustomDomainVerifiedAt)
+	if center.Analytics, err = exportHelpCenterAnalytics(ctx, tx, workspaceID); err != nil {
+		return err
+	}
 	rows, err = tx.Query(ctx, `SELECT locale,visible,position,created_at,updated_at FROM help_center_languages WHERE workspace_id=$1 ORDER BY position,locale`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export help center languages: %w", err)

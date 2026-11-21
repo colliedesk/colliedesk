@@ -60,6 +60,11 @@ func (s *Store) PutHelpCenterAnalytics(ctx context.Context, workspaceID, actorID
 		keyID, sealed = &id, value
 	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (hcanalytics.Settings, error) {
+		// The help center's row (off) is created on the first save, so the export's help-center line carries it.
+		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,content_version,updated_at) VALUES($1,1,clock_timestamp())
+			ON CONFLICT (workspace_id) DO NOTHING`, workspaceID); err != nil {
+			return hcanalytics.Settings{}, fmt.Errorf("save the help center analytics: %w", err)
+		}
 		var secretSet bool
 		err := tx.QueryRow(ctx, `INSERT INTO help_center_analytics AS h (workspace_id, provider, enabled, ga4_measurement_id, ga4_api_secret_sealed,
 				ga4_api_secret_key_id, plausible_domain, plausible_base_url, updated_by_agent_id)
