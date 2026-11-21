@@ -68,9 +68,9 @@ CREATE TABLE kb_articles (
     updated_at timestamptz NOT NULL DEFAULT now(),
     deleted_at timestamptz,
     deleted_by_agent_id uuid,
-    -- No GIN index: under row-level security Postgres never uses one for @@, which is not
-    -- leakproof (docs/internals/knowledge-base.md), so a search reads the vectors of the
-    -- workspace.
+    -- No GIN index: under row-level security Postgres never uses one for @@, which is
+    -- not leakproof (docs/internals/knowledge-base.md), so a search reads the vectors of
+    -- the workspace.
     search tsvector GENERATED ALWAYS AS (kb_search_vector(title || ' ' || body_md)) STORED,
     UNIQUE (workspace_id, id),
     UNIQUE (workspace_id, number),
@@ -121,8 +121,8 @@ CREATE TABLE kb_article_versions (
 CREATE INDEX kb_article_versions_collection_idx
     ON kb_article_versions(workspace_id, collection_id);
 
--- Translations an import brings in, one per article and language. Kept and exported; not rendered
--- yet.
+-- Translations an import brings in, one per article and language. Kept and exported; not
+-- rendered yet.
 CREATE TABLE kb_article_translations (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     article_id uuid NOT NULL,

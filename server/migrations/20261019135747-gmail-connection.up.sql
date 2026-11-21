@@ -35,9 +35,9 @@ CREATE TABLE mailbox_oauth_states (
 
 CREATE INDEX mailbox_oauth_states_workspace_idx ON mailbox_oauth_states(workspace_id, expires_at);
 
--- Which transport a queued reply was accepted for. A reply accepted for Gmail never leaves through
--- SMTP: when the connection is gone or broken it fails with the reason, and retrying chooses
--- again.
+-- Which transport a queued reply was accepted for. A reply accepted for Gmail never leaves
+-- through SMTP: when the connection is gone or broken it fails with the reason, and retrying
+-- chooses again.
 ALTER TABLE email_outbox ADD COLUMN transport text NOT NULL DEFAULT 'smtp'
     CHECK (transport IN ('smtp', 'gmail'));
 

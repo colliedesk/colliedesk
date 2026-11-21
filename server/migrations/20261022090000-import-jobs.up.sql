@@ -1,8 +1,8 @@
 -- In-app imports (#97). A row is the durable state of one import (or undo) the server runs in the
--- background: what a person or an AI agent sees, and what a worker leases. The Freshdesk API key is
--- held sealed (tokenseal, MAILBOX_TOKEN_KEYS) only while the job can still use it, and erased in
--- the update that ends the job. See docs/internals/freshdesk-import.md, "In-app import (#97): the
--- job".
+-- background: what a person or an AI agent sees, and what a worker leases. The Freshdesk API key
+-- is held sealed (tokenseal, MAILBOX_TOKEN_KEYS) only while the job can still use it, and erased
+-- in the update that ends the job. See docs/internals/freshdesk-import.md, "In-app import (#97):
+-- the job".
 CREATE TABLE import_jobs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -46,8 +46,8 @@ CREATE TABLE import_jobs (
     finished_at timestamptz,
     updated_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (workspace_id, id),
-    FOREIGN KEY (workspace_id, created_by) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (created_by),
+    FOREIGN KEY (workspace_id, created_by)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (created_by),
     FOREIGN KEY (workspace_id, undo_of) REFERENCES import_jobs(workspace_id, id) ON DELETE CASCADE,
     CHECK ((kind = 'undo') = (undo_of IS NOT NULL)),
     CHECK ((kind = 'undo') = (phase = 'undo')),

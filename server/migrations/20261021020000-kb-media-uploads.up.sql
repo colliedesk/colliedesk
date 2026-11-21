@@ -23,8 +23,8 @@ CREATE TABLE kb_media_uploads (
     media_id uuid,
     CHECK ((completed_at IS NULL) = (media_id IS NULL)),
     UNIQUE (workspace_id, id),
-    FOREIGN KEY (workspace_id, created_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (created_by_agent_id)
+    FOREIGN KEY (workspace_id, created_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (created_by_agent_id)
 );
 -- The daily purge finds expired uploads in every workspace.
 CREATE INDEX kb_media_uploads_expiry_idx ON kb_media_uploads(expires_at);

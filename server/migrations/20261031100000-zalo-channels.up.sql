@@ -1,9 +1,9 @@
 -- Zalo Official Account channels (docs/user/zalo.md): a channel is one OA
--- (channels.external_account is its oa_id, unique on the server, so the app's one webhook routes by
--- it). What is not a secret is here: the Zalo app it is reached through, the team's Zalo user ids
--- (their messages in a group are the team's, never a customer's request) and the organization each
--- group stands for. Its secrets (the app's and the OA's keys, the access and refresh tokens) are
--- channel_credentials.
+-- (channels.external_account is its oa_id, unique on the server, so the app's one webhook routes
+-- by it). What is not a secret is here: the Zalo app it is reached through, the team's Zalo user
+-- ids (their messages in a group are the team's, never a customer's request) and the organization
+-- each group stands for. Its secrets (the app's and the OA's keys, the access and refresh tokens)
+-- are channel_credentials.
 INSERT INTO channel_types (type, connectable) VALUES ('zalo', true);
 
 CREATE TABLE zalo_channels (

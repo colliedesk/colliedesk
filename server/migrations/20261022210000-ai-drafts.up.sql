@@ -1,8 +1,8 @@
 -- AI reply drafts (#89). A person asks for a draft with an optional prompt; a background task
--- writes it from the conversation, matching knowledge base articles and similar solved tickets; the
--- person edits it and sends it, or not. The AI never sends. How each draft ended (sent nearly as
--- written, sent edited, discarded, replaced by a newer one, expired) is kept for the team's numbers
--- (#100).
+-- writes it from the conversation, matching knowledge base articles and similar solved tickets;
+-- the person edits it and sends it, or not. The AI never sends. How each draft ended (sent nearly
+-- as written, sent edited, discarded, replaced by a newer one, expired) is kept for the team's
+-- numbers (#100).
 CREATE TABLE ai_drafts (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -36,14 +36,14 @@ CREATE TABLE ai_drafts (
     UNIQUE (workspace_id, id),
     FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id)
         ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, task_id) REFERENCES ai_tasks(workspace_id, id) ON DELETE
-        SET NULL (task_id),
-    FOREIGN KEY (workspace_id, requested_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (requested_by_agent_id),
-    FOREIGN KEY (workspace_id, decided_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (decided_by_agent_id),
-    FOREIGN KEY (workspace_id, sent_message_id) REFERENCES messages(workspace_id, id) ON DELETE
-        SET NULL (sent_message_id),
+    FOREIGN KEY (workspace_id, task_id)
+        REFERENCES ai_tasks(workspace_id, id) ON DELETE SET NULL (task_id),
+    FOREIGN KEY (workspace_id, requested_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (requested_by_agent_id),
+    FOREIGN KEY (workspace_id, decided_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (decided_by_agent_id),
+    FOREIGN KEY (workspace_id, sent_message_id)
+        REFERENCES messages(workspace_id, id) ON DELETE SET NULL (sent_message_id),
     CHECK ((status = 'ready') = (ready_at IS NOT NULL)),
     CHECK (status = 'ready' OR outcome IS NULL),
     CHECK ((outcome IS NULL) = (decided_at IS NULL)),

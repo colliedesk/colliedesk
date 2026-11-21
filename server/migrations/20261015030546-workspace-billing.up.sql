@@ -15,8 +15,8 @@ CREATE TABLE workspace_billing (
     current_period_end timestamptz,
     cancel_at_period_end boolean NOT NULL DEFAULT false,
     ended_at timestamptz,
-    -- The subscription's own modified_at; an event older than this one is out of order and
-    -- ignored.
+    -- The subscription's own modified_at; an event older than this one is out of order
+    -- and ignored.
     source_modified_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (workspace_id, polar_subscription_id)

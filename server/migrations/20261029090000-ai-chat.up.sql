@@ -5,9 +5,9 @@
 
 INSERT INTO channel_types (type, connectable) VALUES ('help_chat', true);
 
--- A help chat channel's surface: what the chat says first, the questions it offers, what the admin
--- adds to the AI's instructions and the sites that may embed it. History goes through
--- channel_events.
+-- A help chat channel's surface: what the chat says first, the questions it offers, what
+-- the admin adds to the AI's instructions and the sites that may embed it. History goes
+-- through channel_events.
 CREATE TABLE help_chat_channels (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     channel_id uuid NOT NULL,
@@ -72,8 +72,8 @@ CREATE TABLE ai_chat_sessions (
 CREATE INDEX ai_chat_sessions_recent
     ON ai_chat_sessions(workspace_id, last_turn_at DESC, id DESC);
 
--- One question and its answer. The texts become NULL when the transcript expires; the numbers
--- stay.
+-- One question and its answer. The texts become NULL when the transcript expires; the
+-- numbers stay.
 CREATE TABLE ai_chat_turns (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

@@ -31,8 +31,8 @@ CREATE TABLE results_members (
 -- The worker's lease on a workspace, so two servers never compute the same one at once.
 ALTER TABLE results_state ADD COLUMN claimed_until timestamptz;
 
--- The first conversation in Colliedesk (not imported): where the results page starts counting
--- weeks.
+-- The first conversation in Colliedesk (not imported): where the results page starts
+-- counting weeks.
 CREATE INDEX conversations_live_created ON conversations(workspace_id, created_at)
     WHERE channel NOT IN ('imported', 'problem_report');
 

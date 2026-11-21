@@ -1,9 +1,9 @@
 -- AI per channel (docs/internals/ai.md "Levels per channel"). A workspace still decides which
 -- features may send ticket data to a provider (ai_slots.enabled, its consent, provider, model,
--- effort); a channel, and a scope of it (a chat's one-to-one messages and its groups), decides only
--- how much of that work the AI does by itself: off, suggest or auto. One SQL function, ai_level(),
--- answers it for the triggers and the Go code alike. The levels a workspace had keep their
--- behaviour:
+-- effort); a channel, and a scope of it (a chat's one-to-one messages and its groups), decides
+-- only how much of that work the AI does by itself: off, suggest or auto. One SQL function,
+-- ai_level(), answers it for the triggers and the Go code alike. The levels a workspace had keep
+-- their behaviour:
 --   triage enabled -> suggest (it already wrote a suggestion for every new conversation),
 --   triage enabled and automatic -> auto, draft enabled -> off (a draft only when someone asks),
 --   draft enabled and automatic -> suggest (a draft written when a customer writes).
@@ -23,8 +23,8 @@ ALTER TABLE ai_usage DROP CONSTRAINT ai_usage_feature_check,
 ALTER TABLE ai_tasks DROP CONSTRAINT ai_tasks_kind_check,
     ADD CONSTRAINT ai_tasks_kind_check CHECK (kind IN ('triage', 'draft', 'intake'));
 
--- What a feature does by itself where no channel says otherwise, and on conversations of no
--- channel.
+-- What a feature does by itself where no channel says otherwise, and on conversations of
+-- no channel.
 ALTER TABLE ai_slots ADD COLUMN default_level text NOT NULL DEFAULT 'off'
     CHECK (default_level IN ('off', 'suggest', 'auto'));
 UPDATE ai_slots SET default_level = CASE
@@ -50,8 +50,8 @@ CREATE TABLE channel_ai_levels (
     scope text NOT NULL DEFAULT '' CHECK (scope ~ '^[a-z_]{0,40}$'),
     slot text NOT NULL CHECK (slot IN ('triage', 'draft', 'intake')),
     level text NOT NULL CHECK (level IN ('off', 'suggest', 'auto')),
-    -- Intake only: thresholds, context sources, the channel's instructions (IntakeOptions in the
-    -- contract).
+    -- Intake only: thresholds, context sources, the channel's instructions (IntakeOptions in
+    -- the contract).
     options jsonb NOT NULL DEFAULT '{}'
         CHECK (jsonb_typeof(options) = 'object' AND octet_length(options::text) <= 16384),
     updated_by uuid,
@@ -92,8 +92,8 @@ ALTER TABLE channel_events DROP CONSTRAINT channel_events_kind_check,
         'removed', 'held_replayed', 'held_discarded', 'default_changed', 'ai_changed'
     ));
 
--- The scope a channel gave a conversation's first message (Inbound.Scope), so its level can be
--- read.
+-- The scope a channel gave a conversation's first message (Inbound.Scope), so its level can
+-- be read.
 ALTER TABLE conversations ADD COLUMN channel_scope text
     CHECK (channel_scope ~ '^[a-z_]{1,40}$');
 

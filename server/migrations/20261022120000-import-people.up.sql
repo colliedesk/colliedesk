@@ -1,8 +1,8 @@
--- The agents of a Freshdesk account an in-app import read (#97), so the team can invite them before
--- or after the import and link each to a Colliedesk agent: their imported replies and the tickets
--- assigned to them then show that agent. A link is applied by the import worker (relink_pending);
--- relink_from is the agent a changed or removed link is taken away from. See
--- docs/internals/freshdesk-import.md.
+-- The agents of a Freshdesk account an in-app import read (#97), so the team can invite them
+-- before or after the import and link each to a Colliedesk agent: their imported replies and
+-- the tickets assigned to them then show that agent. A link is applied by the import worker
+-- (relink_pending); relink_from is the agent a changed or removed link is taken away from.
+-- See docs/internals/freshdesk-import.md.
 CREATE TABLE import_people (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     -- The ledger source of the account, for example freshdesk:account:777.
@@ -23,10 +23,10 @@ CREATE TABLE import_people (
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (workspace_id, source, external_id),
-    FOREIGN KEY (workspace_id, linked_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (linked_agent_id),
-    FOREIGN KEY (workspace_id, relink_from) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (relink_from)
+    FOREIGN KEY (workspace_id, linked_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (linked_agent_id),
+    FOREIGN KEY (workspace_id, relink_from)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (relink_from)
 );
 CREATE INDEX import_people_email ON import_people(workspace_id, lower(email));
 CREATE INDEX import_people_pending ON import_people(updated_at) WHERE relink_pending;

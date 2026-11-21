@@ -5,13 +5,13 @@ ALTER TABLE ai_automatic_limits ADD COLUMN draft_per_day integer NOT NULL DEFAUL
     CHECK (draft_per_day BETWEEN 0 AND 10000);
 
 ALTER TABLE ai_drafts
-    -- Written by itself for a customer's message, not asked for by a person: the whole team sees
-    -- it.
+    -- Written by itself for a customer's message, not asked for by a person: the whole team
+    -- sees it.
     ADD COLUMN automatic boolean NOT NULL DEFAULT false,
     -- The newest customer message it answers.
     ADD COLUMN answers_message_id uuid,
-    -- The model's view that the message needs a reply ("thanks" does not); null for a person's
-    -- draft.
+    -- The model's view that the message needs a reply ("thanks" does not); null for a
+    -- person's draft.
     ADD COLUMN reply_needed boolean,
     ADD FOREIGN KEY (workspace_id, answers_message_id) REFERENCES messages(workspace_id, id)
         ON DELETE SET NULL (answers_message_id);

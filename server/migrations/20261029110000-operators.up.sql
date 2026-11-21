@@ -54,9 +54,9 @@ CREATE TABLE operator_sessions (
 );
 CREATE INDEX operator_sessions_operator ON operator_sessions (operator_id);
 
--- A change an operator token asked for, waiting for a person (an operator) to approve it. Its body
--- never holds a secret: the approver types any secret the change needs, and it is used once, never
--- stored.
+-- A change an operator token asked for, waiting for a person (an operator) to approve it. Its
+-- body never holds a secret: the approver types any secret the change needs, and it is used once,
+-- never stored.
 CREATE TABLE operator_requests (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id uuid NOT NULL REFERENCES operator_sessions(id),

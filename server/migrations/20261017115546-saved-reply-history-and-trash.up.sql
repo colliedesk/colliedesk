@@ -72,7 +72,7 @@ ALTER TABLE agent_requests ADD CONSTRAINT agent_requests_saved_reply_fkey
     FOREIGN KEY (workspace_id, saved_reply_id)
     REFERENCES saved_replies(workspace_id, id) ON DELETE SET NULL (saved_reply_id);
 
--- Same isolation as saved_replies. The app role may read and add versions, never change or remove
--- one; secure_workspace_table leaves every privilege in place, so the grant is narrowed in
--- 20261121132937-workspace-table-security.
+-- Same isolation as saved_replies. The app role may read and add versions, never change or
+-- remove one; secure_workspace_table leaves every privilege in place, so the grant is narrowed
+-- in 20261121132937-workspace-table-security.
 SELECT secure_workspace_table('saved_reply_versions');

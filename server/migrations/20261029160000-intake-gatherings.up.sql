@@ -1,14 +1,14 @@
 -- The intake of chat channels (docs/internals/channels.md "Intake"): what a customer said in one
--- go on a scope that collects messages is a gathering, decided as one, by the channel's rules, by
--- AI where the rules only had a default, or by a person in the queue. Email and web forms have
--- none.
+-- go on a scope that collects messages is a gathering, decided as one, by the channel's rules,
+-- by AI where the rules only had a default, or by a person in the queue. Email and web forms
+-- have none.
 CREATE TABLE intake_gatherings (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     channel_id uuid NOT NULL,
     scope text NOT NULL DEFAULT '' CHECK (scope ~ '^[a-z_]{0,40}$'),
-    -- Where gatherings are decided one after the other: a thread and its sender
-    -- ("thread:<id>:<sender>").
+    -- Where gatherings are decided one after the other: a thread and its
+    -- sender ("thread:<id>:<sender>").
     lane_key text NOT NULL CHECK (char_length(lane_key) BETWEEN 1 AND 500),
     thread_id uuid,
     contact_id uuid,
@@ -20,11 +20,11 @@ CREATE TABLE intake_gatherings (
         'no_command', 'ai_unsure', 'ai_unavailable', 'too_old', 'credential', 'target_changed',
         'lane_blocked', 'requeued', 'gate_closed'
     )),
-    -- What the rules decided when it closed: what a gathering falls back on when AI does not
-    -- decide.
+    -- What the rules decided when it closed: what a gathering falls back on when AI does
+    -- not decide.
     rules_action text NOT NULL CHECK (rules_action IN ('create', 'attach', 'review', 'archive')),
-    -- match: the batch carried evidence (a command, a reference); default: what the scope does
-    -- without.
+    -- match: the batch carried evidence (a command, a reference); default: what the scope
+    -- does without.
     rules_basis text NOT NULL DEFAULT 'default' CHECK (rules_basis IN ('match', 'default')),
     rules_rule text NOT NULL CHECK (rules_rule ~ '^[a-z_]{1,40}$'),
     rules_target uuid,
@@ -80,8 +80,8 @@ CREATE INDEX intake_gatherings_decided
     ON intake_gatherings(workspace_id, decided_at DESC, id DESC)
     WHERE state IN ('created', 'attached', 'applied', 'ignored');
 
--- Every time AI or a person decided a gathering, as it was: never changed, the labels of intake's
--- eval.
+-- Every time AI or a person decided a gathering, as it was: never changed, the labels of
+-- intake's eval.
 CREATE TABLE intake_decisions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -106,8 +106,8 @@ CREATE TABLE intake_decisions (
         'level_suggest', 'below_threshold', 'too_old', 'credential', 'person_first',
         'target_changed', 'lane_blocked', 'gate_closed', 'limit', 'error'
     )),
-    -- The journal events it was decided on: it applies only while the gathering still has exactly
-    -- these.
+    -- The journal events it was decided on: it applies only while the gathering still has
+    -- exactly these.
     items_seen uuid[] NOT NULL,
     fallback boolean NOT NULL DEFAULT false,
     -- A person who undid or changed what AI did.

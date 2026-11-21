@@ -35,8 +35,8 @@ CREATE TABLE kb_article_votes (
     article_id uuid NOT NULL,
     voter bytea NOT NULL CHECK (octet_length(voter) = 32),
     -- HMAC-SHA256 of the address the vote came from (an IPv4 address, an IPv6 /64), keyed with a
-    -- server secret: it bounds the new readers one address adds to an article in a day, and never
-    -- shows.
+    -- server secret: it bounds the new readers one address adds to an article in a day, and
+    -- never shows.
     address bytea NOT NULL CHECK (octet_length(address) = 32),
     helpful boolean NOT NULL,
     -- "What was missing?", masked; only a "No" has one.
@@ -72,6 +72,6 @@ CREATE TABLE kb_article_vote_versions (
 SELECT secure_workspace_table('kb_article_vote_resets');
 SELECT secure_workspace_table('kb_article_votes');
 SELECT secure_workspace_table('kb_article_vote_versions');
--- A reset is history: written and read, never changed (it goes by cascade, which runs as the
--- owner).
+-- A reset is history: written and read, never changed (it goes by cascade, which runs as
+-- the owner).
 SELECT limit_app_role('kb_article_vote_resets', 'SELECT', 'INSERT');

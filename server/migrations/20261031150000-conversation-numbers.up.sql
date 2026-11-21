@@ -38,8 +38,8 @@ CREATE TABLE conversation_number_formats (
         REFERENCES conversation_number_series (workspace_id, series) ON DELETE CASCADE
 );
 
--- The code of number n opened in year, in format (domain.NumberFormat.Render, which tests hold to
--- this).
+-- The code of number n opened in year, in format (domain.NumberFormat.Render, which tests hold
+-- to this).
 CREATE FUNCTION conversation_display_ref(format text, n bigint, year integer) RETURNS text
     LANGUAGE plpgsql IMMUTABLE AS $$
 DECLARE

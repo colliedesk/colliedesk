@@ -1,6 +1,6 @@
--- Going back means the previous release, which reads its settings from the environment again.
--- Export what was set here first (`collie config export --format env --include-secrets`,
--- docs/self-host/upgrade.md).
+-- Going back means the previous release, which reads its settings from the environment
+-- again. Export what was set here first (`collie config export --format env
+-- --include-secrets`, docs/self-host/upgrade.md).
 DROP TABLE IF EXISTS operator_audit;
 DROP FUNCTION IF EXISTS operator_audit_append_only();
 DROP TABLE IF EXISTS polar_products;

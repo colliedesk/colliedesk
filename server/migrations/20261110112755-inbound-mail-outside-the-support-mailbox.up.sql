@@ -1,9 +1,9 @@
--- Journal rows written before the email envelope said "direct": mark the mail that never passed the
--- support mailbox, so it does not count as forwarded mail. A test message is the product's own
--- message: its fixed subject and opening line, from an agent of the workspace. A Gmail forwarding
--- confirmation comes from forwarding-noreply@google.com with "Forwarding Confirmation" in its
--- subject. An answer to a platform reply address left no mark in the journal and cannot be told
--- apart.
+-- Journal rows written before the email envelope said "direct": mark the mail that never passed
+-- the support mailbox, so it does not count as forwarded mail. A test message is the product's
+-- own message: its fixed subject and opening line, from an agent of the workspace. A Gmail
+-- forwarding confirmation comes from forwarding-noreply@google.com with "Forwarding Confirmation"
+-- in its subject. An answer to a platform reply address left no mark in the journal and cannot be
+-- told apart.
 UPDATE channel_inbound_events e SET raw = COALESCE(e.raw, '{}'::jsonb) || '{"direct": true}'::jsonb
 FROM messages m
 JOIN conversations c ON c.workspace_id = m.workspace_id AND c.id = m.conversation_id

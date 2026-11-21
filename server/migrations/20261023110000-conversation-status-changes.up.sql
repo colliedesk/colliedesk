@@ -6,11 +6,11 @@
 -- change; an import creates conversations with their source status, which is history from before
 -- the move, not a change.
 --
--- source says who changed it: 'colliedesk' (the default) or 'import', which an importer sets with
--- set_config('app.status_source','import',true) for its own transactions. The results page reads
--- only 'colliedesk'; import rows keep the history consistent with the current status and leave in
--- the export. actor_agent_id is the person or token owner, when the writer knows one
--- (app.actor_agent_id).
+-- source says who changed it: 'colliedesk' (the default) or 'import', which an importer sets
+-- with set_config('app.status_source','import',true) for its own transactions. The results
+-- page reads only 'colliedesk'; import rows keep the history consistent with the current
+-- status and leave in the export. actor_agent_id is the person or token owner, when the writer
+-- knows one (app.actor_agent_id).
 CREATE TABLE conversation_status_changes (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -24,8 +24,8 @@ CREATE TABLE conversation_status_changes (
     CHECK (from_status <> to_status),
     FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id)
         ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, actor_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (actor_agent_id)
+    FOREIGN KEY (workspace_id, actor_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (actor_agent_id)
 );
 
 -- One conversation's history in order (results, export), and a workspace's changes since a time.

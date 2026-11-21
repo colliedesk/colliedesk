@@ -1,6 +1,6 @@
 -- A Microsoft 365 or Outlook.com mailbox connected for sending (issue #95, step 1), beside Gmail.
--- An email channel still has one mailbox connection: connecting through the other provider replaces
--- it.
+-- An email channel still has one mailbox connection: connecting through the other provider
+-- replaces it.
 ALTER TABLE mailbox_connections DROP CONSTRAINT mailbox_connections_provider_check,
     ADD CONSTRAINT mailbox_connections_provider_check CHECK (provider IN ('google', 'microsoft'));
 ALTER TABLE mailbox_oauth_states DROP CONSTRAINT mailbox_oauth_states_provider_check,

@@ -1,7 +1,7 @@
--- The schema before has no room for a Microsoft connection, the replies sent through it or its
--- failure reason. Refuse to roll back while any exists, naming the workspaces, rather than drop a
--- connection or rewrite how a reply left (the way back for a server is the backup:
--- docs/internals/channels.md).
+-- The schema before has no room for a Microsoft connection, the replies sent through it or
+-- its failure reason. Refuse to roll back while any exists, naming the workspaces, rather
+-- than drop a connection or rewrite how a reply left (the way back for a server is the
+-- backup: docs/internals/channels.md).
 DO $$
 DECLARE
     holders text;

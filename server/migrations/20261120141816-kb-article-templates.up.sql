@@ -57,8 +57,8 @@ ALTER TABLE kb_collections ADD COLUMN default_template_id uuid;
 ALTER TABLE kb_collections ADD FOREIGN KEY (workspace_id, default_template_id)
     REFERENCES kb_templates(workspace_id, id) ON DELETE SET NULL (default_template_id);
 
--- When the workspace got its starter templates. Set once, so a starter the team deleted never comes
--- back.
+-- When the workspace got its starter templates. Set once, so a starter the team deleted never
+-- comes back.
 ALTER TABLE workspaces ADD COLUMN kb_starter_templates_at timestamptz;
 
 SELECT secure_workspace_table('kb_templates');
@@ -66,10 +66,10 @@ SELECT secure_workspace_table('kb_template_versions');
 -- Versions are history: the app adds them and never changes or removes one.
 SELECT limit_app_role('kb_template_versions', 'SELECT', 'INSERT');
 
--- Adds the three starter templates (How-to, Troubleshooting, FAQ) to a workspace that never had
--- them, each with version 1 in its history. A workspace that had them gets nothing, even when the
--- team deleted them since. Workspace creation calls it; so does this migration, for every
--- workspace.
+-- Adds the three starter templates (How-to, Troubleshooting, FAQ) to a workspace that never
+-- had them, each with version 1 in its history. A workspace that had them gets nothing, even
+-- when the team deleted them since. Workspace creation calls it; so does this migration, for
+-- every workspace.
 CREATE FUNCTION kb_seed_starter_templates(workspace uuid) RETURNS void LANGUAGE plpgsql AS $fn$
 BEGIN
     UPDATE workspaces SET kb_starter_templates_at = now() WHERE id = workspace AND kb_starter_templates_at IS NULL;

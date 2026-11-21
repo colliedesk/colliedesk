@@ -9,12 +9,12 @@
 -- (docs/self-host/upgrade.md); the down migration exists for a workspace that still fits the old
 -- schema, and refuses otherwise.
 
--- The registered channel types. connectable=false is only an origin of conversations (an import, a
--- conversation an agent started); nothing connects to it. A workspace may have any number of
--- channels of a type (two support mailboxes, two web forms). A new type adds its row in its own
--- migration. Not workspace data: no workspace_id and no grant to the app role (revoked below),
--- which never reads it: the server's registry knows the types, and foreign keys check it as the
--- owner.
+-- The registered channel types. connectable=false is only an origin of conversations (an
+-- import, a conversation an agent started); nothing connects to it. A workspace may have any
+-- number of channels of a type (two support mailboxes, two web forms). A new type adds its row
+-- in its own migration. Not workspace data: no workspace_id and no grant to the app role
+-- (revoked below), which never reads it: the server's registry knows the types, and foreign
+-- keys check it as the owner.
 CREATE TABLE channel_types (
     type text PRIMARY KEY CHECK (type ~ '^[a-z][a-z0-9_]{1,30}$'),
     connectable boolean NOT NULL,
@@ -28,15 +28,15 @@ CREATE TABLE channels (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     type text NOT NULL,
-    -- Checked against channel_types through the foreign key below, so only a connectable type has
-    -- channels.
+    -- Checked against channel_types through the foreign key below, so only a connectable type
+    -- has channels.
     connectable boolean NOT NULL DEFAULT true CHECK (connectable),
     name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 80 AND btrim(name) <> ''
         AND name !~ '[\x01-\x1f\x7f]'),
     enabled boolean NOT NULL DEFAULT true,
-    -- The channel's rules for what arrives and what leaves (join policy, default tags, assignee and
-    -- priority, rate limits, aggregation, customer notices), validated by its adapter. Never a
-    -- secret.
+    -- The channel's rules for what arrives and what leaves (join policy, default tags, assignee
+    -- and priority, rate limits, aggregation, customer notices), validated by its adapter. Never
+    -- a secret.
     settings jsonb NOT NULL DEFAULT '{}'
         CHECK (jsonb_typeof(settings) = 'object' AND octet_length(settings::text) <= 65536),
     -- The account outside that the channel is (a chat account id, a page id). Unique on the whole
@@ -47,8 +47,8 @@ CREATE TABLE channels (
     updated_at timestamptz NOT NULL DEFAULT now(),
     disabled_at timestamptz,
     disabled_by_agent_id uuid,
-    -- Removing a channel keeps its row, so conversations still name it; its settings and secrets
-    -- go.
+    -- Removing a channel keeps its row, so conversations still name it; its settings and
+    -- secrets go.
     deleted_at timestamptz,
     deleted_by_agent_id uuid,
     -- The channel of its type that answers what names no channel: a conversation started without
@@ -57,12 +57,12 @@ CREATE TABLE channels (
     is_default boolean NOT NULL DEFAULT false,
     UNIQUE (workspace_id, id),
     FOREIGN KEY (type, connectable) REFERENCES channel_types(type, connectable),
-    FOREIGN KEY (workspace_id, created_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (created_by_agent_id),
-    FOREIGN KEY (workspace_id, disabled_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (disabled_by_agent_id),
-    FOREIGN KEY (workspace_id, deleted_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (deleted_by_agent_id),
+    FOREIGN KEY (workspace_id, created_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (created_by_agent_id),
+    FOREIGN KEY (workspace_id, disabled_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (disabled_by_agent_id),
+    FOREIGN KEY (workspace_id, deleted_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (deleted_by_agent_id),
     CHECK (enabled = (disabled_at IS NULL)),
     CHECK (deleted_at IS NULL OR NOT enabled),
     CHECK (NOT is_default OR deleted_at IS NULL)
@@ -92,8 +92,8 @@ CREATE TABLE channel_credentials (
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (workspace_id, channel_id, name),
     FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, updated_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (updated_by_agent_id)
+    FOREIGN KEY (workspace_id, updated_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (updated_by_agent_id)
 );
 
 -- Who a contact is on one channel (a chat user id). An email address stays in contacts.email.
@@ -113,9 +113,9 @@ CREATE TABLE contact_identities (
 );
 CREATE INDEX contact_identities_contact_idx ON contact_identities(workspace_id, contact_id);
 
--- What joins a new message to a conversation, per channel type: an email reply token, a chat user
--- or group. One key of a chat may have had several conversations over time; the newest is tried
--- first.
+-- What joins a new message to a conversation, per channel type: an email reply token, a chat
+-- user or group. One key of a chat may have had several conversations over time; the newest is
+-- tried first.
 CREATE TABLE conversation_thread_keys (
     workspace_id uuid NOT NULL,
     conversation_id uuid NOT NULL,
@@ -148,9 +148,9 @@ CREATE TABLE channel_inbound_events (
     -- one (an email's raw message, already stored once as its original).
     raw jsonb,
     raw_object_key text,
-    -- The size of the object at raw_object_key. A held event's bytes count toward the workspace's
-    -- storage until the event becomes a message (whose attachment then counts them) or is
-    -- discarded.
+    -- The size of the object at raw_object_key. A held event's bytes count toward the
+    -- workspace's storage until the event becomes a message (whose attachment then counts them)
+    -- or is discarded.
     raw_bytes bigint CHECK (raw_bytes >= 0),
     -- Who sent it on the channel (an identity), for the per-sender rate limit.
     sender_key text CHECK (char_length(sender_key) BETWEEN 1 AND 500),
@@ -167,12 +167,12 @@ CREATE TABLE channel_inbound_events (
     processed_at timestamptz,
     UNIQUE (workspace_id, id),
     FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id),
-    FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id) ON DELETE
-        SET NULL (conversation_id),
-    FOREIGN KEY (workspace_id, message_id) REFERENCES messages(workspace_id, id) ON DELETE
-        SET NULL (message_id),
-    FOREIGN KEY (workspace_id, decided_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (decided_by_agent_id),
+    FOREIGN KEY (workspace_id, conversation_id)
+        REFERENCES conversations(workspace_id, id) ON DELETE SET NULL (conversation_id),
+    FOREIGN KEY (workspace_id, message_id)
+        REFERENCES messages(workspace_id, id) ON DELETE SET NULL (message_id),
+    FOREIGN KEY (workspace_id, decided_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (decided_by_agent_id),
     CHECK (raw IS NOT NULL OR raw_object_key IS NOT NULL),
     CHECK (raw_bytes IS NULL OR raw_object_key IS NOT NULL),
     CHECK (raw IS NULL OR octet_length(raw::text) <= 262144),
@@ -312,8 +312,8 @@ CREATE TABLE channel_events (
     detail jsonb NOT NULL DEFAULT '{}',
     created_at timestamptz NOT NULL DEFAULT now(),
     FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id),
-    FOREIGN KEY (workspace_id, actor_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (actor_agent_id)
+    FOREIGN KEY (workspace_id, actor_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (actor_agent_id)
 );
 CREATE INDEX channel_events_workspace_idx
     ON channel_events(workspace_id, created_at DESC, seq DESC);
@@ -356,10 +356,10 @@ ALTER TABLE messages
 -- NULLs never collide.
 ALTER TABLE contacts ALTER COLUMN email DROP NOT NULL;
 
--- The state of a support address domain: its TXT verification and the email provider's domain. It
--- belongs to the domain, not to a mailbox: the email channels of a workspace on one domain verify
--- it once and share one provider domain. A row lives while a channel of the workspace uses the
--- domain.
+-- The state of a support address domain: its TXT verification and the email provider's domain.
+-- It belongs to the domain, not to a mailbox: the email channels of a workspace on one domain
+-- verify it once and share one provider domain. A row lives while a channel of the workspace
+-- uses the domain.
 CREATE TABLE email_domains (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     domain text NOT NULL CHECK (domain = lower(domain) AND domain ~ '^[^@\s]+$'),
@@ -527,8 +527,8 @@ BEGIN
 END
 $$;
 
--- The new keys. mailbox_connections pointed at email_channels by workspace; it points by channel
--- now.
+-- The new keys. mailbox_connections pointed at email_channels by workspace; it points by
+-- channel now.
 ALTER TABLE mailbox_connections DROP CONSTRAINT mailbox_connections_workspace_id_fkey,
     DROP CONSTRAINT mailbox_connections_pkey;
 DROP INDEX email_channels_provider_domain_id_key;
@@ -550,8 +550,8 @@ ALTER TABLE email_channels DROP CONSTRAINT email_channels_pkey,
     DROP COLUMN provider_domain_expired_at,
     DROP COLUMN provider_domain_first_verified_at,
     ADD COLUMN domain text GENERATED ALWAYS AS (split_part(support_address, '@', 2)) STORED,
-    -- The mailbox the address names: support+billing@acme.com and support@acme.com are one
-    -- (email.MailboxKey).
+    -- The mailbox the address names: support+billing@acme.com and support@acme.com are
+    -- one (email.MailboxKey).
     ADD COLUMN mailbox_key text
         GENERATED ALWAYS AS (split_part(split_part(support_address, '@', 1), '+',
             1) || '@' || split_part(support_address, '@', 2)) STORED;

@@ -1,6 +1,6 @@
 -- The schema before channels has room for one email channel and one web form per workspace and for
--- nothing only channels can hold. Refuse to roll back while any of that exists, rather than drop it
--- silently.
+-- nothing only channels can hold. Refuse to roll back while any of that exists, rather than drop
+-- it silently.
 DO $$
 DECLARE
     many text;
@@ -97,8 +97,8 @@ ALTER TABLE web_form_channels DROP CONSTRAINT web_form_channels_pkey,
     DROP CONSTRAINT web_form_channels_channel_fkey, DROP COLUMN legacy_slug, DROP COLUMN channel_id;
 
 -- The domain state goes back to the one email channel of each workspace. A provider domain no
--- channel uses any more is queued for deletion at the provider, as removing its channel would have
--- done.
+-- channel uses any more is queued for deletion at the provider, as removing its channel would
+-- have done.
 ALTER TABLE email_channels
     ADD COLUMN domain_verification_token text,
     ADD COLUMN domain_verified_at timestamptz,

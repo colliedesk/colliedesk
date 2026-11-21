@@ -1,10 +1,10 @@
 -- Each claim of a custom help center domain gets a CNAME target of its own,
 -- hc-<claim>.<HELP_CENTER_DOMAIN>: 24 random hex digits made with the claim and kept until the
--- claim is removed or replaced. A CNAME to the workspace's <slug>.<HELP_CENTER_DOMAIN> no longer
--- proves anything: a slug can be renamed and then taken by another workspace, and a CNAME left
--- behind at the domain's DNS provider would prove that workspace's claim. Existing claims get a
--- random target here; their owners point the CNAME at it (the TXT token keeps proving them
--- meanwhile).
+-- claim is removed or replaced. A CNAME to the workspace's <slug>.<HELP_CENTER_DOMAIN> no
+-- longer proves anything: a slug can be renamed and then taken by another workspace, and a
+-- CNAME left behind at the domain's DNS provider would prove that workspace's claim. Existing
+-- claims get a random target here; their owners point the CNAME at it (the TXT token keeps
+-- proving them meanwhile).
 ALTER TABLE help_center_domains ADD COLUMN claim text;
 UPDATE help_center_domains
     SET claim = substr(md5(gen_random_uuid()::text || workspace_id::text), 1, 24);

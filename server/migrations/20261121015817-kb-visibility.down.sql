@@ -1,6 +1,6 @@
--- Rolling back would put every article kept for help chat or the team on the help center, so it
--- refuses while any article or collection is not visible to everyone. Set them back to everyone
--- first.
+-- Rolling back would put every article kept for help chat or the team on the help center, so
+-- it refuses while any article or collection is not visible to everyone. Set them back to
+-- everyone first.
 DO $$
 BEGIN
     PERFORM set_config('app.privileged', 'on', true);

@@ -4,9 +4,9 @@
 -- The 30 day clock starts then. Cleared when the workspace gets access again.
 ALTER TABLE workspaces ADD COLUMN retention_notice_sent_at timestamptz;
 
--- Which admins were already told (or whose address the relay refused for good) in the current
--- lock, so a partly failed pass never mails the same admin twice. It holds agent ids, not
--- addresses.
+-- Which admins were already told (or whose address the relay refused for good) in the
+-- current lock, so a partly failed pass never mails the same admin twice. It holds agent
+-- ids, not addresses.
 CREATE TABLE workspace_retention_notices (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     agent_id uuid NOT NULL,

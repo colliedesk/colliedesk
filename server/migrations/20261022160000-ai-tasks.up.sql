@@ -1,8 +1,8 @@
 -- The AI task queue (#89). A task is one piece of AI work the server runs in the background (a
 -- triage suggestion, a reply draft), so no screen waits for a model. A worker of `collie serve`
 -- leases due tasks like import jobs, calls the provider through the metered layer and records the
--- outcome. A restored workspace never gets its tasks back (restore-workspace.sh): they would spend
--- again.
+-- outcome. A restored workspace never gets its tasks back (restore-workspace.sh): they would
+-- spend again.
 CREATE TABLE ai_tasks (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -24,8 +24,8 @@ CREATE TABLE ai_tasks (
     UNIQUE (workspace_id, id),
     FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id)
         ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, requested_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (requested_by_agent_id),
+    FOREIGN KEY (workspace_id, requested_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (requested_by_agent_id),
     CHECK ((state IN ('done', 'failed', 'cancelled')) = (finished_at IS NOT NULL)),
     CHECK (state <> 'failed' AND state <> 'cancelled' OR error_code IS NOT NULL),
     CHECK ((claim_token IS NULL) = (lease_until IS NULL))
@@ -60,8 +60,8 @@ CREATE TABLE ai_automatic_limits (
     per_minute integer NOT NULL CHECK (per_minute BETWEEN 0 AND 1000),
     updated_by uuid,
     updated_at timestamptz NOT NULL DEFAULT now(),
-    FOREIGN KEY (workspace_id, updated_by) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (updated_by)
+    FOREIGN KEY (workspace_id, updated_by)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (updated_by)
 );
 
 -- Changing the automatic limits is part of the AI settings history.

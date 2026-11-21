@@ -27,8 +27,8 @@ CREATE TABLE ai_providers (
     updated_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (workspace_id, id),
     UNIQUE (workspace_id, label),
-    FOREIGN KEY (workspace_id, created_by) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (created_by),
+    FOREIGN KEY (workspace_id, created_by)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (created_by),
     CHECK ((sealed_key IS NULL) = (sealed_key_id IS NULL)),
     CHECK ((sealed_key IS NULL) = (key_hint IS NULL)),
     CHECK ((auth_kind = 'api_key') = (sealed_key IS NOT NULL)),
@@ -54,19 +54,19 @@ CREATE TABLE ai_slots (
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (workspace_id, slot),
     FOREIGN KEY (workspace_id, provider_id) REFERENCES ai_providers(workspace_id, id),
-    FOREIGN KEY (workspace_id, consented_by) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (consented_by),
-    FOREIGN KEY (workspace_id, updated_by) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (updated_by),
+    FOREIGN KEY (workspace_id, consented_by)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (consented_by),
+    FOREIGN KEY (workspace_id, updated_by)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (updated_by),
     CHECK (NOT (uses_server AND provider_id IS NOT NULL)),
     CHECK (NOT enabled OR ((uses_server OR provider_id IS NOT NULL) AND model IS NOT NULL
         AND consented_at IS NOT NULL))
 );
 CREATE INDEX ai_slots_provider ON ai_slots(workspace_id, provider_id) WHERE provider_id IS NOT NULL;
 
--- Who added, changed or removed a provider or a key, or turned a feature on, off or elsewhere.
--- Never a key: only its last four characters. Labels are copied, so the history outlives the
--- provider.
+-- Who added, changed or removed a provider or a key, or turned a feature on, off or
+-- elsewhere. Never a key: only its last four characters. Labels are copied, so the history
+-- outlives the provider.
 CREATE TABLE ai_settings_events (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     -- Orders the events of one transaction, which share created_at. Not a key: a restored workspace
@@ -83,8 +83,8 @@ CREATE TABLE ai_settings_events (
     slot text CHECK (slot IN ('triage', 'draft')),
     detail jsonb NOT NULL DEFAULT '{}',
     created_at timestamptz NOT NULL DEFAULT now(),
-    FOREIGN KEY (workspace_id, actor_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (actor_agent_id)
+    FOREIGN KEY (workspace_id, actor_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (actor_agent_id)
 );
 CREATE INDEX ai_settings_events_workspace
     ON ai_settings_events(workspace_id, created_at DESC, seq DESC);
@@ -119,8 +119,8 @@ CREATE TABLE ai_usage (
     started_at timestamptz NOT NULL,
     finished_at timestamptz,
     latency_ms integer,
-    FOREIGN KEY (workspace_id, actor_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (actor_agent_id),
+    FOREIGN KEY (workspace_id, actor_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (actor_agent_id),
     CHECK ((status = 'started') = (finished_at IS NULL)),
     CHECK ((status = 'error') = (error_code IS NOT NULL))
 );

@@ -13,10 +13,10 @@ CREATE TABLE results_share_links (
     revoked_by uuid,
     last_viewed_at timestamptz,
     PRIMARY KEY (workspace_id, id),
-    FOREIGN KEY (workspace_id, created_by) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (created_by),
-    FOREIGN KEY (workspace_id, revoked_by) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (revoked_by)
+    FOREIGN KEY (workspace_id, created_by)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (created_by),
+    FOREIGN KEY (workspace_id, revoked_by)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (revoked_by)
 );
 CREATE UNIQUE INDEX results_share_links_active ON results_share_links(workspace_id)
     WHERE revoked_at IS NULL;

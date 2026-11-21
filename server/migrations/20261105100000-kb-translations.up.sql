@@ -1,9 +1,9 @@
 -- Translations of the knowledge base become a language version of the same article
--- (docs/internals/knowledge-base.md, "Translations"): each has its own slug, search fields, status,
--- versions and trash, and is marked outdated when the article's own text changes. The help center's
--- languages are its primary language (help_centers.locale) and the rows of help_center_languages,
--- each shown to customers or hidden (hidden at first). Collections get a name and description per
--- language.
+-- (docs/internals/knowledge-base.md, "Translations"): each has its own slug, search fields,
+-- status, versions and trash, and is marked outdated when the article's own text changes. The help
+-- center's languages are its primary language (help_centers.locale) and the rows of
+-- help_center_languages, each shown to customers or hidden (hidden at first). Collections get a
+-- name and description per language.
 --
 -- No row is dropped: every translation an import brought in stays, gains a first version of kind
 -- import (so an import rerun and undo can tell it from a person's edit) and its language is added
@@ -39,9 +39,9 @@ ALTER TABLE kb_article_translations
     ADD COLUMN search tsvector
         GENERATED ALWAYS AS (kb_search_vector(title || ' ' || body_md)) STORED;
 
--- Slugs from the title, as domain.Slugify would make them for Latin text; a slug that differs from
--- Slugify only costs a 301 to the canonical address, which the help center sends for any other
--- slug.
+-- Slugs from the title, as domain.Slugify would make them for Latin text; a slug that differs
+-- from Slugify only costs a 301 to the canonical address, which the help center sends for any
+-- other slug.
 UPDATE kb_article_translations SET
     slug = COALESCE(NULLIF(left(btrim(
         regexp_replace(lower(normalize(title, NFC)), '[^[:alnum:]]+', '-', 'g'), '-'), 120), ''),
@@ -76,8 +76,8 @@ ALTER TABLE kb_article_translations
     ADD CONSTRAINT kb_article_translations_deleted_by_fkey
         FOREIGN KEY (workspace_id, deleted_by_agent_id)
         REFERENCES agents(workspace_id, id) ON DELETE SET NULL (deleted_by_agent_id);
--- The lists of a language (missing, outdated) and the help center read one locale of the
--- workspace.
+-- The lists of a language (missing, outdated) and the help center read one locale of
+-- the workspace.
 CREATE INDEX kb_article_translations_locale_idx ON kb_article_translations(workspace_id, locale)
     WHERE deleted_at IS NULL;
 CREATE INDEX kb_article_translations_trash_idx ON kb_article_translations(deleted_at)
@@ -172,5 +172,5 @@ CREATE TRIGGER ai_retrieval_translation_updated
         IS DISTINCT FROM (NEW.title, NEW.body_md, NEW.status, NEW.deleted_at))
     EXECUTE FUNCTION ai_retrieval_translation_changed();
 -- Rows an older build made for translations that are drafts stay: a search skips them
--- (aiPublishedTranslationOf in store/ai-retrieval.go) and the next build of their article drops
--- them.
+-- (aiPublishedTranslationOf in store/ai-retrieval.go) and the next build of their article
+-- drops them.

@@ -22,9 +22,9 @@ ALTER TABLE messages
     ADD COLUMN email_message_id text,
     ADD COLUMN email_meta jsonb;
 
--- The attachment and import migration that precedes this one owns this key. Add it only when this
--- migration runs without it, so both orders apply cleanly; the down migration leaves it to its
--- owner.
+-- The attachment and import migration that precedes this one owns this key. Add it only when
+-- this migration runs without it, so both orders apply cleanly; the down migration leaves it to
+-- its owner.
 DO $$
 BEGIN
     IF NOT EXISTS (

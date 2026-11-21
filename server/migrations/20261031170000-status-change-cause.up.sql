@@ -13,9 +13,9 @@ ALTER TABLE conversation_status_changes
     -- by itself does not tell them either.
     ADD COLUMN quiet boolean NOT NULL DEFAULT false;
 
--- Before this migration a change with no actor was a customer writing again: the only writer that
--- named nobody. A change by a team member deleted since lost its actor, and reads as the
--- customer's.
+-- Before this migration a change with no actor was a customer writing again: the only writer
+-- that named nobody. A change by a team member deleted since lost its actor, and reads as
+-- the customer's.
 UPDATE conversation_status_changes SET cause = CASE
     WHEN source = 'import' THEN 'import'
     WHEN actor_agent_id IS NOT NULL THEN 'agent'

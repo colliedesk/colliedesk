@@ -54,8 +54,8 @@ CREATE INDEX message_moves_from
 CREATE INDEX message_moves_to
     ON message_moves(workspace_id, to_conversation_id, moved_at DESC)
     WHERE to_conversation_id IS NOT NULL;
--- Whether a later move took one of a move's messages (only the newest move of a message is
--- undone).
+-- Whether a later move took one of a move's messages (only the newest move of a message
+-- is undone).
 CREATE INDEX message_moves_messages ON message_moves USING gin (message_ids);
 
 -- A customer message moved into a conversation of another contact: the contact whose conversation
@@ -64,15 +64,15 @@ CREATE INDEX message_moves_messages ON message_moves USING gin (message_ids);
 ALTER TABLE messages ADD COLUMN other_contact_id uuid,
     ADD FOREIGN KEY (workspace_id, other_contact_id)
         REFERENCES contacts(workspace_id, id) ON DELETE SET NULL (other_contact_id),
-    -- A chat message taken back to the intake queue: out of the conversation's timeline, never
-    -- deleted.
+    -- A chat message taken back to the intake queue: out of the conversation's timeline,
+    -- never deleted.
     ADD COLUMN detached_at timestamptz,
     ADD COLUMN detached_by_agent_id uuid,
     ADD FOREIGN KEY (workspace_id, detached_by_agent_id)
         REFERENCES agents(workspace_id, id) ON DELETE SET NULL (detached_by_agent_id);
 
--- A conversation closed because every customer message of it was moved to another: where they
--- went.
+-- A conversation closed because every customer message of it was moved to another: where
+-- they went.
 ALTER TABLE conversations ADD COLUMN merged_into_id uuid,
     ADD FOREIGN KEY (workspace_id, merged_into_id)
         REFERENCES conversations(workspace_id, id) ON DELETE SET NULL (merged_into_id),

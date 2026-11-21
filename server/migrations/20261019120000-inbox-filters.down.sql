@@ -1,5 +1,5 @@
--- Saved views are what people made; an older image cannot show them, so they are not dropped
--- silently.
+-- Saved views are what people made; an older image cannot show them, so they are not
+-- dropped silently.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM saved_views) THEN

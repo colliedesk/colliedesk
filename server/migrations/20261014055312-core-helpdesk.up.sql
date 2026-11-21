@@ -1,7 +1,7 @@
 -- Core helpdesk schema: workspaces and their agents, the sign-in tables (pairing links and
--- sessions), contacts, conversations with messages, and tags. Every workspace-owned table carries
--- workspace_id, and composite (workspace_id, id) keys make each foreign key stay inside one
--- workspace.
+-- sessions), contacts, conversations with messages, and tags. Every workspace-owned table
+-- carries workspace_id, and composite (workspace_id, id) keys make each foreign key stay inside
+-- one workspace.
 
 CREATE TABLE workspaces (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

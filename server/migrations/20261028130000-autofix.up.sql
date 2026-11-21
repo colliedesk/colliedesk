@@ -1,9 +1,9 @@
 -- Autofix, the bridge version: a person sends a conversation to a coding agent the workspace
 -- already uses (Claude through an issue, Copilot through an issue, Cursor through its API), on a
 -- private GitHub repository the workspace connected through the Colliedesk GitHub App, and follows
--- it to a pull request, its merge and the release. Colliedesk runs no agent and holds no model key;
--- the only vendor key it keeps is Cursor's, sealed. Every move of a fix attempt is an event in
--- fix_attempt_events.
+-- it to a pull request, its merge and the release. Colliedesk runs no agent and holds no model
+-- key; the only vendor key it keeps is Cursor's, sealed. Every move of a fix attempt is an event
+-- in fix_attempt_events.
 
 -- A GitHub App installation the workspace connected. installation_id is GitHub's, unique on the
 -- server: one installation belongs to one workspace, and a webhook acts only in that workspace. An
@@ -44,8 +44,8 @@ CREATE TABLE autofix_repos (
     visibility text NOT NULL CHECK (visibility IN ('private', 'internal', 'public')),
     visibility_checked_at timestamptz NOT NULL DEFAULT now(),
     default_branch text NOT NULL CHECK (char_length(default_branch) BETWEEN 1 AND 255),
-    -- Internal notes go with a fix only when the repository allows it; off until an admin turns it
-    -- on.
+    -- Internal notes go with a fix only when the repository allows it; off until an admin turns
+    -- it on.
     include_notes boolean NOT NULL DEFAULT false,
     default_connector text
         CHECK (default_connector IN ('claude_issue', 'copilot_issue', 'cursor_api')),
@@ -87,8 +87,8 @@ CREATE TABLE autofix_connectors (
     credential_set_by_name text CHECK (char_length(credential_set_by_name) <= 200),
     credential_set_at timestamptz,
     last_check_at timestamptz,
-    -- ok, or why the last check failed (key_invalid, no_repo_access, …); the API names the
-    -- values.
+    -- ok, or why the last check failed (key_invalid, no_repo_access, …); the API names
+    -- the values.
     last_check_result text CHECK (last_check_result ~ '^[a-z_]{1,40}$'),
     last_check_message text CHECK (char_length(last_check_message) <= 500),
     updated_at timestamptz NOT NULL DEFAULT now(),
@@ -118,8 +118,8 @@ CREATE TABLE fix_attempts (
     conversation_id uuid NOT NULL,
     attempt_no integer NOT NULL CHECK (attempt_no >= 1),
     previous_attempt_id uuid,
-    -- The repository, and its name when it was sent: disconnecting it keeps the attempt
-    -- readable.
+    -- The repository, and its name when it was sent: disconnecting it keeps the
+    -- attempt readable.
     repo_id uuid,
     repo_full_name text NOT NULL
         CHECK (repo_full_name ~ '^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$'),
@@ -149,8 +149,8 @@ CREATE TABLE fix_attempts (
     -- The GitHub account that created the issue (no secret); empty for Cursor.
     github_user_id bigint,
     github_login text CHECK (char_length(github_login) BETWEEN 1 AND 100),
-    -- Copilot only: assigned to Copilot through the API, or left for a person to assign on
-    -- GitHub.
+    -- Copilot only: assigned to Copilot through the API, or left for a person to assign
+    -- on GitHub.
     copilot_assignment text CHECK (copilot_assignment IN ('assigned', 'on_github')),
 
     issue_number integer CHECK (issue_number > 0),

@@ -47,8 +47,8 @@ CREATE TABLE ai_retrieval_docs (
     CHECK (kb_locale IS NULL OR kb_article_id IS NOT NULL),
     FOREIGN KEY (workspace_id, kb_article_id) REFERENCES kb_articles(workspace_id, id)
         ON DELETE CASCADE,
-    -- MATCH SIMPLE: a row with kb_locale NULL (the article's own text) is not checked against
-    -- translations.
+    -- MATCH SIMPLE: a row with kb_locale NULL (the article's own text) is not checked
+    -- against translations.
     FOREIGN KEY (workspace_id, kb_article_id, kb_locale)
         REFERENCES kb_article_translations(workspace_id, article_id, locale) ON DELETE CASCADE,
     FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id)

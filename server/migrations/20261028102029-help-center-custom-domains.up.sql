@@ -2,9 +2,9 @@
 -- host name is pending until a DNS check proves the workspace owns it (a CNAME to its own
 -- <slug>.<HELP_CENTER_DOMAIN> or the token in a TXT record), then active. Several workspaces may
 -- hold the same host name while it is pending; the first to be verified wins it, and the partial
--- unique index keeps a second from becoming active. The server stores the host name in lower case
--- ASCII (punycode) and the token as 32 hex digits; the checks keep any other writer to the same
--- shapes.
+-- unique index keeps a second from becoming active. The server stores the host name in lower
+-- case ASCII (punycode) and the token as 32 hex digits; the checks keep any other writer to the
+-- same shapes.
 CREATE TABLE help_center_domains (
     workspace_id uuid PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
     hostname text NOT NULL

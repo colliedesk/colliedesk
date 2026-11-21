@@ -1,6 +1,6 @@
--- Turns row-level security off and removes the app role's grants in this schema. The role itself
--- stays because other schemas of this database may still use it; drop it by hand once no schema
--- does.
+-- Turns row-level security off and removes the app role's grants in this schema. The role
+-- itself stays because other schemas of this database may still use it; drop it by hand once no
+-- schema does.
 
 DO $$
 DECLARE

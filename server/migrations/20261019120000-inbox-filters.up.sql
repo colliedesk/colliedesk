@@ -6,10 +6,10 @@ ALTER TABLE conversations ADD COLUMN channel text NOT NULL DEFAULT 'agent'
     CHECK (channel IN ('email', 'web_form', 'imported', 'agent', 'problem_report'));
 
 -- Existing rows are read from what they already hold: an import keeps its origin; otherwise the
--- first message tells. An incoming first message marks how it arrived (email_meta.via); web form
--- messages stored before via existed have no email_meta at all, since every mail and problem
--- report always had one. A first message from the team, or none, is a conversation a team member
--- started.
+-- first message tells. An incoming first message marks how it arrived (email_meta.via); web
+-- form messages stored before via existed have no email_meta at all, since every mail and
+-- problem report always had one. A first message from the team, or none, is a conversation a
+-- team member started.
 UPDATE conversations c SET channel = CASE
         WHEN c.origin IS NOT NULL THEN 'imported'
         WHEN f.kind IS DISTINCT FROM 'incoming' THEN 'agent'
@@ -86,8 +86,8 @@ END
 $$;
 
 -- Only a change of kind, time or conversation can move the newest message; edits of the HTML or
--- the email metadata refresh nothing. The conversation a message left and the one it joined both
--- refresh.
+-- the email metadata refresh nothing. The conversation a message left and the one it joined
+-- both refresh.
 CREATE FUNCTION messages_last_public_updated() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     PERFORM conversations_refresh_last_public(array_agg(x.workspace_id), array_agg(x.conversation_id))
@@ -117,9 +117,9 @@ CREATE INDEX email_outbox_workspace_failed_idx ON email_outbox(workspace_id, mes
     WHERE status = 'failed';
 
 -- Saved views: a named set of inbox filters (the query of GET /conversations as an object). A
--- personal view belongs to one agent and goes with them; a shared view belongs to the workspace. A
--- delete waits 30 days in the trash (deleted_at) and can be restored. Older images ignore this
--- table.
+-- personal view belongs to one agent and goes with them; a shared view belongs to the
+-- workspace. A delete waits 30 days in the trash (deleted_at) and can be restored. Older images
+-- ignore this table.
 CREATE TABLE saved_views (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

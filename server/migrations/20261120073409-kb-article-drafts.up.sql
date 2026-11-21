@@ -1,8 +1,8 @@
 -- A published article, or a published translation, can hold one set of unpublished changes
 -- (docs/internals/knowledge-base.md, "Drafts"). A person or an AI agent edits it as often as they
 -- like; the help center, search, sitemap.xml, llms.txt and AI answers keep reading the published
--- row until someone publishes the draft. Publishing copies it into the live row, discarding deletes
--- it.
+-- row until someone publishes the draft. Publishing copies it into the live row, discarding
+-- deletes it.
 --
 -- locale NULL is the article's own text; otherwise the row is the draft of that translation. A
 -- draft row exists only while its article or translation is published: a draft article is edited in

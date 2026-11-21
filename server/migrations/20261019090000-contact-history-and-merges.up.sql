@@ -49,7 +49,7 @@ CREATE INDEX contact_merges_contact_idx
 CREATE UNIQUE INDEX contact_merges_active_idx ON contact_merges(workspace_id, merged_contact_id)
     WHERE undone_at IS NULL;
 
--- Same isolation as contacts. The app role reads, adds and marks merges undone, never removes one;
--- secure_workspace_table leaves every privilege in place, so the grant is narrowed in
--- 20261121132937-workspace-table-security.
+-- Same isolation as contacts. The app role reads, adds and marks merges undone, never
+-- removes one; secure_workspace_table leaves every privilege in place, so the grant is
+-- narrowed in 20261121132937-workspace-table-security.
 SELECT secure_workspace_table('contact_merges');

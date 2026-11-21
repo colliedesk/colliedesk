@@ -16,8 +16,8 @@ CREATE TABLE conversation_sla_alerts (
     status text NOT NULL DEFAULT 'sending'
         CHECK (status IN ('sending', 'sent', 'rejected', 'done', 'nobody')),
     created_at timestamptz NOT NULL DEFAULT now(),
-    -- Once per conversation, clock, threshold and recipient: a pause moves due_at, never a second
-    -- email.
+    -- Once per conversation, clock, threshold and recipient: a pause moves due_at, never a
+    -- second email.
     UNIQUE (workspace_id, conversation_id, clock, threshold, recipient),
     CHECK ((recipient = '') = (status IN ('done', 'nobody'))),
     FOREIGN KEY (workspace_id, conversation_id)
@@ -26,8 +26,8 @@ CREATE TABLE conversation_sla_alerts (
 CREATE INDEX conversation_sla_alerts_conversation
     ON conversation_sla_alerts(workspace_id, conversation_id, created_at);
 ALTER TABLE agents ADD COLUMN sla_alert_email boolean NOT NULL DEFAULT true;
--- When the emails last came on (targets on and alert_email): a threshold reached before sends
--- nothing.
+-- When the emails last came on (targets on and alert_email): a threshold reached before
+-- sends nothing.
 ALTER TABLE response_targets ADD COLUMN alerts_since timestamptz;
 ALTER TABLE conversations ADD COLUMN sla_alert_since timestamptz;
 UPDATE conversations SET sla_alert_since = created_at WHERE sla_applies;

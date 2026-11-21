@@ -11,21 +11,21 @@ ALTER TABLE ai_slots
     ADD CHECK (NOT (automatic AND slot = 'triage') OR cardinality(auto_parts) > 0);
 
 ALTER TABLE ai_triage_suggestions
-    -- When AI applied it, and what: {"tag_ids": [...], "priority": "...", "assignee_agent_id":
-    -- "..."}.
+    -- When AI applied it, and what: {"tag_ids": [...], "priority": "...",
+    -- "assignee_agent_id": "..."}.
     ADD COLUMN auto_applied_at timestamptz,
     ADD COLUMN auto_applied jsonb NOT NULL DEFAULT '{}',
     -- What AI left because a person had set it: {"priority": {"reason": "set_by_person", "value":
     -- "high"}, ...}.
     ADD COLUMN skipped jsonb NOT NULL DEFAULT '{}',
-    -- What an undo took back, and what it kept because a person changed it after AI: {"priority":
-    -- "urgent"}.
+    -- What an undo took back, and what it kept because a person changed it after AI:
+    -- {"priority": "urgent"}.
     ADD COLUMN undone_parts jsonb NOT NULL DEFAULT '{}',
     ADD COLUMN kept jsonb NOT NULL DEFAULT '{}',
     ADD COLUMN undone_at timestamptz,
     ADD COLUMN undone_by_agent_id uuid,
-    ADD FOREIGN KEY (workspace_id, undone_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (undone_by_agent_id),
+    ADD FOREIGN KEY (workspace_id, undone_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (undone_by_agent_id),
     DROP CONSTRAINT ai_triage_suggestions_outcome_check,
     ADD CONSTRAINT ai_triage_suggestions_outcome_check
         CHECK (outcome IN ('accepted', 'partly_accepted', 'dismissed', 'superseded', 'expired',

@@ -1,9 +1,9 @@
 -- Who can see an article (docs/internals/knowledge-base.md, "Visibility"). An article and a
--- collection each have a visibility: everyone (the help center, help chat and the team), help_chat
--- (help chat may quote it, the help center never shows it) or agents (only the team). An article's
--- effective visibility is the most restrictive of its own and that of every live collection it is
--- in (its home, the others it is listed in, and their parents). A collection in the trash does not
--- count.
+-- collection each have a visibility: everyone (the help center, help chat and the team),
+-- help_chat (help chat may quote it, the help center never shows it) or agents (only the team).
+-- An article's effective visibility is the most restrictive of its own and that of every live
+-- collection it is in (its home, the others it is listed in, and their parents). A collection in
+-- the trash does not count.
 --
 -- These views are the one definition of what customers may read. Every help center reader goes
 -- through kb_public_articles and kb_public_translations; help chat retrieval through
@@ -54,8 +54,8 @@ FROM kb_article_collections x
 JOIN kb_collection_visibility v
     ON v.workspace_id = x.workspace_id AND v.id = x.collection_id;
 
--- Each article with the visibility its collections allow (collection_rank) and its effective
--- visibility.
+-- Each article with the visibility its collections allow (collection_rank) and its
+-- effective visibility.
 CREATE VIEW kb_article_visibility WITH (security_invoker = true) AS
 SELECT a.workspace_id, a.id, a.status, a.deleted_at, r.collection_rank,
     GREATEST(kb_visibility_rank(a.visibility), r.collection_rank) AS visibility_rank

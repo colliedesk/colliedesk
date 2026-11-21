@@ -1,8 +1,8 @@
 -- What the results page (issue #100, docs/internals/results.md) computes for a workspace. The
 -- baseline is measured from one import: its ledger source, when its first full run finished (the
--- anchor, which a later run never moves; ticket stats read after it are frozen), and the reconcile
--- status of its latest run (NULL for an import made before results existed). All NULL without a
--- baseline.
+-- anchor, which a later run never moves; ticket stats read after it are frozen), and the
+-- reconcile status of its latest run (NULL for an import made before results existed). All NULL
+-- without a baseline.
 CREATE TABLE results_state (
     workspace_id uuid PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
     baseline_source text,

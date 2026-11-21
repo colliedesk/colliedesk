@@ -36,9 +36,9 @@ CREATE TABLE kb_reviews (
     decision_note text NOT NULL DEFAULT ''
         CHECK (char_length(decision_note) <= 500 AND strpos(decision_note, E'\n') = 0),
     supersedes_review_id uuid,
-    -- An approved review whose text is still the one waiting to be published: the Approved list. An
-    -- edit, a publish or a discard sets it false; an edit back to the approved text sets it true
-    -- again.
+    -- An approved review whose text is still the one waiting to be published: the Approved list.
+    -- An edit, a publish or a discard sets it false; an edit back to the approved text sets it
+    -- true again.
     approves_pending boolean NOT NULL DEFAULT false,
     -- The email that tells the author the review was decided.
     author_email text NOT NULL DEFAULT 'none'

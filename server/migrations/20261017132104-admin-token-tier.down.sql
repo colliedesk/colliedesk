@@ -1,8 +1,8 @@
--- Code older than this migration knows no admin tier. Revoke every admin token and record it as a
--- send token with the agent ceiling, so the older constraints hold and nothing it could do
--- survives. Requests an admin token filed keep their record under the send tier. The block marks
--- itself privileged because an owner that is not a superuser sees no row under forced row-level
--- security.
+-- Code older than this migration knows no admin tier. Revoke every admin token and record it as
+-- a send token with the agent ceiling, so the older constraints hold and nothing it could do
+-- survives. Requests an admin token filed keep their record under the send tier. The block
+-- marks itself privileged because an owner that is not a superuser sees no row under forced
+-- row-level security.
 DO $$
 BEGIN
     PERFORM set_config('app.privileged', 'on', true);

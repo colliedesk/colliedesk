@@ -16,8 +16,8 @@ CREATE TABLE ai_triage_suggestions (
     priority text CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
     assignee_agent_id uuid,
     reason text,
-    -- The articles and solved tickets the suggestion read, as the database names them: kind, id,
-    -- title.
+    -- The articles and solved tickets the suggestion read, as the database names them: kind,
+    -- id, title.
     sources jsonb NOT NULL DEFAULT '[]',
     -- The conversation's priority and assignee when the suggestion was asked for. A field a person
     -- changed before the answer came is not suggested: stale holds what they set instead.
@@ -37,14 +37,14 @@ CREATE TABLE ai_triage_suggestions (
     UNIQUE (workspace_id, id),
     FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id)
         ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, task_id) REFERENCES ai_tasks(workspace_id, id) ON DELETE
-        SET NULL (task_id),
-    FOREIGN KEY (workspace_id, requested_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (requested_by_agent_id),
-    FOREIGN KEY (workspace_id, assignee_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (assignee_agent_id),
-    FOREIGN KEY (workspace_id, decided_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (decided_by_agent_id),
+    FOREIGN KEY (workspace_id, task_id)
+        REFERENCES ai_tasks(workspace_id, id) ON DELETE SET NULL (task_id),
+    FOREIGN KEY (workspace_id, requested_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (requested_by_agent_id),
+    FOREIGN KEY (workspace_id, assignee_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (assignee_agent_id),
+    FOREIGN KEY (workspace_id, decided_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (decided_by_agent_id),
     CHECK ((status = 'ready') = (ready_at IS NOT NULL)),
     CHECK (status = 'ready' OR outcome IS NULL),
     CHECK ((outcome IS NULL) = (decided_at IS NULL))

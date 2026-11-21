@@ -16,8 +16,8 @@ CREATE TABLE kb_media_batches (
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (workspace_id, id),
-    FOREIGN KEY (workspace_id, created_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (created_by_agent_id)
+    FOREIGN KEY (workspace_id, created_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (created_by_agent_id)
 );
 
 CREATE TABLE kb_media_replacements (
@@ -39,10 +39,10 @@ CREATE TABLE kb_media_replacements (
     CHECK (from_media_id <> to_media_id),
     CHECK (cardinality(article_ids) = cardinality(article_versions)),
     CHECK (undone_by_agent_id IS NULL OR undone_at IS NOT NULL),
-    FOREIGN KEY (workspace_id, replaced_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (replaced_by_agent_id),
-    FOREIGN KEY (workspace_id, undone_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
-        SET NULL (undone_by_agent_id)
+    FOREIGN KEY (workspace_id, replaced_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (replaced_by_agent_id),
+    FOREIGN KEY (workspace_id, undone_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (undone_by_agent_id)
 );
 -- An undo after the replaced item was purged is refused; the replacement stays as a record.
 CREATE INDEX kb_media_replacements_media_idx ON kb_media_replacements(workspace_id, from_media_id);
