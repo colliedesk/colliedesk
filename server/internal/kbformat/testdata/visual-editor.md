@@ -45,6 +45,9 @@ Indented four times.
 - Two
   - Nested
 - Three
+  ***
+
+* A list right after another
 
 3. Third
 4. Fourth

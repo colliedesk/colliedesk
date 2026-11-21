@@ -60,7 +60,8 @@ function block(node: FormatNode): JSONContent {
     case 'heading':
       return { type: 'heading', attrs: { level: node.depth, ...wrapAttrs(node) }, content: inline(node.children ?? []) };
     case 'blockquote':
-      return { type: 'blockquote', content: blocks(node.children ?? []) };
+      // An empty quote (">") is the one an editor saves with an empty paragraph in it.
+      return { type: 'blockquote', content: (node.children ?? []).length > 0 ? blocks(node.children!) : [{ type: 'paragraph' }] };
     case 'list':
       return list(node as ListNode);
     case 'code': {

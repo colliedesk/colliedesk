@@ -19,7 +19,9 @@ export function docToMarkdown(doc: PMNode): string {
     rule: '-',
     emphasis: '*',
     fences: true,
-    join: [htmlApart],
+    join: [htmlApart, listApart],
+    // Right under a line of text, --- would make that line a heading.
+    handlers: { thematicBreak: (node) => (node.data?.underText ? '***' : '---') },
   });
 }
 
@@ -27,9 +29,21 @@ export function docToMarkdown(doc: PMNode): string {
 // tight list.
 const htmlApart: Join = (left, right) => (left.type === 'html' || right.type === 'html' ? 1 : undefined);
 
+// A list can start right under a line of text only from 1 and with an item that is not empty.
+const listApart: Join = (left, right) => {
+  if (left.type !== 'paragraph' || right.type !== 'list') return undefined;
+  const first = right.children[0];
+  return (right.ordered && (right.start ?? 1) !== 1) || !first || first.children.length === 0 ? 1 : undefined;
+};
+
 export function flow(parent: PMNode): MD[] {
   const out: MD[] = [];
-  parent.forEach((child) => out.push(...block(child)));
+  parent.forEach((child) => {
+    for (const node of block(child)) {
+      if (node.type === 'thematicBreak' && out.at(-1)?.type === 'paragraph') node.data = { underText: true };
+      out.push(node);
+    }
+  });
   return out;
 }
 

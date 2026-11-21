@@ -42,7 +42,11 @@ function leaf(node: PMNode): MD {
 export function phrasing(block: PMNode): MD[] {
   const root: MD[] = [];
   const stack: { mark: Mark; node: MD }[] = [];
-  block.forEach((child) => {
+  // Markdown has no line break at the end of a block: it would show as a backslash.
+  let end = block.childCount;
+  while (end > 0 && block.child(end - 1).type.name === 'hardBreak') end -= 1;
+  block.forEach((child, _offset, index) => {
+    if (index >= end) return;
     const wanted = child.marks.filter((mark) => mark.type.name !== 'code')
       .sort((a, b) => order.indexOf(a.type.name) - order.indexOf(b.type.name));
     const kept = stack.findIndex((open) => !wanted.some((mark) => mark.eq(open.mark)));
