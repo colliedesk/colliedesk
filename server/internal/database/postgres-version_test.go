@@ -17,7 +17,9 @@ func TestCheckPostgresVersionRefusesAServerBelowTheFloorAndNamesTheUpgrade(t *te
 	if err == nil {
 		t.Fatalf("PostgreSQL %s passed a floor of 99", shown)
 	}
-	for _, want := range []string{"PostgreSQL 99 or newer", "PostgreSQL " + shown, "sh upgrade-postgres.sh", "docs/self-host/upgrade.md#postgresql-versions"} {
+	// SHOW server_version may carry the packager's suffix: "17.11 (Debian 17.11-1.pgdg12+2)".
+	release := strings.Fields(shown)[0]
+	for _, want := range []string{"PostgreSQL 99 or newer", "this database is PostgreSQL " + release + ".", "sh upgrade-postgres.sh moves a bundled database on PostgreSQL 16, 17 or 18 to 19", "provider", "docs/self-host/upgrade.md#postgresql-versions"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not name %q", err, want)
 		}

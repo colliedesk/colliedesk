@@ -21,6 +21,9 @@ func TestCommandsStopOnAPostgresBelowTheFloorBeforeTouchingIt(t *testing.T) {
 			t.Fatalf("collie %s on an old PostgreSQL: %v", command[0], err)
 		}
 	}
+	if err := run(context.Background(), []string{"version"}, io.Discard, databaseURL, ""); err != nil {
+		t.Fatalf("collie version needs no database, yet: %v", err)
+	}
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	if err != nil {
 		t.Fatal(err)

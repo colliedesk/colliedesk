@@ -30,7 +30,7 @@ A workspace admin can also download everything in one workspace from the web app
 ## Database requirements and hardening
 
 An external database must be PostgreSQL 16 or newer: on an older server every `collie` command that
-uses the database, `serve` and `migrate` among them, stops before it changes anything and says so.
+reads or writes the database, `serve` and `migrate` among them, stops before it changes anything and says so.
 The database the installer runs is PostgreSQL 19
 for a new install; an existing install keeps the major it has
 ([PostgreSQL versions](upgrade.md#postgresql-versions)).
