@@ -470,17 +470,19 @@ type KBArticle struct {
 	SEOTitle       string   `json:"seo_title"`
 	SEODescription string   `json:"seo_description"`
 	// ShowContents tells whether the article's page lists its headings.
-	ShowContents     bool            `json:"show_contents"`
-	Status           string          `json:"status"`
-	PublishedAt      *time.Time      `json:"published_at"`
-	AuthorAgentID    *string         `json:"author_agent_id"`
-	SourceMeta       json.RawMessage `json:"source_meta"`
-	SourceHTML       *string         `json:"source_html"`
-	ImageIDs         []string        `json:"image_ids"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
-	DeletedAt        *time.Time      `json:"deleted_at"`
-	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+	ShowContents  bool            `json:"show_contents"`
+	Status        string          `json:"status"`
+	PublishedAt   *time.Time      `json:"published_at"`
+	AuthorAgentID *string         `json:"author_agent_id"`
+	SourceMeta    json.RawMessage `json:"source_meta"`
+	SourceHTML    *string         `json:"source_html"`
+	ImageIDs      []string        `json:"image_ids"`
+	// Tags are the published tags, sorted; a published article's draft keeps its own list.
+	Tags             []string   `json:"tags"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	DeletedAt        *time.Time `json:"deleted_at"`
+	DeletedByAgentID *string    `json:"deleted_by_agent_id"`
 	// AIExcludedAt is set while AI may not read the article (in any language), by AIExcludedByAgentID.
 	AIExcludedAt        *time.Time `json:"ai_excluded_at"`
 	AIExcludedByAgentID *string    `json:"ai_excluded_by_agent_id"`
@@ -488,23 +490,27 @@ type KBArticle struct {
 
 // KBArticleVersion is one version of an article: what it said after a change and who made it.
 type KBArticleVersion struct {
-	ArticleID           string    `json:"article_id"`
-	Version             int       `json:"version"`
-	Kind                string    `json:"kind"`
-	RestoredFromVersion *int      `json:"restored_from_version"`
-	Title               string    `json:"title"`
-	Slug                string    `json:"slug"`
-	BodyMD              string    `json:"body_md"`
-	SEOTitle            string    `json:"seo_title"`
-	SEODescription      string    `json:"seo_description"`
-	ShowContents        bool      `json:"show_contents"`
-	Status              string    `json:"status"`
-	CollectionID        *string   `json:"collection_id"`
-	ChangedByAgentID    *string   `json:"changed_by_agent_id"`
-	TokenID             *string   `json:"token_id"`
-	TokenLabel          *string   `json:"token_label"`
-	AgentRequestID      *string   `json:"agent_request_id"`
-	CreatedAt           time.Time `json:"created_at"`
+	ArticleID           string  `json:"article_id"`
+	Version             int     `json:"version"`
+	Kind                string  `json:"kind"`
+	RestoredFromVersion *int    `json:"restored_from_version"`
+	Title               string  `json:"title"`
+	Slug                string  `json:"slug"`
+	BodyMD              string  `json:"body_md"`
+	SEOTitle            string  `json:"seo_title"`
+	SEODescription      string  `json:"seo_description"`
+	ShowContents        bool    `json:"show_contents"`
+	Status              string  `json:"status"`
+	CollectionID        *string `json:"collection_id"`
+	ChangedByAgentID    *string `json:"changed_by_agent_id"`
+	TokenID             *string `json:"token_id"`
+	TokenLabel          *string `json:"token_label"`
+	AgentRequestID      *string `json:"agent_request_id"`
+	// AuthorFromAgentID and AuthorToAgentID are set on a version of kind author_change: whom the
+	// article was credited to before and after.
+	AuthorFromAgentID *string   `json:"author_from_agent_id"`
+	AuthorToAgentID   *string   `json:"author_to_agent_id"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // KBArticleTranslation is an article's version in another language, also in the trash. Outdated is

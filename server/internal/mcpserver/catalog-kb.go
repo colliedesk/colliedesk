@@ -34,24 +34,29 @@ const (
 	// kbTagsProperty sets an article's tags; kbTagsOutput is how the answers carry them.
 	kbTagsProperty = `"tags":{"type":"array","maxItems":20,"items":{"type":"string","minLength":1,"maxLength":40},` +
 		`"description":"Replaces every tag (empty removes them). Written in lower case, repeats dropped; shared by its translations, separate from conversation tags. On a published article they wait in its draft until published."}`
-	kbTagsOutput   = `"tags":{"type":"array","items":{"type":"string"},"description":"Its published tags, sorted; colliedesk_kb_tags_list lists every tag."}`
-	kbSlugProperty = `"slug":{"type":"string","minLength":1,"maxLength":120,"description":"Lowercase letters and digits of any script joined by hyphens. Changing it changes the help center address; old addresses are not redirected."}`
+	kbTagsOutput = `"tags":{"type":"array","items":{"type":"string"},"description":"Its published tags, sorted; colliedesk_kb_tags_list lists every tag."}`
+	// kbAuthorSchema is a team member an article is credited to; kbAuthorOutput is how the answers carry it.
+	kbAuthorSchema = `{"type":["object","null"],"required":["agent_id","name","left"],"properties":{"agent_id":{"type":"string"},"name":{"type":"string"},` +
+		`"left":{"type":"boolean","description":"They left the team; still shown as the author."}}}`
+	kbAuthorOutput   = `"author":` + kbAuthorSchema
+	kbAuthorProperty = `"author_agent_id":{"type":"string",` + uuid + `,"description":"Credit the article to this active team member (colliedesk_agents_list). Applies at once, also on a published article, and is recorded in its history."}`
+	kbSlugProperty   = `"slug":{"type":"string","minLength":1,"maxLength":120,"description":"Lowercase letters and digits of any script joined by hyphens. Changing it changes the help center address; old addresses are not redirected."}`
 
 	// kbArticleChangeSchema is a saved reply change with the kinds only articles have: written by an
 	// import, a library item replaced in the text, AI kept away from the article or let read it again.
-	kbArticleChangeSchema = `{"type":["object","null"],"properties":{"version":{"type":"integer"},"kind":{"type":"string","enum":["create","edit","draft","delete","restore","undelete","import","media_replace","ai_exclude","ai_include","review_request","review_approve","review_changes","review_withdraw"]},` +
+	kbArticleChangeSchema = `{"type":["object","null"],"properties":{"version":{"type":"integer"},"kind":{"type":"string","enum":["create","edit","draft","delete","restore","undelete","import","media_replace","ai_exclude","ai_include","review_request","review_approve","review_changes","review_withdraw","author_change"]},` +
 		`"restored_from_version":{"type":["integer","null"]},"by":{"type":["string","null"],"description":"The person who made the change (or, before roles, approved the request that made it)."},` +
 		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made it; null when a person made it in the web app."},` +
 		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
 
-	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility","tags"],"properties":{` + kbTagsOutput + `,` +
+	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility","tags","author"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` +
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,` +
 		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"has_draft":{"type":"boolean","description":"Unpublished changes wait in a draft; colliedesk_kb_article_get shows them."},` +
 		`"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}},` + kbVisibilityOutput + `}}`
 
-	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from","tags"],"properties":{` + kbTagsOutput + `,` +
+	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from","tags","author"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` +
 		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
 		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"has_draft":{"type":"boolean"},"draft":` + kbArticleDraftSchema + `,"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
@@ -225,15 +230,15 @@ func kbArticleUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_update",
 		Title: "Edit a knowledge base article",
-		Description: `Change the title, text, slug, collection, search title (seo_title), meta description (seo_description), On this page switch (show_contents) or who can see it (visibility) of an article, or publish (status published) or unpublish it (status draft). ` +
+		Description: `Change the title, text, slug, collection, search title (seo_title), meta description (seo_description), On this page switch (show_contents), who can see it (visibility), tags or author (author_agent_id) of an article, or publish (status published) or unpublish it (status draft). ` +
 			`On a published article the change goes to its draft and the help center keeps the live text until colliedesk_kb_article_draft_publish (status draft unpublishes it with the draft as its text). ` +
 			`collection_id moves it to a new home; collection_ids replaces every collection it is listed in (the home first), and its address never changes. Every change is a new version; ` +
-			`colliedesk_kb_article_version_restore brings an earlier text back. visibility applies at once, also on a published article; showing it to more people needs kb_articles:publish.` + "\n\n" + kbTextNotice,
+			`colliedesk_kb_article_version_restore brings an earlier text back. visibility and author_agent_id apply at once, also on a published article; showing it to more people needs kb_articles:publish.` + "\n\n" + kbTextNotice,
 
 		REST: []string{"PATCH /api/v1/kb/articles/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["article_id","updated_at"],"properties":{` + kbArticleIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"title":{"type":"string","minLength":1,"maxLength":300},"body":{"type":"string","maxLength":100000,"description":"` + kbBodyDescription + `"},` + kbSlugProperty + `,` +
-			`"collection_id":{"type":"string",` + uuid + `},` + kbCollectionIDsProperty + `,"status":{"type":"string","enum":["draft","published"]},` + kbSEOProperties + `,` + kbShowContentsProperty + `,` + kbVisibilityProperty + `,` + kbTagsProperty + `}}`,
+			`"collection_id":{"type":"string",` + uuid + `},` + kbCollectionIDsProperty + `,"status":{"type":"string","enum":["draft","published"]},` + kbSEOProperties + `,` + kbShowContentsProperty + `,` + kbVisibilityProperty + `,` + kbTagsProperty + `,` + kbAuthorProperty + `}}`,
 		Output: kbArticleOutput,
 		run:    kbArticleUpdate,
 	}
@@ -297,7 +302,8 @@ func kbArticleHistorySpec() Spec {
 		Output: `{"type":"object","required":["article_id","versions","next_before_version"],"properties":{"article_id":{"type":"string"},"versions":{"type":"array","items":` +
 			`{"type":"object","required":["version","kind","team_text","body_truncated","status","slug"],"properties":{"version":{"type":"integer"},"kind":{"type":"string"},"restored_from_version":{"type":["integer","null"]},` +
 			`"by":{"type":["string","null"]},"via_token":{"type":["string","null"]},"agent_request_id":{"type":["string","null"]},"at":{"type":"string"},"team_text":` + teamTextSchema + `,` +
-			`"body_truncated":{"type":"boolean"},"status":{"type":"string"},"slug":{"type":"string"},"collection_id":{"type":["string","null"]}}}},` +
+			`"body_truncated":{"type":"boolean"},"status":{"type":"string"},"slug":{"type":"string"},"collection_id":{"type":["string","null"]},` +
+			`"author_change":{"type":"object","description":"On kind author_change: the author before and after.","properties":{"from":` + kbAuthorSchema + `,"to":` + kbAuthorSchema + `}}}}},` +
 			`"next_before_version":{"type":["integer","null"],"description":"Null on the last page."}}}`,
 		run: kbArticleHistory,
 	}

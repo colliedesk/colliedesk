@@ -315,6 +315,21 @@ test('an open history loads again after a save adds a version', async () => {
   expect(await screen.findByText(/Version 2 ·/)).toBeInTheDocument();
 });
 
+test('the history names an author change with the author before and after, also one who left', async () => {
+  const version = { version: 1, kind: 'create', restored_from_version: null, changed_by: { agent_id: null, name: 'Ada' }, token: null, agent_request_id: null,
+    created_at: '2026-10-02T00:00:00Z', title: 'Reset your password', slug: 'reset', body_md: 'Text', seo_title: '', seo_description: '', show_contents: true, status: 'draft', collection_id: ids.setup };
+  const credited = { ...version, version: 2, kind: 'author_change', created_at: '2026-10-03T00:00:00Z',
+    author_change: { from: { agent_id: ids.article, name: 'Ben Tran', left: true }, to: { agent_id: ids.setup, name: 'Lan Pham', left: false } } };
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()),
+    'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions': () => json(200, { items: [credited, version], next_before_version: null }) });
+  open({ articleId: ids.article });
+  fireEvent.click(await screen.findByRole('button', { name: 'More article actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^Version history/ }));
+  const history = await screen.findByRole('region', { name: 'History of Reset your password' });
+  expect(await within(history).findByText(/Author changed by Ada/)).toBeInTheDocument();
+  expect(within(history).getByText('Author: Ben Tran (left) → Lan Pham')).toBeInTheDocument();
+});
+
 test('spaces around the title or address name are not a change, so the form never stays unsaved with nothing to send', async () => {
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()) });
   open({ articleId: ids.article });

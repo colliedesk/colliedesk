@@ -34,7 +34,7 @@ export const savedReplyMessages = {
   savedReplyDaysLeft: (days: number) => (days === 1 ? '1 day left' : `${days} days left`),
   savedReplyDeletedBy: (person: string) => `Deleted by ${person}`,
   savedReplyChangeVerb: { baseline: 'State before history', create: 'Created', edit: 'Edited', delete: 'Deleted', restore: 'Restored', undelete: 'Restored from the trash', import: 'Imported', media_replace: 'Replaced an image or video', ai_exclude: 'Excluded from AI', ai_include: 'Let AI use it again', mark_current: 'Marked up to date', mark_outdated: 'Marked outdated', draft: 'Saved unpublished changes',
-    review_request: 'Sent for review', review_approve: 'Approved for publishing', review_changes: 'Sent back for changes', review_withdraw: 'Took back the review' } as const,
+    review_request: 'Sent for review', review_approve: 'Approved for publishing', review_changes: 'Sent back for changes', review_withdraw: 'Took back the review', author_change: 'Author changed' } as const,
   savedReplyRestoredVersion: (version: number) => `Version ${version} restored`,
   savedReplyChangeBy: (what: string, person: string) => `${what} by ${person}`,
   savedReplyChangeVia: (text: string, token: string) => `${text} via ${token}`,

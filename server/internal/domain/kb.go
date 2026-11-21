@@ -53,6 +53,8 @@ const (
 	// KBArticleAIExcluded, KBArticleAIIncluded: AI was kept away from the article, or let read it again.
 	KBArticleAIExcluded = "ai_exclude"
 	KBArticleAIIncluded = "ai_include"
+	// KBArticleAuthorChanged: the article was credited to another team member (the text did not change).
+	KBArticleAuthorChanged = "author_change"
 )
 
 // Article statuses.
@@ -104,16 +106,18 @@ type KBArticleSummary struct {
 	CollectionID string `json:"collection_id"`
 	// CollectionIDs are the collections the help center lists it in: CollectionID, its home, first, then
 	// the others outside the trash by name.
-	CollectionIDs []string         `json:"collection_ids"`
-	Position      int              `json:"position"`
-	Title         string           `json:"title"`
-	Slug          string           `json:"slug"`
-	Status        string           `json:"status"`
-	PublishedAt   *time.Time       `json:"published_at"`
-	AuthorAgentID *string          `json:"author_agent_id"`
-	CreatedAt     time.Time        `json:"created_at"`
-	UpdatedAt     time.Time        `json:"updated_at"`
-	LastChange    *KBArticleChange `json:"last_change"`
+	CollectionIDs []string   `json:"collection_ids"`
+	Position      int        `json:"position"`
+	Title         string     `json:"title"`
+	Slug          string     `json:"slug"`
+	Status        string     `json:"status"`
+	PublishedAt   *time.Time `json:"published_at"`
+	AuthorAgentID *string    `json:"author_agent_id"`
+	// Author is the team member AuthorAgentID names; nil when it names nobody.
+	Author     *KBArticleAuthor `json:"author"`
+	CreatedAt  time.Time        `json:"created_at"`
+	UpdatedAt  time.Time        `json:"updated_at"`
+	LastChange *KBArticleChange `json:"last_change"`
 	// URL is the public address on the help center; the API fills it in, the store does not know it.
 	URL string `json:"url"`
 	// HasDraft is set while a published article has unpublished changes (KBArticle.Draft).
@@ -310,17 +314,34 @@ type TrashedKBArticle struct {
 	PurgesAt  time.Time         `json:"purges_at"`
 }
 
+// KBArticleAuthor is the team member an article is credited to. Left is set once they left the team;
+// the article still names them.
+type KBArticleAuthor struct {
+	AgentID string `json:"agent_id"`
+	Name    string `json:"name"`
+	Left    bool   `json:"left"`
+}
+
+// KBAuthorChange is whom a version of kind author_change credited the article to before and after;
+// either is nil when it named nobody, or a person since removed.
+type KBAuthorChange struct {
+	From *KBArticleAuthor `json:"from"`
+	To   *KBArticleAuthor `json:"to"`
+}
+
 // KBArticleVersion is one version of an article with what it said after the change.
 type KBArticleVersion struct {
 	KBArticleChange
-	Title          string  `json:"title"`
-	Slug           string  `json:"slug"`
-	BodyMD         string  `json:"body_md"`
-	SEOTitle       string  `json:"seo_title"`
-	SEODescription string  `json:"seo_description"`
-	ShowContents   bool    `json:"show_contents"`
-	Status         string  `json:"status"`
-	CollectionID   *string `json:"collection_id"`
+	// AuthorChange is set on a version of kind author_change only.
+	AuthorChange   *KBAuthorChange `json:"author_change,omitempty"`
+	Title          string          `json:"title"`
+	Slug           string          `json:"slug"`
+	BodyMD         string          `json:"body_md"`
+	SEOTitle       string          `json:"seo_title"`
+	SEODescription string          `json:"seo_description"`
+	ShowContents   bool            `json:"show_contents"`
+	Status         string          `json:"status"`
+	CollectionID   *string         `json:"collection_id"`
 }
 
 // HelpCenter is the public help center's settings. UpdatedAt is nil until the first write.

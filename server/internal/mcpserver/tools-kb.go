@@ -93,6 +93,7 @@ type restKBArticle struct {
 	Draft         *restKBDraft          `json:"draft"`
 	Attachments   []restKBAttachment    `json:"attachments"`
 	Tags          []string              `json:"tags"`
+	Author        *kbAuthorOut          `json:"author"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
 	AIExclusion    *struct {
@@ -103,6 +104,19 @@ type restKBArticle struct {
 
 type kbTitle struct {
 	Title string `json:"title"`
+}
+
+// kbAuthorOut is the team member an article is credited to, the same in the REST answer and the tool's.
+type kbAuthorOut struct {
+	AgentID string `json:"agent_id"`
+	Name    string `json:"name"`
+	Left    bool   `json:"left"`
+}
+
+// kbAuthorChange is whom a version of kind author_change credited the article to before and after.
+type kbAuthorChange struct {
+	From *kbAuthorOut `json:"from"`
+	To   *kbAuthorOut `json:"to"`
 }
 
 type kbArticleRowOut struct {
@@ -123,6 +137,7 @@ type kbArticleRowOut struct {
 	DeletedBy     *string              `json:"deleted_by,omitempty"`
 	PurgesAt      string               `json:"purges_at,omitempty"`
 	Tags          []string             `json:"tags"`
+	Author        *kbAuthorOut         `json:"author"`
 	kbVisibilityOut
 }
 
@@ -145,7 +160,7 @@ func kbCollectionIDs(article restKBArticle) []string {
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
 	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Position: article.Position, Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, HasDraft: article.HasDraft, PurgesAt: article.PurgesAt,
-		Tags: kbTags(article.Tags), kbVisibilityOut: article.kbVisibilityOut}
+		Tags: kbTags(article.Tags), Author: article.Author, kbVisibilityOut: article.kbVisibilityOut}
 	if article.DeletedAt != nil {
 		out.DeletedAt = *article.DeletedAt
 	}
@@ -176,6 +191,7 @@ type kbArticleOut struct {
 	Translations  []kbTranslationRowOut `json:"translations"`
 	Attachments   []kbAttachmentOut     `json:"attachments"`
 	Tags          []string              `json:"tags"`
+	Author        *kbAuthorOut          `json:"author"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
 }
@@ -198,7 +214,7 @@ func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
 		ShowContents: article.ShowContents, InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}, Attachments: kbAttachmentsView(article.Attachments),
-		Tags: kbTags(article.Tags), kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom}
+		Tags: kbTags(article.Tags), Author: article.Author, kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, kbTranslationRow(translation))
 	}
@@ -447,7 +463,7 @@ func kbArticleUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	change := kbArticleFields(arguments, "article_id")
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: title, body, slug, collection_id, collection_ids, status, seo_title, seo_description, show_contents, visibility or tags."}
+		return nil, &toolError{"Give something to change: title, body, slug, collection_id, collection_ids, status, seo_title, seo_description, show_contents, visibility, tags or author_agent_id."}
 	}
 	c.forArticle(args.ID)
 	var updated restKBArticle
@@ -539,11 +555,12 @@ func kbArticleHistory(c *call, arguments map[string]any) (any, error) {
 	var page struct {
 		Items []struct {
 			restSavedReplyChange
-			Title        string  `json:"title"`
-			Slug         string  `json:"slug"`
-			BodyMD       string  `json:"body_md"`
-			Status       string  `json:"status"`
-			CollectionID *string `json:"collection_id"`
+			Title        string          `json:"title"`
+			Slug         string          `json:"slug"`
+			BodyMD       string          `json:"body_md"`
+			Status       string          `json:"status"`
+			CollectionID *string         `json:"collection_id"`
+			AuthorChange *kbAuthorChange `json:"author_change"`
 		} `json:"items"`
 		NextBeforeVersion *int `json:"next_before_version"`
 	}
@@ -552,11 +569,12 @@ func kbArticleHistory(c *call, arguments map[string]any) (any, error) {
 	}
 	type versionOut struct {
 		savedReplyChangeOut
-		TeamText      teamText `json:"team_text"`
-		BodyTruncated bool     `json:"body_truncated"`
-		Status        string   `json:"status"`
-		Slug          string   `json:"slug"`
-		CollectionID  *string  `json:"collection_id"`
+		TeamText      teamText        `json:"team_text"`
+		BodyTruncated bool            `json:"body_truncated"`
+		Status        string          `json:"status"`
+		Slug          string          `json:"slug"`
+		CollectionID  *string         `json:"collection_id"`
+		AuthorChange  *kbAuthorChange `json:"author_change,omitempty"`
 	}
 	versions := make([]versionOut, 0, len(page.Items))
 	for _, item := range page.Items {
@@ -564,7 +582,7 @@ func kbArticleHistory(c *call, arguments map[string]any) (any, error) {
 		if args.Version == 0 {
 			body, truncated = cutReplyBody(body)
 		}
-		versions = append(versions, versionOut{*changeOut(&item.restSavedReplyChange), teamText{item.Title, body}, truncated, item.Status, item.Slug, item.CollectionID})
+		versions = append(versions, versionOut{*changeOut(&item.restSavedReplyChange), teamText{item.Title, body}, truncated, item.Status, item.Slug, item.CollectionID, item.AuthorChange})
 	}
 	if args.Version > 0 {
 		if len(versions) == 0 || versions[0].Version != args.Version {

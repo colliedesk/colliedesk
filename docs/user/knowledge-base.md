@@ -442,6 +442,27 @@ A save against a newer copy is refused and shows both texts to choose from (see 
 
 Leaving the page with unsaved changes asks first.
 
+### Tags
+
+**Tags** on the article page label an article for the team: up to 20 per article, each 1 to 40
+characters. A tag is kept in lower case without spaces around it, so `Billing` and ` billing ` are the
+same tag. Tags belong to the article, so its [translations](#translations) share them, and they are not
+the tags of conversations. A tag change is part of the article's history, its
+[review](#review-before-publishing) and the [export](export.md). On a published article it waits in the
+[unpublished changes](#unpublished-changes) until you publish them.
+
+The help center search and the help chat find an article by a tag word as they do by a title word.
+Readers see the tags on the article page only when **Show tags on articles** is on in the
+[help center settings](#help-center-settings).
+
+### Author
+
+**Author** on the article page names the team member the article is credited to: the person who
+created it, until someone changes it. Changing it needs `kb_articles:update`, applies at once (also on
+a published article) and adds an **Author changed** version to the [history](#history) with the author
+before and after. The author must be an active member of the team. A member who left still shows as the
+author, with **(left)** after the name.
+
 ### Unpublished changes
 
 Editing a published article never changes its help center page by surprise. **Save** keeps your

@@ -678,6 +678,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 				WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id AND x.collection_id<>a.collection_id ORDER BY x.collection_id),a.position,a.number,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.show_contents,a.status,a.published_at,a.author_agent_id::text,a.source_meta,a.source_html,
 			COALESCE((SELECT array_agg(l.media_id::text ORDER BY l.media_id) FROM kb_article_media l JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id
 				WHERE l.workspace_id=a.workspace_id AND l.article_id=a.id AND m.kind='image'), '{}'),
+			COALESCE((SELECT array_agg(t.tag ORDER BY t.tag) FROM kb_article_tags t WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id), '{}'),
 			a.created_at,a.updated_at,a.deleted_at,a.deleted_by_agent_id::text,a.ai_excluded_at,a.ai_excluded_by_agent_id::text
 		FROM kb_articles a WHERE a.workspace_id=$1 ORDER BY a.number`, workspaceID)
 	if err != nil {
@@ -687,7 +688,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		var record export.KBArticle
 		var meta []byte
 		if err := rows.Scan(&record.ID, &record.CollectionID, &record.CollectionIDs, &record.Position, &record.Number, &record.Title, &record.Slug, &record.BodyMD, &record.SEOTitle, &record.SEODescription, &record.ShowContents, &record.Status, &record.PublishedAt,
-			&record.AuthorAgentID, &meta, &record.SourceHTML, &record.ImageIDs, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID,
+			&record.AuthorAgentID, &meta, &record.SourceHTML, &record.ImageIDs, &record.Tags, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID,
 			&record.AIExcludedAt, &record.AIExcludedByAgentID); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base articles: %w", err)
@@ -706,7 +707,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 
 	rows, err = tx.Query(ctx, `SELECT article_id::text,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,show_contents,status,collection_id::text,changed_by_agent_id::text,
-			token_id::text,token_label,agent_request_id::text,created_at
+			token_id::text,token_label,agent_request_id::text,author_from_agent_id::text,author_to_agent_id::text,created_at
 		FROM kb_article_versions WHERE workspace_id=$1 ORDER BY article_id,version`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base versions: %w", err)
@@ -714,7 +715,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBArticleVersion
 		if err := rows.Scan(&record.ArticleID, &record.Version, &record.Kind, &record.RestoredFromVersion, &record.Title, &record.Slug, &record.BodyMD, &record.SEOTitle, &record.SEODescription, &record.ShowContents, &record.Status,
-			&record.CollectionID, &record.ChangedByAgentID, &record.TokenID, &record.TokenLabel, &record.AgentRequestID, &record.CreatedAt); err != nil {
+			&record.CollectionID, &record.ChangedByAgentID, &record.TokenID, &record.TokenLabel, &record.AgentRequestID, &record.AuthorFromAgentID, &record.AuthorToAgentID, &record.CreatedAt); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base versions: %w", err)
 		}

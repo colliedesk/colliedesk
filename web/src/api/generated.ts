@@ -8232,6 +8232,14 @@ export interface components {
             visibility?: components["schemas"]["KBVisibility"];
             tags?: components["schemas"]["KBArticleTags"];
         };
+        KBArticleAuthor: {
+            /** Format: uuid */
+            agent_id: string;
+            /** @description The display name, else the email. */
+            name: string;
+            /** @description True once they left the team: the article still names them, and another active member can be credited instead. */
+            left: boolean;
+        };
         /**
          * @description published: on the public help center while it is on. draft: only agents see it.
          * @enum {string}
@@ -8240,10 +8248,10 @@ export interface components {
         KBArticleChange: {
             version: number;
             /**
-             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change); review_request, review_approve, review_changes, review_withdraw: the unpublished text was sent for review, approved, sent back with changes to make, or the review was withdrawn (the text did not change).
+             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change); review_request, review_approve, review_changes, review_withdraw: the unpublished text was sent for review, approved, sent back with changes to make, or the review was withdrawn (the text did not change); author_change: the article was credited to another team member (the text did not change).
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw" | "author_change";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
             /** @description The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person. */
@@ -8299,6 +8307,8 @@ export interface components {
             published_at: string | null;
             /** Format: uuid */
             author_agent_id: string | null;
+            /** @description Who the article is credited to, with left true once they left the team; null without an author. */
+            author: null | components["schemas"]["KBArticleAuthor"];
             /** Format: date-time */
             created_at: string;
             /**
@@ -8514,6 +8524,8 @@ export interface components {
             published_at: string | null;
             /** Format: uuid */
             author_agent_id: string | null;
+            /** @description Who the article is credited to, with left true once they left the team; null without an author. */
+            author: null | components["schemas"]["KBArticleAuthor"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -8619,6 +8631,8 @@ export interface components {
             published_at: string | null;
             /** Format: uuid */
             author_agent_id: string | null;
+            /** @description Who the article is credited to, with left true once they left the team; null without an author. */
+            author: null | components["schemas"]["KBArticleAuthor"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -8643,10 +8657,15 @@ export interface components {
         KBArticleVersion: {
             version: number;
             /**
-             * @description review_request, review_approve, review_changes and review_withdraw record a review of the unpublished text they hold; they change no text.
+             * @description review_request, review_approve, review_changes and review_withdraw record a review of the unpublished text they hold; they change no text. author_change credits the article to another team member (author_change says who before and after); it changes no text.
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw" | "author_change";
+            /** @description Only on a version of kind author_change: the author before and after. Either is null when that person was deleted for good, or when the article had no author. */
+            author_change?: {
+                from: null | components["schemas"]["KBArticleAuthor"];
+                to: null | components["schemas"]["KBArticleAuthor"];
+            };
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -20497,6 +20516,11 @@ export interface operations {
                     visibility?: components["schemas"]["KBVisibility"];
                     /** @description Replaces every tag. On a published article the new tags wait in its unpublished changes (draft.tags), like its text; the help center and its search keep the published tags until they are published. */
                     tags?: components["schemas"]["KBArticleTags"];
+                    /**
+                     * Format: uuid
+                     * @description Credits the article to another active member of the team (GET /api/v1/agents). It applies at once, also on a published article, and adds a version of kind author_change that names the author before and after; the same author again changes nothing. Anyone else is 400 invalid_request.
+                     */
+                    author_agent_id?: string;
                     /** @description An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400. */
                     autosave?: boolean;
                 };

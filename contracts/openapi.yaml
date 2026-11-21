@@ -7114,6 +7114,7 @@ paths:
                 tags:
                   allOf: [{$ref: '#/components/schemas/KBArticleTags'}]
                   description: 'Replaces every tag. On a published article the new tags wait in its unpublished changes (draft.tags), like its text; the help center and its search keep the published tags until they are published.'
+                author_agent_id: {type: string, format: uuid, description: 'Credits the article to another active member of the team (GET /api/v1/agents). It applies at once, also on a published article, and adds a version of kind author_change that names the author before and after; the same author again changes nothing. Anyone else is 400 invalid_request.'}
                 autosave: {type: boolean, description: 'An editor saving while the person types: only title and body_md may change, and no version is added. A draft article is changed in place; a published one keeps the text in its unpublished changes, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400.'}
       responses:
         '200':
@@ -12503,6 +12504,13 @@ components:
           allOf: [{$ref: '#/components/schemas/KBVisibility'}]
           description: 'Who can see the article; a collection it is in can restrict it further. Left out, everyone.'
         tags: {$ref: '#/components/schemas/KBArticleTags'}
+    KBArticleAuthor:
+      type: object
+      required: [agent_id, name, left]
+      properties:
+        agent_id: {type: string, format: uuid}
+        name: {type: string, description: 'The display name, else the email.'}
+        left: {type: boolean, description: 'True once they left the team: the article still names them, and another active member can be credited instead.'}
     KBArticleStatus:
       type: string
       enum: [draft, published]
@@ -12514,8 +12522,8 @@ components:
         version: {type: integer, minimum: 1}
         kind:
           type: string
-          enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft, review_request, review_approve, review_changes, review_withdraw]
-          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change); review_request, review_approve, review_changes, review_withdraw: the unpublished text was sent for review, approved, sent back with changes to make, or the review was withdrawn (the text did not change).'
+          enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft, review_request, review_approve, review_changes, review_withdraw, author_change]
+          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change); review_request, review_approve, review_changes, review_withdraw: the unpublished text was sent for review, approved, sent back with changes to make, or the review was withdrawn (the text did not change); author_change: the article was credited to another team member (the text did not change).'
         restored_from_version: {type: [integer, 'null'], description: The version a restore copied.}
         changed_by:
           description: The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person.
@@ -12550,7 +12558,7 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags]
       properties:
         tags: {allOf: [{$ref: '#/components/schemas/KBArticleTags'}], description: 'Its published tags, sorted; a published article''s unpublished tags are in draft.tags.'}
         id: {type: string, format: uuid}
@@ -12567,6 +12575,11 @@ components:
         status: {$ref: '#/components/schemas/KBArticleStatus'}
         published_at: {type: [string, 'null'], format: date-time, description: When it was last published; null for a draft.}
         author_agent_id: {type: [string, 'null'], format: uuid}
+        author:
+          description: 'Who the article is credited to, with left true once they left the team; null without an author.'
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBArticleAuthor'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time, description: 'Send it back to change the article or its unpublished changes; saving them moves it too.'}
         last_change:
@@ -12775,7 +12788,7 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, visibility_from, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments, tags]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, visibility_from, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments, tags]
       properties:
         tags: {allOf: [{$ref: '#/components/schemas/KBArticleTags'}], description: 'Its published tags, as in KBArticleSummary.'}
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
@@ -12789,6 +12802,11 @@ components:
         status: {$ref: '#/components/schemas/KBArticleStatus'}
         published_at: {type: [string, 'null'], format: date-time}
         author_agent_id: {type: [string, 'null'], format: uuid}
+        author:
+          description: 'Who the article is credited to, with left true once they left the team; null without an author.'
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBArticleAuthor'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         last_change:
@@ -12869,7 +12887,7 @@ components:
         url: {type: string, description: '/api/v1/kb/media/<id> for the team; the help center serves it at /files/<id>/<name> while a published article lists it.'}
     TrashedKBArticle:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, has_draft, deleted_at, deleted_by, purges_at, tags]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, deleted_at, deleted_by, purges_at, tags]
       properties:
         tags: {$ref: '#/components/schemas/KBArticleTags'}
         id: {type: string, format: uuid}
@@ -12882,6 +12900,11 @@ components:
         status: {$ref: '#/components/schemas/KBArticleStatus'}
         published_at: {type: [string, 'null'], format: date-time}
         author_agent_id: {type: [string, 'null'], format: uuid}
+        author:
+          description: 'Who the article is credited to, with left true once they left the team; null without an author.'
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBArticleAuthor'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         last_change:
@@ -12901,7 +12924,20 @@ components:
       required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id, seo_title, seo_description, show_contents]
       properties:
         version: {type: integer, minimum: 1}
-        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft, review_request, review_approve, review_changes, review_withdraw], description: 'review_request, review_approve, review_changes and review_withdraw record a review of the unpublished text they hold; they change no text.'}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft, review_request, review_approve, review_changes, review_withdraw, author_change], description: 'review_request, review_approve, review_changes and review_withdraw record a review of the unpublished text they hold; they change no text. author_change credits the article to another team member (author_change says who before and after); it changes no text.'}
+        author_change:
+          type: object
+          description: 'Only on a version of kind author_change: the author before and after. Either is null when that person was deleted for good, or when the article had no author.'
+          required: [from, to]
+          properties:
+            from:
+              oneOf:
+                - {type: 'null'}
+                - {$ref: '#/components/schemas/KBArticleAuthor'}
+            to:
+              oneOf:
+                - {type: 'null'}
+                - {$ref: '#/components/schemas/KBArticleAuthor'}
         restored_from_version: {type: [integer, 'null']}
         changed_by:
           oneOf:

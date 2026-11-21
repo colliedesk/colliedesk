@@ -16,10 +16,12 @@ export const approvalModeSchema = z.enum(['inherit', 'on', 'off']) satisfies z.Z
 export const visibilitySchema = z.enum(['everyone', 'help_chat', 'agents']) satisfies z.ZodType<Generated<'KBVisibility'>>;
 const visibilityFields = { visibility: visibilitySchema, effective_visibility: visibilitySchema };
 const changeFields = {
-  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft', ...reviewKinds]), restored_from_version: z.number().int().nullable(),
+  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft', ...reviewKinds, 'author_change']), restored_from_version: z.number().int().nullable(),
   changed_by: personSchema.nullable(), token: z.object({ id: z.string().uuid().nullable(), label: z.string() }).nullable(),
   agent_request_id: z.string().uuid().nullable(), created_at: z.string().datetime(),
 };
+// The team member an article is credited to; left once they left the team, and the article still names them.
+export const kbAuthorSchema = z.object({ agent_id: z.string().uuid(), name: z.string(), left: z.boolean() }) satisfies z.ZodType<Generated<'KBArticleAuthor'>>;
 const changeSchema = z.object(changeFields) satisfies z.ZodType<Generated<'KBArticleChange'>>;
 const collectionNameSchema = z.object({
   locale: z.string(), name: z.string(), description: z.string(), imported: z.boolean(), updated_at: z.string().datetime(),
@@ -43,7 +45,7 @@ const translationSummaryFields = {
 const translationSummarySchema = z.object(translationSummaryFields) satisfies z.ZodType<Generated<'KBTranslationSummary'>>;
 const summaryFields = {
   id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), collection_ids: z.array(z.string().uuid()).min(1), position: z.number().int(), title: z.string(), slug: z.string(), status: statusSchema,
-  published_at: nullableDate, author_agent_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  published_at: nullableDate, author_agent_id: z.string().uuid().nullable(), author: kbAuthorSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   last_change: changeSchema.nullable(), url: z.string(),
   // has_draft: a published article with unpublished changes; the help center still shows the published text.
   has_draft: z.boolean(),
@@ -105,6 +107,7 @@ const trashedArticleSchema = z.object({
 }) satisfies z.ZodType<Generated<'TrashedKBArticle'>>;
 const versionSchema = z.object({
   ...changeFields, title: z.string(), slug: z.string(), body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), status: statusSchema, collection_id: z.string().uuid().nullable(),
+  author_change: z.object({ from: kbAuthorSchema.nullable(), to: kbAuthorSchema.nullable() }).optional(),
 }) satisfies z.ZodType<Generated<'KBArticleVersion'>>;
 const imageSchema = z.object({
   id: z.string().uuid(), content_type: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']), size: z.number().int(), sha256: z.string(),

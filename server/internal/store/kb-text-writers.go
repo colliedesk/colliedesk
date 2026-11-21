@@ -15,10 +15,10 @@ var kbTextWriteKinds = []string{domain.KBArticleCreated, domain.KBArticleEdited,
 	domain.KBArticleDrafted, domain.KBArticleImported, domain.KBArticleMediaReplaced}
 
 // kbHelpCenterTextKind tells whether a version of kind that has status published puts the text on
-// the help center, as kbTextVersion does: a draft or a review event does not.
+// the help center, as kbTextVersion does: a draft, a review event or an author change does not.
 func kbHelpCenterTextKind(kind string) bool {
 	return !slices.Contains([]string{domain.KBArticleDrafted, domain.KBReviewRequested, domain.KBReviewApprovedKind,
-		domain.KBReviewChangesKind, domain.KBReviewWithdrawnKind}, kind)
+		domain.KBReviewChangesKind, domain.KBReviewWithdrawnKind, domain.KBArticleAuthorChanged}, kind)
 }
 
 // noteKBTextWriter runs after every write of the text of an article (locale nil) or of its

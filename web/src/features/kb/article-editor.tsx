@@ -818,6 +818,7 @@ function AltDialog({ image, library, onSave, onClose }: { image: MissingAlt; lib
 
 // versionChanges names what a version changed from the one before it.
 function versionChanges(version: KBArticleVersion, previous: KBArticleVersion): string[] {
+  if (version.author_change) return [kbMessages.authorChangedFromTo(kbMessages.authorName(version.author_change.from), kbMessages.authorName(version.author_change.to))];
   return [
     ...(version.title !== previous.title ? [savedReplyMessages.savedReplyTitleChanged] : []),
     ...(version.slug !== previous.slug ? [kbMessages.slugChanged] : []),
