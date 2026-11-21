@@ -1225,8 +1225,9 @@ refusing the request. A failed send is tried again after 10 and 30 seconds; each
   stored sealed (a self-hosted server needs `MAILBOX_TOKEN_KEYS`, see
   [environment variables](../self-host/environment-variables.md); without that key a secret is
   refused and nothing is saved). Leave the field empty to keep the saved secret.
-- To stop sending, clear **Send page views** and save. To remove the API secret too, save
-  `"ga4_api_secret": ""` through the API or `colliedesk_help_center_analytics_set`.
+- To stop sending, clear **Send page views** and save. **Remove secret** deletes the saved API secret
+  and stops sending to GA4 (through the API or `colliedesk_help_center_analytics_set`, save
+  `"ga4_api_secret": ""`).
 - A Plausible on a private, loopback or link-local address, or on plain `http`, is refused and
   nothing is saved; a public name that resolves to a private address is refused when the server sends.
 - Reading the settings needs `help_center:read`; saving and sending a test need `help_center:update`,

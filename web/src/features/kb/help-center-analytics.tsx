@@ -79,6 +79,13 @@ function AnalyticsForm({ settings, timezone }: { settings: Analytics; timezone: 
     save.mutate({ provider, enabled, ga4_measurement_id: measurementId.trim() || null, plausible_domain: domain.trim() || null,
       plausible_base_url: baseUrl.trim() || null, ...(secret.trim() ? { ga4_api_secret: secret.trim() } : {}) });
   };
+  // Removing the secret saves the stored settings, not unsaved edits; GA4 cannot send without it, so it stops.
+  const removeSecret = () => {
+    if (save.isPending || !settings.provider) return;
+    save.mutate({ provider: settings.provider, enabled: settings.provider === 'ga4' ? false : settings.enabled,
+      ga4_measurement_id: settings.ga4_measurement_id, plausible_domain: settings.plausible_domain,
+      plausible_base_url: settings.plausible_base_url, ga4_api_secret: '' });
+  };
   return <>
     <form className="stacked-form" onSubmit={submit}>
       <fieldset className="field"><legend>{text.service}</legend>
@@ -90,6 +97,8 @@ function AnalyticsForm({ settings, timezone }: { settings: Analytics; timezone: 
         <Field id="analytics-ga4-id" label={text.measurementId} help={text.measurementIdHelp} value={measurementId} maxLength={20} problem={fields.ga4_measurement_id} onChange={setMeasurementId} />
         <Field id="analytics-ga4-secret" label={text.apiSecret} help={settings.ga4_api_secret_set ? text.apiSecretSaved : text.apiSecretHelp} value={secret} maxLength={100} secret
           problem={fields.ga4_api_secret} onChange={setSecret} />
+        {settings.ga4_api_secret_set && <span className="button-row">
+          <button type="button" className="secondary-action" disabled={save.isPending} onClick={removeSecret}>{text.removeSecret}</button></span>}
       </>}
       {provider === 'plausible' && <>
         <Field id="analytics-plausible-domain" label={text.domain} help={text.domainHelp} value={domain} maxLength={253} problem={fields.plausible_domain} onChange={setDomain} />

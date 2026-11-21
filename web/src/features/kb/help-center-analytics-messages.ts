@@ -15,6 +15,7 @@ export const analyticsMessages = {
   apiSecret: 'API secret',
   apiSecretHelp: 'A Measurement Protocol API secret of that stream.',
   apiSecretSaved: 'A secret is saved. Leave this empty to keep it.',
+  removeSecret: 'Remove secret',
   domain: 'Site domain',
   domainHelp: 'As named in Plausible, like help.example.com.',
   baseUrl: 'Plausible address',

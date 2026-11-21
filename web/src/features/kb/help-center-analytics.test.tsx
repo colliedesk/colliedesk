@@ -113,3 +113,18 @@ test('an agent without admin rights sees where page views go but cannot change o
   expect(screen.queryByRole('button', { name: 'Send a test event' })).not.toBeInTheDocument();
   expect(screen.getByText('Only an admin can change analytics.')).toBeInTheDocument();
 });
+
+test('an admin removes the saved GA4 secret, which stops sending to GA4', async () => {
+  let saved: Saved = { ...none, provider: 'ga4', enabled: true, ga4_measurement_id: 'G-ABC123XYZ9', ga4_api_secret_set: true };
+  const calls = serve({
+    [`GET ${path}`]: () => json(200, saved),
+    [`PUT ${path}`]: () => { saved = { ...saved, enabled: false, ga4_api_secret_set: false }; return json(200, saved); },
+  });
+  open(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove secret' }));
+  expect(await screen.findByText('Off: no page view is sent.')).toBeInTheDocument();
+  expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({
+    provider: 'ga4', enabled: false, ga4_measurement_id: 'G-ABC123XYZ9', ga4_api_secret: '', plausible_domain: null, plausible_base_url: 'https://plausible.io',
+  });
+  expect(screen.queryByRole('button', { name: 'Remove secret' })).not.toBeInTheDocument();
+});
