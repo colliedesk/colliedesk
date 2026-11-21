@@ -266,8 +266,8 @@ The Freshdesk importer and undo resolve the slug once, then run every read and w
 ## Operator notes
 
 - **PostgreSQL 19 or newer** is required. The `SET` option of role membership (`pg_has_role(...,
-  'SET')`, `GRANT ... WITH INHERIT FALSE, SET TRUE`) appeared in 16; `INSERT ... ON CONFLICT DO SELECT`
-  appeared in 19. `database.MinPostgresMajor` holds it, and every database command checks it first (`CheckPostgresVersion`), so an older server
+  'SET')`, `GRANT ... WITH INHERIT FALSE, SET TRUE`) appeared in 16; the floor is 19 so that queries
+  can use what 19 added. `database.MinPostgresMajor` holds it, and every database command checks it first (`CheckPostgresVersion`), so an older server
   stops with a message naming the version found, the version needed and how to upgrade, instead of
   failing on SQL it does not know. `install.sh`, `compose.yaml`
   and CI pin `postgres:19.0-bookworm`, the version Colliedesk Cloud runs; an existing install on an
