@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -97,10 +98,16 @@ func (s *Store) ListKBTags(ctx context.Context, workspaceID string) ([]domain.KB
 	return tags, nil
 }
 
-// kbTagWords is the search vector of the published tags of the article aliased a, empty without any:
-// the help center and help chat find an article by a tag as by a word of its title.
-const kbTagWords = `COALESCE((SELECT kb_search_vector(string_agg(kt.tag, ' ')) FROM kb_article_tags kt
-	WHERE kt.workspace_id=a.workspace_id AND kt.article_id=a.id), ''::tsvector)`
+// kbAnyWordQuery is kbQuery matching any one of the words instead of all of them.
+var kbAnyWordQuery = strings.Replace(kbQuery, `' & '`, `' | '`, 1)
+
+// kbTagHits is the query tagged(article_id, words) of the articles of workspace $1 with a published tag
+// that matches a word of the search $2, and the search vector of those tags: the help center finds an
+// article by a tag as by a word of its title, and by a tag and a title word together. It reads the
+// workspace's tags once, so the search never builds a tag vector for every article.
+var kbTagHits = `tagged AS (SELECT kt.article_id, kb_search_vector(string_agg(kt.tag, ' ')) AS words
+		FROM kb_article_tags kt WHERE kt.workspace_id=$1 AND kb_search_vector(kt.tag) @@ ` + kbAnyWordQuery + `
+		GROUP BY kt.article_id)`
 
 // shownKBTags returns the published tags of the article, sorted, when the help center shows tags, and
 // none when it does not.
