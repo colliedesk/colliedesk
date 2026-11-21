@@ -362,7 +362,7 @@ if [ "$ROLLBACK" = true ]; then
   start_all || {
     if refuses_major; then
       too_new=1
-      compose stop server >/dev/null 2>&1
+      compose stop server >/dev/null 2>&1 || :
       fail "PostgreSQL $from_major is back on its old volume, but the server release in COLLIE_DESK_IMAGE needs a newer PostgreSQL, so the server is stopped. Set COLLIE_DESK_IMAGE in .env to the release the install ran before, for example $EARLIER_IMAGE, then run sh upgrade-postgres.sh --rollback again to finish it."
     fi
     fail 'the install did not become healthy on its old database; run docker compose ps for details'

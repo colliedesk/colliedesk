@@ -821,6 +821,8 @@ grep -qF 'COLLIE_DESK_IMAGE' "$TMP/upgrade.out" ||
 if upgrade --rollback; then cat "$TMP/upgrade.out" >&2; fail "a rollback with $IMAGE in .env said it finished"; fi
 grep -qF 'COLLIE_DESK_IMAGE' "$TMP/upgrade.out" && grep -qF 'ghcr.io/colliedesk/colliedesk:1.0.1' "$TMP/upgrade.out" ||
   { cat "$TMP/upgrade.out" >&2; fail "a rollback with $IMAGE in .env did not name COLLIE_DESK_IMAGE and the release to set"; }
+! grep -qF 'the rollback did not finish' "$TMP/upgrade.out" ||
+  { cat "$TMP/upgrade.out" >&2; fail "a rollback with $IMAGE in .env also said only to run it again"; }
 no_secret_printed "rolling back with $IMAGE in .env"
 [ "$(pg_major)" = 17 ] && [ "$(data_volume)" = "$old_volume" ] || fail "a rollback with $IMAGE in .env left PostgreSQL 17 off its old volume"
 ! server_running || fail "a rollback with $IMAGE in .env left a server running that refuses PostgreSQL 17"
