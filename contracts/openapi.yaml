@@ -4011,9 +4011,11 @@ paths:
       operationId: listSavedViews
       x-permission: saved_views:read
       description: >
-        The inbox views the caller can use: the views shared with the whole workspace, then the
-        caller's own personal views, each group ordered by name ignoring case. A deleted view is not
-        listed here (see `GET /api/v1/saved-views/trash`).
+        The views of one area the caller can use (the inbox unless `area` says kb): the views shared
+        with the whole workspace, then the caller's own personal views, each group ordered by name
+        ignoring case. A deleted view is not listed here (see `GET /api/v1/saved-views/trash`).
+      parameters:
+        - {$ref: '#/components/parameters/SavedViewAreaQuery'}
       responses:
         '200':
           description: Saved views
@@ -4024,15 +4026,18 @@ paths:
                 required: [items]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/SavedView'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: createSavedView
       x-permission: saved_views:create
       description: >
-        Saves a set of inbox filters under a name. A personal view is seen only by the person who saved
-        it; a shared view by everyone in the workspace, and anyone may change or delete it. Names are
-        unique ignoring case among the caller's personal views and among the shared views (409). Each
-        person keeps at most 50 personal views and a workspace at most 50 shared ones (409).
+        Saves a set of filters under a name: inbox filters (`area` inbox, the default) or knowledge base
+        article list filters (`area` kb, the filters of `GET /api/v1/kb/articles`). A personal view is
+        seen only by the person who saved it; a shared view by everyone in the workspace, and anyone may
+        change or delete it. Within an area, names are unique ignoring case among the caller's personal
+        views and among the shared views (409). In each area a person keeps at most 50 personal views
+        and a workspace at most 50 shared ones (409).
       parameters:
         - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
@@ -4057,8 +4062,11 @@ paths:
       operationId: listDeletedSavedViews
       x-permission: saved_views:read
       description: >
-        Views deleted in the last 30 days that the caller could see, newest deletion first. Each can be
-        restored with `POST /api/v1/saved-views/{id}/restore` until `purges_at`; after that it is gone.
+        Views of one area (the inbox unless `area` says kb) deleted in the last 30 days that the caller
+        could see, newest deletion first. Each can be restored with
+        `POST /api/v1/saved-views/{id}/restore` until `purges_at`; after that it is gone.
+      parameters:
+        - {$ref: '#/components/parameters/SavedViewAreaQuery'}
       responses:
         '200':
           description: Deleted saved views
@@ -4069,6 +4077,7 @@ paths:
                 required: [items]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/SavedView'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
   /api/v1/saved-views/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
@@ -9749,6 +9758,7 @@ components:
         (POST /api/v1/kb/articles/publish). Translations are left out.
       schema: {type: string, enum: [in_review, approved]}
     KBListSort: {name: sort, in: query, description: The order without `q`; ignored with `q`., schema: {type: string, enum: [recent, manual]}}
+    SavedViewAreaQuery: {name: area, in: query, description: 'inbox (the default): the inbox views. kb: the knowledge base article list views.', schema: {$ref: '#/components/schemas/SavedViewArea'}}
     RoleKey:
       name: id
       in: path
@@ -11791,6 +11801,38 @@ components:
         sort: {$ref: '#/components/schemas/ConversationSort'}
         search: {type: string, minLength: 1, maxLength: 200}
         sla: {type: array, maxItems: 2, uniqueItems: true, items: {type: string, enum: [overdue, due_soon]}, description: 'overdue (a running response target is past), due_soon (one is within warn_before_minutes of its target).'}
+    KBArticleFilters:
+      type: object
+      additionalProperties: false
+      description: >-
+        The filters of `GET /api/v1/kb/articles` as one object, under the same names and checked as that
+        list checks them; a list holds the values the query string repeats (tag) or separates with commas
+        (author). Tags are kept cleaned (lowercase). A date is midnight in the workspace's timezone when
+        the view is opened. An empty object is every article outside the trash.
+      properties:
+        q: {type: string, minLength: 1, maxLength: 200}
+        status: {type: string, enum: [draft, published]}
+        collection_id: {type: string, format: uuid}
+        include_subcollections: {type: boolean, description: 'true needs collection_id.'}
+        author: {type: array, maxItems: 50, uniqueItems: true, items: {type: string, format: uuid}}
+        tag: {type: array, maxItems: 20, items: {type: string, minLength: 1, maxLength: 40}}
+        tag_match: {type: string, enum: [any, all]}
+        created_after: {type: string, maxLength: 40, description: 'An RFC 3339 time or a date, as the created_after query of GET /api/v1/kb/articles.'}
+        created_before: {type: string, maxLength: 40}
+        updated_after: {type: string, maxLength: 40}
+        updated_before: {type: string, maxLength: 40}
+        translation: {type: string, enum: [missing, outdated]}
+        locale: {type: string, minLength: 1, maxLength: 35}
+        has_draft: {type: boolean}
+        visibility: {$ref: '#/components/schemas/KBVisibility'}
+        state: {type: string, enum: [in_review, approved]}
+        sort: {type: string, enum: [recent, manual]}
+    SavedViewArea: {type: string, enum: [inbox, kb], default: inbox, description: 'inbox: conversation filters. kb: knowledge base article list filters.'}
+    SavedViewFilters:
+      description: The view's filters, as its area takes them.
+      anyOf:
+        - {$ref: '#/components/schemas/ConversationFilters'}
+        - {$ref: '#/components/schemas/KBArticleFilters'}
     SavedViewScope: {type: string, enum: [personal, shared]}
     SavedViewInput:
       type: object
@@ -11798,8 +11840,9 @@ components:
       additionalProperties: false
       properties:
         name: {type: string, minLength: 1, maxLength: 80}
+        area: {$ref: '#/components/schemas/SavedViewArea'}
         scope: {$ref: '#/components/schemas/SavedViewScope'}
-        filters: {$ref: '#/components/schemas/ConversationFilters'}
+        filters: {$ref: '#/components/schemas/SavedViewFilters'}
     SavedViewChange:
       type: object
       required: [updated_at]
@@ -11809,15 +11852,16 @@ components:
         updated_at: {type: string, format: date-time, description: 'The updated_at of the view as the caller last read it. If someone saved it since, nothing changes (409 changed_elsewhere).'}
         name: {type: string, minLength: 1, maxLength: 80}
         scope: {$ref: '#/components/schemas/SavedViewScope'}
-        filters: {$ref: '#/components/schemas/ConversationFilters'}
+        filters: {$ref: '#/components/schemas/SavedViewFilters'}
     SavedView:
       type: object
-      required: [id, name, scope, filters, owner_agent_id, created_at, updated_at, deleted_at, purges_at]
+      required: [id, name, area, scope, filters, owner_agent_id, created_at, updated_at, deleted_at, purges_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
+        area: {$ref: '#/components/schemas/SavedViewArea'}
         scope: {$ref: '#/components/schemas/SavedViewScope'}
-        filters: {$ref: '#/components/schemas/ConversationFilters'}
+        filters: {$ref: '#/components/schemas/SavedViewFilters'}
         owner_agent_id: {type: [string, 'null'], format: uuid, description: The person a personal view belongs to; null for a shared view.}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}

@@ -13,15 +13,17 @@ import (
 )
 
 // SavedViewChange holds the fields a PATCH sets; nil leaves a field as it is. Seen is the updated_at the
-// caller read: a view saved since is not changed (domain.ErrSavedViewChanged).
+// caller read: a view saved since is not changed (domain.ErrSavedViewChanged). New filters are held
+// to the view's own area by CheckFilters, which returns them as they are stored.
 type SavedViewChange struct {
-	Seen    time.Time
-	Name    *string
-	Scope   *string
-	Filters json.RawMessage
+	Seen         time.Time
+	Name         *string
+	Scope        *string
+	Filters      json.RawMessage
+	CheckFilters func(area string, filters json.RawMessage) (json.RawMessage, error)
 }
 
-const savedViewColumns = `id::text,name,scope,filters,owner_agent_id::text,created_at,updated_at,deleted_at`
+const savedViewColumns = `id::text,name,area,scope,filters,owner_agent_id::text,created_at,updated_at,deleted_at`
 
 // visibleToAgent is the condition every read and write of a view carries: a shared view, or one of
 // the caller's own. Another person's personal view does not exist for the caller.
@@ -30,7 +32,7 @@ const visibleToAgent = `(scope='shared' OR owner_agent_id=$2::uuid)`
 func scanSavedView(row pgx.Row) (domain.SavedView, error) {
 	var view domain.SavedView
 	var filters []byte
-	if err := row.Scan(&view.ID, &view.Name, &view.Scope, &filters, &view.OwnerAgentID, &view.CreatedAt, &view.UpdatedAt, &view.DeletedAt); err != nil {
+	if err := row.Scan(&view.ID, &view.Name, &view.Area, &view.Scope, &filters, &view.OwnerAgentID, &view.CreatedAt, &view.UpdatedAt, &view.DeletedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.SavedView{}, domain.ErrSavedViewNotFound
 		}
@@ -62,12 +64,12 @@ func collectSavedViews(rows pgx.Rows) ([]domain.SavedView, error) {
 	return views, nil
 }
 
-// ListSavedViews returns the shared views, then the agent's personal ones, each by name ignoring case.
-func (s *Store) ListSavedViews(ctx context.Context, workspaceID, agentID string) ([]domain.SavedView, error) {
+// ListSavedViews returns the shared views of area, then the agent's personal ones, each by name ignoring case.
+func (s *Store) ListSavedViews(ctx context.Context, workspaceID, agentID, area string) ([]domain.SavedView, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.SavedView, error) {
 		rows, err := tx.Query(ctx, `SELECT `+savedViewColumns+` FROM saved_views
-			WHERE workspace_id=$1 AND `+visibleToAgent+` AND deleted_at IS NULL
-			ORDER BY scope='personal',lower(name),id`, workspaceID, agentID)
+			WHERE workspace_id=$1 AND `+visibleToAgent+` AND area=$3 AND deleted_at IS NULL
+			ORDER BY scope='personal',lower(name),id`, workspaceID, agentID, area)
 		if err != nil {
 			return nil, fmt.Errorf("list saved views: %w", err)
 		}
@@ -75,16 +77,16 @@ func (s *Store) ListSavedViews(ctx context.Context, workspaceID, agentID string)
 	})
 }
 
-// ListDeletedSavedViews returns the views the agent could see that were deleted in the last 30
-// days, newest deletion first. Older ones are removed for good first.
-func (s *Store) ListDeletedSavedViews(ctx context.Context, workspaceID, agentID string) ([]domain.SavedView, error) {
+// ListDeletedSavedViews returns the views of area the agent could see that were deleted in the last
+// 30 days, newest deletion first. Older ones are removed for good first.
+func (s *Store) ListDeletedSavedViews(ctx context.Context, workspaceID, agentID, area string) ([]domain.SavedView, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.SavedView, error) {
 		if err := purgeSavedViews(ctx, tx, workspaceID, s.now()); err != nil {
 			return nil, err
 		}
 		rows, err := tx.Query(ctx, `SELECT `+savedViewColumns+` FROM saved_views
-			WHERE workspace_id=$1 AND `+visibleToAgent+` AND deleted_at IS NOT NULL
-			ORDER BY deleted_at DESC,id`, workspaceID, agentID)
+			WHERE workspace_id=$1 AND `+visibleToAgent+` AND area=$3 AND deleted_at IS NOT NULL
+			ORDER BY deleted_at DESC,id`, workspaceID, agentID, area)
 		if err != nil {
 			return nil, fmt.Errorf("list deleted saved views: %w", err)
 		}
@@ -108,11 +110,11 @@ func lockSavedViews(ctx context.Context, tx pgx.Tx, workspaceID string) error {
 	return nil
 }
 
-// checkSavedViewRoom refuses a view that would be the 51st of its group.
-func checkSavedViewRoom(ctx context.Context, tx pgx.Tx, workspaceID, scope, ownerID, exceptID string) error {
+// checkSavedViewRoom refuses a view that would be the 51st of its group in its area.
+func checkSavedViewRoom(ctx context.Context, tx pgx.Tx, workspaceID, area, scope, ownerID, exceptID string) error {
 	var count int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM saved_views WHERE workspace_id=$1 AND deleted_at IS NULL AND scope=$2
-		AND ($2='shared' OR owner_agent_id=NULLIF($3,'')::uuid) AND id::text<>$4`, workspaceID, scope, ownerID, exceptID).Scan(&count); err != nil {
+		AND ($2='shared' OR owner_agent_id=NULLIF($3,'')::uuid) AND id::text<>$4 AND area=$5`, workspaceID, scope, ownerID, exceptID, area).Scan(&count); err != nil {
 		return fmt.Errorf("count saved views: %w", err)
 	}
 	if count >= domain.MaxSavedViews {
@@ -136,17 +138,17 @@ func ownerOf(scope, agentID string) *string {
 	return nil
 }
 
-func (s *Store) CreateSavedView(ctx context.Context, workspaceID, agentID, name, scope string, filters json.RawMessage) (domain.SavedView, error) {
+func (s *Store) CreateSavedView(ctx context.Context, workspaceID, agentID, area, name, scope string, filters json.RawMessage) (domain.SavedView, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.SavedView, error) {
 		if err := lockSavedViews(ctx, tx, workspaceID); err != nil {
 			return domain.SavedView{}, err
 		}
-		if err := checkSavedViewRoom(ctx, tx, workspaceID, scope, agentID, ""); err != nil {
+		if err := checkSavedViewRoom(ctx, tx, workspaceID, area, scope, agentID, ""); err != nil {
 			return domain.SavedView{}, err
 		}
 		now := s.now()
-		view, err := scanSavedView(tx.QueryRow(ctx, `INSERT INTO saved_views(workspace_id,scope,owner_agent_id,name,filters,created_by_agent_id,created_at,updated_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$7) RETURNING `+savedViewColumns, workspaceID, scope, ownerOf(scope, agentID), name, []byte(filters), agentID, now))
+		view, err := scanSavedView(tx.QueryRow(ctx, `INSERT INTO saved_views(workspace_id,scope,owner_agent_id,name,filters,created_by_agent_id,created_at,updated_at,area)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8) RETURNING `+savedViewColumns, workspaceID, scope, ownerOf(scope, agentID), name, []byte(filters), agentID, now, area))
 		return view, savedViewWriteError(err)
 	})
 }
@@ -171,12 +173,14 @@ func (s *Store) UpdateSavedView(ctx context.Context, workspaceID, agentID, id st
 			name = *change.Name
 		}
 		if change.Filters != nil {
-			filters = change.Filters
+			if filters, err = change.CheckFilters(current.Area, change.Filters); err != nil {
+				return domain.SavedView{}, err
+			}
 		}
 		owner := current.OwnerAgentID
 		if change.Scope != nil && *change.Scope != current.Scope {
 			scope, owner = *change.Scope, ownerOf(*change.Scope, agentID)
-			if err := checkSavedViewRoom(ctx, tx, workspaceID, scope, agentID, current.ID); err != nil {
+			if err := checkSavedViewRoom(ctx, tx, workspaceID, current.Area, scope, agentID, current.ID); err != nil {
 				return domain.SavedView{}, err
 			}
 		}
@@ -218,7 +222,7 @@ func (s *Store) RestoreSavedView(ctx context.Context, workspaceID, agentID, id s
 		if current.OwnerAgentID != nil {
 			owner = *current.OwnerAgentID
 		}
-		if err := checkSavedViewRoom(ctx, tx, workspaceID, current.Scope, owner, current.ID); err != nil {
+		if err := checkSavedViewRoom(ctx, tx, workspaceID, current.Area, current.Scope, owner, current.ID); err != nil {
 			return domain.SavedView{}, err
 		}
 		view, err := scanSavedView(tx.QueryRow(ctx, `UPDATE saved_views SET deleted_at=NULL,updated_at=$3

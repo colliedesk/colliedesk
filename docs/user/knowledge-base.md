@@ -92,6 +92,15 @@ center is on. While it is off, a banner at the top says so, with **Turn on in Se
 published article says "not public"; a draft says "agents only". With the help center on, the arrow at
 the end of a published article's row opens its public page.
 
+### Saved views
+
+**Views** above the article list keeps a set of filters under a name, as the
+[inbox's saved views](inbox.md#saved-views) do. Set the filters, type a name under **Save these
+filters**, choose **Only me** or **Everyone in the workspace**, and select **Save view**. Selecting a
+view opens its filters again. A view's **⋯** menu replaces its filters, renames it, shares it or keeps it
+for you, and deletes it; a deleted view waits 30 days under **Recently deleted**. Knowledge base views
+and inbox views are kept apart: each list shows only its own, and a name may be used once in each.
+
 ## Write an article
 
 1. Select **New article** (inside a collection, it starts there).

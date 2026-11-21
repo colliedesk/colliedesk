@@ -391,10 +391,12 @@ type SavedReply struct {
 	DeletedByAgentID *string    `json:"deleted_by_agent_id"`
 }
 
-// SavedView is a named set of inbox filters, personal (owner_agent_id set) or shared, also in the trash.
+// SavedView is a named set of filters of the inbox or of the knowledge base article list (area),
+// personal (owner_agent_id set) or shared, also in the trash.
 type SavedView struct {
 	ID               string          `json:"id"`
 	Name             string          `json:"name"`
+	Area             string          `json:"area"`
 	Scope            string          `json:"scope"`
 	OwnerAgentID     *string         `json:"owner_agent_id"`
 	Filters          json.RawMessage `json:"filters"`

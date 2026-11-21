@@ -288,7 +288,7 @@ func exportSavedReplies(ctx context.Context, tx pgx.Tx, workspaceID string, sink
 // exportSavedViews writes every view of the workspace, every person's personal views and the trash
 // included: the export is the workspace's whole record, and only an admin downloads it.
 func exportSavedViews(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,name,scope,owner_agent_id::text,filters,created_by_agent_id::text,created_at,updated_at,deleted_at
+	rows, err := tx.Query(ctx, `SELECT id::text,name,area,scope,owner_agent_id::text,filters,created_by_agent_id::text,created_at,updated_at,deleted_at
 		FROM saved_views WHERE workspace_id=$1 ORDER BY id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export saved views: %w", err)
@@ -297,7 +297,7 @@ func exportSavedViews(ctx context.Context, tx pgx.Tx, workspaceID string, sink e
 	for rows.Next() {
 		var record export.SavedView
 		var filters []byte
-		if err := rows.Scan(&record.ID, &record.Name, &record.Scope, &record.OwnerAgentID, &filters, &record.CreatedByAgentID,
+		if err := rows.Scan(&record.ID, &record.Name, &record.Area, &record.Scope, &record.OwnerAgentID, &filters, &record.CreatedByAgentID,
 			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt); err != nil {
 			return fmt.Errorf("export saved views: %w", err)
 		}

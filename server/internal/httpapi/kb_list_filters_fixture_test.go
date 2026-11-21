@@ -16,9 +16,9 @@ type kbFilterFixture struct {
 	billing, refunds, shipping string
 	// The articles by name: card (A), invoice (B), parcel (C), label (D), lost (E).
 	ids map[string]string
-	// Another workspace's author and collection.
-	foreignAgentID, foreignCollectionID string
-	pool                                *pgxpool.Pool
+	// Another workspace's admin session, author and collection.
+	foreignAdmin, foreignAgentID, foreignCollectionID string
+	pool                                              *pgxpool.Pool
 }
 
 func newKBFilterFixture(t *testing.T) kbFilterFixture {
@@ -63,7 +63,7 @@ func newKBFilterFixture(t *testing.T) kbFilterFixture {
 	fixtureSQL(t, pool, `UPDATE kb_article_translations SET outdated=true, outdated_at=now() WHERE article_id=$1`, f.ids["card"])
 
 	foreign := createSession(t, api, service, "KB Filters Elsewhere", "admin@kb-filters-elsewhere.example.com")
-	f.foreignAgentID = agentID(t, api, foreign)
+	f.foreignAdmin, f.foreignAgentID = foreign, agentID(t, api, foreign)
 	f.foreignCollectionID = kbCollection(t, api, foreign, map[string]any{"name": "Billing"}).ID
 	kbArticle(t, api, foreign, map[string]any{"collection_id": f.foreignCollectionID, "title": "Card refund", "body_md": "Elsewhere.", "tags": []string{"billing"}})
 	return f

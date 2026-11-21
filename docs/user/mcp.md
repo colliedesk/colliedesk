@@ -144,8 +144,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_saved_reply_version_restore` | Makes an earlier version current again, as a new version | `saved_replies:update` |
 | `colliedesk_saved_replies_trash` | Lists the saved replies in the trash a page at a time, with when each is deleted for good | `saved_replies:read` |
 | `colliedesk_saved_reply_undelete` | Takes a saved reply out of the trash | `saved_replies:delete` |
-| `colliedesk_saved_views_list` | Lists the [saved inbox views](inbox.md#saved-views) the token's person can use, or the ones in the trash | `saved_views:read` |
-| `colliedesk_saved_view_create` | Saves inbox filters as a personal or shared view | `saved_views:create` |
+| `colliedesk_saved_views_list` | Lists the saved views of the [inbox](inbox.md#saved-views) or the [knowledge base](knowledge-base.md#saved-views) the token's person can use, or the ones in the trash | `saved_views:read` |
+| `colliedesk_saved_view_create` | Saves inbox or knowledge base article filters as a personal or shared view | `saved_views:create` |
 | `colliedesk_saved_view_update` | Changes the name, the filters or who sees a view | `saved_views:update` |
 | `colliedesk_saved_view_delete` | Moves a view to the trash for 30 days; changes no conversation | `saved_views:delete` |
 | `colliedesk_saved_view_restore` | Takes a view out of the trash | `saved_views:delete` |
@@ -165,6 +165,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_template_history` | Lists the versions of a template a page at a time: who, through which token, and the text | `kb_articles:read` |
 | `colliedesk_kb_template_version_restore` | Makes an earlier version of a template current again, as a new version | `kb_articles:update` |
 | `colliedesk_kb_articles_search` | Lists or searches the articles, without their text, a page at a time, each with its public address (`url`) to link in a reply | `kb_articles:read` |
+| `colliedesk_kb_articles_export` | Gives the article list, with the same filters, as the CSV the list page downloads, and the link to the whole file | `kb_articles:read` |
+| `colliedesk_kb_tags_list` | Lists the tags of the articles, by name, with how many articles have each | `kb_articles:read` |
 | `colliedesk_kb_article_get` | Reads one article with its whole Markdown text and its public address (`url`), also from the trash | `kb_articles:read` |
 | `colliedesk_kb_article_create` | Writes an article, as a draft or published | `kb_articles:create` |
 | `colliedesk_kb_article_update` | Edits, moves, publishes or unpublishes an article; every change is a version | `kb_articles:update` |
