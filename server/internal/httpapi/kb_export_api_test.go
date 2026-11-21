@@ -74,6 +74,22 @@ func TestKnowledgeBaseExportTakesTheListFilters(t *testing.T) {
 	}
 }
 
+// A failure after the file started breaks the download, so a short file that still reads as a whole
+// list never reaches the person: here the vote counts of the first page cannot be read.
+func TestKnowledgeBaseExportFailureAfterTheStartAbortsTheDownload(t *testing.T) {
+	f := newKBExportFixture(t)
+	fixtureSQL(t, f.pool, `DROP TABLE kb_article_vote_resets CASCADE`)
+	var aborted any
+	func() {
+		defer func() { aborted = recover() }()
+		response := request(t, f.api, http.MethodGet, "/api/v1/kb/articles/export.csv", nil, f.admin, nil)
+		t.Errorf("export ended with %d and %q, want the connection aborted", response.Code, response.Body.String())
+	}()
+	if aborted != http.ErrAbortHandler {
+		t.Fatalf("handler ended with %v, want the connection to be aborted", aborted)
+	}
+}
+
 // Another workspace's collection or author is no filter value here: the file has its header only.
 func TestKnowledgeBaseExportNeverReadsAnotherWorkspace(t *testing.T) {
 	f := newKBExportFixture(t)

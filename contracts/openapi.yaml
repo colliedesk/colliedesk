@@ -7088,7 +7088,9 @@ paths:
         team member who left the team ends in " (left)"), tags (joined by ", "), languages (its translations,
         an outdated one followed by " (outdated)"), created_at and updated_at (RFC 3339 in the caller's
         timezone), helpful_votes and not_helpful_votes (what the article's page counts). A cell that starts
-        with =, +, - or @ starts with ' instead, so a spreadsheet never reads it as a formula.
+        with =, +, -, @, a tab or a carriage return starts with ' instead, so a spreadsheet never reads it
+        as a formula. A failure after the file started breaks the download instead of ending the file
+        early, so a short file is never taken for the whole list.
       parameters:
         - {$ref: '#/components/parameters/KBListQ'}
         - {$ref: '#/components/parameters/KBListStatus'}

@@ -1,6 +1,7 @@
 package mcpserver_test
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -67,5 +68,13 @@ func TestKBArticlesExportAndTagsThroughMCP(t *testing.T) {
 	}
 	if refused := e.fails(session, "colliedesk_kb_articles_export", map[string]any{"created_after": "yesterday"}); !strings.Contains(refused, "created_after") {
 		t.Fatalf("a bad date = %q, want it to name created_after", refused)
+	}
+
+	// A file that broke off after it started is an error, never a short csv with truncated false.
+	if _, err := e.pool.Exec(context.Background(), `DROP TABLE kb_article_vote_resets CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	if broken := e.fails(session, "colliedesk_kb_articles_export", map[string]any{}); !strings.Contains(broken, "before its end") {
+		t.Fatalf("a broken file = %q, want it to say the file stopped before its end", broken)
 	}
 }

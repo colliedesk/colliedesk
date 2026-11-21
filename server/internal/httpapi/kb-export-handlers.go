@@ -21,7 +21,8 @@ var kbExportColumns = []string{"title", "address", "collection", "status", "auth
 
 // exportKBArticles sends the articles listKBArticles lists with the same filters, in its order, as one
 // CSV file streamed a page at a time. A refused filter is a 400 before the file starts; a failure after
-// it started ends the file early and is logged.
+// it started is logged and aborts the response, so the download fails instead of ending in a short file
+// that reads as the whole list.
 func (a *API) exportKBArticles(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
 	filter, err := kbArticleFilter(request.URL.Query(), who.Workspace.Timezone)
@@ -56,7 +57,7 @@ func (a *API) exportKBArticles(response http.ResponseWriter, request *http.Reque
 		items = items[:min(len(items), maxKBExportRows-written)]
 		if err := a.writeKBExportPage(response, request, writer, rows, items); err != nil {
 			slog.Error("knowledge base export: write a page", "error", err, "workspace", who.Workspace.ID)
-			return
+			panic(http.ErrAbortHandler)
 		}
 		written += len(items)
 		if next == "" || written >= maxKBExportRows {
@@ -65,7 +66,7 @@ func (a *API) exportKBArticles(response http.ResponseWriter, request *http.Reque
 		filter.Cursor = next
 		if items, next, err = a.store.ListKBArticles(request.Context(), who.Workspace.ID, filter); err != nil {
 			slog.Error("knowledge base export: read a page", "error", err, "workspace", who.Workspace.ID)
-			return
+			panic(http.ErrAbortHandler)
 		}
 	}
 }

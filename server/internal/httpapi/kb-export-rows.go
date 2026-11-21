@@ -55,9 +55,8 @@ func kbExportStatus(item domain.KBArticleSummary) string {
 	return item.Status
 }
 
-// spreadsheetText keeps a cell that starts like a formula as text: a spreadsheet opening the file runs
-// a cell starting with =, +, - or @, and skips a leading tab or carriage return to find one, so such a
-// cell starts with ' instead.
+// spreadsheetText keeps a cell that starts like a formula as text: a spreadsheet opening the file can
+// run a cell starting with =, +, -, @, a tab or a carriage return, so such a cell starts with ' instead.
 func spreadsheetText(cell string) string {
 	if cell != "" && strings.ContainsRune("=+-@\t\r", rune(cell[0])) {
 		return "'" + cell
