@@ -46,6 +46,10 @@ func (c *call) refuse(err error, notFound string) error {
 	case failure.Status == 409 && failure.Code == "template_in_trash":
 		return c.refusal("conflict", "The template is in the trash; undelete it or pick another: colliedesk_kb_template_undelete brings it back, "+
 			"colliedesk_kb_templates_list lists the others.")
+	case failure.Status == 409 && failure.Code == "approval_required":
+		return c.refusal("conflict", "A collection of this article needs an approved version of exactly this text before it is published. "+
+			"Send it for review with colliedesk_kb_article_send_for_review (reviewer_ids: teammates who may publish, from colliedesk_agents_list; "+
+			"locale for a translation, which must be a draft first); once one approves it, publish it. colliedesk_kb_reviews_list shows its reviews.")
 	case failure.Status == 409:
 		return c.refusal("conflict", "Colliedesk refused this: "+failure.Message)
 	case failure.Status == 400 || failure.Status == 422:

@@ -43,7 +43,8 @@ func (a *API) discardKBArticleDraft(response http.ResponseWriter, request *http.
 	if !ok {
 		return
 	}
-	article, err := a.store.DiscardKBArticleDraft(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), seen)
+	who := principal(request)
+	article, err := a.store.DiscardKBArticleDraft(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), seen)
 	if err != nil {
 		writeKBError(response, err)
 		return

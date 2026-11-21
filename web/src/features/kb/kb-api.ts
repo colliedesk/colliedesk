@@ -8,8 +8,12 @@ import type { Generated, JsonResponse } from '../../api/schemas';
 const nullableDate = z.string().datetime().nullable();
 const personSchema = z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }) satisfies z.ZodType<Generated<'SavedReplyPerson'>>;
 const statusSchema = z.enum(['draft', 'published']) satisfies z.ZodType<Generated<'KBArticleStatus'>>;
+// The steps of a review the history lists beside the edits.
+const reviewKinds = ['review_request', 'review_approve', 'review_changes', 'review_withdraw'] as const;
+// A help center or a collection that requires approval publishes only text a teammate approved; inherit follows the help center.
+export const approvalModeSchema = z.enum(['inherit', 'on', 'off']) satisfies z.ZodType<Generated<'KBApprovalMode'>>;
 const changeFields = {
-  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft']), restored_from_version: z.number().int().nullable(),
+  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft', ...reviewKinds]), restored_from_version: z.number().int().nullable(),
   changed_by: personSchema.nullable(), token: z.object({ id: z.string().uuid().nullable(), label: z.string() }).nullable(),
   agent_request_id: z.string().uuid().nullable(), created_at: z.string().datetime(),
 };
@@ -21,12 +25,12 @@ const collectionFields = {
   id: z.string().uuid(), parent_id: z.string().uuid().nullable(), name: z.string(), slug: z.string(), description: z.string(),
   position: z.number().int(), article_count: z.number().int(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 };
-export const kbCollectionSchema = z.object({ ...collectionFields, default_template_id: z.string().uuid().nullable(), translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
+export const kbCollectionSchema = z.object({ ...collectionFields, default_template_id: z.string().uuid().nullable(), require_approval: approvalModeSchema, translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
 const trashedCollectionSchema = z.object({
-  ...collectionFields, default_template_id: z.string().uuid().nullable().optional(), translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
+  ...collectionFields, default_template_id: z.string().uuid().nullable().optional(), require_approval: approvalModeSchema.optional(), translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBCollection'>>;
 const translationChangeSchema = z.object({
-  ...changeFields, kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'mark_current', 'mark_outdated']),
+  ...changeFields, kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'mark_current', 'mark_outdated', ...reviewKinds]),
 }) satisfies z.ZodType<Generated<'KBTranslationChange'>>;
 const translationSummaryFields = {
   article_id: z.string().uuid(), locale: z.string(), title: z.string(), slug: z.string(), status: statusSchema, published_at: nullableDate,
@@ -43,7 +47,7 @@ const summaryFields = {
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
 // A file listed under an article or translation, in the order the reader sees.
-const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
+export const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
 // The unpublished changes of a published article: what publishing them puts live. Its updated_at is the
 // version every save, publish, discard, restore or delete sends while it exists.
 const draftSchema = z.object({
@@ -99,7 +103,7 @@ const imageSchema = z.object({
   url: z.string(), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Pick<Generated<'KBMedia'>, 'id' | 'content_type' | 'size' | 'sha256' | 'url' | 'created_at'>>;
 const helpCenterSchema = z.object({
-  enabled: z.boolean(), title: z.string(), locale: z.string(), content_version: z.number().int(), updated_at: nullableDate, url: z.string(),
+  enabled: z.boolean(), title: z.string(), locale: z.string(), require_approval: z.boolean(), content_version: z.number().int(), updated_at: nullableDate, url: z.string(),
 }) satisfies z.ZodType<Generated<'HelpCenter'>>;
 
 const orderSchema = z.object({
@@ -130,6 +134,7 @@ export type KBTranslation = z.infer<typeof kbTranslationSchema>;
 export type KBTranslationVersion = z.infer<typeof translationVersionSchema>;
 export type KBLanguageItem = z.infer<typeof languageItemSchema>;
 export type HelpCenterLanguages = z.infer<typeof helpCenterLanguagesSchema>;
+export type KBApprovalMode = z.infer<typeof approvalModeSchema>;
 export type KBLanguageState = 'missing' | 'outdated' | 'translated';
 
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
@@ -143,7 +148,8 @@ const noContent = z.undefined();
 
 // sort is the order without q: recent (the default without collection_id) or manual, the help center's.
 // limit is the page size, 1 to 200 (50 when left out). has_draft 'true' keeps the articles with unpublished changes.
-export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string; has_draft?: 'true' };
+// state keeps the articles whose unpublished text waits for a reviewer (in_review) or was approved as it is (approved).
+export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string; has_draft?: 'true'; state?: 'in_review' | 'approved' };
 
 // query is called with a variable, never an object literal, inside a path: the gate that checks every path
 // the web app calls is a route (web_routes_test.go) reads a path up to its first closing brace.

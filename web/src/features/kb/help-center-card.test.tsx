@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
+import { PermissionsContext } from '../../lib/permissions-context';
 import { HelpCenterSettings } from './help-center-card';
 import { json, serve } from './kb.test.fixture';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const off = { enabled: false, title: '', locale: 'pt-BR', content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' };
+const off = { enabled: false, title: '', locale: 'pt-BR', require_approval: false, content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' };
 
 function open(canManage: boolean) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><HelpCenterSettings canManage={canManage} workspaceName="Acme" /></QueryClientProvider>);
@@ -54,6 +55,26 @@ test('the help center settings opened at #help-center-heading (the reply box lin
     window.history.replaceState(null, '', '/');
     delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   }
+});
+
+test('an admin who may publish turns on approval before publishing in one click; the rest of the settings are sent back unchanged', async () => {
+  const calls = serve({ 'GET /api/v1/help-center': () => json(200, off), 'PUT /api/v1/help-center': (call) => json(200, { ...off, ...(call.body as object) }) });
+  open(true);
+  const box = await screen.findByRole('checkbox', { name: 'Require approval before publishing' });
+  expect(box).not.toBeChecked();
+  expect(box).toHaveAccessibleDescription('A teammate who may publish approves each new or changed article before it goes on the help center. Collections can override it.');
+  fireEvent.click(box);
+  await waitFor(() => expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ enabled: false, title: '', locale: 'pt-BR', require_approval: true }));
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Require approval before publishing' })).toBeChecked());
+});
+
+test('an admin who may not publish sees whether approval is required but cannot change it', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, { ...off, require_approval: true }) });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <PermissionsContext.Provider value={['help_center:read', 'help_center:update']}><HelpCenterSettings canManage workspaceName="Acme" /></PermissionsContext.Provider></QueryClientProvider>);
+  expect(await screen.findByText('Approval before publishing: required.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Approval before publishing' })).toHaveAccessibleDescription('Only a role that may publish articles changes it.');
+  expect(screen.queryByRole('checkbox', { name: 'Require approval before publishing' })).not.toBeInTheDocument();
 });
 
 test('the title says where it shows and what an empty one uses, in one line', async () => {

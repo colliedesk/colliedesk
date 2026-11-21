@@ -69,6 +69,7 @@ type contractFixture struct {
 	approveRequestID, rejectRequestID, cancelRequestID string
 	kb                                                 contractKB
 	kbTemplates                                        contractKBTemplates
+	kbReviews                                          contractKBReviews
 	imports                                            importJobs
 	// aiProviderID is changed, checked and finally deleted by the AI cases.
 	aiProviderID string
@@ -236,6 +237,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	}
 
 	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
+	kbReviews := seedContractKBReviews(t, api, adminToken, agentSession.Token, kb.collectionID)
 	requestToken := issueToken(t, api, adminToken, "Contract requester", "read").Token
 	// Agent requests are gone; the two decision routes answer 410 to a workspace session.
 	approveRequestID, rejectRequestID, cancelRequestID := "00000000-0000-4000-8000-0000000000a1", "00000000-0000-4000-8000-0000000000a2", ""
@@ -307,7 +309,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	oauthClientID := registerContractOAuthClient(t, api)
 	return contractFixture{trialOfferToken: trialOfferToken, trialAcceptToken: trialAcceptToken, oauthClientID: oauthClientID, intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, roleID: roleID, spareRoleID: spareRoleID, deletedRoleID: deletedRoleID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, noteID: noteID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
-		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), usedInviteToken: linkToken(t, agentURL), logoutToken: logout.Token, kb: kb, kbTemplates: kbTemplates}
+		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), usedInviteToken: linkToken(t, agentURL), logoutToken: logout.Token, kb: kb, kbTemplates: kbTemplates, kbReviews: kbReviews}
 }
 
 // seedMailImage gives the conversation's incoming message HTML with one remote image and returns the

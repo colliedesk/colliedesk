@@ -352,6 +352,22 @@ const templatesRoute = createRoute({
   loader: pageChunk(kbPart),
   component: () => <Part part={kbPart} failed={kbFailed} render={({ TemplatesRoute }) => <TemplatesRoute />} />,
 });
+// Reviews of knowledge base text before it is published: the lists, and one review with its changes.
+const reviewsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/reviews',
+  loader: pageChunk(kbPart),
+  component: () => <Part part={kbPart} failed={kbFailed} render={({ ReviewsRoute }) => <ReviewsRoute />} />,
+});
+const kbReviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/reviews/$reviewId',
+  loader: pageChunk(kbPart),
+  component: function KBReview() {
+    const { reviewId } = kbReviewRoute.useParams();
+    return <Part part={kbPart} failed={kbFailed} render={({ ReviewRoute }) => <ReviewRoute key={reviewId} reviewId={reviewId} />} />;
+  },
+});
 // One language of an article, beside the original; it also starts a translation.
 // The help center's own settings, beside the articles it publishes; they were a section of Settings.
 const helpCenterSettingsRoute = createRoute({
@@ -665,7 +681,7 @@ const trialOfferRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, templatesRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, tagsRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
+export const routeTree = rootRoute.addChildren([oauthAuthorizeRoute, trialOfferRoute, inboxRoute, conversationRoute, mentionsRoute, mentionRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, languagesRoute, templatesRoute, reviewsRoute, kbReviewRoute, translationRoute, helpCenterSettingsRoute, settingsRoute, accountRoute, generalRoute, membersRoute, fieldsRoute, savedRepliesRoute, tagsRoute, dataRoute, requestsRoute, reviewRoute, billingRoute, ...movedRoutes, newRoleRoute, roleRoute, targetsRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 // Every router Link loads its page ahead when the pointer or the focus reaches it (plain links: lib/in-app-links.ts).
 export const router = createRouter({ routeTree, context: {}, defaultPreload: 'intent' });
 

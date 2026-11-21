@@ -107,6 +107,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
         ...(values.description !== original.description ? { description: values.description } : {}),
         ...(values.parent_id !== original.parent_id ? { parent_id: values.parent_id } : {}),
         ...(values.default_template_id !== (original.default_template_id ?? null) ? { default_template_id: values.default_template_id } : {}),
+        ...(values.require_approval !== original.require_approval ? { require_approval: values.require_approval } : {}),
       });
       await refresh();
       setForm(null);

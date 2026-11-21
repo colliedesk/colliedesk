@@ -149,14 +149,16 @@ func (s *Store) SetKBArticleAttachments(ctx context.Context, workspaceID string,
 		if err := checkKBAttachments(ctx, tx, workspaceID, ids); err != nil {
 			return domain.KBArticle{}, err
 		}
+		// The files are part of the text a review approves: a change is an edit of the article by its
+		// author, and a change to a published article's draft is a draft save.
 		if status != domain.KBPublished {
-			if err := replaceKBAttachments(ctx, tx, workspaceID, id, nil, ids); err != nil {
-				return domain.KBArticle{}, err
-			}
-			if _, err := tx.Exec(ctx, `UPDATE kb_articles SET updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2`, workspaceID, id); err != nil {
-				return domain.KBArticle{}, err
-			}
-			return readKBArticle(ctx, tx, workspaceID, id)
+			return changeKBArticleLocked(ctx, tx, workspaceID, actor, id, domain.KBArticleEdited, nil, func(tx pgx.Tx) error {
+				if err := replaceKBAttachments(ctx, tx, workspaceID, id, nil, ids); err != nil {
+					return err
+				}
+				_, err := tx.Exec(ctx, `UPDATE kb_articles SET updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2`, workspaceID, id)
+				return err
+			})
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO kb_article_drafts(workspace_id,article_id,title,slug,body_md,seo_title,seo_description,attachment_ids,
 				updated_by_agent_id,created_at,updated_at)
@@ -167,7 +169,7 @@ func (s *Store) SetKBArticleAttachments(ctx context.Context, workspaceID string,
 			workspaceID, id, ids, optionalID(actor.AgentID)); err != nil {
 			return domain.KBArticle{}, fmt.Errorf("save knowledge base draft attachments: %w", err)
 		}
-		return readKBArticle(ctx, tx, workspaceID, id)
+		return recordKBArticleDraft(ctx, tx, workspaceID, actor, id)
 	})
 	return article, kbError("set knowledge base article attachments", err)
 }
@@ -191,8 +193,9 @@ func lockKBArticleSeen(ctx context.Context, tx pgx.Tx, workspaceID, id string, s
 }
 
 // SetKBTranslationAttachments sets the files a translation lists, in order; a translation has no
-// draft, so the list changes at once.
-func (s *Store) SetKBTranslationAttachments(ctx context.Context, workspaceID, articleID, locale string, ids []string, seen *time.Time) (domain.KBArticleTranslation, error) {
+// draft, so the list changes at once. It is an edit of the translation: in a collection that needs
+// approval, a published translation's list changes only to one a review approved.
+func (s *Store) SetKBTranslationAttachments(ctx context.Context, workspaceID string, actor Actor, articleID, locale string, ids []string, seen *time.Time) (domain.KBArticleTranslation, error) {
 	if err := translationKey(articleID, locale); err != nil {
 		return domain.KBArticleTranslation{}, err
 	}
@@ -215,11 +218,21 @@ func (s *Store) SetKBTranslationAttachments(ctx context.Context, workspaceID, ar
 		if err := checkKBAttachments(ctx, tx, workspaceID, ids); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
+		was, err := translationPublishState(ctx, tx, workspaceID, articleID, locale)
+		if err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
 		if err := replaceKBAttachments(ctx, tx, workspaceID, articleID, &locale, ids); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE kb_article_translations SET updated_at=clock_timestamp() WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`,
 			workspaceID, articleID, locale); err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
+		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleEdited, nil); err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
+		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, was); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
 		return readKBTranslation(ctx, tx, workspaceID, articleID, locale)
