@@ -345,7 +345,7 @@ func (s *Service) ChatUsage(ctx context.Context, workspaceID string, month time.
 				(SELECT count(*) FILTER (WHERE f.rating='helpful') FROM ai_chat_feedback f WHERE f.workspace_id=$1 AND f.created_at>=$2 AND f.created_at<$3),
 				(SELECT count(*) FROM ai_chat_feedback f WHERE f.workspace_id=$1 AND f.created_at>=$2 AND f.created_at<$3),
 				(SELECT count(*) FROM kb_articles a JOIN help_centers h ON h.workspace_id=a.workspace_id AND h.enabled
-					WHERE a.workspace_id=$1 AND a.status='published' AND a.deleted_at IS NULL AND NOT a.ai_excluded)`,
+					WHERE a.workspace_id=$1 AND NOT a.ai_excluded AND EXISTS (SELECT 1 FROM kb_help_chat_articles kv WHERE kv.workspace_id=a.workspace_id AND kv.id=a.id))`,
 			workspaceID, month, month.AddDate(0, 1, 0), day).
 			Scan(&usage.Answers, &usage.AnswersToday, &spent, &usage.Chats, &usage.HandedOff, &usage.Helpful, &usage.Rated, &usage.Articles)
 		if err != nil {

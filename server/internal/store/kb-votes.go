@@ -28,7 +28,7 @@ var kbVoteCountsSQL = `SELECT
 	COALESCE(sum(` + importedThumb("thumbs_up") + `), 0)::bigint, COALESCE(sum(` + importedThumb("thumbs_down") + `), 0)::bigint
 	FROM (SELECT a.source_meta FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2
 		UNION ALL SELECT t.source_meta FROM kb_article_translations t
-			WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.status='published' AND t.deleted_at IS NULL) s(m)
+			WHERE t.workspace_id=$1 AND t.article_id=$2 AND ` + publicKBTranslation + `) s(m)
 	WHERE m IS NOT NULL AND NOT EXISTS (SELECT 1 FROM kb_article_vote_resets r WHERE r.workspace_id=$1 AND r.article_id=$2)`
 
 // kbVoteCounts are the current and imported counts of an article, read in tx.
@@ -104,7 +104,7 @@ func (s *Store) VoteKBArticle(ctx context.Context, workspaceID string, number in
 	}
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
 		var articleID string
-		err := tx.QueryRow(ctx, `SELECT a.id::text FROM kb_articles a WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number).Scan(&articleID)
+		err := tx.QueryRow(ctx, `SELECT a.id::text FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=$2`, workspaceID, number).Scan(&articleID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return struct{}{}, domain.ErrKBArticleNotFound
 		}

@@ -373,7 +373,7 @@ func (s *Service) chatExcerpts(ctx context.Context, workspaceID, locale, questio
 		var err error
 		// Only the text this reader gets of each article is scored: its translation in the reader's
 		// language, else its own (locale is a shown language or "").
-		docs, err = store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: text, KBLimit: chatExcerptArticles, KBReader: &locale})
+		docs, err = store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: text, KBLimit: chatExcerptArticles, KBReader: &locale, HelpChat: true})
 		if err != nil {
 			return err
 		}

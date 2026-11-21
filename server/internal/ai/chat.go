@@ -503,7 +503,7 @@ func (s *Service) streamChat(ctx context.Context, workspaceID string, binding Bi
 func (s *Service) chatRelated(ctx context.Context, workspaceID, question string) ([]ChatArticleRef, error) {
 	var related []ChatArticleRef
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		docs, err := store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: question, KBLimit: chatRelated})
+		docs, err := store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: question, KBLimit: chatRelated, HelpChat: true})
 		if err != nil {
 			return err
 		}
