@@ -71,7 +71,7 @@ major() { query postgres 'SHOW server_version_num;' | cut -c1-2; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # The state of an upgrade, one key=value per line, rewritten whole each time.
-state='' prior='' from_major='' old_image='' old_key='' old_cluster='' project='' dump_dir='' cluster='' started_at='' finished_at=''
+state='' prior='' too_new='' from_major='' old_image='' old_key='' old_cluster='' project='' dump_dir='' cluster='' started_at='' finished_at=''
 load_state() {
   for key in state prior from_major old_image old_key old_cluster project dump_dir cluster started_at finished_at; do
     # shellcheck disable=SC2034 # read by the eval below
@@ -124,6 +124,9 @@ volume_for() {
 }
 start_postgres() { compose up -d --wait postgres >/dev/null 2>&1; }
 start_all() { compose up -d --wait >/dev/null 2>&1; }
+# refuses_major: the server stopped because its release needs a newer PostgreSQL than this one.
+refuses_major() { compose logs --no-color server 2>/dev/null | grep -q 'or newer is required'; }
+EARLIER_IMAGE=ghcr.io/colliedesk/colliedesk:1.0.1
 # is_cluster MAJOR KEY ID: the running PostgreSQL is MAJOR on the volume KEY, and its cluster is ID
 # (pg_control_system). An edit that moves PGDATA starts an empty cluster on the same volume.
 is_cluster() {
@@ -198,6 +201,7 @@ finish() {
   say "Colliedesk is on PostgreSQL $NEW_MAJOR${down_at:+ (downtime $(($(date +%s) - down_at)) s)}."
   say "The dump is in $dump_dir/, readable only by you: remove it (rm -r $dump_dir) once the install has run well for a week."
   say "The PostgreSQL $from_major data stays in the volume $(volume_for "$old_key"), not written by the upgrade. To go back to it: sh upgrade-postgres.sh --rollback"
+  say "A release newer than v1.0.1 does not start on PostgreSQL $from_major: before a rollback, set COLLIE_DESK_IMAGE in .env to the release the install ran before, for example $EARLIER_IMAGE."
 }
 # on_exit: a run that stops with the upgrade started (a failure or a signal) is undone while
 # compose.yaml names the old major. Once it names 19 the server may have written there, so nothing
@@ -319,9 +323,12 @@ if [ "$ROLLBACK" = true ]; then
           fi
           ;;
         resume)
-          start_if "$from_major" "$old_key" "$old_cluster" || [ $? != 2 ] ||
-            warn "the PostgreSQL that docker compose starts from compose.yaml is not the PostgreSQL $from_major database of before the upgrade; nothing was started. Undo the edit of the postgres service first."
-          warn "the rollback did not finish. compose.yaml names PostgreSQL $from_major and the server may have written to the volume $old_key: run sh upgrade-postgres.sh --rollback again to finish it."
+          # A server release that refuses this major was already named; starting it again would not help.
+          if [ -z "$too_new" ]; then
+            start_if "$from_major" "$old_key" "$old_cluster" || [ $? != 2 ] ||
+              warn "the PostgreSQL that docker compose starts from compose.yaml is not the PostgreSQL $from_major database of before the upgrade; nothing was started. Undo the edit of the postgres service first."
+            warn "the rollback did not finish. compose.yaml names PostgreSQL $from_major and the server may have written to the volume $old_key: run sh upgrade-postgres.sh --rollback again to finish it."
+          fi
           ;;
       esac
     fi
@@ -351,8 +358,15 @@ if [ "$ROLLBACK" = true ]; then
     compose stop postgres >/dev/null 2>&1
     fail "the PostgreSQL that docker compose starts on the volume $old_key is not the PostgreSQL $from_major database of before the upgrade: an edit of the postgres service (PGDATA, the volume) changes it. Undo the edit, then run sh upgrade-postgres.sh --rollback again."
   }
-  phase=resume
-  start_all || fail 'the install did not become healthy on its old database; run docker compose ps for details'
+  phase=resume too_new=''
+  start_all || {
+    if refuses_major; then
+      too_new=1
+      compose stop server >/dev/null 2>&1
+      fail "PostgreSQL $from_major is back on its old volume, but the server release in COLLIE_DESK_IMAGE needs a newer PostgreSQL, so the server is stopped. Set COLLIE_DESK_IMAGE in .env to the release the install ran before, for example $EARLIER_IMAGE, then run sh upgrade-postgres.sh --rollback again to finish it."
+    fi
+    fail 'the install did not become healthy on its old database; run docker compose ps for details'
+  }
   state=rolled_back finished_at=$(now)
   save_state
   rm -f compose.yaml.before-rollback
