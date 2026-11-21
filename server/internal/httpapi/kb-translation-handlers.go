@@ -381,9 +381,6 @@ func (a *API) restoreKBTranslationVersion(response http.ResponseWriter, request 
 		return
 	}
 	who := principal(request)
-	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, a.translationIsPublished(request, who)) {
-		return
-	}
 	// A repeated press (same Idempotency-Key) answers the first restore again and adds no version.
 	articleID, locale := request.PathValue("id"), request.PathValue("locale")
 	a.runOnce(response, request, http.StatusOK, restoreKBTranslationVersionOperation, []string{articleID, locale, strconv.Itoa(version), seen.UTC().Format(time.RFC3339Nano)},

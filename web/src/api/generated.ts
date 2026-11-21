@@ -4566,7 +4566,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Set the files the translation lists under its text, in order, as for an article. A translation has no draft: the list changes at once. A translation that lists no file shows the article's files on its page. The list is part of the translation's text a review approves: in a collection that needs approval, a change to a published translation's list that no review approved is 409 `approval_required` and the list stays as it was. */
+        /** @description Set the files the translation lists under its text, in order, as for an article. On a published translation the list goes into its draft (`draft.attachments`) and the help center keeps the published list until the draft is published. A translation that lists no file shows the article's files on its page. The list is part of the translation's text a review approves: in a collection that needs approval, publishing a draft whose list no review approved is 409 `approval_required`. */
         put: operations["setKBTranslationAttachments"];
         post?: never;
         delete?: never;
@@ -4628,7 +4628,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Make the title, slug, text and search fields of an earlier version of a translation current again, as a new version; its status and outdated flag stay. Send back the `updated_at` you read (409 `changed_elsewhere`). A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing. */
+        /** @description Make the title, slug, text and search fields of an earlier version of a translation current again, as a new version; its status and outdated flag stay. On a published translation they go into its draft, so the help center changes only when the draft is published. Send back the `updated_at` you read (409 `changed_elsewhere`). A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing. */
         post: operations["restoreKBTranslationVersion"];
         delete?: never;
         options?: never;

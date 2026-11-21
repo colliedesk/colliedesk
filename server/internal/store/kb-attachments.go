@@ -192,54 +192,6 @@ func lockKBArticleSeen(ctx context.Context, tx pgx.Tx, workspaceID, id string, s
 	return status, nil
 }
 
-// SetKBTranslationAttachments sets the files a translation lists, in order; a translation has no
-// draft, so the list changes at once. It is an edit of the translation: in a collection that needs
-// approval, a published translation's list changes only to one a review approved.
-func (s *Store) SetKBTranslationAttachments(ctx context.Context, workspaceID string, actor Actor, articleID, locale string, ids []string, seen *time.Time) (domain.KBArticleTranslation, error) {
-	if err := translationKey(articleID, locale); err != nil {
-		return domain.KBArticleTranslation{}, err
-	}
-	item, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticleTranslation, error) {
-		if seen == nil {
-			var current time.Time
-			err := tx.QueryRow(ctx, `SELECT updated_at FROM kb_article_translations WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`,
-				workspaceID, articleID, locale).Scan(&current)
-			if errors.Is(err, pgx.ErrNoRows) {
-				return domain.KBArticleTranslation{}, kbTranslationOrArticleMissing(ctx, tx, workspaceID, articleID)
-			}
-			if err != nil {
-				return domain.KBArticleTranslation{}, err
-			}
-			seen = &current
-		}
-		if _, err := lockLiveKBTranslation(ctx, tx, workspaceID, articleID, locale, *seen); err != nil {
-			return domain.KBArticleTranslation{}, err
-		}
-		if err := checkKBAttachments(ctx, tx, workspaceID, ids); err != nil {
-			return domain.KBArticleTranslation{}, err
-		}
-		was, err := translationPublishState(ctx, tx, workspaceID, articleID, locale)
-		if err != nil {
-			return domain.KBArticleTranslation{}, err
-		}
-		if err := replaceKBAttachments(ctx, tx, workspaceID, articleID, &locale, ids); err != nil {
-			return domain.KBArticleTranslation{}, err
-		}
-		if _, err := tx.Exec(ctx, `UPDATE kb_article_translations SET updated_at=clock_timestamp() WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`,
-			workspaceID, articleID, locale); err != nil {
-			return domain.KBArticleTranslation{}, err
-		}
-		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleEdited, nil); err != nil {
-			return domain.KBArticleTranslation{}, err
-		}
-		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, was); err != nil {
-			return domain.KBArticleTranslation{}, err
-		}
-		return readKBTranslation(ctx, tx, workspaceID, articleID, locale)
-	})
-	return item, kbError("set knowledge base translation attachments", err)
-}
-
 // kbTranslationOrArticleMissing tells a missing article from a missing translation.
 func kbTranslationOrArticleMissing(ctx context.Context, tx pgx.Tx, workspaceID, articleID string) error {
 	if err := kbArticleExists(ctx, tx, workspaceID, articleID); err != nil {
