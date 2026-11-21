@@ -74,3 +74,13 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION app_role(), secure_workspace_table(regclass), secure_server_table(regclass),
     limit_app_role(regclass, text[]) FROM PUBLIC;
+
+-- These tables were meant to refuse the app role a DELETE (history is only added; roles and number
+-- series are marked deleted or reset), but their GRANT ran on top of the default privileges.
+SELECT limit_app_role('saved_reply_versions', 'SELECT', 'INSERT');
+SELECT limit_app_role('roles', 'SELECT', 'INSERT', 'UPDATE');
+SELECT limit_app_role('agent_requests', 'SELECT', 'INSERT', 'UPDATE');
+SELECT limit_app_role('response_targets', 'SELECT', 'INSERT', 'UPDATE');
+SELECT limit_app_role('contact_merges', 'SELECT', 'INSERT', 'UPDATE');
+SELECT limit_app_role('conversation_number_series', 'SELECT', 'INSERT', 'UPDATE');
+SELECT limit_app_role('conversation_number_formats', 'SELECT', 'INSERT', 'UPDATE');

@@ -570,7 +570,7 @@ Migration `kb-visibility`; code in `server/internal/store/kb-visibility*.go`. Us
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges
   give the app role all four rights, so `GRANT SELECT, INSERT` alone does not make a table append-only.
   The migration revokes all rights on `kb_article_versions` first; `TestKnowledgeBaseVersionsAreAppendOnlyForTheAppRole`
-  pins it. (`saved_reply_versions` was created with only the grant, so the app role can still change it.)
+  pins it. A new table uses `limit_app_role` ([workspace isolation](workspace-isolation.md#securing-a-new-table)).
 - **"Unused" is more than "no article".** The help center's logo and favicon (`help_centers.logo_media_id`,
   `favicon_media_id`) are library items no article links. `kbMediaNamedByHelpCenter` is part of the
   purge rule (`kbMediaPurgeable`), the `unused` and `in_use` filters, trash-unused and the admin's

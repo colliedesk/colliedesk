@@ -15,11 +15,18 @@ import (
 // UPDATE and DELETE. History and audit rows are only added; a role or a counter is never deleted, only
 // marked deleted or reset. Every other workspace table allows all four.
 var narrowedAppRoleTables = map[string][]string{
+	"agent_requests":                  {"SELECT", "INSERT", "UPDATE"},
+	"contact_merges":                  {"SELECT", "INSERT", "UPDATE"},
+	"conversation_number_formats":     {"SELECT", "INSERT", "UPDATE"},
+	"conversation_number_series":      {"SELECT", "INSERT", "UPDATE"},
 	"fix_attempt_events":              {"SELECT", "INSERT"},
 	"kb_article_translation_versions": {"SELECT", "INSERT"},
 	"kb_article_versions":             {"SELECT", "INSERT"},
 	"kb_article_vote_resets":          {"SELECT", "INSERT"},
 	"kb_template_versions":            {"SELECT", "INSERT"},
+	"response_targets":                {"SELECT", "INSERT", "UPDATE"},
+	"roles":                           {"SELECT", "INSERT", "UPDATE"},
+	"saved_reply_versions":            {"SELECT", "INSERT"},
 	"workspace_events":                {"SELECT", "INSERT"},
 }
 
