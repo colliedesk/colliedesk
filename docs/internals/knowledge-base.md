@@ -322,7 +322,8 @@ Results reads the same tables (docs/internals/results.md › Help center).
   reader counted once per page.
 - **Never on the page's path.** `PageViewed` only adds to a map under a mutex. `Run` writes every 30 s
   (`FlushEvery`, `COLLIEDESK_E2E_VIEW_FLUSH_MS` in the e2e build only) and once more after
-  `server.Shutdown` with 10 s to do it; a failed write puts the counts back for the next one. A server
+  `server.Shutdown` with 5 s of its own (`stopServing`), even when the shutdown failed or used all of its
+  10 s; a failed write puts the counts back for the next one. A server
   killed with SIGKILL loses at most 30 s of views.
 - **One statement, privileged.** The write is one `INSERT … SELECT FROM unnest(…) JOIN kb_articles … ON
   CONFLICT DO UPDATE SET views = views + EXCLUDED.views` across workspaces, under

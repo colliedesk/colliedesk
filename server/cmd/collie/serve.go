@@ -150,14 +150,8 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		}
 		return nil
 	case <-ctx.Done():
-		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := server.Shutdown(shutdown); err != nil {
-			return fmt.Errorf("shutdown HTTP server: %w", err)
-		}
-		// No page is served any more: the views not yet written are written now, not lost with the process.
-		if err := p.views.Flush(shutdown); err != nil {
-			slog.Error("write help center article views at shutdown", "error", err)
+		if err := stopServing(server.Shutdown, p.views.Flush, 10*time.Second, 5*time.Second); err != nil {
+			return err
 		}
 		reload.Stop(stopWorkersWithin)
 		_ = configStore.Leave(context.WithoutCancel(ctx), reload.process.InstanceID)
