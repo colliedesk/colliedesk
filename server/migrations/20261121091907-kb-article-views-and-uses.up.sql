@@ -13,7 +13,7 @@ CREATE INDEX kb_article_views_day ON kb_article_views(workspace_id, day);
 
 -- A sent reply that used an article: it linked the article's help center address (link), or it was an
 -- AI draft that quoted the article (ai_source). One row per message, article and kind. conversation_id
--- follows the message when it moves to another conversation.
+-- stays the reply's: only customer messages move between conversations.
 CREATE TABLE kb_article_uses (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     kb_article_id uuid NOT NULL,
