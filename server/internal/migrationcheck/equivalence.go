@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Migration is one migration of a chain: its up file's name, its up SQL and its down SQL.
@@ -123,30 +122,32 @@ func byName(chain []Migration) map[string]string {
 	return named
 }
 
+// chainSchema is one chain's schema in the comparison database. The connections are plain pgx
+// connections: the comparison reads only the throwaway schemas it creates, never app data.
 type chainSchema struct {
 	name  string
-	admin *pgxpool.Pool
-	pool  *pgxpool.Pool
+	admin *pgx.Conn
+	pool  *pgx.Conn
 }
 
 func newChainSchema(ctx context.Context, databaseURL, name string) (*chainSchema, error) {
-	admin, err := pgxpool.New(ctx, databaseURL)
+	admin, err := pgx.Connect(ctx, databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("connect to the database: %w", err)
 	}
 	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+pgx.Identifier{name}.Sanitize()); err != nil {
-		admin.Close()
+		_ = admin.Close(ctx)
 		return nil, fmt.Errorf("create schema %s: %w", name, err)
 	}
-	config, err := pgxpool.ParseConfig(databaseURL)
+	config, err := pgx.ParseConfig(databaseURL)
 	if err != nil {
-		admin.Close()
+		_ = admin.Close(ctx)
 		return nil, err
 	}
-	config.ConnConfig.RuntimeParams["search_path"] = name
-	pool, err := pgxpool.NewWithConfig(ctx, config)
+	config.RuntimeParams["search_path"] = name
+	pool, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
-		admin.Close()
+		_ = admin.Close(ctx)
 		return nil, err
 	}
 	chain := &chainSchema{name: name, admin: admin, pool: pool}
@@ -162,9 +163,10 @@ func newChainSchema(ctx context.Context, databaseURL, name string) (*chainSchema
 }
 
 func (c *chainSchema) drop(ctx context.Context) {
-	c.pool.Close()
-	_, _ = c.admin.Exec(context.WithoutCancel(ctx), "DROP SCHEMA "+pgx.Identifier{c.name}.Sanitize()+" CASCADE")
-	c.admin.Close()
+	ctx = context.WithoutCancel(ctx)
+	_ = c.pool.Close(ctx)
+	_, _ = c.admin.Exec(ctx, "DROP SCHEMA "+pgx.Identifier{c.name}.Sanitize()+" CASCADE")
+	_ = c.admin.Close(ctx)
 }
 
 // apply runs a migration the way the server does: in one transaction marked privileged.
