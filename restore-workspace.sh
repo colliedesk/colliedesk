@@ -158,6 +158,11 @@ export_script() {
   emit '\set ON_ERROR_STOP on'
   emit 'BEGIN;'
   emit "SET LOCAL TimeZone = 'UTC'; SET LOCAL DateStyle = 'ISO, YMD'; SET LOCAL extra_float_digits = 3;"
+  # An article's files go before the workspace: on v1.1.0 their delete trigger queues the article for
+  # AI retrieval, which fails inside the workspace's cascade. Here the workspace still exists.
+  if grep -q '^kb_article_attachments ' "$work/plan"; then
+    emit "DELETE FROM kb_article_attachments WHERE workspace_id = '$wid';"
+  fi
   # Removing the workspace cascades to its rows; tables without a foreign key to it are emptied of it next.
   emit "DELETE FROM workspaces WHERE id = '$wid';"
   while read -r table columns; do
