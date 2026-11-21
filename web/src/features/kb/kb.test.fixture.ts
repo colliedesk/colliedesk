@@ -33,8 +33,14 @@ export const summary = (n: number, title: string, status: 'draft' | 'published' 
   url: `https://desk.example.com/help/acme/a/${n}-${title.toLowerCase().replace(/ /g, '-')}`,
 });
 
+// withoutVotes drops what only the article list fills in: one article read alone, or in the trash, has no vote counts.
+export const withoutVotes = (row: ReturnType<typeof summary>) => {
+  const { votes: _votes, ...rest } = row;
+  return rest;
+};
+
 export const article = (fields: Record<string, unknown> = {}) => ({
-  ...summary(7, 'Reset your password'), id: ids.article, body_md: 'Open **Settings**.', seo_title: '', seo_description: '', show_contents: true, has_source_html: false, translations: [], attachments: [], deleted_at: null, ai_exclusion: null, draft: null, visibility_from: null, ...fields,
+  ...withoutVotes(summary(7, 'Reset your password')), id: ids.article, body_md: 'Open **Settings**.', seo_title: '', seo_description: '', show_contents: true, has_source_html: false, translations: [], attachments: [], deleted_at: null, ai_exclusion: null, draft: null, visibility_from: null, ...fields,
 });
 
 export const me = {

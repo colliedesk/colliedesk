@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { KnowledgeRoute } from './knowledge-page';
 import { PermissionsContext } from '../../lib/permissions-context';
 import type { KnowledgeSearch } from './knowledge-page';
-import { collection, collections, ids, json, me, refusal, serve, summary } from './kb.test.fixture';
+import { collection, collections, ids, json, me, refusal, serve, summary, withoutVotes } from './kb.test.fixture';
 
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }));
@@ -108,7 +108,7 @@ test('a collection that still holds articles is not deleted, and the reason is s
 });
 
 test('the trash restores an article with the version it shows', async () => {
-  const trashed = { ...summary(9, 'Old pricing'), deleted_at: '2026-10-10T00:00:00Z', deleted_by: { agent_id: null, name: 'Ada' }, purges_at: '2026-11-09T00:00:00Z' };
+  const trashed = { ...withoutVotes(summary(9, 'Old pricing')), deleted_at: '2026-10-10T00:00:00Z', deleted_by: { agent_id: null, name: 'Ada' }, purges_at: '2026-11-09T00:00:00Z' };
   const calls = serve({ ...base,
     'GET /api/v1/kb/articles/trash': () => json(200, { items: [trashed], next_cursor: null }),
     'GET /api/v1/kb/collections/trash': () => json(200, { items: [] }),
@@ -283,7 +283,7 @@ test('the trash says when an item goes for good in one line and keeps the rest i
 });
 
 test('restoring an article whose collection is in the trash shows the server\'s reason, not a general failure', async () => {
-  const trashed = { ...summary(9, 'Old pricing'), deleted_at: '2026-10-10T00:00:00Z', deleted_by: { agent_id: null, name: 'Ada' }, purges_at: '2026-11-09T00:00:00Z' };
+  const trashed = { ...withoutVotes(summary(9, 'Old pricing')), deleted_at: '2026-10-10T00:00:00Z', deleted_by: { agent_id: null, name: 'Ada' }, purges_at: '2026-11-09T00:00:00Z' };
   serve({ ...base,
     'GET /api/v1/kb/articles/trash': () => json(200, { items: [trashed], next_cursor: null }),
     'GET /api/v1/kb/collections/trash': () => json(200, { items: [] }),

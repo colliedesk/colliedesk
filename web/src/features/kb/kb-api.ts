@@ -58,12 +58,12 @@ const summaryFields = {
   languages: z.array(z.object({ locale: z.string(), outdated: z.boolean() })),
   // in_review: its own unpublished text waits for a reviewer; approved: a reviewer approved it, ready to publish.
   review_state: z.enum(['in_review', 'approved']).nullable(),
-  // Readers' answers to "Was this article helpful?", imported ones included.
-  votes: z.object({ helpful: z.number().int(), not_helpful: z.number().int() }),
   ...visibilityFields,
 };
 const listColumnsSchema = z.object({ columns: z.array(kbListColumnSchema), default: z.boolean() }) satisfies z.ZodType<JsonResponse<'setKBListColumns', 200>>;
-const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
+// Only the article list counts readers' answers to "Was this article helpful?" (imported ones included);
+// one article read alone, or in the trash, comes without them.
+const summarySchema = z.object({ ...summaryFields, votes: z.object({ helpful: z.number().int(), not_helpful: z.number().int() }) }) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
 // A file listed under an article or translation, in the order the reader sees.
 export const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
 // The unpublished changes of a published article: what publishing them puts live. Its updated_at is the
