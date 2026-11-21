@@ -70,6 +70,8 @@ func dailyCounts(ctx context.Context, tx pgx.Tx, sql string, args ...any) (map[s
 var helpCenterArticleVotes = strings.ReplaceAll(kbVoteCountsSQL, "$2", "top.id")
 
 // helpCenterArticles are the articles viewed or used in a sent reply in [from, to), most viewed first.
+// Only articles the help center shows are listed: results reach members without a knowledge base
+// permission and share-link viewers, so an article kept for the team or for help chat is never named.
 func helpCenterArticles(ctx context.Context, tx pgx.Tx, workspaceID string, from, to time.Time, loc *time.Location) ([]results.HelpCenterArticle, int, error) {
 	rows, err := tx.Query(ctx, `WITH v AS (
 			SELECT kb_article_id AS id, sum(views)::bigint AS views FROM kb_article_views
@@ -79,7 +81,7 @@ func helpCenterArticles(ctx context.Context, tx pgx.Tx, workspaceID string, from
 			WHERE workspace_id=$1 AND created_at>=$4 AND created_at<$5 GROUP BY 1),
 		top AS (
 			SELECT a.id, a.number, a.title, COALESCE(v.views, 0) AS views, COALESCE(u.uses, 0) AS uses, count(*) OVER () AS total
-			FROM v FULL JOIN u ON u.id=v.id JOIN kb_articles a ON a.workspace_id=$1 AND a.id=COALESCE(v.id, u.id)
+			FROM v FULL JOIN u ON u.id=v.id JOIN kb_articles a ON a.id=COALESCE(v.id, u.id) AND `+publicKBArticle+`
 			ORDER BY views DESC, uses DESC, a.number LIMIT $6)
 		SELECT top.id::text, top.number, top.title, top.views, top.uses, top.total, votes.up, votes.down, votes.imported_up, votes.imported_down
 		FROM top, LATERAL (`+helpCenterArticleVotes+`) votes(up, down, imported_up, imported_down)
