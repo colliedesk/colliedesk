@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { InvalidRequestError } from '../../api/client';
 import { messages } from '../../messages';
+import { HelpTip } from '../../ui/help-tip';
 import { kbApi } from './kb-api';
 import type { HelpCenter } from './kb-api';
 
@@ -23,9 +24,9 @@ export function HelpCenterShowTags({ settings, canManage }: { settings: HelpCent
   if (!canManage) return <p className="muted-copy">{settings.show_tags ? showTagsMessages.on : showTagsMessages.off}</p>;
   const on = save.isPending ? save.variables : settings.show_tags;
   return <div className="field">
-    <label className="field-inline"><input type="checkbox" checked={on} disabled={save.isPending} aria-describedby="help-center-show-tags-help"
+    <div className="heading-with-tip"><label className="field-inline"><input type="checkbox" checked={on} disabled={save.isPending} aria-describedby="help-center-show-tags-help"
       onChange={(event) => save.mutate(event.target.checked)} /><span>{showTagsMessages.label}</span></label>
-    <small id="help-center-show-tags-help" className="muted-copy">{showTagsMessages.help}</small>
+      <HelpTip id="help-center-show-tags-help" label={showTagsMessages.label} text={showTagsMessages.help} /></div>
     {save.isError && <p role="alert" className="error-copy">{save.error instanceof InvalidRequestError ? save.error.message : messages.settingsActionFailed}</p>}
   </div>;
 }

@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { HelpTip } from '../../ui/help-tip';
 import { kbApi } from './kb-api';
 
 // The article's tags in the editor's side column. They are part of the draft: Save sends them with the text,
@@ -14,7 +15,8 @@ export const tagMessages = {
   remove: (tag: string) => `Remove tag ${tag}`,
   tooLong: `A tag is at most ${maxTagLength} characters.`,
   full: `${maxTags} tags is the most an article can have.`,
-  help: 'Tags group articles in the list and help search. Readers see them only when the help center shows tags (Knowledge settings).',
+  help: 'Press Enter to add a tag.',
+  why: 'Tags group articles in the article list and in search. Readers see them only when the help center shows tags (Knowledge base → Settings).',
 };
 
 // tagOf writes a tag as the server stores it: trimmed, lower case, single spaces.
@@ -52,7 +54,7 @@ export function ArticleTagsField({ headingId, value, onChange }: ArticleTagsFiel
   const offered = (known.data?.items ?? []).map((item) => item.tag).filter((tag) => !value.includes(tag));
   return (
     <section className="kb-side-box" aria-labelledby={headingId}>
-      <h3 id={headingId}>{tagMessages.heading}</h3>
+      <div className="heading-with-tip"><h3 id={headingId}>{tagMessages.heading}</h3><HelpTip label={tagMessages.heading} text={tagMessages.why} /></div>
       {value.length > 0 && <ul className="kb-tag-chips" aria-label={tagMessages.heading}>
         {value.map((tag) => <li key={tag}><span>{tag}</span>
           <button type="button" aria-label={tagMessages.remove(tag)} onClick={() => onChange(value.filter((item) => item !== tag))}><span aria-hidden="true">×</span></button></li>)}

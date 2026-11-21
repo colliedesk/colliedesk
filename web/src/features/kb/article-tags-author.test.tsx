@@ -44,6 +44,15 @@ test('tags are added as the server writes them and removed one by one, and Save 
   expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-02T00:00:00Z', tags: ['refund policy'] });
 });
 
+test('the tags field keeps one short hint and explains what tags do in its tip', async () => {
+  serve({ ...base, [`GET ${articlePath}`]: () => json(200, article({ tags: [] })) });
+  open({ articleId: ids.article });
+  const input = await screen.findByRole('combobox', { name: 'Add a tag' });
+  expect(input).toHaveAccessibleDescription('Press Enter to add a tag.');
+  expect(screen.getByRole('button', { name: 'About Tags' })).toHaveAccessibleDescription(
+    'Tags group articles in the article list and in search. Readers see them only when the help center shows tags (Knowledge base → Settings).');
+});
+
 test('a tag over 40 characters says why and is not added, and the 20th tag is the last', async () => {
   const twenty = Array.from({ length: 19 }, (_, at) => `tag ${String(at + 1).padStart(2, '0')}`);
   serve({ ...base, [`GET ${articlePath}`]: () => json(200, article({ tags: twenty })) });

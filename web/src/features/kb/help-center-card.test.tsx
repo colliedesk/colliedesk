@@ -95,6 +95,15 @@ test('an admin shows article tags to readers with one click; only show_tags is s
   await waitFor(() => expect(calls.filter((call) => call.method === 'PUT').at(-1)?.body).toEqual({ enabled: false, title: '', locale: 'pt-BR', show_tags: false }));
 });
 
+test('the tags switch keeps one short line and explains the rest in its tip', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, off) });
+  open(true);
+  const box = await screen.findByRole('checkbox', { name: 'Show tags on article pages' });
+  expect(box).toHaveAccessibleDescription('Readers see an article\'s tags under its title. Search on the help center finds articles by their tags either way.');
+  expect(screen.getByRole('button', { name: 'About Show tags on article pages' })).toBeInTheDocument();
+  expect(screen.queryByText('Readers see an article\'s tags under its title. Search on the help center finds articles by their tags either way.', { selector: 'small' })).not.toBeInTheDocument();
+});
+
 test('an agent reads whether readers see tags', async () => {
   serve({ 'GET /api/v1/help-center': () => json(200, { ...off, show_tags: true }) });
   open(false);
