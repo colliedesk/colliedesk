@@ -92,6 +92,30 @@ center is on. While it is off, a banner at the top says so, with **Turn on in Se
 published article says "not public"; a draft says "agents only". With the help center on, the arrow at
 the end of a published article's row opens its public page.
 
+### Filters, columns and export
+
+**Filters** above the list narrows it further, and the number on the button says how many filters are on:
+
+- **Tags**: the tags of the articles, each with how many articles have it. With more than one ticked,
+  **Articles with** chooses **Any of these tags** or **All of these tags**.
+- **Author**: one or more team members.
+- **Created** and **Updated**: a day from and a day to, in the workspace's timezone; either end can stay empty.
+- **Translation**: **Missing a translation** or **Outdated translation**, in one **Language** or any.
+- **Include sub-collections**, inside a collection: also list the articles of the collections under it.
+
+**Clear filters** turns them all off. The filters are in the address too, and a
+[saved view](#saved-views) keeps them under a name.
+
+**Columns** chooses what each row shows besides the title: **Status**, **Collection**, **Author**,
+**Tags**, **Languages**, **Created**, **Updated** and **Votes** (the readers who answered "Was this
+article helpful?" with yes and with no). Your choice is kept for you, on every device you sign in on;
+**Reset columns** brings back the default (Status, Author, Tags and Updated).
+
+**Export CSV** downloads every article the filters keep, in the list's order, up to 50,000 rows:
+`title`, `address`, `collection`, `status`, `author`, `tags`, `languages`, `created_at` and
+`updated_at` (in your timezone, with its offset), `helpful_votes` and `not_helpful_votes`. `status` is
+`published`, `unpublished_changes`, `draft`, or the [review](#review-before-publishing) state of a draft.
+
 ### Saved views
 
 **Views** above the article list keeps a set of filters under a name, as the
@@ -461,7 +485,7 @@ the tags of conversations. A tag change is part of the article's history, its
 [unpublished changes](#unpublished-changes) until you publish them.
 
 The help center search and the help chat find an article by a tag word as they do by a title word.
-Readers see the tags on the article page only when **Show tags on articles** is on in the
+Readers see the tags on the article page only when **Show tags on article pages** is on in the
 [help center settings](#help-center-settings).
 
 ### Author
@@ -777,7 +801,7 @@ Open **Knowledge base → Settings**. It needs only
 role reads neither articles nor media. Everyone who opens it sees whether the help center is on. An admin can turn
 it on or off with **Publish the help center** and set its **Title** (empty uses the workspace name).
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
-published. **Show tags on articles** shows each article's published [tags](#tags) on its page; search
+published. **Show tags on article pages** shows each article's published [tags](#tags) on its page; search
 finds articles by tag either way.
 
 ### Brand
