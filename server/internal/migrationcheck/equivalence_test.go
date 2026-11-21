@@ -183,3 +183,56 @@ func TestCheckComparesTheSchemaEvenWhenAnotherMigrationHasAStyleProblem(t *testi
 		t.Fatalf("want both the style problem and the schema difference, got %v", err)
 	}
 }
+
+// A pull request may reflow an applied migration and add a new one; the new one is not a difference.
+func TestEquivalentAcceptsANewMigrationBesideAnEditedOne(t *testing.T) {
+	url := equivalenceDatabase(t)
+	before := []Migration{{Name: "1-notes.up.sql", SQL: "CREATE TABLE notes (id int);", Down: "DROP TABLE notes;"}}
+	after := []Migration{
+		{Name: "1-notes.up.sql", SQL: "-- Notes.\nCREATE TABLE notes (\n    id int\n);", Down: "DROP TABLE notes;"},
+		{Name: "2-tags.up.sql", SQL: "CREATE TABLE tags (id int);", Down: "DROP TABLE tags;"},
+	}
+	if err := Equivalent(context.Background(), url, before, after); err != nil {
+		t.Fatalf("Equivalent: %v", err)
+	}
+}
+
+// An install that applied the whole before chain runs only the names it lacks, in name order, even
+// one dated before the migrations it already has. It must end where a new install of after ends.
+func TestEquivalentComparesAnUpgradeFromTheBeforeChain(t *testing.T) {
+	url := equivalenceDatabase(t)
+	answer := func(n string) string {
+		return "CREATE OR REPLACE FUNCTION answer() RETURNS int LANGUAGE sql AS 'SELECT " + n + "';"
+	}
+	before := []Migration{
+		{Name: "1-notes.up.sql", SQL: "CREATE TABLE notes (id int);", Down: "DROP TABLE notes;"},
+		{Name: "3-answer.up.sql", SQL: answer("42"), Down: "DROP FUNCTION answer();"},
+		{Name: "4-answer-changed.up.sql", SQL: answer("43"), Down: answer("42")},
+	}
+	after := []Migration{
+		before[0],
+		// On a new install it runs before 3 and 4 replace it; on an upgrade it runs last and undoes 4.
+		{Name: "2-answer-first.up.sql", SQL: answer("42"), Down: "SELECT 1;"},
+		before[1],
+		before[2],
+	}
+	err := Equivalent(context.Background(), url, before, after)
+	if err == nil || !strings.Contains(err.Error(), "upgrade") || !strings.Contains(err.Error(), "43") {
+		t.Fatalf("want the upgrade path refused, got %v", err)
+	}
+}
+
+func TestEquivalentComparesColumnGrantsAndViewOptions(t *testing.T) {
+	url := equivalenceDatabase(t)
+	table := "CREATE TABLE notes (id int, body text); "
+	before := []Migration{{Name: "1-notes.up.sql", SQL: table + "GRANT SELECT (id) ON notes TO PUBLIC;"}}
+	after := []Migration{{Name: "1-notes.up.sql", SQL: table + "GRANT SELECT (id, body) ON notes TO PUBLIC;"}}
+	if err := Equivalent(context.Background(), url, before, after); err == nil || !strings.Contains(err.Error(), "body") {
+		t.Fatalf("want a column grant difference, got %v", err)
+	}
+	before = []Migration{{Name: "1-notes.up.sql", SQL: table + "CREATE VIEW note_ids WITH (security_invoker = true) AS SELECT id FROM notes;"}}
+	after = []Migration{{Name: "1-notes.up.sql", SQL: table + "CREATE VIEW note_ids AS SELECT id FROM notes;"}}
+	if err := Equivalent(context.Background(), url, before, after); err == nil || !strings.Contains(err.Error(), "note_ids") {
+		t.Fatalf("want a view option difference, got %v", err)
+	}
+}

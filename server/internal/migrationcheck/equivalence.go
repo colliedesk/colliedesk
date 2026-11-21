@@ -21,11 +21,14 @@ type Migration struct {
 // databaseURL, and fails at the first migration after which the two schemas differ: tables, columns,
 // constraints, indexes, policies, grants, functions, triggers, views, types, comments and rows.
 //
-// Both chains run in name order, as the server runs them, and are then rolled back newest first. After every name both chains have, the
-// schemas must match, except that the after chain may already have a function the before chain
-// defines later (a rewrite may move a helper earlier so older migrations can call it). After the
-// last migration, and once everything is rolled back, they must match exactly. Matching after every step is what lets a database that
-// applied part of the old chain finish with the new one.
+// Both chains run in name order, as the server runs them, and are then rolled back newest first.
+// After every name both chains have, nothing the before chain has may be missing or different in the
+// after chain. The after chain may be ahead: with a function the before chain defines later (a rewrite
+// may move a helper earlier so older migrations can call it) and, while a migration only it has is
+// applied, with anything that migration made. Matching after every step is what lets a database that
+// applied part of the old chain finish with the new one. Three states must match exactly: an install
+// that applied the whole before chain and then ran what it lacks, against a new install of the after
+// chain; and both chains once everything is rolled back.
 func Equivalent(ctx context.Context, databaseURL string, before, after []Migration) error {
 	suffix := fmt.Sprint(time.Now().UnixNano())
 	beforeChain, err := newChainSchema(ctx, databaseURL, "migration_before_"+suffix)
@@ -52,6 +55,14 @@ func Equivalent(ctx context.Context, databaseURL string, before, after []Migrati
 	}
 	sort.Strings(names)
 
+	// newApplied counts the migrations only the after chain has that are applied to it right now.
+	newApplied := 0
+	tolerance := func() difference {
+		if newApplied > 0 {
+			return additions
+		}
+		return earlierFunctions
+	}
 	for _, name := range names {
 		beforeSQL, inBefore := beforeByName[name]
 		afterSQL, inAfter := afterByName[name]
@@ -65,15 +76,19 @@ func Equivalent(ctx context.Context, databaseURL string, before, after []Migrati
 				return fmt.Errorf("after chain: %w", err)
 			}
 		}
+		if !inBefore {
+			newApplied++
+		}
 		if !inBefore || !inAfter {
 			continue
 		}
-		if err := compareChains(ctx, beforeChain, afterChain, true); err != nil {
+		if err := compareChains(ctx, beforeChain, afterChain, tolerance()); err != nil {
 			return fmt.Errorf("after %s the schemas differ:\n%w", name, err)
 		}
 	}
-	if err := compareChains(ctx, beforeChain, afterChain, false); err != nil {
-		return fmt.Errorf("after the last migration the schemas differ:\n%w", err)
+
+	if err := compareUpgrade(ctx, databaseURL, suffix, names, beforeByName, afterByName, afterChain); err != nil {
+		return err
 	}
 
 	// Roll both chains back, newest first, as TestMigrationAppliesUpDownAndUpAgain does.
@@ -93,15 +108,59 @@ func Equivalent(ctx context.Context, databaseURL string, before, after []Migrati
 				return fmt.Errorf("after chain: %w", err)
 			}
 		}
+		if !inBefore {
+			newApplied--
+		}
 		if !inBefore || !inAfter {
 			continue
 		}
-		if err := compareChains(ctx, beforeChain, afterChain, true); err != nil {
+		if err := compareChains(ctx, beforeChain, afterChain, tolerance()); err != nil {
 			return fmt.Errorf("after rolling back %s the schemas differ:\n%w", name, err)
 		}
 	}
-	if err := compareChains(ctx, beforeChain, afterChain, false); err != nil {
+	if err := compareChains(ctx, beforeChain, afterChain, exact); err != nil {
 		return fmt.Errorf("after rolling every migration back the schemas differ:\n%w", err)
+	}
+	return nil
+}
+
+// difference is what compareChains lets the second schema have that the first does not.
+type difference int
+
+const (
+	exact            difference = iota
+	earlierFunctions            // a function the first schema does not have yet
+	additions                   // anything the first schema does not have
+)
+
+// compareUpgrade builds what an install that applied the whole before chain gets from the after
+// chain: the server runs only the names it lacks, in name order, after everything it has. That must
+// end where a new install of the after chain ends.
+func compareUpgrade(ctx context.Context, databaseURL, suffix string, names []string,
+	beforeByName, afterByName map[string]string, afterChain *chainSchema) error {
+	upgraded, err := newChainSchema(ctx, databaseURL, "migration_upgrade_"+suffix)
+	if err != nil {
+		return err
+	}
+	defer upgraded.drop(ctx)
+	for _, name := range names {
+		if sql, ok := beforeByName[name]; ok {
+			if err := upgraded.apply(ctx, name, sql); err != nil {
+				return fmt.Errorf("upgrade: %w", err)
+			}
+		}
+	}
+	for _, name := range names {
+		if _, applied := beforeByName[name]; applied {
+			continue
+		}
+		if err := upgraded.apply(ctx, name, afterByName[name]); err != nil {
+			return fmt.Errorf("upgrade from the before chain: %w", err)
+		}
+	}
+	if err := compareChains(ctx, upgraded, afterChain, exact); err != nil {
+		return fmt.Errorf("an upgrade from the before chain ends with a different schema than a new install "+
+			"(- upgrade, + new install):\n%w", err)
 	}
 	return nil
 }
@@ -199,7 +258,7 @@ func (c *chainSchema) rollback(ctx context.Context, name, sql string) error {
 	})
 }
 
-func compareChains(ctx context.Context, before, after *chainSchema, allowEarlierFunctions bool) error {
+func compareChains(ctx context.Context, before, after *chainSchema, allowed difference) error {
 	beforeLines, err := before.snapshot(ctx)
 	if err != nil {
 		return err
@@ -232,7 +291,10 @@ func compareChains(ctx context.Context, before, after *chainSchema, allowEarlier
 		if inBefore[line] {
 			continue
 		}
-		if allowEarlierFunctions && strings.HasPrefix(line, "function ") && !beforeFunctions[functionSignature(line)] {
+		if allowed == additions && !beforeHas(line, inBefore, beforeFunctions) {
+			continue
+		}
+		if allowed == earlierFunctions && strings.HasPrefix(line, "function ") && !beforeFunctions[functionSignature(line)] {
 			continue
 		}
 		differences = append(differences, "+ "+line)
@@ -255,6 +317,34 @@ func compareChains(ctx context.Context, before, after *chainSchema, allowEarlier
 	return fmt.Errorf("%s(- only before, + only after)", report.String())
 }
 
+// beforeHas says whether the first schema has the object a line of the second describes, perhaps
+// with another definition: then the line is a change, not an addition. Objects are named by the line
+// up to its first space after the kind and name ("column notes.size", "policy notes.own", ...).
+func beforeHas(line string, inBefore map[string]bool, beforeFunctions map[string]bool) bool {
+	if strings.HasPrefix(line, "function ") {
+		return beforeFunctions[functionSignature(line)]
+	}
+	key := objectKey(line)
+	for other := range inBefore {
+		if objectKey(other) == key {
+			return true
+		}
+	}
+	return false
+}
+
+// objectKey is a line's kind and object name: its first words up to the object's name.
+func objectKey(line string) string {
+	fields := strings.Fields(line)
+	switch {
+	case len(fields) >= 3 && (fields[0] == "column" && fields[1] == "grant" || fields[0] == "default" || fields[0] == "schema"):
+		return strings.Join(fields[:3], " ")
+	case len(fields) >= 2:
+		return fields[0] + " " + fields[1]
+	}
+	return line
+}
+
 // functionSignature is "function name(arguments)", the part of a function line before its body.
 func functionSignature(line string) string {
 	if end := strings.Index(line, ") "); end >= 0 {
@@ -266,8 +356,9 @@ func functionSignature(line string) string {
 // catalogQueries each return one text line per object. $1 is the schema; names print unqualified
 // because the connection's search_path is the schema.
 var catalogQueries = []string{
-	`SELECT format('relation %s kind=%s rls=%s force=%s acl=%s', c.relname, c.relkind, c.relrowsecurity,
-		c.relforcerowsecurity, (SELECT string_agg(a::text, ',' ORDER BY a::text) FROM unnest(c.relacl) a))
+	`SELECT format('relation %s kind=%s rls=%s force=%s options=%s acl=%s', c.relname, c.relkind,
+		c.relrowsecurity, c.relforcerowsecurity, c.reloptions,
+		(SELECT string_agg(a::text, ',' ORDER BY a::text) FROM unnest(c.relacl) a))
 	FROM pg_class c WHERE c.relnamespace = $1::regnamespace AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')`,
 	`SELECT format('column %s.%s position=%s %s notnull=%s default=%s identity=%s generated=%s collation=%s',
 		c.relname, a.attname, a.attnum, format_type(a.atttypid, a.atttypmod), a.attnotnull,
@@ -276,11 +367,15 @@ var catalogQueries = []string{
 	LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 	WHERE c.relnamespace = $1::regnamespace AND c.relkind IN ('r', 'p', 'v', 'm', 'f') AND a.attnum > 0
 		AND NOT a.attisdropped`,
+	`SELECT format('column grant %s.%s %s', c.relname, a.attname,
+		(SELECT string_agg(g::text, ',' ORDER BY g::text) FROM unnest(a.attacl) g))
+	FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+	WHERE c.relnamespace = $1::regnamespace AND a.attacl IS NOT NULL AND a.attnum > 0 AND NOT a.attisdropped`,
 	`SELECT format('constraint %s.%s %s deferrable=%s deferred=%s', coalesce(c.relname, t.typname), k.conname,
 		pg_get_constraintdef(k.oid), k.condeferrable, k.condeferred)
 	FROM pg_constraint k LEFT JOIN pg_class c ON c.oid = k.conrelid LEFT JOIN pg_type t ON t.oid = k.contypid
 	WHERE k.connamespace = $1::regnamespace`,
-	`SELECT format('index %s', pg_get_indexdef(i.indexrelid))
+	`SELECT format('index %s %s', c.relname, pg_get_indexdef(i.indexrelid))
 	FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relnamespace = $1::regnamespace`,
 	`SELECT format('policy %s.%s %s %s roles=%s using=%s check=%s', tablename, policyname, permissive, cmd,
 		roles, qual, with_check)
@@ -288,7 +383,7 @@ var catalogQueries = []string{
 	`SELECT format('function %s(%s) %s acl=%s', p.proname, pg_get_function_identity_arguments(p.oid),
 		pg_get_functiondef(p.oid), (SELECT string_agg(a::text, ',' ORDER BY a::text) FROM unnest(p.proacl) a))
 	FROM pg_proc p WHERE p.pronamespace = $1::regnamespace AND p.prokind IN ('f', 'p')`,
-	`SELECT format('trigger %s enabled=%s', pg_get_triggerdef(t.oid), t.tgenabled)
+	`SELECT format('trigger %s.%s %s enabled=%s', c.relname, t.tgname, pg_get_triggerdef(t.oid), t.tgenabled)
 	FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
 	WHERE c.relnamespace = $1::regnamespace AND NOT t.tgisinternal`,
 	`SELECT format('view %s %s', c.relname, pg_get_viewdef(c.oid))

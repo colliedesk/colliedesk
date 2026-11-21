@@ -139,11 +139,19 @@ jobs:
       - name: go vet passes and the migrations are valid
         if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: server
-        # --base refuses an edited applied migration unless --database proves it builds the same schema
-        # (docs/internals/migrations.md); with no edited migration it reads git only.
+        # On a pull request, --base refuses an edited applied migration unless --database proves it
+        # builds the same schema (docs/internals/migrations.md); with no edited migration it reads git
+        # only. The base is the pull request's base commit, not the moving tip of main.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          git fetch --no-tags --depth=1 origin "${GITHUB_BASE_REF:-main}"
-          go vet ./... ../docs/... && go run ./cmd/migration-check --repo=.. --base=FETCH_HEAD --database="$TEST_DATABASE_URL"
+          go vet ./... ../docs/...
+          if [ -n "$BASE_SHA" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA"
+            go run ./cmd/migration-check --repo=.. --base="$BASE_SHA" --database="$TEST_DATABASE_URL"
+          else
+            go run ./cmd/migration-check --repo=..
+          fi
       # go-cache.yml saves main's entry on every push. A pull request whose go.sum main has not cached
       # yet (a new module) saves once, on its own ref, so its next runs skip compiling that module
       # (the Anthropic SDK: about 23 seconds per job). Only shard 7 uploads, so one job pays for it.

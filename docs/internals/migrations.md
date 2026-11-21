@@ -55,10 +55,19 @@ applied file never runs again on a database that applied it; it changes what a n
    go run ./cmd/migration-check --repo=.. --base=origin/main --database="$TEST_DATABASE_URL"
    ```
 
-   It runs the base chain and your chain into two new schemas. After every up migration, and after
-   every down migration on the way back, it compares tables, columns, constraints, indexes,
-   policies, grants, functions, triggers, views, types, comments and rows. It names the first
-   migration where the two differ. Without `--database`, an edited applied migration is refused.
+   It runs the base chain and your chain into new schemas and compares tables, columns,
+   constraints, indexes, policies, grants (column grants too), functions, triggers, views and
+   their options, types, comments and rows. It names the first migration where they differ.
+   - After every up migration, and every down migration on the way back, nothing the base chain
+     has may be missing or different. Your chain may be ahead only with a function defined earlier
+     or with what a migration the base does not have made.
+   - An install that applied the whole base chain, then ran the names it lacks, must end exactly
+     like a new install of your chain. This is the path Cloud and every upgraded install take;
+     check a release too with `--base=<tag>`.
+   - Once every migration is rolled back, both chains must match exactly.
+
+   Without `--database`, an edited applied migration is refused. CI runs this on every pull
+   request, against the pull request's base commit.
 4. Keep a `CREATE FUNCTION` body in an applied migration exactly as written. PostgreSQL stores the
    body text, so a reflowed body is a different function on new installs. Long lines in those bodies
    are allowed up to `storedFunctionBodies` in `server/internal/migrationcheck/style.go`; a new
