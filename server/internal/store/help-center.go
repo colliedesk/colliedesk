@@ -36,7 +36,7 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 		colors := &theme.Colors
 		var logoWidth, logoHeight *int
 		// The logo and favicon count only while they are images of the library outside its trash.
-		err := tx.QueryRow(ctx, `SELECT w.slug, w.name, COALESCE(h.enabled, false), COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0),
+		err := tx.QueryRow(ctx, `SELECT w.slug, w.name, w.timezone, COALESCE(h.enabled, false), COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0),
 				logo.id::text, logo.width, logo.height, icon.id::text, COALESCE(h.logo_alt, ''), h.linkback_url, h.contact_url, h.contact_phone,
 				h.color_primary, h.color_header, h.color_header_text, h.color_background, h.color_text, h.color_link, h.color_footer, h.body_font, h.heading_font,
 				COALESCE(h.custom_css, ''), COALESCE(d.hostname, ''), COALESCE(h.google_site_verification, ''), COALESCE(h.bing_site_verification, '')
@@ -45,7 +45,7 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 			LEFT JOIN kb_media logo ON logo.workspace_id=w.id AND logo.id=h.logo_media_id AND logo.kind='image' AND logo.deleted_at IS NULL
 			LEFT JOIN kb_media icon ON icon.workspace_id=w.id AND icon.id=h.favicon_media_id AND icon.kind='image' AND icon.deleted_at IS NULL
 			WHERE w.id=$1`, workspaceID).
-			Scan(&site.Slug, &site.Name, &got.enabled, &site.Title, &site.Locale, &site.ContentVersion,
+			Scan(&site.Slug, &site.Name, &site.Timezone, &got.enabled, &site.Title, &site.Locale, &site.ContentVersion,
 				&theme.LogoMediaID, &logoWidth, &logoHeight, &theme.FaviconMediaID, &theme.LogoAlt, &theme.LinkbackURL, &theme.ContactURL, &theme.ContactPhone,
 				&colors.Primary, &colors.Header, &colors.HeaderText, &colors.Background, &colors.Text, &colors.Link, &colors.Footer, &theme.BodyFont, &theme.HeadingFont,
 				&theme.CustomCSS, &site.CustomHost, &site.SearchConsole.Google, &site.SearchConsole.Bing)
@@ -260,7 +260,7 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID string, num
 				shownTranslation(`$3`)+` WHERE `+publicKBArticle+` AND a.number=$2`, workspaceID, number, locale), &body, &id, &seoTitle, &seoDescription, &showContents)
 		}
 		article.SEOTitle, article.SEODescription, article.ShowContents, article.Locale = seoTitle, seoDescription, showContents, locale
-		article.BodyMD = body
+		article.BodyMD, article.ID = body, id
 		if err != nil {
 			return article, err
 		}

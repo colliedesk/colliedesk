@@ -34,6 +34,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
+	"github.com/colliedesk/colliedesk/server/internal/pageview"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
@@ -164,6 +165,9 @@ type Config struct {
 	// settings and what they hold stay: the app hides them, the routes that use them answer 409 feature_off,
 	// and what keeps their data whole (webhooks, inbound mail, keep-alive) runs on (feature-switches.go).
 	SwitchedOff map[string]bool
+	// PageViews receives an event for each public help center page a reader is served (the view counter,
+	// kbviews); nil sends none. The process owns it, so it outlives a configuration reload.
+	PageViews pageview.Consumer
 	// Carry is the state the APIs of one process share across configurations (re-serve); nil makes a new one.
 	Carry *Carry
 	// OperatorOrigin is OPERATOR_ORIGIN: the operator console's own host. Empty serves it at Origin/operator.

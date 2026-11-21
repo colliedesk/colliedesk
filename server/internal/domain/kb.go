@@ -485,6 +485,8 @@ type HelpCenterSite struct {
 	Locale         string
 	ContentVersion int64
 	Trial          bool
+	// Timezone is the workspace's IANA timezone: the day an article view is counted on.
+	Timezone string
 	// Theme is the brand the pages show. A logo or favicon that is no longer an image of the library
 	// outside its trash is left out (nil), so a page never links an image it cannot serve.
 	Theme HelpCenterTheme
@@ -517,6 +519,8 @@ type PublicKBCollection struct {
 // PublicKBArticle is a published article as the help center shows it. BodyMD is empty in lists;
 // Excerpt is the start of the text, set only by a search.
 type PublicKBArticle struct {
+	// ID is set with the article page only: the article a view of the page counts for.
+	ID           string
 	Number       int64
 	Slug         string
 	Title        string

@@ -24,6 +24,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/kbhtml"
+	"github.com/colliedesk/colliedesk/server/internal/pageview"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -99,6 +100,11 @@ type Config struct {
 	// Additions says what the channel types add to the help center's pages now (an Ask AI link, an
 	// article's chat box); nil adds nothing.
 	Additions func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error)
+	// PageViews receives an event for each page a reader is served (pageview.IsReader); nil sends none.
+	PageViews pageview.Consumer
+	// Team reports whether request comes from a team member previewing the help center, whose views
+	// are not counted; nil means nobody does.
+	Team func(request *http.Request) bool
 }
 
 // ChannelRoute is a channel type's help center route with the handler the API built for it.

@@ -35,7 +35,7 @@ type Count struct {
 
 // Writer adds counts to the ones stored.
 type Writer interface {
-	WriteViews(ctx context.Context, counts []Count) error
+	WriteKBArticleViews(ctx context.Context, counts []Count) error
 }
 
 // Options are the counter's clock and key source; zero values use the real ones.
@@ -136,7 +136,7 @@ func (c *Counter) Flush(ctx context.Context) error {
 		key.Views = views
 		counts = append(counts, key)
 	}
-	err := c.writer.WriteViews(ctx, counts)
+	err := c.writer.WriteKBArticleViews(ctx, counts)
 	if err != nil {
 		c.mu.Lock()
 		for key, views := range taken {

@@ -17,7 +17,7 @@ type written struct {
 	fail   error
 }
 
-func (w *written) WriteViews(_ context.Context, counts []kbviews.Count) error {
+func (w *written) WriteKBArticleViews(_ context.Context, counts []kbviews.Count) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.fail != nil {

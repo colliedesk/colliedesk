@@ -33,7 +33,15 @@ func (a *API) newHelpCenter() *helpcenter.Site {
 		Domain: a.config.HelpCenterDomain, Version: a.config.Version, Allow: a.allowHelpCenter, AllowLookup: a.allowHelpCenterHostLookup,
 		AllowVote: a.allowHelpCenterVote, VoteKey: a.helpCenterVoteKey(),
 		Client:        func(request *http.Request) string { return clientAddress(request, a.config.TrustedProxies) },
-		ChannelRoutes: a.channelHelpCenterRoutes(), Additions: a.channelHelpCenterAdditions()})
+		ChannelRoutes: a.channelHelpCenterRoutes(), Additions: a.channelHelpCenterAdditions(),
+		PageViews: a.config.PageViews, Team: signedIn})
+}
+
+// signedIn reports whether request carries a Colliedesk session: a team member looking at the help
+// center. The cookie is not checked; a forged one only leaves that page view uncounted.
+func signedIn(request *http.Request) bool {
+	_, err := request.Cookie(sessionCookie)
+	return err == nil
 }
 
 // allowHelpCenter charges a help center request to its client address: every page to one limiter, and

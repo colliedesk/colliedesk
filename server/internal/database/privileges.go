@@ -100,6 +100,10 @@ const (
 	// stopped, or whose text was erased. Only keys leave the transaction; the stored bytes go through the
 	// scoped DiscardObject.
 	PrivilegeDraftFileSweep Privilege = "draft-file-sweep"
+	// PrivilegeKBArticleViews adds the help center article views counted in memory, for every
+	// workspace, to kb_article_views in one statement; each row names its own workspace and article, a
+	// count whose article is gone is skipped, and nothing leaves the transaction.
+	PrivilegeKBArticleViews Privilege = "kb-article-views"
 	// PrivilegeBillingReconcile reads every workspace id and every stored Polar subscription, so the
 	// operator command can compare them with Polar's list. Writes go through the scoped path.
 	PrivilegeBillingReconcile Privilege = "billing-reconcile"
