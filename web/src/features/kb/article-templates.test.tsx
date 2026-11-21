@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, expect, test, vi } from 'vitest';
 import { ArticleRoute } from './article-editor';
 import { KnowledgeRoute } from './knowledge-page';
-import { article, change, collection, collections, ids, json, me, refusal, serve, summary } from './kb.test.fixture';
+import { article, change, collection, collections, ids, json, me, refusal, serve, summary, noStats } from './kb.test.fixture';
 
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate, useBlocker: vi.fn() }));
@@ -25,7 +25,7 @@ const base = {
   'GET /api/v1/kb/templates': () => json(200, { items: [howTo, faq] }),
   [`GET /api/v1/kb/templates/${howTo.id}`]: () => json(200, howTo),
   [`GET /api/v1/kb/templates/${faq.id}`]: () => json(200, faq),
-  [`GET /api/v1/kb/articles/${ids.article}/votes`]: () => json(200, { article_id: ids.article, helpful: 0, not_helpful: 0, imported: { helpful: 0, not_helpful: 0 }, votes: [], resets: [] }),
+  [`GET /api/v1/kb/articles/${ids.article}/votes`]: () => json(200, { article_id: ids.article, helpful: 0, not_helpful: 0, imported: { helpful: 0, not_helpful: 0 }, votes: [], resets: [] }), [`GET /api/v1/kb/articles/${ids.article}/stats`]: () => json(200, noStats),
 };
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const editor = (props: { articleId?: string; collectionId?: string; templateId?: string }) =>

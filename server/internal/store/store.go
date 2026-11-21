@@ -30,6 +30,9 @@ type Store struct {
 	paidStorage int64
 	// objects is attachment storage, used to verify and discard objects; nil skips both.
 	objects attachments.Storage
+	// appHost and helpCenterDomain name the help center hosts a reply's links are read on; see
+	// WithHelpCenterHosts.
+	appHost, helpCenterDomain string
 }
 
 func New(pool *pgxpool.Pool) *Store {

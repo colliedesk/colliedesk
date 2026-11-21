@@ -413,6 +413,12 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	article.AIDraftsThisMonth = &drafts
+	stats, err := a.store.KBArticleStats(request.Context(), principal(request).Workspace.ID, article.ID, a.now(), "", "")
+	if err != nil {
+		writeKBError(response, err)
+		return
+	}
+	article.Views30d, article.Uses30d = &stats.Views, &stats.Uses
 	writeJSON(response, http.StatusOK, article)
 }
 

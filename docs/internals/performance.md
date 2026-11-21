@@ -257,13 +257,17 @@ binary) holds the background compute of one workspace's results page to 2 s, bes
 waits for it (the page reads a stored snapshot), but it holds a connection. The fixture is a busy team:
 5,000 Colliedesk conversations over 30 days (a customer message and a reply each, half resolved) and
 20,000 imported Freshdesk tickets in the baseline's window, with stats and time logged on a quarter.
-Measured on the dev host: current numbers 130 ms, baseline 550 to 590 ms; seeding takes about 5 s. The
-baseline cost is mostly writing the ~65,000 rows of the conversations behind its numbers; a foreign
-key from those rows to conversations tripled it and was dropped (`docs/internals/results.md`). On the
-same data the page's read (`store.ReadResults`: the state row and one snapshot of each kind) is held to
-20 ms p95 over 200 calls (1.5 ms locally) and the list a number opens (`result=` on the 5,000
-conversations of the 30-day volume, a page of 50) to the inbox's 100 ms p95 (5 ms locally); one seed
-serves all three. Do not widen any of them.
+The help center has 200 published articles read in two languages on each of the 30 days (12,000 view
+rows) and a link in every Colliedesk reply, a quarter of them also to article 1.
+Measured on the dev host: current numbers 130 to 175 ms, baseline 550 to 790 ms; seeding takes about
+5 s. The baseline cost is mostly writing the ~65,000 rows of the conversations behind its numbers; a
+foreign key from those rows to conversations tripled it and was dropped (`docs/internals/results.md`).
+On the same data the page's read (`store.ReadResults`: the state row, one snapshot of each kind and the
+help center section, read live) is held to 20 ms p95 over 200 calls (9.4 ms locally, 1.5 ms before the
+help center), the stats of the most used article (`store.KBArticleStats`, the editor's box and the
+replies behind "Used in replies") to 20 ms p95 (5 ms locally) and the list a number opens (`result=` on
+the 5,000 conversations of the 30-day volume, a page of 50) to the inbox's 100 ms p95 (9 ms locally);
+one seed serves all four. Do not widen any of them.
 
 ## Milestone checks on the message path
 

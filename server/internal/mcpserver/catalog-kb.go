@@ -50,15 +50,21 @@ const (
 		`"has_draft":{"type":"boolean","description":"Unpublished changes wait in a draft; colliedesk_kb_article_get shows them."},` +
 		`"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}},` + kbVisibilityOutput + `}}`
 
-	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from"],"properties":{` +
+	// kbArticleSchemaOpen is an article without its closing braces, so one read alone can add its numbers.
+	kbArticleSchemaOpen = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from"],"properties":{` +
 		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
 		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"has_draft":{"type":"boolean"},"draft":` + kbArticleDraftSchema + `,"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
 		kbShowContentsProperty + `,"in_trash":{"type":"boolean"},"has_source_html":{"type":"boolean","description":"An import kept the original HTML; it is in the workspace export."},` +
 		`"ai_exclusion":{"type":["object","null"],"description":"Set while AI may not read the article (colliedesk_kb_article_ai_exclude); null while it may.","required":["at","by"],"properties":{"at":{"type":"string"},"by":{"type":["string","null"]}}},` +
-		`"translations":{"type":"array","description":"Its versions in the help center's other languages, without their text (in the trash too). Read one with colliedesk_kb_translation_get.","items":` + kbTranslationSummarySchema + `},"attachments":` + kbAttachmentsSchema + `,` + kbVisibilityOutput + `,` + kbVisibilityFromOutput + `}}`
+		`"translations":{"type":"array","description":"Its versions in the help center's other languages, without their text (in the trash too). Read one with colliedesk_kb_translation_get.","items":` + kbTranslationSummarySchema + `},"attachments":` + kbAttachmentsSchema + `,` + kbVisibilityOutput + `,` + kbVisibilityFromOutput
+	kbArticleSchema = kbArticleSchemaOpen + `}}`
 
 	kbArticleOutput = `{"type":"object","required":["article"],"properties":{"article":` + kbArticleSchema + `}}`
+	// kbArticleGetOutput adds the last 30 days of help center views and reply uses to one article read alone.
+	kbArticleGetOutput = `{"type":"object","required":["article"],"properties":{"article":` + kbArticleSchemaOpen + `,` +
+		`"views_30d":{"type":"integer","description":"Help center views in the last 30 days; per day with colliedesk_kb_article_stats."},` +
+		`"uses_30d":{"type":"integer","description":"Sent replies that linked it or were an AI draft quoting it, last 30 days."}}}}}`
 
 	kbCollectionSchema = `{"type":"object","required":["id","parent_id","name","slug","description","position","article_count","updated_at","default_template_id","visibility","effective_visibility"],"properties":{` +
 		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"default_template_id":{"type":["string","null"],"description":"The template every new article in it starts from (colliedesk_kb_templates_list); null: they start empty."},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
@@ -194,7 +200,7 @@ func kbArticleGetSpec() Spec {
 			"\n\n" + kbTextNotice,
 		REST:   []string{"GET /api/v1/kb/articles/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["article_id"],"properties":{` + kbArticleIDProperty + `}}`,
-		Output: kbArticleOutput,
+		Output: kbArticleGetOutput,
 		run:    kbArticleGet,
 	}
 }

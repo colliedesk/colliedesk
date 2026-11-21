@@ -23,7 +23,18 @@ const snapshotSchema = z.object({
   windows: z.object({ '30d': resultsWindowSchema, '7d': resultsWindowSchema }),
 });
 const hoursSavedSchema = z.object({ hours: z.number(), conversations: count, median_handle_minutes: count }).nullable();
+// The help center block is read live: article views next to the conversations opened, per week and per article.
+const day = z.string().date();
+const helpCenterWindowSchema = z.object({
+  from: date, to: date, views: count, requests: count, score: z.number().nullable(),
+  weeks: z.array(z.object({ from: date, to: date, first_day: day, last_day: day, views: count, requests: count, score: z.number().nullable() })),
+  days: z.array(z.object({ day, views: count, requests: count })),
+  articles: z.array(z.object({ id: z.string().uuid(), number: count, title: z.string(), views: count, helpful: count, votes: count, helpful_percent: count.nullable(), uses: count })),
+  articles_total: count,
+});
+const helpCenterSchema = z.object({ timezone: z.string(), windows: z.object({ '30d': helpCenterWindowSchema, '7d': helpCenterWindowSchema }) });
 export const resultsSchema = z.object({
+  help_center: helpCenterSchema,
   current: snapshotSchema.nullable(), baseline: snapshotSchema.nullable(), baseline_state: z.enum(['none', 'computing', 'ready']),
   hours_saved: z.object({ '30d': hoursSavedSchema.optional(), '7d': hoursSavedSchema.optional() }),
   error: z.object({ message: z.string(), at: date }).nullable(),
@@ -44,6 +55,7 @@ const weeklySchema = z.object({ weekly: z.boolean() }) satisfies z.ZodType<JsonR
 export type Results = z.infer<typeof resultsSchema>;
 export type ResultsSnapshot = z.infer<typeof snapshotSchema>;
 export type ResultsWindow = z.infer<typeof resultsWindowSchema>;
+export type HelpCenterWindow = z.infer<typeof helpCenterWindowSchema>;
 export type WindowKey = '30d' | '7d';
 export type ShareLink = z.infer<typeof shareLinkSchema>;
 export type SharedResults = z.infer<typeof sharedResultsSchema>;

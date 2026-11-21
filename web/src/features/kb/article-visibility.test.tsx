@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { ArticleRoute } from './article-editor';
-import { article, collections, ids, json, me, refusal, serve } from './kb.test.fixture';
+import { article, collections, ids, json, me, refusal, serve, noStats } from './kb.test.fixture';
 
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate, useBlocker: vi.fn() }));
@@ -16,7 +16,7 @@ function open(props: { articleId?: string; collectionId?: string }) {
 const path = `/api/v1/kb/articles/${ids.article}`;
 const noVotes = { article_id: ids.article, helpful: 0, not_helpful: 0, imported: { helpful: 0, not_helpful: 0 }, votes: [], resets: [] };
 const base = { 'GET /api/v1/auth/me': () => json(200, me), 'GET /api/v1/kb/collections': () => json(200, { items: collections }),
-  [`GET ${path}/votes`]: () => json(200, noVotes) };
+  [`GET ${path}/votes`]: () => json(200, noVotes), [`GET ${path}/stats`]: () => json(200, noStats) };
 
 test('who can see this offers three choices with one line each, and a saved article applies the choice at once', async () => {
   const calls = serve({ ...base, [`GET ${path}`]: () => json(200, article({ status: 'published' })),

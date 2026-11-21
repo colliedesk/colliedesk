@@ -177,7 +177,7 @@ func (w *Worker) composeWeekly(content *weeklyContent, timezone, to string, now 
 // WeeklyText is the weekly email: the last 30 days next to the baseline's, last week's volume and the AI
 // drafts. Totals only: no customer names, subjects or message text.
 func WeeklyText(workspace string, page Page, timezone, origin string, now time.Time) (string, string) {
-	loc := location(timezone)
+	loc := Location(timezone)
 	day := func(at time.Time) string { return at.In(loc).Format("Jan 2") }
 	span := func(r Range) string { return day(r.From) + " – " + day(r.To) }
 	current := page.Current.Windows["30d"]

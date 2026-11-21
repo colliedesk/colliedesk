@@ -119,6 +119,7 @@ var toolDocs = map[string]string{
 	"colliedesk_kb_article_draft_publish":            "Puts the unpublished changes of a published article or translation on the help center",
 	"colliedesk_kb_article_votes_get":                "Reads an article's \"Was this article helpful?\" counts, each reader's vote and what they said was missing",
 	"colliedesk_kb_article_votes_reset":              "Starts an article's helpful count again from 0; the earlier counts stay under resets",
+	"colliedesk_kb_article_stats":                    "Counts an article's help center views and the sent replies that used it, per day, with those replies' conversations",
 	"colliedesk_kb_article_send_for_review":          "Saves an article's or translation's text and asks teammates who may publish to approve it",
 	"colliedesk_kb_reviews_list":                     "Lists the reviews waiting for you, or the reviews of one article",
 	"colliedesk_kb_review_get":                       "Reads a review with the text proposed, what is live and the line diff between them",
