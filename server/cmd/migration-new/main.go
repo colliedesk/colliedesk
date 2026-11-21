@@ -57,6 +57,7 @@ func run(args []string, output io.Writer, now func() time.Time) error {
 			return fmt.Errorf("close %s: %w", filepath.Base(path), err)
 		}
 	}
-	_, err = fmt.Fprintf(output, "created server/migrations/%s.{up,down}.sql\n", stem)
+	_, err = fmt.Fprintf(output, "created server/migrations/%s.{up,down}.sql\n"+
+		"write them by docs/internals/migrations.md, then run: go run ./cmd/migration-check --repo=..\n", stem)
 	return err
 }

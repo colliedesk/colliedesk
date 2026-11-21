@@ -10,7 +10,9 @@ BEGIN
     RETURN NULL;
 END
 $$;
-CREATE OR REPLACE FUNCTION conversations_refresh_last_public(workspace_ids uuid[], conversation_ids uuid[]) RETURNS void LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION conversations_refresh_last_public(
+    workspace_ids uuid[], conversation_ids uuid[]
+) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
     PERFORM 1 FROM conversations c
         WHERE (c.workspace_id, c.id) IN (SELECT * FROM unnest(workspace_ids, conversation_ids))
@@ -29,5 +31,6 @@ END
 $$;
 ALTER TABLE conversation_thread_keys DROP COLUMN message_id;
 ALTER TABLE conversations DROP COLUMN merged_into_id;
-ALTER TABLE messages DROP COLUMN other_contact_id, DROP COLUMN detached_at, DROP COLUMN detached_by_agent_id;
+ALTER TABLE messages DROP COLUMN other_contact_id, DROP COLUMN detached_at,
+    DROP COLUMN detached_by_agent_id;
 DROP TABLE message_moves;

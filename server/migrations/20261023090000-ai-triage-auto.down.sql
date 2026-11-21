@@ -1,6 +1,7 @@
 -- What AI applied stays on the conversations; only the record of it and the setting go.
 DROP INDEX ai_triage_auto_applied;
-UPDATE ai_triage_suggestions SET outcome = CASE WHEN applied <> '{}' THEN 'partly_accepted' ELSE 'dismissed' END
+UPDATE ai_triage_suggestions SET outcome = CASE WHEN applied <> '{}' THEN 'partly_accepted'
+    ELSE 'dismissed' END
     WHERE outcome IN ('auto_applied', 'undone');
 ALTER TABLE ai_triage_suggestions
     DROP CONSTRAINT ai_triage_suggestions_outcome_check,

@@ -1,14 +1,18 @@
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM channel_outbox WHERE thread_item_id IS NOT NULL) OR EXISTS (SELECT 1 FROM channel_sent_ids WHERE thread_item_id IS NOT NULL) THEN
-        RAISE EXCEPTION 'notices sent in chats are stored: this migration cannot go down without losing them';
+    IF EXISTS (SELECT 1 FROM channel_outbox WHERE thread_item_id IS NOT NULL)
+            OR EXISTS (SELECT 1 FROM channel_sent_ids WHERE thread_item_id IS NOT NULL) THEN
+        RAISE EXCEPTION 'notices sent in chats are stored: '
+            'this migration cannot go down without losing them';
     END IF;
 END
 $$;
 ALTER TABLE channel_sent_ids DROP COLUMN thread_item_id, ALTER COLUMN message_id SET NOT NULL;
 DROP INDEX channel_outbox_thread_item_idx;
 ALTER TABLE channel_outbox DROP COLUMN thread_item_id, ALTER COLUMN message_id SET NOT NULL;
-CREATE OR REPLACE FUNCTION conversations_refresh_last_public(workspace_ids uuid[], conversation_ids uuid[]) RETURNS void LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION conversations_refresh_last_public(
+    workspace_ids uuid[], conversation_ids uuid[]
+) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
     PERFORM 1 FROM conversations c
         WHERE (c.workspace_id, c.id) IN (SELECT * FROM unnest(workspace_ids, conversation_ids))

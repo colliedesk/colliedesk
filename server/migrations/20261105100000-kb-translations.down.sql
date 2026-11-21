@@ -1,6 +1,6 @@
--- Back to translations that are only kept and exported. Every translation row stays with its title and
--- text (those in the trash too); its slug, status, search fields, flags, versions, the help center's
--- languages and the collections' translated names go.
+-- Back to translations that are only kept and exported. Every translation row stays with its title
+-- and text (those in the trash too); its slug, status, search fields, flags, versions, the help
+-- center's languages and the collections' translated names go.
 DROP TRIGGER ai_retrieval_translation_updated ON kb_article_translations;
 CREATE OR REPLACE FUNCTION ai_retrieval_translation_changed() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -8,8 +8,10 @@ BEGIN
     RETURN NULL;
 END
 $$;
-CREATE TRIGGER ai_retrieval_translation_updated AFTER UPDATE OF title, body_md ON kb_article_translations
-    FOR EACH ROW WHEN ((OLD.title, OLD.body_md) IS DISTINCT FROM (NEW.title, NEW.body_md)) EXECUTE FUNCTION ai_retrieval_translation_changed();
+CREATE TRIGGER ai_retrieval_translation_updated
+    AFTER UPDATE OF title, body_md ON kb_article_translations
+    FOR EACH ROW WHEN ((OLD.title, OLD.body_md) IS DISTINCT FROM (NEW.title, NEW.body_md))
+    EXECUTE FUNCTION ai_retrieval_translation_changed();
 -- The older builder reads every translation: queue the articles that have one.
 INSERT INTO ai_retrieval_pending(workspace_id, kb_article_id)
     SELECT DISTINCT t.workspace_id, t.article_id FROM kb_article_translations t

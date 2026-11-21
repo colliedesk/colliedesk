@@ -12,7 +12,10 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE contype = 'f' AND confrelid = 'messages'::regclass
-          AND conindid = (SELECT conindid FROM pg_constraint WHERE conrelid = 'messages'::regclass AND conname = 'messages_workspace_id_id_key')
+          AND conindid = (
+              SELECT conindid FROM pg_constraint
+              WHERE conrelid = 'messages'::regclass AND conname = 'messages_workspace_id_id_key'
+          )
     ) THEN
         ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_workspace_id_id_key;
     END IF;

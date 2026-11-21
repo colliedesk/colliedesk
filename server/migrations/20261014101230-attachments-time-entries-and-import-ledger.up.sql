@@ -1,9 +1,15 @@
+-- Attachments, time entries and the import ledger, plus the message, conversation and contact
+-- columns they need.
+--
 -- This migration owns the composite key that lets attachments reference a message of the same
 -- workspace. The email channel migration adds the same key when it runs first (databases that got
 -- main before this migration), so add it only when it is missing.
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'messages'::regclass AND conname = 'messages_workspace_id_id_key') THEN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'messages'::regclass AND conname = 'messages_workspace_id_id_key'
+    ) THEN
         ALTER TABLE messages ADD CONSTRAINT messages_workspace_id_id_key UNIQUE (workspace_id, id);
     END IF;
 END $$;
@@ -38,8 +44,10 @@ CREATE TABLE time_entries (
     billable boolean NOT NULL,
     executed_at timestamptz NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
-    FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (agent_id)
+    FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, agent_id) REFERENCES agents(workspace_id, id)
+        ON DELETE SET NULL (agent_id)
 );
 
 CREATE TABLE import_items (

@@ -159,12 +159,15 @@ old_volume=$(data_volume)
 compose_mode=$(mode "$TMP/compose.yaml")
 
 # The fixture: every migration of $BASE_TAG in order, as the owner and with the setting
-# `collie migrate` uses, each followed by its fixture file, in one psql session. Migration files
-# never change once merged (migration-check), so the files of this checkout are the ones it ran.
+# `collie migrate` uses, each followed by its fixture file, in one psql session. The files come from
+# $BASE_TAG itself: an applied migration may be edited for readability when it builds the same schema
+# (docs/internals/migrations.md), so this checkout's copy is not always the text that release ran.
 git -C "$ROOT" ls-tree --name-only "$BASE_TAG" server/migrations/ | sed -n 's#^server/migrations/\(.*\.up\.sql\)$#\1#p' >"$TMP/base-migrations"
 [ -s "$TMP/base-migrations" ] || fail "cannot list the migrations of $BASE_TAG"
+mkdir "$TMP/base"
 while read -r name; do
-  [ -f "$ROOT/server/migrations/$name" ] || fail "migration $name of $BASE_TAG is not in this checkout"
+  git -C "$ROOT" show "$BASE_TAG:server/migrations/$name" >"$TMP/base/$name" ||
+    fail "cannot read migration $name of $BASE_TAG"
 done <"$TMP/base-migrations"
 step "building the fixture on the $(grep -c . "$TMP/base-migrations") migrations of $BASE_TAG"
 {
@@ -172,7 +175,7 @@ step "building the fixture on the $(grep -c . "$TMP/base-migrations") migrations
   echo 'CREATE TABLE schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());'
   echo 'RESET ROLE;'
   while read -r name; do
-    file=$ROOT/server/migrations/$name
+    file=$TMP/base/$name
     echo 'BEGIN;'
     echo 'SET LOCAL ROLE colliedesk;'
     echo "SELECT set_config('app.privileged', 'on', true) \\g /dev/null"

@@ -257,10 +257,13 @@ one call:
    A plain `GRANT SELECT, INSERT` restricts nothing, because it adds to the default privileges.
    `limit_app_role` revokes first, then grants exactly the listed privileges.
 
-`migration-check` refuses a migration after `20261121132937-workspace-table-security` that writes
-`CREATE`, `ALTER` or `DROP POLICY`, `ROW LEVEL SECURITY`, `pg_policies` or `app.privileged` by hand
-(comments do not count). If a table needs a
-shape the helpers do not give, add a helper in a migration and test it.
+The helpers are defined in `20261014135949-table-security-helpers`, before row-level security is set
+up, so every migration calls them, the oldest ones too. `migration-check` refuses an up migration that
+writes `CREATE`, `ALTER` or `DROP POLICY`, `ROW LEVEL SECURITY`, `pg_policies` or `app.privileged` by
+hand (comments do not count); only that migration and `20261014135950-workspace-row-level-security`,
+which secures `workspaces` itself, spell it out. If a table needs a shape the helpers do not give, add
+a helper in a migration and test it. The rest of a migration's layout is in
+[migrations.md](migrations.md).
 
 ## Guards
 

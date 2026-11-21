@@ -1,6 +1,11 @@
+-- The email channel: a per-workspace support address with its inbound secret and domain check,
+-- the columns that tie messages and conversations to email threads, the indexes behind the inbound
+-- rate limits, and the outbox that queues outgoing replies.
+
 CREATE TABLE email_channels (
     workspace_id uuid PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
-    support_address text NOT NULL CHECK (support_address = lower(support_address) AND support_address LIKE '_%@_%'),
+    support_address text NOT NULL
+        CHECK (support_address = lower(support_address) AND support_address LIKE '_%@_%'),
     secret_key_id text UNIQUE,
     secret_hash bytea,
     secret_rotated_at timestamptz,
@@ -17,11 +22,15 @@ ALTER TABLE messages
     ADD COLUMN email_message_id text,
     ADD COLUMN email_meta jsonb;
 
--- The attachment and import migration that precedes this one owns this key. Add it only when this
--- migration runs without it, so both orders apply cleanly; the down migration leaves it to its owner.
+-- The attachment and import migration that precedes this one owns this key. Add it only when
+-- this migration runs without it, so both orders apply cleanly; the down migration leaves it to
+-- its owner.
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'messages'::regclass AND conname = 'messages_workspace_id_id_key') THEN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'messages'::regclass AND conname = 'messages_workspace_id_id_key'
+    ) THEN
         ALTER TABLE messages ADD CONSTRAINT messages_workspace_id_id_key UNIQUE (workspace_id, id);
     END IF;
 END $$;
@@ -54,4 +63,5 @@ CREATE TABLE email_outbox (
 );
 
 CREATE INDEX email_outbox_due_idx ON email_outbox(next_attempt_at) WHERE status = 'queued';
-CREATE INDEX email_outbox_workspace_sent_idx ON email_outbox(workspace_id, sent_at) WHERE status = 'sent';
+CREATE INDEX email_outbox_workspace_sent_idx ON email_outbox(workspace_id, sent_at)
+    WHERE status = 'sent';
