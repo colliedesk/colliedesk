@@ -48,6 +48,24 @@ func saveKBTranslationDraft(ctx context.Context, tx pgx.Tx, workspaceID string, 
 	return recordKBTranslationDraft(ctx, tx, workspaceID, actor, articleID, locale, !change.Autosave)
 }
 
+// restoreKBTranslationDraft writes the text of version into the draft of a published translation, so
+// the help center keeps the published text until someone publishes it.
+func restoreKBTranslationDraft(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, articleID, locale string, version int) (domain.KBArticleTranslation, error) {
+	tag, err := tx.Exec(ctx, `INSERT INTO kb_article_drafts(workspace_id,article_id,locale,title,slug,body_md,seo_title,seo_description,updated_by_agent_id,created_at,updated_at)
+		SELECT v.workspace_id,v.article_id,v.locale,v.title,v.slug,v.body_md,v.seo_title,v.seo_description,$5,clock_timestamp(),clock_timestamp()
+		FROM kb_article_translation_versions v WHERE v.workspace_id=$1 AND v.article_id=$2 AND v.locale=$3 AND v.version=$4
+		ON CONFLICT (workspace_id,article_id,locale) WHERE locale IS NOT NULL DO UPDATE SET title=EXCLUDED.title, slug=EXCLUDED.slug, body_md=EXCLUDED.body_md,
+			seo_title=EXCLUDED.seo_title, seo_description=EXCLUDED.seo_description, updated_by_agent_id=EXCLUDED.updated_by_agent_id, updated_at=EXCLUDED.updated_at`,
+		workspaceID, articleID, locale, version, optionalID(actor.AgentID))
+	if err != nil {
+		return domain.KBArticleTranslation{}, fmt.Errorf("restore knowledge base translation version into its draft: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.KBArticleTranslation{}, domain.ErrKBTranslationVersionNotFound
+	}
+	return recordKBTranslationDraft(ctx, tx, workspaceID, actor, articleID, locale, true)
+}
+
 // recordKBTranslationDraft records the translation's draft as a version of kind draft, notes its
 // writer, links the media it names, settles an open review of the translation and returns it. An
 // autosave (versioned false) records no version: the next save does.

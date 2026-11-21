@@ -136,3 +136,48 @@ func TestSavingAPublishedTranslationKeepsTheHelpCenterOnThePublishedText(t *test
 		t.Errorf("versions after discard = %s, want draft, edit, draft, draft, create", got)
 	}
 }
+
+// Restoring an older version of a published translation puts that text in its draft; the trash keeps
+// the draft; unpublishing takes the draft's text into the translation, so no change is lost.
+func TestARestoreOfAPublishedTranslationWaitsInItsDraftUntilUnpublished(t *testing.T) {
+	f := newLanguagesFixture(t)
+	id := f.translated.ID
+	var live kbDraftedTranslation
+	kbPublishTranslationChange(t, f.api, f.admin, id, "fr", map[string]any{"updated_at": f.frSeen, "body_md": "Toute carte convient : mélèze."}, &live)
+
+	var restored kbDraftedTranslation
+	response := postWithKey(t, f.api, f.admin, kbTranslationPath(id, "fr", "/versions/1/restore"), "restore-into-draft", map[string]any{"updated_at": live.UpdatedAt})
+	if response.Code != http.StatusOK {
+		t.Fatalf("restore status=%d body=%s", response.Code, response.Body.String())
+	}
+	decode(t, response, &restored)
+	if restored.BodyMD != "Toute carte convient : mélèze." || restored.Status != "published" || !restored.HasDraft || restored.Draft == nil ||
+		!strings.HasPrefix(restored.Draft.BodyMD, "Toute carte convient : sapinette.") || restored.UpdatedAt == live.UpdatedAt {
+		t.Fatalf("restored = %+v draft=%+v", restored.kbTranslationView, restored.Draft)
+	}
+	if got := kbTranslationVersionKinds(t, f.api, f.admin, id, "fr"); got != "draft,edit,draft,create" {
+		t.Errorf("versions = %s, want draft, edit, draft, create", got)
+	}
+	wantPage(t, visit(f.site, f.base+"/fr/a/1-payer-par-carte", "198.51.100.93"), http.StatusOK, []string{"mélèze"}, []string{"sapinette"})
+
+	kbCall(t, f.api, http.MethodDelete, kbTranslationPath(id, "fr", "?updated_at="+url.QueryEscape(restored.UpdatedAt)), nil, f.admin, http.StatusNoContent, nil)
+	trashed := kbGetTranslation(t, f.api, f.admin, id, "fr")
+	var back kbDraftedTranslation
+	response = postWithKey(t, f.api, f.admin, kbTranslationPath(id, "fr", "/restore"), "undelete-with-draft", map[string]any{"updated_at": trashed.UpdatedAt})
+	if response.Code != http.StatusOK {
+		t.Fatalf("undelete status=%d body=%s", response.Code, response.Body.String())
+	}
+	decode(t, response, &back)
+	if back.InTrash || !back.HasDraft || back.Draft == nil || !strings.HasPrefix(back.Draft.BodyMD, "Toute carte convient : sapinette.") || back.BodyMD != "Toute carte convient : mélèze." {
+		t.Fatalf("out of the trash = %+v draft=%+v", back.kbTranslationView, back.Draft)
+	}
+
+	var unpublished kbDraftedTranslation
+	kbCall(t, f.api, http.MethodPatch, kbTranslationPath(id, "fr"), map[string]any{"updated_at": back.UpdatedAt, "status": "draft"}, f.admin, http.StatusOK, &unpublished)
+	if unpublished.Status != "draft" || unpublished.HasDraft || unpublished.Draft != nil || !strings.HasPrefix(unpublished.BodyMD, "Toute carte convient : sapinette.") {
+		t.Fatalf("unpublished = %+v draft=%+v", unpublished.kbTranslationView, unpublished.Draft)
+	}
+	if page := visit(f.site, f.base+"/fr/a/1-payer-par-carte", "198.51.100.93"); page.Code == http.StatusOK && strings.Contains(page.Body.String(), "sapinette") {
+		t.Errorf("the unpublished translation is on the help center:\n%s", page.Body.String())
+	}
+}

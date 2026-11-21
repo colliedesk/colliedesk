@@ -596,14 +596,19 @@ func (s *Store) KBTranslationVersions(ctx context.Context, workspaceID, articleI
 }
 
 // RestoreKBTranslationVersion makes the title, slug, text and search fields of version current as a
-// new version; the status and the outdated flag stay.
+// new version; the status and the outdated flag stay. A published translation takes them into its
+// draft instead.
 func (s *Store) RestoreKBTranslationVersion(ctx context.Context, workspaceID string, actor Actor, articleID, locale string, version int, seen time.Time) (domain.KBArticleTranslation, error) {
 	if err := translationKey(articleID, locale); err != nil {
 		return domain.KBArticleTranslation{}, err
 	}
 	item, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticleTranslation, error) {
-		if _, err := lockLiveKBTranslation(ctx, tx, workspaceID, articleID, locale, seen); err != nil {
+		before, err := lockLiveKBTranslation(ctx, tx, workspaceID, articleID, locale, seen)
+		if err != nil {
 			return domain.KBArticleTranslation{}, err
+		}
+		if before.Status == domain.KBPublished {
+			return restoreKBTranslationDraft(ctx, tx, workspaceID, actor, articleID, locale, version)
 		}
 		was, err := translationPublishState(ctx, tx, workspaceID, articleID, locale)
 		if err != nil {
