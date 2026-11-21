@@ -132,11 +132,28 @@ func (r *restClient) download(ctx context.Context, token, path string, limit int
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	recorder := &recorder{header: http.Header{}, limit: limit}
-	r.api.ServeHTTP(recorder, request)
+	if aborted := serveUntilAborted(r.api, recorder, request); aborted && !recorder.full {
+		return nil, nil, &toolError{"Colliedesk stopped sending the file before its end, so it is incomplete and is not returned. Try again; if it keeps failing, tell a workspace admin."}
+	}
 	if recorder.status < 200 || recorder.status > 299 {
 		return nil, nil, parseRESTError(recorder)
 	}
 	return recorder.header, recorder.body.Bytes(), nil
+}
+
+// serveUntilAborted serves request and reports whether the handler aborted its response
+// (http.ErrAbortHandler), which a handler does when a file breaks off after it started.
+func serveUntilAborted(api http.Handler, recorder *recorder, request *http.Request) (aborted bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if recovered != http.ErrAbortHandler {
+				panic(recovered)
+			}
+			aborted = true
+		}
+	}()
+	api.ServeHTTP(recorder, request)
+	return false
 }
 
 // agentRequested is an operator call Colliedesk did not run: it was filed as an operator request an
@@ -178,8 +195,10 @@ type recorder struct {
 	status   int
 	body     bytes.Buffer
 	overflow bool
-	// limit, when above zero, keeps only the first limit bytes and then stops the handler with errEnough.
+	// limit, when above zero, keeps only the first limit bytes and then stops the handler with errEnough;
+	// full says it did.
 	limit int
+	full  bool
 }
 
 func (r *recorder) Header() http.Header { return r.header }
@@ -197,6 +216,7 @@ func (r *recorder) Write(data []byte) (int, error) {
 	if r.limit > 0 && r.body.Len()+len(data) > r.limit {
 		room := r.limit - r.body.Len()
 		r.body.Write(data[:room])
+		r.full = true
 		return room, errEnough
 	}
 	if r.body.Len()+len(data) > maxRESTResponse {

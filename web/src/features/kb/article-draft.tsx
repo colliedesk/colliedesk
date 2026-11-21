@@ -37,7 +37,7 @@ export const editable = (article: KBArticle): KBArticle => {
   if (!draft) return article;
   return { ...article, title: draft.title, slug: draft.slug, body_md: draft.body_md, seo_title: draft.seo_title, seo_description: draft.seo_description,
     collection_id: draft.collection_id, collection_ids: draft.collection_ids, show_contents: draft.show_contents,
-    attachments: draft.attachments };
+    attachments: draft.attachments, tags: draft.tags };
 };
 
 // editableTranslation is the same for a published translation: with unpublished changes, those.

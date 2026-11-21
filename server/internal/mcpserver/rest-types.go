@@ -3,6 +3,8 @@ package mcpserver
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // The shapes below are the parts of the REST answers (contracts/openapi.yaml) that tools read.
@@ -22,6 +24,7 @@ type restMe struct {
 	Plan  *struct {
 		Locked bool `json:"locked"`
 	} `json:"plan"`
+	KBListColumns domain.KBListColumns `json:"kb_list_columns"`
 }
 
 type restAgent struct {

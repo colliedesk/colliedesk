@@ -90,6 +90,8 @@ type KBContent struct {
 	SEODescription string        `json:"seo_description"`
 	CollectionIDs  []string      `json:"collection_ids"`
 	Attachments    KBAttachments `json:"attachments"`
+	// Tags are the article's, cleaned (CleanKBTags); a translation's text leaves them out.
+	Tags []string `json:"tags,omitempty"`
 }
 
 // KBReviewDetail is a review with the text it is about: Proposed is the text waiting to be published
@@ -126,6 +128,11 @@ func (c KBContent) Hash() string {
 		}
 		fields = append(fields, files)
 	}
+	if len(c.Tags) > 0 {
+		tags := slices.Clone(c.Tags)
+		slices.Sort(tags)
+		fields = append(fields, map[string][]string{"tags": slices.Compact(tags)})
+	}
 	encoded, _ := json.Marshal(fields)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
@@ -134,5 +141,5 @@ func (c KBContent) Hash() string {
 // Content is the article's live text as a review sees it.
 func (a KBArticle) Content() KBContent {
 	return KBContent{Title: a.Title, Slug: a.Slug, BodyMD: a.BodyMD, SEOTitle: a.SEOTitle, SEODescription: a.SEODescription, CollectionIDs: a.CollectionIDs,
-		Attachments: a.Attachments}
+		Attachments: a.Attachments, Tags: a.Tags}
 }

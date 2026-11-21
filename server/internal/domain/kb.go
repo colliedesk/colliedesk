@@ -53,6 +53,8 @@ const (
 	// KBArticleAIExcluded, KBArticleAIIncluded: AI was kept away from the article, or let read it again.
 	KBArticleAIExcluded = "ai_exclude"
 	KBArticleAIIncluded = "ai_include"
+	// KBArticleAuthorChanged: the article was credited to another team member (the text did not change).
+	KBArticleAuthorChanged = "author_change"
 )
 
 // Article statuses.
@@ -104,16 +106,18 @@ type KBArticleSummary struct {
 	CollectionID string `json:"collection_id"`
 	// CollectionIDs are the collections the help center lists it in: CollectionID, its home, first, then
 	// the others outside the trash by name.
-	CollectionIDs []string         `json:"collection_ids"`
-	Position      int              `json:"position"`
-	Title         string           `json:"title"`
-	Slug          string           `json:"slug"`
-	Status        string           `json:"status"`
-	PublishedAt   *time.Time       `json:"published_at"`
-	AuthorAgentID *string          `json:"author_agent_id"`
-	CreatedAt     time.Time        `json:"created_at"`
-	UpdatedAt     time.Time        `json:"updated_at"`
-	LastChange    *KBArticleChange `json:"last_change"`
+	CollectionIDs []string   `json:"collection_ids"`
+	Position      int        `json:"position"`
+	Title         string     `json:"title"`
+	Slug          string     `json:"slug"`
+	Status        string     `json:"status"`
+	PublishedAt   *time.Time `json:"published_at"`
+	AuthorAgentID *string    `json:"author_agent_id"`
+	// Author is the team member AuthorAgentID names; nil when it names nobody.
+	Author     *KBArticleAuthor `json:"author"`
+	CreatedAt  time.Time        `json:"created_at"`
+	UpdatedAt  time.Time        `json:"updated_at"`
+	LastChange *KBArticleChange `json:"last_change"`
 	// URL is the public address on the help center; the API fills it in, the store does not know it.
 	URL string `json:"url"`
 	// HasDraft is set while a published article has unpublished changes (KBArticle.Draft).
@@ -122,6 +126,21 @@ type KBArticleSummary struct {
 	// restrictive of it and of every live collection the article is in, which is what applies.
 	Visibility          string `json:"visibility"`
 	EffectiveVisibility string `json:"effective_visibility"`
+	// Tags are the published tags, sorted (CleanKBTags); a published article's draft has its own.
+	Tags []string `json:"tags"`
+	// Languages are its translations outside the trash, by locale.
+	Languages []KBArticleLanguage `json:"languages"`
+	// ReviewState is "in_review" while its own unpublished text waits for a reviewer and "approved" once
+	// a reviewer approved that text as it is now; nil otherwise.
+	ReviewState *string `json:"review_state"`
+	// Votes are its readers' answers, imported ones included; only the article list fills them in.
+	Votes *KBVoteTally `json:"votes,omitempty"`
+}
+
+// KBArticleLanguage is one translation of an article as lists show it.
+type KBArticleLanguage struct {
+	Locale   string `json:"locale"`
+	Outdated bool   `json:"outdated"`
 }
 
 // KBTranslationSummary is one language version of an article without its text, as the article and
@@ -316,17 +335,34 @@ type TrashedKBArticle struct {
 	PurgesAt  time.Time         `json:"purges_at"`
 }
 
+// KBArticleAuthor is the team member an article is credited to. Left is set once they left the team;
+// the article still names them.
+type KBArticleAuthor struct {
+	AgentID string `json:"agent_id"`
+	Name    string `json:"name"`
+	Left    bool   `json:"left"`
+}
+
+// KBAuthorChange is whom a version of kind author_change credited the article to before and after;
+// either is nil when it named nobody, or a person since removed.
+type KBAuthorChange struct {
+	From *KBArticleAuthor `json:"from"`
+	To   *KBArticleAuthor `json:"to"`
+}
+
 // KBArticleVersion is one version of an article with what it said after the change.
 type KBArticleVersion struct {
 	KBArticleChange
-	Title          string  `json:"title"`
-	Slug           string  `json:"slug"`
-	BodyMD         string  `json:"body_md"`
-	SEOTitle       string  `json:"seo_title"`
-	SEODescription string  `json:"seo_description"`
-	ShowContents   bool    `json:"show_contents"`
-	Status         string  `json:"status"`
-	CollectionID   *string `json:"collection_id"`
+	// AuthorChange is set on a version of kind author_change only.
+	AuthorChange   *KBAuthorChange `json:"author_change,omitempty"`
+	Title          string          `json:"title"`
+	Slug           string          `json:"slug"`
+	BodyMD         string          `json:"body_md"`
+	SEOTitle       string          `json:"seo_title"`
+	SEODescription string          `json:"seo_description"`
+	ShowContents   bool            `json:"show_contents"`
+	Status         string          `json:"status"`
+	CollectionID   *string         `json:"collection_id"`
 }
 
 // HelpCenter is the public help center's settings. UpdatedAt is nil until the first write.
@@ -336,9 +372,11 @@ type HelpCenter struct {
 	Locale  string `json:"locale"`
 	// RequireApproval makes an article need an approved version to be published, in every
 	// collection that inherits the setting.
-	RequireApproval bool       `json:"require_approval"`
-	ContentVersion  int64      `json:"content_version"`
-	UpdatedAt       *time.Time `json:"updated_at"`
+	RequireApproval bool `json:"require_approval"`
+	// ShowTags shows readers each article's tags on its page.
+	ShowTags       bool       `json:"show_tags"`
+	ContentVersion int64      `json:"content_version"`
+	UpdatedAt      *time.Time `json:"updated_at"`
 	// URL is the public address; the API sets it, the store leaves it empty.
 	URL string `json:"url"`
 }
@@ -553,6 +591,9 @@ type PublicKBArticle struct {
 	// Attachments are the files the page lists for download under the text, read with the article
 	// page and the help center index only; URL is left empty, the help center gives each its own address.
 	Attachments KBAttachments
+	// Tags are the article's published tags, read with the article page only and only when the help
+	// center shows tags (HelpCenter.ShowTags).
+	Tags []string
 }
 
 // PublicKBTranslation is a published translation the help center shows, for sitemap.xml.
@@ -569,4 +610,10 @@ type PublicKBVideo struct {
 	ID            string
 	Width, Height int
 	PosterVersion string
+}
+
+// KBTagCount is a tag the workspace's articles have, with how many articles outside the trash have it.
+type KBTagCount struct {
+	Tag          string `json:"tag"`
+	ArticleCount int    `json:"article_count"`
 }

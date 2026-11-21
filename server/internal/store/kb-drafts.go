@@ -68,18 +68,19 @@ func saveKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 	}
 	// Without new extras, a new home is no longer one of the draft's other collections.
 	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_drafts(workspace_id,article_id,title,slug,body_md,seo_title,seo_description,collection_id,extra_collection_ids,
-			show_contents,updated_by_agent_id,created_at,updated_at)
+			show_contents,tags,updated_by_agent_id,created_at,updated_at)
 		SELECT a.workspace_id,a.id,COALESCE($3,d.title,a.title),COALESCE($4,d.slug,a.slug),COALESCE($5,d.body_md,a.body_md),
 			COALESCE($6,d.seo_title,a.seo_title),COALESCE($7,d.seo_description,a.seo_description),COALESCE($8::uuid,d.collection_id),
-			CASE WHEN $9 THEN $10::uuid[] ELSE array_remove(d.extra_collection_ids,$8::uuid) END,COALESCE($12,d.show_contents),$11,clock_timestamp(),clock_timestamp()
+			CASE WHEN $9 THEN $10::uuid[] ELSE array_remove(d.extra_collection_ids,$8::uuid) END,COALESCE($12,d.show_contents),
+			CASE WHEN $13 THEN $14::text[] ELSE d.tags END,$11,clock_timestamp(),clock_timestamp()
 		FROM kb_articles a LEFT JOIN kb_article_drafts d ON d.workspace_id=a.workspace_id AND d.article_id=a.id AND d.locale IS NULL
 		WHERE a.workspace_id=$1 AND a.id=$2
 		ON CONFLICT (workspace_id,article_id) WHERE locale IS NULL DO UPDATE SET title=EXCLUDED.title, slug=EXCLUDED.slug, body_md=EXCLUDED.body_md,
 			seo_title=EXCLUDED.seo_title, seo_description=EXCLUDED.seo_description, collection_id=EXCLUDED.collection_id,
-			extra_collection_ids=EXCLUDED.extra_collection_ids, show_contents=EXCLUDED.show_contents, updated_by_agent_id=EXCLUDED.updated_by_agent_id,
-			updated_at=EXCLUDED.updated_at`,
+			extra_collection_ids=EXCLUDED.extra_collection_ids, show_contents=EXCLUDED.show_contents, tags=EXCLUDED.tags,
+			updated_by_agent_id=EXCLUDED.updated_by_agent_id, updated_at=EXCLUDED.updated_at`,
 		workspaceID, id, change.Title, change.Slug, change.BodyMD, change.SEOTitle, change.SEODescription, change.CollectionID,
-		change.ExtraCollectionIDs != nil, extras, optionalID(actor.AgentID), change.ShowContents); err != nil {
+		change.ExtraCollectionIDs != nil, extras, optionalID(actor.AgentID), change.ShowContents, change.Tags != nil, draftTags(change.Tags)); err != nil {
 		return domain.KBArticle{}, fmt.Errorf("save knowledge base article draft: %w", err)
 	}
 	return recordKBArticleDraft(ctx, tx, workspaceID, actor, id, !change.Autosave)
@@ -129,12 +130,12 @@ func foldKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 	var title, slug, body, seoTitle, seoDescription string
 	var home *string
 	var showContents *bool
-	var extras, attachments []string
+	var extras, attachments, tags []string
 	var keepExtras bool
 	err := tx.QueryRow(ctx, `DELETE FROM kb_article_drafts WHERE workspace_id=$1 AND article_id=$2 AND locale IS NULL
 		RETURNING title,slug,body_md,seo_title,seo_description,collection_id::text,show_contents,COALESCE(extra_collection_ids::text[],'{}'),
-			extra_collection_ids IS NULL,attachment_ids::text[]`,
-		workspaceID, id).Scan(&title, &slug, &body, &seoTitle, &seoDescription, &home, &showContents, &extras, &keepExtras, &attachments)
+			extra_collection_ids IS NULL,attachment_ids::text[],tags`,
+		workspaceID, id).Scan(&title, &slug, &body, &seoTitle, &seoDescription, &home, &showContents, &extras, &keepExtras, &attachments, &tags)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return change, nil
 	}
@@ -161,6 +162,10 @@ func foldKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 	}
 	if change.ShowContents == nil {
 		change.ShowContents = showContents
+	}
+	// A draft that never changed its tags (NULL) publishes the live ones.
+	if change.Tags == nil && tags != nil {
+		change.Tags = &tags
 	}
 	if change.ExtraCollectionIDs != nil || keepExtras {
 		return change, nil

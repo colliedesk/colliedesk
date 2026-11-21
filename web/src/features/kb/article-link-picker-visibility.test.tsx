@@ -6,7 +6,7 @@ import { article, json, serve, summary } from './kb.test.fixture';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
-const center = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' };
+const center = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' };
 const reset = summary(7, 'Reset your password', 'published');
 const internal = { ...summary(8, 'Refund rules', 'published'), id: '88888888-8888-4888-8888-888888888888', effective_visibility: 'agents' as const };
 const botOnly = { ...summary(9, 'Plan limits', 'published'), id: '99999999-9999-4999-8999-999999999999', visibility: 'help_chat' as const, effective_visibility: 'help_chat' as const };

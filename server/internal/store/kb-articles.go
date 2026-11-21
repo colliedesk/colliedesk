@@ -93,7 +93,7 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 			article.AIExclusion.By = &domain.SavedReplyPerson{AgentID: excludedBy, Name: *excludedByName}
 		}
 	}
-	if err := fillKBCollectionIDs(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
+	if err := fillKBSummaries(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
 		return article, err
 	}
 	if err := readKBVisibilityFrom(ctx, tx, workspaceID, &article); err != nil {
@@ -103,6 +103,9 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 		return article, err
 	}
 	if err := fillKBArticleAttachments(ctx, tx, workspaceID, &article); err != nil {
+		return article, err
+	}
+	if err := fillKBDraftTags(ctx, tx, workspaceID, &article); err != nil {
 		return article, err
 	}
 	article.Translations, err = listKBArticleTranslations(ctx, tx, workspaceID, id)
@@ -123,22 +126,6 @@ const (
 	KBSortRecent = "recent"
 	KBSortManual = "manual"
 )
-
-// KBArticleFilter selects articles outside the trash. Query matches every word of Query as a word or
-// the start of one, or Query inside the title; a search orders by relevance. Without one, Sort orders
-// the list; empty is KBSortManual inside a collection and KBSortRecent otherwise.
-type KBArticleFilter struct {
-	Query, Status, CollectionID, Sort string
-	Limit                             int
-	Cursor                            string
-	// HasDraft keeps only the articles with unpublished changes.
-	HasDraft bool
-	// Visibility keeps only the articles whose effective visibility is this one.
-	Visibility string
-	// ReviewState keeps only the articles whose own unpublished text waits for a reviewer
-	// (KBInReview) or was approved as it is now (KBApproved).
-	ReviewState string
-}
 
 // The review states of an article's unpublished text an article list narrows to.
 const (
@@ -171,39 +158,18 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 	}
 	query := strings.TrimSpace(filter.Query)
 	args := []any{workspaceID, query, filter.Limit + 1, offset}
-	where := ` WHERE a.workspace_id=$1 AND a.deleted_at IS NULL`
-	if filter.Status != "" {
-		args = append(args, filter.Status)
-		where += fmt.Sprintf(` AND a.status=$%d`, len(args))
-	}
-	if filter.CollectionID != "" {
-		if !savedReplyID.MatchString(filter.CollectionID) {
-			return []domain.KBArticleSummary{}, "", nil
-		}
-		args = append(args, filter.CollectionID)
-		where += fmt.Sprintf(` AND a.collection_id=$%d`, len(args))
-	}
-	if filter.HasDraft {
-		where += ` AND ` + kbHasDraft
-	}
-	if filter.Visibility != "" {
-		args = append(args, filter.Visibility)
-		where += fmt.Sprintf(` AND EXISTS (SELECT 1 FROM kb_article_visibility w WHERE w.workspace_id=a.workspace_id AND w.id=a.id AND w.visibility_rank=kb_visibility_rank($%d))`, len(args))
-	}
-	switch filter.ReviewState {
-	case KBInReview:
-		where += ` AND EXISTS (SELECT 1 FROM kb_reviews r WHERE r.workspace_id=a.workspace_id AND r.article_id=a.id AND r.locale IS NULL AND r.state='open')`
-	case KBApproved:
-		where += ` AND EXISTS (SELECT 1 FROM kb_reviews r WHERE r.workspace_id=a.workspace_id AND r.article_id=a.id AND r.locale IS NULL AND r.approves_pending)`
+	where, args, ok := filter.where(args)
+	if !ok {
+		return []domain.KBArticleSummary{}, "", nil
 	}
 	sort := filter.Sort
-	if sort == "" && filter.CollectionID != "" {
+	if sort == "" && filter.CollectionID != "" && !filter.IncludeSubcollections {
 		sort = KBSortManual
 	}
 	order := ` ORDER BY a.updated_at DESC, a.id DESC`
 	join, with := ``, ``
 	switch {
-	case query == "" && sort == KBSortManual && filter.CollectionID != "":
+	case query == "" && sort == KBSortManual && filter.CollectionID != "" && !filter.IncludeSubcollections:
 		order = ` ORDER BY a.position, lower(a.title), a.number`
 	case query == "" && sort == KBSortManual:
 		// Across collections, as the help center lists them: a collection's articles, then its collections'.
@@ -219,6 +185,9 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 		where += ` AND $2::text = ''`
 	}
 	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.KBArticleSummary, error) {
+		if err := checkKBFilterLocale(ctx, tx, workspaceID, filter.Locale); err != nil {
+			return nil, err
+		}
 		rows, err := tx.Query(ctx, with+kbArticleSelect(``, join)+where+order+` LIMIT $3 OFFSET $4`, args...)
 		if err != nil {
 			return nil, err
@@ -231,7 +200,7 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 		for index := range items {
 			pointers[index] = &items[index]
 		}
-		return items, fillKBCollectionIDs(ctx, tx, workspaceID, pointers...)
+		return items, fillKBSummaries(ctx, tx, workspaceID, pointers...)
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("list knowledge base articles: %w", err)
@@ -281,7 +250,7 @@ func (s *Store) ListTrashedKBArticles(ctx context.Context, workspaceID string, l
 		for index := range items {
 			pointers[index] = &items[index].KBArticleSummary
 		}
-		return items, fillKBCollectionIDs(ctx, tx, workspaceID, pointers...)
+		return items, fillKBSummaries(ctx, tx, workspaceID, pointers...)
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("list knowledge base article trash: %w", err)
@@ -299,14 +268,20 @@ func (s *Store) ListTrashedKBArticles(ctx context.Context, workspaceID string, l
 // text points at, and bumps the knowledge base version. The caller changed the row in tx first, so
 // the row lock orders concurrent versions of one article.
 func addKBArticleVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, actor Actor, kind string, restoredFrom *int) error {
+	return addKBArticleVersionNaming(ctx, tx, workspaceID, articleID, actor, kind, restoredFrom, nil, nil)
+}
+
+// addKBArticleVersionNaming is addKBArticleVersion for a version that also names the author before
+// and after (kind author_change): versions are never updated once written.
+func addKBArticleVersionNaming(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, actor Actor, kind string, restoredFrom *int, authorFrom, authorTo *string) error {
 	var status string
 	if err := tx.QueryRow(ctx, `INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,show_contents,status,collection_id,
-			changed_by_agent_id,token_id,token_label,agent_request_id,created_at)
+			changed_by_agent_id,token_id,token_label,agent_request_id,created_at,author_from_agent_id,author_to_agent_id)
 		SELECT a.workspace_id,a.id,COALESCE((SELECT max(version) FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2),0)+1,
-			$3,$4,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.show_contents,a.status,a.collection_id,$5,t.id,t.label,$7,clock_timestamp()
+			$3,$4,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.show_contents,a.status,a.collection_id,$5,t.id,t.label,$7,clock_timestamp(),$8,$9
 		FROM kb_articles a LEFT JOIN sessions t ON t.workspace_id=a.workspace_id AND t.id=$6
 		WHERE a.workspace_id=$1 AND a.id=$2 RETURNING status`,
-		workspaceID, articleID, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID)).Scan(&status); err != nil {
+		workspaceID, articleID, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID), authorFrom, authorTo).Scan(&status); err != nil {
 		return fmt.Errorf("record knowledge base article version: %w", err)
 	}
 	if err := noteKBTextWriter(ctx, tx, workspaceID, articleID, nil, actor, kind, status); err != nil {
@@ -502,6 +477,8 @@ type KBArticleInput struct {
 	// BodyFromCollection starts the article from its home collection's default template, if it has
 	// one; BodyMD is then empty.
 	BodyFromCollection bool
+	// Tags are the article's tags; domain.CleanKBTags cleans them.
+	Tags []string
 }
 
 // CreateKBArticle adds an article with the next number of the workspace and its first version.
@@ -536,6 +513,9 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 	if err := domain.CheckKBVisibility(input.Visibility); err != nil {
 		return domain.KBArticle{}, err
 	}
+	if input.Tags, err = domain.CleanKBTags(input.Tags); err != nil {
+		return domain.KBArticle{}, err
+	}
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
 		number, err := admitKBArticle(ctx, tx, workspaceID)
 		if err != nil {
@@ -559,6 +539,9 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 			return domain.KBArticle{}, err
 		}
 		if err := setKBArticleCollections(ctx, tx, workspaceID, id, extras); err != nil {
+			return domain.KBArticle{}, err
+		}
+		if err := replaceKBArticleTags(ctx, tx, workspaceID, id, input.Tags); err != nil {
 			return domain.KBArticle{}, err
 		}
 		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleCreated, nil); err != nil {
@@ -586,13 +569,20 @@ type KBArticleChange struct {
 	Autosave bool
 	// Visibility applies at once, also to a published article, and is not a version of its text.
 	Visibility *string
+	// Tags replaces the article's tags; a published article's go to its draft, as its text does.
+	Tags *[]string
+	// AuthorAgentID credits the article to another active team member at once, also on a published
+	// article, as a version of kind author_change.
+	AuthorAgentID *string
 }
 
-// onlyVisibility tells whether the change sets nothing but the visibility.
-func (change KBArticleChange) onlyVisibility() bool {
+// immediate tells whether the change sets something that applies at once, and whether that is all
+// it sets.
+func (change KBArticleChange) immediate() (some, only bool) {
 	rest := change
-	rest.Visibility = nil
-	return change.Visibility != nil && rest == (KBArticleChange{})
+	rest.Visibility, rest.AuthorAgentID = nil, nil
+	some = change.Visibility != nil || change.AuthorAgentID != nil
+	return some, some && rest == (KBArticleChange{})
 }
 
 // UpdateKBArticle changes a live article and records the version. seen is the updated_at the client read.
@@ -627,6 +617,13 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 			return domain.KBArticle{}, err
 		}
 	}
+	if change.Tags != nil {
+		tags, err := domain.CleanKBTags(*change.Tags)
+		if err != nil {
+			return domain.KBArticle{}, err
+		}
+		change.Tags = &tags
+	}
 	for _, field := range []struct {
 		value **string
 		what  string
@@ -653,14 +650,21 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 		if err != nil {
 			return domain.KBArticle{}, err
 		}
-		if change.Visibility != nil {
-			if err := setKBArticleVisibility(ctx, tx, workspaceID, id, *change.Visibility); err != nil {
-				return domain.KBArticle{}, err
+		if some, only := change.immediate(); some {
+			if change.Visibility != nil {
+				if err := setKBArticleVisibility(ctx, tx, workspaceID, id, *change.Visibility); err != nil {
+					return domain.KBArticle{}, err
+				}
 			}
-			if change.onlyVisibility() {
+			if change.AuthorAgentID != nil {
+				if err := setKBArticleAuthor(ctx, tx, workspaceID, actor, id, *change.AuthorAgentID); err != nil {
+					return domain.KBArticle{}, err
+				}
+			}
+			if only {
 				return readKBArticle(ctx, tx, workspaceID, id)
 			}
-			change.Visibility = nil
+			change.Visibility, change.AuthorAgentID = nil, nil
 		}
 		// A published article keeps its live text until someone publishes the change.
 		if status == domain.KBPublished && (change.Status == nil || *change.Status == domain.KBPublished) {
@@ -699,6 +703,11 @@ func writeKBArticleChange(ctx context.Context, tx pgx.Tx, workspaceID, id string
 	}
 	if err := updateKBArticleRow(ctx, tx, workspaceID, id, change); err != nil {
 		return err
+	}
+	if change.Tags != nil {
+		if err := replaceKBArticleTags(ctx, tx, workspaceID, id, *change.Tags); err != nil {
+			return err
+		}
 	}
 	if change.ExtraCollectionIDs != nil {
 		return setKBArticleCollections(ctx, tx, workspaceID, id, extras)
@@ -917,7 +926,7 @@ func (s *Store) KBArticleVersions(ctx context.Context, workspaceID, id string, l
 		if err != nil {
 			return nil, err
 		}
-		return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.KBArticleVersion, error) {
+		versions, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.KBArticleVersion, error) {
 			var change changeRow
 			var version domain.KBArticleVersion
 			if err := row.Scan(append(change.targets(), &version.Title, &version.Slug, &version.BodyMD, &version.SEOTitle, &version.SEODescription, &version.ShowContents, &version.Status, &version.CollectionID)...); err != nil {
@@ -926,6 +935,10 @@ func (s *Store) KBArticleVersions(ctx context.Context, workspaceID, id string, l
 			version.KBArticleChange = *change.change()
 			return version, nil
 		})
+		if err != nil {
+			return nil, err
+		}
+		return versions, fillKBAuthorChanges(ctx, tx, workspaceID, id, versions)
 	})
 	if err != nil {
 		return nil, 0, kbError("list knowledge base article versions", err)
