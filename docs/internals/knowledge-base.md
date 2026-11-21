@@ -248,8 +248,13 @@ Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
 - **Export** writes `kb-article-drafts.ndjson`; the versions file carries the `draft` kind.
 - **Agents:** `kb_article_update` saves the draft, `kb_article_get` returns `draft` in the same call
   (no separate draft tool, the tool list is near its budget), and `kb_article_draft_publish` /
-  `kb_article_draft_discard` act on it. Translations still write their live row until #694 gives them
-  the same flow on this table.
+  `kb_article_draft_discard` act on it; with `locale` they act on a translation's row
+  (`…/translations/{locale}/draft[/publish]`).
+- **A translation's row follows the article's rules** (`kb-translation-drafts.go`). Its token is the
+  later of the translation's and the row's `updated_at`; save, autosave, restore and media replace
+  write the row, unpublish folds it into the translation, delete and undelete keep it. Its
+  `attachment_ids` are the files the row shows, copied to the translation on publish. A Freshdesk
+  rerun or undo treats a translation with a row as changed in Colliedesk.
 ## Votes
 
 Migration `20261120073704-kb-article-votes`; code `helpcenter/votes.go` (form, cookie, redirect),
@@ -373,8 +378,8 @@ the same article, as Freshdesk does it, never an article of its own.
   the person picks one. Every save takes the answer's `updated_at`, so a second save does not race itself.
 - **Autosave runs 3 s after typing stops, and on blur, `visibilitychange` to hidden, `pagehide` and
   coming back online** (`use-autosave.ts`, `article-autosave.tsx`). A new article (no row yet) and a
-  translation are not autosaved: the first needs a collection and a Save to exist, and a translation
-  has no draft row before #694, so its autosave would change the live page. A save while the page
+  translation are not autosaved: the first needs a collection and a Save to exist; the server takes a
+  translation's autosave (`autosave: true`), the translation editor does not send one yet. A save while the page
   closes uses `keepalive` below 60,000 bytes (the browser holds at most 64 KiB of keepalive bodies);
   a longer text relies on the device copy.
 - **The device copy is per workspace, person and article.** `unsaved-store.ts` keys it
@@ -518,9 +523,9 @@ Migration `20261120184320-kb-article-reviews`; code `store/kb-reviews.go`, `kb-r
   points at the old one (`supersedes_review_id`) and drops the reviewer who edited, so a second
   person still approves. With nobody left it stays superseded
   (`TestAnEditInReviewReopensTheReviewWithoutTheReviewerWhoEdited`).
-- **A translation has no draft layer.** Its pending text is a translation in draft status; saving a
-  published one where approval is required is refused (`ErrKBTranslationApprovalRequired`) and the
-  error says to set it to draft first.
+- **A published translation is reviewed through its draft row.** A save writes the row and supersedes
+  an open review; `…/translations/{locale}/draft/publish` needs an approved review of the row's hash
+  where approval is required, else `ErrKBTranslationApprovalRequired`.
 - **Mail goes through the outbox columns.** `kb_review_reviewers.email` and `kb_reviews.author_email`
   move `queued` → `sending` → `sent` (or `rejected`, or `off` for a deactivated person or a closed
   review); the `kbreviewmail` sender claims each row right before it sends, so two servers never send
