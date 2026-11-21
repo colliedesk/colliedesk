@@ -1,7 +1,8 @@
--- AI reply drafts (#89). A person asks for a draft with an optional prompt; a background task writes
--- it from the conversation, matching knowledge base articles and similar solved tickets; the person
--- edits it and sends it, or not. The AI never sends. How each draft ended (sent nearly as written,
--- sent edited, discarded, replaced by a newer one, expired) is kept for the team's numbers (#100).
+-- AI reply drafts (#89). A person asks for a draft with an optional prompt; a background task
+-- writes it from the conversation, matching knowledge base articles and similar solved tickets; the
+-- person edits it and sends it, or not. The AI never sends. How each draft ended (sent nearly as
+-- written, sent edited, discarded, replaced by a newer one, expired) is kept for the team's numbers
+-- (#100).
 CREATE TABLE ai_drafts (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -21,7 +22,8 @@ CREATE TABLE ai_drafts (
     -- Addresses, numbers or names in the draft that the conversation does not hold.
     warnings jsonb NOT NULL DEFAULT '[]',
     model text,
-    outcome text CHECK (outcome IN ('sent_unchanged', 'sent_edited', 'discarded', 'superseded', 'expired')),
+    outcome text CHECK (outcome IN ('sent_unchanged', 'sent_edited', 'discarded', 'superseded',
+        'expired')),
     -- How close the sent reply was to the draft, 0 to 1 (words); sent_unchanged is 0.9 and above.
     similarity numeric(4, 3) CHECK (similarity BETWEEN 0 AND 1),
     sent_message_id uuid,
@@ -32,11 +34,16 @@ CREATE TABLE ai_drafts (
     -- The text and the prompt are erased 90 days after the outcome; the numbers stay.
     text_cleared_at timestamptz,
     UNIQUE (workspace_id, id),
-    FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, task_id) REFERENCES ai_tasks(workspace_id, id) ON DELETE SET NULL (task_id),
-    FOREIGN KEY (workspace_id, requested_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (requested_by_agent_id),
-    FOREIGN KEY (workspace_id, decided_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (decided_by_agent_id),
-    FOREIGN KEY (workspace_id, sent_message_id) REFERENCES messages(workspace_id, id) ON DELETE SET NULL (sent_message_id),
+    FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, task_id) REFERENCES ai_tasks(workspace_id, id) ON DELETE
+        SET NULL (task_id),
+    FOREIGN KEY (workspace_id, requested_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
+        SET NULL (requested_by_agent_id),
+    FOREIGN KEY (workspace_id, decided_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE
+        SET NULL (decided_by_agent_id),
+    FOREIGN KEY (workspace_id, sent_message_id) REFERENCES messages(workspace_id, id) ON DELETE
+        SET NULL (sent_message_id),
     CHECK ((status = 'ready') = (ready_at IS NOT NULL)),
     CHECK (status = 'ready' OR outcome IS NULL),
     CHECK ((outcome IS NULL) = (decided_at IS NULL)),
@@ -59,13 +66,15 @@ CREATE TABLE ai_draft_sources (
     created_at timestamptz NOT NULL,
     PRIMARY KEY (workspace_id, draft_id, kb_article_id),
     FOREIGN KEY (workspace_id, draft_id) REFERENCES ai_drafts(workspace_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (workspace_id, kb_article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE
+    FOREIGN KEY (workspace_id, kb_article_id) REFERENCES kb_articles(workspace_id, id)
+        ON DELETE CASCADE
 );
 CREATE INDEX ai_draft_sources_article ON ai_draft_sources(workspace_id, kb_article_id, created_at);
 
 -- A reply sent from a draft names it, so the timeline can say so and the outcome is exact.
 ALTER TABLE messages ADD COLUMN ai_draft_id uuid;
-ALTER TABLE messages ADD FOREIGN KEY (workspace_id, ai_draft_id) REFERENCES ai_drafts(workspace_id, id) ON DELETE SET NULL (ai_draft_id);
+ALTER TABLE messages ADD FOREIGN KEY (workspace_id, ai_draft_id)
+    REFERENCES ai_drafts(workspace_id, id) ON DELETE SET NULL (ai_draft_id);
 
 -- A conversation resolved or closed discards the drafts nobody decided on, and stops the ones still
 -- being written (their tasks too): no call is spent on a reply nobody will send.
@@ -82,35 +91,9 @@ BEGIN
 END
 $$;
 CREATE TRIGGER ai_drafts_discard_on_resolve AFTER UPDATE OF status ON conversations
-    FOR EACH ROW WHEN (NEW.status IN ('resolved', 'closed') AND OLD.status IS DISTINCT FROM NEW.status)
+    FOR EACH ROW WHEN (NEW.status IN ('resolved', 'closed') AND OLD.status IS DISTINCT
+        FROM NEW.status)
     EXECUTE FUNCTION ai_drafts_discard_on_resolve();
 
-DO $$
-DECLARE
-    app_role text;
-BEGIN
-    SELECT roles[1]::text INTO app_role FROM pg_policies
-        WHERE schemaname = current_schema() AND tablename = 'workspaces' AND policyname = 'workspace_isolation';
-    IF app_role IS NULL THEN
-        RAISE EXCEPTION 'row-level security is not set up in this schema';
-    END IF;
-    ALTER TABLE ai_draft_sources ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE ai_draft_sources FORCE ROW LEVEL SECURITY;
-    EXECUTE format($policy$CREATE POLICY workspace_isolation ON ai_draft_sources FOR ALL TO %1$I
-        USING (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))
-        WITH CHECK (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))$policy$, app_role);
-    EXECUTE format($policy$CREATE POLICY privileged_access ON ai_draft_sources FOR ALL TO %1$I
-        USING ((SELECT current_setting('app.privileged', true) = 'on'))
-        WITH CHECK ((SELECT current_setting('app.privileged', true) = 'on'))$policy$, current_user);
-    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ai_draft_sources TO %I', app_role);
-    ALTER TABLE ai_drafts ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE ai_drafts FORCE ROW LEVEL SECURITY;
-    EXECUTE format($policy$CREATE POLICY workspace_isolation ON ai_drafts FOR ALL TO %1$I
-        USING (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))
-        WITH CHECK (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))$policy$, app_role);
-    EXECUTE format($policy$CREATE POLICY privileged_access ON ai_drafts FOR ALL TO %1$I
-        USING ((SELECT current_setting('app.privileged', true) = 'on'))
-        WITH CHECK ((SELECT current_setting('app.privileged', true) = 'on'))$policy$, current_user);
-    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ai_drafts TO %I', app_role);
-END
-$$;
+SELECT secure_workspace_table('ai_draft_sources');
+SELECT secure_workspace_table('ai_drafts');

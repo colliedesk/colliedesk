@@ -4,4 +4,6 @@
 ALTER TABLE kb_articles ADD COLUMN position integer NOT NULL DEFAULT 0 CHECK (position >= 0);
 -- A collection's articles in that order: the admin list reads one page of them without sorting the
 -- whole collection, and the help center numbers them per collection.
-CREATE INDEX kb_articles_order_idx ON kb_articles(workspace_id, collection_id, position, lower(title), number) WHERE deleted_at IS NULL;
+CREATE INDEX kb_articles_order_idx
+    ON kb_articles(workspace_id, collection_id, position, lower(title), number)
+        WHERE deleted_at IS NULL;

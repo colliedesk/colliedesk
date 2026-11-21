@@ -1,26 +1,32 @@
--- Reply drafts written when a customer writes (#89): an admin lets a workspace's AI draft a reply to
--- every new customer message by itself. The draft waits on the conversation for the team; the AI
+-- Reply drafts written when a customer writes (#89): an admin lets a workspace's AI draft a reply
+-- to every new customer message by itself. The draft waits on the conversation for the team; the AI
 -- never sends. Off unless an admin turns it on (ai_slots.automatic on the draft slot).
-ALTER TABLE ai_automatic_limits ADD COLUMN draft_per_day integer NOT NULL DEFAULT 100 CHECK (draft_per_day BETWEEN 0 AND 10000);
+ALTER TABLE ai_automatic_limits ADD COLUMN draft_per_day integer NOT NULL DEFAULT 100
+    CHECK (draft_per_day BETWEEN 0 AND 10000);
 
 ALTER TABLE ai_drafts
-    -- Written by itself for a customer's message, not asked for by a person: the whole team sees it.
+    -- Written by itself for a customer's message, not asked for by a person: the whole team sees
+    -- it.
     ADD COLUMN automatic boolean NOT NULL DEFAULT false,
     -- The newest customer message it answers.
     ADD COLUMN answers_message_id uuid,
-    -- The model's view that the message needs a reply ("thanks" does not); null for a person's draft.
+    -- The model's view that the message needs a reply ("thanks" does not); null for a person's
+    -- draft.
     ADD COLUMN reply_needed boolean,
-    ADD FOREIGN KEY (workspace_id, answers_message_id) REFERENCES messages(workspace_id, id) ON DELETE SET NULL (answers_message_id);
-CREATE INDEX ai_drafts_automatic_open ON ai_drafts(workspace_id, conversation_id) WHERE automatic AND outcome IS NULL;
--- At most one automatic draft waits to be written per conversation: messages that come close together
--- are answered by one draft.
-CREATE UNIQUE INDEX ai_tasks_automatic_draft_queued ON ai_tasks(workspace_id, conversation_id) WHERE kind = 'draft' AND automatic AND state = 'queued';
+    ADD FOREIGN KEY (workspace_id, answers_message_id) REFERENCES messages(workspace_id, id)
+        ON DELETE SET NULL (answers_message_id);
+CREATE INDEX ai_drafts_automatic_open ON ai_drafts(workspace_id, conversation_id) WHERE automatic
+    AND outcome IS NULL;
+-- At most one automatic draft waits to be written per conversation: messages that come close
+-- together are answered by one draft.
+CREATE UNIQUE INDEX ai_tasks_automatic_draft_queued ON ai_tasks(workspace_id, conversation_id)
+    WHERE kind = 'draft' AND automatic AND state = 'queued';
 
--- A customer's message queues an automatic draft when the workspace lets drafts write themselves. It
--- runs a minute later, and a message that comes before it runs pushes it another minute (five at most
--- from the first), so a burst gets one draft. A ready automatic draft nobody decided on is replaced.
--- An imported message (origin set) queues nothing, and neither does mail that failed its sender check.
--- A reply from the team stops the automatic draft still waiting.
+-- A customer's message queues an automatic draft when the workspace lets drafts write themselves.
+-- It runs a minute later, and a message that comes before it runs pushes it another minute (five at
+-- most from the first), so a burst gets one draft. A ready automatic draft nobody decided on is
+-- replaced. An imported message (origin set) queues nothing, and neither does mail that failed its
+-- sender check. A reply from the team stops the automatic draft still waiting.
 CREATE FUNCTION ai_draft_on_customer_message() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     waiting uuid;
