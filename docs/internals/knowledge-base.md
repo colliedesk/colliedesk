@@ -224,6 +224,13 @@ Code: `server/internal/store/kb-drafts*.go`, migration `kb-article-drafts`, MCP
   newest non-`draft` version. Image and video serving checks the live text and published translations
   (`shownTextNames`), so an item only a draft shows is not public; `linkKBMedia` still counts drafts,
   so the library never purges it as unused.
+- **Autosave is a save with no version.** `PATCH` with `autosave: true` takes only `title` and
+  `body_md` (any other field is 400, so an autosave never publishes, unpublishes or moves an article).
+  On a published article it upserts the draft row without a `draft` version; on a never-published one
+  it writes the row in place with no version and no help center bump (`changeKBArticleLocked` with an
+  empty kind), and still links the media the text names. The token check is the same as a save's, so a
+  stale `updated_at` is 409 `changed_elsewhere`. The next save without `autosave` records the version.
+  The MCP tool keeps saving with a version: an agent's write is a decision, not keystrokes.
 - **Restore on a published article writes the draft**, needs `:update` only, and keeps the old rule
   that a restore never publishes.
 - **Delete and undelete keep the row**: it goes to the trash with the article and comes back with it;
@@ -359,9 +366,45 @@ the same article, as Freshdesk does it, never an article of its own.
   editor at once (`handle.markdown()`), so none of them works on a stale text.
 - **A text is never cut.** The body has no `maxLength` (a browser cuts a paste to it silently); a
   counter of code points, as the server counts (`[...text].length`, not `.length`), refuses the save.
-- **A lost race keeps the person's text.** On `changed_elsewhere` the editor offers "save mine over
-  theirs" (reads the article again and saves with its `updated_at`; theirs stays in the history) or
-  "discard mine". Every save takes the answer's `updated_at`, so a second save does not race itself.
+- **A lost race keeps the person's text and shows both.** On `changed_elsewhere`, from a save or an
+  autosave, the editor and a translation's form show the two texts line by line (`conflict-compare.tsx`,
+  the draft's `line-diff.ts`) with "Save mine over theirs" (reads the item again and saves with its
+  `updated_at`; theirs stays in the history) or "Discard mine and show theirs". Autosave stops until
+  the person picks one. Every save takes the answer's `updated_at`, so a second save does not race itself.
+- **Autosave runs 3 s after typing stops, and on blur, `visibilitychange` to hidden, `pagehide` and
+  coming back online** (`use-autosave.ts`, `article-autosave.tsx`). A new article (no row yet) and a
+  translation are not autosaved: the first needs a collection and a Save to exist, and a translation
+  has no draft row before #694, so its autosave would change the live page. A save while the page
+  closes uses `keepalive` below 60,000 bytes (the browser holds at most 64 KiB of keepalive bodies);
+  a longer text relies on the device copy.
+- **The device copy is per workspace, person and article.** `unsaved-store.ts` keys it
+  `colliedesk:kb-unsaved:<workspace>:<agent>:<article>`, so a shared browser never offers one
+  person's text to another or across workspaces; the editor waits for `/me` before it reads it. It is
+  written on every change and removed once a save is confirmed, unless the text changed after that
+  save. On open it is offered back only when it is newer than the server copy and differs from it.
+- **Full screen is a class on the editor, not the Fullscreen API**, so the toolbar, dialogs and menus
+  stay in the same document. Escape leaves it, except when a dialog, menu or link search is open: each
+  prevents the Escape it handles, and the editor leaves full screen only on an Escape nobody took.
+- **Pasted HTML becomes Markdown with the Freshdesk import's rules** (`editor/paste-html.ts`, ported
+  from `server/internal/freshdesk/solutions-markdown.go`). Both sides run the cases in
+  `server/internal/freshdesk/testdata/html-markdown-cases.json` (vitest and
+  `TestArticleMarkdownMatchesTheSharedPasteCases`), so a rule change in one fails the other. The paste is
+  stricter than an import: players, frames, forms and SVG are dropped, an image keeps only an
+  `http(s)`, `data:` or `blob:` address, underline becomes plain text (the help center allowlist has
+  no `<u>`), styled spans become bold or italic only from weight and style, and a table without a
+  header row gets an empty one (GFM needs one). A relative image address from a web page stays as
+  written and shows as a broken image. The result is Markdown, rendered later by kbhtml's allowlist,
+  so no pasted tag reaches the help center that a typed one could not.
+- **Plain text wins in code and from code editors.** Inside a fenced block or inline code, and for a
+  clipboard that carries `vscode-editor-data`, the paste is the plain text. After a formatted paste a
+  bar offers "Keep formatting · Paste as plain text"; each swaps the inserted range, as one undo step.
+- **Pasted images go to the media library.** `data:` and `blob:` images are uploaded like a dropped
+  file (type and 5 MiB checked first); a web address goes to `POST /api/v1/kb/images/import`, which the
+  server downloads through the same `netguard` dialer as mail images: private, loopback, link-local and
+  metadata addresses are refused after DNS and on every redirect (403 `address_refused`), with the
+  same size and type limits as an upload. An image that fails is left out of the text and the editor
+  says why; the rest of the paste goes in. The e2e pastes a `data:` image because the guard refuses the
+  test server's own loopback address; the unit tests cover the web address path.
 - **Images never leave a placeholder in the text.** A pasted, dropped or inserted image is checked first
   (type, 5 MiB). A widget decoration in CodeMirror's state (`editor/upload.ts`) shows "Uploading…"
   while the text stays as it was; the image then goes in as a paragraph of its own after the block the

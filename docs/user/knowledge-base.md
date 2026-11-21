@@ -133,6 +133,47 @@ spaces.
 text is never cut: the counter turns red and saving waits until you shorten it, or split it into
 two articles.
 
+### Autosave
+
+An article that is already saved once saves itself while you write: 3 seconds after you stop typing,
+and at once when you switch to another window or tab, or close it. The status next to **Save** says
+**Saving…**, then **Saved 12:04** (in your time zone).
+
+- Autosave never changes the help center. On a draft article it updates the draft. On a published
+  article it adds to its [unpublished changes](#unpublished-changes).
+- Autosave adds no version to the [history](#history). **Save** (`Ctrl+S`) adds one, as before.
+- Autosave never publishes and never counts as an approval.
+- Without a connection the status says **Offline, kept on this device**. The text is kept in this
+  browser, for you and this article only, and saved when the connection comes back.
+- If the browser still holds text newer than the saved article when you open it, the editor asks
+  **Restore unsaved text from 12:03?**. Select **Restore** to put it back, or **Discard**.
+- A new article saves for the first time with **Save draft** or **Save and publish**. A
+  [translation](#translations) saves with **Save** only.
+
+If a teammate (or an AI agent) saved the article after you opened it, your save or autosave is
+refused and nothing is overwritten. The editor shows both texts line by line: struck through is only
+in theirs, highlighted is only in yours. Choose **Save mine over theirs** (theirs stays in the
+history) or **Discard mine and show theirs**. A translation does the same.
+
+### Full screen
+
+Select **Full screen** in the toolbar to write with the whole window. The toolbar stays. Press `Esc`
+or select **Leave full screen** to go back. `Esc` first closes an open menu or dialog.
+
+### Paste from Word, Google Docs or a web page
+
+Copied text from Word, Google Docs, Notion or a web page goes in as Markdown. Headings, bold, italic,
+lists, links, tables and code stay. Fonts, sizes, colors and underline are left out. Players,
+frames and scripts are left out too.
+
+- The copy's images go to the [media library](#media-library) first, like a pasted file. An image at
+  a web address is downloaded by Colliedesk and stored. While they upload, a box at the cursor says
+  so; **Cancel** there drops the paste.
+- An image that cannot be stored is left out, and the editor says why. The rest of the paste goes in.
+- After the paste, a bar offers **Keep formatting · Paste as plain text**. One click writes the paste
+  the other way. The bar goes when you type on.
+- In a code block, and from a code editor such as VS Code, a paste stays plain text.
+
 ### Callouts
 
 A callout sets a short passage apart: a note, a tip, something important, a warning or a caution.
@@ -394,9 +435,7 @@ text are used. Line breaks and repeated spaces become one space. Both are part o
 history and of the [export](export.md). On a published article they are part of its
 [unpublished changes](#unpublished-changes) until you publish them.
 
-If a teammate (or an AI agent) saved the article after you opened it, your save is refused and
-nothing is overwritten. Your text stays on screen and you choose: **Save mine over theirs** (theirs
-stays in the history) or **Discard mine and show theirs**.
+A save against a newer copy is refused and shows both texts to choose from (see [Autosave](#autosave)).
 
 Leaving the page with unsaved changes asks first.
 
@@ -1025,6 +1064,11 @@ Articles and collections:
   `colliedesk_kb_article_draft_discard` (`DELETE /api/v1/kb/articles/{id}/draft`) drops them. Both take
   the article's `updated_at` as you read it: saving the unpublished changes moves it, so changes saved
   after you read them are never published or dropped unseen.
+- Autosave: `PATCH /api/v1/kb/articles/{id}` with `autosave: true` takes only `title` and `body_md` and
+  adds no version. On a draft article it changes the article; on a published one it adds to the
+  unpublished changes. Every `PATCH` sends the `updated_at` it started from; a newer copy on the server
+  refuses it with 409 `changed_elsewhere`. An agent saves with `colliedesk_kb_article_update` as before,
+  which adds a version.
 - [Readers' votes](#votes-from-readers): `colliedesk_kb_article_votes_get` or
   `GET /api/v1/kb/articles/{id}/votes` reads the count, each vote with its line, and the earlier counts
   (`kb_articles:read`). `colliedesk_kb_article_votes_reset` or `POST /api/v1/kb/articles/{id}/votes/reset`
@@ -1052,6 +1096,9 @@ Images and videos:
 
 - An image in the text is `![name](/api/v1/kb/images/…)`. A video of the media library is
   `<video controls preload="metadata" src="/api/v1/kb/media/<id>"></video>`.
+- An image at a public web address: `colliedesk_kb_image_import` (`POST /api/v1/kb/images/import`, with
+  `kb_media:create`) downloads it into the media library and answers its link. Private, loopback and
+  internal addresses are refused with 403 `address_refused`.
 - Media library: `colliedesk_kb_media_list` and `colliedesk_kb_media_get` show which images no article
   uses and which have no alt text. `colliedesk_kb_media_update` names, describes or keeps them.
   `colliedesk_kb_media_trash` and `colliedesk_kb_media_undelete` move them to the trash or back, and
