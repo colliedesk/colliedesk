@@ -166,6 +166,8 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/kb/articles":                                     {"/api/v1/kb/articles?q=contract&status=draft", nil, admin, 200, ""},
 		"POST /api/v1/kb/articles":                                    {"/api/v1/kb/articles", map[string]any{"collection_id": kb.collectionID, "title": "Created contract article", "body_md": "Hi", "status": "published"}, admin, 201, ""},
 		"GET /api/v1/kb/articles/trash":                               {"/api/v1/kb/articles/trash", nil, admin, 200, ""},
+		"GET /api/v1/kb/articles/export.csv":                          {"/api/v1/kb/articles/export.csv?status=draft&tag=contract", nil, admin, 200, ""},
+		"GET /api/v1/kb/tags":                                         {"/api/v1/kb/tags", nil, admin, 200, ""},
 		"GET /api/v1/kb/articles/{id}":                                {"/api/v1/kb/articles/" + kb.articleID, nil, admin, 200, ""},
 		"PATCH /api/v1/kb/articles/{id}":                              {"/api/v1/kb/articles/" + kb.articleID, map[string]any{"updated_at": kb.articleSeen, "status": "published"}, admin, 200, ""},
 		"DELETE /api/v1/kb/articles/{id}":                             {"/api/v1/kb/articles/" + kb.deleteArticleID + "?updated_at=" + url.QueryEscape(kb.deleteArticleSeen), nil, admin, 204, ""},
