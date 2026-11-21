@@ -35,16 +35,18 @@ LEFT JOIN kb_collections p ON p.workspace_id = c.workspace_id AND p.id = c.paren
 LEFT JOIN kb_collections g ON g.workspace_id = p.workspace_id AND g.id = p.parent_id AND g.deleted_at IS NULL
 WHERE c.deleted_at IS NULL;
 
--- Each article with its effective visibility. A home collection that is not live counts as agents.
+-- Each article with the visibility its collections allow (collection_rank) and its effective
+-- visibility. A home collection that is not live counts as agents.
 CREATE VIEW kb_article_visibility WITH (security_invoker = true) AS
-SELECT a.workspace_id, a.id, a.status, a.deleted_at,
-    GREATEST(kb_visibility_rank(a.visibility),
+SELECT a.workspace_id, a.id, a.status, a.deleted_at, l.collection_rank,
+    GREATEST(kb_visibility_rank(a.visibility), l.collection_rank) AS visibility_rank
+FROM kb_articles a
+CROSS JOIN LATERAL (SELECT GREATEST(
         COALESCE((SELECT v.visibility_rank FROM kb_collection_visibility v
             WHERE v.workspace_id = a.workspace_id AND v.id = a.collection_id), 2),
         COALESCE((SELECT max(v.visibility_rank) FROM kb_article_collections x
             JOIN kb_collection_visibility v ON v.workspace_id = x.workspace_id AND v.id = x.collection_id
-            WHERE x.workspace_id = a.workspace_id AND x.article_id = a.id), 0)) AS visibility_rank
-FROM kb_articles a;
+            WHERE x.workspace_id = a.workspace_id AND x.article_id = a.id), 0)) AS collection_rank) l;
 
 CREATE VIEW kb_published_articles WITH (security_invoker = true) AS
 SELECT v.workspace_id, v.id FROM kb_article_visibility v WHERE v.status = 'published' AND v.deleted_at IS NULL;

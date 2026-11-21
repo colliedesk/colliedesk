@@ -22,7 +22,7 @@ const kbArticleChangeColumns = `v.version,v.kind,v.restored_from_version,v.chang
 // kbArticleSelect reads articles a with their newest version; extra columns follow the change columns.
 func kbArticleSelect(extra, join string) string {
 	return `SELECT a.id::text,a.number,a.collection_id::text,a.position,a.title,a.slug,a.status,a.published_at,a.author_agent_id::text,a.created_at,` + kbArticleToken + `,` + kbHasDraft + `,` +
-		kbArticleChangeColumns + extra + `
+		kbArticleVisibilityColumns + `,` + kbArticleChangeColumns + extra + `
 	FROM kb_articles a
 	LEFT JOIN LATERAL (SELECT * FROM kb_article_versions x WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id ORDER BY x.version DESC LIMIT 1) v ON true
 	LEFT JOIN agents p ON p.workspace_id=v.workspace_id AND p.id=v.changed_by_agent_id` + join
@@ -63,7 +63,7 @@ func scanKBSummary(row pgx.Row, extra ...any) (domain.KBArticleSummary, error) {
 	var item domain.KBArticleSummary
 	var change changeRow
 	targets := append([]any{&item.ID, &item.Number, &item.CollectionID, &item.Position, &item.Title, &item.Slug, &item.Status, &item.PublishedAt, &item.AuthorAgentID,
-		&item.CreatedAt, &item.UpdatedAt, &item.HasDraft}, change.targets()...)
+		&item.CreatedAt, &item.UpdatedAt, &item.HasDraft, &item.Visibility, &item.EffectiveVisibility}, change.targets()...)
 	if err := row.Scan(append(targets, extra...)...); err != nil {
 		return item, err
 	}
@@ -94,6 +94,9 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 		}
 	}
 	if err := fillKBCollectionIDs(ctx, tx, workspaceID, &article.KBArticleSummary); err != nil {
+		return article, err
+	}
+	if err := readKBVisibilityFrom(ctx, tx, workspaceID, &article); err != nil {
 		return article, err
 	}
 	if article.Draft, err = readKBArticleDraft(ctx, tx, workspaceID, article); err != nil {
@@ -130,6 +133,8 @@ type KBArticleFilter struct {
 	Cursor                            string
 	// HasDraft keeps only the articles with unpublished changes.
 	HasDraft bool
+	// Visibility keeps only the articles whose effective visibility is this one.
+	Visibility string
 	// ReviewState keeps only the articles whose own unpublished text waits for a reviewer
 	// (KBInReview) or was approved as it is now (KBApproved).
 	ReviewState string
@@ -180,6 +185,10 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 	}
 	if filter.HasDraft {
 		where += ` AND ` + kbHasDraft
+	}
+	if filter.Visibility != "" {
+		args = append(args, filter.Visibility)
+		where += fmt.Sprintf(` AND EXISTS (SELECT 1 FROM kb_article_visibility w WHERE w.workspace_id=a.workspace_id AND w.id=a.id AND w.visibility_rank=kb_visibility_rank($%d))`, len(args))
 	}
 	switch filter.ReviewState {
 	case KBInReview:
@@ -477,6 +486,8 @@ func setKBArticleCollections(ctx context.Context, tx pgx.Tx, workspaceID, articl
 type KBArticleInput struct {
 	CollectionID, Title, Slug, BodyMD, Status string
 	ExtraCollectionIDs                        []string
+	// Visibility is who may see the article (domain.KBVisibilities); empty is everyone.
+	Visibility string
 	// SEOTitle and SEODescription are the search fields; empty uses the defaults.
 	SEOTitle, SEODescription string
 	// ShowContents turns the article's list of headings on its page on or off; nil leaves it on.
@@ -515,6 +526,12 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 	if err := domain.CheckKBStatus(input.Status); err != nil {
 		return domain.KBArticle{}, err
 	}
+	if input.Visibility == "" {
+		input.Visibility = domain.KBVisibleEveryone
+	}
+	if err := domain.CheckKBVisibility(input.Visibility); err != nil {
+		return domain.KBArticle{}, err
+	}
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
 		number, err := admitKBArticle(ctx, tx, workspaceID)
 		if err != nil {
@@ -531,9 +548,10 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 			return domain.KBArticle{}, err
 		}
 		var id string
-		if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,position,seo_title,seo_description,show_contents)
-			VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN clock_timestamp() END,$8,`+kbArticleEnd(`$2::uuid`)+`,$9,$10,COALESCE($11,true)) RETURNING id::text`,
-			workspaceID, input.CollectionID, number, title, input.Slug, input.BodyMD, input.Status, optionalID(actor.AgentID), input.SEOTitle, input.SEODescription, input.ShowContents).Scan(&id); err != nil {
+		if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,position,seo_title,seo_description,show_contents,visibility)
+			VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN clock_timestamp() END,$8,`+kbArticleEnd(`$2::uuid`)+`,$9,$10,COALESCE($11,true),$12) RETURNING id::text`,
+			workspaceID, input.CollectionID, number, title, input.Slug, input.BodyMD, input.Status, optionalID(actor.AgentID), input.SEOTitle, input.SEODescription, input.ShowContents,
+			input.Visibility).Scan(&id); err != nil {
 			return domain.KBArticle{}, err
 		}
 		if err := setKBArticleCollections(ctx, tx, workspaceID, id, extras); err != nil {
@@ -559,6 +577,15 @@ type KBArticleChange struct {
 	SEOTitle, SEODescription                  *string
 	ShowContents                              *bool
 	ExtraCollectionIDs                        *[]string
+	// Visibility applies at once, also to a published article, and is not a version of its text.
+	Visibility *string
+}
+
+// onlyVisibility tells whether the change sets nothing but the visibility.
+func (change KBArticleChange) onlyVisibility() bool {
+	rest := change
+	rest.Visibility = nil
+	return change.Visibility != nil && rest == (KBArticleChange{})
 }
 
 // UpdateKBArticle changes a live article and records the version. seen is the updated_at the client read.
@@ -588,6 +615,11 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 			return domain.KBArticle{}, err
 		}
 	}
+	if change.Visibility != nil {
+		if err := domain.CheckKBVisibility(*change.Visibility); err != nil {
+			return domain.KBArticle{}, err
+		}
+	}
 	for _, field := range []struct {
 		value **string
 		what  string
@@ -603,7 +635,7 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 		*field.value = &cleaned
 	}
 	// Unpublishing folds the draft into the article, which may move it.
-	places := change.CollectionID != nil || (change.Status != nil && *change.Status == domain.KBDraft)
+	places := change.CollectionID != nil || change.Visibility != nil || (change.Status != nil && *change.Status == domain.KBDraft)
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
 		if places {
 			if err := lockKB(ctx, tx, workspaceID); err != nil {
@@ -613,6 +645,15 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 		status, _, err := lockKBArticle(ctx, tx, workspaceID, id, seen)
 		if err != nil {
 			return domain.KBArticle{}, err
+		}
+		if change.Visibility != nil {
+			if err := setKBArticleVisibility(ctx, tx, workspaceID, id, *change.Visibility); err != nil {
+				return domain.KBArticle{}, err
+			}
+			if change.onlyVisibility() {
+				return readKBArticle(ctx, tx, workspaceID, id)
+			}
+			change.Visibility = nil
 		}
 		// A published article keeps its live text until someone publishes the change.
 		if status == domain.KBPublished && (change.Status == nil || *change.Status == domain.KBPublished) {

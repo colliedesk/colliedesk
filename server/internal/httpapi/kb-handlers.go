@@ -25,9 +25,12 @@ import (
 // writeKBError maps the refusals of knowledge base writes; anything else is a store failure.
 func writeKBError(response http.ResponseWriter, err error) {
 	var invalid *domain.InvalidKBError
+	var raise *domain.KBVisibilityRaiseError
 	switch {
 	case errors.As(err, &invalid):
 		writeError(response, http.StatusBadRequest, "invalid_request", invalid.Message)
+	case errors.As(err, &raise):
+		writeError(response, http.StatusConflict, "approval_required", raise.Error())
 	case errors.Is(err, domain.ErrKBChanged):
 		writeError(response, http.StatusConflict, "changed_elsewhere", "This was changed by someone else. Reload to see their version, then try again.")
 	case errors.Is(err, domain.ErrKBDuplicateSlug):
@@ -117,9 +120,10 @@ func (a *API) createKBCollection(response http.ResponseWriter, request *http.Req
 		ParentID    *string `json:"parent_id"`
 		Position    int     `json:"position"`
 		Template    *string `json:"default_template_id"`
+		Visibility  string  `json:"visibility"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A collection needs a name; slug, description, parent_id, position and default_template_id are optional.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "A collection needs a name; slug, description, parent_id, position, default_template_id and visibility are optional.")
 		return
 	}
 	if input.Slug != nil && *input.Slug == "" {
@@ -139,9 +143,10 @@ func (a *API) createKBCollection(response http.ResponseWriter, request *http.Req
 	if input.Template != nil {
 		template = *input.Template
 	}
-	a.createOnce(response, request, createKBCollectionOperation, []string{input.Name, slug, input.Description, parent, strconv.Itoa(input.Position), template}, func(ctx context.Context) (any, error) {
+	a.createOnce(response, request, createKBCollectionOperation, []string{input.Name, slug, input.Description, parent, strconv.Itoa(input.Position), template, input.Visibility}, func(ctx context.Context) (any, error) {
 		collection, err := a.store.CreateKBCollection(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
-			store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position, DefaultTemplateID: input.Template})
+			store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position,
+				DefaultTemplateID: input.Template, Visibility: input.Visibility})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered
@@ -151,10 +156,6 @@ func (a *API) createKBCollection(response http.ResponseWriter, request *http.Req
 }
 
 func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Request) {
-	// A collection's name, slug and place are the help center's navigation.
-	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, nil) {
-		return
-	}
 	var input struct {
 		UpdatedAt   *time.Time      `json:"updated_at"`
 		Name        *string         `json:"name"`
@@ -164,16 +165,29 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 		ParentID    json.RawMessage `json:"parent_id"`
 		Template    json.RawMessage `json:"default_template_id"`
 		Approval    *string         `json:"require_approval"`
+		Visibility  *string         `json:"visibility"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and what to change.")
+		return
+	}
+	// A collection's name, slug and place are the help center's navigation, and showing it to more
+	// people publishes what is in it; keeping it from more people is an edit.
+	onlyRestricts := input.Name == nil && input.Slug == nil && input.Description == nil && input.Position == nil &&
+		input.ParentID == nil && input.Template == nil && input.Approval == nil && input.Visibility != nil
+	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, func() (bool, error) {
+		if !onlyRestricts {
+			return true, nil
+		}
+		return a.store.KBCollectionVisibilityRaises(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), *input.Visibility)
+	}) {
 		return
 	}
 	// Whether a collection needs approval is a help center setting, like the workspace's own.
 	if input.Approval != nil && a.refuseUnlessHeld(response, request, principal(request), auth.PermHelpCenterUpdate, nil) {
 		return
 	}
-	change := store.KBCollectionChange{Name: input.Name, Slug: input.Slug, Description: input.Description, Position: input.Position, RequireApproval: input.Approval}
+	change := store.KBCollectionChange{Name: input.Name, Slug: input.Slug, Description: input.Description, Position: input.Position, RequireApproval: input.Approval, Visibility: input.Visibility}
 	if input.ParentID != nil {
 		change.MoveParent = true
 		if string(input.ParentID) != "null" {
@@ -293,7 +307,11 @@ func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request
 	}
 	query := request.URL.Query()
 	filter := store.KBArticleFilter{Query: query.Get("q"), Status: query.Get("status"), CollectionID: query.Get("collection_id"), Sort: query.Get("sort"),
-		Limit: limit, Cursor: query.Get("cursor"), ReviewState: query.Get("state")}
+		Limit: limit, Cursor: query.Get("cursor"), ReviewState: query.Get("state"), Visibility: query.Get("visibility")}
+	if filter.Visibility != "" && domain.CheckKBVisibility(filter.Visibility) != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "visibility is everyone, help_chat or agents: who can see the article now.")
+		return
+	}
 	if filter.ReviewState != "" && filter.ReviewState != store.KBInReview && filter.ReviewState != store.KBApproved {
 		writeError(response, http.StatusBadRequest, "invalid_request", "state is in_review or approved.")
 		return
@@ -487,9 +505,10 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 		SEODesc       string    `json:"seo_description"`
 		ShowContents  *bool     `json:"show_contents"`
 		TemplateID    *string   `json:"template_id"`
+		Visibility    string    `json:"visibility"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "An article needs a collection_id and a title; body_md or template_id, slug and status are optional.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "An article needs a collection_id and a title; body_md or template_id, slug, status and visibility are optional.")
 		return
 	}
 	if input.BodyMD != nil && input.TemplateID != nil {
@@ -532,10 +551,11 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 	if input.Status == "published" && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, body, templateID, strconv.FormatBool(fromCollection), input.Status, input.SEOTitle, input.SEODesc, showContentsKey(input.ShowContents)}, func(ctx context.Context) (any, error) {
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, strings.Join(extraIDs, ","), input.Title, slug, body, templateID, strconv.FormatBool(fromCollection), input.Status, input.SEOTitle, input.SEODesc, showContentsKey(input.ShowContents), input.Visibility}, func(ctx context.Context) (any, error) {
 		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
 			store.KBArticleInput{CollectionID: input.CollectionID, ExtraCollectionIDs: extraIDs, Title: input.Title, Slug: slug, BodyMD: body, Status: input.Status,
-				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, TemplateID: templateID, BodyFromCollection: fromCollection})
+				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, TemplateID: templateID, BodyFromCollection: fromCollection,
+				Visibility: input.Visibility})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered
@@ -565,10 +585,12 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		SEOTitle      *string    `json:"seo_title"`
 		SEODesc       *string    `json:"seo_description"`
 		ShowContents  *bool      `json:"show_contents"`
+		Visibility    *string    `json:"visibility"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
-		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.CollectionIDs == nil && input.Status == nil && input.SEOTitle == nil && input.SEODesc == nil && input.ShowContents == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title, seo_description or show_contents.")
+		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.CollectionIDs == nil && input.Status == nil && input.SEOTitle == nil &&
+			input.SEODesc == nil && input.ShowContents == nil && input.Visibility == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, collection_ids, status, seo_title, seo_description, show_contents or visibility.")
 		return
 	}
 	homeCollection, extras, problem := kbArticleCollections(input.CollectionID, input.CollectionIDs)
@@ -577,9 +599,16 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	who := principal(request)
-	// Publishing or unpublishing changes the help center; a change to a published article is saved
-	// as its draft, which the help center does not show.
+	// Publishing or unpublishing changes the help center, and so does showing a published article to
+	// more people; a change to a published article is saved as its draft, which the help center does
+	// not show, and keeping it from more people applies at once.
 	publishes := func() (bool, error) {
+		if input.Visibility != nil {
+			raises, err := a.store.KBArticleVisibilityRaises(request.Context(), who.Workspace.ID, request.PathValue("id"), *input.Visibility)
+			if raises || err != nil {
+				return raises, err
+			}
+		}
 		if input.Status == nil {
 			return false, nil
 		}
@@ -591,7 +620,7 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 	}
 	article, err := a.store.UpdateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt,
 		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: homeCollection, ExtraCollectionIDs: extras, Status: input.Status,
-			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents})
+			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc, ShowContents: input.ShowContents, Visibility: input.Visibility})
 	if err != nil {
 		writeKBError(response, err)
 		return

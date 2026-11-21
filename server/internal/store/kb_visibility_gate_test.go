@@ -23,6 +23,7 @@ var teamSideKBFiles = map[string]string{
 	"store/kb-review-edits.go":            "the version a review compares with",
 	"store/kb-review-translations.go":     "the version a translation review compares with",
 	"store/kb-public.go":                  "whether a change needs kb_articles:publish",
+	"store/kb-visibility.go":              "which published articles a change shows to more people",
 	"store/setup-ai-and-targets.go":       "the setup step that asks for a first published article",
 	"freshdesk/solutions-link-targets.go": "where an imported link points",
 }
