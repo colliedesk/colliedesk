@@ -48,12 +48,13 @@ export const ArticleFigure = Node.create({
     getAttrs: (element) => {
       const image = element.querySelector('img, span.kb-external-image');
       const width = element.getAttribute('data-width');
+      const align = element.getAttribute('data-align');
       return {
         src: image?.getAttribute('src') ?? image?.getAttribute('data-src') ?? '',
         alt: image?.getAttribute('alt') ?? image?.getAttribute('data-alt') ?? null,
         href: element.getAttribute('data-href'),
         width: width && ((rules.figure.widths as readonly string[]).includes(width) || within(width, 1, rules.figure.pixels)) ? width : null,
-        align: element.getAttribute('data-align'),
+        align: align && (rules.figure.align as readonly string[]).includes(align) ? align : null,
         border: element.hasAttribute('data-border'),
       };
     },
