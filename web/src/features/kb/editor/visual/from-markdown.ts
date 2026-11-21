@@ -93,6 +93,7 @@ function figure(node: FormatNode): JSONContent {
     attrs: {
       src: image.url ?? '', alt: image.alt ?? null, title: image.title ?? null,
       href: shown!.type === 'link' ? ((shown as ImageNode).url ?? '') : null,
+      linkTitle: shown!.type === 'link' ? ((shown as ImageNode).title ?? null) : null,
       width: attrs['data-width'] ?? null, align: attrs['data-align'] ?? null, border: attrs['data-border'] !== undefined,
     },
     content: caption ? inline(caption.children ?? []) : [],

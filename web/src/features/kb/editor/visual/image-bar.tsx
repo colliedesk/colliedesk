@@ -54,7 +54,7 @@ export function ImageBar({ editor, picked, extra }: { editor: Editor; picked: Pi
       <button type="button" aria-pressed={picked.attrs.href !== null} onClick={() => setLinking(true)}>{m.link}</button>
       {extra}
       {linking && <LinkDialog current={picked.attrs.href ?? ''} onClose={() => setLinking(false)}
-        onRemove={() => { setLinking(false); set({ href: null }); }}
+        onRemove={() => { setLinking(false); set({ href: null, linkTitle: null }); }}
         onSet={(href) => { setLinking(false); set({ href }); }} />}
     </div>
   );

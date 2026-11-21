@@ -89,7 +89,7 @@ function block(node: PMNode): MD[] {
 function figure(node: PMNode): MD[] {
   const attrs = node.attrs as FigureAttrs;
   const image: MD = { type: 'image', url: attrs.src, alt: attrs.alt ?? '', title: attrs.title };
-  const shown: MD = attrs.href ? { type: 'link', url: attrs.href, title: null, children: [image] } : image;
+  const shown: MD = attrs.href ? { type: 'link', url: attrs.href, title: attrs.linkTitle, children: [image] } : image;
   const picture: MD = { type: 'paragraph', children: [shown] };
   const caption = node.childCount > 0 ? [html('<figcaption>'), { type: 'paragraph', children: phrasing(node) }, html('</figcaption>')] : [];
   return [html(tagString(figureTag(attrs))), picture, ...caption, html('</figure>')];

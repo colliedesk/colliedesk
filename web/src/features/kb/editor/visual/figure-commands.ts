@@ -35,7 +35,8 @@ function imageAttrs(image: PMNode): FigureAttrs {
   const link = image.marks.find((mark) => mark.type.name === 'link');
   return {
     src: image.attrs.src as string, alt: (image.attrs.alt as string | null) ?? null, title: (image.attrs.title as string | null) ?? null,
-    href: (link?.attrs.href as string | undefined) ?? null, width: null, align: null, border: false,
+    href: (link?.attrs.href as string | undefined) ?? null, linkTitle: (link?.attrs.title as string | null | undefined) ?? null,
+    width: null, align: null, border: false,
   };
 }
 

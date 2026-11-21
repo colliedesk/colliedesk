@@ -8,6 +8,7 @@ export interface FigureAttrs {
   alt: string | null;
   title: string | null;
   href: string | null;
+  linkTitle: string | null;
   width: string | null;
   align: string | null;
   border: boolean;
@@ -38,6 +39,7 @@ export const ArticleFigure = Node.create({
     alt: { default: null, rendered: false },
     title: { default: null, rendered: false },
     href: { default: null, rendered: false },
+    linkTitle: { default: null, rendered: false },
     width: { default: null, rendered: false },
     align: { default: null, rendered: false },
     border: { default: false, rendered: false },
@@ -52,7 +54,9 @@ export const ArticleFigure = Node.create({
       return {
         src: image?.getAttribute('src') ?? image?.getAttribute('data-src') ?? '',
         alt: image?.getAttribute('alt') ?? image?.getAttribute('data-alt') ?? null,
+        title: image?.getAttribute('title') ?? null,
         href: element.getAttribute('data-href'),
+        linkTitle: element.getAttribute('data-link-title'),
         width: width && ((rules.figure.widths as readonly string[]).includes(width) || within(width, 1, rules.figure.pixels)) ? width : null,
         align: align && (rules.figure.align as readonly string[]).includes(align) ? align : null,
         border: element.hasAttribute('data-border'),
@@ -63,15 +67,17 @@ export const ArticleFigure = Node.create({
     const attrs = node.attrs as FigureAttrs;
     const tag = figureTag(attrs);
     const pixels = attrs.width && within(attrs.width, 1, rules.figure.pixels) ? { width: attrs.width } : {};
+    const title = attrs.title ? { title: attrs.title } : {};
     const image = ownImage(attrs.src)
-      ? ['img', { src: attrs.src, alt: attrs.alt ?? '', ...pixels }]
-      : ['span', { class: 'kb-external-image', 'data-src': attrs.src, 'data-alt': attrs.alt ?? '' }, kbMessages.externalImage(attrs.alt ?? '', attrs.src)];
+      ? ['img', { src: attrs.src, alt: attrs.alt ?? '', ...title, ...pixels }]
+      : ['span', { class: 'kb-external-image', 'data-src': attrs.src, 'data-alt': attrs.alt ?? '', ...title }, kbMessages.externalImage(attrs.alt ?? '', attrs.src)];
     const data = {
       'data-figure': tagString(tag),
       ...(attrs.width ? { 'data-width': attrs.width } : {}),
       ...(attrs.align ? { 'data-align': attrs.align } : {}),
       ...(attrs.border ? { 'data-border': '' } : {}),
       ...(attrs.href ? { 'data-href': attrs.href } : {}),
+      ...(attrs.href && attrs.linkTitle ? { 'data-link-title': attrs.linkTitle } : {}),
     };
     return ['figure', { class: figureClass(tag).join(' '), ...data }, ['div', { contenteditable: 'false' }, image], ['figcaption', 0]];
   },
