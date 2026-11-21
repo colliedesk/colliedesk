@@ -114,6 +114,19 @@ type KBMediaArticle struct {
 type KBMediaDetails struct {
 	KBMedia
 	Articles []KBMediaArticle `json:"articles"`
+	// EarlierVersions are the items this one replaced in articles, by replacements not undone, the
+	// newest first; undoing a replacement puts its item back. Empty, never null.
+	EarlierVersions []KBMediaEarlierVersion `json:"earlier_versions"`
+}
+
+// KBMediaEarlierVersion is an item a replacement put this one in the place of.
+type KBMediaEarlierVersion struct {
+	ReplacementID string    `json:"replacement_id"`
+	MediaID       string    `json:"media_id"`
+	Name          string    `json:"name"`
+	URL           string    `json:"url"`
+	ArticleIDs    []string  `json:"article_ids"`
+	ReplacedAt    time.Time `json:"replaced_at"`
 }
 
 // KBMediaSummary adds up the items of a library list that no live article uses: their count and

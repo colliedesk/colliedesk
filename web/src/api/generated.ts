@@ -4865,6 +4865,7 @@ export interface paths {
         /**
          * @description Put another library item (`with_media_id`, an image for an image, a video for a video) in the place of this one in every live article whose current text or a translation shows it. Each such article gets a new version of kind `media_replace`, and published ones change on the help center at once. Ids never change their bytes, so the new item keeps its own id and caches stay right. The answer is the replacement; `POST /api/v1/kb/media-replacements/{id}/undo` reverses it. 400 when the kinds differ.
          *     A file (kind `file`) is replaced in place, since articles list it by its id: it keeps its id and address and takes the bytes and name of `with_media_id`, which goes to the trash holding the earlier version (`in_place` true, no article gets a new version). 400 when an article or a draft lists `with_media_id`: upload the new version as a file no article lists. Replacing a file a published article lists needs kb_articles:publish.
+         *     With `article_id`, only that article and its translations change: the others that show the image or video keep it. This is how an edited copy (an annotated screenshot) goes in one article, and the new item's details list this one in `earlier_versions` until the replacement is undone. 400 when that article's text does not show the item, or when the item is a file; 404 when no live article in the workspace has that id. Changing a published article needs kb_articles:publish.
          */
         post: operations["replaceKBMedia"];
         delete?: never;
@@ -8997,6 +8998,22 @@ export interface components {
                 in_trash: boolean;
                 /** @description False when only an older version names the item. */
                 current: boolean;
+            }[];
+            /** @description The items replacements put this one in the place of (by replacements not undone, newest first), each an earlier version the articles showed. Undoing the replacement puts it back. Empty when there are none. */
+            earlier_versions: {
+                /**
+                 * Format: uuid
+                 * @description Undo with POST /api/v1/kb/media-replacements/{replacement_id}/undo.
+                 */
+                replacement_id: string;
+                /** Format: uuid */
+                media_id: string;
+                name: string;
+                url: string;
+                /** @description The articles the replacement changed. */
+                article_ids: string[];
+                /** Format: date-time */
+                replaced_at: string;
             }[];
         };
         KBMediaResult: {
@@ -22492,6 +22509,11 @@ export interface operations {
                 "application/json": {
                     /** Format: uuid */
                     with_media_id: string;
+                    /**
+                     * Format: uuid
+                     * @description Replace in this article only; leave out to replace in every live article.
+                     */
+                    article_id?: string;
                 };
             };
         };

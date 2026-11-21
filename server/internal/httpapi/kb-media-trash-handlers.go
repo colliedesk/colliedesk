@@ -189,21 +189,26 @@ func writeKBMediaReplaceError(response http.ResponseWriter, err error) {
 }
 
 func (a *API) replaceKBMedia(response http.ResponseWriter, request *http.Request) {
-	// A replacement writes a new version of every live article that shows the item.
+	// A replacement writes a new version of every live article that shows the item, or with article_id
+	// of that one article only.
 	who := principal(request)
-	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, func() (bool, error) {
-		return a.store.KBMediaShownPublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
-	}) {
-		return
-	}
 	var input struct {
-		With string `json:"with_media_id"`
+		With    string `json:"with_media_id"`
+		Article string `json:"article_id"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.With == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send with_media_id, the item to put in its place.")
 		return
 	}
-	replacement, err := a.store.ReplaceKBMedia(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), input.With)
+	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, func() (bool, error) {
+		if input.Article != "" {
+			return a.store.KBArticlePublished(request.Context(), who.Workspace.ID, input.Article)
+		}
+		return a.store.KBMediaShownPublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
+	}) {
+		return
+	}
+	replacement, err := a.store.ReplaceKBMedia(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), input.With, input.Article)
 	if err != nil {
 		writeKBMediaReplaceError(response, err)
 		return

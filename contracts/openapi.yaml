@@ -8525,6 +8525,12 @@ paths:
         earlier version (`in_place` true, no article gets a new version). 400 when an article or a
         draft lists `with_media_id`: upload the new version as a file no article lists. Replacing a
         file a published article lists needs kb_articles:publish.
+
+        With `article_id`, only that article and its translations change: the others that show the image
+        or video keep it. This is how an edited copy (an annotated screenshot) goes in one article, and
+        the new item's details list this one in `earlier_versions` until the replacement is undone. 400
+        when that article's text does not show the item, or when the item is a file; 404 when no live
+        article in the workspace has that id. Changing a published article needs kb_articles:publish.
       requestBody:
         required: true
         content:
@@ -8534,6 +8540,7 @@ paths:
               required: [with_media_id]
               properties:
                 with_media_id: {type: string, format: uuid}
+                article_id: {type: string, format: uuid, description: 'Replace in this article only; leave out to replace in every live article.'}
       responses:
         '200':
           description: The replacement
@@ -13307,7 +13314,7 @@ components:
       allOf:
         - {$ref: '#/components/schemas/KBMedia'}
         - type: object
-          required: [articles]
+          required: [articles, earlier_versions]
           properties:
             articles:
               type: array
@@ -13321,6 +13328,22 @@ components:
                   status: {type: string, enum: [draft, published]}
                   in_trash: {type: boolean}
                   current: {type: boolean, description: False when only an older version names the item.}
+            earlier_versions:
+              type: array
+              description: >-
+                The items replacements put this one in the place of (by replacements not undone, newest
+                first), each an earlier version the articles showed. Undoing the replacement puts it back.
+                Empty when there are none.
+              items:
+                type: object
+                required: [replacement_id, media_id, name, url, article_ids, replaced_at]
+                properties:
+                  replacement_id: {type: string, format: uuid, description: 'Undo with POST /api/v1/kb/media-replacements/{replacement_id}/undo.'}
+                  media_id: {type: string, format: uuid}
+                  name: {type: string}
+                  url: {type: string}
+                  article_ids: {type: array, items: {type: string, format: uuid}, description: The articles the replacement changed.}
+                  replaced_at: {type: string, format: date-time}
     KBMediaResult:
       type: object
       required: [id, status]

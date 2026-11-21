@@ -51,22 +51,21 @@ func lockKBArticlesForMedia(ctx context.Context, tx pgx.Tx, workspaceID string, 
 // changes (replaceInKBDraft), and records the
 // replacement so it can be undone. An image is replaced by an image, a video by a video; with is
 // taken out of the library's trash if it is there. A file is replaced by a file in place
-// (replaceKBFileInPlace), since articles list it by its id.
-func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Actor, id, with string) (domain.KBMediaReplacement, error) {
+// (replaceKBFileInPlace), since articles list it by its id. With article an image or video is
+// replaced in that live article only, which must show it.
+func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Actor, id, with, article string) (domain.KBMediaReplacement, error) {
 	if !savedReplyID.MatchString(id) || !savedReplyID.MatchString(with) {
 		return domain.KBMediaReplacement{}, domain.ErrKBMediaNotFound
+	}
+	if article != "" && !savedReplyID.MatchString(article) {
+		return domain.KBMediaReplacement{}, domain.ErrKBArticleNotFound
 	}
 	if strings.EqualFold(id, with) {
 		return domain.KBMediaReplacement{}, &domain.InvalidKBError{Message: "Replace an item with another one."}
 	}
 	from, to := strings.ToLower(id), strings.ToLower(with)
 	replacement, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBMediaReplacement, error) {
-		rows, err := tx.Query(ctx, `SELECT DISTINCT l.article_id::text FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
-			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND a.deleted_at IS NULL ORDER BY 1`, workspaceID, from)
-		if err != nil {
-			return domain.KBMediaReplacement{}, err
-		}
-		articles, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		articles, err := kbArticlesShowingMedia(ctx, tx, workspaceID, from, strings.ToLower(article))
 		if err != nil {
 			return domain.KBMediaReplacement{}, err
 		}
@@ -84,6 +83,12 @@ func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Ac
 		}
 		if len(kinds) != 1 {
 			return domain.KBMediaReplacement{}, domain.ErrKBMediaKindMismatch
+		}
+		if article != "" && kinds[0] == domain.KBMediaFile {
+			return domain.KBMediaReplacement{}, &domain.InvalidKBError{Message: "A file is replaced in place in every article that lists it: send no article_id."}
+		}
+		if article != "" && len(articles) == 0 {
+			return domain.KBMediaReplacement{}, &domain.InvalidKBError{Message: "The article does not show this item: send the id of an article whose text shows it, or no article_id."}
 		}
 		if kinds[0] == domain.KBMediaFile {
 			return replaceKBFileInPlace(ctx, tx, workspaceID, actor, from, to)
