@@ -15,6 +15,18 @@ if [ "${1:-}" = compose ]; then
   case "$*" in
     *PG_VERSION*)
       [ "${STUB_MODE:-ok}" != probe-fails ] || exit 1
+      # STUB_PG_VERSIONS ("volume=major ...") gives each data volume its own major, so a test sees
+      # which volume the installer read.
+      if [ -n "${STUB_PG_VERSIONS:-}" ]; then
+        file=compose.yaml
+        [ "${2:-}" != -f ] || file=$3
+        key=$(sed -n 's#^      - \([A-Za-z0-9_.-]*\):/var/lib/postgresql/data$#\1#p' "$file" | head -n 1)
+        for pair in $STUB_PG_VERSIONS; do
+          [ "${pair%%=*}" != "$key" ] || { printf '%s\n' "${pair#*=}"; exit; }
+        done
+        printf '%s\n' none
+        exit
+      fi
       printf '%s\n' "${STUB_PG_VERSION:-none}"
       exit
       ;;
@@ -172,7 +184,7 @@ printf '%s\n' 'POSTGRES_PASSWORD=pg' 'APP_ORIGIN=https://desk.example.com' 'SMTP
   'INTERNAL_SIGNUP_EMAILS=@example.com' 'SMTP_PORT=' 'APP_SECRET=old' >"$upgrade/.env"
 touch "$upgrade/.initialized"
 rm -f "$STUB_LOG" "$STUB_LOG.stdin"
-STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$upgrade" --name Desk --email admin@example.com </dev/null >/dev/null
+STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$upgrade" --name Desk --email admin@example.com </dev/null >/dev/null
 grep -Fx '# the older compose file' "$upgrade/compose.yaml.bak" >/dev/null
 grep -F 'compose run --rm -T server' "$STUB_LOG" >/dev/null
 grep -F 'collie config import --stdin --only-missing --by installer' "$STUB_LOG" >/dev/null
@@ -209,7 +221,7 @@ mkdir -p "$failing"
 printf '%s\n' 'name: colliedesk' '# still the older one' >"$failing/compose.yaml"
 printf '%s\n' 'POSTGRES_PASSWORD=pg' 'SMTP_HOST=smtp.example.net' >"$failing/.env"
 touch "$failing/.initialized"
-expect_failure 'Importing the settings from .env failed' env STUB_MODE=import-fails STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$failing" --name Desk --email admin@example.com
+expect_failure 'Importing the settings from .env failed' env STUB_MODE=import-fails STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$failing" --name Desk --email admin@example.com
 grep -Fx '# still the older one' "$failing/compose.yaml" >/dev/null
 [ ! -f "$failing/compose.yaml.bak" ]
 
@@ -224,21 +236,30 @@ if printf '%s' "$again" | grep -F 'Operator console' >/dev/null; then
   exit 1
 fi
 
-# A rerun keeps the PostgreSQL major the data volume holds: the installer never changes it by itself.
+# A rerun on a bundled database that PostgreSQL 16, 17 or 18 wrote stops before it changes compose.yaml:
+# Colliedesk runs on 19, and the installer never moves data to a new major by itself. The message names
+# the script that does, from the branch this installer comes from.
 kept=$TMP/kept
 mkdir -p "$kept"
 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null >/dev/null
-output=$(STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null 2>&1)
-grep -Fx '    image: postgres:17-bookworm' "$kept/compose.yaml" >/dev/null || { printf 'a rerun on PostgreSQL 17 data changed the image:\n%s\n' "$(grep 'image: postgres' "$kept/compose.yaml")" >&2; exit 1; }
-grep -Fx '      PGDATA: /var/lib/postgresql/data' "$kept/compose.yaml" >/dev/null
-printf '%s' "$output" | grep -F 'PostgreSQL 17' | grep -F 'docs/self-host/upgrade.md#postgresql-versions' >/dev/null ||
-  { printf 'the rerun did not say it kept PostgreSQL 17 and where to read about upgrading:\n%s\n' "$output" >&2; exit 1; }
-printf '%s' "$output" | grep -F 'PostgreSQL 17' | grep -F 'upgrade-postgres.sh' >/dev/null ||
-  { printf 'the rerun on PostgreSQL 17 did not name the script that moves it to 19:\n%s\n' "$output" >&2; exit 1; }
-# The compose file lost (or never written) on an initialized install: the major still comes from the volume.
-rm "$kept/compose.yaml" "$kept/compose.yaml.bak"
-STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
-grep -Fx '    image: postgres:17-bookworm' "$kept/compose.yaml" >/dev/null
+cp "$kept/compose.yaml" "$TMP/kept.fresh"
+for major in 16 17 18; do
+  expect_failure "the database volume holds PostgreSQL $major" env STUB_PG_VERSION=$major sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com
+  for want in 'PostgreSQL 19 or newer' 'compose.yaml was not changed' \
+    'curl -fsSLO https://raw.githubusercontent.com/colliedesk/colliedesk/main/upgrade-postgres.sh' 'sh upgrade-postgres.sh' \
+    'docs/self-host/upgrade.md#postgresql-versions'; do
+    printf '%s' "$output" | grep -F -- "$want" >/dev/null ||
+      { printf 'the rerun on PostgreSQL %s data did not say %s:\n%s\n' "$major" "$want" "$output" >&2; exit 1; }
+  done
+  cmp -s "$kept/compose.yaml" "$TMP/kept.fresh" || { printf 'a rerun on PostgreSQL %s data changed compose.yaml\n' "$major" >&2; exit 1; }
+  [ ! -e "$kept/compose.yaml.bak" ] && [ ! -e "$kept/compose.yaml.next" ] && [ ! -e "$kept/compose.yaml.probe" ] ||
+    { printf 'a rerun on PostgreSQL %s data left a compose file beside compose.yaml\n' "$major" >&2; exit 1; }
+done
+# The compose file lost (or never written) on an initialized install: the major still comes from the
+# volume, and nothing is written.
+rm "$kept/compose.yaml"
+expect_failure 'the database volume holds PostgreSQL 17' env STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com
+[ ! -e "$kept/compose.yaml" ] && [ ! -e "$kept/compose.yaml.probe" ] || { printf '%s\n' 'a refused rerun without compose.yaml wrote a compose file' >&2; exit 1; }
 # Data already on 19 stays on the pinned 19 image, with no notice.
 output=$(STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null 2>&1)
 grep -Ex '    image: postgres:19\.[0-9]+-bookworm@sha256:[0-9a-f]{64}' "$kept/compose.yaml" >/dev/null
@@ -266,14 +287,15 @@ fi
 # one is refused with nothing written, since either volume may hold the data.
 rm -f "$moved/compose.yaml" "$moved/compose.yaml.bak"
 printf 'state=done\nold_key=postgres-data\n' >"$moved/.postgres-upgrade"
-STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
+STUB_PG_VERSIONS='postgres-data=17 postgres19-data=19' sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
 grep -Fx '      - postgres19-data:/var/lib/postgresql/data' "$moved/compose.yaml" >/dev/null ||
   { printf '%s\n' 'a rerun without compose.yaml after a finished upgrade went back to the volume postgres-data' >&2; exit 1; }
 rm -f "$moved/compose.yaml" "$moved/compose.yaml.bak"
 printf 'state=rolled_back\nold_key=postgres-data\n' >"$moved/.postgres-upgrade"
-STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
-grep -Fx '      - postgres-data:/var/lib/postgresql/data' "$moved/compose.yaml" >/dev/null ||
-  { printf '%s\n' 'a rerun without compose.yaml after a rollback did not use the old volume' >&2; exit 1; }
+expect_failure 'the database volume holds PostgreSQL 17' env STUB_PG_VERSIONS='postgres-data=17 postgres19-data=19' \
+  sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com ||
+  { printf '%s\n' 'a rerun without compose.yaml after a rollback did not read the old volume' >&2; exit 1; }
+[ ! -e "$moved/compose.yaml" ] || { printf '%s\n' 'a refused rerun after a rollback wrote compose.yaml' >&2; exit 1; }
 rm -f "$moved/compose.yaml" "$moved/compose.yaml.bak"
 printf 'state=started\nold_key=postgres-data\n' >"$moved/.postgres-upgrade"
 expect_failure 'has not finished' env STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com
