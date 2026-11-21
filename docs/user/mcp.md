@@ -225,6 +225,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_help_center_theme_get` | Reads the public help center's logo, colors, fonts, custom CSS and links | `help_center:read` |
 | `colliedesk_help_center_theme_check` | Checks a candidate brand, custom CSS and color contrast without saving it; can render a page preview | `help_center:read` |
 | `colliedesk_help_center_search_console_get` | Reads the Google and Bing Search Console verification tokens of the help center | `help_center:read` |
+| `colliedesk_help_center_analytics_get` | Reads where the help center sends its page views (GA4 or Plausible), whether it is on and the last send result | `help_center:read` |
 | `colliedesk_help_center_freshdesk_redirect_get` | Says how the old Freshdesk help center addresses move and, for a Freshdesk plan that allows it, returns the snippet that redirects them | `help_center:read` |
 | `colliedesk_help_center_domain_get` | Reads the custom domain, its DNS records and the last check | `help_center:read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any token |
@@ -270,6 +271,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `help_center:update` |
 | `colliedesk_help_center_theme_update` | Replaces the public help center's brand after checking its color contrast and custom CSS | `help_center:update` |
 | `colliedesk_help_center_search_console_update` | Sets or removes the Google and Bing verification tokens served as meta tags on the help center's pages | `help_center:update` |
+| `colliedesk_help_center_analytics_set` | Sends the help center's page views from the server to the workspace's own GA4 or Plausible, or stops it | `help_center:update` |
+| `colliedesk_help_center_analytics_test` | Sends one test page view to the saved GA4 or Plausible and says what the service answered | `help_center:update` |
 | `colliedesk_help_center_domain_set` | Sets or replaces the custom domain, pending DNS ownership proof | `help_center:update` |
 | `colliedesk_help_center_domain_check` | Checks DNS ownership and activates the proven custom domain | `help_center:update` |
 | `colliedesk_help_center_domain_remove` | Removes the custom domain and restores the slug address | `help_center:update` |
