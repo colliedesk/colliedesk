@@ -74,8 +74,10 @@ func replaceInKBArticleTranslations(ctx context.Context, tx pgx.Tx, workspaceID,
 		item           replacedTranslation
 		shown, drafted bool
 	}
-	rows, err := tx.Query(ctx, `SELECT t.locale, t.body_md, t.status='published' AND t.deleted_at IS NULL, `+kbTranslationHasDraft+`
-		FROM kb_article_translations t WHERE t.workspace_id=$1 AND t.article_id=$2 ORDER BY t.locale FOR UPDATE`, workspaceID, articleID)
+	rows, err := tx.Query(ctx, `SELECT t.locale, t.body_md,
+			EXISTS(SELECT 1 FROM kb_published_translations p WHERE p.workspace_id=t.workspace_id AND p.article_id=t.article_id AND p.locale=t.locale),
+			`+kbTranslationHasDraft+`
+		FROM kb_article_translations t WHERE t.workspace_id=$1 AND t.article_id=$2 ORDER BY t.locale FOR UPDATE OF t`, workspaceID, articleID)
 	if err != nil {
 		return nil, err
 	}
