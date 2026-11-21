@@ -133,7 +133,7 @@ export const kbMessages = {
   },
   videoLink: 'YouTube or Vimeo link',
   linkAddress: 'Address',
-  linkAddressHelp: 'A web address (https://…), an email address (mailto:…) or a page of this site (/…).',
+  linkAddressHelp: 'https://…, mailto:… or a page of this site (/…).',
   linkAddressInvalid: 'Type the whole address, such as https://example.com.',
   removeLink: 'Remove link',
   codeLanguage: 'Language',

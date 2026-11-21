@@ -23,6 +23,15 @@ test('a Markdown block the editor cannot show stays read-only text in its place'
   expect(document.querySelector('.kb-markdown-block')).toHaveAttribute('contenteditable', 'false');
 });
 
+test('an image from another site is never loaded: the editor says so in its place, and keeps it in the text', async () => {
+  const article = '![tracker](https://tracker.example/p.gif) and ![login](/api/v1/kb/images/7d1c2b9e-0f3a-4c5d-8e6f-1a2b3c4d5e6f)\n';
+  const { handle, text } = await make(article);
+  const images = [...text.querySelectorAll('img[src]')].map((image) => image.getAttribute('src'));
+  expect(images).toEqual(['/api/v1/kb/images/7d1c2b9e-0f3a-4c5d-8e6f-1a2b3c4d5e6f']);
+  expect(text).toHaveTextContent('Image from another site, not shown here or on the help center: tracker. Paste or drop the image to add it.');
+  expect(handle.markdown()).toBe(article);
+});
+
 test('load shows other text with a fresh undo history, and is no change', async () => {
   const { handle, onChange, editor } = await make('One\n');
   act(() => { editor.commands.insertContentAt(4, ' more'); });
