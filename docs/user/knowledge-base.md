@@ -365,7 +365,7 @@ In the Markdown, a sized, aligned, framed, captioned or linked image is a `<figu
 ```html
 <figure data-width="480" data-align="center" data-border>
 
-[![Settings page](/api/v1/kb/images/…)](https://example.com/settings)
+[![Settings page](…)](https://example.com/settings)
 
 <figcaption>
 

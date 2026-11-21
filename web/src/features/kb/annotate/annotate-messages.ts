@@ -19,5 +19,5 @@ export const annotateMessages = {
   loading: 'Loading the image…',
   loadFailed: 'The image could not be loaded. Close and try again.',
   saveFailed: 'The copy could not be saved. Try again.',
-  copyNote: 'The original stays in the media library as an earlier version of the copy.',
+  copyNote: 'The library keeps the original as an earlier version.',
 };
