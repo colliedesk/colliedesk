@@ -8209,7 +8209,7 @@ export interface components {
             title: string;
             /** @description Lowercase letters, digits and hyphens in any script; made from the title when left out. */
             slug?: string;
-            /** @description The text in Markdown. Of raw HTML the help center shows only a YouTube or Vimeo player, an <iframe> whose src is https://www.youtube.com/embed/<id>, https://www.youtube-nocookie.com/embed/<id> or https://player.vimeo.com/video/<id>; anything else is left out when shown and kept as written. */
+            /** @description The text in Markdown. Of raw HTML the help center shows only a YouTube or Vimeo player, an <iframe> whose src is https://www.youtube.com/embed/<id>, https://www.youtube-nocookie.com/embed/<id> or https://player.vimeo.com/video/<id>, and formatting: <u>, <mark>, <span data-color> (accent, success, warning, danger, muted), a <p> or <hN> wrapper around a paragraph or heading with data-align (center, right) and data-indent (1-4), and a <table> of <tr>, <th> and <td> with colspan and rowspan (2-20), data-align and data-bg (a colour name). Formatting tags are saved lowercase with only those attributes, in that order; anything else is left out when shown and kept as written. */
             body_md?: string;
             /**
              * Format: uuid
@@ -20485,6 +20485,7 @@ export interface operations {
                     updated_at: string;
                     title?: string;
                     slug?: string;
+                    /** @description The text in Markdown, with the HTML that KBArticleInput body_md names; formatting tags come back respelled lowercase. */
                     body_md?: string;
                     /**
                      * Format: uuid
