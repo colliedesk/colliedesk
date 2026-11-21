@@ -744,9 +744,12 @@ func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "The image could not be read.")
 		return
 	}
-	a.storeKBImage(response, request, data, upload, func(err error) {
+	image, ok := a.storeKBImage(request.Context(), response, request, data, upload, func(err error) {
 		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+"; nothing was stored.")
 	})
+	if ok {
+		writeJSON(response, http.StatusCreated, image)
+	}
 }
 
 // storeKBThumbnail makes and stores the library thumbnail of an image, or returns nil: an image too

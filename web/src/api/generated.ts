@@ -20925,7 +20925,10 @@ export interface operations {
     importKBImage: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -20944,6 +20947,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The image an earlier request with the same Idempotency-Key imported; nothing was fetched or stored again */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMedia"];
+                };
+            };
             /** @description The stored image, or the item that already held the same bytes */
             201: {
                 headers: {
@@ -20983,6 +20995,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["IdempotencyKeyReused"];
             /** @description The address could not be reached or answered with an error; nothing was stored. */
             502: {
                 headers: {

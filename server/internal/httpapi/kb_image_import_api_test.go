@@ -115,3 +115,28 @@ func TestKBImageImportIsPerWorkspace(t *testing.T) {
 		t.Fatalf("beta library = %+v", items)
 	}
 }
+
+// A paste retried by a slow network names itself with the same Idempotency-Key: the repeat answers the
+// first import (200) without fetching the image again, and the key with another address is refused.
+func TestKBImageImportWithARepeatedKeyFetchesOnce(t *testing.T) {
+	host := newImageHost(t, serveBytes("image/png", kbPNG))
+	api, session := importDesk(t, allowing(host))
+	admin := session("KB Import Key", "admin@kb-import-key.example.com")
+	body := map[string]any{"url": host.URL + "/once.png"}
+
+	first := postWithKey(t, api, admin, kbImageImportPath, "paste-1", body)
+	repeat := postWithKey(t, api, admin, kbImageImportPath, "paste-1", body)
+	if first.Code != http.StatusCreated || repeat.Code != http.StatusOK {
+		t.Fatalf("first=%d repeat=%d body=%s, want 201 then 200", first.Code, repeat.Code, repeat.Body.String())
+	}
+	var made, again kbMediaView
+	decode(t, first, &made)
+	decode(t, repeat, &again)
+	if again.ID != made.ID || host.hits.Load() != 1 {
+		t.Fatalf("repeat id=%s (want %s), image fetched %d times (want 1)", again.ID, made.ID, host.hits.Load())
+	}
+	other := postWithKey(t, api, admin, kbImageImportPath, "paste-1", map[string]any{"url": host.URL + "/other.png"})
+	if other.Code != http.StatusUnprocessableEntity || !strings.Contains(other.Body.String(), "idempotency_key_reused") {
+		t.Fatalf("other address with the same key: status=%d body=%s, want 422 idempotency_key_reused", other.Code, other.Body.String())
+	}
+}

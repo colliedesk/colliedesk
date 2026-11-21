@@ -369,6 +369,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   }, []);
   // The Attachments strip takes the files pasted or dropped into the text: an article lists them under it.
   const attachIn = useRef<(files: File[]) => void>(undefined);
+  // An image at a web address is the same paste while its address is: the abort signal does not name it.
+  const importImage = useCreateAction(({ url, signal }: { url: string; signal?: AbortSignal }, key: string) => mediaApi.importImage({ url }, key, signal));
   const imageHooks = useMemo<UploadHooks>(() => ({
     accept: (all) => {
       const problems: string[] = [];
@@ -418,7 +420,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     // An image pasted with copied text: the server fetches one at a web address; one the browser holds
     // (data:, blob:) goes up like a dropped file.
     store: async (src, signal) => {
-      if (/^https?:/i.test(src)) return (await mediaApi.importImage({ url: src }, signal)).url;
+      if (/^https?:/i.test(src)) return (await importImage.run({ url: src, signal })).url;
       const blob = await (await fetch(src, { signal })).blob();
       const file = new File([blob], 'image', { type: blob.type });
       const problem = kindOf(file) === 'image' ? fileProblem(file) : 'type';
