@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 type restKBCollection struct {
@@ -95,6 +97,7 @@ type restKBArticle struct {
 	Tags          []string              `json:"tags"`
 	Author        *kbAuthorOut          `json:"author"`
 	Languages     []kbLanguageOut       `json:"languages"`
+	Votes         *domain.KBVoteTally   `json:"votes"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
 	AIExclusion    *struct {
@@ -140,6 +143,7 @@ type kbArticleRowOut struct {
 	Tags          []string             `json:"tags"`
 	Author        *kbAuthorOut         `json:"author"`
 	Languages     []kbLanguageOut      `json:"languages"`
+	Votes         *domain.KBVoteTally  `json:"votes,omitempty"`
 	kbVisibilityOut
 }
 
@@ -168,7 +172,7 @@ func kbCollectionIDs(article restKBArticle) []string {
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
 	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Position: article.Position, Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, HasDraft: article.HasDraft, PurgesAt: article.PurgesAt,
-		Tags: kbTags(article.Tags), Author: article.Author, Languages: article.Languages, kbVisibilityOut: article.kbVisibilityOut}
+		Tags: kbTags(article.Tags), Author: article.Author, Languages: article.Languages, Votes: article.Votes, kbVisibilityOut: article.kbVisibilityOut}
 	if out.Languages == nil {
 		out.Languages = []kbLanguageOut{}
 	}

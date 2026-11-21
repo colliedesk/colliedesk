@@ -764,6 +764,7 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/agents/me/results-email", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/workspace/setup", auth.PermissionSession},
 		{http.MethodPut, "/api/v1/agents/me/setup-guide", auth.PermissionSession},
+		{http.MethodPut, "/api/v1/agents/me/kb-list-columns", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/channels", auth.PermissionSession},
 		{http.MethodPost, "/api/v1/channels", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/channels/events", auth.PermissionSession},

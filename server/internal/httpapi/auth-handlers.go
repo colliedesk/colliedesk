@@ -124,6 +124,7 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, map[string]any{
 		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "token": identity.Token, "permissions": identity.Effective(), "plan": plan,
 		"onboarding_goal": goal, "ai_features": features, "setup_guide_hidden": identity.Agent.SetupGuideHidden,
+		"kb_list_columns": domain.EffectiveKBListColumns(identity.Agent.KBListColumns),
 	})
 }
 

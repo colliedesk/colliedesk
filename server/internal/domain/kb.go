@@ -133,6 +133,8 @@ type KBArticleSummary struct {
 	// ReviewState is "in_review" while its own unpublished text waits for a reviewer and "approved" once
 	// a reviewer approved that text as it is now; nil otherwise.
 	ReviewState *string `json:"review_state"`
+	// Votes are its readers' answers, imported ones included; only the article list fills them in.
+	Votes *KBVoteTally `json:"votes,omitempty"`
 }
 
 // KBArticleLanguage is one translation of an article as lists show it.

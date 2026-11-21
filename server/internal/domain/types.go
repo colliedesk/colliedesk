@@ -21,6 +21,9 @@ type Agent struct {
 	TimezoneOverride *string   `json:"timezone_override"`
 	// SetupGuideHidden is read with the session; GET /auth/me returns it beside the agent.
 	SetupGuideHidden bool `json:"-"`
+	// KBListColumns is the agent's stored choice of knowledge base list columns, nil before they chose;
+	// GET /auth/me returns what they see (EffectiveKBListColumns).
+	KBListColumns []string `json:"-"`
 }
 
 // Session is a sign-in. Token is what an agent token was given, nil for a person's session; Role is

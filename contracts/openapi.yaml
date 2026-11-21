@@ -5386,6 +5386,35 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/agents/me/kb-list-columns:
+    put:
+      operationId: setKBListColumns
+      x-permission: profile:update
+      description: >-
+        Chooses the columns the caller sees in the knowledge base article list, in their order. Article
+        is always shown first and is not in the list. It is a choice of the person, kept on the server
+        for every browser they sign in from; other agents keep their own. Null goes back to the default.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [columns]
+              properties:
+                columns:
+                  type: [array, 'null']
+                  maxItems: 8
+                  uniqueItems: true
+                  items: {$ref: '#/components/schemas/KBListColumn'}
+      responses:
+        '200':
+          description: The caller's columns
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBListColumns'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/ai/usage:
     get:
       operationId: getAIUsage
@@ -12076,9 +12105,10 @@ components:
           description: When the browser first saw `ttclid` or `fbclid`. Missing, in the future or older than 7 days, the sign-up time stands in.
     Me:
       type: object
-      required: [agent, workspace, timezone, token, permissions, plan, onboarding_goal, ai_features, setup_guide_hidden]
+      required: [agent, workspace, timezone, token, permissions, plan, onboarding_goal, ai_features, setup_guide_hidden, kb_list_columns]
       properties:
         setup_guide_hidden: {type: boolean, description: True when this agent hid the setup guide in the inbox.}
+        kb_list_columns: {$ref: '#/components/schemas/KBListColumns'}
         ai_features:
           type: object
           description: Which AI features can run now in the workspace (on, with a working provider); the web app offers only those.
@@ -12729,8 +12759,9 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags, languages, review_state]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags, languages, review_state, votes]
       properties:
+        votes: {allOf: [{$ref: '#/components/schemas/KBVoteTally'}], description: 'What readers answered to "Was this article helpful?", imported votes included, as GET /api/v1/kb/articles/{id}/votes counts them.'}
         review_state:
           type: [string, 'null']
           enum: [in_review, approved, null]
@@ -13146,6 +13177,16 @@ components:
         show_contents: {type: boolean}
         status: {$ref: '#/components/schemas/KBArticleStatus'}
         collection_id: {type: [string, 'null'], format: uuid, description: Null once that collection was deleted for good.}
+    KBListColumn:
+      type: string
+      enum: [status, collection, author, tags, languages, created, updated, votes]
+    KBListColumns:
+      type: object
+      required: [columns, default]
+      description: 'The columns of the knowledge base article list this agent sees after Article, in order (PUT /api/v1/agents/me/kb-list-columns).'
+      properties:
+        columns: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/KBListColumn'}}
+        default: {type: boolean, description: 'True while the agent has not chosen: columns is then status, author, tags, updated.'}
     KBVoteTally:
       type: object
       required: [helpful, not_helpful]

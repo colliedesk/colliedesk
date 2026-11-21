@@ -323,8 +323,19 @@ func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
+	ids := make([]string, len(items))
 	for index := range items {
 		addressKBArticle(home, &items[index])
+		ids[index] = items[index].ID
+	}
+	votes, err := a.store.KBArticleVoteTotals(request.Context(), principal(request).Workspace.ID, ids)
+	if err != nil {
+		writeKBError(response, err)
+		return
+	}
+	for index := range items {
+		tally := votes[items[index].ID]
+		items[index].Votes = &tally
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "next_cursor": optionalString(next)})
 }

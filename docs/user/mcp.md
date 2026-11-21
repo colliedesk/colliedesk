@@ -248,8 +248,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_response_targets_set` | Changes the business hours or the response targets | `workspace:update` |
 | `colliedesk_my_sla_alerts_set` | Turns your own reminder and overdue emails on or off | `profile:update` |
 | `colliedesk_my_mention_email_set` | Turns your own mention emails on or off | `profile:update` |
+| `colliedesk_my_kb_list_columns_set` | Chooses your own knowledge base article list columns | `profile:update` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | any token |
-| `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | any token |
+| `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone and knowledge base list columns | any token |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `workspace:update` |
 | `colliedesk_workspace_rename` | Renames the workspace (replies never carry this name; it is the help center title while the help center has none) | `workspace:update` |
 | `colliedesk_my_timezone_set` | Sets or clears your own timezone | `profile:update` |

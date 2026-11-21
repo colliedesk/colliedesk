@@ -58,7 +58,7 @@ func Catalog() []Spec {
 		replyDraftSpec(),
 		replyDraftRestoreSpec(),
 		workspaceExportSpec(), billingActionSpec(), trialOfferAcceptSpec(), emailChannelDisconnectSpec(),
-		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), myMentionEmailSetSpec(), problemReportSpec(),
+		emailSecretRotateSpec(), gmailConnectSpec(), gmailDisconnectSpec(), microsoftConnectSpec(), microsoftDisconnectSpec(), workspaceSlugChangeSpec(), numberSeriesListSpec(), numberSeriesSetSpec(), responseTargetsGetSpec(), responseTargetsSetSpec(), mySLAAlertsSetSpec(), myMentionEmailSetSpec(), myKBListColumnsSetSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
 		rolesListSpec(), roleCreateSpec(), roleUpdateSpec(), roleDeleteSpec(), roleResetSpec(), roleRestoreSpec(), memberRolesSetSpec(),
