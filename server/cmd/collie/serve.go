@@ -26,6 +26,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/health"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
+	"github.com/colliedesk/colliedesk/server/internal/kbviews"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -48,6 +49,10 @@ var cursorBaseURL = ""
 // cursorReadEvery, when set, is how often the Autofix worker looks for due fixes and how soon a sent
 // Cursor run is read again; only end-to-end builds set it, so a journey does not wait 15 seconds a read.
 var cursorReadEvery time.Duration
+
+// viewFlushEvery, when set, is how often help center article views are written (30 seconds otherwise);
+// only end-to-end builds set it, so a journey sees a view without waiting.
+var viewFlushEvery time.Duration
 
 // microsoftBaseURL replaces Microsoft's sign-in and Graph addresses with a local stand-in; only
 // end-to-end builds set it.
@@ -120,6 +125,11 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	p.Go(processCtx, func(ctx context.Context) {
 		store.NewWithDB(db).RunAIRetrieval(ctx, 2*time.Second, func(err error) { slog.Error("build AI retrieval", "error", err) })
 	})
+	// Help center article views are counted in memory and written every 30 seconds (docs/internals/knowledge-base.md).
+	p.views = kbviews.New(store.NewWithDB(db), kbviews.Options{})
+	p.Go(processCtx, func(ctx context.Context) {
+		p.views.Run(ctx, viewFlushEvery, func(err error) { slog.Error("write help center article views", "error", err) })
+	})
 	first := newGeneration(p, loaded, config, slog.Default())
 	first.Start(processCtx)
 	handler := &swapHandler{}
@@ -144,6 +154,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		defer cancel()
 		if err := server.Shutdown(shutdown); err != nil {
 			return fmt.Errorf("shutdown HTTP server: %w", err)
+		}
+		// No page is served any more: the views not yet written are written now, not lost with the process.
+		if err := p.views.Flush(shutdown); err != nil {
+			slog.Error("write help center article views at shutdown", "error", err)
 		}
 		reload.Stop(stopWorkersWithin)
 		_ = configStore.Leave(context.WithoutCancel(ctx), reload.process.InstanceID)

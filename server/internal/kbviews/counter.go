@@ -147,9 +147,12 @@ func (c *Counter) Flush(ctx context.Context) error {
 	return err
 }
 
-// Run flushes every FlushEvery until ctx ends, then once more.
-func (c *Counter) Run(ctx context.Context, onError func(error)) {
-	ticker := time.NewTicker(FlushEvery)
+// Run flushes every interval (FlushEvery when 0) until ctx ends, then once more.
+func (c *Counter) Run(ctx context.Context, interval time.Duration, onError func(error)) {
+	if interval <= 0 {
+		interval = FlushEvery
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	c.runTicks(ctx, ticker.C, onError)
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/kbreviewmail"
+	"github.com/colliedesk/colliedesk/server/internal/kbviews"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/mentionmail"
 	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
@@ -67,7 +68,9 @@ type process struct {
 	operatorOrigin string
 	operators      *auth.OperatorService
 	configStore    *serverconfig.Store
-	wait           sync.WaitGroup
+	// views counts help center article views for every generation; serve writes what is left at shutdown.
+	views *kbviews.Counter
+	wait  sync.WaitGroup
 }
 
 // Go runs a loop that does not depend on the configuration for the life of the process.
@@ -316,6 +319,9 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		ProblemReportWorkspace: config.ProblemReportWorkspace, SwitchedOff: off, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
 		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv,
 		ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
+	if p.views != nil {
+		apiConfig.PageViews = p.views
+	}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
 	if telemetryConfig.Enabled() {
