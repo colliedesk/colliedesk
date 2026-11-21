@@ -18,6 +18,9 @@ import { CodeBlockDialog } from './code-block-dialog';
 import { calloutTypes } from '../callouts';
 import { embedSnippet, parseVideoLink } from '../video-link';
 import { startUpload, uploadEvents, uploads as uploadField, uploadsPending } from './upload';
+import { pasteEvents } from './paste-formatted';
+import type { Pasted } from './paste-formatted';
+import { PasteToast } from './paste-toast';
 import { MediaPicker } from '../media-picker';
 import { KBDialog, KBMenu, usePhone } from '../kb-ui';
 import type { MenuItem } from '../kb-ui';
@@ -92,6 +95,8 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const [coding, setCoding] = useState(false);
   // full: the text and its toolbar fill the window until the button or Escape leaves.
   const [full, setFull] = useState(false);
+  // pasted: the last formatted paste, offered as plain text until the person types on.
+  const [pasted, setPasted] = useState<Pasted>();
   // linkAt is where the list of articles to link to opens, measured from the bar's left edge: under the button
   // that opened it. Undefined while the list is closed.
   const [linkAt, setLinkAt] = useState<number>();
@@ -140,7 +145,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
       keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap]), search({ top: true }), markdownLanguage, markdownHighlight,
       placeholder(kbMessages.writePlaceholder), phrases,
       EditorView.contentAttributes.of({ 'aria-label': latest.current.label, 'aria-describedby': latest.current.describedBy, 'aria-multiline': 'true', spellcheck: 'true' }),
-      uploadField, uploadEvents(hooks),
+      uploadField, uploadEvents(hooks), pasteEvents(hooks, (next) => { if (alive) setPasted(next); }),
       EditorView.updateListener.of((update) => {
         if (!alive) return;
         if (update.docChanged || update.selectionSet || update.transactions.length) {
@@ -148,6 +153,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           setActive((current) => (sameActive(current, next) ? current : next));
         }
         if (!update.docChanged) return;
+        if (!update.transactions.some((tr) => tr.isUserEvent('input.paste'))) setPasted(undefined);
         window.clearTimeout(timer);
         timer = window.setTimeout(() => { if (alive) emit(update.view); }, 120);
       }),
@@ -161,6 +167,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
       load: (markdown) => {
         window.clearTimeout(timer);
         view.setState(EditorState.create({ doc: markdown, extensions: build() }));
+        setPasted(undefined);
         view.scrollDOM.scrollTop = 0;
         emitted = view.state.doc.toString();
         setActive(activeOf(view.state));
@@ -349,6 +356,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           startUpload(view, files, view.state.selection.main.head, hooks.current);
           view.focus();
         }} />
+      {pasted && editing && <PasteToast pasted={pasted} view={viewRef.current} onChange={setPasted} />}
       <div className="cm-area">
         <div ref={host} className="cm-host" hidden={mode === 'preview'} />
         {mode !== 'edit' && <section className="cm-preview kb-preview-panel" tabIndex={0} aria-label={kbMessages.preview}>{preview}</section>}

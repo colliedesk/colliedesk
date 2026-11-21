@@ -128,3 +128,6 @@
 }
 
 .cm-uploading .link-action { margin-left: auto; min-height: 0; }
+
+/* The paste toast: the way the paste is written now is pressed, the other one is a link. */
+.md-paste [aria-pressed="true"] { text-decoration: none; font-weight: 600; }

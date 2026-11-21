@@ -59,7 +59,7 @@ export type MediaUsage = 'in_use' | 'unused' | 'missing_alt';
 export type MediaSort = 'newest' | 'oldest' | 'name' | 'largest';
 export interface MediaQuery { kind?: MediaKind; q?: string; usage?: MediaUsage; sort?: MediaSort; cursor?: string }
 
-type Operation = 'updateKBMedia' | 'trashKBMedia' | 'trashUnusedKBMedia' | 'restoreKBMediaBatch' | 'purgeKBMedia' | 'replaceKBMedia' | 'createKBMediaUpload';
+type Operation = 'updateKBMedia' | 'trashKBMedia' | 'trashUnusedKBMedia' | 'restoreKBMediaBatch' | 'purgeKBMedia' | 'replaceKBMedia' | 'createKBMediaUpload' | 'importKBImage';
 const json = <O extends Operation>(value: RequestBody<O>): string => JSON.stringify(value);
 const noContent = z.undefined();
 const filterQuery = (filter: MediaQuery) => query({ ...filter });
@@ -88,6 +88,9 @@ export const mediaApi = {
   // The body is the image itself; keep marks an upload made in the library, which the purge spares.
   uploadImage: (file: Blob, name: string, keep: boolean) =>
     request(`/api/v1/kb/images${imageQuery(name, keep)}`, kbMediaSchema, { method: 'POST', body: file, headers: { 'Content-Type': file.type } }),
+  // importImage stores an image the server downloads from its address (a pasted web or Google Docs image).
+  importImage: (value: RequestBody<'importKBImage'>, signal?: AbortSignal) =>
+    request('/api/v1/kb/images/import', kbMediaSchema, { method: 'POST', body: json<'importKBImage'>(value), signal }),
   setPoster: (id: string, image: Blob) => request(`/api/v1/kb/media/${id}/poster`, kbMediaSchema, { method: 'PUT', body: image, headers: { 'Content-Type': image.type } }),
   startUpload: (value: RequestBody<'createKBMediaUpload'>) => request('/api/v1/kb/media-uploads', uploadSchema, { method: 'POST', body: json<'createKBMediaUpload'>(value) }),
   upload: (id: string) => request(`/api/v1/kb/media-uploads/${id}`, uploadSchema),

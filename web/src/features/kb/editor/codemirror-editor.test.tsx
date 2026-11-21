@@ -7,7 +7,7 @@ import type { EditorHandle, UploadHooks } from './codemirror-editor';
 // jsdom lays nothing out; CodeMirror measures text ranges, so they answer with empty boxes.
 if (!('getClientRects' in Range.prototype)) Object.assign(Range.prototype, { getClientRects: () => [], getBoundingClientRect: () => new DOMRect() });
 
-const never: UploadHooks = { accept: (files) => files, upload: () => new Promise(() => {}), onStart: () => {}, onDone: () => {}, onError: () => {} };
+const never: UploadHooks = { accept: (files) => files, upload: () => new Promise(() => {}), store: () => new Promise(() => {}), onStart: () => {}, onDone: () => {}, onError: () => {} };
 
 async function make(initial: string, uploads: UploadHooks = never) {
   let handle: EditorHandle | undefined;

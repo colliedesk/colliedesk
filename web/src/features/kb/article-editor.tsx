@@ -415,6 +415,16 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         videoUploads.current.delete(session);
       }
     },
+    // An image pasted with copied text: the server fetches one at a web address; one the browser holds
+    // (data:, blob:) goes up like a dropped file.
+    store: async (src, signal) => {
+      if (/^https?:/i.test(src)) return (await mediaApi.importImage({ url: src }, signal)).url;
+      const blob = await (await fetch(src, { signal })).blob();
+      const file = new File([blob], 'image', { type: blob.type });
+      const problem = kindOf(file) === 'image' ? fileProblem(file) : 'type';
+      if (problem) throw new InvalidRequestError(problem === 'size' ? kbMessages.imageTooLarge('image') : kbMessages.imageType('image'));
+      return (await mediaApi.uploadImage(file, 'image', false)).url;
+    },
     onStart: () => setUploading((count) => count + 1),
     onDone: (file) => { setUploading((count) => count - 1); setNotice(kbMessages.imageUploaded(file.name)); },
     onError: (file, error) => {

@@ -112,6 +112,8 @@ export const kbMessages = {
     link: 'Link', articleLink: 'Link to article', bullet: 'Bulleted list', ordered: 'Numbered list', task: 'Checklist', quote: 'Quote', codeBlock: 'Code block', table: 'Table',
     hr: 'Divider', insertImage: 'Upload', insertMedia: 'Media', insertVideo: 'Insert video', search: 'Find and replace', undo: 'Undo', redo: 'Redo',
     fullscreen: 'Full screen', fullscreenKeys: 'Esc to leave', exitFullscreen: 'Leave full screen',
+    pasted: 'Pasted text', keepFormatting: 'Keep formatting', pastePlain: 'Paste as plain text',
+    pastedImages: (count: number) => `${count} images`,
     insertMenu: 'Insert', insertMenuMore: ' image, video or callout', insertMenuLong: 'Insert image, video or callout', moreFormatting: 'More formatting',
     callouts: { note: 'Note callout', tip: 'Tip callout', important: 'Important callout', warning: 'Warning callout', caution: 'Caution callout' },
     fromLibrary: 'From the media library', fromLibraryHint: 'Pick one or more, with their alt text',

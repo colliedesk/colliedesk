@@ -50,7 +50,7 @@ function link(el: Element, content: string): string {
   if (!inner) return before + after;
   const title = el.getAttribute('title');
   const quoted = title ? ` "${title.replace(/[\\"]/g, '\\$&').replace(/\s+/g, ' ')}"` : '';
-  return `${before}[${inner}](${address(href)}${quoted})${after}`;
+  return `${before}[${inner}](${markdownAddress(href)}${quoted})${after}`;
 }
 
 function image(el: Element, images: Set<string>): string {
@@ -58,7 +58,7 @@ function image(el: Element, images: Set<string>): string {
   if (!src || !imageAllowed(src)) return '';
   if (/^(https?|blob|data):/i.test(src)) images.add(src);
   const alt = (el.getAttribute('alt') ?? '').replace(/\s+/g, ' ').trim().replace(/[\\[\]]/g, '\\$&');
-  return `![${alt}](${address(src)})`;
+  return `![${alt}](${markdownAddress(src)})`;
 }
 
 // What a browser would read as the scheme: it ignores spaces and control characters inside it.
@@ -82,7 +82,8 @@ export function imageAllowed(src: string): boolean {
   return name === null || name === 'http' || name === 'https' || name === 'blob';
 }
 
-function address(url: string): string {
+// markdownAddress writes a link or image address so Markdown reads it whole.
+export function markdownAddress(url: string): string {
   return url.replace(/[ ()<>\n\r\t]/g, (c) => encodeURIComponent(c));
 }
 
