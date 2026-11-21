@@ -233,6 +233,8 @@ grep -Fx '    image: postgres:17-bookworm' "$kept/compose.yaml" >/dev/null || { 
 grep -Fx '      PGDATA: /var/lib/postgresql/data' "$kept/compose.yaml" >/dev/null
 printf '%s' "$output" | grep -F 'PostgreSQL 17' | grep -F 'docs/self-host/upgrade.md#postgresql-versions' >/dev/null ||
   { printf 'the rerun did not say it kept PostgreSQL 17 and where to read about upgrading:\n%s\n' "$output" >&2; exit 1; }
+printf '%s' "$output" | grep -F 'PostgreSQL 17' | grep -F 'upgrade-postgres.sh' >/dev/null ||
+  { printf 'the rerun on PostgreSQL 17 did not name the script that moves it to 19:\n%s\n' "$output" >&2; exit 1; }
 # The compose file lost (or never written) on an initialized install: the major still comes from the volume.
 rm "$kept/compose.yaml" "$kept/compose.yaml.bak"
 STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$kept" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
@@ -244,6 +246,39 @@ if printf '%s' "$output" | grep -F 'upgrade.md#postgresql-versions' >/dev/null; 
   printf '%s\n' 'the installer printed the PostgreSQL notice on 19 data' >&2
   exit 1
 fi
+# An install upgraded by upgrade-postgres.sh keeps 19 in the volume postgres19-data: a rerun keeps
+# that volume, or PostgreSQL 19 would start on the volume the older major wrote.
+moved=$TMP/moved
+mkdir -p "$moved"
+cp "$kept/.env" "$kept/.initialized" "$moved/"
+sed 's#^      - postgres-data:/var/lib/postgresql/data$#      - postgres19-data:/var/lib/postgresql/data#; s#^  postgres-data:$#  postgres19-data:#' \
+  "$kept/compose.yaml" >"$moved/compose.yaml"
+grep -Fx '  postgres19-data:' "$moved/compose.yaml" >/dev/null
+STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
+grep -Fx '      - postgres19-data:/var/lib/postgresql/data' "$moved/compose.yaml" >/dev/null
+grep -Fx '  postgres19-data:' "$moved/compose.yaml" >/dev/null
+if grep -F 'postgres-data:' "$moved/compose.yaml" | grep -v postgres19-data >/dev/null; then
+  printf '%s\n' 'the installer put back the volume postgres-data on an install upgraded to 19' >&2
+  exit 1
+fi
+# The compose file lost after upgrade-postgres.sh: the state it left names the volume of the data. A
+# finished upgrade stays on postgres19-data, a rolled-back one on its old volume, and an unfinished
+# one is refused with nothing written, since either volume may hold the data.
+rm -f "$moved/compose.yaml" "$moved/compose.yaml.bak"
+printf 'state=done\nold_key=postgres-data\n' >"$moved/.postgres-upgrade"
+STUB_PG_VERSION=19 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
+grep -Fx '      - postgres19-data:/var/lib/postgresql/data' "$moved/compose.yaml" >/dev/null ||
+  { printf '%s\n' 'a rerun without compose.yaml after a finished upgrade went back to the volume postgres-data' >&2; exit 1; }
+rm -f "$moved/compose.yaml" "$moved/compose.yaml.bak"
+printf 'state=rolled_back\nold_key=postgres-data\n' >"$moved/.postgres-upgrade"
+STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com </dev/null >/dev/null 2>&1
+grep -Fx '      - postgres-data:/var/lib/postgresql/data' "$moved/compose.yaml" >/dev/null ||
+  { printf '%s\n' 'a rerun without compose.yaml after a rollback did not use the old volume' >&2; exit 1; }
+rm -f "$moved/compose.yaml" "$moved/compose.yaml.bak"
+printf 'state=started\nold_key=postgres-data\n' >"$moved/.postgres-upgrade"
+expect_failure 'has not finished' env STUB_PG_VERSION=17 sh "$ROOT/install.sh" --dir "$moved" --name Desk --email admin@example.com
+[ ! -e "$moved/compose.yaml" ] && [ ! -e "$moved/compose.yaml.next" ] ||
+  { printf '%s\n' 'a rerun refused for an unfinished upgrade wrote a compose file' >&2; exit 1; }
 cp "$kept/compose.yaml" "$TMP/kept.compose"
 # A major this installer does not run, an initialized install whose volume holds no data, and a volume
 # it cannot read stop the installer before it changes the compose file.

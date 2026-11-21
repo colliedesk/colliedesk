@@ -6779,6 +6779,9 @@ paths:
                 parent_id: {type: [string, 'null'], format: uuid}
                 position: {type: integer, minimum: 0, maximum: 1000000}
                 default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in it starts from; null clears it. A template in the trash is 409 template_in_trash.'}
+                require_approval:
+                  allOf: [{$ref: '#/components/schemas/KBApprovalMode'}]
+                  description: 'Whether its articles need an approved version before they are published. Changing it also needs help_center:update.'
       responses:
         '200':
           description: Updated collection
@@ -6906,6 +6909,52 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/publish:
+    post:
+      operationId: publishKBArticles
+      x-permission: kb_articles:publish
+      description: >
+        Publish several articles at once: a draft goes on the help center, a published article's
+        unpublished changes replace its live text (as POST /api/v1/kb/articles/{id}/draft/publish).
+        Each id is answered on its own in `results`, in the order sent: the published article, or the
+        error that one call would have given; an article in a collection that needs approval without
+        an approval of its current text is 409 `approval_required` and stays as it is, and one with
+        nothing unpublished is 409 `nothing_to_publish`. At most 50 ids. A repeat with the same
+        Idempotency-Key answers what the first one got.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [article_ids]
+              properties:
+                article_ids: {type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: {type: string}}
+      responses:
+        '200':
+          description: One result per article id
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id]
+                      properties:
+                        id: {type: string}
+                        article: {$ref: '#/components/schemas/KBArticle'}
+                        error: {$ref: '#/components/schemas/BulkItemError'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles:
     get:
       operationId: listKBArticles
@@ -6925,6 +6974,13 @@ paths:
         - {name: status, in: query, schema: {type: string, enum: [draft, published]}}
         - {name: collection_id, in: query, description: Only the articles directly in this collection., schema: {type: string, format: uuid}}
         - {name: has_draft, in: query, description: 'true: only the published articles with unpublished changes (has_draft).', schema: {type: boolean}}
+        - name: state
+          in: query
+          description: >-
+            in_review: only the articles whose unpublished text waits for a reviewer. approved: only the
+            ones whose unpublished text a reviewer approved as it is now, ready to publish
+            (POST /api/v1/kb/articles/publish). Translations are left out.
+          schema: {type: string, enum: [in_review, approved]}
         - {name: sort, in: query, description: The order without `q`; ignored with `q`., schema: {type: string, enum: [recent, manual]}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
@@ -7143,7 +7199,9 @@ paths:
         Set the files the article lists under its text for download, in order: items of kind `file` of
         the media library (upload one with POST /api/v1/kb/media-uploads and `kind` file). On a
         published article the list goes into its draft, as an edit does, and the help center shows it
-        once the draft is published; otherwise it is the article's list at once. A file is downloadable
+        once the draft is published; otherwise it is the article's list at once. The list is part of
+        the text a review approves: a change opens a new review in place of an open one, and an
+        approved text whose list changed needs a new approval before it is published. A file is downloadable
         from the help center only while a published article or translation lists it. An id that is not
         a file of this workspace's library outside the trash is 404 `file_not_found` naming it. The same id twice is 400.
       requestBody:
@@ -7211,6 +7269,286 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/{id}/reviews:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listKBArticleReviews
+      x-permission: kb_articles:read
+      description: >
+        The reviews of an article, newest first (at most 200): who sent each, who was asked, what they
+        decided, and whether its text is still the current one. state narrows them. GET
+        /api/v1/kb/reviews/{id} reads one with its line diff.
+      parameters:
+        - {name: state, in: query, schema: {type: string, enum: [open, approved, changes_requested, withdrawn, superseded]}}
+      responses:
+        '200':
+          description: The article's reviews
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReviewList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: requestKBReview
+      x-permission: kb_articles:update
+      description: >
+        Send the article's unpublished text (its draft, or the article while it is not published) for
+        review to 1 to 10 teammates who may publish (kb_articles:publish; GET /api/v1/agents). Not
+        yourself: a reviewer is never the author. Where a collection of the article requires approval,
+        publishing is refused (409 `approval_required`) until one of them approves this exact text. A
+        text with an open review is 409 `review_state`; a published article without changes has
+        nothing to review (409 `review_state`). A repeat with the same Idempotency-Key answers the
+        first review.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reviewer_ids]
+              properties:
+                reviewer_ids: {type: array, minItems: 1, maxItems: 10, items: {type: string, format: uuid}}
+                note: {type: string, maxLength: 500, description: One line to the reviewers.}
+      responses:
+        '201':
+          description: The open review
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '200':
+          description: The review a repeat of the same request opened
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/{id}/translations/{locale}/reviews:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: locale, in: path, required: true, schema: {type: string, minLength: 2, maxLength: 35}}
+    get:
+      operationId: listKBTranslationReviews
+      x-permission: kb_articles:read
+      description: >
+        The reviews of one translation of an article, newest first (at most 200). state narrows them.
+        GET /api/v1/kb/reviews/{id} reads one with its line diff.
+      parameters:
+        - {name: state, in: query, schema: {type: string, enum: [open, approved, changes_requested, withdrawn, superseded]}}
+      responses:
+        '200':
+          description: The translation's reviews
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReviewList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: requestKBTranslationReview
+      x-permission: kb_articles:update
+      description: >
+        Send a draft translation for review to 1 to 10 teammates who may publish (kb_articles:publish;
+        GET /api/v1/agents), never yourself. Where a collection of the article requires approval, the
+        translation is published (PATCH status published) only once one of them approves this exact
+        text, and an edit of a published translation there needs a new approval. A translation that
+        is already published has nothing to review (409 `review_state`); an open review is 409
+        `review_state` too. A repeat with the same Idempotency-Key answers the first review.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reviewer_ids]
+              properties:
+                reviewer_ids: {type: array, minItems: 1, maxItems: 10, items: {type: string, format: uuid}}
+                note: {type: string, maxLength: 500, description: One line to the reviewers.}
+      responses:
+        '201':
+          description: The open review
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '200':
+          description: The review a repeat of the same request opened
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/reviews/approve:
+    post:
+      operationId: approveKBReviews
+      x-permission: kb_articles:publish
+      description: >
+        Approve several open reviews at once, as POST /api/v1/kb/reviews/{id}/approve does each one
+        (the same rules: only a named reviewer, never the sender or their tokens). Each id is answered
+        on its own in `results`, in the order sent: the decided review, or the error that one call would
+        have given (`not_found`, `not_reviewer`, `review_state`). At most 50 ids. A repeat with the same
+        Idempotency-Key answers what the first one got.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [review_ids]
+              properties:
+                review_ids: {type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: {type: string}}
+                note: {type: string, maxLength: 500, description: An optional line to each author.}
+      responses:
+        '200':
+          description: One result per review id
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id]
+                      properties:
+                        id: {type: string}
+                        review: {$ref: '#/components/schemas/KBReview'}
+                        error: {$ref: '#/components/schemas/BulkItemError'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/reviews/{id}/approve:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: approveKBReview
+      x-permission: kb_articles:publish
+      description: >
+        Approve the text of an open review: it may then be published exactly as it is. Only a person the
+        review names may approve it, never the person who sent it nor any of their agent tokens (403
+        `not_reviewer`); through a token, only the token of a named reviewer, and the review records
+        that token. A review that was decided, withdrawn or superseded by an edit is 409 `review_state`.
+        A repeat with the same Idempotency-Key answers what the first one got.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: {type: string, maxLength: 500, description: An optional line to the author.}
+      responses:
+        '200':
+          description: The decided review
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/reviews:
+    get:
+      operationId: listKBReviews
+      x-permission: kb_articles:read
+      description: >
+        The workspace's reviews, newest first (at most 200). state=open&reviewer=me lists the texts
+        waiting for your decision (for an agent token, its maker's); reviewer also takes an agent id.
+      parameters:
+        - {name: state, in: query, schema: {type: string, enum: [open, approved, changes_requested, withdrawn, superseded]}}
+        - {name: reviewer, in: query, description: 'me, or the agent id of a reviewer.', schema: {type: string}}
+      responses:
+        '200':
+          description: Reviews
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReviewList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/kb/reviews/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBReview
+      x-permission: kb_articles:read
+      description: >
+        One review with the text it is about: proposed (the text waiting to be published; the reviewed
+        one while current is true), live (what the help center shows; null while the article is not
+        published) and diff, the lines of the body from live to proposed. A reviewer who reads it is
+        marked as having seen it.
+      responses:
+        '200':
+          description: The review and its text
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReviewDetail'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/reviews/{id}/request-changes:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: requestKBReviewChanges
+      x-permission: kb_articles:publish
+      description: >
+        Close an open review asking the author to change the text; note says what, in one line. The same
+        people may decide as for an approval (403 `not_reviewer` otherwise). A repeat with the same
+        Idempotency-Key answers what the first one got.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: {type: string, minLength: 1, maxLength: 500, description: What to change.}
+      responses:
+        '200':
+          description: The decided review
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/reviews/{id}/withdraw:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: withdrawKBReview
+      x-permission: kb_articles:update
+      description: >
+        Close an open review that is no longer wanted. The person who sent it may withdraw it, or anyone
+        who may publish (403 `not_reviewer` otherwise). Send the text for review again with POST
+        /api/v1/kb/articles/{id}/reviews. A repeat with the same Idempotency-Key answers what the first
+        one got.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: {type: string, maxLength: 500, description: An optional line saying why.}
+      responses:
+        '200':
+          description: The withdrawn review
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBReview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles/{id}/versions:
     parameters: [{$ref: '#/components/parameters/ID'}]
@@ -7494,7 +7832,9 @@ paths:
       description: >
         Set the files the translation lists under its text, in order, as for an article. A translation
         has no draft: the list changes at once. A translation that lists no file shows the article's
-        files on its page.
+        files on its page. The list is part of the translation's text a review approves: in a collection
+        that needs approval, a change to a published translation's list that no review approved is 409
+        `approval_required` and the list stays as it was.
       requestBody:
         required: true
         content:
@@ -8352,6 +8692,8 @@ paths:
         Turn the public help center on or off, and set its title and language (a BCP 47 tag such as
         `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off
         line at once; turning it on again publishes the articles marked published.
+        `require_approval` makes publishing need an approved review in every collection that inherits
+        it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes).
       requestBody:
         required: true
         content:
@@ -11845,6 +12187,91 @@ components:
             - {type: 'null'}
             - {$ref: '#/components/schemas/SavedReplyPerson'}
         purges_at: {type: string, format: date-time, description: When the reply and its history are deleted for good (30 days after deleted_at).}
+    KBReviewer:
+      type: object
+      required: [agent_id, name, seen_at]
+      properties:
+        agent_id: {type: string, format: uuid}
+        name: {type: string}
+        seen_at: {type: [string, 'null'], format: date-time, description: 'When they first opened the review; null until then.'}
+    KBReviewToken:
+      description: The agent token it was done through; null when a person did it in the web app. The label outlives the token.
+      oneOf:
+        - {type: 'null'}
+        - type: object
+          required: [id, label]
+          properties:
+            id: {type: [string, 'null'], format: uuid}
+            label: {type: string}
+    KBReview:
+      type: object
+      description: 'One review of one unpublished text: the article''s own (locale null) or a translation''s. An approval holds only for the exact text it was given (content_hash over the title, slug, body, collections and SEO fields): an edit after it makes the text unapproved again, and an edit while it is open supersedes it with a new review of the new text.'
+      required: [id, article_id, article_title, locale, state, note, content_hash, current, reviewers, requested_by, requested_by_token, decided_by, decided_by_token, decided_at, decision_note, supersedes_review_id, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        article_id: {type: string, format: uuid}
+        article_title: {type: string, description: 'The title of the article, or of the translation for a translation''s review.'}
+        locale: {type: [string, 'null'], description: 'The translation''s language; null for the article''s own text.'}
+        state: {type: string, enum: [open, approved, changes_requested, withdrawn, superseded]}
+        note: {type: string, description: The one line the author wrote to the reviewers.}
+        content_hash: {type: string, pattern: '^[0-9a-f]{64}$'}
+        current: {type: boolean, description: 'Whether the text is still the one reviewed: an approved review that is current lets the text be published.'}
+        reviewers: {type: array, items: {$ref: '#/components/schemas/KBReviewer'}}
+        requested_by:
+          description: The person who sent the text for review; null once they were removed.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        requested_by_token: {$ref: '#/components/schemas/KBReviewToken'}
+        decided_by:
+          description: The person who decided or withdrew it; null while it is open.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        decided_by_token: {$ref: '#/components/schemas/KBReviewToken'}
+        decided_at: {type: [string, 'null'], format: date-time}
+        decision_note: {type: string, description: 'The one line the reviewer wrote: what to change, for changes_requested.'}
+        supersedes_review_id: {type: [string, 'null'], format: uuid, description: The review an edit closed when it opened this one.}
+        created_at: {type: string, format: date-time}
+    KBReviewList:
+      type: object
+      required: [reviews]
+      properties:
+        reviews: {type: array, items: {$ref: '#/components/schemas/KBReview'}}
+    KBReviewContent:
+      type: object
+      description: 'A text as the help center shows it: the fields an approval covers, the files it lists among them (a change of the list after an approval needs a new one).'
+      required: [title, slug, body_md, seo_title, seo_description, collection_ids, attachments]
+      properties:
+        title: {type: string}
+        slug: {type: string}
+        body_md: {type: string}
+        seo_title: {type: string}
+        seo_description: {type: string}
+        collection_ids: {type: array, items: {type: string, format: uuid}}
+        attachments:
+          type: array
+          description: 'The files the text lists, in order; a translation''s own list (empty while it shows the article''s files).'
+          items: {$ref: '#/components/schemas/KBAttachment'}
+    KBDiffLine:
+      type: object
+      required: [change, text]
+      properties:
+        change: {type: string, enum: [same, removed, added], description: 'In a changed run the removed lines come first, then the added ones.'}
+        text: {type: string}
+    KBReviewDetail:
+      allOf:
+        - {$ref: '#/components/schemas/KBReview'}
+        - type: object
+          required: [live, proposed, diff]
+          properties:
+            live:
+              description: What the help center shows now; null while the article is not published.
+              oneOf:
+                - {type: 'null'}
+                - {$ref: '#/components/schemas/KBReviewContent'}
+            proposed: {$ref: '#/components/schemas/KBReviewContent'}
+            diff: {type: array, items: {$ref: '#/components/schemas/KBDiffLine'}}
     SavedReplyPerson:
       type: object
       required: [agent_id, name]
@@ -11976,9 +12403,13 @@ components:
         parent_id: {type: [string, 'null'], format: uuid}
         position: {type: integer, minimum: 0, maximum: 1000000, description: 'Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand, else 0 (by name).'}
         default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in this collection starts from; null for none. A template in the trash is 409 template_in_trash; trashing the template sets this to null.'}
+    KBApprovalMode:
+      type: string
+      enum: [inherit, 'on', 'off']
+      description: 'Whether an article listed in the collection is published only once a teammate approved its exact text: inherit (the workspace setting require_approval of the help center), on or off. An article needs approval when any of its collections does.'
     KBCollection:
       type: object
-      required: [id, parent_id, name, slug, description, position, default_template_id, article_count, created_at, updated_at, translations]
+      required: [id, parent_id, name, slug, description, position, default_template_id, require_approval, article_count, created_at, updated_at, translations]
       properties:
         translations: {type: array, description: Its name and description in the help center's other languages., items: {$ref: '#/components/schemas/KBCollectionTranslation'}}
         id: {type: string, format: uuid}
@@ -11988,6 +12419,7 @@ components:
         description: {type: string}
         position: {type: integer}
         default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in it starts from; null for none.'}
+        require_approval: {$ref: '#/components/schemas/KBApprovalMode'}
         article_count: {type: integer, description: 'Articles directly in this collection and outside the trash, drafts included.'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -12038,8 +12470,8 @@ components:
         version: {type: integer, minimum: 1}
         kind:
           type: string
-          enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft]
-          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change).'
+          enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft, review_request, review_approve, review_changes, review_withdraw]
+          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change); review_request, review_approve, review_changes, review_withdraw: the unpublished text was sent for review, approved, sent back with changes to make, or the review was withdrawn (the text did not change).'
         restored_from_version: {type: [integer, 'null'], description: The version a restore copied.}
         changed_by:
           description: The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person.
@@ -12122,7 +12554,7 @@ components:
         version: {type: integer, minimum: 1}
         kind:
           type: string
-          enum: [create, edit, delete, restore, undelete, import, media_replace, mark_current, mark_outdated]
+          enum: [create, edit, delete, restore, undelete, import, media_replace, mark_current, mark_outdated, review_request, review_approve, review_changes, review_withdraw]
           description: 'mark_current, mark_outdated: the translation was marked up to date with its article, or outdated, without other change.'
         restored_from_version: {type: [integer, 'null']}
         changed_by:
@@ -12243,7 +12675,7 @@ components:
       required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, seo_title, seo_description, status]
       properties:
         version: {type: integer, minimum: 1}
-        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, mark_current, mark_outdated]}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, mark_current, mark_outdated, review_request, review_approve, review_changes, review_withdraw]}
         restored_from_version: {type: [integer, 'null']}
         changed_by:
           oneOf:
@@ -12408,7 +12840,7 @@ components:
       required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id, seo_title, seo_description, show_contents]
       properties:
         version: {type: integer, minimum: 1}
-        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft]}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include, draft, review_request, review_approve, review_changes, review_withdraw], description: 'review_request, review_approve, review_changes and review_withdraw record a review of the unpublished text they hold; they change no text.'}
         restored_from_version: {type: [integer, 'null']}
         changed_by:
           oneOf:
@@ -12631,13 +13063,20 @@ components:
         enabled: {type: boolean}
         title: {type: string, maxLength: 200, description: Shown at the top of every page; empty uses the workspace name.}
         locale: {type: string, minLength: 2, maxLength: 35, description: 'BCP 47 language tag of the pages, such as en or pt-BR.'}
+        require_approval:
+          type: boolean
+          description: >-
+            Whether an article needs a teammate's approval of its exact text before it is published, in
+            every collection whose `require_approval` is `inherit`. Left out, it stays as it is. Sending it
+            needs kb_articles:publish too.
     HelpCenter:
       type: object
-      required: [enabled, title, locale, content_version, updated_at, url]
+      required: [enabled, title, locale, require_approval, content_version, updated_at, url]
       properties:
         enabled: {type: boolean}
         title: {type: string}
         locale: {type: string}
+        require_approval: {type: boolean, description: 'Articles in collections that inherit the setting need an approved version to be published (POST /api/v1/kb/articles/{id}/reviews).'}
         content_version: {type: integer, minimum: 0}
         updated_at: {type: [string, 'null'], format: date-time, description: Null until the knowledge base or its settings were first changed.}
         url:
@@ -14872,6 +15311,13 @@ components:
         previous_trial_ends_at: {type: string, format: date-time}
         trial_ends_at: {type: string, format: date-time, description: 'The trial end now.'}
         extended: {type: boolean, description: 'False when the trial already ended later than 14 days from now and was kept.'}
+    BulkItemError:
+      type: object
+      description: Why one item of a bulk request was not done; the same code and message a call for that item alone answers.
+      required: [code, message]
+      properties:
+        code: {type: string}
+        message: {type: string}
     Error:
       type: object
       required: [error]

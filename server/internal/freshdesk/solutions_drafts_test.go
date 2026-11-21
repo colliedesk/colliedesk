@@ -44,7 +44,7 @@ func TestSolutionsRerunUpdatesAnArticleWhoseUnpublishedChangesWereDiscarded(t *t
 	env.mustRun(t)
 	before := env.kbArticles(t, env.workspaceID)
 	saved := env.saveArticleDraft(t, before["101"].ID, "Drafted in Colliedesk.")
-	if _, err := store.New(env.pool).DiscardKBArticleDraft(context.Background(), env.workspaceID, before["101"].ID, saved.UpdatedAt); err != nil {
+	if _, err := store.New(env.pool).DiscardKBArticleDraft(context.Background(), env.workspaceID, store.Actor{}, before["101"].ID, saved.UpdatedAt); err != nil {
 		t.Fatal(err)
 	}
 	env.editSolutions(func(fixture map[string]any) {
@@ -69,7 +69,7 @@ func TestSolutionsUndoKeepsOnlyArticlesThatStillHaveUnpublishedChanges(t *testin
 	articles := env.kbArticles(t, env.workspaceID)
 	env.saveArticleDraft(t, articles["101"].ID, "Drafted in Colliedesk.")
 	saved := env.saveArticleDraft(t, articles["106"].ID, "Drafted, then discarded.")
-	if _, err := store.New(env.pool).DiscardKBArticleDraft(ctx, env.workspaceID, articles["106"].ID, saved.UpdatedAt); err != nil {
+	if _, err := store.New(env.pool).DiscardKBArticleDraft(ctx, env.workspaceID, store.Actor{}, articles["106"].ID, saved.UpdatedAt); err != nil {
 		t.Fatal(err)
 	}
 	result, err := freshdesk.Undo(ctx, env.pool, env.storage, freshdesk.UndoOptions{WorkspaceSlug: "acme-support"})

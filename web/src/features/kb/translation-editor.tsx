@@ -5,6 +5,7 @@ import { useCreateAction } from '../../api/use-create';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
 import { ArticleAttachments } from './article-attachments';
 import { attachmentMessages } from './attachment-messages';
+import { ArticleReviewBox, useTextApproval } from './article-review';
 import { kbApi } from './kb-api';
 import type { KBArticle, KBArticleStatus, KBAttachment, KBTranslation, KBTranslationVersion } from './kb-api';
 import { kbMessages } from './kb-messages';
@@ -188,6 +189,11 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
   const inTrash = translation?.in_trash === true;
   const invalid = busy || !draft.title.trim() || inTrash;
   const canSave = !invalid && (dirty || (upToDate && translation?.outdated));
+  // As an article's text: where one of its collections requires approval, Publish waits for a teammate's.
+  const collections = useQuery({ queryKey: ['kb-collections'], queryFn: kbApi.collections }).data?.items ?? [];
+  const approval = useTextApproval({ articleId, locale, collections, collectionIds: article?.collection_ids ?? [], dirty, version: translation?.updated_at });
+  const blocked = approval.blocked;
+  const reasonId = `${id}-approval`;
   return (
     <main className="kb-frame kb-translation-page" aria-labelledby={`${id}-heading`}>
       <p className="sr-only" role="status" aria-live="polite">{notice}</p>
@@ -203,7 +209,8 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
         </span>
         <span className="kb-art-acts">
           {/* As on an article: Publish and Save stay in the bar, the rest is in its menu, so the bar fits a phone. */}
-          {listed && status !== 'published' && <button type="button" disabled={invalid} onClick={() => void save('published')}>{t.publish}</button>}
+          {listed && status !== 'published' && <button type="button" disabled={invalid || blocked !== undefined}
+            aria-describedby={blocked ? reasonId : undefined} title={blocked} onClick={() => void save('published')}>{t.publish}</button>}
           <button type="button" className="primary-action" disabled={!canSave} onClick={() => void save()}>{busy ? t.saving : translation ? t.save : t.create}</button>
           {translation && !inTrash && <KBMenu label={t.moreActions} title={t.translationOf(name)} buttonClassName="kb-more-button" trigger={<Icon name="more" />} items={[
             { label: t.history, icon: 'history', onSelect: () => setHistoryOpen(true) },
@@ -217,6 +224,8 @@ function TranslationEditor({ articleId, locale, latest, article, visible, listed
           mine={{ title: draft.title, body: draft.body_md }} busy={busy} onKeepMine={() => void keepMine()} onLoadTheirs={() => void loadTheirs()} />}
         {problem && <p role="alert" className="error-copy">{problem}</p>}
         {inTrash && <div className="warning-note"><p>{t.inTrashNote}</p><button type="button" disabled={busy} onClick={() => void restore()}>{t.restoreFromTrash}</button></div>}
+        {listed && !inTrash && (status !== 'published' || dirty) && <ArticleReviewBox articleId={articleId} locale={locale} approval={approval} dirty={dirty}
+          saved={translation !== undefined} headingId={`${id}-review`} reasonId={reasonId} />}
         {!listed && <p className="warning-note">{t.languageNotListed}</p>}
         {listed && visible === false && <p className="muted-copy" data-quiet="state">{t.languageHidden} <a href="/knowledge/languages">{t.languagesTab}</a></p>}
         {original?.status === 'draft' && <p className="muted-copy">{t.articleDraft}</p>}

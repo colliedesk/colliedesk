@@ -430,12 +430,15 @@ type KBCollection struct {
 	Description string  `json:"description"`
 	Position    int     `json:"position"`
 	// DefaultTemplateID is the template every new article in the collection starts from.
-	DefaultTemplateID *string         `json:"default_template_id"`
-	SourceMeta        json.RawMessage `json:"source_meta"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
-	DeletedAt         *time.Time      `json:"deleted_at"`
-	DeletedByAgentID  *string         `json:"deleted_by_agent_id"`
+	DefaultTemplateID *string `json:"default_template_id"`
+	// RequireApproval is inherit (the help center's setting), on or off: whether publishing an article
+	// in the collection needs a teammate's approval.
+	RequireApproval  string          `json:"require_approval"`
+	SourceMeta       json.RawMessage `json:"source_meta"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DeletedAt        *time.Time      `json:"deleted_at"`
+	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
 	// Translations are its name and description in the help center's other languages; source_meta is
 	// set while a name is as an import wrote it.
 	Translations []KBCollectionTranslation `json:"translations"`
@@ -658,27 +661,30 @@ type HelpCenter struct {
 	Enabled bool   `json:"enabled"`
 	Title   string `json:"title"`
 	// Locale is the primary language; Languages the others, each shown to customers or not.
-	Locale            string               `json:"locale"`
-	Languages         []HelpCenterLanguage `json:"languages"`
-	ContentVersion    int64                `json:"content_version"`
-	LastArticleNumber int64                `json:"last_article_number"`
-	UpdatedAt         time.Time            `json:"updated_at"`
-	LogoMediaID       *string              `json:"logo_media_id"`
-	FaviconMediaID    *string              `json:"favicon_media_id"`
-	LogoAlt           string               `json:"logo_alt"`
-	LinkbackURL       *string              `json:"linkback_url"`
-	ContactURL        *string              `json:"contact_url"`
-	ContactPhone      *string              `json:"contact_phone"`
-	ColorPrimary      *string              `json:"color_primary"`
-	ColorHeader       *string              `json:"color_header"`
-	ColorHeaderText   *string              `json:"color_header_text"`
-	ColorBackground   *string              `json:"color_background"`
-	ColorText         *string              `json:"color_text"`
-	ColorLink         *string              `json:"color_link"`
-	ColorFooter       *string              `json:"color_footer"`
-	BodyFont          *string              `json:"body_font"`
-	HeadingFont       *string              `json:"heading_font"`
-	CustomCSS         string               `json:"custom_css"`
+	Locale    string               `json:"locale"`
+	Languages []HelpCenterLanguage `json:"languages"`
+	// RequireApproval: publishing an article or a translation needs a teammate's approval, unless a
+	// collection it is in says otherwise (kb-collections.ndjson).
+	RequireApproval   bool      `json:"require_approval"`
+	ContentVersion    int64     `json:"content_version"`
+	LastArticleNumber int64     `json:"last_article_number"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	LogoMediaID       *string   `json:"logo_media_id"`
+	FaviconMediaID    *string   `json:"favicon_media_id"`
+	LogoAlt           string    `json:"logo_alt"`
+	LinkbackURL       *string   `json:"linkback_url"`
+	ContactURL        *string   `json:"contact_url"`
+	ContactPhone      *string   `json:"contact_phone"`
+	ColorPrimary      *string   `json:"color_primary"`
+	ColorHeader       *string   `json:"color_header"`
+	ColorHeaderText   *string   `json:"color_header_text"`
+	ColorBackground   *string   `json:"color_background"`
+	ColorText         *string   `json:"color_text"`
+	ColorLink         *string   `json:"color_link"`
+	ColorFooter       *string   `json:"color_footer"`
+	BodyFont          *string   `json:"body_font"`
+	HeadingFont       *string   `json:"heading_font"`
+	CustomCSS         string    `json:"custom_css"`
 	// GoogleSiteVerification and BingSiteVerification are the Search Console tokens (null when none).
 	GoogleSiteVerification *string `json:"google_site_verification"`
 	BingSiteVerification   *string `json:"bing_site_verification"`
@@ -1311,6 +1317,8 @@ type Sink interface {
 	KBMediaReplacement(KBMediaReplacement) error
 	KBArticleVoteReset(KBArticleVoteReset) error
 	KBArticleVote(KBArticleVote) error
+	KBReview(KBReview) error
+	KBReviewReviewer(KBReviewReviewer) error
 	HelpCenter(HelpCenter) error
 	AgentRequest(AgentRequest) error
 	ImportJob(ImportJob) error

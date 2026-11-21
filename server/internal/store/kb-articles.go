@@ -130,7 +130,16 @@ type KBArticleFilter struct {
 	Cursor                            string
 	// HasDraft keeps only the articles with unpublished changes.
 	HasDraft bool
+	// ReviewState keeps only the articles whose own unpublished text waits for a reviewer
+	// (KBInReview) or was approved as it is now (KBApproved).
+	ReviewState string
 }
+
+// The review states of an article's unpublished text an article list narrows to.
+const (
+	KBInReview = "in_review"
+	KBApproved = "approved"
+)
 
 // likePattern escapes the wildcards of ILIKE so the text matches as typed.
 var likePattern = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
@@ -171,6 +180,12 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 	}
 	if filter.HasDraft {
 		where += ` AND ` + kbHasDraft
+	}
+	switch filter.ReviewState {
+	case KBInReview:
+		where += ` AND EXISTS (SELECT 1 FROM kb_reviews r WHERE r.workspace_id=a.workspace_id AND r.article_id=a.id AND r.locale IS NULL AND r.state='open')`
+	case KBApproved:
+		where += ` AND EXISTS (SELECT 1 FROM kb_reviews r WHERE r.workspace_id=a.workspace_id AND r.article_id=a.id AND r.locale IS NULL AND r.approves_pending)`
 	}
 	sort := filter.Sort
 	if sort == "" && filter.CollectionID != "" {
@@ -527,7 +542,11 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleCreated, nil); err != nil {
 			return domain.KBArticle{}, err
 		}
-		return readKBArticle(ctx, tx, workspaceID, id)
+		article, err := readKBArticle(ctx, tx, workspaceID, id)
+		if err != nil {
+			return domain.KBArticle{}, err
+		}
+		return article, guardKBPublish(ctx, tx, workspaceID, id, nil, kbPublishState{}, articlePublishState(article))
 	})
 	return article, kbError("create knowledge base article", err)
 }
@@ -705,15 +724,15 @@ func (s *Store) changeKBArticle(ctx context.Context, workspaceID string, actor A
 // kind. An autosave (kind "") of an article not on the help center records no version and leaves the
 // help center version as it is; it still links the media the text names.
 func changeKBArticleLocked(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, id, kind string, restoredFrom *int, write func(pgx.Tx) error) (domain.KBArticle, error) {
-	var wasTitle, wasBody string
-	if err := tx.QueryRow(ctx, `SELECT title, body_md FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&wasTitle, &wasBody); err != nil {
+	was, err := readKBArticle(ctx, tx, workspaceID, id)
+	if err != nil {
 		return domain.KBArticle{}, err
 	}
 	if err := write(tx); err != nil {
 		return domain.KBArticle{}, err
 	}
 	// An edit or a restore of the article's own words leaves its translations behind.
-	if err := markKBTranslationsOutdated(ctx, tx, workspaceID, id, wasTitle, wasBody); err != nil {
+	if err := markKBTranslationsOutdated(ctx, tx, workspaceID, id, was.Title, was.BodyMD); err != nil {
 		return domain.KBArticle{}, err
 	}
 	if kind == "" {
@@ -723,7 +742,14 @@ func changeKBArticleLocked(ctx context.Context, tx pgx.Tx, workspaceID string, a
 	} else if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, kind, restoredFrom); err != nil {
 		return domain.KBArticle{}, err
 	}
-	return readKBArticle(ctx, tx, workspaceID, id)
+	if err := settleKBReviewAfterEdit(ctx, tx, workspaceID, actor, id, nil); err != nil {
+		return domain.KBArticle{}, err
+	}
+	article, err := readKBArticle(ctx, tx, workspaceID, id)
+	if err != nil {
+		return domain.KBArticle{}, err
+	}
+	return article, guardKBPublish(ctx, tx, workspaceID, id, nil, articlePublishState(was), articlePublishState(article))
 }
 
 // DeleteKBArticle moves an article to the trash and records the version.

@@ -43,6 +43,12 @@ const (
 	intakeEvaluationOperation            = "intake_evaluation"
 	allowOAuthOperation                  = "oauth_allow"
 	resetKBVotesOperation                = "kb_votes_reset"
+	createKBReviewOperation              = "kb_review"
+	approveKBReviewOperation             = "kb_review_approve"
+	requestKBReviewChangesOperation      = "kb_review_changes"
+	withdrawKBReviewOperation            = "kb_review_withdraw"
+	approveKBReviewsOperation            = "kb_reviews_approve"
+	publishKBArticlesOperation           = "kb_articles_publish"
 	importKBImageOperation               = "kb_image_import"
 )
 

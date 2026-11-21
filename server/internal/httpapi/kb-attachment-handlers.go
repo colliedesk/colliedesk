@@ -64,7 +64,7 @@ func (a *API) setKBTranslationAttachments(response http.ResponseWriter, request 
 	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, a.translationIsPublished(request, who)) {
 		return
 	}
-	translation, err := a.store.SetKBTranslationAttachments(request.Context(), who.Workspace.ID, request.PathValue("id"), request.PathValue("locale"), ids, seen)
+	translation, err := a.store.SetKBTranslationAttachments(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), request.PathValue("locale"), ids, seen)
 	if err != nil {
 		writeKBAttachmentError(response, err)
 		return

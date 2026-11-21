@@ -467,6 +467,12 @@ jobs:
         env:
           BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
         run: sh .github/scripts/ci-background.sh start compose-smoke sh tests/compose-smoke.sh
+      # upgrade-postgres.sh moves an install of v1.0.1 (PostgreSQL 17) to 19 and back, for both database
+      # login layouts at once (about 130 to 145 seconds each); the image job still ends before the e2e shards.
+      - name: Start the PostgreSQL 19 upgrade tests in the background
+        run: |
+          sh .github/scripts/ci-background.sh start upgrade-postgres-owner sh tests/upgrade-postgres-test.sh owner colliedesk:ci
+          sh .github/scripts/ci-background.sh start upgrade-postgres-superuser sh tests/upgrade-postgres-test.sh superuser colliedesk:ci
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -500,6 +506,13 @@ jobs:
         run: sh .github/scripts/ci-background.sh wait upgrade
       - name: The stack from compose.yaml reached the server
         run: sh .github/scripts/ci-background.sh wait compose-smoke
+      - name: upgrade-postgres.sh moves PostgreSQL 17 to 19 and back without losing a row or a file
+        env:
+          # Five Docker checks share the runner here; each of these waits counts from its own start.
+          CI_BACKGROUND_TIMEOUT: '240'
+        run: |
+          sh .github/scripts/ci-background.sh wait upgrade-postgres-owner
+          sh .github/scripts/ci-background.sh wait upgrade-postgres-superuser
 
   # The one check to watch: adding or splitting jobs above never renames it.
   # Fails a PR that brings in a dependency version with a known vulnerability (OSV database).

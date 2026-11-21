@@ -1,7 +1,9 @@
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useHolds } from '../../lib/permissions-context';
 import { HelpTip } from '../../ui/help-tip';
+import { CollectionApprovalField } from './collection-approval-field';
 import type { KBCollection } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { kbTemplatesApi, templatesKey } from './kb-templates-api';
@@ -16,6 +18,8 @@ export interface CollectionValues {
   parent_id: string | null;
   // default_template_id is the template every new article in it starts from; null starts them blank.
   default_template_id: string | null;
+  // require_approval overrides the help center's approval before publishing for its articles.
+  require_approval: KBCollection['require_approval'];
 }
 
 interface CollectionFormProps {
@@ -34,8 +38,9 @@ export function CollectionForm({ tree, node, parentId = null, onSubmit, onCancel
   const original = node?.collection;
   const [values, setValues] = useState<CollectionValues>({
     name: original?.name ?? '', slug: original?.slug ?? '', description: original?.description ?? '', parent_id: original ? original.parent_id : parentId,
-    default_template_id: original?.default_template_id ?? null,
+    default_template_id: original?.default_template_id ?? null, require_approval: original?.require_approval ?? 'inherit',
   });
+  const holds = useHolds();
   const templates = useQuery({ queryKey: templatesKey, queryFn: kbTemplatesApi.list }).data?.items ?? [];
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -81,6 +86,8 @@ export function CollectionForm({ tree, node, parentId = null, onSubmit, onCancel
         </select>
         <small className="muted-copy"><span id={`${id}-template-note`}>{templateMessages.defaultTemplateNote}</span>{' '}
           <HelpTip label={templateMessages.defaultTemplate} text={templateMessages.defaultTemplateTip} id={`${id}-template-tip`} /></small></div>}
+      {/* Changing it is a help center setting: the server asks for help_center:update too. */}
+      {original && holds('help_center:update') && <CollectionApprovalField value={values.require_approval} onChange={(mode) => set({ require_approval: mode })} />}
       <div className="button-row">
         <button className="primary-action" type="submit" disabled={busy || !values.name.trim()}>{original ? kbMessages.saveCollection : kbMessages.createCollection}</button>
         <button type="button" disabled={busy} onClick={onCancel}>{kbMessages.cancel}</button>

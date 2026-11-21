@@ -17,6 +17,7 @@ import { ArticleDraftBar, draftMessages, editable } from './article-draft';
 import { sameBody, useArticleAutosave } from './article-autosave';
 import { ConflictCompare } from './conflict-compare';
 import { unsavedKey } from './unsaved-store';
+import { ArticleReviewBox, useTextApproval } from './article-review';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
 import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
@@ -36,6 +37,7 @@ import { embedFor } from './media-grid';
 import { baseName, fileProblem, kindOf, uploadVideo } from './media-uploads';
 import { addPoster } from './video-poster';
 import { InsertTemplateMenu, useTemplateStart } from './article-template';
+import { reviewMessages as r } from './review-messages';
 
 // The limits the server checks (server/internal/domain/kb.go), counted in characters like the server.
 export const maxTitle = 300;
@@ -532,7 +534,12 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     queries: missing.map((image) => ({ queryKey: ['kb-media-details', image.id ?? image.url], queryFn: () => mediaApi.details(image.id!), enabled: image.id !== undefined, retry: false, staleTime: 60_000 })),
   });
   const nameOf = (image: MissingAlt, at: number) => missingNames[at]?.data?.name || image.fallback;
-  const publish = () => { if (missing.length > 0) setAskingAlt('publish'); else void save('published'); };
+  // Where a collection requires approval, Publish waits for a teammate's approval of the saved text.
+  const approval = useTextApproval({ articleId: base?.id, collections, version: raw?.updated_at, dirty,
+    collectionIds: [...(raw?.collection_ids ?? []), ...(raw?.draft?.collection_ids ?? []), draft.collection_id, ...draft.extras] });
+  const blocked = approval.blocked;
+  const reasonId = `${id}-approval`;
+  const publish = () => { if (blocked) return; if (missing.length > 0) setAskingAlt('publish'); else void save('published'); };
   // Publishing changes asks too when they bring in an image without alt text the published version does not
   // have: that image would go on the help center at once. A save of a published article keeps it off.
   const liveMissing = useMemo(() => (raw ? missingAlt(raw.body_md).map((image) => image.markdown) : []), [raw]);
@@ -577,7 +584,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     ] : []),
     status === 'published'
       ? { label: kbMessages.unpublish, icon: 'globe' as const, disabled: busy || invalid, onSelect: () => void save('draft') }
-      : { label: publishLabel, icon: 'globe' as const, disabled: busy || invalid, onSelect: publish },
+      : { label: publishLabel, icon: 'globe' as const, hint: blocked ? r.approvalNeeded : undefined, disabled: busy || invalid || blocked !== undefined, onSelect: publish },
     ...(base ? [{ label: kbMessages.deleteArticleMenu, icon: 'trash' as const, danger: true, separated: true, onSelect: () => setDeleting(true) }] : []),
   ];
   const stateWords = [status === 'published' ? (isPublic === false ? kbMessages.notPublicShort : '') : '', raw?.has_draft ? draftMessages.unpublishedChanges : '', autosave.word || (savedOnce ? kbMessages.saved : '')].filter(Boolean);
@@ -593,6 +600,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           <Icon name="globe" />{kbMessages.turnOnHelpCenter}</a>}
       </section>
       {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
+      {(!base || status !== 'published' || raw?.has_draft || dirty) && <ArticleReviewBox articleId={base?.id} approval={approval} dirty={dirty} saved={base !== undefined}
+        headingId={`${id}-review`} reasonId={reasonId} />}
       {base && <ArticleTranslationsBox article={base} headingId={`${id}-translations`} />}
       {base && <ArticleVotesBox articleId={base.id} title={base.title} timezone={timezone} headingId={`${id}-votes`} />}
       {missing.length > 0 && <section className="kb-alt-warn" aria-labelledby={`${id}-alt-warn`}>
@@ -652,7 +661,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
             {stateWords.map((word) => <span key={word}>· {word}</span>)}
           </span>
           <span className="kb-art-acts">
-            {status !== 'published' && <button type="button" disabled={busy || invalid} aria-describedby={needsCollection} onClick={publish}>{publishLabel}</button>}
+            {status !== 'published' && <button type="button" disabled={busy || invalid || blocked !== undefined} aria-describedby={blocked ? reasonId : needsCollection} title={blocked}
+              onClick={publish}>{publishLabel}</button>}
             <button className="primary-action" type="submit" form={`${id}-form`} disabled={disabledSave} aria-describedby={needsCollection}>{saveLabel}</button>
             {more}
           </span>
@@ -661,7 +671,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       {(startNotice || autosave.restoreBar || raw?.draft || conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || (base?.ai_exclusion && !phone)) && <div className="kb-editor-notes">
         {startNotice && !base && <p role="status" className="warning-note">{startNotice}</p>}
         {base?.ai_exclusion && !phone && <ArticleAINote article={base} onChanged={aiChangedFromNote} />}
-        {raw?.draft && <ArticleDraftBar article={raw} title={draft.title} body={bodyNow} busy={busy} dirty={dirty} onPublish={askPublishChanges} onDiscard={discardChanges} />}
+        {raw?.draft && <ArticleDraftBar article={raw} title={draft.title} body={bodyNow} busy={busy} dirty={dirty} blocked={blocked} onPublish={askPublishChanges} onDiscard={discardChanges} />}
         {autosave.restoreBar}
         {conflict && <ConflictCompare message={kbMessages.changedElsewhere} theirs={theirs} mine={{ title: draft.title, body: draft.body }} busy={busy}
           onKeepMine={() => void keepMine()} onLoadTheirs={() => void loadTheirs()} />}
@@ -722,7 +732,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {more}
         {/* A saved draft has nothing to save: its next step, Publish, takes the place of Save. */}
         {status !== 'published' && base && !dirty && !autosave.pending
-          ? <button type="button" className="primary-action" disabled={busy || invalid} onClick={publish}>{kbMessages.publish}</button>
+          ? <button type="button" className="primary-action" disabled={busy || invalid || blocked !== undefined} title={blocked} onClick={publish}>{kbMessages.publish}</button>
           : <button className="primary-action" type="submit" form={`${id}-form`} disabled={disabledSave} aria-describedby={needsCollection}>{saveLabel}</button>}
       </div>}
       {phone && detailsOpen && <KBDialog title={kbMessages.details} className="kb-details-sheet" fieldFirst={false} closeLabel={kbMessages.closeDetails} onClose={() => setDetailsOpen(false)}>{details}</KBDialog>}

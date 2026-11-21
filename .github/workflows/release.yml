@@ -145,6 +145,24 @@ jobs:
             exit 0
           fi
           sh "$RUNNER_TEMP/upgrade-test/tests/upgrade-test.sh" "$previous" colliedesk:release
+      # docs/self-host/upgrade.md sends operators of a bundled PostgreSQL 17 database to
+      # upgrade-postgres.sh at their release's tag, so the script and its test come from the released
+      # commit: an install of v1.0.1 must move to PostgreSQL 19 and back without losing a row or a file.
+      - name: Move the bundled database from PostgreSQL 17 to 19 and back
+        env:
+          SHA: ${{ steps.target.outputs.sha }}
+          CI_BACKGROUND_TIMEOUT: '300'
+        run: |
+          if ! git cat-file -e "$SHA:upgrade-postgres.sh" 2>/dev/null; then
+            echo "$SHA has no upgrade-postgres.sh: nothing to test."
+            exit 0
+          fi
+          git worktree add --detach "$RUNNER_TEMP/upgrade-postgres" "$SHA"
+          cd "$RUNNER_TEMP/upgrade-postgres"
+          sh .github/scripts/ci-background.sh start upgrade-postgres-owner sh tests/upgrade-postgres-test.sh owner colliedesk:release
+          sh .github/scripts/ci-background.sh start upgrade-postgres-superuser sh tests/upgrade-postgres-test.sh superuser colliedesk:release
+          sh .github/scripts/ci-background.sh wait upgrade-postgres-owner
+          sh .github/scripts/ci-background.sh wait upgrade-postgres-superuser
       # The client collie (collie mcp for a person's computer) for each system, the Claude Desktop
       # extension and SHA256SUMS: the files of client-assets.txt, which the user guides link as
       # releases/latest/download/<name>. Built before anything is published, so a failure stops

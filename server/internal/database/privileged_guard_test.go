@@ -61,6 +61,7 @@ var privilegedCallSites = []string{
 	"internal/store/intake.go: PrivilegeIntakeDueClaim",
 	"internal/store/kb-images.go: PrivilegeKBPurge",
 	"internal/store/kb-media-uploads.go: PrivilegeKBUploadDisk",
+	"internal/store/kb-review-mail.go: PrivilegeKBReviewEmailClaim",
 	"internal/store/mail-image-cache.go: PrivilegeMailImageSweep",
 	"internal/store/mailbox-connections.go: PrivilegeMailboxGrantShared",
 	"internal/store/mailbox-connections.go: PrivilegeMailboxKeepAlive",

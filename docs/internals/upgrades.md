@@ -116,3 +116,92 @@ Between the steps a row can still be unfilled. Self-host keeps the old server ru
 runs `collie migrate && exec collie serve` in one container, so no new server reads the table between the
 steps. The readers tolerate an unfilled row anyway (COALESCE; a code names only numbered conversations),
 held by `TestAConversationNotNumberedYetReadsListsAndExports`.
+
+## A new PostgreSQL major
+
+`upgrade-postgres.sh` moves a bundled 16, 17 or 18 database to 19 by dump and restore into a new
+volume (`postgres19-data`), never `pg_upgrade`: the upgrade only dumps from the old volume, so
+`--rollback` is only a compose edit back to the old image and volume. `tests/upgrade-postgres-test.sh` runs it on an
+install made by the v1.0.1 installer (PostgreSQL 17, no `PGDATA` line), for both database login
+layouts, in the background of the CI `image` job and in the release.
+
+- **Compare data only while the server is stopped.** The server writes on its own (AI indexing,
+  inbound and outbox retries, snapshots, the settings import), so a snapshot of a running install
+  differs from the next one for no fault of the upgrade. The test stops the server, compares,
+  takes the next baseline in the same stop and starts it again; each `up --wait` costs about 3 s.
+- **`compose.yaml` switches last.** PostgreSQL 19 runs from a staging copy,
+  `compose.postgres-19.yaml`, until the restore and the analyze are done; only then is
+  `compose.yaml` replaced, with `mv`, so it is never half written. A run killed at any point leaves a
+  `compose.yaml` that serves complete data: the old major before the switch, 19 after it. The next
+  run reads `compose.yaml`, not the state file, to choose between finishing on 19 and putting the
+  install back, and only on a positive match: the data volume it names is either the 19 one or the
+  old one. A third key (a hand edit) is refused, since the script cannot tell where the server
+  wrote. After each switch of `compose.yaml` the script runs `sync`, so after a power loss the file
+  on disk names the volume the server wrote, not the one before.
+- **After the switch, never point away from 19 or remove its volume.** Once `compose.yaml` names 19
+  the server may have written there, and the 19 volume may be the only copy of those writes. A
+  failure or a signal after the switch leaves `compose.yaml` on 19 and names the two ways on (run
+  again, `--rollback`). The new volume is removed only while `compose.postgres-19.yaml` still exists,
+  which proves `compose.yaml` never named it.
+- **The rollback is resumable.** It records `rolling_back` before it edits `compose.yaml`. Until
+  PostgreSQL runs on the old volume, a stop puts `compose.yaml` back on 19; after that, the server
+  may have written to the old volume, so a stop leaves `compose.yaml` on the old major and the next
+  `--rollback` finishes it. An upgrade refuses while a rollback is unfinished. A rollback stopped
+  before it edited `compose.yaml` (still on 19) starts over. The state of before the rollback is
+  kept in `prior`, so a rollback that starts over and then fails still puts back `done` or `started`.
+  If the failure leaves `compose.yaml` on the old major (its copy gone), the state stays
+  `rolling_back` and nothing starts: a server on the old volume under a state that says 19 would
+  write where the next run does not look.
+- **One compose project.** The volumes belong to the project recorded in the state file. Docker
+  Compose takes `COMPOSE_PROJECT_NAME` from the shell or `.env` over `name:`, and in another project
+  it would start an empty database beside the install. A run that finds an upgrade or rollback under
+  way, or done, compares `docker compose config`'s `name` with the recorded one and refuses a
+  difference. A first run has nothing recorded, so it requires the project to own volumes already:
+  a project without any is not where the install ran.
+- **The postgres service is read from `compose.yaml` alone.** The script parses and edits only that
+  file, while Compose also merges `compose.override.yaml` and `COMPOSE_FILE`. A run refuses when the
+  merged postgres service differs from the one `compose.yaml` gives (`docker compose -f compose.yaml
+  config` ignores both), since the volume it would dump or start is then not the one it parsed.
+- **Missing volumes are refused, not created.** Compose creates a named volume that does not exist,
+  so a finish whose 19 volume was removed would start an empty 19 and the server on it, and an
+  upgrade whose old volume is gone would dump an empty 17. Both check the volume exists first.
+- **Start the server only on a known cluster.** The script records `system_identifier` from
+  `pg_control_system()` in the state file: `old_cluster` before the dump, `cluster` after the
+  restore. Every place that starts the server (a finish, a rollback, the undo of a cut-off run, the
+  exit handlers) stops a server started by hand, starts PostgreSQL first and compares it, with the major and the volume key; a hand edit (another `PGDATA`)
+  gives a fresh cluster with another identifier, and the script stops PostgreSQL and starts nothing.
+  A finish leaves `compose.yaml` as the operator edited it, since the server may have written there;
+  a rollback that meets another cluster puts `compose.yaml` back as it was, on 19.
+- **Only the server's writes are fenced.** The dump starts after the server stops; the bundled
+  compose file runs only postgres and server. Another program writing to the database directly is
+  the operator's to stop first; its writes after the dump are not carried.
+- **pg_restore output goes to a file.** Its errors can quote rows, so stderr of `pg_restore` and
+  `vacuumdb` goes to `restore.log` in the dump directory (mode 600 under `umask 077`), and the
+  message names it.
+- **An undo that cannot list the volumes stops.** Without the list the half-made 19 volume cannot
+  be found, so `compose.postgres-19.yaml` and the state `started` stay: the next run still knows the
+  volume as one no server ran on and removes it.
+- **The compose files keep their mode.** `umask 077` protects the dump; the script copies
+  `compose.yaml` with `cp -p` before each edit, so the install's mode (often 664) survives.
+- **No lock against two runs at once.** The script is run by hand by one operator on one host; two
+  concurrent runs would also fight over the same containers, which a lock file cannot prevent across
+  a reboot. Not worth the stale-lock failure mode.
+- **The exit handlers ignore signals and write errors.** A closed SSH session sends SIGHUP, and then
+  every write to the terminal fails; the handler that puts the install back must still run to its
+  end, so it ignores HUP, INT, TERM and PIPE and its messages swallow write errors. The test runs a
+  failed upgrade with stderr on `/dev/full`. The signal trap ignores further signals before it exits,
+  since a Ctrl-C reaches `docker` and the script at once and a second one must not cut the handler.
+  Not covered by a test: two signals within milliseconds cannot be timed reliably.
+- **The installer keeps the volume key it finds.** A rerun after the upgrade must keep
+  `postgres19-data`, or PostgreSQL 19 starts on the volume 17 wrote. Without `compose.yaml` it reads
+  the key from the state `.postgres-upgrade` left (done: 19, failed or rolled back: the old key) and
+  stops while an upgrade or rollback is unfinished. `tests/install-test.sh` holds it.
+- **A finished upgrade with the old compose file put back by hand: the plain run refuses,
+  `--rollback` records it.** The server already serves the old volume, so a finish would move it
+  away from data it may have written. `--rollback` runs as a resumed rollback: it checks that the
+  old cluster starts from `compose.yaml`, leaves the file as it is and records `rolled_back`, so the
+  installer, run without `compose.yaml`, picks the old volume and not `postgres19-data`.
+- **An undo checks that the old volume exists.** Without it docker compose would create an empty
+  one and the cluster check would blame an edit of the postgres service.
+- **No `start_interval` in the healthchecks.** It would shorten each start, but Compose refuses it on
+  Docker Engine before 25, such as Debian 12's `docker.io` (20.10).

@@ -35,7 +35,7 @@ const (
 
 	// kbArticleChangeSchema is a saved reply change with the kinds only articles have: written by an
 	// import, a library item replaced in the text, AI kept away from the article or let read it again.
-	kbArticleChangeSchema = `{"type":["object","null"],"properties":{"version":{"type":"integer"},"kind":{"type":"string","enum":["create","edit","draft","delete","restore","undelete","import","media_replace","ai_exclude","ai_include"]},` +
+	kbArticleChangeSchema = `{"type":["object","null"],"properties":{"version":{"type":"integer"},"kind":{"type":"string","enum":["create","edit","draft","delete","restore","undelete","import","media_replace","ai_exclude","ai_include","review_request","review_approve","review_changes","review_withdraw"]},` +
 		`"restored_from_version":{"type":["integer","null"]},"by":{"type":["string","null"],"description":"The person who made the change (or, before roles, approved the request that made it)."},` +
 		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made it; null when a person made it in the web app."},` +
 		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
@@ -61,14 +61,21 @@ const (
 		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"default_template_id":{"type":["string","null"],"description":"The template every new article in it starts from (colliedesk_kb_templates_list); null: they start empty."},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
 		`"position":{"type":"integer"},"article_count":{"type":"integer"},"updated_at":{"type":"string"},"deleted_at":{"type":"string"},"deleted_by":{"type":["string","null"]},"purges_at":{"type":"string"},` +
 		`"translations":{"type":"array","description":"Its name and description in the help center's other languages (colliedesk_kb_collection_translation_set).","items":{"type":"object","properties":{` +
-		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}}}}`
+		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}},` + kbRequireApprovalProperty + `}}`
+
+	// kbRequireApprovalProperty is a collection's approval setting, in its answer and in a change.
+	kbRequireApprovalProperty = `"require_approval":{"type":"string","enum":["inherit","on","off"],"description":"Whether its articles need an approved version before they are published: ` +
+		`inherit follows the help center's require_approval, on and off override it. An article in several collections needs one if any of them does."}`
 
 	kbDefaultTemplateProperty = `"default_template_id":{"type":["string","null"],` + uuid + `,"description":"A template from colliedesk_kb_templates_list that every new article in it starts from; null clears it. Deleting the template clears it too."}`
 
 	kbCollectionOutput = `{"type":"object","required":["collection"],"properties":{"collection":` + kbCollectionSchema + `}}`
 
 	helpCenterSchema = `{"type":"object","required":["enabled","title","locale","content_version","url"],"properties":{"enabled":{"type":"boolean"},"title":{"type":"string"},` +
-		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"}}}`
+		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"},` + kbHelpCenterApprovalProperty + `}}`
+
+	kbHelpCenterApprovalProperty = `"require_approval":{"type":"boolean","description":"true: an article is published only once a teammate approved exactly its text ` +
+		`(colliedesk_kb_article_send_for_review); a collection's require_approval can override it."}`
 )
 
 func kbCollectionsListSpec() Spec {
@@ -117,13 +124,13 @@ func kbCollectionUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_collection_update",
 		Title: "Change a knowledge base collection",
-		Description: `Rename a collection, change its slug, description, position or default template, or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
+		Description: `Rename a collection, change its slug, description, position, default template or whether its articles need approval (require_approval, needs kb_articles:publish), or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
 			`A move that would nest it more than three levels deep, or under itself, is refused.`,
 
 		REST: []string{"PATCH /api/v1/kb/collections/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["collection_id","updated_at"],"properties":{` + kbCollectionIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,"description":{"type":"string","maxLength":2000},"position":{"type":"integer","minimum":0,"maximum":1000000},` +
-			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
+			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,` + kbRequireApprovalProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionUpdate,
 	}
@@ -168,7 +175,8 @@ func kbArticlesSearchSpec() Spec {
 			`Each article has its public address (url); to link one in a reply, search with status published.` + "\n\n" + kbTextNotice,
 		REST: []string{"GET /api/v1/kb/articles"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","maxLength":200},"status":{"type":"string","enum":["draft","published"]},` +
-			`"collection_id":{"type":"string",` + uuid + `},"has_draft":{"type":"boolean"},"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
+			`"collection_id":{"type":"string",` + uuid + `},"has_draft":{"type":"boolean"},"state":{"type":"string","enum":["in_review","approved"],` +
+			`"description":"in_review: with an open review; approved: their unpublished text is approved and can be published (colliedesk_kb_articles_publish)."},"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
 		Output: `{"type":"object","required":["articles","next_cursor"],"properties":{"articles":{"type":"array","items":` + kbArticleRowSchema + `},` +
 			`"next_cursor":{"type":["string","null"],"description":"Null on the last page."}}}`,
 		run: kbArticlesSearch,
@@ -402,11 +410,12 @@ func helpCenterUpdateSpec() Spec {
 		Name:  "colliedesk_help_center_update",
 		Title: "Turn the help center on or off",
 		Description: `Turn the public help center on or off and set its title (empty uses the workspace name) and language (a BCP 47 tag such as en or pt-BR). ` +
-			`Turning it on publishes every article marked published; turning it off takes every page off line at once. It is safe to repeat.`,
+			`Turning it on publishes every article marked published; turning it off takes every page off line at once. ` +
+			`require_approval (needs kb_articles:publish; left out, it stays as it is) makes every article need a teammate's approval before it is published. It is safe to repeat.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/help-center"},
 		Input: `{"type":"object","additionalProperties":false,"required":["enabled","title","locale"],"properties":{"enabled":{"type":"boolean"},` +
-			`"title":{"type":"string","maxLength":200},"locale":{"type":"string","minLength":2,"maxLength":35}}}`,
+			`"title":{"type":"string","maxLength":200},"locale":{"type":"string","minLength":2,"maxLength":35},` + kbHelpCenterApprovalProperty + `}}`,
 		Output: `{"type":"object","required":["help_center"],"properties":{"help_center":` + helpCenterSchema + `}}`,
 		run:    helpCenterUpdate,
 	}

@@ -10,7 +10,7 @@ if (!('getClientRects' in Range.prototype)) Object.assign(Range.prototype, { get
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const never: UploadHooks = { accept: (files) => files, upload: () => new Promise(() => {}), store: () => new Promise(() => {}), onStart: () => {}, onDone: () => {}, onError: () => {} };
-const center = { enabled: true, title: '', locale: 'en', content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' };
+const center = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' };
 const reset = summary(7, 'Reset your password', 'published');
 const refund = summary(8, 'Refund steps', 'published');
 

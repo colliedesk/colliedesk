@@ -17,3 +17,13 @@
   .kb-template-list > li:has(> .kb-template-text) { grid-template-columns: minmax(0, 1fr); }
   .kb-template-actions button { min-height: var(--touch); }
 }
+
+/* Reviews: the tab's count of what waits for me, the lists with a checkbox per row, one review. */
+.kb-review-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 4px; border-radius: 9px; background: var(--accent); color: var(--surface-1); padding: 0 5px; font-size: var(--fs-label); font-weight: 600; font-variant-numeric: tabular-nums; }
+.kb-template-list > li.kb-review-row { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+.kb-review-row > input[type="checkbox"] { margin-top: 3px; }
+.kb-review-bulk { align-items: center; }
+.kb-review-refused { margin: 0; padding-left: var(--space-4); color: var(--danger); font-size: var(--fs-small); }
+.kb-review-ok { color: var(--ok); }
+.kb-review .kb-diff { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-2) 0; }
+.kb-reviewer-list { display: grid; gap: var(--space-1); margin: 0; border: 0; padding: 0; }

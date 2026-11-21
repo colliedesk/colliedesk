@@ -67,7 +67,7 @@ func readKBTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID, l
 	summary, err := scanKBTranslationSummary(tx.QueryRow(ctx, kbTranslationSelect(`,t.body_md,t.seo_title,t.seo_description,t.source_html IS NOT NULL,t.deleted_at,
 			COALESCE((SELECT l.visible FROM help_center_languages l WHERE l.workspace_id=t.workspace_id AND l.locale=t.locale), false),
 			a.id::text,a.number,COALESCE(h.locale,'en'),a.title,a.body_md,a.seo_title,a.seo_description,a.status,a.collection_id::text,c.name,
-			COALESCE((SELECT max(w.version) FROM kb_article_versions w WHERE w.workspace_id=a.workspace_id AND w.article_id=a.id AND w.kind<>'draft'), 0),a.updated_at`,
+			COALESCE((SELECT max(w.version) FROM kb_article_versions w WHERE w.workspace_id=a.workspace_id AND w.article_id=a.id AND `+kbTextVersion("w.")+`), 0),a.updated_at`,
 		` JOIN kb_articles a ON a.workspace_id=t.workspace_id AND a.id=t.article_id
 			JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
 			LEFT JOIN help_centers h ON h.workspace_id=t.workspace_id`)+` WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3`, workspaceID, articleID, locale),
@@ -269,6 +269,9 @@ func (s *Store) CreateKBTranslation(ctx context.Context, workspaceID string, act
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, input.Locale, actor, domain.KBArticleCreated, nil); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
+		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, input.Locale, kbPublishState{}); err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
 		return readKBTranslation(ctx, tx, workspaceID, articleID, input.Locale)
 	})
 	return item, kbError("create knowledge base translation", err)
@@ -295,6 +298,10 @@ func (s *Store) UpdateKBTranslation(ctx context.Context, workspaceID string, act
 		if err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
+		was, err := translationPublishState(ctx, tx, workspaceID, articleID, locale)
+		if err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
 		if change.Status != nil && *change.Status == domain.KBPublished && before.Status != domain.KBPublished {
 			// A translation in a language the help center no longer lists stays a draft.
 			if err := checkKBLanguage(ctx, tx, workspaceID, locale); err != nil {
@@ -318,6 +325,9 @@ func (s *Store) UpdateKBTranslation(ctx context.Context, workspaceID string, act
 			}
 		}
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, kind, nil); err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
+		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, was); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
 		return readKBTranslation(ctx, tx, workspaceID, articleID, locale)
@@ -375,7 +385,10 @@ func (s *Store) DeleteKBTranslation(ctx context.Context, workspaceID string, act
 			WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`, workspaceID, articleID, locale, s.now(), optionalID(actor.AgentID)); err != nil {
 			return struct{}{}, err
 		}
-		return struct{}{}, addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleDeleted, nil)
+		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleDeleted, nil); err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, kbPublishState{})
 	})
 	return kbError("delete knowledge base translation", err)
 }
@@ -405,6 +418,8 @@ func (s *Store) UndeleteKBTranslation(ctx context.Context, workspaceID string, a
 			WHERE workspace_id=$1 AND article_id=$2 AND locale=$3`, workspaceID, articleID, locale); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
+		// Out of the trash comes the text that was there, as the article's undelete does: nothing new
+		// to approve.
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleUndeleted, nil); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
@@ -526,6 +541,10 @@ func (s *Store) RestoreKBTranslationVersion(ctx context.Context, workspaceID str
 		if _, err := lockLiveKBTranslation(ctx, tx, workspaceID, articleID, locale, seen); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
+		was, err := translationPublishState(ctx, tx, workspaceID, articleID, locale)
+		if err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
 		tag, err := tx.Exec(ctx, `UPDATE kb_article_translations t SET title=v.title, slug=v.slug, body_md=v.body_md, seo_title=v.seo_title, seo_description=v.seo_description,
 				updated_at=clock_timestamp() FROM kb_article_translation_versions v
 			WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3 AND v.workspace_id=t.workspace_id AND v.article_id=t.article_id AND v.locale=t.locale AND v.version=$4`,
@@ -537,6 +556,9 @@ func (s *Store) RestoreKBTranslationVersion(ctx context.Context, workspaceID str
 			return domain.KBArticleTranslation{}, domain.ErrKBTranslationVersionNotFound
 		}
 		if err := addKBTranslationVersion(ctx, tx, workspaceID, articleID, locale, actor, domain.KBArticleRestored, &version); err != nil {
+			return domain.KBArticleTranslation{}, err
+		}
+		if err := afterKBTranslationWrite(ctx, tx, workspaceID, actor, articleID, locale, was); err != nil {
 			return domain.KBArticleTranslation{}, err
 		}
 		return readKBTranslation(ctx, tx, workspaceID, articleID, locale)

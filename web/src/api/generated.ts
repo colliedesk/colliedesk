@@ -4043,6 +4043,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/articles/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Publish several articles at once: a draft goes on the help center, a published article's unpublished changes replace its live text (as POST /api/v1/kb/articles/{id}/draft/publish). Each id is answered on its own in `results`, in the order sent: the published article, or the error that one call would have given; an article in a collection that needs approval without an approval of its current text is 409 `approval_required` and stays as it is, and one with nothing unpublished is 409 `nothing_to_publish`. At most 50 ids. A repeat with the same Idempotency-Key answers what the first one got. */
+        post: operations["publishKBArticles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles": {
         parameters: {
             query?: never;
@@ -4148,7 +4165,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Set the files the article lists under its text for download, in order: items of kind `file` of the media library (upload one with POST /api/v1/kb/media-uploads and `kind` file). On a published article the list goes into its draft, as an edit does, and the help center shows it once the draft is published; otherwise it is the article's list at once. A file is downloadable from the help center only while a published article or translation lists it. An id that is not a file of this workspace's library outside the trash is 404 `file_not_found` naming it. The same id twice is 400. */
+        /** @description Set the files the article lists under its text for download, in order: items of kind `file` of the media library (upload one with POST /api/v1/kb/media-uploads and `kind` file). On a published article the list goes into its draft, as an edit does, and the help center shows it once the draft is published; otherwise it is the article's list at once. The list is part of the text a review approves: a change opens a new review in place of an open one, and an approved text whose list changed needs a new approval before it is published. A file is downloadable from the help center only while a published article or translation lists it. An id that is not a file of this workspace's library outside the trash is 404 `file_not_found` naming it. The same id twice is 400. */
         put: operations["setKBArticleAttachments"];
         post?: never;
         delete?: never;
@@ -4189,6 +4206,157 @@ export interface paths {
         put?: never;
         /** @description Start the article's count again from 0, for example after rewriting it. The counts the page showed, imported votes included, are kept as a reset in `resets` (who and when), and the current votes and their lines stop counting; nothing is deleted. Readers can vote again at once. With nothing counted it stores no reset and answers the votes unchanged. Not for an article in the trash. A repeat with the same Idempotency-Key answers what the first one got; the key with another article is refused with 422, code `idempotency_key_reused`. */
         post: operations["resetKBArticleVotes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The reviews of an article, newest first (at most 200): who sent each, who was asked, what they decided, and whether its text is still the current one. state narrows them. GET /api/v1/kb/reviews/{id} reads one with its line diff. */
+        get: operations["listKBArticleReviews"];
+        put?: never;
+        /** @description Send the article's unpublished text (its draft, or the article while it is not published) for review to 1 to 10 teammates who may publish (kb_articles:publish; GET /api/v1/agents). Not yourself: a reviewer is never the author. Where a collection of the article requires approval, publishing is refused (409 `approval_required`) until one of them approves this exact text. A text with an open review is 409 `review_state`; a published article without changes has nothing to review (409 `review_state`). A repeat with the same Idempotency-Key answers the first review. */
+        post: operations["requestKBReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/translations/{locale}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        /** @description The reviews of one translation of an article, newest first (at most 200). state narrows them. GET /api/v1/kb/reviews/{id} reads one with its line diff. */
+        get: operations["listKBTranslationReviews"];
+        put?: never;
+        /** @description Send a draft translation for review to 1 to 10 teammates who may publish (kb_articles:publish; GET /api/v1/agents), never yourself. Where a collection of the article requires approval, the translation is published (PATCH status published) only once one of them approves this exact text, and an edit of a published translation there needs a new approval. A translation that is already published has nothing to review (409 `review_state`); an open review is 409 `review_state` too. A repeat with the same Idempotency-Key answers the first review. */
+        post: operations["requestKBTranslationReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/reviews/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Approve several open reviews at once, as POST /api/v1/kb/reviews/{id}/approve does each one (the same rules: only a named reviewer, never the sender or their tokens). Each id is answered on its own in `results`, in the order sent: the decided review, or the error that one call would have given (`not_found`, `not_reviewer`, `review_state`). At most 50 ids. A repeat with the same Idempotency-Key answers what the first one got. */
+        post: operations["approveKBReviews"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/reviews/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Approve the text of an open review: it may then be published exactly as it is. Only a person the review names may approve it, never the person who sent it nor any of their agent tokens (403 `not_reviewer`); through a token, only the token of a named reviewer, and the review records that token. A review that was decided, withdrawn or superseded by an edit is 409 `review_state`. A repeat with the same Idempotency-Key answers what the first one got. */
+        post: operations["approveKBReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's reviews, newest first (at most 200). state=open&reviewer=me lists the texts waiting for your decision (for an agent token, its maker's); reviewer also takes an agent id. */
+        get: operations["listKBReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/reviews/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description One review with the text it is about: proposed (the text waiting to be published; the reviewed one while current is true), live (what the help center shows; null while the article is not published) and diff, the lines of the body from live to proposed. A reviewer who reads it is marked as having seen it. */
+        get: operations["getKBReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/reviews/{id}/request-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Close an open review asking the author to change the text; note says what, in one line. The same people may decide as for an approval (403 `not_reviewer` otherwise). A repeat with the same Idempotency-Key answers what the first one got. */
+        post: operations["requestKBReviewChanges"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/reviews/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Close an open review that is no longer wanted. The person who sent it may withdraw it, or anyone who may publish (403 `not_reviewer` otherwise). Send the text for review again with POST /api/v1/kb/articles/{id}/reviews. A repeat with the same Idempotency-Key answers what the first one got. */
+        post: operations["withdrawKBReview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4358,7 +4526,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Set the files the translation lists under its text, in order, as for an article. A translation has no draft: the list changes at once. A translation that lists no file shows the article's files on its page. */
+        /** @description Set the files the translation lists under its text, in order, as for an article. A translation has no draft: the list changes at once. A translation that lists no file shows the article's files on its page. The list is part of the translation's text a review approves: in a collection that needs approval, a change to a published translation's list that no review approved is 409 `approval_required` and the list stays as it was. */
         put: operations["setKBTranslationAttachments"];
         post?: never;
         delete?: never;
@@ -4792,7 +4960,7 @@ export interface paths {
         };
         /** @description Whether the public help center is on, its title and language. `content_version` grows with every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the knowledge base is public. */
         get: operations["getHelpCenter"];
-        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. */
+        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. `require_approval` makes publishing need an approved review in every collection that inherits it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes). */
         put: operations["putHelpCenter"];
         post?: never;
         delete?: never;
@@ -7741,6 +7909,86 @@ export interface components {
              */
             purges_at: string;
         };
+        KBReviewer: {
+            /** Format: uuid */
+            agent_id: string;
+            name: string;
+            /**
+             * Format: date-time
+             * @description When they first opened the review; null until then.
+             */
+            seen_at: string | null;
+        };
+        /** @description The agent token it was done through; null when a person did it in the web app. The label outlives the token. */
+        KBReviewToken: null | {
+            /** Format: uuid */
+            id: string | null;
+            label: string;
+        };
+        /** @description One review of one unpublished text: the article's own (locale null) or a translation's. An approval holds only for the exact text it was given (content_hash over the title, slug, body, collections and SEO fields): an edit after it makes the text unapproved again, and an edit while it is open supersedes it with a new review of the new text. */
+        KBReview: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            article_id: string;
+            /** @description The title of the article, or of the translation for a translation's review. */
+            article_title: string;
+            /** @description The translation's language; null for the article's own text. */
+            locale: string | null;
+            /** @enum {string} */
+            state: "open" | "approved" | "changes_requested" | "withdrawn" | "superseded";
+            /** @description The one line the author wrote to the reviewers. */
+            note: string;
+            content_hash: string;
+            /** @description Whether the text is still the one reviewed: an approved review that is current lets the text be published. */
+            current: boolean;
+            reviewers: components["schemas"]["KBReviewer"][];
+            /** @description The person who sent the text for review; null once they were removed. */
+            requested_by: null | components["schemas"]["SavedReplyPerson"];
+            requested_by_token: components["schemas"]["KBReviewToken"];
+            /** @description The person who decided or withdrew it; null while it is open. */
+            decided_by: null | components["schemas"]["SavedReplyPerson"];
+            decided_by_token: components["schemas"]["KBReviewToken"];
+            /** Format: date-time */
+            decided_at: string | null;
+            /** @description The one line the reviewer wrote: what to change, for changes_requested. */
+            decision_note: string;
+            /**
+             * Format: uuid
+             * @description The review an edit closed when it opened this one.
+             */
+            supersedes_review_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        KBReviewList: {
+            reviews: components["schemas"]["KBReview"][];
+        };
+        /** @description A text as the help center shows it: the fields an approval covers, the files it lists among them (a change of the list after an approval needs a new one). */
+        KBReviewContent: {
+            title: string;
+            slug: string;
+            body_md: string;
+            seo_title: string;
+            seo_description: string;
+            collection_ids: string[];
+            /** @description The files the text lists, in order; a translation's own list (empty while it shows the article's files). */
+            attachments: components["schemas"]["KBAttachment"][];
+        };
+        KBDiffLine: {
+            /**
+             * @description In a changed run the removed lines come first, then the added ones.
+             * @enum {string}
+             */
+            change: "same" | "removed" | "added";
+            text: string;
+        };
+        KBReviewDetail: components["schemas"]["KBReview"] & {
+            /** @description What the help center shows now; null while the article is not published. */
+            live: null | components["schemas"]["KBReviewContent"];
+            proposed: components["schemas"]["KBReviewContent"];
+            diff: components["schemas"]["KBDiffLine"][];
+        };
         SavedReplyPerson: {
             /** Format: uuid */
             agent_id: string | null;
@@ -7872,6 +8120,11 @@ export interface components {
              */
             default_template_id?: string | null;
         };
+        /**
+         * @description Whether an article listed in the collection is published only once a teammate approved its exact text: inherit (the workspace setting require_approval of the help center), on or off. An article needs approval when any of its collections does.
+         * @enum {string}
+         */
+        KBApprovalMode: "inherit" | "on" | "off";
         KBCollection: {
             /** @description Its name and description in the help center's other languages. */
             translations: components["schemas"]["KBCollectionTranslation"][];
@@ -7888,6 +8141,7 @@ export interface components {
              * @description The template every new article in it starts from; null for none.
              */
             default_template_id: string | null;
+            require_approval: components["schemas"]["KBApprovalMode"];
             /** @description Articles directly in this collection and outside the trash, drafts included. */
             article_count: number;
             /** Format: date-time */
@@ -7960,10 +8214,10 @@ export interface components {
         KBArticleChange: {
             version: number;
             /**
-             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change).
+             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change); draft: unpublished changes to a published article were saved (the help center did not change); review_request, review_approve, review_changes, review_withdraw: the unpublished text was sent for review, approved, sent back with changes to make, or the review was withdrawn (the text did not change).
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
             /** @description The person who made the change (or, before agent requests were removed, approved the request that made it); null for an import or a removed person. */
@@ -8045,7 +8299,7 @@ export interface components {
              * @description mark_current, mark_outdated: the translation was marked up to date with its article, or outdated, without other change.
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -8166,7 +8420,7 @@ export interface components {
         KBTranslationVersion: {
             version: number;
             /** @enum {string} */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -8345,8 +8599,11 @@ export interface components {
         };
         KBArticleVersion: {
             version: number;
-            /** @enum {string} */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft";
+            /**
+             * @description review_request, review_approve, review_changes and review_withdraw record a review of the unpublished text they hold; they change no text.
+             * @enum {string}
+             */
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -8563,11 +8820,15 @@ export interface components {
             title: string;
             /** @description BCP 47 language tag of the pages, such as en or pt-BR. */
             locale: string;
+            /** @description Whether an article needs a teammate's approval of its exact text before it is published, in every collection whose `require_approval` is `inherit`. Left out, it stays as it is. Sending it needs kb_articles:publish too. */
+            require_approval?: boolean;
         };
         HelpCenter: {
             enabled: boolean;
             title: string;
             locale: string;
+            /** @description Articles in collections that inherit the setting need an approved version to be published (POST /api/v1/kb/articles/{id}/reviews). */
+            require_approval: boolean;
             content_version: number;
             /**
              * Format: date-time
@@ -10393,6 +10654,11 @@ export interface components {
             trial_ends_at: string;
             /** @description False when the trial already ended later than 14 days from now and was kept. */
             extended: boolean;
+        };
+        /** @description Why one item of a bulk request was not done; the same code and message a call for that item alone answers. */
+        BulkItemError: {
+            code: string;
+            message: string;
         };
         Error: {
             error: {
@@ -19797,6 +20063,8 @@ export interface operations {
                      * @description The template every new article in it starts from; null clears it. A template in the trash is 409 template_in_trash.
                      */
                     default_template_id?: string | null;
+                    /** @description Whether its articles need an approved version before they are published. Changing it also needs help_center:update. */
+                    require_approval?: components["schemas"]["KBApprovalMode"];
                 };
             };
         };
@@ -19940,6 +20208,46 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    publishKBArticles: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    article_ids: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description One result per article id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: {
+                            id: string;
+                            article?: components["schemas"]["KBArticle"];
+                            error?: components["schemas"]["BulkItemError"];
+                        }[];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
     listKBArticles: {
         parameters: {
             query?: {
@@ -19949,6 +20257,8 @@ export interface operations {
                 collection_id?: string;
                 /** @description true: only the published articles with unpublished changes (has_draft). */
                 has_draft?: boolean;
+                /** @description in_review: only the articles whose unpublished text waits for a reviewer. approved: only the ones whose unpublished text a reviewer approved as it is now, ready to publish (POST /api/v1/kb/articles/publish). Translations are left out. */
+                state?: "in_review" | "approved";
                 /** @description The order without `q`; ignored with `q`. */
                 sort?: "recent" | "manual";
                 limit?: number;
@@ -20341,6 +20651,368 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    listKBArticleReviews: {
+        parameters: {
+            query?: {
+                state?: "open" | "approved" | "changes_requested" | "withdrawn" | "superseded";
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article's reviews */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReviewList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    requestKBReview: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reviewer_ids: string[];
+                    /** @description One line to the reviewers. */
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The review a repeat of the same request opened */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReview"];
+                };
+            };
+            /** @description The open review */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    listKBTranslationReviews: {
+        parameters: {
+            query?: {
+                state?: "open" | "approved" | "changes_requested" | "withdrawn" | "superseded";
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The translation's reviews */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReviewList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    requestKBTranslationReview: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reviewer_ids: string[];
+                    /** @description One line to the reviewers. */
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The review a repeat of the same request opened */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReview"];
+                };
+            };
+            /** @description The open review */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    approveKBReviews: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    review_ids: string[];
+                    /** @description An optional line to each author. */
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description One result per review id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: {
+                            id: string;
+                            review?: components["schemas"]["KBReview"];
+                            error?: components["schemas"]["BulkItemError"];
+                        }[];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    approveKBReview: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description An optional line to the author. */
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The decided review */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    listKBReviews: {
+        parameters: {
+            query?: {
+                state?: "open" | "approved" | "changes_requested" | "withdrawn" | "superseded";
+                /** @description me, or the agent id of a reviewer. */
+                reviewer?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reviews */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReviewList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getKBReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The review and its text */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReviewDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    requestKBReviewChanges: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description What to change. */
+                    note: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The decided review */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    withdrawKBReview: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description An optional line saying why. */
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The withdrawn review */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBReview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["IdempotencyKeyReused"];
         };
     };

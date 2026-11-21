@@ -142,7 +142,8 @@ and at once when you switch to another window or tab, or close it. The status ne
 - Autosave never changes the help center. On a draft article it updates the draft. On a published
   article it adds to its [unpublished changes](#unpublished-changes).
 - Autosave adds no version to the [history](#history). **Save** (`Ctrl+S`) adds one, as before.
-- Autosave never publishes and never counts as an approval.
+- Autosave never publishes and never counts as an approval. While the text is in review, an autosave
+  replaces the review as **Save** does (see [Review before publishing](#review-before-publishing)).
 - Without a connection the status says **Offline, kept on this device**. The text is kept in this
   browser, for you and this article only, and saved when the connection comes back.
 - If the browser still holds text newer than the saved article when you open it, the editor asks
@@ -390,7 +391,8 @@ An article can offer files to download under its text: a warranty form, a price 
 Each goes up with a bar of its progress and shows its type and size. Move a file up or down to set
 the order readers see, or remove it from the list; the file stays in the [media library](#media-library).
 On a published article the list is part of its [unpublished changes](#unpublished-changes) until
-**Publish changes**; a translation has a list of its own, which changes at once.
+**Publish changes**; a translation has a list of its own, which changes at once. Where
+[approval is required](#review-before-publishing), the list is part of what a reviewer approves.
 
 - Accepted: PDF; Word, Excel and PowerPoint (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`);
   OpenDocument (`odt`, `ods`, `odp`); CSV, TXT and RTF; ZIP, 7z and `tar.gz`. The type is judged from
@@ -462,7 +464,85 @@ the status filter **Unpublished changes** keeps only those.
 - A [media replacement](#media-library) also replaces the item in unpublished changes, and its undo puts
   it back there.
 - A [translation](#translations) of a published article still goes live when you save it
-  ([#694](https://github.com/colliedesk/colliedesk/issues/694)).
+  ([#694](https://github.com/colliedesk/colliedesk/issues/694)); where publishing
+  [needs approval](#review-before-publishing), that save is refused.
+
+## Review before publishing
+
+A team can ask that a teammate approves each new or changed article before it goes on the help center.
+Open **Knowledge base → Settings** and turn on **Require approval before publishing**. Only a role
+that may publish articles (`kb_articles:publish`) changes it. Each collection can override it:
+**Edit** a collection and set **Approval before publishing** to **As the help center**, **Required**
+or **Not required**. An article in several collections needs approval when any of them requires it.
+
+Where approval is required, **Publish** and **Publish changes** stay off until a teammate approves the
+exact text, and the article says why: **Publishing needs a teammate's approval: send it for review.**
+
+1. Save the article (or its [unpublished changes](#unpublished-changes)).
+2. Select **Send for review**. Choose one or more **Reviewers** (up to 10) and add a **Note to the
+   reviewers** if you like. Only teammates who may publish are offered, never you.
+3. Each reviewer gets an email within a minute and finds the article under **Reviews**. The article
+   says **Waiting for approval from** them.
+4. A reviewer approves it, or asks for changes with one line you read on the article.
+5. Once approved, the article says **Approved by** the reviewer: select **Publish** (or **Publish
+   changes**).
+
+You get an email when your review is decided. Steps for the author: save, send for review, publish (3);
+for the reviewer: open **Reviews**, open the article, approve (3).
+
+### Reviews
+
+**Reviews** at the top of the knowledge base shows how many texts wait for your decision. It has three
+views:
+
+- **Waiting for you**: the texts you were asked to review. Tick several and select **Approve N**.
+- **In review**: every text waiting for a decision, with who sent it and who was asked.
+- **Approved**: approved texts not published yet. Tick several and select **Publish N**.
+
+Open one to see **Live now** (the published text, or **Not published yet**) beside **Proposed**, and
+**Changes**, each removed and added line, then **Files**, the files it lists with the ones added and
+removed. **Approve** approves it; **Request changes** sends it back
+with **What to change**. A text an AI agent wrote shows **Written by an AI agent through** its token.
+
+### Who may approve
+
+- A reviewer holds `kb_articles:publish` and is chosen when the text is sent.
+- Nobody approves their own text: not the person who sent it, nor anyone who wrote part of it or changed
+  its files since it was last published.
+- A text an AI agent sent through a token is never approved by that token or by another token of the
+  person who made it. A token acts for its maker, so it approves only for a reviewer, and the history
+  names the token.
+- An approval holds for the exact text: title, address name, text, collections, search title, meta
+  description and the [files](#attach-files) it lists, in their order (a translation: its own files). Any later
+  edit, a change of the file list too, needs a new approval: the article says **Your edits need a new approval:
+  save them and send them for review.**
+- An edit while a text is in review replaces the review (**Replaced by an edit**) with a new one for the
+  same reviewers, except a reviewer who made the edit. Reviewers are emailed again (**Review again**).
+  An [autosave](#autosave) is an edit too: it replaces the review, and an approval of the earlier text
+  stops counting.
+
+**Withdraw** takes a review back: the sender, or anyone who may publish, can withdraw it. Only one review
+of an article (or of one translation) is open at a time.
+
+Every way to publish checks the approval: **Publish**, **Publish changes**, **Publish N**, a new
+article created published, a translation set to published, and every API or MCP call. A refused call
+answers 409 `approval_required` and says what to send. Three changes keep working as before:
+restoring a published article from the trash brings back the text that was live; a
+[media replacement](#media-library) changes the published articles that show the item (it needs
+`kb_articles:publish`); and an [import](import-freshdesk.md#knowledge-base) brings articles with the
+status they had in Freshdesk.
+
+### Review a translation
+
+A [translation](#translations) needs approval where its article does, and is reviewed on its own. It has
+no unpublished changes, so to change a published translation: set it back to draft, edit it, send it for
+review, and publish it once approved. Saving a published translation is refused and says so.
+
+### Reviews in the history
+
+The article's [history](#history) lists each request, approval, request for changes and withdrawal,
+with who made it and through which token. The publish that follows is a version of its own. The
+[export](export.md) includes every review and who was asked.
 
 ## Templates
 
@@ -519,7 +599,7 @@ Moving from Freshdesk: Freshdesk does not offer its article templates through it
 
 **⋯ → Version history** on an article lists every version, newest first: who made it (and through which AI
 agent token, or an agent request approved before requests were removed), when, and what changed (title, address name, text, status,
-collection). **Restore version N** makes that version's title, address name and text current again,
+collection), and each [review](#review-before-publishing) request and decision. **Restore version N** makes that version's title, address name and text current again,
 as a new version; the status and collection stay as they are, so a restore never publishes or moves
 an article by surprise. On a published article the restored version becomes its
 [unpublished changes](#unpublished-changes); the help center keeps the published text until you publish
@@ -1036,6 +1116,8 @@ token. Without the permission the call is refused and names what is missing
 | Add, edit, delete and restore templates | `kb_articles:update` |
 | Delete and restore from the trash | `kb_articles:delete` |
 | Anything that changes the public help center (publish, publish changes, unpublish or trash a published article, a published collection) | `kb_articles:publish` as well |
+| Send a text for review, withdraw your own review | `kb_articles:update` |
+| Approve, request changes, withdraw anyone's review, set whether publishing needs approval | `kb_articles:publish` |
 | Upload, name, replace, trash images, videos and files | `kb_media:create`, `kb_media:update`, `kb_media:delete` |
 | Set the files listed under an article or translation | `kb_articles:update` (and `kb_articles:publish` for a published translation) |
 | Turn the help center on or off, add or order its languages | `help_center:update` |
@@ -1077,6 +1159,25 @@ Articles and collections:
 - Link an article in a reply: every article an agent reads or finds carries its public address in `url`
   (also in the API). An agent links an article the same way a person does: the title and the address on
   two lines, from a search with `status` published while the help center is on.
+
+[Review before publishing](#review-before-publishing):
+
+- `colliedesk_kb_article_send_for_review` (`POST /api/v1/kb/articles/{id}/reviews`, or
+  `/translations/{locale}/reviews` for a translation) sends the text to `reviewer_ids` with a `note`; it can
+  save the title, text and search fields with the article's `updated_at` in the same call. Reviewers come
+  from `colliedesk_agents_list` (`GET /api/v1/agents`): those who may publish.
+- `colliedesk_kb_reviews_list` (`GET /api/v1/kb/reviews`, `state=open&reviewer=me` for what waits for
+  you; or per article and translation) and `colliedesk_kb_review_get` (`GET /api/v1/kb/reviews/{id}`, with
+  the live text and the line diff) read them with `kb_articles:read`.
+- `colliedesk_kb_review_approve` (`POST /api/v1/kb/reviews/{id}/approve`, or `POST /api/v1/kb/reviews/approve`
+  for several) and `colliedesk_kb_review_request_changes` (`POST /api/v1/kb/reviews/{id}/request-changes`,
+  a `note` is required) need `kb_articles:publish`. `colliedesk_kb_review_withdraw`
+  (`POST /api/v1/kb/reviews/{id}/withdraw`) needs `kb_articles:update`.
+- `colliedesk_kb_articles_publish` (`POST /api/v1/kb/articles/publish`) publishes up to 50 articles and
+  answers each one on its own. `colliedesk_kb_articles_search` takes `state` `in_review` or `approved`.
+- `require_approval` on `colliedesk_help_center_update` (`PUT /api/v1/help-center`, true or false) and on
+  `colliedesk_kb_collection_update` (`inherit`, `on` or `off`) needs `kb_articles:publish`.
+- A review id of another workspace is 404.
 
 [Templates](#templates):
 
