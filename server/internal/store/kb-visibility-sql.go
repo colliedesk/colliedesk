@@ -15,6 +15,10 @@ const helpChatKBArticle = `a.workspace_id=$1 AND EXISTS (SELECT 1 FROM kb_help_c
 // publicKBTranslation holds for a translation t the help center shows (its language aside).
 const publicKBTranslation = `EXISTS (SELECT 1 FROM kb_public_translations kt WHERE kt.workspace_id=t.workspace_id AND kt.article_id=t.article_id AND kt.locale=t.locale)`
 
+// publishedKBTranslation holds for a published translation t of a published article, whoever may read
+// it: what the team counts and its AI drafts read.
+const publishedKBTranslation = `EXISTS (SELECT 1 FROM kb_published_translations kt WHERE kt.workspace_id=t.workspace_id AND kt.article_id=t.article_id AND kt.locale=t.locale)`
+
 // helpChatKBTranslation holds for a translation t help chat may read (its language aside).
 const helpChatKBTranslation = `EXISTS (SELECT 1 FROM kb_help_chat_translations kt WHERE kt.workspace_id=t.workspace_id AND kt.article_id=t.article_id AND kt.locale=t.locale)`
 
