@@ -56,7 +56,7 @@ func (s *Store) CreateKBTemplate(ctx context.Context, workspaceID string, actor 
 	if description, err = domain.CleanKBTemplateDescription(description); err != nil {
 		return domain.KBTemplate{}, err
 	}
-	if err := domain.CheckKBTemplateBody(body); err != nil {
+	if err := cleanKBTemplateBody(&body); err != nil {
 		return domain.KBTemplate{}, err
 	}
 	template, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBTemplate, error) {
@@ -101,7 +101,7 @@ func (s *Store) UpdateKBTemplate(ctx context.Context, workspaceID string, actor 
 		change.Description = &description
 	}
 	if change.Body != nil {
-		if err := domain.CheckKBTemplateBody(*change.Body); err != nil {
+		if err := cleanKBTemplateBody(change.Body); err != nil {
 			return domain.KBTemplate{}, err
 		}
 	}

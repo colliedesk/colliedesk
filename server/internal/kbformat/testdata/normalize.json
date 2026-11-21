@@ -1,0 +1,42 @@
+[
+  {
+    "name": "inline tags are lowercased and keep only the attributes they may have",
+    "in": "Say <U>this</U> and <SPAN class=\"x\" style=\"color:red\" data-color=\"danger\">that</SPAN>.\n",
+    "out": "Say <u>this</u> and <span data-color=\"danger\">that</span>.\n"
+  },
+  {
+    "name": "a colour outside the palette is dropped",
+    "in": "Read <span data-color=\"#ff0000\">this</span> <mark title=\"x\">now</mark>.\n",
+    "out": "Read <span>this</span> <mark>now</mark>.\n"
+  },
+  {
+    "name": "a wrapper writes double quotes in the canonical attribute order",
+    "in": "<P data-indent='2' DATA-ALIGN='center'>\n\nHello\n\n</P>\n",
+    "out": "<p data-align=\"center\" data-indent=\"2\">\n\nHello\n\n</p>\n"
+  },
+  {
+    "name": "a heading wrapper drops an indent out of range",
+    "in": "<h2 data-indent=\"9\" data-align=\"right\">\n\n## Steps\n\n</h2>\n",
+    "out": "<h2 data-align=\"right\">\n\n## Steps\n\n</h2>\n"
+  },
+  {
+    "name": "a table cell drops a span of 1 and lowercases the rest",
+    "in": "<TABLE>\n<TR>\n<TD ROWSPAN=2 colspan=\"1\" data-bg=\"success\">\n\nA\n\n</TD>\n</TR>\n</TABLE>\n",
+    "out": "<table>\n<tr>\n<td rowspan=\"2\" data-bg=\"success\">\n\nA\n\n</td>\n</tr>\n</table>\n"
+  },
+  {
+    "name": "a canonical body stays byte for byte",
+    "in": "# Title\n\n<p data-align=\"center\">\n\nSay <u>this</u>, <mark>that</mark> and <span data-color=\"accent\">more</span>.\n\n</p>\n\n<table>\n<tr>\n<th colspan=\"2\" data-align=\"center\">\n\nHead\n\n</th>\n</tr>\n<tr>\n<td data-bg=\"warning\">\n\nA\n\n</td>\n<td>\n\nB\n\n</td>\n</tr>\n</table>\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n",
+    "out": "# Title\n\n<p data-align=\"center\">\n\nSay <u>this</u>, <mark>that</mark> and <span data-color=\"accent\">more</span>.\n\n</p>\n\n<table>\n<tr>\n<th colspan=\"2\" data-align=\"center\">\n\nHead\n\n</th>\n</tr>\n<tr>\n<td data-bg=\"warning\">\n\nA\n\n</td>\n<td>\n\nB\n\n</td>\n</tr>\n</table>\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
+  },
+  {
+    "name": "code keeps its text",
+    "in": "Type `<U>x</U>` here.\n\n```html\n<SPAN data-color='danger'>\n```\n\n    <P DATA-ALIGN='center'>\n",
+    "out": "Type `<U>x</U>` here.\n\n```html\n<SPAN data-color='danger'>\n```\n\n    <P DATA-ALIGN='center'>\n"
+  },
+  {
+    "name": "other HTML is left for the body check",
+    "in": "<div class=\"x\">\n\nText <kbd>Ctrl</kbd>\n\n</div>\n",
+    "out": "<div class=\"x\">\n\nText <kbd>Ctrl</kbd>\n\n</div>\n"
+  }
+]

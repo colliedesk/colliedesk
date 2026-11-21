@@ -197,7 +197,7 @@ func cleanKBTranslationFields(title, slug, body, status, seoTitle, seoDescriptio
 		}
 	}
 	if body != nil {
-		if err := domain.CheckKBBody(*body); err != nil {
+		if err := cleanKBBody(body); err != nil {
 			return err
 		}
 	}
