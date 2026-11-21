@@ -290,14 +290,18 @@ func (s *Store) ListTrashedKBArticles(ctx context.Context, workspaceID string, l
 // text points at, and bumps the knowledge base version. The caller changed the row in tx first, so
 // the row lock orders concurrent versions of one article.
 func addKBArticleVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, actor Actor, kind string, restoredFrom *int) error {
-	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,show_contents,status,collection_id,
+	var status string
+	if err := tx.QueryRow(ctx, `INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,show_contents,status,collection_id,
 			changed_by_agent_id,token_id,token_label,agent_request_id,created_at)
 		SELECT a.workspace_id,a.id,COALESCE((SELECT max(version) FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2),0)+1,
 			$3,$4,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.show_contents,a.status,a.collection_id,$5,t.id,t.label,$7,clock_timestamp()
 		FROM kb_articles a LEFT JOIN sessions t ON t.workspace_id=a.workspace_id AND t.id=$6
-		WHERE a.workspace_id=$1 AND a.id=$2`,
-		workspaceID, articleID, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID)); err != nil {
+		WHERE a.workspace_id=$1 AND a.id=$2 RETURNING status`,
+		workspaceID, articleID, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID)).Scan(&status); err != nil {
 		return fmt.Errorf("record knowledge base article version: %w", err)
+	}
+	if err := noteKBTextWriter(ctx, tx, workspaceID, articleID, nil, actor, kind, status); err != nil {
+		return err
 	}
 	if _, err := linkKBMedia(ctx, tx, workspaceID, articleID); err != nil {
 		return err
@@ -736,6 +740,10 @@ func changeKBArticleLocked(ctx context.Context, tx pgx.Tx, workspaceID string, a
 		return domain.KBArticle{}, err
 	}
 	if kind == "" {
+		// An autosave records no version, so it puts nothing on the help center.
+		if err := noteKBTextWriter(ctx, tx, workspaceID, id, nil, actor, domain.KBArticleEdited, ""); err != nil {
+			return domain.KBArticle{}, err
+		}
 		if _, err := linkKBMedia(ctx, tx, workspaceID, id); err != nil {
 			return domain.KBArticle{}, err
 		}

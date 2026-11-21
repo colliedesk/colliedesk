@@ -501,8 +501,19 @@ Migration `20261120184320-kb-article-reviews`; code `store/kb-reviews.go`, `kb-r
   Approved list and `settleKBReviewAfterEdit` keeps it right after every write.
 - **Four-eyes is by person, not by token.** A decision compares the requester's agent id, so neither
   their session nor any of their tokens decides; the decider must be listed in `kb_review_reviewers`;
-  `kbTextAuthors` refuses a reviewer who wrote a text-changing version since the last published one
+  `kbTextAuthors` refuses a reviewer who wrote the text since it was last published
   (`TestATokensDraftIsApprovedOnlyByAnotherTeammate`, `TestAReviewerMustBeAnotherTeammateWhoMayPublish`).
+- **Who wrote a text is a table, not the history.** An autosave records no version, so
+  `kb_text_writers` (one row per article, locale and person; locale NULL is the article's own text)
+  is the only source `kbTextAuthors` reads. `noteKBTextWriter` runs in the writers every text write
+  passes through (`addKBArticleVersion`, `recordKBArticleDraft`, the autosave branch of
+  `changeKBArticleLocked`, `recordKBTranslationVersion`): a create, edit, restore, draft, import or
+  media replace adds its person; a version with status `published` that is not a draft or a review
+  event empties the list, so the next change starts from nobody. A review event adds no one. An import
+  has no person and adds no one. The migration filled it from the versions with the rule they had
+  (`TestKBTextWritersStartFromTheVersions`, `TestATeammateWhoOnlyAutosavedTheTextNeverReviewsIt`,
+  `TestAnAutosavingWriterReviewsTheNextChangeAfterAPublish`). The workspace export leaves it out:
+  it says who may review, not what was written.
 - **An edit supersedes, then reopens without the editor.** The new review copies the sender and note,
   points at the old one (`supersedes_review_id`) and drops the reviewer who edited, so a second
   person still approves. With nobody left it stays superseded

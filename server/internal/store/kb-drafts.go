@@ -94,6 +94,9 @@ func recordKBArticleDraft(ctx context.Context, tx pgx.Tx, workspaceID string, ac
 			return domain.KBArticle{}, err
 		}
 	}
+	if err := noteKBTextWriter(ctx, tx, workspaceID, id, nil, actor, domain.KBArticleDrafted, ""); err != nil {
+		return domain.KBArticle{}, err
+	}
 	if _, err := linkKBMedia(ctx, tx, workspaceID, id); err != nil {
 		return domain.KBArticle{}, err
 	}

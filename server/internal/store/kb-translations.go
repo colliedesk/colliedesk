@@ -150,16 +150,17 @@ func addKBTranslationVersion(ctx context.Context, tx pgx.Tx, workspaceID, articl
 
 // recordKBTranslationVersion records the translation as it is now as its next version.
 func recordKBTranslationVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string, actor Actor, kind string, restoredFrom *int) error {
-	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_translation_versions(workspace_id,article_id,locale,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,status,
+	var status string
+	if err := tx.QueryRow(ctx, `INSERT INTO kb_article_translation_versions(workspace_id,article_id,locale,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,status,
 			changed_by_agent_id,token_id,token_label,agent_request_id,created_at)
 		SELECT t.workspace_id,t.article_id,t.locale,COALESCE((SELECT max(version) FROM kb_article_translation_versions WHERE workspace_id=$1 AND article_id=$2 AND locale=$3),0)+1,
 			$4,$5,t.title,t.slug,t.body_md,t.seo_title,t.seo_description,t.status,$6,s.id,s.label,$8,clock_timestamp()
 		FROM kb_article_translations t LEFT JOIN sessions s ON s.workspace_id=t.workspace_id AND s.id=$7
-		WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3`,
-		workspaceID, articleID, locale, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID)); err != nil {
+		WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3 RETURNING status`,
+		workspaceID, articleID, locale, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID)).Scan(&status); err != nil {
 		return fmt.Errorf("record knowledge base translation version: %w", err)
 	}
-	return nil
+	return noteKBTextWriter(ctx, tx, workspaceID, articleID, &locale, actor, kind, status)
 }
 
 // checkKBLanguage refuses a locale that is not a listed language of the help center (the primary one

@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -76,18 +75,6 @@ func kbPendingText(ctx context.Context, tx pgx.Tx, workspaceID, articleID string
 		return false, "", err
 	}
 	return item.DeletedAt == nil && item.Status != domain.KBPublished, content.Hash(), nil
-}
-
-// kbTranslationTextAuthors is kbTextAuthors for a translation's history.
-func kbTranslationTextAuthors(ctx context.Context, tx pgx.Tx, workspaceID, articleID, locale string, people []string) ([]string, error) {
-	rows, err := tx.Query(ctx, `SELECT DISTINCT v.changed_by_agent_id::text FROM kb_article_translation_versions v WHERE v.workspace_id=$1 AND v.article_id=$2 AND v.locale=$3
-		AND v.changed_by_agent_id=ANY($4::uuid[]) AND v.kind IN `+kbTextChangeKinds+` AND v.version > COALESCE((SELECT max(p.version) FROM kb_article_translation_versions p
-			WHERE p.workspace_id=$1 AND p.article_id=$2 AND p.locale=$3 AND p.status='published' AND `+kbTextVersion("p.")+`),0)`,
-		workspaceID, articleID, locale, people)
-	if err != nil {
-		return nil, fmt.Errorf("read knowledge base translation authors: %w", err)
-	}
-	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
 // reviewedKBText is the text a review is about as it is now, and what the help center shows of it
