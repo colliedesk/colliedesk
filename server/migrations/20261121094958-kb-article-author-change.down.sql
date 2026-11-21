@@ -4,14 +4,16 @@ DO $$
 BEGIN
     PERFORM set_config('app.privileged', 'on', true);
     IF EXISTS (SELECT 1 FROM kb_article_versions WHERE kind = 'author_change') THEN
-        RAISE EXCEPTION 'knowledge base author change rollback refused: % versions record an author change',
+        RAISE EXCEPTION
+            'knowledge base author change rollback refused: % versions record an author change',
             (SELECT count(*) FROM kb_article_versions WHERE kind = 'author_change');
     END IF;
 END $$;
 
 ALTER TABLE kb_article_versions DROP CONSTRAINT kb_article_versions_kind_check;
 ALTER TABLE kb_article_versions ADD CONSTRAINT kb_article_versions_kind_check
-    CHECK (kind IN ('create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'ai_exclude', 'ai_include', 'draft',
+    CHECK (kind IN ('create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace',
+        'ai_exclude', 'ai_include', 'draft',
         'review_request', 'review_approve', 'review_changes', 'review_withdraw'));
 
 ALTER TABLE kb_article_versions

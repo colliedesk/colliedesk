@@ -11,7 +11,8 @@ END $$;
 
 DROP INDEX saved_views_personal_name_idx;
 DROP INDEX saved_views_shared_name_idx;
-CREATE UNIQUE INDEX saved_views_personal_name_idx ON saved_views(workspace_id, owner_agent_id, lower(name))
+CREATE UNIQUE INDEX saved_views_personal_name_idx
+    ON saved_views(workspace_id, owner_agent_id, lower(name))
     WHERE deleted_at IS NULL AND scope = 'personal';
 CREATE UNIQUE INDEX saved_views_shared_name_idx ON saved_views(workspace_id, lower(name))
     WHERE deleted_at IS NULL AND scope = 'shared';
