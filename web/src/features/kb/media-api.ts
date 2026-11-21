@@ -25,6 +25,9 @@ export const kbMediaSchema = z.object({
 }) satisfies z.ZodType<Generated<'KBMedia'>>;
 const detailsSchema = kbMediaSchema.extend({
   articles: z.array(z.object({ id: z.string().uuid(), number: z.number().int(), title: z.string(), status: z.enum(['draft', 'published']), in_trash: z.boolean(), current: z.boolean() })),
+  // Items a replacement put this one in the place of, newest first; Undo puts each back.
+  earlier_versions: z.array(z.object({ replacement_id: z.string().uuid(), media_id: z.string().uuid(), name: z.string(), url: z.string(),
+    article_ids: z.array(z.string().uuid()), replaced_at: z.string().datetime() })),
 }) satisfies z.ZodType<Generated<'KBMediaDetails'>>;
 const summarySchema = z.object({ count: z.number().int(), bytes: z.number().int(), kept_count: z.number().int(), kept_bytes: z.number().int() }) satisfies z.ZodType<Generated<'KBMediaUnusedSummary'>>;
 const pageSchema = z.object({ items: z.array(kbMediaSchema), next_cursor: z.string().nullable(), summary: summarySchema.optional() }) satisfies z.ZodType<JsonResponse<'listKBMedia', 200>>;
@@ -83,7 +86,9 @@ export const mediaApi = {
   trashUnused: (value: RequestBody<'trashUnusedKBMedia'>) => request('/api/v1/kb/media/trash-unused', trashUnusedSchema, { method: 'POST', body: json<'trashUnusedKBMedia'>(value) }),
   restore: (value: RequestBody<'restoreKBMediaBatch'>) => request('/api/v1/kb/media/restore', resultsSchema, { method: 'POST', body: json<'restoreKBMediaBatch'>(value) }),
   purge: (ids: string[]) => request('/api/v1/kb/media/purge', resultsSchema, { method: 'POST', body: json<'purgeKBMedia'>({ ids }) }),
-  replace: (id: string, withId: string) => request(`/api/v1/kb/media/${id}/replace`, replacementSchema, { method: 'POST', body: json<'replaceKBMedia'>({ with_media_id: withId }) }),
+  // With articleId the new item goes in that one article only; without, in every article that shows the item.
+  replace: (id: string, withId: string, articleId?: string) => request(`/api/v1/kb/media/${id}/replace`, replacementSchema,
+    { method: 'POST', body: json<'replaceKBMedia'>({ with_media_id: withId, ...(articleId ? { article_id: articleId } : {}) }) }),
   undoReplacement: (id: string) => request(`/api/v1/kb/media-replacements/${id}/undo`, replacementSchema, { method: 'POST' }),
   // The body is the image itself; keep marks an upload made in the library, which the purge spares.
   uploadImage: (file: Blob, name: string, keep: boolean) =>

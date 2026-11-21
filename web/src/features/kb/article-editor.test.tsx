@@ -174,7 +174,7 @@ test('the preview shows YouTube and Vimeo players and library videos as the help
     + '<video src="/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b" autoplay controls></video>';
   const libraryVideo = { id: '0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b', kind: 'video', content_type: 'video/mp4', size: 10, sha256: 'a'.repeat(64),
     url: '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b', name: 'Tour', alt: '', width: 1280, height: 720, duration_ms: 1000, codecs: [], thumbnail_url: null,
-    poster_url: '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b/poster/abcdef12', kept: false, deleted_at: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', articles: [] };
+    poster_url: '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b/poster/abcdef12', kept: false, deleted_at: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', articles: [], earlier_versions: [] };
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: body + '\n\n<video src="/api/v1/kb/media/1b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b"></video>' })),
     'GET /api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b/details': () => json(200, libraryVideo) });
   open({ articleId: ids.article });
@@ -446,7 +446,7 @@ test('Cancel in an upload\'s place stops a video, and a video that fails is thro
 test('publishing an article with an image without alt text asks first; the alt text goes in the text and in the library', async () => {
   const body = `Steps.\n\n![](/api/v1/kb/images/${ids.image})\n`;
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: body })),
-    [`GET /api/v1/kb/media/${ids.image}/details`]: () => json(200, { ...uploaded, articles: [] }),
+    [`GET /api/v1/kb/media/${ids.image}/details`]: () => json(200, { ...uploaded, articles: [], earlier_versions: [] }),
     [`PATCH /api/v1/kb/media/${ids.image}`]: () => json(200, { ...uploaded, alt: 'The login screen' }),
     'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': (call) => json(200, article({ ...(call.body as object), updated_at: '2026-10-05T00:00:00Z' })) });
   open({ articleId: ids.article });
