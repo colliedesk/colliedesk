@@ -982,6 +982,15 @@ class ImageLayerCache(unittest.TestCase):
         self.assertIn('wait compose-smoke', image)
         self.assertNotIn('compose-smoke', '\n'.join(jobs['roadmap']))
 
+    def test_every_pull_request_moves_both_database_layouts_to_postgres_19_and_back(self):
+        # upgrade-postgres.sh rewrites a self-hosted install's database; a change that breaks it
+        # must fail CI for the owner layout and for the superuser layout alike.
+        image = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['image'])
+        for layout in ['owner', 'superuser']:
+            self.assertIn(f'start upgrade-postgres-{layout} sh tests/upgrade-postgres-test.sh {layout} colliedesk:ci',
+                          image)
+            self.assertIn(f'wait upgrade-postgres-{layout}', image)
+
 
 class PackageManager(unittest.TestCase):
     def test_workflows_run_pnpm_through_corepack_only(self):
