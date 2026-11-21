@@ -205,6 +205,21 @@ a:hover { text-decoration-thickness: 2px; }
 .crumbs li + li::before { content: "/"; margin: 0 0.5rem; color: var(--rule); }
 .crumbs a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; min-height: 2.75rem; }
 .crumbs a:hover { color: var(--link); text-decoration: underline; }
+/* A deep trail stays on one line: the levels between the first and the last two fold into "…",
+   which opens the full path below it (a <details>, since the help center runs no script). */
+.crumbs-folded { flex-wrap: nowrap; }
+.crumbs-folded > li { min-width: 0; }
+.crumbs-folded > li > a { display: block; line-height: 2.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumbs-fold { position: relative; flex: none; }
+.crumbs-fold summary { list-style: none; cursor: pointer; color: var(--muted); display: inline-flex; align-items: center; min-height: 2.75rem; min-width: 2.75rem; justify-content: center; }
+.crumbs-fold summary::-webkit-details-marker { display: none; }
+.crumbs-fold summary:hover { color: var(--link); }
+.crumbs-fold details > ol {
+  position: absolute; z-index: 10; top: 100%; left: 0; display: block; min-width: 14rem; max-width: calc(100vw - 2rem);
+  padding: 0.5rem 1rem; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+.crumbs-fold details > ol li + li::before { content: none; }
+.crumbs-fold details > ol li { display: block; }
 
 .section-label {
   font: 600 0.8125rem/1.4 var(--font-body); text-transform: uppercase; letter-spacing: 0.08em;

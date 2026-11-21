@@ -33,7 +33,11 @@ The public help center is in `help-center.md`.
   its own: ordering extras by hand is left out until someone asks. Lists group by the collection the
   article is listed in (`PublicKBArticle.CollectionID` is that one in lists, the home on the article
   page); the sitemap, llms.txt, search and AI read `kb_articles` alone, so each names an article once.
-- **Three levels, checked in Go.** Collections nest category, folder, subfolder like Freshdesk. Depth,
+- **Six levels, checked in Go.** Collections nest up to `domain.MaxKBDepth` (6) levels; the Freshdesk
+  import still places folders three deep (`kbCollectionLevelMax`) so a re-run lands where the first one
+  did. The help center folds the middle of a breadcrumb deeper than three levels into a `<details>`
+  (Home, the first level, "…", the last two: `helpcenter/crumbs.go`), since its CSP runs no script;
+  the BreadcrumbList structured data keeps every level. Depth,
   loops and the limits are checked under one advisory lock per workspace (`lockKB`), taken by every
   write that counts rows or reshapes the tree. A collection that still holds a live article or
   collection cannot be deleted (409 `collection_not_empty`), so the trash never hides live content; an

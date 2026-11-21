@@ -30,8 +30,9 @@ const (
 	MaxKBDescription    = 2000
 	MaxKBSlug           = 120
 	MaxKBPosition       = 1000000
-	// MaxKBDepth is how deep collections nest: a Freshdesk category, folder and subfolder.
-	MaxKBDepth = 3
+	// MaxKBDepth is how deep collections nest. Six levels fit a product with areas, sub-areas and
+	// guides; the help center folds the middle of a deep breadcrumb so it stays on one phone line.
+	MaxKBDepth = 6
 	// MaxKBImageBytes bounds one image.
 	MaxKBImageBytes = 5 << 20
 	// KBTrashRetention is how long a deleted article or collection stays restorable, and how old an

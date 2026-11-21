@@ -3972,10 +3972,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The knowledge base collections of the workspace that are not in the trash, as a flat list ordered by parent, position and name. A collection sits at most three levels deep (category, folder, subfolder). `article_count` counts its articles outside the trash, drafts included. */
+        /** @description The knowledge base collections of the workspace that are not in the trash, as a flat list ordered by parent, position and name. A collection sits at most six levels deep. `article_count` counts its articles outside the trash, drafts included. */
         get: operations["listKBCollections"];
         put?: never;
-        /** @description Needs `kb_articles:create`. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
+        /** @description Needs `kb_articles:create`. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already six levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
         post: operations["createKBCollection"];
         delete?: never;
         options?: never;
@@ -4016,7 +4016,7 @@ export interface paths {
         delete: operations["deleteKBCollection"];
         options?: never;
         head?: never;
-        /** @description Rename a collection, change its slug, description or position, or move it under another parent (`parent_id`; null moves it to the top). Send back the `updated_at` you read (409 `changed_elsewhere` when it was saved since). A move that would put a collection under itself or more than three levels deep is 400. Changing the slug changes the addresses of the help center pages under it; old addresses are not redirected. A collection in the trash is 404. */
+        /** @description Rename a collection, change its slug, description or position, or move it under another parent (`parent_id`; null moves it to the top). Send back the `updated_at` you read (409 `changed_elsewhere` when it was saved since). A move that would put a collection under itself or more than six levels deep is 400. Changing the slug changes the addresses of the help center pages under it; old addresses are not redirected. A collection in the trash is 404. */
         patch: operations["updateKBCollection"];
         trace?: never;
     };

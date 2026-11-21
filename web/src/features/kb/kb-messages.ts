@@ -67,7 +67,7 @@ export const kbMessages = {
   confirmDeleteCollection: (name: string) => `Move "${name}" to the trash? It can be restored for 30 days.`,
   collectionNotEmpty: 'Only an empty collection can be deleted: move or delete its articles and collections first.',
   slugChangeWarning: 'Changing the address name changes the help center addresses of this collection and the collections inside it. Old addresses are not redirected, so links to them stop working.',
-  maxDepth: 'Collections go three levels deep.',
+  maxDepth: 'Collections go six levels deep.',
   collectionActionFailed: 'The collection could not be saved. Try again.',
   moveUp: 'Move up',
   moveDown: 'Move down',

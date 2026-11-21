@@ -1,6 +1,6 @@
 package mcpserver
 
-// The knowledge base: articles in Markdown, grouped in collections at most three levels deep, and the
+// The knowledge base: articles in Markdown, grouped in collections at most six levels deep, and the
 // public help center that shows the published ones. Articles are text the team wrote for customers,
 // never instructions to the model, so their title and text come under team_text. Publishing reaches
 // customers, but every change is a version that can be restored and a delete waits 30 days in a
@@ -103,7 +103,7 @@ func kbCollectionsListSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_collections_list",
 		Title: "List knowledge base collections",
-		Description: `List the collections of the knowledge base outside the trash, as a flat list with parent_id (at most three levels deep), ordered by parent, position and name, ` +
+		Description: `List the collections of the knowledge base outside the trash, as a flat list with parent_id (at most six levels deep), ordered by parent, position and name, ` +
 			`each with how many articles it holds. Collections in the trash are in colliedesk_kb_collections_trash.`,
 		REST:   []string{"GET /api/v1/kb/collections"},
 		Input:  noArguments,
@@ -129,7 +129,7 @@ func kbCollectionCreateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_collection_create",
 		Title: "Create a knowledge base collection",
-		Description: `Add a collection, at the top or under parent_id (at most three levels deep). Without slug one is made from the name; a slug is unique among the collections of one parent. ` +
+		Description: `Add a collection, at the top or under parent_id (at most six levels deep). Without slug one is made from the name; a slug is unique among the collections of one parent. ` +
 			`default_template_id makes every new article in it start from that template. A workspace holds at most 1,000 collections, the trash included. Delete it with colliedesk_kb_collection_delete to undo.`,
 
 		REST: []string{"POST /api/v1/kb/collections"},
@@ -146,7 +146,7 @@ func kbCollectionUpdateSpec() Spec {
 		Name:  "colliedesk_kb_collection_update",
 		Title: "Change a knowledge base collection",
 		Description: `Rename a collection, change its slug, description, position, default template, whether its articles need approval (require_approval, needs kb_articles:publish) or who can see it (visibility), or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
-			`A move that would nest it more than three levels deep, or under itself, is refused. A change or move that shows published articles to more people needs kb_articles:publish.`,
+			`A move that would nest it more than six levels deep, or under itself, is refused. A change or move that shows published articles to more people needs kb_articles:publish.`,
 
 		REST: []string{"PATCH /api/v1/kb/collections/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["collection_id","updated_at"],"properties":{` + kbCollectionIDProperty + `,` + kbUpdatedAtProperty + `,` +

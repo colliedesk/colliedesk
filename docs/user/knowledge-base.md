@@ -13,7 +13,7 @@ dates and images; see [Import from Freshdesk](import-freshdesk.md#knowledge-base
 
 ## Collections
 
-A collection groups articles, like a Freshdesk category, folder and subfolder: collections go three
+A collection groups articles, like a Freshdesk category, folder and subfolder: collections go six
 levels deep. Every article has a home collection, so a new knowledge base starts by asking for
 one, for example "Getting started". An article can also be listed in more collections; see
 [Several collections](#several-collections).
@@ -1286,7 +1286,7 @@ unpublished or deleted, or while the help center is off.
   200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
 - Files: 25 MiB each and 100 MiB per article or translation, at most 50 under one; the text read for
   search stops at 200 KiB.
-- Collections go three levels deep.
+- Collections go six levels deep.
 - Search does not find a part in the middle of a word, nor words in text written without spaces.
 - 40 languages besides the primary one; one translation per article and language.
 

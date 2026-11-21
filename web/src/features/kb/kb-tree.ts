@@ -2,8 +2,8 @@ import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/atta
 import { InvalidRequestError, PlanLimitError } from '../../api/client';
 import type { KBCollection } from './kb-api';
 
-// Collections nest three levels deep, like a Freshdesk category, folder and subfolder.
-export const maxDepth = 3;
+// Collections nest six levels deep; the server checks the same limit (domain.MaxKBDepth).
+export const maxDepth = 6;
 
 export interface TreeNode {
   collection: KBCollection;

@@ -98,7 +98,7 @@ var toolDocs = map[string]string{
 	"colliedesk_kb_template_undelete":                "Takes a template out of the trash",
 	"colliedesk_kb_template_history":                 "Lists the versions of a template a page at a time: who, through which token, and the text",
 	"colliedesk_kb_template_version_restore":         "Makes an earlier version of a template current again, as a new version",
-	"colliedesk_kb_collections_list":                 "Lists the knowledge base collections (at most three levels deep) with how many articles each holds",
+	"colliedesk_kb_collections_list":                 "Lists the knowledge base collections (at most six levels deep) with how many articles each holds",
 	"colliedesk_kb_collection_create":                "Adds a collection, at the top or inside another",
 	"colliedesk_kb_collection_update":                "Renames, reorders or moves a collection",
 	"colliedesk_kb_collection_delete":                "Moves an empty collection to the trash for 30 days",

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { KnowledgeRoute } from './knowledge-page';
 import { PermissionsContext } from '../../lib/permissions-context';
@@ -22,7 +22,7 @@ const base = {
   'GET /api/v1/kb/articles': () => json(200, { items: [summary(1, 'Reset your password', 'published'), summary(2, 'Add a teammate')], next_cursor: null }),
 };
 
-test('collections nest three levels, and choosing one lists only its articles', async () => {
+test('collections nest, and choosing one lists only its articles', async () => {
   const calls = serve(base);
   const show = open();
   const tree = await screen.findByRole('navigation', { name: 'Collections' });
@@ -37,8 +37,19 @@ test('collections nest three levels, and choosing one lists only its articles', 
   expect(within(tree).getByRole('link', { name: 'Setup, 2 articles' })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByRole('button', { name: 'Add a collection inside Setup' })).toBeInTheDocument();
   show({ collection: ids.deep });
-  expect(await screen.findByText('Collections go three levels deep.')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Add a collection inside Email' })).not.toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Add a collection inside Email' })).toBeInTheDocument();
+});
+
+test('a collection six levels deep takes no collection inside it', async () => {
+  const levels = ['44444444-0000-4000-8000-000000000004', '55555555-0000-4000-8000-000000000005', '66666666-0000-4000-8000-000000000006'];
+  const deeper = [collection(levels[0], 'Gmail', ids.deep), collection(levels[1], 'Filters', levels[0]), collection(levels[2], 'Labels', levels[1])];
+  serve({ ...base, 'GET /api/v1/kb/collections': () => json(200, { items: [...collections, ...deeper] }) });
+  open({ collection: levels[1] });
+  expect(await screen.findByRole('button', { name: 'Add a collection inside Filters' })).toBeInTheDocument();
+  cleanup();
+  open({ collection: levels[2] });
+  expect(await screen.findByText('Collections go six levels deep.')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Add a collection inside Labels' })).not.toBeInTheDocument();
 });
 
 test('the search goes to the address a moment after typing stops, and asks the server with it', async () => {
@@ -81,7 +92,7 @@ test('a new collection in a workspace with collections can go inside one of them
   open();
   fireEvent.click((await screen.findAllByRole('button', { name: 'New collection' }))[0]);
   const form = screen.getByRole('form', { name: 'New collection' });
-  expect(within(within(form).getByRole('combobox', { name: 'Inside' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['Top level', 'Guides', '\u2003Setup', 'Billing']);
+  expect(within(within(form).getByRole('combobox', { name: 'Inside' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['Top level', 'Guides', '\u2003Setup', '\u2003\u2003Email', 'Billing']);
 });
 
 test('changing a collection\'s address name warns that its old help center addresses stop working', async () => {
