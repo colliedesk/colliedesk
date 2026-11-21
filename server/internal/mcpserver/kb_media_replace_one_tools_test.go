@@ -41,6 +41,28 @@ func TestSendTokenReplacesAnImageInOneArticle(t *testing.T) {
 	}
 }
 
+// Replacing in one article changes that article, so a token that may change media but not articles is
+// refused with the permission it lacks, and nothing changes.
+func TestMediaTokenWithoutArticleUpdateCannotReplaceInOneArticle(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("KB Replace One Scope Desk", "admin@kb-replace-one-scope.example.com")
+	session := e.connect(w.send, "")
+	image := e.ok(session, "colliedesk_kb_image_upload", map[string]any{"data_base64": base64.StdEncoding.EncodeToString(kbPNG), "name": "Settings"})
+	imageID, imageURL := at(t, image, "image", "id").(string), at(t, image, "image", "url").(string)
+	copied := e.ok(session, "colliedesk_kb_image_upload", map[string]any{"data_base64": base64.StdEncoding.EncodeToString(otherPNG()), "name": "Settings (annotated)"})
+	collection := at(t, e.ok(session, "colliedesk_kb_collection_create", map[string]any{"name": "Setup"}), "collection", "id").(string)
+	article := at(t, e.ok(session, "colliedesk_kb_article_create", map[string]any{"collection_id": collection, "title": "Setup", "body": "![a](" + imageURL + ")"}), "article", "id").(string)
+
+	media := e.connect(e.token(w.admin, "media only", "", []string{"kb_articles:read", "kb_media:read", "kb_media:update"}), "")
+	refusal := e.fails(media, "colliedesk_kb_media_replace", map[string]any{"media_id": imageID, "with_media_id": at(t, copied, "image", "id"), "article_id": article})
+	if !strings.Contains(refusal, "kb_articles:update") {
+		t.Fatalf("refusal %q, want it to name kb_articles:update", refusal)
+	}
+	if body := at(t, e.ok(session, "colliedesk_kb_article_get", map[string]any{"article_id": article}), "article", "team_text", "body"); body != "![a]("+imageURL+")" {
+		t.Fatalf("body after the refusal = %v", body)
+	}
+}
+
 // A purge refuses the earlier version of a replacement that stands, telling the agent which article and
 // which replacement keep it and how to lift that; once undone, it is purged like any other item.
 func TestAdminTokenCannotPurgeTheEarlierVersionOfAReplacement(t *testing.T) {

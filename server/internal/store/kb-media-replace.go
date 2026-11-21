@@ -65,12 +65,15 @@ func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Ac
 	}
 	from, to := strings.ToLower(id), strings.ToLower(with)
 	replacement, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBMediaReplacement, error) {
-		articles, err := kbArticlesShowingMedia(ctx, tx, workspaceID, from, strings.ToLower(article))
-		if err != nil {
-			return domain.KBMediaReplacement{}, err
+		// Both items are locked with the articles, so neither is purged under the replacement.
+		var articles, found []string
+		var err error
+		if article != "" {
+			articles = []string{strings.ToLower(article)}
+			found, err = lockKBArticleForReplace(ctx, tx, workspaceID, articles[0], from, to)
+		} else if articles, err = kbArticlesShowingMedia(ctx, tx, workspaceID, from); err == nil {
+			found, err = lockKBArticlesForMedia(ctx, tx, workspaceID, articles, from, to)
 		}
-		// Both items are locked with the rest, so neither is purged under the replacement.
-		found, err := lockKBArticlesForMedia(ctx, tx, workspaceID, articles, from, to)
 		if err != nil {
 			return domain.KBMediaReplacement{}, err
 		}
@@ -87,28 +90,12 @@ func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Ac
 		if article != "" && kinds[0] == domain.KBMediaFile {
 			return domain.KBMediaReplacement{}, &domain.InvalidKBError{Message: "A file is replaced in place in every article that lists it: send no article_id."}
 		}
-		if article != "" && len(articles) == 0 {
-			return domain.KBMediaReplacement{}, &domain.InvalidKBError{Message: "The article does not show this item: send the id of an article whose text shows it, or no article_id."}
-		}
 		if kinds[0] == domain.KBMediaFile {
 			return replaceKBFileInPlace(ctx, tx, workspaceID, actor, from, to)
 		}
-		changed, versions := []string{}, []int{}
-		translations := []replacedTranslation{}
-		for _, articleID := range articles {
-			version, rewritten, err := replaceInKBArticle(ctx, tx, workspaceID, articleID, actor, from, to)
-			if err != nil {
-				return domain.KBMediaReplacement{}, err
-			}
-			if version > 0 {
-				changed, versions = append(changed, articleID), append(versions, version)
-			}
-			translations = append(translations, rewritten...)
-			drafts, err := replaceInKBDraft(ctx, tx, workspaceID, articleID, from, to)
-			if err != nil {
-				return domain.KBMediaReplacement{}, err
-			}
-			translations = append(translations, drafts...)
+		changed, versions, translations, err := replaceInKBArticles(ctx, tx, workspaceID, actor, articles, article != "", from, to)
+		if err != nil {
+			return domain.KBMediaReplacement{}, err
 		}
 		recorded, _ := json.Marshal(translations)
 		return scanKBMediaReplacement(tx.QueryRow(ctx, `INSERT INTO kb_media_replacements(workspace_id,from_media_id,to_media_id,article_ids,article_versions,translations,replaced_by_agent_id)
@@ -118,6 +105,37 @@ func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Ac
 		return domain.KBMediaReplacement{}, kbMediaReplaceError("replace knowledge base media", err)
 	}
 	return replacement, nil
+}
+
+// replaceInKBArticles rewrites from to to in the locked articles and returns the articles with the
+// media_replace version each got and every rewrite for the undo. With one, the single article goes
+// through replaceInOneKBArticle and is listed even with version 0 (only its unpublished changes or
+// translations changed); finding the item nowhere in it is ErrKBMediaNotInArticle.
+func replaceInKBArticles(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, articles []string, one bool, from, to string) ([]string, []int, []replacedTranslation, error) {
+	if one {
+		version, rewritten, err := replaceInOneKBArticle(ctx, tx, workspaceID, articles[0], actor, from, to)
+		if err == nil && version == 0 && len(rewritten) == 0 {
+			err = domain.ErrKBMediaNotInArticle
+		}
+		return articles, []int{version}, rewritten, err
+	}
+	changed, versions, translations := []string{}, []int{}, []replacedTranslation{}
+	for _, articleID := range articles {
+		version, rewritten, err := replaceInKBArticle(ctx, tx, workspaceID, articleID, actor, from, to)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if version > 0 {
+			changed, versions = append(changed, articleID), append(versions, version)
+		}
+		translations = append(translations, rewritten...)
+		drafts, err := replaceInKBDraft(ctx, tx, workspaceID, articleID, from, to)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		translations = append(translations, drafts...)
+	}
+	return changed, versions, translations, nil
 }
 
 // replaceInKBArticle rewrites from to to in the current text of a locked article and its translations,
@@ -250,6 +268,9 @@ func (s *Store) UndoKBMediaReplacement(ctx context.Context, workspaceID string, 
 			restored[item.ArticleID] = true
 		}
 		for i, articleID := range replacement.ArticleIDs {
+			if versions[i] == 0 {
+				continue // the article's own text was not rewritten; its other rewrites are undone above
+			}
 			var newest int
 			var before *string
 			// A draft version holds unpublished changes, never the article's text, so it neither stops the undo
@@ -315,7 +336,7 @@ func scanKBMediaReplacement(row pgx.Row) (domain.KBMediaReplacement, error) {
 }
 
 func kbMediaReplaceError(what string, err error) error {
-	for _, known := range []error{domain.ErrKBMediaReplacementNotFound, domain.ErrKBMediaKindMismatch, domain.ErrKBMediaGone} {
+	for _, known := range []error{domain.ErrKBMediaReplacementNotFound, domain.ErrKBMediaKindMismatch, domain.ErrKBMediaGone, domain.ErrKBMediaNotInArticle} {
 		if errors.Is(err, known) {
 			return known
 		}

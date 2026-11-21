@@ -151,7 +151,9 @@ func kbMediaReplaceSpec() Spec {
 		Description: `Put another library item (with_media_id: an image for an image, a video for a video) in the place of media_id in every live article whose current text or a translation shows it. ` +
 			`Each such article gets a new version; published ones change on the help center at once. ` +
 			`A file is replaced in place (in_place true): it keeps its id and address and takes the bytes and name of with_media_id, a file no article lists, which goes to the trash holding the earlier version. ` +
-			`article_id changes that one article (and its translations) only, as for an edited copy of a screenshot; colliedesk_kb_media_get of the new item then lists media_id under earlier_versions. ` +
+			`article_id changes that one article (and its translations) only, as for an edited copy of a screenshot, and also needs kb_articles:update; ` +
+			`a published article gets the copy in its unpublished changes, so the help center shows it once they are published. ` +
+			`colliedesk_kb_media_get of the new item then lists media_id under earlier_versions. ` +
 			`Undo it with colliedesk_kb_media_replace_undo and the replacement_id.`,
 
 		REST: []string{"POST /api/v1/kb/media/{id}/replace"},

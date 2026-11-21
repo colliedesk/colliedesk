@@ -75,11 +75,12 @@ func TestKBMediaReplaceInOneArticleLeavesTheOthersAndUndoes(t *testing.T) {
 		t.Fatalf("earlier versions after undo = %+v", details.EarlierVersions)
 	}
 
-	// The published article needs kb_articles:publish.
-	refused(t, api, http.MethodPost, "/api/v1/kb/media/"+original.ID+"/replace", map[string]any{"with_media_id": annotated.ID, "article_id": other.ID}, editor, "kb_articles:publish")
 	// An article that does not show the item is refused, and nothing is recorded.
 	plain := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Plain", "body_md": "No image"})
-	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/"+original.ID+"/replace", map[string]any{"with_media_id": annotated.ID, "article_id": plain.ID}, admin, http.StatusBadRequest, nil)
+	if code := errorCode(t, kbCall(t, api, http.MethodPost, "/api/v1/kb/media/"+original.ID+"/replace", map[string]any{"with_media_id": annotated.ID, "article_id": plain.ID},
+		admin, http.StatusConflict, nil)); code != "media_not_in_article" {
+		t.Fatalf("code = %q, want media_not_in_article", code)
+	}
 	var recorded int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM kb_media_replacements WHERE from_media_id=$1`, original.ID).Scan(&recorded); err != nil || recorded != 1 {
 		t.Fatalf("replacements recorded = %d (%v), want 1", recorded, err)

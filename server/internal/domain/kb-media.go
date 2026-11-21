@@ -256,6 +256,10 @@ var (
 	ErrKBMediaKindMismatch = errors.New("an image is replaced by an image, a video by a video, a file by a file")
 	// ErrKBMediaGone means the item a replacement would bring back was deleted for good.
 	ErrKBMediaGone = errors.New("the replaced item was deleted for good, so the replacement cannot be undone")
+	// ErrKBMediaNotInArticle means a replacement in one article found the item nowhere in its text, its
+	// translations or their unpublished changes, so nothing was replaced.
+	ErrKBMediaNotInArticle = errors.New("the article does not show this item now, in its text, a translation or unpublished changes, so nothing was replaced: " +
+		"open the article again to see its current text")
 )
 
 // ReplaceKBMediaIDs rewrites every link of the item from in text to the item to: image and media paths,

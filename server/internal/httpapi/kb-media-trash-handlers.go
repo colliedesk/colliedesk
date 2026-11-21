@@ -188,14 +188,17 @@ func writeKBMediaReplaceError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+".")
 	case errors.Is(err, domain.ErrKBMediaGone):
 		writeError(response, http.StatusConflict, "media_gone", sentence(err)+".")
+	case errors.Is(err, domain.ErrKBMediaNotInArticle):
+		writeError(response, http.StatusConflict, "media_not_in_article", sentence(err)+".")
 	default:
 		writeKBMediaError(response, err)
 	}
 }
 
 func (a *API) replaceKBMedia(response http.ResponseWriter, request *http.Request) {
-	// A replacement writes a new version of every live article that shows the item, or with article_id
-	// of that one article only.
+	// A replacement writes a new version of every live article that shows the item, so changing a
+	// published one needs publish. With article_id it changes that one article only, and a published
+	// one only in its unpublished changes, so editing articles is enough.
 	who := principal(request)
 	var input struct {
 		With    string `json:"with_media_id"`
@@ -205,10 +208,11 @@ func (a *API) replaceKBMedia(response http.ResponseWriter, request *http.Request
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send with_media_id, the item to put in its place.")
 		return
 	}
-	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, func() (bool, error) {
-		if input.Article != "" {
-			return a.store.KBArticlePublished(request.Context(), who.Workspace.ID, input.Article)
+	if input.Article != "" {
+		if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesUpdate, nil) {
+			return
 		}
+	} else if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, func() (bool, error) {
 		return a.store.KBMediaShownPublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
 	}) {
 		return

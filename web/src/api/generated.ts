@@ -4865,7 +4865,7 @@ export interface paths {
         /**
          * @description Put another library item (`with_media_id`, an image for an image, a video for a video) in the place of this one in every live article whose current text or a translation shows it. Each such article gets a new version of kind `media_replace`, and published ones change on the help center at once. Ids never change their bytes, so the new item keeps its own id and caches stay right. The answer is the replacement; `POST /api/v1/kb/media-replacements/{id}/undo` reverses it. 400 when the kinds differ.
          *     A file (kind `file`) is replaced in place, since articles list it by its id: it keeps its id and address and takes the bytes and name of `with_media_id`, which goes to the trash holding the earlier version (`in_place` true, no article gets a new version). 400 when an article or a draft lists `with_media_id`: upload the new version as a file no article lists. Replacing a file a published article lists needs kb_articles:publish.
-         *     With `article_id`, only that article and its translations change: the others that show the image or video keep it. This is how an edited copy (an annotated screenshot) goes in one article, and the new item's details list this one in `earlier_versions` until the replacement is undone. 400 when that article's text does not show the item, or when the item is a file; 404 when no live article in the workspace has that id. Changing a published article needs kb_articles:publish.
+         *     With `article_id`, only that article and its translations change: the others that show the image or video keep it. This is how an edited copy (an annotated screenshot) goes in one article, and the new item's details list this one in `earlier_versions` until the replacement is undone. A published article and its published translations keep their text: the copy goes into their unpublished changes (made from the published text when there are none), so the help center shows it once someone publishes them, and the article is listed with no new version. This needs kb_articles:update, not publish. 409 `media_not_in_article` when neither the article, its translations nor their unpublished changes show the item (nothing is recorded); 400 when the item is a file; 404 when no live article in the workspace has that id.
          */
         post: operations["replaceKBMedia"];
         delete?: never;
@@ -4885,7 +4885,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Put back the text each article and translation had before the replacement, where nothing changed since (an article whose newest version is still the replacement's, a translation that still holds the replaced text), as new versions. Anything changed since keeps its text and is listed in `skipped_article_ids`. Undoing twice changes nothing more. 409 `media_gone` when the replaced item was deleted for good. */
+        /** @description Put back the text each article and translation had before the replacement, where nothing changed since (an article whose newest version is still the replacement's, a translation that still holds the replaced text), as new versions. Anything changed since keeps its text and is listed in `skipped_article_ids`. Unpublished changes that took an edited copy get the item back the same way, while they still hold the copy. Undoing twice changes nothing more. 409 `media_gone` when the replaced item was deleted for good. */
         post: operations["undoKBMediaReplacement"];
         delete?: never;
         options?: never;
@@ -22553,6 +22553,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     undoKBMediaReplacement: {
