@@ -18,7 +18,7 @@ import { sameBody, storedAs, useArticleAutosave } from './article-autosave';
 import { ConflictCompare } from './conflict-compare';
 import { unsavedKey } from './unsaved-store';
 import { ArticleReviewBox, useTextApproval } from './article-review';
-import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
+import type { EditorHandle, UploadHooks, ViewMode } from './editor/editor-types';
 import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
 import type { KBArticle, KBArticleStatus, KBArticleVersion, KBAttachment } from './kb-api';

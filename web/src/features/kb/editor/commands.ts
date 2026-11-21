@@ -7,21 +7,9 @@ import { redoDepth, undoDepth } from '@codemirror/commands';
 // The toolbar edits Markdown source: it adds or takes away the syntax around the selection, it never parses into a
 // document model, so the text stays exactly what is stored in body_md.
 
-export type Block = 'paragraph' | 'h1' | 'h2' | 'h3';
+import type { Active, Block, LineKind } from './editor-types';
 
-export interface Active {
-  block: Block;
-  strong: boolean;
-  emphasis: boolean;
-  code: boolean;
-  link: boolean;
-  bullet: boolean;
-  ordered: boolean;
-  task: boolean;
-  quote: boolean;
-  canUndo: boolean;
-  canRedo: boolean;
-}
+export type { Active, Block, LineKind } from './editor-types';
 
 const headingOf = (line: string): Block => {
   const match = /^(#{1,6})\s/.exec(line);
@@ -146,7 +134,6 @@ const linesOf = (state: EditorState) => {
   return lines;
 };
 
-export type LineKind = 'bullet' | 'ordered' | 'task' | 'quote';
 const prefixOf: Record<LineKind, (index: number) => string> = {
   bullet: () => '- ',
   ordered: (index) => `${index + 1}. `,
