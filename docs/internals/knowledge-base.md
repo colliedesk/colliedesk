@@ -718,6 +718,39 @@ Migration `kb-visibility`; code in `server/internal/store/kb-visibility*.go`. Us
 - **A new write that reshapes the tree needs the guard.** A path that changes a parent, a collection
   list or the trash state of a collection and skips `guardKBVisibilityRaise` can publish unreviewed text.
 
+## Bulk actions
+
+Migration `20261121202017-kb-bulk-operations`; code `httpapi/kb-bulk-handlers.go`, `kb-bulk-actions.go`,
+`kb-bulk-undo-handlers.go`, `store/kb-bulk.go`, MCP `colliedesk_kb_articles_bulk` and
+`colliedesk_kb_articles_bulk_undo`, web `features/kb/kb-bulk-*.ts(x)`, `use-kb-bulk.ts`. Issue #679.
+
+- **Each article goes through the call for it alone.** `kbBulkOne` reads the article and runs the
+  same store write (`UpdateKBArticle`, `publishOneKBArticle`, `RequestKBReview`, `DecideKBReview`,
+  `DeleteKBArticle`) the single route runs, so the review gate, four-eyes, the visibility raise check
+  and the trash rule cannot be skipped by a batch. The route is `byHandler` in `routeAccess`: it needs
+  `kb_articles:update`, and the handler asks for publish or delete per action and per article.
+- **A filter is the list's filter.** `filter` is parsed by `kbArticleFilter`, the parser of
+  `GET /api/v1/kb/articles`, so the bulk action and the list never disagree on what matches. More than
+  500 matches is refused before anything changes; the web app sends the filter, never the ids of the
+  pages it loaded.
+- **One undo record, one history entry per article.** `kb_bulk_operations` holds the batch and
+  `kb_bulk_operation_articles` what undo puts back, with the article's `updated_at` just after the
+  action (`after_token`). Undo leaves an article whose token moved since and lists it `not_undone`.
+- **Not everything can be undone.** An approval, a publish of a draft over published text, an unpublish
+  that made the draft the text, and an author change from nobody record no entry: the answer says
+  `undoable: false`, and the article's history keeps the earlier version.
+
+### Traps
+
+- **The undo claim commits before the articles are put back.** `ClaimKBBulkUndo` marks the batch
+  undone first, so two undos at once never both run. A crash after the claim leaves the batch marked
+  undone with some articles not put back; the history of each article still shows both changes.
+- **A move or a tag change of a published article goes to its draft.** When the batch made that draft,
+  undo discards it (`discard_draft`) instead of writing the old values into it.
+- **Undo of a trash restores the article at the end of its collection.** The restore follows
+  `undelete`, which does not keep the old position.
+- **COPY is refused on a table with row-level security.** The entries go in as `unnest` arrays.
+
 ## Traps
 
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges
