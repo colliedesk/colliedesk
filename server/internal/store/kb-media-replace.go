@@ -99,13 +99,11 @@ func (s *Store) ReplaceKBMedia(ctx context.Context, workspaceID string, actor Ac
 				changed, versions = append(changed, articleID), append(versions, version)
 			}
 			translations = append(translations, rewritten...)
-			draft, err := replaceInKBDraft(ctx, tx, workspaceID, articleID, from, to)
+			drafts, err := replaceInKBDraft(ctx, tx, workspaceID, articleID, from, to)
 			if err != nil {
 				return domain.KBMediaReplacement{}, err
 			}
-			if draft != nil {
-				translations = append(translations, *draft)
-			}
+			translations = append(translations, drafts...)
 		}
 		recorded, _ := json.Marshal(translations)
 		return scanKBMediaReplacement(tx.QueryRow(ctx, `INSERT INTO kb_media_replacements(workspace_id,from_media_id,to_media_id,article_ids,article_versions,translations,replaced_by_agent_id)

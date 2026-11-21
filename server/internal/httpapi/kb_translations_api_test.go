@@ -182,20 +182,26 @@ func TestKnowledgeBaseTranslationsHaveTheirOwnTextStatusHistoryTrashAndOutdatedF
 	if len(versions.Items) != 4 || versions.Items[3].Kind != "create" || versions.Items[2].Kind != "edit" || versions.Items[1].Kind != "mark_outdated" {
 		t.Fatalf("versions = %+v", versions.Items)
 	}
-	var restored kbTranslationView
-	// A repeated press (same Idempotency-Key) answers the first restore again and adds no version.
+	// A repeated press (same Idempotency-Key) answers the first restore again and adds no version. The translation
+	// is published, so the restored text waits in its draft until it is published.
 	first := postWithKey(t, api, admin, kbTranslationPath(article.ID, "fr", "/versions/1/restore"), "restore-version-1", map[string]any{"updated_at": marked.UpdatedAt})
 	again := postWithKey(t, api, admin, kbTranslationPath(article.ID, "fr", "/versions/1/restore"), "restore-version-1", map[string]any{"updated_at": marked.UpdatedAt})
 	if first.Code != http.StatusOK || again.Code != http.StatusOK || sameUpdate(t, first) != sameUpdate(t, again) {
 		t.Fatalf("restore version, repeated: %d %s / %d %s", first.Code, first.Body.String(), again.Code, again.Body.String())
 	}
-	decode(t, first, &restored)
-	if restored.BodyMD != "Ouvrez les réglages." || restored.Status != "published" || restored.LastChange.Kind != "restore" {
-		t.Fatalf("restored = %+v", restored)
+	var drafted kbDraftedTranslation
+	decode(t, first, &drafted)
+	if drafted.BodyMD != "Ouvrez les réglages, puis Sécurité." || drafted.Status != "published" || drafted.Draft == nil || drafted.Draft.BodyMD != "Ouvrez les réglages." {
+		t.Fatalf("restored = %+v draft=%+v", drafted.kbTranslationView, drafted.Draft)
 	}
 	kbCall(t, api, http.MethodGet, kbTranslationPath(article.ID, "fr", "/versions"), nil, admin, http.StatusOK, &versions)
-	if len(versions.Items) != 5 {
-		t.Fatalf("versions after a repeated restore = %d", len(versions.Items))
+	if len(versions.Items) != 5 || versions.Items[0].Kind != "draft" {
+		t.Fatalf("versions after a repeated restore = %+v", versions.Items)
+	}
+	var restored kbTranslationView
+	kbCall(t, api, http.MethodPost, kbTranslationPath(article.ID, "fr", "/draft/publish"), map[string]any{"updated_at": drafted.UpdatedAt}, admin, http.StatusOK, &restored)
+	if restored.BodyMD != "Ouvrez les réglages." || restored.Status != "published" || restored.LastChange.Kind != "edit" {
+		t.Fatalf("published restored draft = %+v", restored)
 	}
 
 	// Trash and back.

@@ -266,27 +266,33 @@ func (a *API) updateKBTranslation(response http.ResponseWriter, request *http.Re
 		SEOTitle  *string    `json:"seo_title"`
 		SEODesc   *string    `json:"seo_description"`
 		Outdated  *bool      `json:"outdated"`
+		Autosave  bool       `json:"autosave"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
 		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.Status == nil && input.SEOTitle == nil && input.SEODesc == nil && input.Outdated == nil) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, status, seo_title, seo_description or outdated.")
 		return
 	}
-	who := principal(request)
-	publishes := func() (bool, error) {
-		if input.Status != nil && *input.Status == domain.KBPublished {
-			return true, nil
-		}
-		return a.store.KBTranslationPublished(request.Context(), who.Workspace.ID, request.PathValue("id"), request.PathValue("locale"))
+	if input.Autosave && (input.Slug != nil || input.Status != nil || input.SEOTitle != nil || input.SEODesc != nil || input.Outdated != nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "An autosave changes only title and body_md; save the other fields without autosave.")
+		return
 	}
-	// Marking it up to date or outdated changes nothing customers read.
-	contentChanges := input.Title != nil || input.Slug != nil || input.BodyMD != nil || input.Status != nil || input.SEOTitle != nil || input.SEODesc != nil
-	if contentChanges && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, publishes) {
+	who := principal(request)
+	// Publishing or unpublishing changes the help center; a change to a published translation is saved
+	// as its draft, which the help center does not show.
+	publishes := func() (bool, error) {
+		if input.Status == nil {
+			return false, nil
+		}
+		published, err := a.store.KBTranslationPublished(request.Context(), who.Workspace.ID, request.PathValue("id"), request.PathValue("locale"))
+		return (*input.Status == domain.KBPublished) != published, err
+	}
+	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, publishes) {
 		return
 	}
 	translation, err := a.store.UpdateKBTranslation(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), request.PathValue("locale"),
 		*input.UpdatedAt, store.KBTranslationChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, Status: input.Status, SEOTitle: input.SEOTitle,
-			SEODescription: input.SEODesc, Outdated: input.Outdated})
+			SEODescription: input.SEODesc, Outdated: input.Outdated, Autosave: input.Autosave})
 	if err != nil {
 		writeKBError(response, err)
 		return
@@ -375,9 +381,6 @@ func (a *API) restoreKBTranslationVersion(response http.ResponseWriter, request 
 		return
 	}
 	who := principal(request)
-	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, a.translationIsPublished(request, who)) {
-		return
-	}
 	// A repeated press (same Idempotency-Key) answers the first restore again and adds no version.
 	articleID, locale := request.PathValue("id"), request.PathValue("locale")
 	a.runOnce(response, request, http.StatusOK, restoreKBTranslationVersionOperation, []string{articleID, locale, strconv.Itoa(version), seen.UTC().Format(time.RFC3339Nano)},

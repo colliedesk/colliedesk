@@ -4511,8 +4511,48 @@ export interface paths {
         delete: operations["deleteKBTranslation"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, status, search title or meta description of a translation, or mark it up to date with the article (`outdated: false`) or outdated again (`outdated: true`). Send back the `updated_at` you read (409 `changed_elsewhere`). Every change is a version; a change of the flag alone is kind `mark_current` or `mark_outdated`. Publishing it, or changing a published one, needs kb_articles:publish. A translation in the trash is 404. */
+        /** @description Change the title, slug, text, status, search title or meta description of a translation, or mark it up to date with the article (`outdated: false`) or outdated again (`outdated: true`). Send back the `updated_at` you read (409 `changed_elsewhere`). Every change is a version, except an autosave (`autosave: true`); a change of the flag alone is kind `mark_current` or `mark_outdated`. A change of a published translation's title, slug, text, search title or meta description is saved as its draft (`has_draft`, `draft`, a version of kind `draft`): the help center keeps the published text until POST /api/v1/kb/articles/{id}/translations/{locale}/draft/publish. Publishing or unpublishing it needs kb_articles:publish; unpublishing folds its draft into it. A translation in the trash is 404. */
         patch: operations["updateKBTranslation"];
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/translations/{locale}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Throw away the unpublished changes of a published translation. The published translation and its history stay as they are; the versions that saved the draft stay in the history and can be restored. Send the translation's `updated_at` (409 `changed_elsewhere`). 404 when the translation has no unpublished changes. */
+        delete: operations["discardKBTranslationDraft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/translations/{locale}/draft/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Put the unpublished changes of a published translation on the help center: they become the translation (a version of kind `edit`) and the draft is gone. Send the translation's `updated_at` (409 `changed_elsewhere`). 404 when the translation has no unpublished changes; 409 `approval_required` when the help center requires approval and no reviewer approved this exact text. A repeat with the same Idempotency-Key answers the first publish again (200) and changes nothing. */
+        post: operations["publishKBTranslationDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/kb/articles/{id}/translations/{locale}/attachments": {
@@ -4526,7 +4566,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Set the files the translation lists under its text, in order, as for an article. A translation has no draft: the list changes at once. A translation that lists no file shows the article's files on its page. The list is part of the translation's text a review approves: in a collection that needs approval, a change to a published translation's list that no review approved is 409 `approval_required` and the list stays as it was. */
+        /** @description Set the files the translation lists under its text, in order, as for an article. On a published translation the list goes into its draft (`draft.attachments`) and the help center keeps the published list until the draft is published. A translation that lists no file shows the article's files on its page. The list is part of the translation's text a review approves: in a collection that needs approval, publishing a draft whose list no review approved is 409 `approval_required`. */
         put: operations["setKBTranslationAttachments"];
         post?: never;
         delete?: never;
@@ -4588,7 +4628,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Make the title, slug, text and search fields of an earlier version of a translation current again, as a new version; its status and outdated flag stay. Send back the `updated_at` you read (409 `changed_elsewhere`). A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing. */
+        /** @description Make the title, slug, text and search fields of an earlier version of a translation current again, as a new version; its status and outdated flag stay. On a published translation they go into its draft, so the help center changes only when the draft is published. Send back the `updated_at` you read (409 `changed_elsewhere`). A repeat with the same Idempotency-Key answers the first restore again (200) and changes nothing. */
         post: operations["restoreKBTranslationVersion"];
         delete?: never;
         options?: never;
@@ -8321,10 +8361,10 @@ export interface components {
         KBTranslationChange: {
             version: number;
             /**
-             * @description mark_current, mark_outdated: the translation was marked up to date with its article, or outdated, without other change.
+             * @description mark_current, mark_outdated: the translation was marked up to date with its article, or outdated, without other change. draft: its unpublished changes were saved; the help center keeps the published text.
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -8355,6 +8395,8 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             in_trash: boolean;
+            /** @description The translation is published and has unpublished changes (GET /api/v1/kb/articles/{id}/translations/{locale} returns them as draft). */
+            has_draft: boolean;
             last_change: null | components["schemas"]["KBTranslationChange"];
             /** @description Its page in its language while customers see the language (it opens once it and its article are published); in a hidden language, the article's own page in the primary language, never an address that answers 404. */
             url: string;
@@ -8397,6 +8439,8 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             in_trash: boolean;
+            /** @description The translation is published and has unpublished changes (GET /api/v1/kb/articles/{id}/translations/{locale} returns them as draft). */
+            has_draft: boolean;
             last_change: null | components["schemas"]["KBTranslationChange"];
             /** @description Its page in its language while customers see the language (it opens once it and its article are published); in a hidden language, the article's own page in the primary language, never an address that answers 404. */
             url: string;
@@ -8411,7 +8455,28 @@ export interface components {
             original: components["schemas"]["KBTranslationOriginal"];
             /** @description The files it lists under its text for download, in order. */
             attachments: components["schemas"]["KBAttachment"][];
+            /** @description Its unpublished changes while it is published and has some (has_draft); null otherwise. The help center shows the fields above until they are published. */
+            draft: null | components["schemas"]["KBTranslationDraft"];
             missing_media?: string[];
+        };
+        /** @description The unpublished changes of a published translation: every field as it will be once published. */
+        KBTranslationDraft: {
+            title: string;
+            slug: string;
+            body_md: string;
+            seo_title: string;
+            seo_description: string;
+            /** @description The files it will list once published, in order; empty shows the article's. */
+            attachments: components["schemas"]["KBAttachment"][];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When the draft was saved last. To save, publish or discard it, send the translation's updated_at.
+             */
+            updated_at: string;
+            /** @description Who saved it last; null when that person was removed. */
+            updated_by: null | components["schemas"]["SavedReplyPerson"];
         };
         TrashedKBTranslation: {
             /** Format: uuid */
@@ -8431,6 +8496,8 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             in_trash: boolean;
+            /** @description The translation is published and has unpublished changes (GET /api/v1/kb/articles/{id}/translations/{locale} returns them as draft). */
+            has_draft: boolean;
             last_change: null | components["schemas"]["KBTranslationChange"];
             /** @description Its page in its language while customers see the language (it opens once it and its article are published); in a hidden language, the article's own page in the primary language, never an address that answers 404. */
             url: string;
@@ -8445,7 +8512,7 @@ export interface components {
         KBTranslationVersion: {
             version: number;
             /** @enum {string} */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "mark_current" | "mark_outdated" | "draft" | "review_request" | "review_approve" | "review_changes" | "review_withdraw";
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -21374,6 +21441,8 @@ export interface operations {
                     seo_title?: string;
                     seo_description?: string;
                     outdated?: boolean;
+                    /** @description An editor saving while the person types: only title and body_md may change, and no version is added. A translation that is not published is changed in place; a published one keeps the text in its draft, so the help center never changes. The next save without autosave adds the version. Any other field with autosave is 400. */
+                    autosave?: boolean;
                 };
             };
         };
@@ -21392,6 +21461,75 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    discardKBTranslationDraft: {
+        parameters: {
+            query: {
+                updated_at: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The published translation, without unpublished changes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleTranslation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    publishKBTranslationDraft: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+                locale: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The published translation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleTranslation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     setKBTranslationAttachments: {

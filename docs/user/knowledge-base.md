@@ -148,8 +148,11 @@ and at once when you switch to another window or tab, or close it. The status ne
   browser, for you and this article only, and saved when the connection comes back.
 - If the browser still holds text newer than the saved article when you open it, the editor asks
   **Restore unsaved text from 12:03?**. Select **Restore** to put it back, or **Discard**.
-- A new article saves for the first time with **Save draft** or **Save and publish**. A
-  [translation](#translations) saves with **Save** only.
+- A new article saves for the first time with **Save draft** or **Save and publish**.
+- A [translation](#translations) that exists autosaves its title and text the same way. A
+  published one keeps them in its unpublished changes. A new translation saves for the first time
+  with **Save translation**. The address and search fields save with **Save** only. A translation
+  keeps no copy on this device: without a connection its text stays in the open page until you save.
 
 If a teammate (or an AI agent) saved the article after you opened it, your save or autosave is
 refused and nothing is overwritten. The editor shows both texts line by line: struck through is only
@@ -464,9 +467,8 @@ the status filter **Unpublished changes** keeps only those.
 - **Delete** it: the unpublished changes go to the trash with it and come back when you restore it.
 - A [media replacement](#media-library) also replaces the item in unpublished changes, and its undo puts
   it back there.
-- A [translation](#translations) of a published article still goes live when you save it
-  ([#694](https://github.com/colliedesk/colliedesk/issues/694)); where publishing
-  [needs approval](#review-before-publishing), that save is refused.
+- A published [translation](#translations) has unpublished changes of its own, in the same bar on its
+  page: see [Change a published translation](#change-a-published-translation).
 
 ## Review before publishing
 
@@ -535,9 +537,9 @@ status they had in Freshdesk.
 
 ### Review a translation
 
-A [translation](#translations) needs approval where its article does, and is reviewed on its own. It has
-no unpublished changes, so to change a published translation: set it back to draft, edit it, send it for
-review, and publish it once approved. Saving a published translation is refused and says so.
+A [translation](#translations) needs approval where its article does, and is reviewed on its own. To
+change a published translation: edit it and **Save** (the help center keeps the published text), send it
+for review, and select **Publish changes** once approved. A save after the approval needs a new one.
 
 ### Reviews in the history
 
@@ -704,6 +706,17 @@ translation beside the original (side by side on a wide screen, one above the ot
 A new translation starts empty; **Start from the original text** copies the article's text to
 translate over it. **Save translation** keeps it as a draft; **Publish** puts it on the help center
 once the language is shown. Steps: open the article, select the language, write, Publish (4).
+
+### Change a published translation
+
+Saving a published translation keeps the changes apart, as on an
+[article](#unpublished-changes): its help center page, search, `llms.txt`, the sitemap, the `.md` copy
+and the help chat keep the published text, and an image or file that only the changes show stays
+private. The bar **Unpublished changes** on the translation's page has **Publish changes**,
+**Compare with published** and **Discard draft**. Steps: open the translation, edit, Save, Publish
+changes (4). A restored version also goes into the changes; **Unpublish** makes them the text of the
+draft translation; deleting and restoring the translation keeps them. The translation's
+files are part of the changes until you publish them.
 
 ### Outdated translations
 
@@ -1195,7 +1208,8 @@ Articles and collections:
   adds no version. On a draft article it changes the article; on a published one it adds to the
   unpublished changes. Every `PATCH` sends the `updated_at` it started from; a newer copy on the server
   refuses it with 409 `changed_elsewhere`. An agent saves with `colliedesk_kb_article_update` as before,
-  which adds a version.
+  which adds a version. `PATCH /api/v1/kb/articles/{id}/translations/{locale}` takes `autosave: true`
+  the same way.
 - [Readers' votes](#votes-from-readers): `colliedesk_kb_article_votes_get` or
   `GET /api/v1/kb/articles/{id}/votes` reads the count, each vote with its line, and the earlier counts
   (`kb_articles:read`). `colliedesk_kb_article_votes_reset` or `POST /api/v1/kb/articles/{id}/votes/reset`
@@ -1270,6 +1284,13 @@ Translations:
 - `colliedesk_help_center_languages_set` adds, orders, shows and hides languages (`help_center:update`,
   and `kb_articles:publish` to show or hide one).
 - Translating one missing article takes three calls: list, read the article, create.
+- A published translation: `colliedesk_kb_translation_update` saves unpublished changes;
+  `colliedesk_kb_translation_get` answers them in `draft` (`has_draft` marks them in every list).
+  `colliedesk_kb_article_draft_publish` and `colliedesk_kb_article_draft_discard` with `locale`
+  (`POST /api/v1/kb/articles/{id}/translations/{locale}/draft/publish`, with `kb_articles:publish`, and
+  `DELETE /api/v1/kb/articles/{id}/translations/{locale}/draft`) publish or drop them, with the
+  translation's `updated_at` as you read it. Changing a published translation takes two calls: update,
+  publish.
 
 Help center:
 
