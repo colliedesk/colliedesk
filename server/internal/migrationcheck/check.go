@@ -59,10 +59,10 @@ func Check(repo string, options Options) error {
 	return checkBase(repo, dir, options)
 }
 
-// checkBase refuses a deleted or renamed applied migration. An edited one is accepted only when the
-// schema stays the same: an up migration through Equivalent, a down migration when only its layout
-// and comments changed. The server records applied migrations by name only, so an edit never runs
-// again on a database that applied the file; it changes what a new install runs.
+// checkBase refuses a deleted or renamed applied migration. An edited one, up or down, is accepted
+// only when Equivalent shows the chain builds and rolls back to the same schemas as the base. The
+// server records applied migrations by name only, so an edit never runs again on a database that
+// applied the file; it changes what a new install runs.
 func checkBase(repo, dir string, options Options) error {
 	command := exec.Command("git", "-C", repo, "ls-tree", "-r", "--name-only", options.Base, "--", "server/migrations")
 	output, err := command.Output()
@@ -71,8 +71,8 @@ func checkBase(repo, dir string, options Options) error {
 	}
 	names := strings.Fields(string(output))
 	sort.Strings(names)
-	var editedUp []string
-	baseUp := make(map[string]string)
+	var edited []string
+	baseChain := make(map[string]*Migration)
 	for _, path := range names {
 		if !strings.HasSuffix(path, ".sql") {
 			continue
@@ -87,42 +87,41 @@ func checkBase(repo, dir string, options Options) error {
 		if err != nil {
 			return fmt.Errorf("read base migration %q: %w", path, err)
 		}
+		up := strings.TrimSuffix(strings.TrimSuffix(name, ".down.sql"), ".up.sql") + ".up.sql"
+		if baseChain[up] == nil {
+			baseChain[up] = &Migration{Name: up}
+		}
 		if strings.HasSuffix(name, ".up.sql") {
-			baseUp[name] = string(baseContents)
+			baseChain[up].SQL = string(baseContents)
+		} else {
+			baseChain[up].Down = string(baseContents)
 		}
-		if bytes.Equal(current, baseContents) {
-			continue
+		if !bytes.Equal(current, baseContents) {
+			edited = append(edited, path)
 		}
-		if strings.HasSuffix(name, ".down.sql") {
-			if sqlLayout(string(current)) != sqlLayout(string(baseContents)) {
-				return fmt.Errorf("base migration %q was modified beyond its layout and comments", path)
-			}
-			continue
-		}
-		editedUp = append(editedUp, path)
 	}
-	if len(editedUp) == 0 {
+	if len(edited) == 0 {
 		return nil
 	}
 	if options.DatabaseURL == "" {
 		return fmt.Errorf("base migration %q was modified: an applied migration may change only when it builds the "+
-			"same schema; prove it with migration-check --base %s --database <PostgreSQL URL>", editedUp[0], options.Base)
+			"same schema; prove it with migration-check --base %s --database <PostgreSQL URL>", edited[0], options.Base)
 	}
-	before := make([]Migration, 0, len(baseUp))
-	for name, sql := range baseUp {
-		before = append(before, Migration{Name: name, SQL: sql})
+	before := make([]Migration, 0, len(baseChain))
+	for _, migration := range baseChain {
+		before = append(before, *migration)
 	}
-	after, err := upMigrations(dir)
+	after, err := chainMigrations(dir)
 	if err != nil {
 		return err
 	}
 	if err := Equivalent(context.Background(), options.DatabaseURL, before, after); err != nil {
-		return fmt.Errorf("edited applied migrations (%s) build a different schema: %w", strings.Join(editedUp, ", "), err)
+		return fmt.Errorf("edited applied migrations (%s) build a different schema: %w", strings.Join(edited, ", "), err)
 	}
 	return nil
 }
 
-func upMigrations(dir string) ([]Migration, error) {
+func chainMigrations(dir string) ([]Migration, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("read migrations: %w", err)
@@ -132,35 +131,15 @@ func upMigrations(dir string) ([]Migration, error) {
 		if !strings.HasSuffix(entry.Name(), ".up.sql") {
 			continue
 		}
-		contents, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		up, err := os.ReadFile(filepath.Join(dir, entry.Name()))
 		if err != nil {
 			return nil, err
 		}
-		chain = append(chain, Migration{Name: entry.Name(), SQL: string(contents)})
+		down, err := os.ReadFile(filepath.Join(dir, strings.TrimSuffix(entry.Name(), ".up.sql")+".down.sql"))
+		if err != nil {
+			return nil, err
+		}
+		chain = append(chain, Migration{Name: entry.Name(), SQL: string(up), Down: string(down)})
 	}
 	return chain, nil
-}
-
-// sqlLayout is the SQL without comments and with every run of spaces and line breaks outside
-// quoted strings made one space, so two files with the same sqlLayout differ only in layout.
-func sqlLayout(sql string) string {
-	code := withoutComments(sql)
-	var layout strings.Builder
-	quoted := false
-	space := false
-	for _, r := range code {
-		if r == '\'' {
-			quoted = !quoted
-		}
-		if !quoted && (r == ' ' || r == '\t' || r == '\n' || r == '\r') {
-			space = true
-			continue
-		}
-		if space && layout.Len() > 0 {
-			layout.WriteByte(' ')
-		}
-		space = false
-		layout.WriteRune(r)
-	}
-	return layout.String()
 }

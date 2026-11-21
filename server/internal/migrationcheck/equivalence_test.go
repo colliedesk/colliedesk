@@ -147,3 +147,23 @@ func writeMigration(t *testing.T, repo, name, contents string) {
 		t.Fatal(err)
 	}
 }
+
+func TestEquivalentRollsBothChainsBack(t *testing.T) {
+	url := equivalenceDatabase(t)
+	before := []Migration{
+		{Name: "1-notes.up.sql", SQL: "CREATE TABLE notes (id int);", Down: "DROP TABLE notes;"},
+		{Name: "2-note-size.up.sql", SQL: "ALTER TABLE notes ADD COLUMN size int;", Down: "ALTER TABLE notes DROP COLUMN size;"},
+	}
+	after := []Migration{
+		before[0],
+		{Name: "2-note-size.up.sql", SQL: before[1].SQL, Down: "-- Removes the size.\nALTER TABLE notes\n    DROP COLUMN size;\n"},
+	}
+	if err := Equivalent(context.Background(), url, before, after); err != nil {
+		t.Fatalf("Equivalent: %v", err)
+	}
+	after[1].Down = "SELECT 1;"
+	err := Equivalent(context.Background(), url, before, after)
+	if err == nil || !strings.Contains(err.Error(), "2-note-size") || !strings.Contains(err.Error(), "size") {
+		t.Fatalf("want the down of 2-note-size refused, got %v", err)
+	}
+}

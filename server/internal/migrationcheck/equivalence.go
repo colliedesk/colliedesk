@@ -11,20 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Migration is one up migration of a chain: its file name and its SQL.
+// Migration is one migration of a chain: its up file's name, its up SQL and its down SQL.
 type Migration struct {
 	Name string
 	SQL  string
+	Down string
 }
 
 // Equivalent applies two chains of up migrations, each into a new schema of the database at
 // databaseURL, and fails at the first migration after which the two schemas differ: tables, columns,
 // constraints, indexes, policies, grants, functions, triggers, views, types, comments and rows.
 //
-// Both chains run in name order, as the server runs them. After every name both chains have, the
+// Both chains run in name order, as the server runs them, and are then rolled back newest first. After every name both chains have, the
 // schemas must match, except that the after chain may already have a function the before chain
 // defines later (a rewrite may move a helper earlier so older migrations can call it). After the
-// last migration they must match exactly. Matching after every step is what lets a database that
+// last migration, and once everything is rolled back, they must match exactly. Matching after every step is what lets a database that
 // applied part of the old chain finish with the new one.
 func Equivalent(ctx context.Context, databaseURL string, before, after []Migration) error {
 	suffix := fmt.Sprint(time.Now().UnixNano())
@@ -75,7 +76,43 @@ func Equivalent(ctx context.Context, databaseURL string, before, after []Migrati
 	if err := compareChains(ctx, beforeChain, afterChain, false); err != nil {
 		return fmt.Errorf("after the last migration the schemas differ:\n%w", err)
 	}
+
+	// Roll both chains back, newest first, as TestMigrationAppliesUpDownAndUpAgain does.
+	beforeDowns := downsByName(before)
+	afterDowns := downsByName(after)
+	for i := len(names) - 1; i >= 0; i-- {
+		name := names[i]
+		beforeDown, inBefore := beforeDowns[name]
+		afterDown, inAfter := afterDowns[name]
+		if inBefore {
+			if err := beforeChain.rollback(ctx, name, beforeDown); err != nil {
+				return fmt.Errorf("before chain: %w", err)
+			}
+		}
+		if inAfter {
+			if err := afterChain.rollback(ctx, name, afterDown); err != nil {
+				return fmt.Errorf("after chain: %w", err)
+			}
+		}
+		if !inBefore || !inAfter {
+			continue
+		}
+		if err := compareChains(ctx, beforeChain, afterChain, true); err != nil {
+			return fmt.Errorf("after rolling back %s the schemas differ:\n%w", name, err)
+		}
+	}
+	if err := compareChains(ctx, beforeChain, afterChain, false); err != nil {
+		return fmt.Errorf("after rolling every migration back the schemas differ:\n%w", err)
+	}
 	return nil
+}
+
+func downsByName(chain []Migration) map[string]string {
+	named := make(map[string]string, len(chain))
+	for _, migration := range chain {
+		named[migration.Name] = migration.Down
+	}
+	return named
 }
 
 func byName(chain []Migration) map[string]string {
@@ -140,6 +177,22 @@ func (c *chainSchema) apply(ctx context.Context, name, sql string) error {
 			return fmt.Errorf("apply %s: %w", name, err)
 		}
 		_, err := tx.Exec(ctx, `INSERT INTO schema_migrations(name) VALUES($1)`, name)
+		return err
+	})
+}
+
+// rollback runs a down migration the way the migration tests do and removes it from the ledger.
+func (c *chainSchema) rollback(ctx context.Context, name, sql string) error {
+	return pgx.BeginFunc(ctx, c.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `SELECT set_config('app.privileged', 'on', true)`); err != nil {
+			return err
+		}
+		if strings.TrimSpace(sql) != "" {
+			if _, err := tx.Exec(ctx, sql); err != nil {
+				return fmt.Errorf("roll back %s: %w", name, err)
+			}
+		}
+		_, err := tx.Exec(ctx, `DELETE FROM schema_migrations WHERE name = $1`, name)
 		return err
 	})
 }
