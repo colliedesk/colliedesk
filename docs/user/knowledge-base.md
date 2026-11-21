@@ -399,7 +399,8 @@ the replacement to put the first one back. An article saved with an image that n
 saved all the same, and the answer names the missing image.
 
 Only uploaded images are shown. An image linked from another site (`![x](https://…)`) is not shown in
-the preview or on the help center; the preview says so. Download it and paste it in instead.
+the visual editor, the preview or on the help center; the editor and the preview say so in its place,
+and the article keeps it. Download it and paste it in instead.
 
 ### Videos
 
