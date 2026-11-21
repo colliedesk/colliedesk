@@ -315,9 +315,11 @@ Results reads the same tables (docs/internals/results.md › Help center).
   day)`, per article; the client address is the one the site already trusts (`Config.Client`, else the
   connection's). The key is random, lives in memory only and changes at each UTC day (`Options.NewKey`,
   injectable with the clock `Options.Now`); the readers of the old key are forgotten with it.
-  At most 200,000 readers are remembered (`maxReaders`); past it a new reader's view still counts, it is
-  only not remembered, so rotating User-Agents cannot grow the memory. The cost is a double count, never
-  a lost view.
+  At most 200,000 readers are remembered (`maxReaders`, `Options.MaxReaders`), so rotating User-Agents
+  cannot grow the memory. A full memory first forgets readers older than 30 minutes (at most once a
+  minute, `pruneFullEvery`); a new reader it still cannot remember is not counted, and the next flush
+  logs one warning with how many views were left out. The cost is an undercount under a flood, never a
+  reader counted once per page.
 - **Never on the page's path.** `PageViewed` only adds to a map under a mutex. `Run` writes every 30 s
   (`FlushEvery`, `COLLIEDESK_E2E_VIEW_FLUSH_MS` in the e2e build only) and once more after
   `server.Shutdown` with 10 s to do it; a failed write puts the counts back for the next one. A server

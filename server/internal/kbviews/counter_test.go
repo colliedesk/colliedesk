@@ -153,3 +153,31 @@ func TestRunFlushesOnEachTickAndOnStop(t *testing.T) {
 		t.Fatalf("views after stop = %d, want 2", got)
 	}
 }
+
+func TestAFullReaderMemoryForgetsExpiredReadersAndNeverCountsAnUnrememberedOne(t *testing.T) {
+	c := &clock{now: time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)}
+	w := &written{}
+	counter := kbviews.New(w, kbviews.Options{Now: c.Now, NewKey: func() []byte { return []byte{1} }, MaxReaders: 2})
+	counter.PageViewed(article("a1", "198.51.100.1", c.now))
+	counter.PageViewed(article("a1", "198.51.100.2", c.now))
+	// The memory is full of readers seen just now: a third reader cannot be remembered, so its views
+	// are not counted at all, rather than once per page.
+	counter.PageViewed(article("a1", "198.51.100.3", c.now))
+	counter.PageViewed(article("a1", "198.51.100.3", c.now))
+	if err := counter.Flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.total("a1", "2026-11-21"); got != 2 {
+		t.Fatalf("views with a full memory = %d, want 2", got)
+	}
+	// Half an hour later the first two have expired and make room, without waiting for a flush.
+	c.now = c.now.Add(31 * time.Minute)
+	counter.PageViewed(article("a1", "198.51.100.3", c.now))
+	counter.PageViewed(article("a1", "198.51.100.3", c.now))
+	if err := counter.Flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.total("a1", "2026-11-21"); got != 3 {
+		t.Fatalf("views after the old readers expired = %d, want 3", got)
+	}
+}

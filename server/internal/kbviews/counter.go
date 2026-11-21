@@ -8,6 +8,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -21,9 +22,13 @@ const Window = 30 * time.Minute
 // FlushEvery is how often the counts are written; a crash loses at most this much.
 const FlushEvery = 30 * time.Second
 
-// maxReaders bounds the readers remembered for Window. Past it a view still counts, it is only not
-// remembered, so rotating user agents cannot grow the memory.
+// maxReaders bounds the readers remembered for Window, so rotating user agents cannot grow the memory.
+// A view by a reader that cannot be remembered is not counted, so it cannot count once per page.
 const maxReaders = 200_000
+
+// pruneFullEvery is how often a full memory looks for expired readers, so a flood of new readers
+// does not scan it on every page.
+const pruneFullEvery = time.Minute
 
 // Count is the views of one article in one locale on one day of the workspace's timezone.
 type Count struct {
@@ -43,6 +48,8 @@ type Options struct {
 	Now func() time.Time
 	// NewKey returns the key the reader hashes of one UTC day are made with; it is kept in memory only.
 	NewKey func() []byte
+	// MaxReaders bounds the readers remembered at once; 0 is maxReaders.
+	MaxReaders int
 }
 
 type reader struct {
@@ -55,24 +62,32 @@ type Counter struct {
 	writer Writer
 	now    func() time.Time
 	newKey func() []byte
+	limit  int
 
 	mu      sync.Mutex
 	keyDay  string
 	key     []byte
 	seen    map[reader]time.Time
 	pending map[Count]int64
+	// prunedAt is when the readers were last pruned; dropped counts the views not counted since the
+	// last flush because the memory was full.
+	prunedAt time.Time
+	dropped  int64
 	// flushing serializes Flush, so a timer flush and the last one never write the same counts twice.
 	flushing sync.Mutex
 }
 
 // New returns a counter writing to writer.
 func New(writer Writer, options Options) *Counter {
-	c := &Counter{writer: writer, now: options.Now, newKey: options.NewKey, seen: map[reader]time.Time{}, pending: map[Count]int64{}}
+	c := &Counter{writer: writer, now: options.Now, newKey: options.NewKey, limit: options.MaxReaders, seen: map[reader]time.Time{}, pending: map[Count]int64{}}
 	if c.now == nil {
 		c.now = func() time.Time { return time.Now().UTC() }
 	}
 	if c.newKey == nil {
 		c.newKey = func() []byte { return []byte(rand.Text()) }
+	}
+	if c.limit <= 0 {
+		c.limit = maxReaders
 	}
 	return c
 }
@@ -91,12 +106,18 @@ func (c *Counter) PageViewed(event pageview.Event) {
 	mac.Write([]byte(event.Client + "\n" + event.UserAgent + "\n" + day.Format(time.DateOnly)))
 	who := reader{article: event.ArticleID}
 	copy(who.hash[:], mac.Sum(nil))
-	if last, ok := c.seen[who]; ok && now.Sub(last) < Window {
+	last, known := c.seen[who]
+	if known && now.Sub(last) < Window {
 		return
 	}
-	if _, ok := c.seen[who]; ok || len(c.seen) < maxReaders {
-		c.seen[who] = now
+	if !known && len(c.seen) >= c.limit && now.Sub(c.prunedAt) >= pruneFullEvery {
+		c.pruneLocked(now)
 	}
+	if !known && len(c.seen) >= c.limit {
+		c.dropped++
+		return
+	}
+	c.seen[who] = now
 	c.pending[Count{WorkspaceID: event.WorkspaceID, ArticleID: event.ArticleID, Locale: event.Locale, Day: day}]++
 }
 
@@ -108,9 +129,9 @@ func (c *Counter) rotate(now time.Time) {
 	}
 }
 
-func (c *Counter) prune(now time.Time) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// pruneLocked forgets the readers older than Window; c.mu is held.
+func (c *Counter) pruneLocked(now time.Time) {
+	c.prunedAt = now
 	for who, last := range c.seen {
 		if now.Sub(last) >= Window {
 			delete(c.seen, who)
@@ -123,11 +144,14 @@ func (c *Counter) prune(now time.Time) {
 func (c *Counter) Flush(ctx context.Context) error {
 	c.flushing.Lock()
 	defer c.flushing.Unlock()
-	c.prune(c.now())
 	c.mu.Lock()
-	taken := c.pending
-	c.pending = map[Count]int64{}
+	c.pruneLocked(c.now())
+	taken, dropped := c.pending, c.dropped
+	c.pending, c.dropped = map[Count]int64{}, 0
 	c.mu.Unlock()
+	if dropped > 0 {
+		slog.Warn("help center article views not counted: too many readers to remember", "views", dropped, "max_readers", c.limit)
+	}
 	if len(taken) == 0 {
 		return nil
 	}
