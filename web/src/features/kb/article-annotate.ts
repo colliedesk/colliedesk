@@ -45,7 +45,14 @@ export function useImageAnnotation(state: AnnotationState): ImageAnnotation {
       const copyName = annotatedName(name, image.type);
       if (fileProblem(new File([image], copyName, { type: image.type })) === 'size') throw new InvalidRequestError(kbMessages.imageTooLarge(copyName));
       const copy = await mediaApi.uploadImage(image, copyName, false);
-      await mediaApi.replace(original, copy.id, article.id);
+      try {
+        await mediaApi.replace(original, copy.id, article.id);
+      } catch (error) {
+        // The copy is in no article, so it goes to the trash, where the library can still restore it. The
+        // refusal is what the dialog shows; a failure to trash the copy would only hide it.
+        await mediaApi.moveToTrash({ ids: [copy.id] }).catch(() => undefined);
+        throw error;
+      }
       await now.current.reload();
       now.current.notice(kbMessages.annotated);
     },
