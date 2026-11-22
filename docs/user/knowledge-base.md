@@ -934,8 +934,8 @@ matches an open gap marks that gap fixed by it at once; the row says it was fixe
 
 ### Draft an article from a gap
 
-With the right to create articles (`kb_articles:create`) and [built-in AI](ai.md) on, an open gap
-has **Draft an article**. The AI reads what readers asked and up to 8 resolved conversations of
+With the right to create articles (`kb_articles:create`), an open gap has **Draft an article**. It
+uses the model of [Reply drafts](ai.md#reply-drafts). The AI reads what readers asked and up to 8 resolved conversations of
 your workspace that match it best, then writes a title and a body. The new article opens in the
 editor as a **draft** in your first collection; it is never published until someone publishes it
 the usual way (`kb_articles:publish`, and the review your workspace asks for). Where the
@@ -943,7 +943,8 @@ conversations do not say something, the draft writes `[check: …]` instead of g
 
 The AI only sees masked text: emails and numbers of 6 digits or more are removed first, as for an
 inbox draft. A draft counts against your workspace's AI like an inbox draft, and is refused with the
-same message when no model is set or this month's AI is used up.
+same message when Reply drafts are off or this month's AI is used up; the button works again
+once that is fixed.
 
 The editor of such a draft shows **Sources**: the conversations it was written from, each linked.
 A team member who may not read conversations sees that it was drafted from them, without the links.

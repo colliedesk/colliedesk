@@ -191,6 +191,13 @@ func TestADraftFromAGapIsNeverPublishedByAnAgentWithoutThePublishPermission(t *t
 	if draft.Status != "draft" || len(draft.conversationIDs()) != 0 {
 		t.Fatalf("draft = %+v, want a draft that names no conversation to a token that cannot read them", draft)
 	}
+	// The draft was written from conversations: an admin reads them, the writer still does not.
+	var asAdmin, asWriter gapDraftView
+	kbCall(t, d.api, http.MethodGet, "/api/v1/kb/articles/"+draft.ID, nil, d.adminA, http.StatusOK, &asAdmin)
+	kbCall(t, d.api, http.MethodGet, "/api/v1/kb/articles/"+draft.ID, nil, writer, http.StatusOK, &asWriter)
+	if len(asAdmin.conversationIDs()) != 8 || asWriter.GapSource == nil || asWriter.GapSource.GapID != d.gap || len(asWriter.conversationIDs()) != 0 {
+		t.Fatalf("admin reads %v, writer reads %+v; want 8 for the admin and the gap without conversations for the writer", asAdmin.conversationIDs(), asWriter.GapSource)
+	}
 	refused(t, d.api, http.MethodPost, "/api/v1/kb/articles/publish", map[string]any{"article_ids": []string{draft.ID}}, writer, "kb_articles:publish")
 	if status := queryString(t, d.pool, `SELECT status FROM kb_articles WHERE id=$1`, draft.ID); status != "draft" {
 		t.Fatalf("status = %s, want draft", status)
