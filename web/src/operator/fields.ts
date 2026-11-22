@@ -72,6 +72,7 @@ export const fields: Record<string, FieldInfo> = {
   'ai.allow_private_base_urls': { label: 'Let workspaces use private AI addresses', kind: 'switch' },
   'mail_image_cache.max_bytes': { label: 'Email image cache', kind: 'bytes' },
   'kb_video.max_bytes': { label: 'Largest knowledge base video', kind: 'bytes', help: 'Your reverse proxy must accept parts of 8 MiB.' },
+  'kb_searches.retention_days': { label: 'Keep help center searches (days)', kind: 'number', help: 'Searches older than this are deleted every day.' },
   'problem_report.workspace': { label: 'Problem reports go to workspace', kind: 'text', help: "A workspace's address (slug); empty sends nothing." },
   'telemetry.enabled': { label: 'Usage report', kind: 'switch' },
   'operator.require_totp': { label: 'Require an authenticator', kind: 'switch', help: 'Can be turned off only on the server, never on the hosted cloud.' },
@@ -117,7 +118,7 @@ export const sections: Record<string, Section[]> = {
     { title: 'Operator sign-in', lead: 'Turning it off is done on the server only.', keys: ['operator.require_totp'] },
   ],
   limits: [
-    { title: 'Limits', lead: 'Sizes the server takes.', keys: ['mail_image_cache.max_bytes', 'kb_video.max_bytes'] },
+    { title: 'Limits', lead: 'Sizes the server takes.', keys: ['mail_image_cache.max_bytes', 'kb_video.max_bytes', 'kb_searches.retention_days'] },
     { title: 'Reports', lead: 'Problem reports and the daily usage report.', keys: ['problem_report.workspace', 'telemetry.enabled'] },
   ],
 };

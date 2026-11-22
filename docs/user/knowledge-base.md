@@ -876,6 +876,30 @@ reader counts once per 30 minutes, and bots, link previews and your team's previ
 [Reports](results.md#help-center) shows every article side by side. An article in the trash keeps its
 numbers.
 
+## Searches
+
+**Knowledge → Searches** (with the right to read articles, `kb_articles:read`) shows what readers
+searched for on your public help centers in the last 7 days, in three lists of up to 20:
+
+- **Searches that found no article**: each is an article to write. **Write an article** opens a new
+  one (with the right to create articles).
+- **Searches whose results nobody opened**: the articles were found but their titles did not match
+  what the reader wanted.
+- **Top searches**: the words searched most, with how many results they found and how many times a
+  reader opened one.
+
+A search shows here as soon as a reader makes it. Words that differ only in case or accents count as
+one. Emails and numbers of 6 digits or more are replaced with "[email removed]" and "[number removed]"
+before a search is kept, and nothing about the reader (address, cookie, email) is stored. Bots, link
+previews and your team's own searches never count. A workspace keeps at most 120 searches a
+minute across its help centers; a search past that is still answered, only not counted. Each
+search keeps the help center it was made on; the lists show every help center together.
+
+Searches are kept for 180 days, then deleted; a server operator can change this with
+`kb_searches.retention_days` ([environment variables](../self-host/environment-variables.md)). The
+[export](export.md) includes them. An AI agent reads the same report with the MCP tool
+`colliedesk_kb_search_report`.
+
 ## Keep an article away from AI
 
 AI features (reply drafts and triage suggestions, once an admin turns them on) find the published

@@ -112,6 +112,8 @@ var keys = []Key{
 
 	{Name: "mail_image_cache.max_bytes", Env: "MAIL_IMAGE_CACHE_BYTES", Default: "1073741824", Hot: true, Group: GroupLimits, Import: "limits"},
 	{Name: "kb_video.max_bytes", Env: "KB_VIDEO_MAX_BYTES", Default: "209715200", Hot: true, Group: GroupLimits, Import: "limits", Guards: []Guard{GuardPreview}},
+	// How long help center searches are kept for the search report; a daily job deletes older ones.
+	{Name: "kb_searches.retention_days", Default: "180", Hot: true, Group: GroupLimits},
 	{Name: "problem_report.workspace", Env: "PROBLEM_REPORT_WORKSPACE", Hot: true, Group: GroupLimits, Import: "problem-report", Guards: []Guard{GuardPreview}},
 	// The environment can still turn the usage report off (DISABLE_TELEMETRY, DO_NOT_TRACK), never on.
 	{Name: "telemetry.enabled", Default: "true", Group: GroupLimits},

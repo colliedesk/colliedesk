@@ -6,6 +6,7 @@ import type { IconName } from './editor/icons';
 import { kbMessages } from './kb-messages';
 import { mediaMessages } from './media-messages';
 import { ReviewsTab } from './reviews-tab';
+import { searchesMessages } from './searches-messages';
 import { templateMessages } from './template-messages';
 import { translationMessages } from './translation-messages';
 import { useHolds } from '../../lib/permissions-context';
@@ -165,7 +166,7 @@ export function KBToast({ text, undo, onUndo, onDismiss }: { text: string; undo?
 }
 
 interface HeadProps {
-  current: 'articles' | 'media' | 'languages' | 'templates' | 'reviews' | 'settings';
+  current: 'articles' | 'media' | 'languages' | 'templates' | 'reviews' | 'searches' | 'settings';
   heading: string;
   // articles counts the live articles, from the collections; the Media tab has no count the API gives.
   articles?: number;
@@ -176,16 +177,20 @@ interface HeadProps {
 export function KBHead({ current, heading, articles, actions }: HeadProps) {
   // A tab opens only for a role that may read what it lists.
   const holds = useHolds();
+  // On a phone the tabs are one row that scrolls sideways (kb.css): the current page's tab is brought into it.
+  const nav = useRef<HTMLElement>(null);
+  useEffect(() => { nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [current]);
   return (
     <header className="kb-head">
       <h1 id="kb-heading" className="kb-page-title">{heading}</h1>
-      <nav className="kb-sections" aria-label={mediaMessages.sections}>
+      <nav className="kb-sections" aria-label={mediaMessages.sections} ref={nav}>
         {holds('kb_articles:read') && <a href="/knowledge" aria-current={current === 'articles' ? 'page' : undefined}>
           {mediaMessages.articlesTab}{articles !== undefined && <span className="kb-count-tag">{articles.toLocaleString('en')}</span>}</a>}
         {holds('kb_media:read') && <a href="/knowledge/media" aria-current={current === 'media' ? 'page' : undefined}>{mediaMessages.mediaTab}</a>}
         {holds('kb_articles:read') && holds('help_center:read') && <a href="/knowledge/languages" aria-current={current === 'languages' ? 'page' : undefined}>{translationMessages.languagesTab}</a>}
         {holds('kb_articles:read') && <a href="/knowledge/templates" aria-current={current === 'templates' ? 'page' : undefined}>{templateMessages.templatesTab}</a>}
         {holds('kb_articles:read') && <ReviewsTab current={current === 'reviews'} />}
+        {holds('kb_articles:read') && <a href="/knowledge/searches" aria-current={current === 'searches' ? 'page' : undefined}>{searchesMessages.searchesTab}</a>}
         {holds('help_center:read') && <a href="/knowledge/settings" aria-current={current === 'settings' ? 'page' : undefined}>{kbMessages.settingsTab}</a>}
       </nav>
       {actions && <div className="kb-head-actions">{actions}</div>}

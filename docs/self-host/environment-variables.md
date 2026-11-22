@@ -98,6 +98,7 @@ again, except `collie config export --include-secrets`. More: [operator console 
 | `KB_VIDEO_MAX_BYTES` | `kb_video.max_bytes` | Limits & telemetry |
 | `PROBLEM_REPORT_WORKSPACE` | `problem_report.workspace` | Limits & telemetry |
 | (new) | `telemetry.enabled` | Limits & telemetry |
+| (new) | `kb_searches.retention_days` (default 180; help center searches older are deleted daily) | Limits & telemetry |
 | (new) | `operator.require_totp` | Operators |
 | (new) | `features.gmail`, `features.microsoft`, `features.autofix`, `features.ai_server`, `features.hosted_mail`, `features.cloud_sign_in`, `features.billing`, `features.signup` (unset: on once the feature's settings are complete; [Features](operator-console.md#features)) | Features |
 | `POLAR_PRODUCT_TEAM_MONTHLY`, `…_TEAM_YEARLY`, `…_FOUNDING`, `…_{SOLO,SMALL,TEAM25}_{MONTHLY,YEARLY}` | the Polar products list (add-only; a product is taken off sale, never deleted) | Billing & retention |

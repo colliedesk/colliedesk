@@ -582,6 +582,13 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 	if !asMarkdown {
 		voted = voteState(request)
 	}
+	if value := request.URL.Query().Get(searchParam); value != "" && voted == "" && !asMarkdown {
+		// Opened from a search: counted, then the canonical address. 302, since the address is not moved.
+		s.openedFromSearch(request, v, value, article.ID)
+		response.Header().Set("Cache-Control", "no-store")
+		http.Redirect(response, request, v.root+ArticlePath(article.Number, article.Slug), http.StatusFound)
+		return
+	}
 	if match[2] != article.Slug || request.URL.RawQuery != "" && voted == "" {
 		kept := ""
 		if voted != "" {
@@ -694,7 +701,9 @@ func (s *Site) search(response http.ResponseWriter, request *http.Request, v vie
 	if utf8.RuneCountInString(query) > maxSearchChars {
 		query = string([]rune(query)[:maxSearchChars])
 	}
-	if fresh(response, request, v.etag) {
+	// A kept search is a new row each time: its page is never answered 304 from an ETag.
+	logged := s.logsSearch(request, query)
+	if !logged && fresh(response, request, v.etag) {
 		return
 	}
 	title := v.text.Search
@@ -727,8 +736,13 @@ func (s *Site) search(response http.ResponseWriter, request *http.Request, v vie
 				return
 			}
 		}
+		opened := ""
+		if logged {
+			opened = s.logSearch(request, v, query, len(articles))
+			response.Header().Set("Cache-Control", loggedSearchCache)
+		}
 		for _, article := range articles {
-			result := searchResult{Title: article.Title, URL: v.root + ArticlePath(article.Number, article.Slug), Excerpt: excerpt(article.Excerpt, excerptChars)}
+			result := searchResult{Title: article.Title, URL: v.root + ArticlePath(article.Number, article.Slug) + opened, Excerpt: excerpt(article.Excerpt, excerptChars)}
 			if collection := t.byID[article.CollectionID]; collection != nil {
 				result.Collection = collection.Name
 			}

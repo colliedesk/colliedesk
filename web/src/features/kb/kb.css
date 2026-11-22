@@ -963,7 +963,12 @@ span.kb-article-open { opacity: 0.35; }
 @media (max-width: 44rem) {
   .kb-articles-page, .media-page, .kb-languages-page, .kb-settings-page { gap: var(--space-4); padding: var(--space-3) var(--space-4) var(--space-6); }
   .kb-head { gap: var(--space-3); }
-  .kb-sections a { min-height: var(--touch); }
+  /* The tabs are one row that scrolls sideways inside the page. The line under them is an inset shadow,
+     so the current tab's underline still covers it without spilling out of the scroll box. */
+  .kb-head .kb-sections { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; border-bottom: 0; box-shadow: inset 0 -1px var(--line); }
+  .kb-head .kb-sections::-webkit-scrollbar { display: none; }
+  .kb-sections a { flex-shrink: 0; min-height: var(--touch); }
+  .kb-head .kb-sections a { margin-bottom: 0; }
   .kb-frame .segmented label, .kb-tabs button { min-height: var(--touch); }
   .kb-list-tools .kb-search { flex: 1 1 100%; }
   .media-toolbar .media-search { flex: 1 1 100%; }

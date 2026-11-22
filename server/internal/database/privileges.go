@@ -104,6 +104,9 @@ const (
 	// workspace, to kb_article_views in one statement; each row names its own workspace and article, a
 	// count whose article is gone is skipped, and nothing leaves the transaction.
 	PrivilegeKBArticleViews Privilege = "kb-article-views"
+	// PrivilegeKBSearchRetention deletes, in every workspace, the help center searches older than the
+	// server's kb_searches.retention_days with one DELETE; nothing leaves the transaction.
+	PrivilegeKBSearchRetention Privilege = "kb-search-retention"
 	// PrivilegeHelpCenterAnalytics lists the workspaces that send their help center page views to GA4 or
 	// Plausible, and records in one statement, for every workspace, when a page view was last accepted
 	// or refused. Only workspace ids leave the transaction; each target and its sealed API secret are
