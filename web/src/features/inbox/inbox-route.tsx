@@ -113,6 +113,13 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const page = paging.key === filterKey ? paging.page : 1;
   const setPage = (next: number) => setPaging({ key: filterKey, page: next });
   const [selectedId, setSelectedId] = useState<string>();
+  // A row picked in the list shows at once, before the address follows. Once the address names another
+  // conversation (the pick landed, a search palette row, the browser's Back or Forward), that one is on screen.
+  const [address, setAddress] = useState(params.conversationId);
+  if (address !== params.conversationId) {
+    setAddress(params.conversationId);
+    if (params.conversationId) setSelectedId(params.conversationId);
+  }
   const query = useMemo(() => apiQuery(filters, page), [filters, page]);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   // Opening a customer or a new conversation then waits for no download; a failure shows where it is used.
@@ -144,10 +151,10 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
   const reportedOpen = useRef<string | undefined>(undefined);
   useEffect(() => {
     const id = params.conversationId;
-    if (!id || selectedId === id || reportedOpen.current === id) return;
+    if (!id || reportedOpen.current === id) return;
     reportedOpen.current = id;
     track('conversation_opened', { source: 'link' });
-  }, [params.conversationId, selectedId]);
+  }, [params.conversationId]);
   const filtered = !isDefaultQuery(filters);
   // An empty Open view is either a new workspace or one that is caught up. The answer's status counts tell which; an
   // answer without them asks for one row of All.
