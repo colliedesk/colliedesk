@@ -66,6 +66,8 @@ select.kb-filter-select { width: calc(100% - 2 * var(--space-2)); margin: 0 var(
 .kb-cols-head, .kb-article-item { display: grid; grid-template-columns: var(--kb-grid, minmax(0, 1fr) 7.5rem 8rem 8rem 8rem 2.5rem); align-items: center; gap: var(--space-4); }
 .kb-cols-head { border-bottom: 1px solid var(--line); padding: var(--space-2) 0 var(--space-2) var(--space-4); color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
 .kb-list-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+/* The head keeps the same scroll-bar gutter as the rows below it, so its labels sit over their cells. */
+.kb-cols-head { overflow: hidden; scrollbar-gutter: stable; }
 .kb-list-note { padding: var(--space-4); }
 .kb-article-list { display: grid; margin: 0; padding: 0; list-style: none; }
 .kb-article-list[aria-busy="true"] { opacity: 0.6; transition: opacity var(--dur) var(--ease); }
@@ -718,6 +720,9 @@ span.kb-article-open { opacity: 0.35; }
    shows a translation beside its original. */
 .kb-languages-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: grid; align-content: start; gap: var(--space-4); }
 .kb-languages, .kb-language-articles { display: grid; gap: var(--space-3); max-width: 56rem; }
+/* A language's articles: the title, the status and the way to the translation (the article list's own columns
+   come from gridOf; this list has none to choose). */
+.kb-language-articles { --kb-grid: minmax(0, 1fr) 7.5rem 8rem; --kb-span: 3; }
 .kb-language-primary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
 .kb-language-list { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
 .kb-language-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(10rem, 1.2fr) auto auto; align-items: center; gap: var(--space-3);
@@ -827,9 +832,9 @@ span.kb-article-open { opacity: 0.35; }
 .kb-article-when { font-size: var(--fs-small); }
 .kb-article-open { color: var(--text-3); }
 .kb-article-open svg, .kb-order svg { width: 14px; height: 14px; }
+/* The tracks come from the columns the person chose (--kb-grid, set by gridOf in list-columns.tsx); a fixed
+   grid here would leave the rows and the head on different tracks. */
 @media (min-width: 44.01rem) {
-  .kb-cols-head, .kb-article-item { grid-template-columns: minmax(0, 1fr) 7.5rem 8rem 2.5rem; }
-  .kb-list[data-order="true"] :is(.kb-cols-head, .kb-article-item) { grid-template-columns: minmax(0, 1fr) 7.5rem 8rem 2.5rem 4.5rem; }
   .kb-article-row { padding: var(--space-2) 0 var(--space-2) var(--space-4); }
   /* One card for the column head and the rows: the head rounds the top, the scroller the bottom. */
   .kb-cols-head { border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: var(--shadow-1); }

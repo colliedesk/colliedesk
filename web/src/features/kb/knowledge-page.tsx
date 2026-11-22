@@ -20,7 +20,7 @@ import { VisibilityFilter } from './visibility-badge';
 import { kbMessages } from './kb-messages';
 import { articleFiltersOf, collectionHref, filtersBeyondCollection } from './knowledge-search';
 import type { KnowledgeSearch } from './knowledge-search';
-import { ListColumns, gridOf } from './list-columns';
+import { ListColumns, gridOf, useFittingColumns } from './list-columns';
 import { ListFilters } from './list-filters';
 import { listMessages } from './list-messages';
 import { NewArticleMenu } from './new-article-menu';
@@ -171,6 +171,9 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const creates = holds('kb_articles:create');
   const bulk = useKBBulk(filter, refresh);
   const selects = holds('kb_articles:update');
+  // The columns that fit beside the title; the last chosen ones give way on a narrow list.
+  const listBox = useRef<HTMLDivElement>(null);
+  const shown = useFittingColumns(listBox, columns, { ordered: Boolean(ordered), selects });
   const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter, enabled: holds('help_center:read') });
   const publicNow = center.data?.enabled;
   const newCollection = () => { setProblem(undefined); setForm(form === 'new' ? null : 'new'); };
@@ -199,7 +202,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
           {noCollections && <p className="muted-copy">{creates ? <>{kbMessages.noCollections} <HelpTip label={kbMessages.collections} text={kbMessages.noCollectionsTip} /></> : kbMessages.noCollectionsYet}</p>}
           {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} hrefTo={(collection?: KBCollection) => collectionHref(search, collection?.id)} /></div>}
         </nav>
-        <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined} data-select={selects ? 'true' : undefined} style={gridOf(columns, Boolean(ordered))}>
+        <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined} data-select={selects ? 'true' : undefined} style={gridOf(shown, Boolean(ordered))}>
           {selected && <CollectionHead node={selected} tree={tree} form={form} confirming={confirming} problem={problem}
             onForm={(next) => { setProblem(undefined); setConfirming(false); setForm(next); }} onSave={save}
             onConfirm={setConfirming} onDelete={() => void remove(selected.collection)}
@@ -230,15 +233,15 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             </fieldset>
             <VisibilityFilter value={search.visibility} onChange={(visibility) => setSearch({ visibility })} />
             <ListFilters search={search} onChange={(change) => setSearch(change)} />
-            <ListColumns columns={columns} isDefault={me.data?.kb_list_columns.default ?? true} />
+            <ListColumns columns={columns} isDefault={me.data?.kb_list_columns.default ?? true} hidden={columns.length - shown.length} />
             <KBSavedViews search={search} timezone={timezone} onApply={(next) => void navigate({ to: '/knowledge', search: next, replace: false })} />
             <a className="button-link kb-export" href={kbApi.exportHref(filter)} download data-tip={listMessages.exportTip}>{listMessages.exportCsv}</a>
           </div>
           {(bulk.count > 0 || bulk.all) && <KBBulkBar count={bulk.count} all={bulk.all} nodes={nodes} meId={me.data?.agent.id} busy={bulk.busy}
             onSelectAll={Object.keys(filter).length > 0 ? bulk.selectAll : undefined} onApply={(change) => void bulk.run(change)} onClear={bulk.clear} />}
           <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span>
-            {columns.map((column, index) => <span key={column} data-extra={index > 0 ? 'true' : undefined}>{columnHead(column)}</span>)}<span />{ordered && <span />}</div>
-          <div className="kb-list-scroll">
+            {shown.map((column, index) => <span key={column} data-extra={index > 0 ? 'true' : undefined}>{columnHead(column)}</span>)}<span />{ordered && <span />}</div>
+          <div className="kb-list-scroll" ref={listBox}>
             {articles.isError && <p role="alert" className="error-copy kb-list-note">{kbMessages.listFailed}{' '}
               <button type="button" className="link-action" onClick={() => void articles.refetch()}>{kbMessages.retry}</button></p>}
             {sortedBy && <p className="muted-copy kb-list-note">{kbMessages.sortedBy[sortedBy]} {kbMessages.orderByHand}</p>}
@@ -246,7 +249,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             {articles.isSuccess && items.length === 0 && <p className="empty-copy kb-list-note">{search.q ? kbMessages.noMatches : kbMessages.noArticles}</p>}
             {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage}
               onPointerOver={preloadEditor} onFocus={preloadEditor}>
-              {items.map((article) => <ArticleRow key={article.id} article={article} columns={columns} timezone={timezone} isPublic={publicNow}
+              {items.map((article) => <ArticleRow key={article.id} article={article} columns={shown} timezone={timezone} isPublic={publicNow}
                 collection={names.get(article.collection_id)}
                 select={selects ? { checked: bulk.all || bulk.ids.includes(article.id), onChange: () => bulk.toggle(article.id, articleIds) } : undefined}
                 order={ordered && <OrderButtons ids={articleIds} id={article.id} name={article.title} more={articles.hasNextPage} busy={moves.moving} onAnnounce={moves.announce}

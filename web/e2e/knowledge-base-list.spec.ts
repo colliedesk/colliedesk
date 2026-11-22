@@ -2,6 +2,10 @@ import { expect, test } from '@playwright/test';
 import { servers } from './support/cli';
 import { createWorkspaceWithSlug } from './support/workspace';
 
+// At 1440 px the list is wide enough for the Tags column beside a title of 12rem; at 1280 only the first two of
+// the default columns fit, and the list leaves Tags out.
+test.use({ viewport: { width: 1440, height: 900 } });
+
 test('knowledge base list: tags set in the editor, a hidden column stays hidden after a reload, and a saved view opens its filters again', { tag: '@journey' }, async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   const { url } = createWorkspaceWithSlug(`KB List ${suffix}`, `admin-${suffix}@example.com`);
