@@ -543,7 +543,7 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		return
 	}
 	// A query names no other article: the address without it is the canonical one, checked below.
-	votes, err := s.config.Store.KBArticleVotesVersion(request.Context(), v.site.WorkspaceID, number)
+	votes, err := s.config.Store.KBArticleVotesVersion(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, number)
 	if err != nil {
 		s.writeError(response, err)
 		return
