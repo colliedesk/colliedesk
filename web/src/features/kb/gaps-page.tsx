@@ -1,7 +1,9 @@
 import { useId, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../api/client';
+import { useNavigate } from '@tanstack/react-router';
+import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
 import type { RequestBody } from '../../api/client';
+import { useCreateAction } from '../../api/use-create';
 import { formatDate } from '../../lib/format-date';
 import { useHolds } from '../../lib/permissions-context';
 import { messages } from '../../messages';
@@ -21,6 +23,7 @@ interface Toast { text: string; undo?: { gap: KBGap; body: Change } }
 // first. A row opens its signals; a gap is linked to the article that answers it, or dismissed.
 export function GapsRoute() {
   const holds = useHolds();
+  const navigate = useNavigate();
   const id = useId();
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -41,6 +44,17 @@ export function GapsRoute() {
     fix: (article: { id: string; title: string }) => update.mutate({ gap, body: { fixed_by_article_id: article.id }, toast: () => ({ text: g.fixed(gap.title, article.title), undo: { gap, body: { status: 'open' } } }) }),
     dismiss: () => update.mutate({ gap, body: { status: 'dismissed' }, toast: () => ({ text: g.dismissed(gap.title), undo: { gap, body: { status: 'open' } } }) }),
     reopen: () => update.mutate({ gap, body: { status: 'open' }, toast: () => ({ text: g.reopened(gap.title) }) }),
+  } : undefined;
+  // One key per press of a gap: a double press writes one draft; a press after a refusal asks again.
+  const drafting = useCreateAction((gapId: string, key: string) => gapsApi.draft(gapId, key));
+  const draft = (gap: KBGap) => holds('kb_articles:create') ? {
+    busy: drafting.pending,
+    run: () => {
+      drafting.run(gap.id).then(
+        (article) => navigate({ to: '/knowledge/articles/$articleId', params: { articleId: article.id } }),
+        (error: unknown) => setToast({ text: error instanceof InvalidRequestError || error instanceof PlanLimitError ? error.message : g.draftFailed }),
+      );
+    },
   } : undefined;
   const items = gaps.data?.items;
   return (
@@ -72,7 +86,7 @@ export function GapsRoute() {
                   onClick={() => setOpened(opened === gap.id ? undefined : gap.id)}>{gap.title}</button>
                 <small className="muted-copy">{g.stats(gap.recent_askers, gap.askers, formatDate(gap.last_seen, timeZone))}</small>
                 <ul className="kb-gap-kinds" aria-label={g.kindsLabel}>{gap.kinds.map((value) => <li key={value}>{g.kinds[value]}</li>)}</ul>
-                {opened === gap.id && <GapSignals gap={gap} timeZone={timeZone} change={change(gap)} />}
+                {opened === gap.id && <GapSignals gap={gap} timeZone={timeZone} change={change(gap)} draft={draft(gap)} />}
               </div>
             </li>
           ))}</ul>}

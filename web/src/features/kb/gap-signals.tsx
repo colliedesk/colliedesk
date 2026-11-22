@@ -20,11 +20,13 @@ interface GapSignalsProps {
     busy: boolean;
     canManage: boolean;
   };
+  // draft is offered to a role that may create articles: the AI writes the missing article as a draft.
+  draft?: { run: () => void; busy: boolean };
 }
 
 // GapSignals is an opened gap: what each reader searched, wrote or asked, newest first, and what to do
 // with it. Nothing tells the askers apart.
-export function GapSignals({ gap, timeZone, change }: GapSignalsProps) {
+export function GapSignals({ gap, timeZone, change, draft }: GapSignalsProps) {
   const [picking, setPicking] = useState(false);
   const detail = useQuery({ queryKey: ['kb-gaps', 'detail', gap.id], queryFn: () => gapsApi.get(gap.id) });
   const data = detail.data;
@@ -45,12 +47,14 @@ export function GapSignals({ gap, timeZone, change }: GapSignalsProps) {
       </>}
       {gap.fixed_by_article && <p className="muted-copy">{g.fixedBy} <a href={`/knowledge/articles/${gap.fixed_by_article.id}`}>{gap.fixed_by_article.title}</a>
         {gap.fixed_automatically && <> {g.fixedAutomatically}</>}</p>}
-      {change && <div className="kb-template-actions">
-        {gap.status === 'open' && <>
+      {(change || draft) && <div className="kb-template-actions">
+        {gap.status === 'open' && draft && <button type="button" className="primary-action" title={g.draftTitle} disabled={draft.busy}
+          onClick={draft.run}>{draft.busy ? g.drafting : g.draft}</button>}
+        {gap.status === 'open' && change && <>
           <button type="button" disabled={change.busy} onClick={() => setPicking(true)}>{g.link}</button>
           <button type="button" disabled={change.busy} onClick={change.dismiss}>{g.dismiss}</button>
         </>}
-        {gap.status !== 'open' && <button type="button" disabled={change.busy} onClick={change.reopen}>{g.reopen}</button>}
+        {gap.status !== 'open' && change && <button type="button" disabled={change.busy} onClick={change.reopen}>{g.reopen}</button>}
       </div>}
       {picking && change && <ArticleLinkPicker canManage={change.canManage}
         onPick={(article) => { setPicking(false); change.fix(article); }}

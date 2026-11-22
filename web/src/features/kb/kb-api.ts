@@ -77,6 +77,12 @@ const draftSchema = z.object({
   collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
   updated_at: z.string().datetime(), updated_by: personSchema.nullable(), tags: z.array(z.string()),
 }) satisfies z.ZodType<Generated<'KBArticleDraft'>>;
+// The knowledge gap an AI draft was written from, and the resolved conversations it read (none for a member
+// who may not read conversations).
+const gapSourceSchema = z.object({
+  gap_id: z.string().uuid(),
+  conversations: z.array(z.object({ conversation_id: z.string().uuid(), display_ref: z.string(), subject: z.string() })),
+}) satisfies z.ZodType<Generated<'KBArticleGapSource'>>;
 export const kbArticleSchema = z.object({
   ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
   ai_exclusion: z.object({ at: z.string().datetime(), by: personSchema.nullable() }).nullable(),
@@ -86,6 +92,7 @@ export const kbArticleSchema = z.object({
   draft: draftSchema.nullable(),
   // The collection that keeps the article more restricted than its own visibility; null when its own decides.
   visibility_from: z.object({ id: z.string().uuid(), name: z.string(), visibility: visibilitySchema }).nullable(),
+  gap_source: gapSourceSchema.optional(),
 }) satisfies z.ZodType<Generated<'KBArticle'>>;
 // The unpublished changes of a published translation: what publishing them puts live.
 const translationDraftSchema = z.object({
@@ -152,6 +159,7 @@ export type KBCollection = z.infer<typeof kbCollectionSchema>;
 export type TrashedKBCollection = z.infer<typeof trashedCollectionSchema>;
 export type KBArticleSummary = z.infer<typeof summarySchema>;
 export type KBArticle = z.infer<typeof kbArticleSchema>;
+export type KBArticleGapSource = z.infer<typeof gapSourceSchema>;
 export type KBArticleDraft = z.infer<typeof draftSchema>;
 export type KBAttachment = z.infer<typeof attachmentSchema>;
 export type TrashedKBArticle = z.infer<typeof trashedArticleSchema>;

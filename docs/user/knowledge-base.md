@@ -932,9 +932,27 @@ each reader searched, wrote or asked, newest first. With the right to edit artic
 **Undo** in the message after a change opens the gap again. Publishing an article whose title
 matches an open gap marks that gap fixed by it at once; the row says it was fixed automatically.
 
+### Draft an article from a gap
+
+With the right to create articles (`kb_articles:create`) and [built-in AI](ai.md) on, an open gap
+has **Draft an article**. The AI reads what readers asked and up to 8 resolved conversations of
+your workspace that match it best, then writes a title and a body. The new article opens in the
+editor as a **draft** in your first collection; it is never published until someone publishes it
+the usual way (`kb_articles:publish`, and the review your workspace asks for). Where the
+conversations do not say something, the draft writes `[check: …]` instead of guessing.
+
+The AI only sees masked text: emails and numbers of 6 digits or more are removed first, as for an
+inbox draft. A draft counts against your workspace's AI like an inbox draft, and is refused with the
+same message when no model is set or this month's AI is used up.
+
+The editor of such a draft shows **Sources**: the conversations it was written from, each linked.
+A team member who may not read conversations sees that it was drafted from them, without the links.
+The gap stays open until you link it to the article or publish an article with a matching title.
+
 A deleted help chat takes its signals with it. Gaps are not in the [export](export.md) yet; the
 searches, votes and chats they come from are. An AI agent works the same list with the MCP tools
-`colliedesk_kb_gaps_list`, `colliedesk_kb_gap_get` and `colliedesk_kb_gap_update`.
+`colliedesk_kb_gaps_list`, `colliedesk_kb_gap_get` and `colliedesk_kb_gap_update`, and drafts an
+article with `colliedesk_kb_gap_draft`.
 
 ## Keep an article away from AI
 

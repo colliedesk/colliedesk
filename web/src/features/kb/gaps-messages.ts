@@ -38,4 +38,13 @@ export const gapsMessages = {
   loadFailed: 'The gaps could not be loaded.',
   signalsFailed: 'What readers asked could not be loaded.',
   saveFailed: 'The gap could not be changed. Try again.',
+  draft: 'Draft an article',
+  drafting: 'Drafting…',
+  draftTitle: 'The AI writes a draft from what readers asked and the resolved conversations that match it, usually in 10 to 20 seconds. It is never published until you publish it.',
+  draftFailed: 'The article could not be drafted. Try again in a moment.',
+  sources: 'Sources',
+  sourcesLead: 'Drafted by AI from a knowledge gap and these resolved conversations. Check it before publishing.',
+  sourcesHidden: 'Drafted by AI from a knowledge gap and resolved conversations you may not open.',
+  sourcesNone: 'Drafted by AI from what readers asked in a knowledge gap; no resolved conversation matched it. Check it before publishing.',
+  sourcesLabel: 'Conversations it was written from',
 };
