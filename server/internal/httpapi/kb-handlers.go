@@ -63,6 +63,13 @@ func writeKBError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "not_found", "The template was not found. GET /api/v1/kb/templates lists them.")
 	case errors.Is(err, domain.ErrKBLanguageNotListed):
 		writeError(response, http.StatusBadRequest, "language_not_listed", "This language is not one of the help center's languages (or it is the primary language, the article's own). Add it with PUT /api/v1/help-center/languages first.")
+	case errors.Is(err, domain.ErrKBBulkOperationNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "The bulk action was not found: send the operation id a bulk action answered.")
+	case errors.Is(err, domain.ErrKBBulkUndone):
+		writeError(response, http.StatusConflict, "already_undone", capitalize(err.Error())+".")
+	case errors.Is(err, domain.ErrKBBulkExpired):
+		writeError(response, http.StatusConflict, "undo_expired", capitalize(err.Error())+
+			". Change the articles back one by one; each one's history keeps the version before the bulk action.")
 	default:
 		if !writeKBReviewError(response, err) {
 			writeStoreError(response, err)
@@ -163,6 +170,7 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 		ParentID    json.RawMessage `json:"parent_id"`
 		Template    json.RawMessage `json:"default_template_id"`
 		Approval    *string         `json:"require_approval"`
+		Order       *string         `json:"article_order"`
 		Visibility  *string         `json:"visibility"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil {
@@ -172,7 +180,7 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 	// A collection's name, slug and place are the help center's navigation, and showing it to more
 	// people publishes what is in it; keeping it from more people is an edit.
 	onlyRestricts := input.Name == nil && input.Slug == nil && input.Description == nil && input.Position == nil &&
-		input.ParentID == nil && input.Template == nil && input.Approval == nil && input.Visibility != nil
+		input.ParentID == nil && input.Template == nil && input.Approval == nil && input.Order == nil && input.Visibility != nil
 	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, func() (bool, error) {
 		if !onlyRestricts {
 			return true, nil
@@ -185,7 +193,7 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 	if input.Approval != nil && a.refuseUnlessHeld(response, request, principal(request), auth.PermHelpCenterUpdate, nil) {
 		return
 	}
-	change := store.KBCollectionChange{Name: input.Name, Slug: input.Slug, Description: input.Description, Position: input.Position, RequireApproval: input.Approval, Visibility: input.Visibility}
+	change := store.KBCollectionChange{Name: input.Name, Slug: input.Slug, Description: input.Description, Position: input.Position, RequireApproval: input.Approval, ArticleOrder: input.Order, Visibility: input.Visibility}
 	if input.ParentID != nil {
 		change.MoveParent = true
 		if string(input.ParentID) != "null" {

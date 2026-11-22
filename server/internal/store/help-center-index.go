@@ -9,13 +9,13 @@ import (
 )
 
 // HelpCenterIndex returns every published article of the workspace outside the trash, without its
-// text, in the help center's order (collection, then position and title): what sitemap.xml and
+// text, in the help center's order (collection, then its article order): what sitemap.xml and
 // llms.txt list, each with the files its own page lists. The article cap bounds it to
 // domain.MaxKBArticles rows.
 func (s *Store) HelpCenterIndex(ctx context.Context, workspaceID string) ([]domain.PublicKBArticle, error) {
 	articles, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
-		rows, err := tx.Query(ctx, `SELECT `+publicKBArticleColumns+` FROM kb_articles a WHERE `+publicKBArticle+`
-			ORDER BY a.collection_id NULLS LAST, a.position, lower(a.title), a.number`, workspaceID)
+		rows, err := tx.Query(ctx, `SELECT `+publicKBArticleColumns+` FROM kb_articles a`+kbArticleCollection+` WHERE `+publicKBArticle+`
+			ORDER BY a.collection_id NULLS LAST, `+kbArticlesBy(kbArticleMode, `a.position`, `a.title`), workspaceID)
 		if err != nil {
 			return nil, err
 		}
