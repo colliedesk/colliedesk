@@ -16,7 +16,7 @@ import (
 // list of one of its published translations in a language help center $H shows.
 const listedByShownArticle = publicKBArticle + ` AND (l.locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
-		WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=l.locale AND ` + publicKBTranslation + `))`
+		WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=l.locale AND ` + shownArticleKBTranslation + `))`
 
 // HelpCenterFile returns a file help center helpCenterID ("" the primary one) may hand out: a
 // published article placed on it, or a published translation of one in a language it shows, lists it,
@@ -26,7 +26,7 @@ func (s *Store) HelpCenterFile(ctx context.Context, workspaceID, helpCenterID, i
 	if !savedReplyID.MatchString(id) || id != strings.ToLower(id) {
 		return StoredKBMedia{}, domain.ErrKBMediaNotFound
 	}
-	file, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBMedia, error) {
+	file, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) (StoredKBMedia, error) {
 		query, args := onHelpCenter(helpCenterID, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
 			AND m.kind='file' AND m.deleted_at IS NULL AND EXISTS (
 			SELECT 1 FROM kb_article_attachments l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id

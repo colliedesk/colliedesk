@@ -207,13 +207,15 @@ func TestPrivilegedReadOnlySnapshotSeesEveryWorkspaceAndRefusesWrites(t *testing
 // securityGaps lists every table of the current schema whose row-level security differs from the
 // one shape each kind of table gets (docs/internals/workspace-isolation.md): a workspace table enables
 // and forces it and carries exactly the workspace_isolation policy for the app role and the
-// privileged_access policy for the owner; a server-wide table carries only privileged_access; neither
+// privileged_access policy for the owner, and a table the public help center reads (helpCenterPolicies)
+// also gives workspace_isolation to the reader and limits it with help_center_isolation; a
+// server-wide table carries only privileged_access; neither
 // a server-wide table nor a table without row-level security is reachable by the app role. Policies
 // are compared as PostgreSQL prints them, so a policy that only mentions app.workspace_id, or one
 // more permissive policy on the table, is a gap.
 func securityGaps(t *testing.T, pool *pgxpool.Pool) (checked, gaps []string) {
 	t.Helper()
-	appRole := policyRole(t, pool)
+	appRole, reader := policyRole(t, pool), readerRole(t, pool)
 	var owner string
 	if err := pool.QueryRow(context.Background(), `SELECT current_user`).Scan(&owner); err != nil {
 		t.Fatal(err)
@@ -256,6 +258,10 @@ func securityGaps(t *testing.T, pool *pgxpool.Pool) (checked, gaps []string) {
 				key = "id"
 			}
 			want = []string{privilegedAccessPolicy(owner), workspaceIsolationPolicy(appRole, key)}
+			if scope, ok := helpCenterPolicies[name]; ok {
+				want = []string{helpCenterIsolationPolicy(reader, scope), privilegedAccessPolicy(owner),
+					workspaceIsolationPolicy(appRole+","+reader, key)}
+			}
 		}
 		if !enabled || !forced || !slices.Equal(policies, want) {
 			gaps = append(gaps, fmt.Sprintf("%s (enabled=%v forced=%v policies=%q, want %q)", name, enabled, forced, policies, want))
@@ -514,7 +520,7 @@ func policyRole(t *testing.T, pool *pgxpool.Pool) string {
 }
 
 // otherDatabase creates a second database on the same cluster, the shape of a second install. The
-// database and the app role its migration created are dropped when the test ends.
+// database and the app and reader roles its migration created are dropped when the test ends.
 func otherDatabase(t *testing.T, pool *pgxpool.Pool, name string) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
@@ -530,15 +536,19 @@ func otherDatabase(t *testing.T, pool *pgxpool.Pool, name string) *pgxpool.Pool 
 	}
 	t.Cleanup(func() {
 		ctx := context.Background()
-		var role string
+		var role, reader string
 		_ = other.QueryRow(ctx, `SELECT roles[1]::text FROM pg_policies WHERE tablename='workspaces' AND policyname='workspace_isolation'`).Scan(&role)
+		_ = other.QueryRow(ctx, `SELECT roles[1]::text FROM pg_policies WHERE tablename='kb_articles' AND policyname='help_center_isolation'`).Scan(&reader)
 		other.Close()
 		if _, err := pool.Exec(ctx, `DROP DATABASE `+pgx.Identifier{name}.Sanitize()+` WITH (FORCE)`); err != nil {
 			t.Errorf("drop %s: %v", name, err)
 		}
-		if role != "" {
+		for _, role := range []string{reader, role} {
+			if role == "" {
+				continue
+			}
 			if _, err := pool.Exec(ctx, `DROP ROLE `+pgx.Identifier{role}.Sanitize()); err != nil {
-				t.Errorf("drop app role %s: %v", role, err)
+				t.Errorf("drop role %s: %v", role, err)
 			}
 		}
 	})
@@ -563,13 +573,18 @@ func TestLongNonASCIIDatabaseNamesGetDistinctAppRolesWithinSixtyThreeBytes(t *te
 			t.Fatalf("app role %q is %d bytes", role, len(role))
 		}
 		roles[role] = true
+		reader, err := New(other).ReaderRole(ctx)
+		if err != nil || len(reader) > 63 || !strings.HasPrefix(reader, "colliedesk_reader_") {
+			t.Fatalf("reader role %q is %d bytes (%v)", reader, len(reader), err)
+		}
+		roles[reader] = true
 		ids := seedTwoWorkspaces(t, other)
 		if got := subjects(t, New(other), ids.a); !slices.Equal(got, []string{"alpha ticket"}) {
 			t.Fatalf("scoped query in %s: %v", name, got)
 		}
 	}
-	if len(roles) != 2 {
-		t.Fatalf("two databases share the app role %v", roles)
+	if len(roles) != 4 {
+		t.Fatalf("two databases share the app or reader role %v", roles)
 	}
 }
 

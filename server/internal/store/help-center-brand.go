@@ -18,7 +18,7 @@ func (s *Store) HelpCenterBrandImage(ctx context.Context, workspaceID, helpCente
 	if !savedReplyID.MatchString(id) || id != strings.ToLower(id) {
 		return StoredKBImage{}, domain.ErrKBImageNotFound
 	}
-	image, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBImage, error) {
+	image, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) (StoredKBImage, error) {
 		query, args := onHelpCenter(helpCenterID, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
 			AND m.kind='image' AND m.deleted_at IS NULL AND EXISTS(SELECT 1 FROM help_centers h
 				WHERE h.workspace_id=m.workspace_id AND h.id=$H AND (h.logo_media_id=m.id OR h.favicon_media_id=m.id))`, workspaceID, id)

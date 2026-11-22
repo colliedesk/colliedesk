@@ -9,20 +9,22 @@ import (
 )
 
 // tableSecurityHelpers defines secure_workspace_table, secure_server_table and limit_app_role, and
-// rowLevelSecurity sets row-level security up with them: the two spell it out by hand. Every other up
-// migration calls the helpers. A down migration up to oldDownMigrations may still undo row-level
+// rowLevelSecurity sets row-level security up with them; helpCenterRowSecurity defines
+// secure_help_center_table and the help center reader role. The three spell it out by hand. Every
+// other up migration calls the helpers. A down migration up to oldDownMigrations may still undo row-level
 // security by hand, as it did when it was applied.
 const (
-	tableSecurityHelpers = "20261014135949-table-security-helpers"
-	rowLevelSecurity     = "20261014135950-workspace-row-level-security"
-	oldDownMigrations    = "20261121132937-workspace-table-security"
+	tableSecurityHelpers  = "20261014135949-table-security-helpers"
+	rowLevelSecurity      = "20261014135950-workspace-row-level-security"
+	oldDownMigrations     = "20261121132937-workspace-table-security"
+	helpCenterRowSecurity = "20261122081247-help-center-row-security"
 )
 
 var handWrittenTableSecurity = regexp.MustCompile(
 	`(?i)(create|alter|drop)\s+policy|row\s+level\s+security|pg_policies|app\.privileged`)
 
 func checkTableSecurity(dir, stem string, files map[string]string) error {
-	if stem == tableSecurityHelpers || stem == rowLevelSecurity {
+	if stem == tableSecurityHelpers || stem == rowLevelSecurity || stem == helpCenterRowSecurity {
 		return nil
 	}
 	for direction, name := range files {
@@ -36,7 +38,7 @@ func checkTableSecurity(dir, stem string, files map[string]string) error {
 		code := withoutComments(string(contents))
 		if match := handWrittenTableSecurity.FindString(code); match != "" {
 			return fmt.Errorf("migration %q writes %q by hand: use SELECT secure_workspace_table('t'), "+
-				"secure_server_table('t') or limit_app_role('t', ...) (docs/internals/workspace-isolation.md)",
+				"secure_server_table('t'), secure_help_center_table('t', ...) or limit_app_role('t', ...) (docs/internals/workspace-isolation.md)",
 				name, strings.ToUpper(match))
 		}
 	}

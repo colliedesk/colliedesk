@@ -77,10 +77,11 @@ func bumpKBVotes(ctx context.Context, tx pgx.Tx, workspaceID, articleID string) 
 	return nil
 }
 
-// KBArticleVotesVersion is the votes version of the article number of workspaceID, part of its page's
-// ETag: 0 before its first vote, and for no such article.
-func (s *Store) KBArticleVotesVersion(ctx context.Context, workspaceID string, number int64) (int64, error) {
-	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (int64, error) {
+// KBArticleVotesVersion is the votes version of the article number of workspaceID on help center
+// helpCenterID ("" the primary one), part of its page's ETag: 0 before its first vote, and for an
+// article that help center does not show.
+func (s *Store) KBArticleVotesVersion(ctx context.Context, workspaceID, helpCenterID string, number int64) (int64, error) {
+	return helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, _ string) (int64, error) {
 		var version int64
 		err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT v.version FROM kb_article_vote_versions v JOIN kb_articles a ON a.workspace_id=v.workspace_id AND a.id=v.article_id
 			WHERE v.workspace_id=$1 AND a.number=$2), 0)`, workspaceID, number).Scan(&version)
@@ -103,7 +104,7 @@ func (s *Store) VoteKBArticle(ctx context.Context, workspaceID, helpCenterID str
 	if helpful {
 		missing = ""
 	}
-	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+	_, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) (struct{}, error) {
 		var articleID string
 		query, args := onHelpCenter(helpCenterID, `SELECT a.id::text FROM kb_articles a WHERE `+shownKBArticle+` AND a.number=$2`, workspaceID, number)
 		err := tx.QueryRow(ctx, query, args...).Scan(&articleID)

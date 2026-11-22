@@ -47,13 +47,14 @@ func HelpCenterLegacyTargetSQL(entity string) string {
 // entity and Freshdesk id) became in the workspace. Freshdesk ids are unique within one account only:
 // when the workspace imported several accounts with the same id, a public target wins, then the row
 // written last. Only done rows count, and only targets help center helpCenterID ("" the primary one)
-// shows. It probes import_items_source_id_idx, in the workspace's scope.
+// shows. It probes import_items_source_id_idx as that help center's reader, which sees only the
+// ledger rows of items the help center shows.
 func (s *Store) HelpCenterLegacyTarget(ctx context.Context, workspaceID, helpCenterID, entity, sourceID string) (HelpCenterLegacyTarget, error) {
 	lookup := HelpCenterLegacyTargetSQL(entity)
 	if lookup == "" {
 		return HelpCenterLegacyTarget{}, nil
 	}
-	target, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (HelpCenterLegacyTarget, error) {
+	target, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) (HelpCenterLegacyTarget, error) {
 		var target HelpCenterLegacyTarget
 		var number *int64
 		var slug, collection *string

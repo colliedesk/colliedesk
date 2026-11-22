@@ -73,6 +73,27 @@ func TestCheckAcceptsHandWrittenRowSecurityBeforeTheHelpers(t *testing.T) {
 	}
 }
 
+func TestCheckAcceptsHandWrittenRowSecurityInTheHelpCenterHelpers(t *testing.T) {
+	repo := migrationRepo(t, map[string]string{
+		"20261122081247-help-center-row-security.up.sql":   "-- Help center reader.\nCREATE POLICY help_center_isolation ON notes USING (true);\nSELECT 1 FROM pg_policies;\n",
+		"20261122081247-help-center-row-security.down.sql": "DROP POLICY help_center_isolation ON notes;\n",
+	})
+	if err := Check(repo, Options{}); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+}
+
+func TestCheckAcceptsTheHelpCenterHelperCall(t *testing.T) {
+	repo := migrationRepo(t, map[string]string{
+		"20261201000000-notes.up.sql": "-- Notes.\nCREATE TABLE notes (workspace_id uuid);\nSELECT secure_workspace_table('notes');\n" +
+			"SELECT secure_help_center_table('notes', 'true', 'SELECT');\n",
+		"20261201000000-notes.down.sql": "DROP TABLE notes;\n",
+	})
+	if err := Check(repo, Options{}); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+}
+
 func TestCheckAcceptsTheHelperCalls(t *testing.T) {
 	repo := migrationRepo(t, map[string]string{
 		"20261201000000-notes.up.sql": "-- Notes.\nCREATE TABLE notes (workspace_id uuid);\nSELECT secure_workspace_table('notes');\n" +

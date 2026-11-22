@@ -13,7 +13,7 @@ import (
 // order): what sitemap.xml and llms.txt list, each with the files its own page lists. The article cap
 // bounds it to domain.MaxKBArticles rows.
 func (s *Store) HelpCenterIndex(ctx context.Context, workspaceID, helpCenterID string) ([]domain.PublicKBArticle, error) {
-	articles, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
+	articles, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) ([]domain.PublicKBArticle, error) {
 		query, args := onHelpCenter(helpCenterID, `SELECT `+publicKBArticleColumns+` FROM kb_articles a`+kbArticleCollection+` WHERE `+shownKBArticle+`
 			ORDER BY a.collection_id NULLS LAST, `+kbArticlesBy(kbArticleMode, `a.position`, `a.title`), workspaceID)
 		rows, err := tx.Query(ctx, query, args...)
@@ -35,7 +35,7 @@ func (s *Store) HelpCenterIndex(ctx context.Context, workspaceID, helpCenterID s
 // HelpCenterTranslationIndex returns every published translation of an article HelpCenterIndex lists,
 // in a language that help center shows, by article number and language: what sitemap.xml adds to it.
 func (s *Store) HelpCenterTranslationIndex(ctx context.Context, workspaceID, helpCenterID string) ([]domain.PublicKBTranslation, error) {
-	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBTranslation, error) {
+	items, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) ([]domain.PublicKBTranslation, error) {
 		query, args := onHelpCenter(helpCenterID, `SELECT a.number, t.locale, t.slug, t.updated_at FROM kb_articles a`+shownTranslation(`t.locale`)+`
 			WHERE `+shownKBArticle+` ORDER BY a.number, hl.position, t.locale`, workspaceID)
 		rows, err := tx.Query(ctx, query, args...)

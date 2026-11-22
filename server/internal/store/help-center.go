@@ -130,12 +130,13 @@ const (
 // helpCenterCollectionsSQL lists the live collections of workspace $1 with their name and description
 // in language $2 ("" the primary one; a missing name falls back to it), the published articles each
 // lists itself (its own and those listed in it too), and how many of those are published in each shown
-// language, by position and name.
+// language, by position and name. byc is computed once: left to the planner, the low row counts it
+// expects under row security make it count again for every collection.
 const helpCenterCollectionsSQL = `WITH shown AS (SELECT a.listed AS collection_id, t.locale, count(*) AS n
-		FROM ` + listedKBArticles + ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + publicKBTranslation + `
+		FROM ` + listedKBArticles + ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + shownArticleKBTranslation + `
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
 		WHERE ` + publicKBArticle + ` GROUP BY a.listed, t.locale),
-	byc AS (SELECT collection_id, jsonb_object_agg(locale, n) AS counts FROM shown GROUP BY collection_id)
+	byc AS MATERIALIZED (SELECT collection_id, jsonb_object_agg(locale, n) AS counts FROM shown GROUP BY collection_id)
 	SELECT c.id::text, COALESCE(c.parent_id::text, ''), COALESCE(ct.name, c.name), CASE WHEN ct.collection_id IS NULL THEN c.description ELSE ct.description END,
 		c.slug, COALESCE(n.published, 0), COALESCE(byc.counts, '{}'::jsonb)
 	FROM kb_collections c
@@ -170,7 +171,7 @@ func (s *Store) HelpCenterCollections(ctx context.Context, workspaceID string) (
 // primary one) in language locale show it: the collections it shows, in its order, their names in
 // that language, and Published counting the articles published in it ("" is the primary language).
 func (s *Store) HelpCenterCollectionsIn(ctx context.Context, workspaceID, helpCenterID, locale string) ([]domain.PublicKBCollection, error) {
-	collections, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBCollection, error) {
+	collections, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) ([]domain.PublicKBCollection, error) {
 		query, args := onHelpCenter(helpCenterID, helpCenterCollectionsSQL, workspaceID, locale)
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
@@ -194,9 +195,10 @@ func scanPublicKBArticle(row pgx.Row, extra ...any) (domain.PublicKBArticle, err
 const publicKBArticleColumns = `a.number, a.slug, a.title, a.collection_id::text, a.published_at, a.updated_at`
 
 // shownTranslation joins t, the published translation in language locale that customers of help
-// center $H see, of articles a.
+// center $H see, of articles a. The statement must also hold publicKBArticle (or shownKBArticle) for
+// a: the join checks only what a translation adds to its article.
 func shownTranslation(locale string) string {
-	return ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=` + locale + ` AND ` + publicKBTranslation + `
+	return ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=` + locale + ` AND ` + shownArticleKBTranslation + `
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible`
 }
 
@@ -220,7 +222,7 @@ var helpCenterTranslatedArticlesSQL = `SELECT x.number, x.tslug, x.ttitle, x.lis
 		SELECT a.number, a.listed, t.slug AS tslug, t.title AS ttitle, t.published_at AS tpublished, t.updated_at AS tupdated,
 			row_number() OVER (PARTITION BY a.listed ORDER BY a.extra, ` + kbArticlesBy(kbListedMode, kbListedPosition, `t.title`) + `) AS place
 		FROM ` + listedKBArticles + kbListedCollection + `
-		JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$5 AND ` + publicKBTranslation + `
+		JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$5 AND ` + shownArticleKBTranslation + `
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
 		WHERE ` + publicKBArticle + ` AND a.listed = ANY($4::uuid[]) AND a.listed IN ` + shownKBCollections + `) x
 	WHERE x.place > $2 AND x.place <= $2 + $3 ORDER BY x.listed, x.place`
@@ -240,7 +242,7 @@ func (s *Store) HelpCenterArticlesIn(ctx context.Context, workspaceID, helpCente
 			return nil, domain.ErrKBCollectionNotFound
 		}
 	}
-	articles, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
+	articles, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) ([]domain.PublicKBArticle, error) {
 		query, args := onHelpCenter(helpCenterID, helpCenterArticlesSQL(`$4::uuid[]`), workspaceID, offset, limit, collectionIDs)
 		if locale != "" {
 			query, args = onHelpCenter(helpCenterID, helpCenterTranslatedArticlesSQL, workspaceID, offset, limit, collectionIDs, locale)
@@ -287,7 +289,7 @@ func (s *Store) HelpCenterArticle(ctx context.Context, workspaceID string, numbe
 // translation shown to customers, or domain.ErrKBArticleNotFound. Alternates name the article's slug
 // in every language it is published and shown in.
 func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID, helpCenterID string, number int64, locale string) (domain.PublicKBArticle, error) {
-	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.PublicKBArticle, error) {
+	article, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) (domain.PublicKBArticle, error) {
 		var body string
 		var id string
 		var seoTitle, seoDescription string
@@ -306,7 +308,7 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID, helpCenter
 		}
 		article.Alternates = map[string]string{}
 		query, args = onHelpCenter(helpCenterID, `SELECT '', a.slug FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2
-			UNION ALL SELECT t.locale, t.slug FROM kb_articles a`+shownTranslation(`t.locale`)+` WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, id)
+			UNION ALL SELECT t.locale, t.slug FROM kb_articles a`+shownTranslation(`t.locale`)+` WHERE `+publicKBArticle+` AND a.id=$2`, workspaceID, id)
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return article, err
@@ -352,7 +354,7 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID, helpCenter
 // translations in a language help center $H shows.
 const shownTextNames = publicKBArticle + ` AND (strpos(a.body_md, $3) > 0 OR EXISTS (SELECT 1 FROM kb_article_translations t
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
-		WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + publicKBTranslation + ` AND strpos(t.body_md, $3) > 0))`
+		WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + shownArticleKBTranslation + ` AND strpos(t.body_md, $3) > 0))`
 
 // HelpCenterVideo returns a video the help center may play, by the rule of HelpCenterImage: the
 // current text of a published article outside the trash links it by its media path, and it is not in
@@ -361,7 +363,7 @@ func (s *Store) HelpCenterVideo(ctx context.Context, workspaceID, helpCenterID, 
 	if !savedReplyID.MatchString(id) || id != strings.ToLower(id) {
 		return StoredKBMedia{}, domain.ErrKBMediaNotFound
 	}
-	video, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBMedia, error) {
+	video, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) (StoredKBMedia, error) {
 		query, args := onHelpCenter(helpCenterID, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
 			AND m.kind='video' AND m.deleted_at IS NULL AND EXISTS (
 			SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
@@ -412,8 +414,8 @@ func (s *Store) SearchHelpCenterIn(ctx context.Context, workspaceID, helpCenterI
 			ORDER BY h.rank DESC, h.updated_at DESC, h.id DESC`
 		args = append(args, locale)
 	}
-	sql, args = onHelpCenter(helpCenterID, sql, args...)
-	articles, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
+	articles, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) ([]domain.PublicKBArticle, error) {
+		sql, args := onHelpCenter(helpCenterID, sql, args...)
 		rows, err := tx.Query(ctx, sql, args...)
 		if err != nil {
 			return nil, err
@@ -442,7 +444,7 @@ func (s *Store) HelpCenterImage(ctx context.Context, workspaceID, helpCenterID, 
 	}
 	// Texts link the id as the database prints it, in lowercase.
 	id = strings.ToLower(id)
-	image, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBImage, error) {
+	image, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) (StoredKBImage, error) {
 		query, args := onHelpCenter(helpCenterID, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
 			AND m.kind='image' AND m.deleted_at IS NULL AND EXISTS (
 			SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id

@@ -25,8 +25,9 @@ type DB struct {
 	pool    *pgxpool.Pool // owner: migrations, privileged lookups, locks, ANALYZE
 	request *pgxpool.Pool // workspace-scoped transactions
 
-	mu      sync.Mutex
-	appRole string
+	mu         sync.Mutex
+	appRole    string
+	readerRole string
 }
 
 // New wraps one pool that connects as the schema owner (single-login mode). Scoping happens per
@@ -46,7 +47,7 @@ func NewSplit(owner, request *pgxpool.Pool) *DB {
 // AppRole returns the role every workspace-scoped transaction switches to. The migration creates it
 // per database (colliedesk_app_<database>) and binds the workspace_isolation policies to it; the
 // name is read back from the policy on workspaces, so the migration stays the single source.
-// The role owns nothing, cannot log in and has no BYPASSRLS.
+// It owns only the help center definer views (helpCenterViews), cannot log in and has no BYPASSRLS.
 func (d *DB) AppRole(ctx context.Context) (string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -207,6 +208,7 @@ func (d *DB) Ping(ctx context.Context) error {
 // Verify refuses to serve when row-level security could be skipped: the app role must exist, must
 // not be a superuser or BYPASSRLS, and the request connection must be able to switch to it. With a
 // separate request login, that login must not be a superuser, BYPASSRLS or a member of the owner.
+// The help center reader is checked the same way (verifyReader).
 func (d *DB) Verify(ctx context.Context) error {
 	role, err := d.AppRole(ctx)
 	if err != nil {
@@ -241,7 +243,7 @@ func (d *DB) Verify(ctx context.Context) error {
 	if d.request != d.pool && (loginSuper || loginBypass || isOwner) {
 		return fmt.Errorf("the request login %s must not be a superuser, BYPASSRLS or a member of the owner %s", user, owner)
 	}
-	return nil
+	return d.verifyReader(ctx, role)
 }
 
 // EnsureRequestLogin creates the login role named in requestURL, with the password in it, when the
