@@ -26,7 +26,7 @@ const kbGapProperties = `"id":{"type":"string"},"status":{"type":"string","enum"
 	`"status_changed_by":{"type":["object","null"],"description":"Who changed the status last; null when no person did.","properties":{"agent_id":{"type":["string","null"]},"name":{"type":"string"}}},` +
 	`"status_changed_at":{"type":["string","null"]},` +
 	`"untrusted_customer_content":{"type":"object","required":["title"],"properties":{"title":{"type":"string",` +
-	`"description":"The words of the signal that opened it, masked: [email removed] and [number removed] replace an email address and a run of 6 or more digits."}}}`
+	`"description":"The most common words of its signals, masked: [email removed] and [number removed] replace an email address and a run of 6 or more digits."}}}`
 
 const kbGapIDProperty = `"gap_id":{"type":"string",` + uuid + `,"description":"From colliedesk_kb_gaps_list."}`
 

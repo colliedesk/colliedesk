@@ -13777,7 +13777,7 @@ components:
       required: [id, title, status, kinds, askers, recent_askers, first_seen, last_seen, fixed_by_article, fixed_automatically, status_changed_by, status_changed_at]
       properties:
         id: {type: string, format: uuid}
-        title: {type: string, minLength: 1, description: 'The words of the first signal, masked: "[email removed]" and "[number removed]" replace an email address and a run of 6 or more digits.'}
+        title: {type: string, minLength: 1, description: 'The most common words of its signals, the newest on a tie, masked: "[email removed]" and "[number removed]" replace an email address and a run of 6 or more digits.'}
         status: {type: string, enum: [open, fixed, dismissed]}
         kinds:
           type: array
