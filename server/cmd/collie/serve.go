@@ -129,6 +129,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	p.Go(processCtx, func(ctx context.Context) {
 		store.NewWithDB(db).RunAIRetrieval(ctx, 2*time.Second, func(err error) { slog.Error("build AI retrieval", "error", err) })
 	})
+	// Knowledge gaps are grouped from a queue the database fills (docs/internals/knowledge-base.md).
+	p.Go(processCtx, func(ctx context.Context) {
+		store.NewWithDB(db).RunKBGaps(ctx, 30*time.Second, func(err error) { slog.Error("group knowledge gaps", "error", err) })
+	})
 	// Help center article views are counted in memory and written every 30 seconds (docs/internals/knowledge-base.md).
 	p.views = kbviews.New(store.NewWithDB(db), kbviews.Options{})
 	p.Go(processCtx, func(ctx context.Context) {
