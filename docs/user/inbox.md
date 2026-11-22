@@ -146,6 +146,11 @@ page. Close it with **Esc**: the focus goes back to where it was.
   status first, so imported closed tickets are found; the list stays on **All statuses** after you clear
   the search. Inside a saved view that saved a status, the search keeps that status and the view stays the place. Characters such as `%` and `_` are matched
   literally.
+- With more than one help center, `help_center:hardware` in the search keeps the conversations that came in
+  through the help center with the handle `hardware` (its web form or its help chat), and `help_center:primary`
+  those of the primary help center: **help_center:hardware printer** finds the Hardware requests about a
+  printer. The handle is the last part of the help center's address in Settings › Help center. Email and the conversations the
+  team starts came through no help center, so these words never find them.
 - A search for a name or an email address also lists the matching customers under **Customers**,
   above the conversations. Select one to open the customer's page with every conversation they had;
   see [Customers](contacts.md).

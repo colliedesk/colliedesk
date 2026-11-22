@@ -2,6 +2,9 @@ package httpapi_test
 
 import (
 	"net/http"
+	"net/url"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +77,79 @@ func TestAWebFormConversationKeepsTheHelpCenterItsFormServes(t *testing.T) {
 	kbCall(t, api, http.MethodPatch, "/api/v1/channels/"+onHardware.ID, map[string]any{"help_center_id": nil}, admin, http.StatusOK, nil)
 	if got := conversationHelpCenters(t, api, admin); got[onHardware.ID] != "Hardware" {
 		t.Fatalf("after the form moved, its conversation is on %q, want Hardware still", got[onHardware.ID])
+	}
+}
+
+// subjectsOfSearch lists the subjects of the conversations an inbox search finds.
+func subjectsOfSearch(t *testing.T, api http.Handler, token, search string) []string {
+	t.Helper()
+	var list struct {
+		Items []conversationHelpCenterView `json:"items"`
+	}
+	kbCall(t, api, http.MethodGet, "/api/v1/conversations?search="+url.QueryEscape(search)+"&sort=created_asc", nil, token, http.StatusOK, &list)
+	subjects := []string{}
+	for _, item := range list.Items {
+		subjects = append(subjects, item.Subject)
+	}
+	return subjects
+}
+
+// Inbox search takes help_center:<handle>, and help_center:primary for the primary: it keeps the
+// conversations that came through that help center, with the other words still to match, and never
+// one of another workspace with the same handle.
+func TestInboxSearchKeepsTheConversationsOfAHelpCenter(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Search Shelf", "admin@search-shelf.example.com")
+	enableHelpCenter(t, api, admin, "Main answers", true)
+	hardware := createHelpCenter(t, api, admin, "Hardware", "hardware")
+	other := createSession(t, api, service, "Other Shelf", "admin@other-shelf.example.com")
+	enableHelpCenter(t, api, other, "Other answers", true)
+	otherHardware := createHelpCenter(t, api, other, "Hardware", "hardware")
+
+	form := func(token, name string, helpCenterID any) formChannel {
+		var channel formChannel
+		kbCall(t, api, http.MethodPost, "/api/v1/channels", map[string]any{"type": "web_form", "name": name,
+			"config": map[string]any{"allowed_origins": []string{}}, "help_center_id": helpCenterID}, token, http.StatusCreated, &channel)
+		return channel
+	}
+	// A form names its conversation after the page it was sent from: "Web form: <source>".
+	post := func(channel formChannel, source, sender string) {
+		body := `{"email":"` + sender + `@search-shelf.example.com","source":"` + source + `","message":"Hello"}`
+		if response := postForm(api, channel.Config.SubmitPath, body, ""); response.Code != http.StatusAccepted {
+			t.Fatalf("post %s: %d %s", source, response.Code, response.Body.String())
+		}
+	}
+	onHardware, onPrimary := form(admin, "Hardware form", hardware.ID), form(admin, "Main form", nil)
+	post(onHardware, "Printer jams", "ada")
+	post(onHardware, "Charger hums", "cy")
+	post(onPrimary, "Printer invoice", "di")
+	post(form(other, "Other hardware form", otherHardware.ID), "Other printer", "ed")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Bo", "email": "bo@search-shelf.example.com"})
+	create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer by phone"})
+
+	for search, want := range map[string][]string{
+		"help_center:hardware":         {"Web form: Printer jams", "Web form: Charger hums"},
+		"help_center:hardware printer": {"Web form: Printer jams"},
+		"printer HELP_CENTER:Hardware": {"Web form: Printer jams"},
+		"help_center:primary":          {"Web form: Printer invoice"},
+		"help_center:nowhere":          {},
+		"printer":                      {"Web form: Printer jams", "Web form: Printer invoice", "Printer by phone"},
+	} {
+		if got := subjectsOfSearch(t, api, admin, search); !slices.Equal(got, want) {
+			t.Errorf("search %q = %v, want %v", search, got, want)
+		}
+	}
+	if got := subjectsOfSearch(t, api, other, "help_center:hardware"); !slices.Equal(got, []string{"Web form: Other printer"}) {
+		t.Errorf("the other workspace's search = %v, want its own conversation only", got)
+	}
+	response := request(t, api, http.MethodGet, "/api/v1/conversations?search="+url.QueryEscape("help_center:not_a_handle!"), nil, admin, nil)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "help_center:") {
+		t.Fatalf("a malformed handle = %d %s, want 400 that names help_center:", response.Code, response.Body.String())
+	}
+	created := request(t, api, http.MethodPost, "/api/v1/help-centers", map[string]any{"name": "Primary", "handle": "primary",
+		"title": "Primary answers", "locale": "en", "enabled": true}, admin, nil)
+	if created.Code != http.StatusBadRequest {
+		t.Fatalf("a help center with the handle primary = %d %s, want 400: search reads it as the primary", created.Code, created.Body.String())
 	}
 }
 

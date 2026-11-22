@@ -51,6 +51,9 @@ type ConversationFilter struct {
 	// Sort is one of the ConversationSort* values; empty is ConversationSortUpdatedDesc.
 	Sort   string
 	Search string
+	// HelpCenters keep the conversations that came through one of the live help centers with these
+	// handles; "primary" is the primary help center.
+	HelpCenters []string
 	// ResultSnapshotID and ResultMetric keep the conversations one number of the results page counts
 	// (results_members); a snapshot no longer kept is ErrResultsRefreshed.
 	ResultSnapshotID string
@@ -442,6 +445,12 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 		if len(either) > 0 {
 			q.and(`(` + strings.Join(either, " OR ") + `)`)
 		}
+	}
+	if len(filter.HelpCenters) > 0 {
+		// A deleted help center has given its handle up: a new one may hold it now.
+		handles := q.arg(filter.HelpCenters) + "::text[]"
+		q.and(`c.help_center_id IN (SELECT h.id FROM help_centers h WHERE h.workspace_id=c.workspace_id AND h.deleted_at IS NULL AND (h.handle=ANY(` +
+			handles + `) OR (h.primary_help_center AND ` + q.arg(domain.PrimaryHelpCenterHandle) + `::text=ANY(` + handles + `))))`)
 	}
 	if filter.ResultSnapshotID != "" {
 		q.and(`EXISTS(SELECT 1 FROM results_members rm WHERE rm.workspace_id=c.workspace_id AND rm.snapshot_id=` + q.arg(filter.ResultSnapshotID) +

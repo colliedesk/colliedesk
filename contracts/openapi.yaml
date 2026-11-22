@@ -1583,7 +1583,12 @@ paths:
           schema: {type: boolean}
         - name: search
           in: query
-          description: Words to find in the subject, in any message text, or in the name or email of the contact.
+          description: >-
+            Words to find in the subject, in any message text, or in the name or email of the contact. A word
+            `help_center:<handle>` is not text to find: it keeps the conversations that came through that help
+            center (`help_center:primary` for the primary; several such words keep any of them), and the other
+            words still match. A handle no live help center has matches nothing; one that cannot be a handle
+            is 400.
           schema: {type: string, maxLength: 200}
         - name: result
           in: query
@@ -14191,7 +14196,7 @@ components:
       required: [name, handle, locale]
       properties:
         name: {type: string, minLength: 1, maxLength: 100}
-        handle: {type: string, minLength: 1, maxLength: 40, pattern: '^[a-z0-9][a-z0-9-]*$', description: 'Lowercase letters, digits and hyphens; its address is the primary''s followed by `/<handle>`.'}
+        handle: {type: string, minLength: 1, maxLength: 40, pattern: '^[a-z0-9][a-z0-9-]*$', description: 'Lowercase letters, digits and hyphens; its address is the primary''s followed by `/<handle>`. `primary` is refused: inbox search reads `help_center:primary` as the primary.'}
         title: {type: string, maxLength: 200, description: Shown at the top of every page; empty uses the workspace name.}
         locale: {type: string, minLength: 2, maxLength: 35}
         enabled: {type: boolean, description: 'Left out, off: nothing of it is public until it is turned on.'}
@@ -14687,7 +14692,7 @@ components:
             The help center it came in through: the one its web form or help chat served when it opened (a help
             chat's Talk to a person included). It stays when the channel later serves another one. Null for one
             that came through none: email, a chat app, started by the team, imported. Find them with
-            help_center:<handle> in q (help_center:primary for the primary).
+            help_center:<handle> in search (help_center:primary for the primary).
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/ConversationHelpCenter'}
