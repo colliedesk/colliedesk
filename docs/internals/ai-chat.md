@@ -97,6 +97,13 @@ to the end user is the conversation id's first 8 hex digits: conversations have 
 finds the transcript with `GET /api/v1/ai/chat/sessions?conversation_id=`; its label and link load
 with the open conversation's chunk (`presence-view`) to keep the first bundle in its budget.
 
+An article's **Still need help?** links to `/chat?article=N`. The page resolves N with
+`ai.ChatArticleOf` (published and not `ai_excluded`, the same filter the chat's sources use) before it
+puts `{number, title}` in the page config; any other N, and the embed surface, give no article, so the
+page never names a draft. chat.js shows it as the chip and sends `article_number` with the hand-off,
+which resolves it again (the browser is not trusted) and starts the transcript with
+`Article: <title> <absolute address>`.
+
 ## Streaming
 
 `POST …/chat/turns` answers NDJSON (`turn`, `delta`*, `sources`, `done` or `error`), `X-Accel-Buffering:

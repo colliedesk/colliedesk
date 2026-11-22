@@ -106,6 +106,7 @@ paths:
       - {name: embed, in: query, required: false, schema: {type: string, enum: ['1']}, description: 'The chat in a site''s frame (the widget): only the channel''s sites may frame it (frame-ancestors).'}
       - {name: t, in: query, required: false, schema: {type: string}, description: 'A one-time code from Open full chat: moves the frame''s chat to this page, then 303 to the page without it.'}
       - {name: lang, in: query, required: false, schema: {type: string}, description: 'The language the reader reads: one the help center shows (any case) gives the page, its words and its home link in it; any other value, or none, is the primary language. Kept through the 303 of t.'}
+      - {name: article, in: query, required: false, schema: {type: string}, description: 'The number of the article whose Still need help? opened the page: a published article the AI may read starts the chat about it (the end user can stop that), and a hand-off names it. Any other value, and embed=1, are ignored.'}
     get:
       operationId: getHelpChatPage
       tags: [HelpCenterChat]
@@ -245,6 +246,7 @@ paths:
                 email: {type: string, maxLength: 254}
                 name: {type: string, maxLength: 120}
                 note: {type: string, maxLength: 2000}
+                article_number: {type: integer, format: int64, minimum: 1, description: 'The article the chat is about (the chat page opened from its Still need help?): its title and address start the message. An article that is not published or is kept away from AI is not named.'}
       responses:
         '201':
           description: 'Sent: a reference the end user may quote (the start of the conversation''s id) and whether the workspace is on a trial (it cannot reply by email then).'

@@ -24,6 +24,7 @@ var reservedIDs = []string{
 	"chat", "chat-title", "q-article", "q-article-note", "q-article-count", "w-article", "resume-article",
 	"cn-t", "cn-d", "h-article-email", "h-article-name", "h-article-note", "h-article-email-err",
 	"h-article-note-hint", "h-article-t", "downloads-title", "tags-title", "related-title",
+	"still-help-title",
 }
 
 func newHeadingIDs() *headingIDs {

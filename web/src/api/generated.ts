@@ -69,6 +69,8 @@ export interface paths {
                 t?: string;
                 /** @description The language the reader reads: one the help center shows (any case) gives the page, its words and its home link in it; any other value, or none, is the primary language. Kept through the 303 of t. */
                 lang?: string;
+                /** @description The number of the article whose Still need help? opened the page: a published article the AI may read starts the chat about it (the end user can stop that), and a hand-off names it. Any other value, and embed=1, are ignored. */
+                article?: string;
             };
             header?: never;
             path?: never;
@@ -12337,6 +12339,8 @@ export interface operations {
                 t?: string;
                 /** @description The language the reader reads: one the help center shows (any case) gives the page, its words and its home link in it; any other value, or none, is the primary language. Kept through the 303 of t. */
                 lang?: string;
+                /** @description The number of the article whose Still need help? opened the page: a published article the AI may read starts the chat about it (the end user can stop that), and a hand-off names it. Any other value, and embed=1, are ignored. */
+                article?: string;
             };
             header?: never;
             path?: never;
@@ -12564,6 +12568,11 @@ export interface operations {
                     email: string;
                     name?: string;
                     note?: string;
+                    /**
+                     * Format: int64
+                     * @description The article the chat is about (the chat page opened from its Still need help?): its title and address start the message. An article that is not published or is kept away from AI is not named.
+                     */
+                    article_number?: number;
                 };
             };
         };

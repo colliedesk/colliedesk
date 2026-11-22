@@ -62,6 +62,16 @@
 {{- end}}
 </section>
 {{- end}}
+{{- with .StillHelp}}
+<section class="still-help" aria-labelledby="still-help-title">
+<h2 id="still-help-title" class="still-help-title">{{.Title}}</h2>
+<ul class="still-help-list">
+{{- if .AskURL}}<li><a class="still-help-ask" href="{{.AskURL}}">{{.AskLabel}}</a></li>{{end}}
+{{- if .ContactURL}}<li><a class="still-help-contact" href="{{.ContactURL}}">{{.ContactLabel}}</a></li>{{end}}
+{{- if .PhoneURL}}<li><a class="still-help-phone" href="{{.PhoneURL}}">{{.PhoneLabel}}</a></li>{{end}}
+</ul>
+</section>
+{{- end}}
 </article>
 {{- if or .Contents .Neighbours}}
 <aside class="rail{{if not .Neighbours}} rail-contents-only{{end}}" aria-labelledby="{{if .Neighbours}}rail-title{{else}}rail-contents-title{{end}}">

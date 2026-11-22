@@ -1334,6 +1334,15 @@ to serve on the domain again.
   ("12 out of 15 found this helpful", votes imported from Freshdesk included). After **No** the reader
   can say **What was missing?** in one line. Both are plain forms that work without script. The words
   are in the article's language (English for a language without them). See [Readers' votes](#votes-from-readers).
+- After the vote, **Still need help?** lists the ways to reach you that you set up, as plain links:
+  **Ask AI** while the [AI chat](ai-chat.md) is on, your **Contact link** and your **Phone number**
+  from the [brand](#brand). An article with none of them has no block. **Ask AI** opens the chat page
+  about the article (`/chat?article=12`): it shows "Asking about" with the article's title, which the
+  reader can remove, and **Talk to a person** from there starts the message with the article's title
+  and address. A `mailto:` contact link opens an email whose subject is "Question about: <title>" and
+  whose text starts with the article's address (a link that already has its own `?subject=` is left as
+  you wrote it). Another contact link opens as it is. An article that is not published or is
+  [kept away from AI](#keep-an-article-away-from-ai) is never named in the chat.
 - **Print** under an article's title opens its print page, at the article's address followed by
   `/print` (`/a/12-reset-your-password/print`): the title, the date and the text, without the header,
   the side list, the footer, the vote or the chat, so the reader prints it or saves it as a PDF with

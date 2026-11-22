@@ -149,6 +149,8 @@ type page struct {
 	Print    printText
 	// Article is the article's own address, on its print page.
 	Article string
+	// StillHelp is the article's "Still need help?" block (still-help.go).
+	StillHelp *stillHelp
 
 	Searched bool
 	Results  []searchResult
@@ -694,6 +696,7 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 	}
 	data.Neighbours = v.articleLinks(neighbours, article.Number)
 	data.Votes = voteBoxOf(v, article)
+	data.StillHelp = stillHelpOf(data, article.Number, article.Title, data.Canonical, v.locale())
 	if len(article.Attachments) > 0 {
 		data.Files = v.fileLinks(article.Attachments)
 	}
