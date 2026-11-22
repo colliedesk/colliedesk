@@ -35,7 +35,7 @@ async function checkGrid(page: Page, label: string, columns: string[], ordered: 
   const row = page.locator('.kb-article-item').filter({ hasText: 'Refund rules' });
   await expect(row).toBeVisible();
   const labels = head.locator('> span');
-  const shown = (await labels.count()) - 2 - (ordered ? 1 : 0);
+  const shown = (await labels.count()) - 2;
   expect(shown, `${label}: at least the first chosen column shows`).toBeGreaterThanOrEqual(1);
   expect(shown).toBeLessThanOrEqual(columns.length);
   const want = columns.slice(0, shown).map((column) => names[column]);
@@ -108,17 +108,18 @@ test.describe('at 1440 px', () => {
     await page.goto(`${base}/knowledge`);
     await expect(page.locator('.kb-list[data-select="true"]')).toBeVisible();
     expect(await checkGrid(page, 'the default columns, all articles', defaults, false, false)).toBe(3);
-    // A collection's order also has its move buttons, so the last default column gives way there.
+    // A collection's order also has its move buttons, beside the open button at the end of the row: the
+    // defaults all show there too.
     await page.goto(`${base}/knowledge?collection=${billing}`);
     await expect(page.locator('.kb-list[data-order="true"]')).toBeVisible();
-    expect(await checkGrid(page, 'the default columns, the collection\'s order', defaults, true, false)).toBe(2);
+    expect(await checkGrid(page, 'the default columns, the collection\'s order', defaults, true, false)).toBe(3);
     for (const [name, columns] of Object.entries(choices)) {
       await setColumns(page, columns);
       // All articles, with the bulk-select tick box an admin gets.
       await page.goto(`${base}/knowledge`);
       await expect(page.locator('.kb-list[data-select="true"]')).toBeVisible();
       await checkGrid(page, `${name}, all articles`, columns, false, false);
-      // One collection: the list is its order, with the move buttons in a column of their own.
+      // One collection: the list is its order, with the move buttons beside the open button.
       await page.goto(`${base}/knowledge?collection=${billing}`);
       await expect(page.locator('.kb-list[data-order="true"]')).toBeVisible();
       await checkGrid(page, `${name}, the collection's order`, columns, true, false);

@@ -24,7 +24,8 @@ export function fittingColumns(columns: KBListColumn[], { width, list = width, p
   if (list <= 36 * rem) return first;
   const pad = 16 + (selects ? 16 + 12 : 0);
   const gap = 16;
-  const tail = (2.5 + (ordered ? 4.5 : 0)) * rem + gap * (ordered ? 1 : 0);
+  // The open button has a track of its own; in a collection's order the order buttons share it.
+  const tail = (ordered ? 4.5 : 2.5) * rem;
   let used = pad + 12 * rem + tail + gap;
   let count = 0;
   for (const column of columns) {
@@ -68,10 +69,10 @@ export function useFittingColumns(scroll: RefObject<HTMLElement | null>, columns
   return { shown: columns.slice(0, fittingColumns(columns, { ...size, ordered, selects, rem })), widest: size.widest };
 }
 
-// gridOf sets the list's grid for the chosen columns: the title, each column, the open-on-help-center button
-// and, while the list is its collection's order, the order buttons.
+// gridOf sets the list's grid for the chosen columns: the title, each column and the open-on-help-center
+// button, which, while the list is its collection's order, shares its track with the order buttons.
 export function gridOf(columns: KBListColumn[], ordered: boolean): React.CSSProperties {
-  const tail = `2.5rem${ordered ? ' 4.5rem' : ''}`;
+  const tail = ordered ? '4.5rem' : '2.5rem';
   const first = columns[0];
   return {
     '--kb-grid': ['minmax(0, 1fr)', ...columns.map((column) => widths[column]), tail].join(' '),
