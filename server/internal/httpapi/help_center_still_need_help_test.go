@@ -51,9 +51,18 @@ func TestAnArticleEndsWithTheWaysToReachTheTeamThatAreSetUp(t *testing.T) {
 		t.Fatalf("article lacks the contact page:\n%s", body)
 	}
 
+	// Without the chat the block is plain links: the page keeps the strict policy byte for byte.
+	kbCall(t, d.api, http.MethodPut, "/api/v1/ai/slots/chat", map[string]any{"source": "server", "enabled": false}, d.admin, http.StatusOK, nil)
+	page := helpCenterCall(d.site, http.MethodGet, testOriginHost, articlePath)
+	if !strings.Contains(page.Body.String(), `class="still-help-contact"`) {
+		t.Fatalf("article without the chat lacks the contact page:\n%s", page.Body.String())
+	}
+	if got := page.Header().Get("Content-Security-Policy"); got != strictHelpCenterPolicy {
+		t.Fatalf("article CSP with Still need help = %q, want %q", got, strictHelpCenterPolicy)
+	}
+
 	// Nothing set up: no block.
 	kbCall(t, d.api, http.MethodPut, "/api/v1/help-center/theme", map[string]any{"custom_css": nil}, d.admin, http.StatusOK, nil)
-	kbCall(t, d.api, http.MethodPut, "/api/v1/ai/slots/chat", map[string]any{"source": "server", "enabled": false}, d.admin, http.StatusOK, nil)
 	if body = read(); strings.Contains(body, "still-help") {
 		t.Fatalf("article shows Still need help with nothing set up:\n%s", body)
 	}
