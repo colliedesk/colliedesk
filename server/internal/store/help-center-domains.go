@@ -351,20 +351,26 @@ func (s *Store) HelpCenterHostProvenClaims(ctx context.Context, host string, pro
 	return claims, nil
 }
 
-// ActiveHelpCenterDomainWorkspaces lists the workspaces with an active custom domain, for the daily
-// re-check. Only workspace ids leave the transaction.
-func (s *Store) ActiveHelpCenterDomainWorkspaces(ctx context.Context) ([]string, error) {
-	var workspaces []string
+// ActiveHelpCenterDomain names a help center with an active custom domain.
+type ActiveHelpCenterDomain struct {
+	WorkspaceID, HelpCenterID string
+}
+
+// ActiveHelpCenterDomains lists the help centers with an active custom domain, in every workspace, for
+// the daily re-check. Only workspace and help center ids leave the transaction.
+func (s *Store) ActiveHelpCenterDomains(ctx context.Context) ([]ActiveHelpCenterDomain, error) {
+	var active []ActiveHelpCenterDomain
 	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterDomainRecheck, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM help_center_domains WHERE status='active' ORDER BY workspace_id`)
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text, help_center_id::text FROM help_center_domains
+			WHERE status='active' ORDER BY workspace_id, help_center_id`)
 		if err != nil {
 			return err
 		}
-		workspaces, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		active, err = pgx.CollectRows(rows, pgx.RowToStructByPos[ActiveHelpCenterDomain])
 		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list active help center domains: %w", err)
 	}
-	return workspaces, nil
+	return active, nil
 }

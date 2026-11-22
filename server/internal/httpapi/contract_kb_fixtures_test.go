@@ -42,6 +42,8 @@ type contractKB struct {
 	// Translations: fr of the article (read, changed), pt of it (a version to restore), de of the
 	// versioned article (deleted), es of it in the trash (restored); a collection name in de to remove.
 	translationSeen, ptSeen, esTrashSeen, deSeen string
+	// Two help centers beside the primary: one to read and change, one to delete.
+	helpCenterID, deleteHelpCenterID string
 }
 
 // contractVideoPart is the part the contract case sends: the whole of a tiny upload.
@@ -50,6 +52,8 @@ var contractVideoPart = []byte("ten bytes!")
 func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 	t.Helper()
 	var kb contractKB
+	kb.helpCenterID = createHelpCenter(t, api, admin, "Contract hardware", "contract-hardware").ID
+	kb.deleteHelpCenterID = createHelpCenter(t, api, admin, "Contract old", "contract-old").ID
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Contract collection"})
 	kb.collectionID, kb.collectionSeen = collection.ID, collection.UpdatedAt
 	deleted := kbCollection(t, api, admin, map[string]any{"name": "Contract empty collection"})
@@ -243,6 +247,11 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 			map[string]any{"updated_at": kb.ptSeen}, admin, 200, ""},
 		"PUT /api/v1/kb/collections/{id}/translations/{locale}":    {"/api/v1/kb/collections/" + kb.collectionID + "/translations/fr", map[string]any{"name": "Collection de contrat"}, admin, 200, ""},
 		"DELETE /api/v1/kb/collections/{id}/translations/{locale}": {"/api/v1/kb/collections/" + kb.collectionID + "/translations/de", nil, admin, 200, ""},
+		"GET /api/v1/help-centers":                                 {"/api/v1/help-centers", nil, admin, 200, ""},
+		"POST /api/v1/help-centers":                                {"/api/v1/help-centers", map[string]any{"name": "Contract billing", "handle": "contract-billing", "locale": "en"}, admin, 201, ""},
+		"GET /api/v1/help-centers/{id}":                            {"/api/v1/help-centers/" + kb.helpCenterID, nil, admin, 200, ""},
+		"PATCH /api/v1/help-centers/{id}":                          {"/api/v1/help-centers/" + kb.helpCenterID, map[string]any{"title": "Contract devices"}, admin, 200, ""},
+		"DELETE /api/v1/help-centers/{id}":                         {"/api/v1/help-centers/" + kb.deleteHelpCenterID, nil, admin, 204, ""},
 		"GET /api/v1/help-center":                                  {"/api/v1/help-center", nil, admin, 200, ""},
 		"PUT /api/v1/help-center":                                  {"/api/v1/help-center", map[string]any{"enabled": true, "title": "Contract help", "locale": "en"}, admin, 200, ""},
 		"GET /api/v1/help-center/theme":                            {path: "/api/v1/help-center/theme", token: admin, status: 200},

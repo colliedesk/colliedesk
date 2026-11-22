@@ -212,7 +212,7 @@ func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.
 	}
 	after, err := a.recordCheck(ctx, who.Workspace.ID, current, a.lookUpDomain(ctx, current.Hostname, helpCenterDomainCheckTimeout), false)
 	if err == nil {
-		err = a.checkAddress(ctx, who.Workspace.ID, after)
+		err = a.checkAddress(ctx, who.Workspace.ID, helpCenterID, after)
 	}
 	switch {
 	case errors.Is(err, domain.ErrHelpCenterDomainTaken):
@@ -250,17 +250,17 @@ func (a *API) recordCheck(ctx context.Context, workspaceID string, current domai
 	return after, err
 }
 
-// checkAddress opens the help center's address on the workspace's custom domain d, as a visitor would,
+// checkAddress opens the address of help center helpCenterID ("" the primary) on its custom domain d, as a visitor would,
 // and records what it showed. It runs only after a check whose DNS proved the claim (so the name points
 // at this service, never at a name the workspace does not control) and while the help center serves
 // there (open and paid); otherwise it clears an earlier result. Like the DNS check, only a check a person
 // or an agent asks for (rate limited) and the daily re-check get here. What the network answered stays
 // in the server's log.
-func (a *API) checkAddress(ctx context.Context, workspaceID string, d domain.HelpCenterDomain) error {
+func (a *API) checkAddress(ctx context.Context, workspaceID, helpCenterID string, d domain.HelpCenterDomain) error {
 	var at *time.Time
 	var failure *string
 	if d.Status == domain.HelpCenterDomainActive && d.CheckError == nil {
-		site, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
+		site, open, err := a.store.OpenHelpCenterAt(ctx, workspaceID, helpCenterID)
 		if err != nil {
 			return err
 		}
@@ -366,13 +366,14 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (open, claimed
 // back to pending (released). It reports how many were checked, failed and were released.
 func (s *Server) RecheckHelpCenterDomains(ctx context.Context) (checked, failed, released int, err error) {
 	a := s.api
-	workspaces, err := a.store.ActiveHelpCenterDomainWorkspaces(ctx)
+	active, err := a.store.ActiveHelpCenterDomains(ctx)
 	if err != nil {
 		return 0, 0, 0, err
 	}
 	var problems []error
-	for _, workspaceID := range workspaces {
-		current, found, err := a.store.GetHelpCenterDomain(ctx, workspaceID)
+	for _, at := range active {
+		workspaceID := at.WorkspaceID
+		current, found, err := a.store.GetHelpCenterDomainIn(ctx, workspaceID, at.HelpCenterID)
 		if err != nil {
 			problems = append(problems, err)
 			continue
@@ -382,7 +383,7 @@ func (s *Server) RecheckHelpCenterDomains(ctx context.Context) (checked, failed,
 		}
 		after, err := a.recordCheck(ctx, workspaceID, current, a.lookUpDomain(ctx, current.Hostname, helpCenterRecheckTimeout), false)
 		if err == nil {
-			err = a.checkAddress(ctx, workspaceID, after)
+			err = a.checkAddress(ctx, workspaceID, at.HelpCenterID, after)
 		}
 		if errors.Is(err, domain.ErrHelpCenterDomainMissing) {
 			continue
