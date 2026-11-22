@@ -21,10 +21,34 @@ func (s *Store) OpenHelpCenter(ctx context.Context, slug string) (domain.HelpCen
 	return s.OpenHelpCenterWorkspace(ctx, workspaceID)
 }
 
-// OpenHelpCenterWorkspace is OpenHelpCenter for a workspace already found, such as the one a custom
-// domain belongs to. CustomHost is the workspace's active custom domain, read in the same query, and "" during
-// the trial: the help center serves on its custom domain only once the workspace is paid.
+// OpenHelpCenterWorkspace is OpenHelpCenter for a workspace already found: its primary help center.
 func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string) (domain.HelpCenterSite, bool, error) {
+	return s.OpenHelpCenterAt(ctx, workspaceID, "")
+}
+
+// OpenHelpCenterHandle is OpenHelpCenterAt for the help center of a workspace already found that
+// handle names; a handle no help center outside the trash has is closed.
+func (s *Store) OpenHelpCenterHandle(ctx context.Context, workspaceID, handle string) (domain.HelpCenterSite, bool, error) {
+	helpCenterID, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (string, error) {
+		var id string
+		err := tx.QueryRow(ctx, `SELECT id::text FROM help_centers WHERE workspace_id=$1 AND handle=$2 AND deleted_at IS NULL`,
+			workspaceID, handle).Scan(&id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return id, err
+	})
+	if err != nil || helpCenterID == "" {
+		return domain.HelpCenterSite{}, false, err
+	}
+	return s.OpenHelpCenterAt(ctx, workspaceID, helpCenterID)
+}
+
+// OpenHelpCenterAt is OpenHelpCenter for help center helpCenterID of a workspace already found, such as
+// the one a custom domain belongs to ("" the primary one); one in the trash is closed. CustomHost is
+// its active custom domain, read in the same query, and "" during the trial: the help center serves on
+// its custom domain only once the workspace is paid. ContentVersion is the knowledge base's.
+func (s *Store) OpenHelpCenterAt(ctx context.Context, workspaceID, helpCenterID string) (domain.HelpCenterSite, bool, error) {
 	type state struct {
 		site    domain.HelpCenterSite
 		enabled bool
@@ -36,26 +60,32 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 		colors := &theme.Colors
 		var logoWidth, logoHeight *int
 		// The logo and favicon count only while they are images of the library outside its trash.
-		err := tx.QueryRow(ctx, `SELECT w.slug, w.name, w.timezone, COALESCE(h.enabled, false), COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0),
+		query, args := onHelpCenter(helpCenterID, `SELECT w.slug, w.name, w.timezone, COALESCE(h.enabled, false), COALESCE(h.title, ''), COALESCE(h.locale, 'en'),
+				COALESCE(kb.content_version, 0), COALESCE(h.id::text, ''), COALESCE(h.primary_help_center, false), COALESCE(h.handle, ''),
 				logo.id::text, logo.width, logo.height, icon.id::text, COALESCE(h.logo_alt, ''), h.linkback_url, h.contact_url, h.contact_phone,
 				h.color_primary, h.color_header, h.color_header_text, h.color_background, h.color_text, h.color_link, h.color_footer, h.body_font, h.heading_font,
-				COALESCE(h.custom_css, ''), COALESCE(d.hostname, ''), COALESCE(h.google_site_verification, ''), COALESCE(h.bing_site_verification, '')
-			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id AND h.primary_help_center
+				COALESCE(h.custom_css, ''), COALESCE(d.hostname, ''), COALESCE(pd.hostname, ''),
+				COALESCE(h.google_site_verification, ''), COALESCE(h.bing_site_verification, '')
+			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id AND h.id=$H AND h.deleted_at IS NULL
+			LEFT JOIN help_centers kb ON kb.workspace_id=w.id AND kb.primary_help_center
 			LEFT JOIN help_center_domains d ON d.workspace_id=w.id AND d.help_center_id=h.id AND d.status='active'
+			LEFT JOIN help_center_domains pd ON pd.workspace_id=w.id AND pd.help_center_id=kb.id AND pd.status='active'
 			LEFT JOIN kb_media logo ON logo.workspace_id=w.id AND logo.id=h.logo_media_id AND logo.kind='image' AND logo.deleted_at IS NULL
 			LEFT JOIN kb_media icon ON icon.workspace_id=w.id AND icon.id=h.favicon_media_id AND icon.kind='image' AND icon.deleted_at IS NULL
-			WHERE w.id=$1`, workspaceID).
-			Scan(&site.Slug, &site.Name, &site.Timezone, &got.enabled, &site.Title, &site.Locale, &site.ContentVersion,
+			WHERE w.id=$1`, workspaceID)
+		err := tx.QueryRow(ctx, query, args...).
+			Scan(&site.Slug, &site.Name, &site.Timezone, &got.enabled, &site.Title, &site.Locale, &site.ContentVersion, &site.HelpCenterID, &site.Primary, &site.Handle,
 				&theme.LogoMediaID, &logoWidth, &logoHeight, &theme.FaviconMediaID, &theme.LogoAlt, &theme.LinkbackURL, &theme.ContactURL, &theme.ContactPhone,
 				&colors.Primary, &colors.Header, &colors.HeaderText, &colors.Background, &colors.Text, &colors.Link, &colors.Footer, &theme.BodyFont, &theme.HeadingFont,
-				&theme.CustomCSS, &site.CustomHost, &site.SearchConsole.Google, &site.SearchConsole.Bing)
+				&theme.CustomCSS, &site.CustomHost, &site.PrimaryHost, &site.SearchConsole.Google, &site.SearchConsole.Bing)
 		if logoWidth != nil && logoHeight != nil {
 			site.LogoWidth, site.LogoHeight = *logoWidth, *logoHeight
 		}
 		if err != nil || !got.enabled {
 			return got, err
 		}
-		rows, err := tx.Query(ctx, `SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) AND visible AND locale <> $2 ORDER BY position, locale`, workspaceID, site.Locale)
+		rows, err := tx.Query(ctx, `SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=$2::uuid AND visible AND locale <> $3
+			ORDER BY position, locale`, workspaceID, site.HelpCenterID, site.Locale)
 		if err != nil {
 			return got, err
 		}
@@ -67,7 +97,7 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 		// A trial workspace may verify its custom domain, but its noindex pages never serve there: the
 		// help center stays on its own address until the workspace is paid.
 		if got.site.Trial {
-			got.site.CustomHost = ""
+			got.site.CustomHost, got.site.PrimaryHost = "", ""
 		}
 		return got, err
 	})
@@ -95,7 +125,7 @@ const listedKBArticles = `(SELECT a.workspace_id, a.id, a.number, a.slug, a.titl
 // language, by position and name.
 const helpCenterCollectionsSQL = `WITH shown AS (SELECT a.listed AS collection_id, t.locale, count(*) AS n
 		FROM ` + listedKBArticles + ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + publicKBTranslation + `
-		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
 		WHERE ` + publicKBArticle + ` GROUP BY a.listed, t.locale),
 	byc AS (SELECT collection_id, jsonb_object_agg(locale, n) AS counts FROM shown GROUP BY collection_id)
 	SELECT c.id::text, COALESCE(c.parent_id::text, ''), COALESCE(ct.name, c.name), CASE WHEN ct.collection_id IS NULL THEN c.description ELSE ct.description END,
@@ -105,8 +135,9 @@ const helpCenterCollectionsSQL = `WITH shown AS (SELECT a.listed AS collection_i
 		ON n.collection_id=c.id
 	LEFT JOIN byc ON byc.collection_id=c.id
 	LEFT JOIN kb_collection_translations ct ON ct.workspace_id=c.workspace_id AND ct.collection_id=c.id AND ct.locale=$2 AND $2 <> ''
-	WHERE c.workspace_id=$1 AND c.deleted_at IS NULL AND ` + publicKBCollection + `
-	ORDER BY c.position, lower(c.name), c.id`
+	LEFT JOIN kb_collection_help_centers p ON p.workspace_id=c.workspace_id AND p.collection_id=c.id AND p.help_center_id=$H
+	WHERE c.workspace_id=$1 AND c.deleted_at IS NULL AND ` + publicKBCollection + ` AND c.id IN ` + shownKBCollections + `
+	ORDER BY COALESCE(p.position, c.position), lower(c.name), c.id`
 
 func scanPublicKBCollection(locale string) func(row pgx.CollectableRow) (domain.PublicKBCollection, error) {
 	return func(row pgx.CollectableRow) (domain.PublicKBCollection, error) {
@@ -124,14 +155,16 @@ func scanPublicKBCollection(locale string) func(row pgx.CollectableRow) (domain.
 // articles each holds itself, by position and name. The caller hides the ones with nothing published
 // below them, so a collection of drafts never shows its name.
 func (s *Store) HelpCenterCollections(ctx context.Context, workspaceID string) ([]domain.PublicKBCollection, error) {
-	return s.HelpCenterCollectionsIn(ctx, workspaceID, "")
+	return s.HelpCenterCollectionsIn(ctx, workspaceID, "", "")
 }
 
-// HelpCenterCollectionsIn is HelpCenterCollections as the pages of language locale show it: its names,
-// and Published counting the articles published in it ("" is the primary language).
-func (s *Store) HelpCenterCollectionsIn(ctx context.Context, workspaceID, locale string) ([]domain.PublicKBCollection, error) {
+// HelpCenterCollectionsIn is HelpCenterCollections as the pages of help center helpCenterID ("" the
+// primary one) in language locale show it: the collections it shows, in its order, their names in
+// that language, and Published counting the articles published in it ("" is the primary language).
+func (s *Store) HelpCenterCollectionsIn(ctx context.Context, workspaceID, helpCenterID, locale string) ([]domain.PublicKBCollection, error) {
 	collections, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBCollection, error) {
-		rows, err := tx.Query(ctx, helpCenterCollectionsSQL, workspaceID, locale)
+		query, args := onHelpCenter(helpCenterID, helpCenterCollectionsSQL, workspaceID, locale)
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -152,10 +185,11 @@ func scanPublicKBArticle(row pgx.Row, extra ...any) (domain.PublicKBArticle, err
 
 const publicKBArticleColumns = `a.number, a.slug, a.title, a.collection_id::text, a.published_at, a.updated_at`
 
-// shownTranslation joins t, the published translation in language $L shown to customers, of articles a.
+// shownTranslation joins t, the published translation in language locale that customers of help
+// center $H see, of articles a.
 func shownTranslation(locale string) string {
 	return ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=` + locale + ` AND ` + publicKBTranslation + `
-		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible`
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible`
 }
 
 // publicKBTranslationColumns read a translation t of article a as publicKBArticleColumns read the article.
@@ -168,7 +202,7 @@ const publicKBTranslationColumns = `a.number, t.slug, t.title, a.collection_id::
 func helpCenterArticlesSQL(collections string) string {
 	return `SELECT a.number, a.slug, a.title, a.listed::text, a.published_at, a.updated_at FROM (
 			SELECT a.*, row_number() OVER (PARTITION BY a.listed ORDER BY a.extra, CASE WHEN a.extra THEN 0 ELSE a.position END, lower(a.title), a.number) AS place
-			FROM ` + listedKBArticles + ` WHERE ` + publicKBArticle + ` AND a.listed = ANY(` + collections + `)) a
+			FROM ` + listedKBArticles + ` WHERE ` + publicKBArticle + ` AND a.listed = ANY(` + collections + `) AND a.listed IN ` + shownKBCollections + `) a
 		WHERE a.place > $2 AND a.place <= $2 + $3 ORDER BY a.listed, a.place`
 }
 
@@ -179,32 +213,31 @@ const helpCenterTranslatedArticlesSQL = `SELECT x.number, x.tslug, x.ttitle, x.l
 			row_number() OVER (PARTITION BY a.listed ORDER BY a.extra, CASE WHEN a.extra THEN 0 ELSE a.position END, lower(t.title), a.number) AS place
 		FROM ` + listedKBArticles + `
 		JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$5 AND ` + publicKBTranslation + `
-		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible
-		WHERE ` + publicKBArticle + ` AND a.listed = ANY($4::uuid[])) x
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
+		WHERE ` + publicKBArticle + ` AND a.listed = ANY($4::uuid[]) AND a.listed IN ` + shownKBCollections + `) x
 	WHERE x.place > $2 AND x.place <= $2 + $3 ORDER BY x.listed, x.place`
 
 // HelpCenterArticles returns, for each of the collections, its published articles in order, skipping
 // the first offset and keeping at most limit; the text is left out.
 func (s *Store) HelpCenterArticles(ctx context.Context, workspaceID string, collectionIDs []string, offset, limit int) ([]domain.PublicKBArticle, error) {
-	return s.HelpCenterArticlesIn(ctx, workspaceID, "", collectionIDs, offset, limit)
+	return s.HelpCenterArticlesIn(ctx, workspaceID, "", "", collectionIDs, offset, limit)
 }
 
-// HelpCenterArticlesIn is HelpCenterArticles in language locale: the articles published in it, with
-// their translated title and slug ("" is the primary language).
-func (s *Store) HelpCenterArticlesIn(ctx context.Context, workspaceID, locale string, collectionIDs []string, offset, limit int) ([]domain.PublicKBArticle, error) {
+// HelpCenterArticlesIn is HelpCenterArticles on help center helpCenterID ("" the primary one), which
+// lists only the collections it shows, in language locale: the articles published in it, with their
+// translated title and slug ("" is the primary language).
+func (s *Store) HelpCenterArticlesIn(ctx context.Context, workspaceID, helpCenterID, locale string, collectionIDs []string, offset, limit int) ([]domain.PublicKBArticle, error) {
 	for _, id := range collectionIDs {
 		if !savedReplyID.MatchString(id) {
 			return nil, domain.ErrKBCollectionNotFound
 		}
 	}
 	articles, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
-		var rows pgx.Rows
-		var err error
-		if locale == "" {
-			rows, err = tx.Query(ctx, helpCenterArticlesSQL(`$4::uuid[]`), workspaceID, offset, limit, collectionIDs)
-		} else {
-			rows, err = tx.Query(ctx, helpCenterTranslatedArticlesSQL, workspaceID, offset, limit, collectionIDs, locale)
+		query, args := onHelpCenter(helpCenterID, helpCenterArticlesSQL(`$4::uuid[]`), workspaceID, offset, limit, collectionIDs)
+		if locale != "" {
+			query, args = onHelpCenter(helpCenterID, helpCenterTranslatedArticlesSQL, workspaceID, offset, limit, collectionIDs, locale)
 		}
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -238,35 +271,35 @@ func scanPublicKBVideo(row pgx.CollectableRow) (domain.PublicKBVideo, error) {
 // HelpCenterArticle returns the published article with number and its text, or
 // domain.ErrKBArticleNotFound for a draft, an article in the trash or no article at all.
 func (s *Store) HelpCenterArticle(ctx context.Context, workspaceID string, number int64) (domain.PublicKBArticle, error) {
-	return s.HelpCenterArticleIn(ctx, workspaceID, number, "")
+	return s.HelpCenterArticleIn(ctx, workspaceID, "", number, "")
 }
 
-// HelpCenterArticleIn is HelpCenterArticle in language locale ("" the primary one): its published
+// HelpCenterArticleIn is HelpCenterArticle on help center helpCenterID ("" the primary one), which
+// shows only the articles placed on it, in language locale ("" the primary one): its published
 // translation shown to customers, or domain.ErrKBArticleNotFound. Alternates name the article's slug
 // in every language it is published and shown in.
-func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID string, number int64, locale string) (domain.PublicKBArticle, error) {
+func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID, helpCenterID string, number int64, locale string) (domain.PublicKBArticle, error) {
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.PublicKBArticle, error) {
 		var body string
 		var id string
 		var seoTitle, seoDescription string
 		var showContents bool
-		var article domain.PublicKBArticle
-		var err error
-		if locale == "" {
-			article, err = scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBArticleColumns+`, a.body_md, a.id::text, a.seo_title, a.seo_description, a.show_contents FROM kb_articles a
-				WHERE `+publicKBArticle+` AND a.number=$2`, workspaceID, number), &body, &id, &seoTitle, &seoDescription, &showContents)
-		} else {
-			article, err = scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBTranslationColumns+`, t.body_md, a.id::text, t.seo_title, t.seo_description, a.show_contents FROM kb_articles a`+
-				shownTranslation(`$3`)+` WHERE `+publicKBArticle+` AND a.number=$2`, workspaceID, number, locale), &body, &id, &seoTitle, &seoDescription, &showContents)
+		query, args := onHelpCenter(helpCenterID, `SELECT `+publicKBArticleColumns+`, a.body_md, a.id::text, a.seo_title, a.seo_description, a.show_contents FROM kb_articles a
+			WHERE `+shownKBArticle+` AND a.number=$2`, workspaceID, number)
+		if locale != "" {
+			query, args = onHelpCenter(helpCenterID, `SELECT `+publicKBTranslationColumns+`, t.body_md, a.id::text, t.seo_title, t.seo_description, a.show_contents FROM kb_articles a`+
+				shownTranslation(`$3`)+` WHERE `+shownKBArticle+` AND a.number=$2`, workspaceID, number, locale)
 		}
+		article, err := scanPublicKBArticle(tx.QueryRow(ctx, query, args...), &body, &id, &seoTitle, &seoDescription, &showContents)
 		article.SEOTitle, article.SEODescription, article.ShowContents, article.Locale = seoTitle, seoDescription, showContents, locale
 		article.BodyMD, article.ID = body, id
 		if err != nil {
 			return article, err
 		}
 		article.Alternates = map[string]string{}
-		rows, err := tx.Query(ctx, `SELECT '', a.slug FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2
+		query, args = onHelpCenter(helpCenterID, `SELECT '', a.slug FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2
 			UNION ALL SELECT t.locale, t.slug FROM kb_articles a`+shownTranslation(`t.locale`)+` WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, id)
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return article, err
 		}
@@ -283,7 +316,7 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID string, num
 		if article.Attachments, err = publicKBAttachments(ctx, tx, workspaceID, id, locale); err != nil {
 			return article, err
 		}
-		if article.Tags, err = shownKBTags(ctx, tx, workspaceID, id); err != nil {
+		if article.Tags, err = shownKBTags(ctx, tx, workspaceID, helpCenterID, id); err != nil {
 			return article, err
 		}
 		if !strings.Contains(body, domain.KBMediaPath) {
@@ -308,24 +341,25 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID string, num
 
 // shownTextNames is the media rule of the help center on rows a (articles) for path $3: the current
 // text of a published article outside the trash names it, or the text of one of its published
-// translations in a language customers see.
+// translations in a language help center $H shows.
 const shownTextNames = publicKBArticle + ` AND (strpos(a.body_md, $3) > 0 OR EXISTS (SELECT 1 FROM kb_article_translations t
-		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
 		WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + publicKBTranslation + ` AND strpos(t.body_md, $3) > 0))`
 
 // HelpCenterVideo returns a video the help center may play, by the rule of HelpCenterImage: the
 // current text of a published article outside the trash links it by its media path, and it is not in
 // the library's trash.
-func (s *Store) HelpCenterVideo(ctx context.Context, workspaceID, id string) (StoredKBMedia, error) {
+func (s *Store) HelpCenterVideo(ctx context.Context, workspaceID, helpCenterID, id string) (StoredKBMedia, error) {
 	if !savedReplyID.MatchString(id) || id != strings.ToLower(id) {
 		return StoredKBMedia{}, domain.ErrKBMediaNotFound
 	}
 	video, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBMedia, error) {
-		return scanKBMedia(tx.QueryRow(ctx, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
+		query, args := onHelpCenter(helpCenterID, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
 			AND m.kind='video' AND m.deleted_at IS NULL AND EXISTS (
 			SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
-			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND `+shownTextNames+`)`,
-			workspaceID, id, domain.KBMediaPath+id))
+			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND `+kbArticleOnHelpCenter+` AND `+shownTextNames+`)`,
+			workspaceID, id, domain.KBMediaPath+id)
+		return scanKBMedia(tx.QueryRow(ctx, query, args...))
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StoredKBMedia{}, domain.ErrKBMediaNotFound
@@ -343,17 +377,18 @@ const helpCenterExcerptChars = 600
 // the start of one, or the text inside the title), best match first, at most limit. Excerpt holds the
 // start of each text; only the articles returned are read for it, never the whole knowledge base.
 func (s *Store) SearchHelpCenter(ctx context.Context, workspaceID, query string, limit int) ([]domain.PublicKBArticle, error) {
-	return s.SearchHelpCenterIn(ctx, workspaceID, "", query, limit)
+	return s.SearchHelpCenterIn(ctx, workspaceID, "", "", query, limit)
 }
 
-// SearchHelpCenterIn is SearchHelpCenter in language locale: it searches the published translations
-// in it ("" is the primary language), their own words, never the primary text. The text of a file the
-// page lists finds its article too, ranked below the article's own words.
-func (s *Store) SearchHelpCenterIn(ctx context.Context, workspaceID, locale, query string, limit int) ([]domain.PublicKBArticle, error) {
+// SearchHelpCenterIn is SearchHelpCenter on help center helpCenterID ("" the primary one), among the
+// articles placed on it, in language locale: it searches the published translations in it ("" is the
+// primary language), their own words, never the primary text. The text of a file the page lists finds
+// its article too, ranked below the article's own words.
+func (s *Store) SearchHelpCenterIn(ctx context.Context, workspaceID, helpCenterID, locale, query string, limit int) ([]domain.PublicKBArticle, error) {
 	sql := `WITH ` + fileHits(`l.locale IS NULL`) + `, ` + kbTagHits + `, hits AS (
 				SELECT a.id, COALESCE(ts_rank(CASE WHEN g.words IS NULL THEN a.search ELSE a.search || g.words END, t.q), 0) + COALESCE(f.rank, 0) / 2 AS rank, a.updated_at
 				FROM kb_articles a CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) t LEFT JOIN tagged g ON g.article_id=a.id LEFT JOIN files f ON f.article_id=a.id
-				WHERE ` + publicKBArticle + ` AND (a.search @@ t.q OR g.article_id IS NOT NULL AND a.search || g.words @@ t.q OR a.title ILIKE $3 OR f.article_id IS NOT NULL)
+				WHERE ` + shownKBArticle + ` AND (a.search @@ t.q OR g.article_id IS NOT NULL AND a.search || g.words @@ t.q OR a.title ILIKE $3 OR f.article_id IS NOT NULL)
 				ORDER BY rank DESC, a.updated_at DESC, a.id DESC LIMIT $4)
 			SELECT ` + publicKBArticleColumns + `, left(a.body_md, $5) FROM hits h JOIN kb_articles a ON a.workspace_id=$1 AND a.id=h.id
 			ORDER BY h.rank DESC, h.updated_at DESC, h.id DESC`
@@ -362,13 +397,14 @@ func (s *Store) SearchHelpCenterIn(ctx context.Context, workspaceID, locale, que
 		sql = `WITH ` + fileHits(translationFiles) + `, ` + kbTagHits + `, hits AS (
 				SELECT a.id, COALESCE(ts_rank(CASE WHEN g.words IS NULL THEN t.search ELSE t.search || g.words END, w.q), 0) + COALESCE(f.rank, 0) / 2 AS rank, t.updated_at
 				FROM kb_articles a` + shownTranslation(`$6`) + ` CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) w LEFT JOIN tagged g ON g.article_id=a.id LEFT JOIN files f ON f.article_id=a.id
-				WHERE ` + publicKBArticle + ` AND (t.search @@ w.q OR g.article_id IS NOT NULL AND t.search || g.words @@ w.q OR t.title ILIKE $3 OR f.article_id IS NOT NULL)
+				WHERE ` + shownKBArticle + ` AND (t.search @@ w.q OR g.article_id IS NOT NULL AND t.search || g.words @@ w.q OR t.title ILIKE $3 OR f.article_id IS NOT NULL)
 				ORDER BY rank DESC, t.updated_at DESC, a.id DESC LIMIT $4)
 			SELECT ` + publicKBTranslationColumns + `, left(t.body_md, $5) FROM hits h JOIN kb_articles a ON a.workspace_id=$1 AND a.id=h.id
 				JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$6
 			ORDER BY h.rank DESC, h.updated_at DESC, h.id DESC`
 		args = append(args, locale)
 	}
+	sql, args = onHelpCenter(helpCenterID, sql, args...)
 	articles, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
 		rows, err := tx.Query(ctx, sql, args...)
 		if err != nil {
@@ -392,18 +428,19 @@ func (s *Store) SearchHelpCenterIn(ctx context.Context, workspaceID, locale, que
 // library's trash is never served, and the texts are checked for the image path itself, since a link
 // marks any version of the article's text or a translation: a published translation in a language
 // customers see counts (shownTextNames).
-func (s *Store) HelpCenterImage(ctx context.Context, workspaceID, id string) (StoredKBImage, error) {
+func (s *Store) HelpCenterImage(ctx context.Context, workspaceID, helpCenterID, id string) (StoredKBImage, error) {
 	if !savedReplyID.MatchString(id) {
 		return StoredKBImage{}, domain.ErrKBImageNotFound
 	}
 	// Texts link the id as the database prints it, in lowercase.
 	id = strings.ToLower(id)
 	image, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBImage, error) {
-		return scanKBImage(tx.QueryRow(ctx, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
+		query, args := onHelpCenter(helpCenterID, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
 			AND m.kind='image' AND m.deleted_at IS NULL AND EXISTS (
 			SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
-			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND `+shownTextNames+`)`,
-			workspaceID, id, domain.KBImagePath+id))
+			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND `+kbArticleOnHelpCenter+` AND `+shownTextNames+`)`,
+			workspaceID, id, domain.KBImagePath+id)
+		return scanKBImage(tx.QueryRow(ctx, query, args...))
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StoredKBImage{}, domain.ErrKBImageNotFound

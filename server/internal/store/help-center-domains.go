@@ -260,38 +260,36 @@ func (s *Store) DeleteHelpCenterDomain(ctx context.Context, workspaceID string) 
 	return removed, true, nil
 }
 
-// HelpCenterHost finds the workspace whose help center serves on host, an active custom domain; found
-// is false for any other name. It crosses workspaces, since a request's host name is all there is;
-// only the workspace id leaves the transaction.
-func (s *Store) HelpCenterHost(ctx context.Context, host string) (string, bool, error) {
-	var workspaceID string
-	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterHost, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM help_center_domains WHERE lower(hostname)=lower($1) AND status='active'`, host).Scan(&workspaceID)
+// HelpCenterHost finds the workspace and the help center that serves on host, an active custom
+// domain; found is false for any other name. It crosses workspaces, since a request's host name is all
+// there is; only the workspace and help center ids leave the transaction.
+func (s *Store) HelpCenterHost(ctx context.Context, host string) (workspaceID, helpCenterID string, found bool, err error) {
+	err = s.db.Privileged(ctx, database.PrivilegeHelpCenterHost, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT workspace_id::text, help_center_id::text FROM help_center_domains WHERE lower(hostname)=lower($1) AND status='active'`, host).Scan(&workspaceID, &helpCenterID)
 	}, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
+		return "", "", false, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("find help center host: %w", err)
+		return "", "", false, fmt.Errorf("find help center host: %w", err)
 	}
-	return workspaceID, true, nil
+	return workspaceID, helpCenterID, true, nil
 }
 
-// HelpCenterClaim finds the workspace of the claim whose CNAME target hc-<claim>.<HELP_CENTER_DOMAIN> a
-// request named; found is false for a claim nobody holds (never made, removed or replaced). Only the
-// workspace id leaves the transaction.
-func (s *Store) HelpCenterClaim(ctx context.Context, claim string) (string, bool, error) {
-	var workspaceID string
-	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterHost, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM help_center_domains WHERE claim=$1`, claim).Scan(&workspaceID)
+// HelpCenterClaim finds the workspace and the help center of the claim whose CNAME target
+// hc-<claim>.<HELP_CENTER_DOMAIN> a request named; found is false for a claim nobody holds (never made,
+// removed or replaced). Only the workspace and help center ids leave the transaction.
+func (s *Store) HelpCenterClaim(ctx context.Context, claim string) (workspaceID, helpCenterID string, found bool, err error) {
+	err = s.db.Privileged(ctx, database.PrivilegeHelpCenterHost, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT workspace_id::text, help_center_id::text FROM help_center_domains WHERE claim=$1`, claim).Scan(&workspaceID, &helpCenterID)
 	}, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
+		return "", "", false, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("find help center claim: %w", err)
+		return "", "", false, fmt.Errorf("find help center claim: %w", err)
 	}
-	return workspaceID, true, nil
+	return workspaceID, helpCenterID, true, nil
 }
 
 // HelpCenterHostPending reports whether any workspace has a pending claim of host, so the certificate

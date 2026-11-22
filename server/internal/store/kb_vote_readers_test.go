@@ -32,7 +32,7 @@ func TestReadersFromOneAddressVotingAtOnceCountUpToTheLimit(t *testing.T) {
 	errs := make([]error, readers)
 	atOnce(readers, func(i int) {
 		voter := sha256.Sum256(fmt.Appendf(nil, "reader-%d", i))
-		errs[i] = s.VoteKBArticle(ctx, workspace, article.Number, voter[:], address[:], true, "")
+		errs[i] = s.VoteKBArticle(ctx, workspace, "", article.Number, voter[:], address[:], true, "")
 	})
 	for i, err := range errs {
 		if err != nil {

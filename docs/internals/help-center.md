@@ -511,6 +511,24 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   translation, so one switch covers every language. It is kept in each version and exported, but a
   version restore leaves it as it is: a restore brings back words, not page settings. A rendering
   change raises `renderVersion`, so no cached page is served in the old shape.
+- **Several help centers, one knowledge base (#680).** A workspace has one primary help center
+  (`help_centers.primary_help_center`) and may have more, each with a `handle`. Collections and
+  articles stay one set: a help center shows the top-level collections linked to it in
+  `kb_collection_help_centers` (with its own home order) and everything inside them; an article is
+  on it when its home collection or one of its extra collections is. Visibility applies first, so an
+  `agents`-only collection is public nowhere. Every public read binds `$H` (`onHelpCenter` in
+  `store/help-center-placement.go`), where `""` is the primary, so an article only on B is the 404
+  of A, in search, `sitemap.xml`, `llms.txt`, votes, files, images and old Freshdesk addresses too.
+  Domains, languages and analytics are keyed by help center; `content_version` and
+  `last_article_number` are read from the primary row only, because they count the whole
+  knowledge base. The custom host cache holds `<workspace id> <help center id>`.
+- **Another help center lives below `/b/<handle>` until it has a domain.** On every address of the
+  primary (`/help/<slug>`, `<slug>.<domain>/help`, the primary's custom domain) `/b/<handle>/…` is
+  that help center, with its own name, collections and canonical links; one letter like `/a/` and
+  `/c/`, so it never takes a language segment or a channel type's route (`channelRoute` skips it).
+  Once its own custom domain is active, the `/b/<handle>` address moves there with a 301. Help chat
+  and the other channel pages answer on the primary only; the help center API and the help chat's
+  article set still act on the primary.
 
 ## Traps
 

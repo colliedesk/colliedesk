@@ -48,7 +48,7 @@ func (s *Site) file(response http.ResponseWriter, request *http.Request, v view,
 		s.writeSiteNotFound(response, v)
 		return
 	}
-	file, err := s.config.Store.HelpCenterFile(request.Context(), site.WorkspaceID, id)
+	file, err := s.config.Store.HelpCenterFile(request.Context(), site.WorkspaceID, site.HelpCenterID, id)
 	if errors.Is(err, domain.ErrKBMediaNotFound) || err == nil && !strings.HasPrefix(file.StorageKey, site.WorkspaceID+"/") {
 		s.writeSiteNotFound(response, v)
 		return

@@ -13,23 +13,25 @@ import (
 
 // listedByShownArticle is the rule that makes a file public, on rows l of kb_article_attachments joined
 // to their article a: the article is published and outside the trash, and the list is its own or the
-// list of one of its published translations in a language customers see.
+// list of one of its published translations in a language help center $H shows.
 const listedByShownArticle = publicKBArticle + ` AND (l.locale IS NULL OR EXISTS (SELECT 1 FROM kb_article_translations t
-		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
 		WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=l.locale AND ` + publicKBTranslation + `))`
 
-// HelpCenterFile returns a file the help center may hand out: a published article, or a published
-// translation shown to customers, lists it, and it is not in the library's trash. A draft's list never
-// counts. Every other id gives domain.ErrKBMediaNotFound.
-func (s *Store) HelpCenterFile(ctx context.Context, workspaceID, id string) (StoredKBMedia, error) {
+// HelpCenterFile returns a file help center helpCenterID ("" the primary one) may hand out: a
+// published article placed on it, or a published translation of one in a language it shows, lists it,
+// and it is not in the library's trash. A draft's list never counts. Every other id gives
+// domain.ErrKBMediaNotFound.
+func (s *Store) HelpCenterFile(ctx context.Context, workspaceID, helpCenterID, id string) (StoredKBMedia, error) {
 	if !savedReplyID.MatchString(id) || id != strings.ToLower(id) {
 		return StoredKBMedia{}, domain.ErrKBMediaNotFound
 	}
 	file, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBMedia, error) {
-		return scanKBMedia(tx.QueryRow(ctx, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
+		query, args := onHelpCenter(helpCenterID, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
 			AND m.kind='file' AND m.deleted_at IS NULL AND EXISTS (
 			SELECT 1 FROM kb_article_attachments l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
-			WHERE l.workspace_id=$1 AND l.media_id=$2 AND `+listedByShownArticle+`)`, workspaceID, id))
+			WHERE l.workspace_id=$1 AND l.media_id=$2 AND `+kbArticleOnHelpCenter+` AND `+listedByShownArticle+`)`, workspaceID, id)
+		return scanKBMedia(tx.QueryRow(ctx, query, args...))
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StoredKBMedia{}, domain.ErrKBMediaNotFound

@@ -142,10 +142,10 @@ func pairGeneration(known, unknown *ttlCache) hostGeneration {
 	return hostGeneration{known: known.currentGeneration(), unknown: unknown.currentGeneration()}
 }
 
-// remember stores what a lookup that started at generation found: the workspace of host, or "" for a
-// name that belongs to none.
-func (h *customHosts) remember(host, workspaceID string, generation hostGeneration) {
-	rememberIn(h.known, h.unknown, host, workspaceID, generation)
+// remember stores what a lookup that started at generation found: the workspace and help center of
+// host ("<workspace id> <help center id>"), or "" for a name that belongs to none.
+func (h *customHosts) remember(host, value string, generation hostGeneration) {
+	rememberIn(h.known, h.unknown, host, value, generation)
 }
 
 // rememberIn stores value for host in known, or "" in unknown when value is empty; a name that moved
@@ -178,45 +178,51 @@ func (s *Site) customHostCandidate(host string) (string, bool) {
 	return host, true
 }
 
-// workspaceOfHost returns the workspace whose help center serves on the custom host, or whose claim
-// has the host as its CNAME target, from the caches or the store. A remembered workspace is only a
-// candidate: the page's own query confirms the domain is still active for it (serve). A name no cache
-// knows costs a privileged query, so the client must be allowed one more (Config.AllowLookup) first;
-// otherwise wait is how long until it may. A name that was known before, its cache entry expired, is
-// looked up without that charge.
-func (s *Site) workspaceOfHost(request *http.Request, host string) (workspaceID string, found bool, wait time.Duration, err error) {
-	workspaceID, fresh, known := s.hosts.known.peek(host)
+// helpCenterOfHost returns the workspace and the help center that serves on the custom host, or whose
+// claim has the host as its CNAME target, from the caches or the store. A remembered help center is
+// only a candidate: the page's own query confirms the domain is still active for it (serve). A name no
+// cache knows costs a privileged query, so the client must be allowed one more (Config.AllowLookup)
+// first; otherwise wait is how long until it may. A name that was known before, its cache entry
+// expired, is looked up without that charge.
+func (s *Site) helpCenterOfHost(request *http.Request, host string) (workspaceID, helpCenterID string, found bool, wait time.Duration, err error) {
+	value, fresh, known := s.hosts.known.peek(host)
 	if fresh {
-		return workspaceID, true, 0, nil
+		workspaceID, helpCenterID, _ = strings.Cut(value, " ")
+		return workspaceID, helpCenterID, true, 0, nil
 	}
 	if _, unknown := s.hosts.unknown.get(host); unknown {
-		return "", false, 0, nil
+		return "", "", false, 0, nil
 	}
 	if !known && s.config.AllowLookup != nil {
 		if allowed, wait := s.config.AllowLookup(request); !allowed {
-			return "", false, max(wait, time.Second), nil
+			return "", "", false, max(wait, time.Second), nil
 		}
 	}
 	find := s.config.Store.HelpCenterHost
 	if claim, ok := claimOfHost(host, s.config.Domain); ok {
-		find = func(ctx context.Context, _ string) (string, bool, error) {
+		find = func(ctx context.Context, _ string) (string, string, bool, error) {
 			return s.config.Store.HelpCenterClaim(ctx, claim)
 		}
 	}
 	generation := s.hosts.generation()
 	result, err, _ := s.hosts.lookups.Do(fmt.Sprintf("host %d %d %s", generation.known, generation.unknown, host), func() (any, error) {
-		workspaceID, _, err := find(context.WithoutCancel(request.Context()), host)
+		workspaceID, helpCenterID, found, err := find(context.WithoutCancel(request.Context()), host)
 		if err != nil {
 			return "", err
 		}
-		s.hosts.remember(host, workspaceID, generation)
-		return workspaceID, nil
+		value := ""
+		if found {
+			value = workspaceID + " " + helpCenterID
+		}
+		s.hosts.remember(host, value, generation)
+		return value, nil
 	})
 	if err != nil {
-		return "", false, 0, err
+		return "", "", false, 0, err
 	}
-	workspaceID = result.(string)
-	return workspaceID, workspaceID != "", 0, nil
+	value = result.(string)
+	workspaceID, helpCenterID, _ = strings.Cut(value, " ")
+	return workspaceID, helpCenterID, value != "", 0, nil
 }
 
 // Address is the public address of a workspace's help center as the API hands it out: SiteURL with

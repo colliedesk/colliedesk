@@ -93,7 +93,9 @@ func sharedKBBudget(t *testing.T) (http.Handler, *pgxpool.Pool, string, string) 
 		seedKBBudget(t, ctx, exec, "KB Budget A", domain.MaxKBArticles)
 		seedKBBudget(t, ctx, exec, "KB Budget B", domain.MaxKBArticles)
 		if err := exec(`INSERT INTO help_centers(workspace_id,enabled,title,content_version,last_article_number,updated_at)
-			SELECT id, true, name, 1, $1, now() FROM workspaces WHERE name LIKE 'KB Budget %'`, domain.MaxKBArticles); err != nil {
+			SELECT id, true, name, 1, $1, now() FROM workspaces WHERE name LIKE 'KB Budget %'
+			ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET enabled=true, title=EXCLUDED.title,
+			content_version=1, last_article_number=EXCLUDED.last_article_number`, domain.MaxKBArticles); err != nil {
 			t.Fatal(err)
 		}
 		// Workspace A's help center also shows French: every article translated (the published ones

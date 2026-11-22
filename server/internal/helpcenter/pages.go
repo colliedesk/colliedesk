@@ -356,7 +356,7 @@ func (v view) count(n int) string {
 }
 
 func (s *Site) loadTree(ctx context.Context, v view) (tree, error) {
-	collections, err := s.config.Store.HelpCenterCollectionsIn(ctx, v.site.WorkspaceID, v.lang)
+	collections, err := s.config.Store.HelpCenterCollectionsIn(ctx, v.site.WorkspaceID, v.site.HelpCenterID, v.lang)
 	if err != nil {
 		return tree{}, err
 	}
@@ -388,7 +388,7 @@ func (s *Site) homePage(ctx context.Context, v view) (page, error) {
 		for index, root := range roots {
 			ids[index] = root.ID
 		}
-		if articles, err = s.config.Store.HelpCenterArticlesIn(ctx, v.site.WorkspaceID, v.lang, ids, 0, homeArticles); err != nil {
+		if articles, err = s.config.Store.HelpCenterArticlesIn(ctx, v.site.WorkspaceID, v.site.HelpCenterID, v.lang, ids, 0, homeArticles); err != nil {
 			return page{}, err
 		}
 	}
@@ -468,7 +468,7 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 		s.writeSiteNotFound(response, v)
 		return
 	}
-	articles, err := s.config.Store.HelpCenterArticlesIn(request.Context(), v.site.WorkspaceID, v.lang, []string{current.ID}, (pageNumber-1)*collectionPageSize, collectionPageSize)
+	articles, err := s.config.Store.HelpCenterArticlesIn(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, v.lang, []string{current.ID}, (pageNumber-1)*collectionPageSize, collectionPageSize)
 	if err != nil {
 		s.writeError(response, err)
 		return
@@ -495,7 +495,7 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 		for index, child := range children {
 			ids[index] = child.ID
 		}
-		previews, err := s.config.Store.HelpCenterArticlesIn(request.Context(), v.site.WorkspaceID, v.lang, ids, 0, homeArticles)
+		previews, err := s.config.Store.HelpCenterArticlesIn(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, v.lang, ids, 0, homeArticles)
 		if err != nil {
 			s.writeError(response, err)
 			return
@@ -549,11 +549,11 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 	if request.URL.RawQuery == "" && fresh(response, request, v.articleTag(votes)) {
 		return
 	}
-	article, err := s.config.Store.HelpCenterArticleIn(request.Context(), v.site.WorkspaceID, number, v.lang)
+	article, err := s.config.Store.HelpCenterArticleIn(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, number, v.lang)
 	if errors.Is(err, domain.ErrKBArticleNotFound) && v.lang != "" {
 		// Not published in this language (yet): the article in the primary language, at its own address
 		// in one step. 302, since a translation may come; none in the primary language is a 404 here.
-		primary, err := s.config.Store.HelpCenterArticle(request.Context(), v.site.WorkspaceID, number)
+		primary, err := s.config.Store.HelpCenterArticleIn(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, number, "")
 		if errors.Is(err, domain.ErrKBArticleNotFound) {
 			s.writeSiteNotFound(response, v)
 			return
@@ -617,7 +617,7 @@ func (s *Site) articlePage(ctx context.Context, v view, article domain.PublicKBA
 	if err != nil {
 		return page{}, false, err
 	}
-	neighbours, err := s.config.Store.HelpCenterArticlesIn(ctx, v.site.WorkspaceID, v.lang, []string{article.CollectionID}, 0, articleNeighbours)
+	neighbours, err := s.config.Store.HelpCenterArticlesIn(ctx, v.site.WorkspaceID, v.site.HelpCenterID, v.lang, []string{article.CollectionID}, 0, articleNeighbours)
 	if err != nil {
 		return page{}, false, err
 	}
@@ -704,7 +704,7 @@ func (s *Site) search(response http.ResponseWriter, request *http.Request, v vie
 	}
 	v.languages(&data, paths, false)
 	if query != "" {
-		articles, err := s.config.Store.SearchHelpCenterIn(request.Context(), v.site.WorkspaceID, v.lang, query, searchResults)
+		articles, err := s.config.Store.SearchHelpCenterIn(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, v.lang, query, searchResults)
 		if err != nil {
 			s.writeError(response, err)
 			return
