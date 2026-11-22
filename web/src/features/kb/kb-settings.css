@@ -1,3 +1,9 @@
 /* Knowledge base → Settings keeps the frame of the other tabs (padding, content width and the one rule under the
    tabs come from kb.css). Its card has no rule of its own on top: the tabs' rule is the only one. */
 .kb-settings-page > .settings-card { border-top: 0; padding: 0; }
+
+/* The list of help centers: one row each, its name with Primary and On or Off, then its address. */
+.hc-list { display: grid; gap: var(--space-3); margin: 0 0 var(--space-3); padding: 0; list-style: none; }
+.hc-list-row { display: grid; gap: var(--space-1); }
+.hc-list-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.hc-list-primary { color: var(--text-3); font-size: var(--fs-label); }

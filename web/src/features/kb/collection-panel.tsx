@@ -5,6 +5,7 @@ import { useHolds } from '../../lib/permissions-context';
 import { HelpTip } from '../../ui/help-tip';
 import { CollectionApprovalField } from './collection-approval-field';
 import { CollectionOrderField } from './collection-order-field';
+import { CollectionShownOnField } from './collection-shown-on-field';
 import { CollectionVisibilityField } from './collection-visibility-field';
 import type { KBCollection, KBVisibility } from './kb-api';
 import { kbMessages } from './kb-messages';
@@ -26,6 +27,8 @@ export interface CollectionValues {
   article_order: KBCollection['article_order'];
   // visibility narrows who can see every article in it and its collections.
   visibility: KBVisibility;
+  // help_center_ids are the help centers a top-level collection is shown on; null keeps them as they are.
+  help_center_ids: string[] | null;
 }
 
 interface CollectionFormProps {
@@ -45,7 +48,7 @@ export function CollectionForm({ tree, node, parentId = null, onSubmit, onCancel
   const [values, setValues] = useState<CollectionValues>({
     name: original?.name ?? '', slug: original?.slug ?? '', description: original?.description ?? '', parent_id: original ? original.parent_id : parentId,
     default_template_id: original?.default_template_id ?? null, require_approval: original?.require_approval ?? 'inherit',
-    article_order: original?.article_order ?? 'manual', visibility: original?.visibility ?? 'everyone',
+    article_order: original?.article_order ?? 'manual', visibility: original?.visibility ?? 'everyone', help_center_ids: null,
   });
   const holds = useHolds();
   const templates = useQuery({ queryKey: templatesKey, queryFn: kbTemplatesApi.list }).data?.items ?? [];
@@ -95,6 +98,8 @@ export function CollectionForm({ tree, node, parentId = null, onSubmit, onCancel
           <HelpTip label={templateMessages.defaultTemplate} text={templateMessages.defaultTemplateTip} id={`${id}-template-tip`} /></small></div>}
       {original && <CollectionOrderField value={values.article_order} onChange={(order) => set({ article_order: order })} />}
       <CollectionVisibilityField value={values.visibility} onChange={(visibility) => set({ visibility })} />
+      <CollectionShownOnField value={values.help_center_ids} saved={original?.help_center_ids} nested={values.parent_id !== null}
+        onChange={(chosen) => set({ help_center_ids: chosen })} />
       {/* Changing it is a help center setting: the server asks for help_center:update too. */}
       {original && holds('help_center:update') && <CollectionApprovalField value={values.require_approval} onChange={(mode) => set({ require_approval: mode })} />}
       <div className="button-row">
