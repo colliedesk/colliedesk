@@ -77,3 +77,15 @@ func TestAHelpCenterNeverServesWhatIsOnlyOnAnother(t *testing.T) {
 	wantMove(t, f.site, old, http.StatusFound, "https://"+hostMain+"/search?q=replace+a+cable", "Host", hostMain)
 	wantMove(t, f.site, old, http.StatusMovedPermanently, "https://"+hostHardware+cablePage, "Host", hostHardware)
 }
+
+// The related articles below an article are only those its own help center shows: an article with
+// the same words that is only on another help center of the workspace is never listed, even when
+// that other help center's page was read first.
+func TestRelatedArticlesStayOnTheirHelpCenter(t *testing.T) {
+	f := newTwoHelpCenters(t)
+	kbArticle(t, f.api, f.admin, map[string]any{"collection_id": f.cable.CollectionID, "title": "Cable warranty terms",
+		"status": "published", "body_md": "Two years on every cable: thistle."})
+
+	wantPage(t, f.at(hostHardware, articlePath(f.shared)), http.StatusOK, []string{"Warranty terms", "Cable warranty terms"}, nil)
+	wantPage(t, f.at(hostMain, articlePath(f.shared)), http.StatusOK, []string{"Warranty terms", "thistle"}, []string{"Cable warranty terms"})
+}

@@ -623,10 +623,10 @@ func (s *Site) articlePage(ctx context.Context, v view, article domain.PublicKBA
 	if err != nil {
 		return page{}, false, err
 	}
-	key := relatedKey{workspaceID: v.site.WorkspaceID, version: v.site.ContentVersion, lang: v.lang, number: article.Number}
+	key := relatedKey{workspaceID: v.site.WorkspaceID, helpCenterID: v.site.HelpCenterID, version: v.site.ContentVersion, lang: v.lang, number: article.Number}
 	related, ok := s.related.get(key)
 	if !ok {
-		if related, err = s.config.Store.HelpCenterRelatedArticles(ctx, v.site.WorkspaceID, v.lang, article.Number, relatedArticles); err != nil {
+		if related, err = s.config.Store.HelpCenterRelatedArticlesIn(ctx, v.site.WorkspaceID, v.site.HelpCenterID, v.lang, article.Number, relatedArticles); err != nil {
 			return page{}, false, err
 		}
 		s.related.keep(key, related)

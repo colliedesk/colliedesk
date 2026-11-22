@@ -11,14 +11,16 @@ import (
 // megabytes in all.
 const relatedListsKept = 8192
 
-// relatedKey names the related list of one article page. The knowledge base's content version is
+// relatedKey names the related list of one article page on one help center, which lists only what
+// that help center shows. The knowledge base's content version is
 // part of it: every write to the knowledge base grows it (bumpKB), the same version that every page's
 // ETag carries, so a list is never served after an article in it was unpublished, trashed or hidden.
 type relatedKey struct {
-	workspaceID string
-	version     int64
-	lang        string
-	number      int64
+	workspaceID  string
+	helpCenterID string
+	version      int64
+	lang         string
+	number       int64
 }
 
 // relatedLists keeps the related articles of the article pages read lately, least recently used out
