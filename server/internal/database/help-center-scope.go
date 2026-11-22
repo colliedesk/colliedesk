@@ -75,6 +75,30 @@ func (d *DB) InHelpCenter(ctx context.Context, workspaceID, helpCenterID string,
 	return finish(ctx, tx, fn)
 }
 
+// BeginHelpChatTx is BeginHelpCenterTx for help chat: app.help_chat is on for this transaction, so
+// kb_help_center_chat_articles and kb_help_center_chat_translations return what help chat on that help
+// center may cite, the articles kept for help chat included. A public page never sets it.
+func (d *DB) BeginHelpChatTx(ctx context.Context, workspaceID, helpCenterID string, options pgx.TxOptions) (pgx.Tx, error) {
+	tx, err := d.BeginHelpCenterTx(ctx, workspaceID, helpCenterID, options)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `SELECT set_config('app.help_chat','on',true)`); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, fmt.Errorf("scope transaction to help chat: %w", err)
+	}
+	return tx, nil
+}
+
+// InHelpChat runs fn in a help chat transaction (BeginHelpChatTx) and commits when fn returns nil.
+func (d *DB) InHelpChat(ctx context.Context, workspaceID, helpCenterID string, fn func(pgx.Tx) error) error {
+	tx, err := d.BeginHelpChatTx(ctx, workspaceID, helpCenterID, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	return finish(ctx, tx, fn)
+}
+
 // verifyReader refuses to serve when help center isolation could be skipped or would hide the staff's
 // own rows: the reader must not be a superuser or BYPASSRLS, the request connection must be able to
 // switch to it, and neither the app role nor a separate request login may inherit it, because its
@@ -118,7 +142,8 @@ func (d *DB) verifyReader(ctx context.Context, app string) error {
 
 // helpCenterViews decide which articles a help center shows. They are not security_invoker: they read
 // their tables as their owner, which must be the app role so workspace isolation still binds them.
-var helpCenterViews = []string{"kb_help_center_collection_ranks", "kb_help_center_public_articles", "kb_help_center_public_translations"}
+var helpCenterViews = []string{"kb_help_center_collection_ranks", "kb_help_center_public_articles", "kb_help_center_public_translations",
+	"kb_help_center_chat_articles", "kb_help_center_chat_translations"}
 
 // verifyHelpCenterViews refuses to serve when a help center view is missing or owned by another role,
 // as after a restore with --no-owner: owned by a superuser it would read every workspace's rows.

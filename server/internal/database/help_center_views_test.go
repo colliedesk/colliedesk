@@ -34,7 +34,10 @@ func TestHelpCenterViewsKeepToTheWorkspaceWhoeverOwnsThem(t *testing.T) {
 		`ALTER VIEW kb_help_center_collection_ranks OWNER TO CURRENT_USER`,
 		`ALTER VIEW kb_help_center_public_articles OWNER TO CURRENT_USER`,
 		`ALTER VIEW kb_help_center_public_translations OWNER TO CURRENT_USER`,
-		`GRANT SELECT ON kb_help_center_collection_ranks, kb_help_center_public_articles, kb_help_center_public_translations TO ` + app,
+		`ALTER VIEW kb_help_center_chat_articles OWNER TO CURRENT_USER`,
+		`ALTER VIEW kb_help_center_chat_translations OWNER TO CURRENT_USER`,
+		`GRANT SELECT ON kb_help_center_collection_ranks, kb_help_center_public_articles, kb_help_center_public_translations,
+			kb_help_center_chat_articles, kb_help_center_chat_translations TO ` + app,
 	} {
 		if _, err := other.Exec(ctx, statement); err != nil {
 			t.Fatalf("%s: %v", statement, err)
@@ -43,6 +46,10 @@ func TestHelpCenterViewsKeepToTheWorkspaceWhoeverOwnsThem(t *testing.T) {
 	for _, view := range helpCenterViews {
 		var own, foreign int
 		err := db.InWorkspace(ctx, ids.a, func(tx pgx.Tx) error {
+			// The help chat views return rows only while help chat is on.
+			if _, err := tx.Exec(ctx, `SELECT set_config('app.help_chat','on',true)`); err != nil {
+				return err
+			}
 			return tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE workspace_id=$1), count(*) FILTER (WHERE workspace_id<>$1) FROM `+view,
 				ids.a).Scan(&own, &foreign)
 		})
