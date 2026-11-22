@@ -1,28 +1,22 @@
 package helpcenter
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
-// handlePrefix is where a workspace's other help centers live below the primary's root: one letter,
-// like /a/ and /c/, so it never takes a language segment, an article path or a channel type's route.
-const handlePrefix = "/b/"
-
-// handleShape is a help center's handle, as the database allows it.
-var handleShape = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
-
-// handlePath splits sub, a path below the primary help center's root, into the handle of another
-// help center and the path below that one's root: /b/<handle> or /b/<handle>/....
+// handlePath splits sub, a path below the primary help center's root, into what may be the handle
+// of another help center and the path below that one's root: /<handle> or /<handle>/.... A first
+// segment the site routes itself or reads as a language is never a handle
+// (domain.CheckHelpCenterHandle), so those pages keep their meaning.
 func handlePath(sub string) (handle, rest string, ok bool) {
-	after, found := strings.CutPrefix(sub, handlePrefix)
+	after, found := strings.CutPrefix(sub, "/")
 	if !found {
 		return "", "", false
 	}
 	handle, rest, _ = strings.Cut(after, "/")
-	if !handleShape.MatchString(handle) {
+	if domain.CheckHelpCenterHandle(handle) != nil {
 		return "", "", false
 	}
 	if rest != "" {
@@ -32,11 +26,11 @@ func handlePath(sub string) (handle, rest string, ok bool) {
 }
 
 // siteAddress is the public address of the help center site, without a trailing slash: its custom
-// domain once one is active; else, for a help center other than the primary, /b/<handle> below the
+// domain once one is active; else, for a help center other than the primary, /<handle> below the
 // primary's address; else the primary's own address (SiteURL).
 func (s *Site) siteAddress(site domain.HelpCenterSite) string {
 	if site.Handle == "" || site.CustomHost != "" {
 		return SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
 	}
-	return SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.PrimaryHost) + strings.TrimSuffix(handlePrefix, "/") + "/" + site.Handle
+	return SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.PrimaryHost) + "/" + site.Handle
 }
