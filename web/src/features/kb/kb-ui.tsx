@@ -177,10 +177,13 @@ interface HeadProps {
 export function KBHead({ current, heading, articles, actions }: HeadProps) {
   // A tab opens only for a role that may read what it lists.
   const holds = useHolds();
+  // On a phone the tabs are one row that scrolls sideways (kb.css): the current page's tab is brought into it.
+  const nav = useRef<HTMLElement>(null);
+  useEffect(() => { nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [current]);
   return (
     <header className="kb-head">
       <h1 id="kb-heading" className="kb-page-title">{heading}</h1>
-      <nav className="kb-sections" aria-label={mediaMessages.sections}>
+      <nav className="kb-sections" aria-label={mediaMessages.sections} ref={nav}>
         {holds('kb_articles:read') && <a href="/knowledge" aria-current={current === 'articles' ? 'page' : undefined}>
           {mediaMessages.articlesTab}{articles !== undefined && <span className="kb-count-tag">{articles.toLocaleString('en')}</span>}</a>}
         {holds('kb_media:read') && <a href="/knowledge/media" aria-current={current === 'media' ? 'page' : undefined}>{mediaMessages.mediaTab}</a>}
