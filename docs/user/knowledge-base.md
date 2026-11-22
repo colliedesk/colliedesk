@@ -21,10 +21,13 @@ one, for example "Getting started". An article can also be listed in more collec
 - **Add**: select **New collection**, type a **Name** (and a description if you like), choose where it
   goes under **Inside** (asked once there is a collection to put it in), then **Create collection**. To add one inside the collection you are looking
   at, select **Add a collection inside**. A collection on the sixth level cannot hold another one.
+  With [several help centers](#several-help-centers), a top-level collection also asks **Shown on**:
+  the help centers whose home page lists it. A new one starts on the primary help center.
 - **Choose**: select a collection on the left to list only the articles directly in it; **All
   articles** lists every one. The number next to a collection counts the articles directly in it, drafts included, not those of the collections inside it.
 - **Edit**: select the collection, then **Edit**. You can rename it, change its description, move it
-  under another collection (or to the top), and change its **Address name**, the part of its help
+  under another collection (or to the top), change the help centers it is **Shown on** (a top-level
+  collection only; at least one), and change its **Address name**, the part of its help
   center address. Changing the address name changes the help center addresses of the collection and
   of the collections inside it; old addresses are not redirected, so the page warns you before you
   save.
@@ -42,6 +45,10 @@ box's **Articles** list use.
   see only the published articles, in the same order.
 - **A collection**: select it, then **Move up** or **Move down** next to **Delete**. It moves among
   the collections beside it (in the same collection, or at the top).
+
+With several help centers, each one's home page can list its top-level collections in an order of
+its own; an AI agent or the API sets it (see [For developers and AI agents](#for-developers-and-ai-agents)).
+Until then a help center follows the order above, and so does the primary's home.
 
 The buttons are reached with `Tab` like any other, and a screen reader hears where the row went
 ("Moved Billing to place 2 of 5."). Once a collection is ordered by hand, an article that is new,
@@ -1184,6 +1191,34 @@ of address names, `/c/billing/cards`; changing one is not redirected. Addresses 
 see [Old help center links](import-freshdesk.md#old-help-center-links). **Changing the workspace
 address name** (Settings → Channels → Email) changes every help center address, and old links stop working.
 
+### Several help centers
+
+A workspace can have up to 20 help centers, each with its own name, address, title, language and
+collections, for example one per product. The first one is the **primary** help center: the
+settings on **Knowledge base → Settings** below the list are its settings, and it cannot be deleted.
+
+**Knowledge base → Settings → Help centers** lists them, the primary first, each with its address and
+whether it is on. Everyone who opens Settings sees the list; an admin changes it.
+
+- **Add**: select **New help center**, type a **Name** (what your team calls it) and a **Handle**,
+  then **Create help center**. The handle is 1 to 40 lowercase letters, digits or hyphens, unique in
+  the workspace. A handle the help center's own pages use, such as `search` or `articles`, is refused.
+  The new help center is served below the primary's address, at `<primary address>/<handle>`, for
+  example `https://desk.example.com/help/acme/hardware`. At 20, the page says so and has no
+  **New help center**: delete one to add another.
+- **Fill it**: a new help center starts off and shows no collection. Edit a top-level collection and
+  check it under **Shown on**; the collections inside it come along. Then select **Turn on** on its
+  row. Turning one on or off needs `kb_articles:publish` as well, and a refusal says so on the row.
+- **Delete**: select **Delete** on its row, then **Delete help center**. Its pages go offline at once
+  and its custom domain is released, so another help center can use that host name. Its collections
+  and articles stay, and keep showing on the other help centers they are shown on. A deleted help
+  center cannot be restored: make a new one and show the collections on it again. Deleting one that
+  serves on a custom domain needs `kb_articles:publish` as well. The primary cannot be deleted.
+
+Its title, language, theme, custom domain and home order are set through the API or by an AI agent
+for now (see [For developers and AI agents](#for-developers-and-ai-agents)); the page sets them for
+the primary only.
+
 ### In other languages
 
 Each language you show (see [Languages](#languages)) has the same pages below its code:
@@ -1547,13 +1582,29 @@ token. Without the permission the call is refused and names what is missing
 | Turn the help center on or off, add or order its languages | `help_center:update` |
 | Show or hide a language | `help_center:update` and `kb_articles:publish` |
 | Set its theme, search console tokens and custom domain | `help_center:update` and `kb_articles:publish` |
+| List the help centers | `help_center:read` |
+| Add a help center, rename it, change its handle, title or language, delete it | `help_center:update` (and `kb_articles:publish` to turn one on or off, or to delete one on a custom domain) |
+| Choose the help centers a collection is shown on | `kb_articles:publish` as well |
 
 Articles and collections:
 
 - Search and read articles with `colliedesk_kb_articles_search` and `colliedesk_kb_article_get`. Agents
   also write, publish, delete and restore articles, manage collections, and upload and read images.
 - Order: `colliedesk_kb_order_set` or `PUT /api/v1/kb/order` puts collections and articles in
-  [order](#order).
+  [order](#order). With `parent_id` null and a `help_center_id`, it sets the order of that help
+  center's home page, listing the top-level collections shown on it; the other help centers keep
+  theirs.
+- [Several help centers](#several-help-centers): `colliedesk_help_centers_list`
+  (`GET /api/v1/help-centers`) lists them with their ids, names, handles and addresses, and `limit`.
+  `colliedesk_help_center_create` (`POST /api/v1/help-centers`) adds one.
+  `PATCH /api/v1/help-centers/{id}`, or `colliedesk_help_center_update` with its `help_center_id`,
+  renames one, changes its handle, or turns it on or off. `DELETE /api/v1/help-centers/{id}`
+  (`colliedesk_help_center_delete`) deletes one. The help center
+  tools and routes (`colliedesk_help_center_get`, `colliedesk_help_center_update`, theme, domain,
+  languages, search console) take an optional `help_center_id`; without it they act on the primary.
+  `help_center_ids` on `colliedesk_kb_collection_create` and `colliedesk_kb_collection_update`
+  (`POST` and `PATCH /api/v1/kb/collections`) chooses where a top-level collection is shown; a
+  collection inside another answers with its top-level collection's.
 - Article order: `article_order` (`manual`, `title`, `newest` or `updated`) on
   `colliedesk_kb_collection_update` or `PATCH /api/v1/kb/collections/{id}` sets a collection's
   [article order](#article-order).

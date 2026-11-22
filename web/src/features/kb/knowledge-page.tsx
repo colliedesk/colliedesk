@@ -104,6 +104,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
         ...(values.require_approval !== original.require_approval ? { require_approval: values.require_approval } : {}),
         ...(values.article_order !== original.article_order ? { article_order: values.article_order } : {}),
         ...(values.visibility !== original.visibility ? { visibility: values.visibility } : {}),
+        ...(values.parent_id === null && values.help_center_ids && !sameSet(values.help_center_ids, original.help_center_ids) ? { help_center_ids: values.help_center_ids } : {}),
       });
       await refresh();
       setForm(null);
@@ -111,7 +112,8 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
     }
     const created = await createCollection.run({ name: values.name, ...(values.description ? { description: values.description } : {}), parent_id: values.parent_id,
       ...(values.default_template_id ? { default_template_id: values.default_template_id } : {}),
-      ...(values.visibility === 'everyone' ? {} : { visibility: values.visibility }) });
+      ...(values.visibility === 'everyone' ? {} : { visibility: values.visibility }),
+      ...(values.parent_id === null && values.help_center_ids ? { help_center_ids: values.help_center_ids } : {}) });
     await refresh();
     setForm(null);
     setSearch({ collection: created.id });
@@ -265,3 +267,6 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   );
 }
 
+
+// sameSet says whether two lists of ids hold the same ids, whatever their order.
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((item) => b.includes(item));

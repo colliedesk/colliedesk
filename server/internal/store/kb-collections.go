@@ -59,12 +59,13 @@ const kbCollectionColumns = `c.id::text,c.parent_id::text,c.name,c.slug,c.descri
 	(SELECT count(*) FROM kb_articles a WHERE a.workspace_id=c.workspace_id AND a.collection_id=c.id AND a.deleted_at IS NULL),c.default_template_id::text,c.require_approval,c.article_order,c.created_at,c.updated_at,
 	COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'imported',t.source_meta IS NOT NULL,
 		'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY t.locale)
-		FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id),'[]'::jsonb),` + kbCollectionVisibilityColumns
+		FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id),'[]'::jsonb),` + kbCollectionVisibilityColumns +
+	`,` + kbCollectionHelpCenters
 
 func kbCollectionTargets(collection *domain.KBCollection) []any {
 	return []any{&collection.ID, &collection.ParentID, &collection.Name, &collection.Slug, &collection.Description, &collection.Position,
 		&collection.ArticleCount, &collection.DefaultTemplateID, &collection.RequireApproval, &collection.ArticleOrder, &collection.CreatedAt, &collection.UpdatedAt, &collection.Translations,
-		&collection.Visibility, &collection.EffectiveVisibility}
+		&collection.Visibility, &collection.EffectiveVisibility, &collection.HelpCenterIDs}
 }
 
 func scanKBCollection(row pgx.Row) (domain.KBCollection, error) {
@@ -131,6 +132,9 @@ type KBCollectionInput struct {
 	DefaultTemplateID *string
 	// Visibility is who may see the collection and its articles; empty is everyone.
 	Visibility string
+	// HelpCenterIDs, when set, are the help centers a top-level collection is shown on; nil is the
+	// primary one.
+	HelpCenterIDs *[]string
 }
 
 func cleanKBCollection(input *KBCollectionInput) error {
@@ -151,6 +155,9 @@ func cleanKBCollection(input *KBCollectionInput) error {
 		return err
 	}
 	if err := domain.CheckKBDescription(input.Description); err != nil {
+		return err
+	}
+	if err := cleanKBHelpCenterIDs(input.HelpCenterIDs); err != nil {
 		return err
 	}
 	return domain.CheckKBPosition(input.Position)
@@ -230,6 +237,11 @@ func (s *Store) CreateKBCollection(ctx context.Context, workspaceID string, acto
 				workspaceID, input.ParentID, input.Name, input.Slug, input.Description, input.Position, input.DefaultTemplateID, input.Visibility).Scan(&id); err != nil {
 				return domain.KBCollection{}, err
 			}
+			if input.HelpCenterIDs != nil {
+				if err := placeKBCollection(ctx, sub, workspaceID, id, *input.HelpCenterIDs); err != nil {
+					return domain.KBCollection{}, err
+				}
+			}
 			return readKBCollection(ctx, sub, workspaceID, id)
 		})
 		if err != nil {
@@ -281,6 +293,8 @@ type KBCollectionChange struct {
 	ArticleOrder *string
 	// Visibility, when set, is who may see the collection and its articles (domain.KBVisibilities).
 	Visibility *string
+	// HelpCenterIDs, when set, are the help centers a top-level collection is shown on, all of them.
+	HelpCenterIDs *[]string
 }
 
 // UpdateKBCollection changes a live collection. seen is the updated_at the client read.
@@ -320,6 +334,9 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 		if err := domain.CheckKBVisibility(*change.Visibility); err != nil {
 			return domain.KBCollection{}, err
 		}
+	}
+	if err := cleanKBHelpCenterIDs(change.HelpCenterIDs); err != nil {
+		return domain.KBCollection{}, err
 	}
 	collection, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBCollection, error) {
 		if err := lockKB(ctx, tx, workspaceID); err != nil {
@@ -366,6 +383,11 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 				WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Name, change.Slug, change.Description, change.Position, change.MoveParent, change.Parent,
 				change.SetDefaultTemplate, change.DefaultTemplateID, change.RequireApproval, change.Visibility, change.ArticleOrder); err != nil {
 				return domain.KBCollection{}, err
+			}
+			if change.HelpCenterIDs != nil {
+				if err := placeKBCollection(ctx, sub, workspaceID, id, *change.HelpCenterIDs); err != nil {
+					return domain.KBCollection{}, err
+				}
 			}
 			return readKBCollection(ctx, sub, workspaceID, id)
 		})

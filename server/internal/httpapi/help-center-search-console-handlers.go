@@ -13,7 +13,11 @@ import (
 var searchConsoleFields = []string{"google_site_verification", "bing_site_verification"}
 
 func (a *API) getHelpCenterSearchConsole(response http.ResponseWriter, request *http.Request) {
-	view, err := a.store.GetHelpCenterSearchConsole(request.Context(), principal(request).Workspace.ID)
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
+	view, err := a.store.GetHelpCenterSearchConsoleIn(request.Context(), principal(request).Workspace.ID, helpCenterID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -25,6 +29,10 @@ func (a *API) getHelpCenterSearchConsole(response http.ResponseWriter, request *
 // so a client that knows only one token never removes the other; null or an empty string removes one.
 // The tags appear on every public page, so settings access alone cannot publish them.
 func (a *API) putHelpCenterSearchConsole(response http.ResponseWriter, request *http.Request) {
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
 	var input struct {
 		Google sentText `json:"google_site_verification"`
 		Bing   sentText `json:"bing_site_verification"`
@@ -47,7 +55,7 @@ func (a *API) putHelpCenterSearchConsole(response http.ResponseWriter, request *
 	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	view, err := a.store.PutHelpCenterSearchConsole(request.Context(), principal(request).Workspace.ID, change)
+	view, err := a.store.PutHelpCenterSearchConsoleIn(request.Context(), principal(request).Workspace.ID, helpCenterID, change)
 	if err != nil {
 		writeThemeError(response, err)
 		return

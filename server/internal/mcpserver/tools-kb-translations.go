@@ -124,9 +124,10 @@ func (c *call) forTranslation(articleID, locale string) {
 		"colliedesk_kb_translations_trash those in the trash; colliedesk_kb_translation_create adds one."
 }
 
-func helpCenterLanguagesGet(c *call, _ map[string]any) (any, error) {
+func helpCenterLanguagesGet(c *call, arguments map[string]any) (any, error) {
+	path, _ := c.atHelpCenter("/api/v1/help-center/languages", arguments)
 	var languages map[string]any
-	if err := c.get("/api/v1/help-center/languages", nil, &languages); err != nil {
+	if err := c.get(path, nil, &languages); err != nil {
 		return nil, err
 	}
 	return map[string]any{"languages": languages}, nil
@@ -134,7 +135,8 @@ func helpCenterLanguagesGet(c *call, _ map[string]any) (any, error) {
 
 func helpCenterLanguagesSet(c *call, arguments map[string]any) (any, error) {
 	var languages map[string]any
-	if err := c.send(http.MethodPut, "/api/v1/help-center/languages", arguments, &languages); err != nil {
+	path, body := c.atHelpCenter("/api/v1/help-center/languages", arguments)
+	if err := c.send(http.MethodPut, path, body, &languages); err != nil {
 		return nil, err
 	}
 	return map[string]any{"languages": languages}, nil

@@ -20,6 +20,7 @@ var directPublishedRead = regexp.MustCompile(`(?i)status\s*(=\s*'published'|in\s
 var teamSideKBFiles = map[string]string{
 	"store/kb-articles.go":            "the team's article list, edits and publishing",
 	"store/kb-translations.go":        "the team's translations and their counts",
+	"store/help-center-languages.go":  "the team's count of published and draft translations per language",
 	"store/kb-review-edits.go":        "the version a review compares with",
 	"store/kb-review-translations.go": "the version a translation review compares with",
 	"store/kb-public.go":              "whether a change needs kb_articles:publish",

@@ -916,6 +916,12 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/kb/articles/{id}/translations/{locale}/draft", auth.PermissionSession},
 		// What readers searched for on the help center.
 		{http.MethodGet, "/api/v1/kb/searches/report", auth.PermissionSession},
+		// The workspace's help centers: the primary one and those below it or on their own domain.
+		{http.MethodGet, "/api/v1/help-centers", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/help-centers", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/help-centers/{id}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/help-centers/{id}", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/help-centers/{id}", auth.PermissionSession},
 		// Knowledge gaps: what readers asked for and did not find.
 		{http.MethodGet, "/api/v1/kb/gaps", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/gaps/{id}", auth.PermissionSession},

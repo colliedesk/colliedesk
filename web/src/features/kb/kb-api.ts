@@ -35,7 +35,9 @@ const collectionFields = {
   id: z.string().uuid(), parent_id: z.string().uuid().nullable(), name: z.string(), slug: z.string(), description: z.string(),
   position: z.number().int(), article_count: z.number().int(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 };
-export const kbCollectionSchema = z.object({ ...collectionFields, ...visibilityFields, default_template_id: z.string().uuid().nullable(), require_approval: approvalModeSchema, article_order: articleOrderSchema, translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
+export const kbCollectionSchema = z.object({ ...collectionFields, ...visibilityFields, default_template_id: z.string().uuid().nullable(), require_approval: approvalModeSchema, article_order: articleOrderSchema, translations: z.array(collectionNameSchema),
+  // The help centers whose home shows it: its own for a top-level collection, its top-level collection's for one under it.
+  help_center_ids: z.array(z.string().uuid()) }) satisfies z.ZodType<Generated<'KBCollection'>>;
 const trashedCollectionSchema = z.object({
   ...collectionFields, visibility: visibilitySchema.optional(), effective_visibility: visibilitySchema.optional(), default_template_id: z.string().uuid().nullable().optional(), require_approval: approvalModeSchema.optional(), article_order: articleOrderSchema.optional(), translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBCollection'>>;

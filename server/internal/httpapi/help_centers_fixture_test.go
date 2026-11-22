@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
 // The custom domains of the two help centers of twoHelpCenters.
@@ -21,6 +23,7 @@ const hostMain, hostHardware = "help.multi-main.example", "help.multi-hardware.e
 type twoHelpCenters struct {
 	api, site http.Handler
 	pool      *pgxpool.Pool
+	service   *auth.Service
 	admin     string
 	slug      string
 	workspace string
@@ -38,7 +41,7 @@ type twoHelpCenters struct {
 func newTwoHelpCenters(t *testing.T) *twoHelpCenters {
 	t.Helper()
 	api, service, pool, _ := testAPIWithStorage(t)
-	f := &twoHelpCenters{api: api, site: helpCenterSite(api), pool: pool}
+	f := &twoHelpCenters{api: api, site: helpCenterSite(api), pool: pool, service: service}
 	f.admin = createSession(t, api, service, "Multi Desk", "admin@multi-desk.example.com")
 	f.slug, f.workspace = workspaceSlug(t, api, f.admin), workspaceID(t, api, f.admin)
 	enableHelpCenter(t, api, f.admin, "Main answers", true)
