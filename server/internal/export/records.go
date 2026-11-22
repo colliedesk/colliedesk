@@ -1362,6 +1362,7 @@ type Sink interface {
 	KBArticleVote(KBArticleVote) error
 	KBArticleView(KBArticleView) error
 	KBArticleUse(KBArticleUse) error
+	KBSearch(KBSearch) error
 	KBReview(KBReview) error
 	KBReviewReviewer(KBReviewReviewer) error
 	HelpCenter(HelpCenter) error

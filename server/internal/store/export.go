@@ -858,6 +858,9 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	if err := exportKBArticleViewsAndUses(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportKBSearches(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	if err := exportKBReviews(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
