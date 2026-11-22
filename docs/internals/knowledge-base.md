@@ -358,6 +358,47 @@ retention `cmd/collie/kb-search-retention.go`, export `store/export-kb-searches.
 - **Export.** `kb-searches.ndjson` (query, results, opened article, `created_at` UTC), after the article
   views; `query_key` is not exported, it is derived.
 
+## Gaps
+
+Migration `20261122170943-kb-gaps`; code `store/kb-gaps.go` (list, read, change),
+`store/kb-gaps-worker.go` (`BuildKBGaps`, `RunKBGaps`), `store/kb-gaps-sources.go` (what each kind
+reads), `store/kb-gaps-place.go` (filing a signal, the automatic fix), `store/kb-gaps-match.go`,
+`store/kb-gaps-topics.go`, `httpapi/kb-gap-handlers.go`, MCP `catalog-kb-gaps.go`, web
+`features/kb/gaps-page.tsx` and `gap-signals.tsx`.
+
+- **Triggers, not handlers.** Every signal comes from a trigger on its source table
+  (`kb_searches`, `kb_article_votes`, `ai_chat_sessions`, `ai_chat_turns`, `ai_chat_feedback`,
+  `kb_articles` on publish) that queues a row in `kb_gap_pending`; the worker reads the source, masks
+  and folds the text and files it. A new place that writes a source needs no gap code.
+- **The reader writes votes.** The help center reader has no grant on the gap tables. The vote
+  trigger's function is `SECURITY DEFINER`, owned by the app role with a fixed search path, so the
+  reader fires it and the app role's workspace isolation still binds the row it queues. It queues
+  only inside the voting workspace's own transaction. Never widen the reader's grants for a gap.
+- **Agent-side tables.** `kb_gap_pending`, `kb_gaps` and `kb_gap_signals` use
+  `secure_workspace_table`, not `secure_help_center_table`: they cover every help center of the
+  workspace and the public help center never reads them.
+- **Workspace deletion.** Every trigger that writes guards with `WHERE EXISTS` on `workspaces`, so a
+  cascade from a workspace being deleted writes nothing; the chat delete trigger likewise skips the
+  recount while its workspace goes.
+- **The worker.** `serve` runs `RunKBGaps` every 30 s. One transaction at a time changes a
+  workspace's gaps (`lockKBGaps`, a transaction advisory lock); another process skips that workspace.
+  A failing workspace keeps its queue and does not hold up the others. A source still held by
+  another transaction stays queued.
+- **Matching.** `kbGapScore` weighs matched words by length (a word of 4 or more characters matches
+  one it starts); `KBGapMatchThreshold` (0.6) joins a signal to a gap. Candidates come from the GIN
+  index on `kb_search_vector(query_key)`, gaps of every status, so a dismissed gap keeps counting.
+- **The title.** `kb_gap_recount` sets the title to the most common text of its signals, the newest
+  on a tie, and recounts askers, first and last seen. A gap left without signals is deleted. Asker
+  keys never leave the server.
+- **Fixed and reopened.** Publishing an article whose title scores at least the threshold against an
+  open gap marks it fixed automatically. A fixed gap asked for more than 7 days after the fix
+  (`kbGapReopenAfter`) opens again; a person's change clears `fixed_automatically`.
+- **Recurring topics.** Once a day per workspace, only with at least 20 conversations resolved in 30
+  days (`kbGapTopicsMinConversations`), a resolved conversation whose subject no published article
+  title matches becomes a signal. No AI is called.
+- **Retention and export.** Signals stay after their search ages out or their article is purged
+  (they are already masked). A deleted chat deletes its signals. Gaps are not in the export.
+
 ## Views and uses
 
 Migration `20261121091907-kb-article-views-and-uses`; code `pageview/` (who is a reader, the event),
