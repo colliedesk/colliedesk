@@ -20,7 +20,7 @@ func TestAnAgentChoosesItsPersonsKnowledgeBaseListColumns(t *testing.T) {
 
 	settings := e.ok(draft, "colliedesk_workspace_settings_get", nil)
 	e.requireMatchesOutputSchema(draft, "colliedesk_workspace_settings_get", settings)
-	if got := columns(settings["your_kb_list_columns"].(map[string]any)); got != "[status author tags updated] true" {
+	if got := columns(settings["your_kb_list_columns"].(map[string]any)); got != "[status author updated] true" {
 		t.Fatalf("columns before choosing = %s", got)
 	}
 	chosen := e.ok(draft, "colliedesk_my_kb_list_columns_set", map[string]any{"columns": []any{"votes", "status", "languages"}})
@@ -32,14 +32,14 @@ func TestAnAgentChoosesItsPersonsKnowledgeBaseListColumns(t *testing.T) {
 		t.Fatalf("columns read back = %s", got)
 	}
 	theirs := e.ok(e.connect(other.draft, ""), "colliedesk_workspace_settings_get", nil)
-	if got := columns(theirs["your_kb_list_columns"].(map[string]any)); got != "[status author tags updated] true" {
+	if got := columns(theirs["your_kb_list_columns"].(map[string]any)); got != "[status author updated] true" {
 		t.Fatalf("another workspace's columns = %s", got)
 	}
 	if message := e.fails(draft, "colliedesk_my_kb_list_columns_set", map[string]any{"columns": []any{"status", "status"}}); !strings.Contains(message, "uniqueItems") {
 		t.Errorf("a column named twice: %q", message)
 	}
 	refusedWithoutPermission(t, e, w.read, "colliedesk_my_kb_list_columns_set", map[string]any{"columns": nil})
-	if got := columns(e.ok(draft, "colliedesk_my_kb_list_columns_set", map[string]any{"columns": nil})); got != "[status author tags updated] true" {
+	if got := columns(e.ok(draft, "colliedesk_my_kb_list_columns_set", map[string]any{"columns": nil})); got != "[status author updated] true" {
 		t.Fatalf("columns after null = %s", got)
 	}
 }

@@ -8,6 +8,7 @@ export const listMessages = {
   columns: 'Columns',
   columnsLead: 'The columns you see here, on every device you sign in on.',
   columnsHidden: (count: number) => `Too narrow for the last ${count === 1 ? 'column' : `${count} columns`}: widen or pick fewer.`,
+  columnsNoRoom: (count: number) => `No room for the last ${count === 1 ? 'column' : `${count} columns`}: pick fewer.`,
   resetColumns: 'Reset columns',
   columnsFailed: 'The columns were not saved. Try again.',
   filters: 'Filters',

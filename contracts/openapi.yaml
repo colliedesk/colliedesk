@@ -13604,7 +13604,7 @@ components:
       description: 'The columns of the knowledge base article list this agent sees after Article, in order (PUT /api/v1/agents/me/kb-list-columns).'
       properties:
         columns: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/KBListColumn'}}
-        default: {type: boolean, description: 'True while the agent has not chosen: columns is then status, author, tags, updated.'}
+        default: {type: boolean, description: 'True while the agent has not chosen: columns is then status, author, updated.'}
     KBVoteTally:
       type: object
       required: [helpful, not_helpful]

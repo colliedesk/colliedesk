@@ -126,7 +126,7 @@ the end of a published article's row opens its public page.
 **Columns** chooses what each row shows besides the title: **Status**, **Collection**, **Author**,
 **Tags**, **Languages**, **Created**, **Updated** and **Votes** (the readers who answered "Was this
 article helpful?" with yes and with no). Your choice is kept for you, on every device you sign in on;
-**Reset columns** brings back the default (Status, Author, Tags and Updated).
+**Reset columns** brings back the default (Status, Author and Updated).
 
 **Export CSV** downloads every article the filters keep, in the list's order, up to 50,000 rows:
 `title`, `address`, `collection`, `status`, `author`, `tags`, `languages`, `created_at` and

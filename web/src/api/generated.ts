@@ -9068,7 +9068,7 @@ export interface components {
         /** @description The columns of the knowledge base article list this agent sees after Article, in order (PUT /api/v1/agents/me/kb-list-columns). */
         KBListColumns: {
             columns: components["schemas"]["KBListColumn"][];
-            /** @description True while the agent has not chosen: columns is then status, author, tags, updated. */
+            /** @description True while the agent has not chosen: columns is then status, author, updated. */
             default: boolean;
         };
         KBVoteTally: {

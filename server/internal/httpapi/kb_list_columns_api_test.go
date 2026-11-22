@@ -38,7 +38,7 @@ func TestKnowledgeBaseListColumnsAreEachMembersChoice(t *testing.T) {
 		decode(t, response, &out)
 		return out
 	}
-	const defaults = "[status author tags updated] true"
+	const defaults = "[status author updated] true"
 	for _, token := range []string{f.admin, f.ann, f.otherAdmin} {
 		if got := fmt.Sprint(columns(token).Columns, " ", columns(token).Default); got != defaults {
 			t.Fatalf("a member who never chose sees %s, want %s", got, defaults)

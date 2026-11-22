@@ -40,7 +40,7 @@ import { KBHead, KBToast } from './kb-ui';
 export type { KnowledgeSearch } from './knowledge-search';
 export { useRefreshKB } from './kb-refresh';
 
-const defaultColumns: KBListColumn[] = ['status', 'author', 'tags', 'updated'];
+const defaultColumns: KBListColumn[] = ['status', 'author', 'updated'];
 // The head of a column: status and updated keep the words the list always had.
 const columnHead = (column: KBListColumn) => (column === 'status' ? kbMessages.statusFilter : column === 'updated' ? kbMessages.updatedColumn : listMessages.columnNames[column]);
 
@@ -173,7 +173,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const selects = holds('kb_articles:update');
   // The columns that fit beside the title; the last chosen ones give way on a narrow list.
   const listBox = useRef<HTMLDivElement>(null);
-  const shown = useFittingColumns(listBox, columns, { ordered: Boolean(ordered), selects });
+  const { shown, widest } = useFittingColumns(listBox, columns, { ordered: Boolean(ordered), selects });
   const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter, enabled: holds('help_center:read') });
   const publicNow = center.data?.enabled;
   const newCollection = () => { setProblem(undefined); setForm(form === 'new' ? null : 'new'); };
@@ -233,7 +233,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             </fieldset>
             <VisibilityFilter value={search.visibility} onChange={(visibility) => setSearch({ visibility })} />
             <ListFilters search={search} onChange={(change) => setSearch(change)} />
-            <ListColumns columns={columns} isDefault={me.data?.kb_list_columns.default ?? true} hidden={columns.length - shown.length} />
+            <ListColumns columns={columns} isDefault={me.data?.kb_list_columns.default ?? true} hidden={columns.length - shown.length} widest={widest} />
             <KBSavedViews search={search} timezone={timezone} onApply={(next) => void navigate({ to: '/knowledge', search: next, replace: false })} />
             <a className="button-link kb-export" href={kbApi.exportHref(filter)} download data-tip={listMessages.exportTip}>{listMessages.exportCsv}</a>
           </div>

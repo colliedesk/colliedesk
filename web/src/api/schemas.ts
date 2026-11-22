@@ -357,7 +357,7 @@ export const meSchema = z.object({
   // An older server offers no AI feature.
   ai_features: z.object({ triage: z.boolean(), draft: z.boolean() }).catch({ triage: false, draft: false }),
   // An older server stores no columns: the list shows the default ones.
-  kb_list_columns: z.object({ columns: z.array(kbListColumnSchema), default: z.boolean() }).catch({ columns: ['status', 'author', 'tags', 'updated'], default: true }),
+  kb_list_columns: z.object({ columns: z.array(kbListColumnSchema), default: z.boolean() }).catch({ columns: ['status', 'author', 'updated'], default: true }),
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean(), internal: z.boolean(), admins: z.array(z.string()).optional() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;

@@ -28,8 +28,9 @@ const names: Record<string, string> = {
 
 // checkGrid compares the head with the first row. The head and the row show the same first chosen columns (the
 // last ones give way when the title would drop under 12rem, and the Columns menu says so); each head label that
-// shows starts where its cell starts; the open button sits on the row's line.
-async function checkGrid(page: Page, label: string, columns: string[], ordered: boolean) {
+// shows starts where its cell starts; the open button sits on the row's line. `widen` says whether a wider window
+// gives the list more room: once the page is at its widest (1020 px of content) the menu only says to pick fewer.
+async function checkGrid(page: Page, label: string, columns: string[], ordered: boolean, widen: boolean) {
   const head = page.locator('.kb-cols-head');
   const row = page.locator('.kb-article-item').filter({ hasText: 'Refund rules' });
   await expect(row).toBeVisible();
@@ -64,12 +65,14 @@ async function checkGrid(page: Page, label: string, columns: string[], ordered: 
   const item = await box(row);
   expect.soft(Math.round(item.height), `${label}: the row is one line of the grid`).toBeLessThanOrEqual(Math.round(rowBox.height) + 1);
   expect.soft(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${label}: no sideways scroll`).toBe(true);
-  // The Columns menu says when the list is too narrow for some of the chosen columns.
+  // The Columns menu says when the list has no room for some of the chosen columns, and what helps.
   const menu = page.locator('.kb-columns-menu');
   await menu.locator('summary').click();
   const note = menu.getByRole('note');
   const left = columns.length - shown;
-  if (left > 0) await expect(note, `${label}: the menu counts the columns left out`).toContainText(`Too narrow for the last ${left === 1 ? 'column' : `${left} columns`}`);
+  const last = left === 1 ? 'column' : `${left} columns`;
+  if (left > 0) await expect(note, `${label}: the menu counts the columns left out and says what helps`)
+    .toHaveText(widen ? `Too narrow for the last ${last}: widen or pick fewer.` : `No room for the last ${last}: pick fewer.`);
   else await expect(note).toHaveCount(0);
   await menu.locator('summary').click();
   return shown;
@@ -91,7 +94,7 @@ async function seed(page: Page) {
 
 const choices: Record<string, string[]> = {
   'one column': ['status'],
-  'the default four': ['status', 'author', 'tags', 'updated'],
+  'four columns': ['status', 'author', 'tags', 'updated'],
   'all eight': ['status', 'collection', 'author', 'tags', 'languages', 'created', 'updated', 'votes'],
 };
 
@@ -100,16 +103,25 @@ test.describe('at 1440 px', () => {
 
   test('kb article list: at desktop width with 1, 4 and 8 columns, with bulk select and in a collection\'s order view, the head lines up with the cells, the title keeps the free width, the open button stays on its row', { tag: '@journey' }, async ({ page }) => {
     const billing = await seed(page);
+    // A person who never chose sees the default columns, every one of them in All articles: no column left out.
+    const defaults = ['status', 'author', 'updated'];
+    await page.goto(`${base}/knowledge`);
+    await expect(page.locator('.kb-list[data-select="true"]')).toBeVisible();
+    expect(await checkGrid(page, 'the default columns, all articles', defaults, false, false)).toBe(3);
+    // A collection's order also has its move buttons, so the last default column gives way there.
+    await page.goto(`${base}/knowledge?collection=${billing}`);
+    await expect(page.locator('.kb-list[data-order="true"]')).toBeVisible();
+    expect(await checkGrid(page, 'the default columns, the collection\'s order', defaults, true, false)).toBe(2);
     for (const [name, columns] of Object.entries(choices)) {
       await setColumns(page, columns);
       // All articles, with the bulk-select tick box an admin gets.
       await page.goto(`${base}/knowledge`);
       await expect(page.locator('.kb-list[data-select="true"]')).toBeVisible();
-      await checkGrid(page, `${name}, all articles`, columns, false);
+      await checkGrid(page, `${name}, all articles`, columns, false, false);
       // One collection: the list is its order, with the move buttons in a column of their own.
       await page.goto(`${base}/knowledge?collection=${billing}`);
       await expect(page.locator('.kb-list[data-order="true"]')).toBeVisible();
-      await checkGrid(page, `${name}, the collection's order`, columns, true);
+      await checkGrid(page, `${name}, the collection's order`, columns, true, false);
       await page.screenshot({ path: test.info().outputPath(`kb-list-${columns.length}-columns-1440.png`) });
     }
   });
@@ -122,17 +134,17 @@ test.describe('on narrower windows', () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await setColumns(page, choices['all eight']);
     await page.goto(`${base}/knowledge`);
-    await checkGrid(page, 'all eight at 1280 px, all articles', choices['all eight'], false);
+    await checkGrid(page, 'all eight at 1280 px, all articles', choices['all eight'], false, true);
     await page.goto(`${base}/knowledge?collection=${billing}`);
     await expect(page.locator('.kb-list[data-order="true"]')).toBeVisible();
-    await checkGrid(page, 'all eight at 1280 px, the collection\'s order', choices['all eight'], true);
+    await checkGrid(page, 'all eight at 1280 px, the collection\'s order', choices['all eight'], true, true);
     // 1150 px: the collections sit beside the list, which is under 36rem and shows the title and the first column
     // only, although two narrow columns would fit.
     await page.setViewportSize({ width: 1150, height: 800 });
     const narrow = ['votes', 'languages', 'status'];
     await setColumns(page, narrow);
     await page.goto(`${base}/knowledge`);
-    expect(await checkGrid(page, 'votes, languages, status at 1150 px', narrow, false)).toBe(1);
+    expect(await checkGrid(page, 'votes, languages, status at 1150 px', narrow, false, true)).toBe(1);
     await page.screenshot({ path: test.info().outputPath('kb-list-narrow.png') });
   });
 });

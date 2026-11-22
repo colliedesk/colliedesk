@@ -12,7 +12,7 @@ vi.mock('@polar-sh/checkout/embed', () => ({ PolarEmbedCheckout: { create: embed
 const me = {
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf('admin'), timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', token: null, permissions: permissionsOf('admin'), plan: null, ai_features: { triage: false, draft: false }, onboarding_goal: null, setup_guide_hidden: false, kb_list_columns: { columns: ['status' as const, 'author' as const, 'tags' as const, 'updated' as const], default: true }, kb_editor: null,
+  timezone: 'UTC', token: null, permissions: permissionsOf('admin'), plan: null, ai_features: { triage: false, draft: false }, onboarding_goal: null, setup_guide_hidden: false, kb_list_columns: { columns: ['status' as const, 'author' as const, 'updated' as const], default: true }, kb_editor: null,
 };
 const locked = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, checkout_refusals: [], storage_upgrade_plan: null, purchased_plan: null, checkout_plans: ['team_monthly', 'team_yearly'],
