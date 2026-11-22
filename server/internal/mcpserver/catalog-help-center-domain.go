@@ -35,7 +35,7 @@ func helpCenterDomainGetSpec() Spec {
 			`awaiting_payment is true while the workspace is on its trial (or locked after it): the domain can be set and verified, ` +
 			`but the help center serves on it only once the workspace is paid. ` + helpCenterAddressRule,
 		REST:   []string{"GET " + helpCenterDomainPath},
-		Input:  noArguments,
+		Input:  helpCenterOnlyInput,
 		Output: helpCenterDomainOutput,
 		run:    helpCenterDomainGet,
 	}
@@ -51,7 +51,7 @@ func helpCenterDomainSetSpec() Spec {
 			`A host name another workspace's help center serves on can be claimed: it waits, pending, until DNS proves this claim and no longer proves the other one. `,
 		Idempotent: true,
 		REST:       []string{"PUT " + helpCenterDomainPath},
-		Input:      `{"type":"object","additionalProperties":false,"required":["hostname"],"properties":{"hostname":{"type":"string","minLength":1,"maxLength":253,"description":"A host name such as help.example.com; Unicode names are stored in punycode."}}}`,
+		Input:      `{"type":"object","additionalProperties":false,"required":["hostname"],"properties":{"hostname":{"type":"string","minLength":1,"maxLength":253,"description":"A host name such as help.example.com; Unicode names are stored in punycode."},` + helpCenterIDProperty + `}}`,
 		Output:     helpCenterDomainOutput,
 		run:        helpCenterDomainSet,
 	}
@@ -67,7 +67,7 @@ func helpCenterDomainCheckSpec() Spec {
 			`that workspace's claim, else domain_taken. ` + helpCenterAddressRule + `One workspace may check 10 times an hour, people and agents together. `,
 		Idempotent: true,
 		REST:       []string{"POST " + helpCenterDomainPath + "/check"},
-		Input:      noArguments,
+		Input:      helpCenterOnlyInput,
 		Output:     helpCenterDomainOutput,
 		run:        helpCenterDomainCheck,
 	}
@@ -81,15 +81,16 @@ func helpCenterDomainRemoveSpec() Spec {
 			`Setting it again needs a new check with a new CNAME target and TXT token. Removing when there is none changes nothing. `,
 		Idempotent: true,
 		REST:       []string{"DELETE " + helpCenterDomainPath},
-		Input:      noArguments,
+		Input:      helpCenterOnlyInput,
 		Output:     helpCenterDomainOutput,
 		run:        helpCenterDomainRemove,
 	}
 }
 
-func helpCenterDomainGet(c *call, _ map[string]any) (any, error) {
+func helpCenterDomainGet(c *call, arguments map[string]any) (any, error) {
+	path, _ := c.atHelpCenter(helpCenterDomainPath, arguments)
 	var current map[string]any
-	if err := c.get(helpCenterDomainPath, nil, &current); err != nil {
+	if err := c.get(path, nil, &current); err != nil {
 		return nil, err
 	}
 	return map[string]any{"domain": current}, nil
@@ -99,17 +100,25 @@ func helpCenterDomainSet(c *call, arguments map[string]any) (any, error) {
 	return helpCenterDomainSend(c, http.MethodPut, helpCenterDomainPath, arguments)
 }
 
-func helpCenterDomainCheck(c *call, _ map[string]any) (any, error) {
-	return helpCenterDomainSend(c, http.MethodPost, helpCenterDomainPath+"/check", nil)
+func helpCenterDomainCheck(c *call, arguments map[string]any) (any, error) {
+	path, _ := c.atHelpCenter(helpCenterDomainPath+"/check", arguments)
+	return helpCenterDomainSend(c, http.MethodPost, path, nil)
 }
 
-func helpCenterDomainRemove(c *call, _ map[string]any) (any, error) {
-	return helpCenterDomainSend(c, http.MethodDelete, helpCenterDomainPath, nil)
+func helpCenterDomainRemove(c *call, arguments map[string]any) (any, error) {
+	path, _ := c.atHelpCenter(helpCenterDomainPath, arguments)
+	return helpCenterDomainSend(c, http.MethodDelete, path, nil)
 }
 
-func helpCenterDomainSend(c *call, method, path string, body any) (any, error) {
+// helpCenterDomainSend sends body, help_center_id taken out of it, to path of that help center.
+func helpCenterDomainSend(c *call, method, path string, body map[string]any) (any, error) {
+	path, body = c.atHelpCenter(path, body)
 	var current map[string]any
-	if err := c.send(method, path, body, &current); err != nil {
+	var payload any
+	if body != nil {
+		payload = body
+	}
+	if err := c.send(method, path, payload, &current); err != nil {
 		return nil, err
 	}
 	return map[string]any{"domain": current}, nil

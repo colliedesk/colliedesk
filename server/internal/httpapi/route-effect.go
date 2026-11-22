@@ -106,7 +106,7 @@ var routeEffects = map[string]Effect{
 	"DELETE /api/v1/kb/media/{id}":                                Changes,
 	"DELETE /api/v1/kb/media-uploads/{id}":                        Changes,
 	"DELETE /api/v1/help-center/domain":                           Changes,
-	"DELETE /api/v1/help-centers/{id}":                            Changes,
+	"DELETE /api/v1/help-centers/{id}":                            Final,
 	"DELETE /api/v1/imports/{id}/people/{externalId}/link":        Changes,
 	"DELETE /api/v1/ai/source-consents/{class}":                   Changes,
 	"DELETE /api/v1/autofix/repos/{id}/include-notes":             Changes,

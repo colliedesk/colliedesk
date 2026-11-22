@@ -81,7 +81,12 @@ const (
 		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"default_template_id":{"type":["string","null"],"description":"The template every new article in it starts from (colliedesk_kb_templates_list); null: they start empty."},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
 		`"position":{"type":"integer"},"article_count":{"type":"integer"},"updated_at":{"type":"string"},"deleted_at":{"type":"string"},"deleted_by":{"type":["string","null"]},"purges_at":{"type":"string"},` +
 		`"translations":{"type":"array","description":"Its name and description in the help center's other languages (colliedesk_kb_collection_translation_set).","items":{"type":"object","properties":{` +
-		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}},` + kbRequireApprovalProperty + `,` + kbArticleOrderProperty + `,` + kbVisibilityOutput + `}}`
+		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}},` + kbRequireApprovalProperty + `,` + kbArticleOrderProperty + `,` + kbVisibilityOutput + `,` +
+		`"help_center_ids":{"type":"array","items":{"type":"string"},"description":"The help centers it is shown on (colliedesk_help_centers_list), the primary first; a nested collection follows its top-level one."}}}`
+
+	// kbHelpCenterIDsProperty chooses the help centers a top-level collection is shown on.
+	kbHelpCenterIDsProperty = `"help_center_ids":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string",` + uuid + `},` +
+		`"description":"Top-level collections only: the help centers it is shown on (colliedesk_help_centers_list); a nested one follows its top-level collection. Left out on create: the primary."}`
 
 	// kbRequireApprovalProperty is a collection's approval setting, in its answer and in a change.
 	kbRequireApprovalProperty = `"require_approval":{"type":"string","enum":["inherit","on","off"],"description":"Whether its articles need an approved version before they are published: ` +
@@ -95,7 +100,8 @@ const (
 
 	kbCollectionOutput = `{"type":"object","required":["collection"],"properties":{"collection":` + kbCollectionSchema + `}}`
 
-	helpCenterSchema = `{"type":"object","required":["enabled","title","locale","content_version","url"],"properties":{"enabled":{"type":"boolean"},"title":{"type":"string"},` +
+	helpCenterSchema = `{"type":"object","required":["enabled","title","locale","content_version","url"],"properties":{"id":{"type":"string"},"name":{"type":"string"},` +
+		`"handle":{"type":["string","null"]},"primary":{"type":"boolean"},"enabled":{"type":"boolean"},"title":{"type":"string"},` +
 		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"},` + kbHelpCenterApprovalProperty + `,` + kbHelpCenterShowTagsProperty + `}}`
 
 	kbHelpCenterApprovalProperty = `"require_approval":{"type":"boolean","description":"true: an article is published only once a teammate approved exactly its text ` +
@@ -135,12 +141,12 @@ func kbCollectionCreateSpec() Spec {
 		Name:  "colliedesk_kb_collection_create",
 		Title: "Create a knowledge base collection",
 		Description: `Add a collection, at the top or under parent_id (at most six levels deep). Without slug one is made from the name; a slug is unique among the collections of one parent. ` +
-			`default_template_id makes every new article in it start from that template. A workspace holds at most 1,000 collections, the trash included. Delete it with colliedesk_kb_collection_delete to undo.`,
+			`default_template_id makes every new article in it start from that template; help_center_ids chooses the help centers a top-level one is shown on. A workspace holds at most 1,000 collections, the trash included. Delete it with colliedesk_kb_collection_delete to undo.`,
 
 		REST: []string{"POST /api/v1/kb/collections"},
 		Input: `{"type":"object","additionalProperties":false,"required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,` +
 			`"description":{"type":"string","maxLength":2000},"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,"position":{"type":"integer","minimum":0,"maximum":1000000,` +
-			`"description":"Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand (colliedesk_kb_order_set), else by name."},` + kbVisibilityProperty + `}}`,
+			`"description":"Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand (colliedesk_kb_order_set), else by name."},` + kbVisibilityProperty + `,` + kbHelpCenterIDsProperty + `}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionCreate,
 	}
@@ -151,12 +157,13 @@ func kbCollectionUpdateSpec() Spec {
 		Name:  "colliedesk_kb_collection_update",
 		Title: "Change a knowledge base collection",
 		Description: `Rename a collection, change its slug, description, position, default template, whether its articles need approval (require_approval, needs kb_articles:publish), how it lists its articles (article_order) or who can see it (visibility), or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
-			`A move that would nest it more than six levels deep, or under itself, is refused. A change or move that shows published articles to more people needs kb_articles:publish.`,
+			`help_center_ids chooses the help centers a top-level collection is shown on. ` +
+			`A move that would nest it more than six levels deep, or under itself, is refused. A change or move that shows published articles to more people, or a change of help_center_ids, needs kb_articles:publish.`,
 
 		REST: []string{"PATCH /api/v1/kb/collections/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["collection_id","updated_at"],"properties":{` + kbCollectionIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,"description":{"type":"string","maxLength":2000},"position":{"type":"integer","minimum":0,"maximum":1000000},` +
-			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,` + kbRequireApprovalProperty + `,` + kbArticleOrderProperty + `,` + kbVisibilityProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
+			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,` + kbRequireApprovalProperty + `,` + kbArticleOrderProperty + `,` + kbVisibilityProperty + `,` + kbHelpCenterIDsProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionUpdate,
 	}
@@ -423,10 +430,10 @@ func helpCenterGetSpec() Spec {
 		Name:  "colliedesk_help_center_get",
 		Title: "Read the help center settings",
 		Description: `Say whether the public help center is on, its title and language, its public address (url), and content_version, which grows with every change to the knowledge base. ` +
-			`While it is off, nothing of the knowledge base is public. An article's public address is url + "/a/<number>-<slug>".`,
-		REST:   []string{"GET /api/v1/help-center"},
-		Input:  noArguments,
-		Output: `{"type":"object","required":["help_center"],"properties":{"help_center":` + helpCenterSchema + `}}`,
+			`While it is off, nothing of the knowledge base is public. An article's public address is url + "/a/<number>-<slug>". With help_center_id, the same of that help center with its name and handle.`,
+		REST:   []string{"GET /api/v1/help-center", "GET /api/v1/help-centers/{id}"},
+		Input:  helpCenterOnlyInput,
+		Output: helpCenterOutput,
 		run:    helpCenterGet,
 	}
 }
@@ -437,12 +444,14 @@ func helpCenterUpdateSpec() Spec {
 		Title: "Turn the help center on or off",
 		Description: `Turn the public help center on or off and set its title (empty uses the workspace name) and language (a BCP 47 tag such as en or pt-BR). ` +
 			`Turning it on publishes every article marked published; turning it off takes every page off line at once. ` +
-			`require_approval (needs kb_articles:publish; left out, it stays as it is) makes every article need a teammate's approval before it is published. show_tags (left out, it stays as it is) shows each article's tags on its page. It is safe to repeat.`,
+			`require_approval (needs kb_articles:publish; left out, it stays as it is) makes every article need a teammate's approval before it is published. show_tags (left out, it stays as it is) shows each article's tags on its page. ` +
+			`With help_center_id it changes that help center, and name and handle rename it; require_approval is workspace-wide, so leave help_center_id out for it. ` + helpCenterHandleRule + `It is safe to repeat.`,
 		Idempotent: true,
-		REST:       []string{"PUT /api/v1/help-center"},
-		Input: `{"type":"object","additionalProperties":false,"required":["enabled","title","locale"],"properties":{"enabled":{"type":"boolean"},` +
-			`"title":{"type":"string","maxLength":200},"locale":{"type":"string","minLength":2,"maxLength":35},` + kbHelpCenterApprovalProperty + `,` + kbHelpCenterShowTagsProperty + `}}`,
-		Output: `{"type":"object","required":["help_center"],"properties":{"help_center":` + helpCenterSchema + `}}`,
+		REST:       []string{"PUT /api/v1/help-center", "PATCH /api/v1/help-centers/{id}"},
+		Input: `{"type":"object","additionalProperties":false,"required":["enabled","title","locale"],"properties":{` + helpCenterIDProperty + `,"enabled":{"type":"boolean"},` +
+			`"title":{"type":"string","maxLength":200},"locale":{"type":"string","minLength":2,"maxLength":35},"name":{"type":"string","minLength":1,"maxLength":200},` +
+			`"handle":{"type":"string","minLength":1,"maxLength":40},` + kbHelpCenterApprovalProperty + `,` + kbHelpCenterShowTagsProperty + `}}`,
+		Output: helpCenterOutput,
 		run:    helpCenterUpdate,
 	}
 }
