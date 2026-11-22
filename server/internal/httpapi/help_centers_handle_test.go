@@ -25,8 +25,10 @@ func TestTheDatabaseRefusesAHelpCenterHandleThatIsARouteOrALanguage(t *testing.T
 			workspace, handle)
 		return err
 	}
-	for _, handle := range []string{"a", "b", "c", "search", "images", "media", "files", "support", "chat",
-		"vi", "pt-br", "fra", "zh-hant"} {
+	// Every name the domain reserves is refused here too, so a route reserved only in Go fails this test.
+	refused := append([]string{"a", "b", "c", "search", "images", "media", "files", "support", "chat",
+		"vi", "pt-br", "fra", "zh-hant"}, domain.ReservedHelpCenterHandles...)
+	for _, handle := range refused {
 		var pgErr *pgconn.PgError
 		if err := insert(handle); !errors.As(err, &pgErr) || pgErr.Code != "23514" {
 			t.Errorf("insert handle %q: %v, want a check violation (23514)", handle, err)
