@@ -44,6 +44,7 @@ work together, keep the knowledge base. Tag `@journey`; CI job `e2e`.
 - `two people on one conversation: who is writing, a warning before a second reply, and leaving` (`web/e2e/collision.spec.ts`)
 - `a private note asks a teammate with @: Mentions counts it, opening it marks it read, the writer sees it was seen` (`web/e2e/mentions.spec.ts`)
 - `review: the rail counts the cards, a person opens one as a conversation, sets one aside and puts it back` (`web/e2e/review.spec.ts`)
+- `search palette: from an open conversation, ⌘K and choosing another conversation (Recent or typed) opens it` (`web/e2e/frame-search-quick-start.spec.ts`)
 - `knowledge base: a collection, an article written in the Markdown editor with a pasted image, published, edited, restored from history, deleted and restored from the trash` (`web/e2e/knowledge-base.spec.ts`)
 - `knowledge base list: tags set in the editor, a hidden column stays hidden after a reload, and a saved view opens its filters again` (`web/e2e/knowledge-base-list.spec.ts`)
 - `knowledge base review: the author sends a draft for review, the reviewer approves it from Reviews, the author publishes it` (`web/e2e/knowledge-base-review.spec.ts`)

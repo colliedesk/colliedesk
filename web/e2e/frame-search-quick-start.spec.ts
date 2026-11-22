@@ -91,6 +91,46 @@ test.describe('at 1440 px', () => {
     expect(new URL(page.url()).searchParams.get('status')).toBe('all');
   });
 
+  test('search palette: from an open conversation, ⌘K and choosing another conversation (Recent or typed) opens it', { tag: '@journey' }, async ({ page }) => {
+    await deskWithConversations(page, 'Palette Desk');
+    await page.goto(`${base}/`);
+    const rows = page.locator('.conversation-scroll > .conversation-item');
+    await expect(rows).toHaveCount(2);
+    const center = page.locator('.conversation-center');
+    const palette = page.getByRole('dialog', { name: 'Search' });
+    const input = palette.getByRole('combobox', { name: 'Search conversations, customers and pages' });
+
+    // A conversation picked in the list is the one open.
+    await rows.filter({ hasText: 'Refund still not on my card' }).click();
+    await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}/);
+    const refundURL = page.url();
+    await expect(center).toContainText('Refund still not on my card');
+
+    // A typed row of the palette opens the other one, in the address and on screen.
+    await page.keyboard.press('Control+k');
+    await input.fill('invoice');
+    await palette.getByRole('group', { name: 'Conversations' }).getByRole('option', { name: /Invoice copy for September/ }).click();
+    await expect(palette).toHaveCount(0);
+    await expect(page).not.toHaveURL(refundURL);
+    await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}/);
+    await expect(center).toContainText('Invoice copy for September');
+    await expect(center).not.toContainText('Refund still not on my card');
+    const invoiceURL = page.url();
+
+    // A Recent row opens the first one again.
+    await page.keyboard.press('Control+k');
+    await palette.getByRole('group', { name: 'Recent' }).getByRole('option', { name: /Refund still not on my card/ }).click();
+    await expect(palette).toHaveCount(0);
+    await expect(page).toHaveURL(refundURL);
+    await expect(center).toContainText('Refund still not on my card');
+    await expect(center).not.toContainText('Invoice copy for September');
+
+    // Picking in the list after the palette still opens the row picked.
+    await rows.filter({ hasText: 'Invoice copy for September' }).click();
+    await expect(page).toHaveURL(invoiceURL);
+    await expect(center).toContainText('Invoice copy for September');
+  });
+
   test('Quick start opens its checklist under it, inside the list column, and nothing floats over the list while it is closed', async ({ page }) => {
     await deskWithConversations(page, 'Quick Desk');
     await page.goto(`${base}/`);
