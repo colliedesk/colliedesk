@@ -63,7 +63,8 @@ composite foreign keys keep working across the scoped tables.
 |---|---|---|
 | `DATABASE_URL` role (owner) | Runs migrations, privileged lookups, the advisory lock, `ANALYZE` through `DB.RefreshStatistics` before an import undo (owner-pool maintenance: statistics only, no rows returned; `pg_stats` hides RLS tables from the app role) | Superuser: all rows (PostgreSQL skips RLS for superusers). Other owner: only rows of a transaction marked `app.privileged`. |
 | `colliedesk_app_<database>` (app role) | Every workspace-scoped transaction switches to it | Only the workspace in `app.workspace_id` |
-| `DATABASE_REQUEST_URL` login (optional, `colliedesk_request` in installs) | Opens the request pool | Nothing by itself; it can only `SET ROLE` to the app role |
+| `colliedesk_reader_<database>` (help center reader) | Every help-center-scoped transaction of the public help center switches to it | Only the rows the help center in `app.help_center_id` shows, of the workspace in `app.workspace_id`; no grant on any other table |
+| `DATABASE_REQUEST_URL` login (optional, `colliedesk_request` in installs) | Opens the request pool | Nothing by itself; it can only `SET ROLE` to the app role, and through it to the reader |
 
 - **App role.** `NOLOGIN NOSUPERUSER NOBYPASSRLS`, one per database. The name is
   `colliedesk_app_` plus the database name. Past 63 bytes (bytes, not characters) it is cut on a
@@ -100,6 +101,10 @@ composite foreign keys keep working across the scoped tables.
 - The request connection cannot `SET ROLE` to the app role.
 - With a separate request login: that login is a superuser, has `BYPASSRLS` or is a member of the
   owner.
+- The reader is missing, is a superuser or has `BYPASSRLS`.
+- The app role inherits the reader (`pg_has_role(..., 'USAGE')`). Its RESTRICTIVE policies would then
+  bind the app role too, and staff would lose every article no help center shows.
+- The request connection cannot `SET ROLE` to the reader, or a separate request login inherits it.
 
 ## The two ways to query
 
@@ -119,6 +124,156 @@ All queries go through `internal/database.DB` (`scope.go`):
 `database.New(pool)` uses one pool for both. `database.NewSplit(owner, request)` is the
 request-login mode. `httpapi.Config.RequestPool` and `store.NewWithDB` / `auth.NewWithDB` carry it.
 The store, auth, importer and email code never touch a pool.
+
+A third way serves the public help center:
+
+- `InHelpCenter(ctx, workspaceID, helpCenterID, fn)` / `BeginHelpCenter` / `BeginHelpCenterTx` start
+  a transaction on the request pool as the help center reader. They set `role`,
+  `app.workspace_id` and `app.help_center_id`, all transaction-local. A workspace or help center id
+  that is not a UUID returns `ErrNoWorkspace` or `ErrNoHelpCenter` before any SQL runs.
+
+## The public help center reader
+
+A workspace can have several help centers. A visitor of one must not read a row only another one
+shows, even through a query that forgets a filter. The reader role enforces this in the database.
+
+### The role
+
+- `NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT`, one per database, named like the app role
+  (`colliedesk_reader_` plus the database name, cut with an md5 suffix past 63 bytes). It owns
+  nothing.
+- It is granted to the app role `WITH INHERIT FALSE, SET TRUE`. The owner and the request login reach
+  it through the app role, and its policies never bind the app role. Leaving it (`RESET ROLE`,
+  `SET LOCAL ROLE NONE`) returns to the request login, which has no rights
+  (`TestRequestLoginCannotLeaveTheHelpCenterScope`).
+- The server reads its name back from `roles[1]` of `help_center_isolation` on `kb_articles`
+  (`DB.ReaderRole`). `pg_policies.roles` is sorted by name, and `colliedesk_app_…` sorts first.
+- Grants: `SELECT` on the knowledge base tables and on `help_centers`, `help_center_languages`,
+  `kb_collection_help_centers`. `SELECT, INSERT, UPDATE` on `kb_article_votes` and
+  `kb_article_vote_versions` (a visitor's vote), with their sequences. `SELECT` on the views listed
+  below. Nothing on conversations, messages, contacts, channels, tokens, sessions, billing or
+  `help_center_domains`.
+
+### The policies
+
+`secure_help_center_table` keeps every policy of a help center table on the reader:
+
+- `workspace_isolation` is extended to the app role and the reader.
+- A RESTRICTIVE `help_center_isolation` policy for the reader only adds the help center check. A
+  RESTRICTIVE policy narrows the permissive ones, so the reader needs both.
+
+Each table reads the one above it through its own policy, so one chain decides everything:
+
+| Table | The reader sees a row when |
+|---|---|
+| `help_centers` | `id` is `app.help_center_id` |
+| `help_center_languages`, `kb_collection_help_centers` | `help_center_id` is `app.help_center_id` |
+| `kb_collections` | its `top_collection_id` is placed on that help center |
+| `kb_collection_translations`, `kb_article_collections` | its collection is visible |
+| `kb_articles` | its home collection is visible, or it is listed in a visible collection |
+| `kb_article_translations`, `_media`, `_attachments`, `_tags`, `_vote_resets`, `_votes`, `_vote_versions` | its article is visible |
+| `kb_media` | an article, attachment, logo or favicon visible to the reader names it |
+
+An unset or empty `app.help_center_id` is `NULL`, so the reader sees no row
+(`TestAHelpCenterReaderWithoutAHelpCenterSeesNothing`). The app role keeps seeing every article of
+its workspace, unplaced and agents-only ones too.
+
+`kb_collections.top_collection_id` holds the top-level collection a collection sits under (itself at
+the top). The policy on `kb_collections` is then one indexed `IN`, not a walk up the parents. Two
+triggers keep it:
+
+- `kb_collections_top` (BEFORE INSERT or UPDATE of `parent_id`) copies the parent's top.
+- `kb_collections_children_top` (AFTER UPDATE) carries a new top down one level per update and stops
+  where the value already matches.
+
+A collection moved under another tree moves its articles to that tree's help center
+(`TestMovingACollectionMovesItsArticlesToTheOtherHelpCenter`). The migration fills the column for
+existing collections (`TestRowSecurityMigrationGivesExistingCollectionsTheirTopCollection`).
+
+**EXISTS or a maintained table.** The policies use `IN (SELECT …)` over the table above, which the
+planner runs as a semi-join on the primary keys. A trigger-maintained table of visible articles per
+help center was the other option. `EXPLAIN (ANALYZE, BUFFERS)` as the reader, on the 2,000-article
+knowledge base of the latency budget tests, put every statement of a page together at 19 to 28 ms
+(article 19 ms, collection 23 ms, search 22 ms, French article with related articles 20 ms, French
+collection 25 ms, French search 26 ms). The policies stay as they are, and the only maintained value
+is `top_collection_id`.
+
+A translation in a list of articles is checked against `kb_published_translations`
+(`shownArticleKBTranslation`), once the statement checks the article with `publicKBArticle`. Checking
+`kb_help_center_public_translations` there as well makes the planner expect one row, and it runs the
+whole join once per collection: the last page of a French collection took 4.5 s instead of 25 ms.
+
+### Definer views
+
+Whether an article is public depends on every collection it is listed in. A listing may sit on
+another help center, which the reader cannot see. Read as the reader, `kb_public_articles` would miss
+that listing and could show an article an agents-only collection hides.
+
+Three views decide this for the whole workspace: `kb_help_center_collection_ranks`,
+`kb_help_center_public_articles` and `kb_help_center_public_translations`.
+
+- They are owned by the app role and are not `security_invoker`. They read the tables as the app role
+  (`workspace_isolation` only), whoever selects from them.
+- They read only tables and immutable functions. A function that reads a table runs as its caller, so
+  the parent walk is a correlated recursive subquery (one key lookup per level, at most nine levels),
+  not `kb_parents_visibility_rank`.
+- They match `kb_public_articles` and `kb_public_translations` row for row
+  (`TestHelpCenterPublicViewsMatchTheWorkspaceViews`,
+  `TestAnAgentsOnlyCollectionSixLevelsUpKeepsTheArticleOffEveryHelpCenter`).
+- Reviewed exception: through them the reader can learn the ids of every public article of its
+  workspace, on any help center. It never reads the article itself, because `kb_articles` stays
+  behind `help_center_isolation`. Public articles are public on their own help center already.
+
+The reader also has `SELECT` on `kb_collection_visibility`, `kb_published_articles` and
+`kb_published_translations`, which are invoker views over tables it is limited on.
+
+### Store methods
+
+The public site reaches the store only through these methods. Each runs through `helpCenterScoped`
+(`internal/store/help-center-scope.go`) and never through the app role's scope:
+
+`HelpCenterArticleIn`, `HelpCenterArticlesIn`, `HelpCenterBrandImage`, `HelpCenterCollectionsIn`,
+`HelpCenterFile`, `HelpCenterImage`, `HelpCenterIndex`, `HelpCenterRelatedArticlesIn`,
+`HelpCenterTranslationIndex`, `HelpCenterVideo`, `KBArticleVotesVersion`, `SearchHelpCenterIn`,
+`VoteKBArticle`.
+
+`helpCenterScoped` resolves `""` to the workspace's primary help center as the app role first (the
+reader reads only its own `help_centers` row). A workspace without one is read as the all-zero UUID,
+which no row has. The callback gets the resolved id, so its own `$H` filters never call
+`primary_help_center_id` as the reader.
+
+Staff, MCP and AI paths stay on the app role. They see every help center of the workspace.
+
+### Reviewed cross-help-center routes
+
+These public-site calls stay on the app role, each for a stated reason. Adding one is a security
+review; `appRoleStoreMethods` in `internal/helpcenter/store_reader_guard_test.go` holds the same list.
+
+| Store method | Decision |
+|---|---|
+| `HelpCenterHost`, `HelpCenterClaim`, `GetHelpCenterDomain` | Host lookup: a host name decides which help center serves the request, before there is one to read as. The reader has no grant on `help_center_domains`. |
+| `OpenHelpCenter`, `OpenHelpCenterAt`, `OpenHelpCenterWorkspace` | Resolve the help center row. `content_version` (the page cache key) is read here. `last_article_number` lives on the primary row and only the staff path increments it (`store/kb-articles.go`). |
+| `OpenHelpCenterHandle` | Resolves a handle among the workspace's help centers. |
+| `WorkspaceForMailSlug` | Resolves a workspace from its slug before any help center is chosen. |
+| `HelpCenterLegacyTarget`, `HelpCenterLegacyItems` | Old helpdesk links redirect to wherever the article is now, which may be another help center. Only the new address leaves. |
+| `HelpCenterPreview` | A signed staff preview shows drafts and agents-only content to the team. |
+
+Other routes that touch more than one help center:
+
+- **`movedTo`** (`helpcenter/site.go`): an old address redirects to the help center's custom domain.
+  It uses the host lookup above and reads no article.
+- **An article link to another help center:** the article page answers 404 for an article this help
+  center does not show (`helpcenter/pages.go`). The reader cannot read it, so a link never renders
+  another help center's text.
+- **`primary_help_center_id()`:** called only as the app role (staff, import, export, help chat, and
+  `helpCenterScoped` itself). As the reader it would see only its own row.
+- **Votes:** written as the reader; a vote through a help center that does not show the article is
+  refused by row-level security (`TestAHelpCenterVisitorVotesOnlyOnItsOwnHelpCenter`).
+- **Article views:** counted in memory and written by `PrivilegeKBArticleViews` (privileged list
+  below); no row is read back.
+- **Web form:** `store.OpenWebForm` runs through `PrivilegeWorkspaceBySlug`, then in the app role's
+  scope; it writes a conversation, which the reader must never reach.
+- **Help chat:** `ChatKBArticlesIn` is an AI path and stays on the app role.
 
 ## Workspace hosts
 
@@ -257,12 +412,28 @@ one call:
 
    A plain `GRANT SELECT, INSERT` restricts nothing, because it adds to the default privileges.
    `limit_app_role` revokes first, then grants exactly the listed privileges.
+4. A table the public help center reads (after `secure_workspace_table`):
 
-The helpers are defined in `20261014135949-table-security-helpers`, before row-level security is set
-up, so every migration calls them, the oldest ones too. `migration-check` refuses an up migration that
+   ```sql
+   SELECT secure_help_center_table('kb_article_notes',
+       'article_id IN (SELECT id FROM kb_articles)', 'SELECT');
+   ```
+
+   The second argument is the reader's `help_center_isolation` condition. Write it over a table
+   above it in the chain (here `kb_articles`), never over `app.help_center_id` again, so the table
+   follows that table's visibility. The helper extends `workspace_isolation` to the reader, adds the
+   RESTRICTIVE policy, revokes every grant of the reader on the table and grants exactly the listed
+   privileges (with the sequences when `INSERT` is listed). A table that is not listed stays out of
+   the reader's reach: default privileges do not cover it.
+
+The first three helpers are defined in `20261014135949-table-security-helpers`, before row-level
+security is set up, so every migration calls them, the oldest ones too.
+`secure_help_center_table` and `reader_role()` are defined in
+`20261122081247-help-center-row-security`. `migration-check` refuses an up migration that
 writes `CREATE`, `ALTER` or `DROP POLICY`, `ROW LEVEL SECURITY`, `pg_policies` or `app.privileged` by
-hand (comments do not count); only that migration and `20261014135950-workspace-row-level-security`,
-which secures `workspaces` itself, spell it out. If a table needs a shape the helpers do not give, add
+hand (comments do not count); only that migration, `20261014135950-workspace-row-level-security`,
+which secures `workspaces` itself, and the help center migration that defines
+`secure_help_center_table` spell it out. If a table needs a shape the helpers do not give, add
 a helper in a migration and test it. The rest of a migration's layout is in
 [migrations.md](migrations.md).
 
@@ -300,6 +471,22 @@ a helper in a migration and test it. The rest of a migration's layout is in
   `TestWorkspaceCannotWriteRowsOfAnotherWorkspace` check the policies themselves.
 - **Non-superuser owner:** `TestNonSuperuserOwnerIsAlsoFailClosed` runs migrations and queries as a
   non-superuser owner. Forced RLS hides all rows from its plain queries.
+- **Help center tables:** the catalog test above also pins the policy text of every table in
+  `helpCenterPolicies` (`help_center_security_test.go`): `workspace_isolation` for the app role and the reader,
+  and the exact `help_center_isolation` condition. `TestSecurityGuardFlagsAWidenedHelpCenterPolicy`
+  and `TestSecurityGuardFlagsAReaderGrantOnTheInbox` prove it catches a widened condition and a
+  reader grant outside the help center.
+- **Reader policies:** `TestAHelpCenterReaderSeesOnlyItsOwnHelpCenter` (a raw `SELECT` of every
+  help center table as the reader of A returns no row only B shows; the app role still sees unplaced
+  and agents-only articles), `TestAHelpCenterReaderWithoutAHelpCenterSeesNothing` and
+  `TestTheHelpCenterReaderReachesOnlyThePublicHelpCenter` (permission denied on the inbox, contacts
+  and channels).
+- **Verify:** `TestVerifyRefusesAReaderThatSkipsHelpCenterIsolation` (a `BYPASSRLS` reader, an app
+  role that inherits it) and `TestRequestLoginCannotLeaveTheHelpCenterScope`.
+- **Public site store calls:** `TestThePublicSiteReadsTheKnowledgeBaseAsTheHelpCenterReader`
+  (`internal/helpcenter/store_reader_guard_test.go`) parses the package. Every `Store` method the
+  public site calls must be a reader method whose body runs `helpCenterScoped` and no app-role scope,
+  or a reviewed app-role method with its reason. A new call fails it until it is classified.
 
 ## Traps
 
@@ -313,6 +500,15 @@ a helper in a migration and test it. The rest of a migration's layout is in
   transaction, then call out. `VerifyEmailDomain` and the importer follow this.
 - **Performance.** A scoped call adds `BEGIN`, one `set_config` round trip and `COMMIT`. The inbox
   p95 gate in `performance.md` runs through this path and must stay within budget.
+- **The reader cannot find the primary help center.** `primary_help_center_id($1)` reads
+  `help_centers`, and the reader sees only its own row. Never bind `""` for `$H` inside an
+  `InHelpCenter` callback; call through `helpCenterScoped`, which resolves the id as the app role
+  first.
+- **A function that reads a table runs as its caller.** A definer view that calls one is limited by
+  the caller's policies again. Write the read inside the view.
+- **Never grant the reader `kb_public_articles` or `kb_public_translations`.** Read as the reader they
+  miss the listings on other help centers and can show an article an agents-only collection hides.
+  Use `kb_help_center_public_articles` and `kb_help_center_public_translations`.
 
 ## Operator notes
 

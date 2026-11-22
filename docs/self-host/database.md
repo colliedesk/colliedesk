@@ -16,11 +16,14 @@ PostgreSQL row-level security keeps each workspace's rows apart. Because of it:
 
 1. Run `pg_dump` as a superuser: `postgres` for installs made with the installer, `colliedesk`
    for older installs and for the repository's `compose.yaml`.
-2. Before you restore into a new PostgreSQL server, create the role that Colliedesk uses for
-   requests. Its name is `colliedesk_app_` followed by the database name:
+2. Before you restore into a new PostgreSQL server, create the two roles that Colliedesk uses for
+   requests: `colliedesk_app_` and `colliedesk_reader_` (public help center pages), each followed by
+   the database name:
    ```sql
    CREATE ROLE colliedesk_app_colliedesk NOLOGIN;
    GRANT colliedesk_app_colliedesk TO colliedesk;
+   CREATE ROLE colliedesk_reader_colliedesk NOLOGIN NOINHERIT;
+   GRANT colliedesk_reader_colliedesk TO colliedesk_app_colliedesk WITH INHERIT FALSE, SET TRUE;
    ```
    Replace the second `colliedesk` with your `DATABASE_URL` user if it is different.
 
@@ -52,10 +55,11 @@ The server opens at most 20 database connections per pool. To change that, add
 `...?sslmode=disable&pool_max_conns=40`. Keep it well above 2, the number of workspace exports the
 server runs at once.
 
-When you remove an install from a shared PostgreSQL server, also remove its two users. Dropping
+When you remove an install from a shared PostgreSQL server, also remove its roles. Dropping
 the database does not remove them. As a superuser, after dropping the database:
 
 ```sql
+DROP ROLE colliedesk_reader_colliedesk;
 DROP ROLE colliedesk_app_colliedesk;
 DROP ROLE colliedesk_request;
 ```
