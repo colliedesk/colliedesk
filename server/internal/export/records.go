@@ -85,6 +85,9 @@ type Channel struct {
 	// AutoCloseSince is when auto-close was turned on: only conversations resolved after it close by
 	// themselves. Null while it is off.
 	AutoCloseSince *time.Time `json:"auto_close_since"`
+	// HelpCenterID is the help center a help chat or web form serves; null is the primary (and every
+	// other type).
+	HelpCenterID *string `json:"help_center_id"`
 }
 
 // ChannelAILevel is the level a channel sets for an AI feature on one of its scopes (” is the
@@ -1272,7 +1275,10 @@ type ConversationHead struct {
 	// ReplyChannelID is the channel its replies were pinned to when its own channel cannot send.
 	ReplyChannelID *string `json:"reply_channel_id"`
 	// MergedIntoID is where its customer messages went when a move closed it as no new request.
-	MergedIntoID *string                    `json:"merged_into_id"`
+	MergedIntoID *string `json:"merged_into_id"`
+	// HelpCenterID is the help center it came in through (a web form or help chat that serves one);
+	// null for email and the other channels.
+	HelpCenterID *string                    `json:"help_center_id"`
 	Origin       *domain.ConversationOrigin `json:"origin"`
 	TagIDs       []string                   `json:"tag_ids"`
 	CreatedAt    time.Time                  `json:"created_at"`
