@@ -18,7 +18,8 @@ export const helpCentersKey = ['help-centers'] as const;
 
 export const helpCentersApi = {
   list: () => request('/api/v1/help-centers', helpCenterListSchema),
-  create: (value: RequestBody<'createHelpCenter'>) => request('/api/v1/help-centers', helpCenterSummarySchema, { method: 'POST', body: JSON.stringify(value) }),
+  create: (value: RequestBody<'createHelpCenter'>, key: string) =>
+    request('/api/v1/help-centers', helpCenterSummarySchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(value) }),
   update: (id: string, value: RequestBody<'updateHelpCenter'>) => request(`/api/v1/help-centers/${id}`, helpCenterSummarySchema, { method: 'PATCH', body: JSON.stringify(value) }),
   remove: (id: string) => request(`/api/v1/help-centers/${id}`, noContentSchema, { method: 'DELETE' }),
 };

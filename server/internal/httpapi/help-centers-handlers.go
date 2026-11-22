@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -66,13 +68,20 @@ func (a *API) createHelpCenter(response http.ResponseWriter, request *http.Reque
 			"Send name, handle (the path below the primary help center's address, such as hardware) and locale (such as en); title and enabled are optional.")
 		return
 	}
-	created, err := a.store.CreateHelpCenter(request.Context(), principal(request).Workspace.ID, domain.NewHelpCenter{
-		Name: *input.Name, Handle: *input.Handle, Title: input.Title, Locale: *input.Locale, Enabled: input.Enabled, ShowTags: input.ShowTags})
-	if err != nil {
-		writeKBError(response, err)
-		return
-	}
-	a.writeHelpCenterSummary(response, request, http.StatusCreated, created)
+	fingerprint := []string{*input.Name, *input.Handle, input.Title, *input.Locale, strconv.FormatBool(input.Enabled), strconv.FormatBool(input.ShowTags)}
+	a.createOnce(response, request, createHelpCenterOperation, fingerprint, func(ctx context.Context) (any, error) {
+		created, err := a.store.CreateHelpCenter(ctx, principal(request).Workspace.ID, domain.NewHelpCenter{
+			Name: *input.Name, Handle: *input.Handle, Title: input.Title, Locale: *input.Locale, Enabled: input.Enabled, ShowTags: input.ShowTags})
+		if err != nil {
+			writeKBError(response, err)
+			return nil, errAnswered
+		}
+		centers := []domain.HelpCenterSummary{created}
+		if !a.addressHelpCenters(response, request, centers) {
+			return nil, errAnswered
+		}
+		return centers[0], nil
+	})
 }
 
 func (a *API) getHelpCenterByID(response http.ResponseWriter, request *http.Request) {

@@ -24612,7 +24612,10 @@ export interface operations {
     createHelpCenter: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -24622,6 +24625,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The help center an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterSummary"];
+                };
+            };
             /** @description The new help center */
             201: {
                 headers: {
@@ -24635,6 +24647,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     getHelpCenterByID: {

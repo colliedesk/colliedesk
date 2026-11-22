@@ -9674,6 +9674,8 @@ paths:
         the workspace is 409 `duplicate_handle`; a handle the help center's own pages use (`search`,
         `articles`, `collections` and the like) is 400. Needs `help_center:update`; turning it on
         (`enabled`) needs `kb_articles:publish` too.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -9683,10 +9685,14 @@ paths:
         '201':
           description: The new help center
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSummary'}}}
+        '200':
+          description: The help center an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSummary'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/help-centers/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:

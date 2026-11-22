@@ -1,6 +1,8 @@
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { RequestBody } from '../../api/client';
+import { useCreateMutation } from '../../api/use-create';
 import { messages } from '../../messages';
 import { helpCenterName, helpCentersApi, helpCentersKey } from './help-centers-api';
 import type { HelpCenterSummary } from './help-centers-api';
@@ -65,13 +67,13 @@ function NewHelpCenterForm({ home, locale, onDone }: { home: string; locale: str
   const client = useQueryClient();
   const [name, setName] = useState('');
   const [handle, setHandle] = useState('');
-  const create = useMutation({
-    mutationFn: () => helpCentersApi.create({ name: name.trim(), handle: handle.trim(), locale }),
+  const create = useCreateMutation({
+    create: (value: RequestBody<'createHelpCenter'>, key: string) => helpCentersApi.create(value, key),
     onSuccess: async () => { await client.invalidateQueries({ queryKey: helpCentersKey }); onDone(true); },
   });
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!create.isPending && name.trim() && handle.trim()) create.mutate();
+    if (!create.isPending && name.trim() && handle.trim()) create.mutate({ name: name.trim(), handle: handle.trim(), locale });
   };
   return <form className="stacked-form" aria-label={text.newHelpCenter} onSubmit={submit}>
     {create.isError && <p role="alert" className="error-copy">{reason(create.error, text.actionFailed)}</p>}

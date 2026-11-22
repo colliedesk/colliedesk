@@ -52,6 +52,26 @@ test('an admin adds a help center by name and handle, and it joins the list', as
   expect(screen.queryByRole('form', { name: 'New help center' })).not.toBeInTheDocument();
 });
 
+test('a create sent again after a failed answer goes under the same Idempotency-Key, so the server makes one', async () => {
+  let answers = 0;
+  const calls = open('admin', {
+    'GET /api/v1/help-centers': () => json(200, { help_centers: [primaryCenter], limit: 20 }),
+    'POST /api/v1/help-centers': () => (++answers === 1 ? refusal(503, 'unavailable', 'Try again.') : json(201, hardwareCenter)),
+  });
+  fireEvent.click(await screen.findByRole('button', { name: 'New help center' }));
+  const form = screen.getByRole('form', { name: 'New help center' });
+  fireEvent.change(within(form).getByRole('textbox', { name: 'Name' }), { target: { value: 'Hardware' } });
+  fireEvent.change(within(form).getByRole('textbox', { name: 'Handle' }), { target: { value: 'hardware' } });
+  fireEvent.click(within(form).getByRole('button', { name: 'Create help center' }));
+  expect(await within(form).findByRole('alert')).toBeInTheDocument();
+  fireEvent.click(within(form).getByRole('button', { name: 'Create help center' }));
+  await waitFor(() => expect(screen.queryByRole('form', { name: 'New help center' })).not.toBeInTheDocument());
+  const keys = calls.filter((call) => call.method === 'POST').map((call) => call.headers['Idempotency-Key']);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toMatch(/^.{16,}$/);
+  expect(keys[1]).toBe(keys[0]);
+});
+
 test('a handle the server refuses says why and keeps the form', async () => {
   const reason = 'Another help center of this workspace already uses the handle hardware.';
   open('admin', {
