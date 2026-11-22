@@ -125,6 +125,16 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **Search** reuses the knowledge base search (`kbQuery` and the title `ILIKE`), published only,
   best 25, and reads the first 600 characters of only those 25 for the excerpt; no `ts_headline`.
   The query is cut at 200 characters.
+- **Related articles** (`store.HelpCenterRelatedArticles`, one query) rank the shown articles by
+  the source's title words and its 24 longest body words without digits, each weighted by rarity
+  (`ln((N+1)/(df+0.5))`, doubled in the title); a word more than half of the candidates hold is not
+  counted. The rest of the home collection fills up to five, in its order. Ranking reads every shown
+  article's vector (no index under row-level security), 25–37 ms on 1,000 articles of 9,000
+  characters, so the page keeps the list in memory per workspace, `content_version`, language and
+  article (`helpcenter/related-lists.go`, 8,192 lists, least recently used out). The version in the
+  key is the guard: every knowledge base write grows it, so a trashed or hidden article never stays
+  listed (`TestAnArticleListsRelatedArticlesBelowItsText` trashes one and reads the page again). The
+  admin preview shows no list. The public JSON and Markdown have no `related`.
 - **Limits per client address** (the web form's limiter and `TRUSTED_PROXIES` handling): 600 pages
   and 30 searches a minute across all workspaces. A search reads every article vector of the
   workspace (no index under row-level security).

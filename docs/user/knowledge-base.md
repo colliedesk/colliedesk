@@ -1255,6 +1255,11 @@ to serve on the domain again.
   inside it. A collection page lists those collections, each with its first articles, and its own
   articles in their [order](#order), 50 a page. An article page lists the other articles of its
   collection beside the text, and its headings under [On this page](#on-this-page).
+- **Related articles** below an article's text lists up to five other articles: first those whose
+  title and text share the most uncommon words with it, from any collection, then the rest of its
+  collection in its [order](#order). An article with no close article and alone in its collection has
+  no list. In a [language](#languages), it lists only articles published in that language. The list
+  is plain links and follows every change to the knowledge base at once.
 - **Search** works like the search in the editor: whole words and the start of words in titles and
   text, and any part of a title. It shows the best 25 matches.
 - Search also finds words in the text of an article's [files](#attach-files) (PDF, TXT, CSV).

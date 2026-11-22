@@ -1238,6 +1238,7 @@
  "TestHelpCenterNonCanonicalAddressesMove": 0.26,
  "TestHelpCenterOldFreshdeskAddressesLatencyBudget": 0.49,
  "TestHelpCenterOnItsOwnHostAndTheCertificateQuestion": 0.55,
+ "TestHelpCenterPagesAfterAnEditLatencyBudget": 4.0,
  "TestHelpCenterPagesCarryStructuredData": 0.34,
  "TestHelpCenterPagesForbidScriptsFramingAndBranding": 0.55,
  "TestHelpCenterPagesLatencyBudget": 21.96,
