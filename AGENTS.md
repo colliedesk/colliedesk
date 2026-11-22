@@ -40,7 +40,7 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    `TestToolArgumentsAreValidatedAgainstTheSchema`,
    `TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`, `TestInboxSearchLatencyBudget`,
    `TestToolsListStaysWithinItsBudget` (the tool list a client loads, `docs/internals/performance.md`),
-   the onboarding and daily-use journeys below; agent journeys with call budgets are tracked in #374.
+   the onboarding and daily-use journeys (`## Journeys` below); agent journeys with call budgets are tracked in #374.
 
 ## Glossary
 
@@ -89,65 +89,19 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 - Market is international: timestamps are stored and returned in UTC; the UI formats them in the
   agent's IANA timezone. No country-specific defaults.
 
-## Onboarding journeys
+## Journeys
 
-Customers leaving Freshdesk judge Colliedesk in their first hour. These end-to-end tests run the
-real server, CLI, PostgreSQL and a browser; only external services are local stand-ins (Freshdesk
-API, identity provider JWKS, Mailpit as the SMTP relay). They run on every PR in the CI jobs
-`onboarding` and `install-smoke`. A change to an onboarding surface (`install.sh`,
-`create-workspace` / `pair`, redeem, invites, sessions, cloud sign-in, the email channel,
-`import freshdesk` / `import undo`, the empty inbox, `operator pair` and the operator console) must keep them green. Never skip, weaken or
-untag one; fix the product instead. `corepack pnpm test` fails when this list and the
-`@onboarding` tests in `web/e2e/` differ (`web/scripts/check-journeys.mjs`).
-
-- `self-host first run: fresh database, create-workspace, pairing link, empty inbox that explains the next step` (`web/e2e/onboarding-self-host.spec.ts`)
-- `invite teammate: admin invites, teammate joins with the Agent role, admin revokes, revoked session refused` (`web/e2e/onboarding-invite.spec.ts`)
-- `email channel: forwarded mail opens a conversation, the reply is delivered by SMTP with threading headers, the customer reply threads back` (`web/e2e/onboarding-email.spec.ts`)
-- `freshdesk import: reconcile OK with exact counts, tickets searchable with original timestamps, undo removes exactly the import` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
-- `freshdesk import: an account without canned responses still migrates its tickets and says so` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
-- `freshdesk import: a wrong API key stops before writing anything and says why` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
-- `freshdesk import: an archive refused with 403 is reported UNVERIFIED, never OK` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
-- `in-app freshdesk import: an admin reads the account, imports it in the background, reconcile OK with exact counts, and undoes it` (`web/e2e/onboarding-in-app-import.spec.ts`)
-- `cloud sign-in: a verified identity of an existing agent gets a Colliedesk session; every other token is refused` (`web/e2e/onboarding-cloud-sign-in.spec.ts`)
-- `cloud signup: a verified identity starts a trial, the same email cannot start a second one, the expired trial is locked and still exports` (`web/e2e/onboarding-cloud-signup.spec.ts`)
-- `golden path: a new team signs up on the cloud, imports Freshdesk in the app, reconcile OK, answers its first conversation by email` (`web/e2e/onboarding-golden-path.spec.ts`; #99 adds its step to this test)
-- `link errors: expired, reused, revoked, mistyped, missing and another workspace's link explain themselves` (`web/e2e/onboarding-link-errors.spec.ts`)
-- `test message: a new cloud workspace sends itself a test message from the empty inbox, answers it on the trial, and the reply is delivered` (`web/e2e/onboarding-test-message.spec.ts`)
-- `operator console: the installer's operator link signs in, the operator sets SMTP and sends a test, the change applies without a restart, history restores the previous version` (`web/e2e/onboarding-operator-console.spec.ts`)
-
-Also: `tests/install-smoke.sh` (real `install.sh` with Docker against the image built from the
-commit; the printed link must sign in) and `tests/install-test.sh` (installer with stubbed Docker).
-
-Ports, databases and temp files derive from the checkout path (`web/e2e/support/checkout.ts`), so two
-checkouts can run them at once; `COLLIEDESK_E2E_PORT_BASE` overrides the ports. Each test server
-(main, mail, cloud) runs on a new database of its own, named after `TEST_DATABASE_URL`'s.
-Run locally: `docker compose --profile test up -d postgres mailpit`, then
-`make e2e E2E_ARGS='--grep @onboarding'`; for the installer,
-`docker build -t colliedesk:smoke -f server/Dockerfile . && COLLIE_DESK_IMAGE=colliedesk:smoke sh tests/install-smoke.sh`.
-
-## Daily-use journeys
-
-What a team does every day after its first hour: answer and route conversations, find one again,
-work together, keep the knowledge base. Each line is one end-to-end test tagged `@journey`; they
-run on every PR in the CI job `e2e`. A journey goes from a real start state (a conversation
-already open, a list with many rows, the width people use) to what the person sees at the end, and
-asserts what they see, not only that a request was sent. A bug a person hits on one of these flows
-adds its step to a journey, or a new journey, in the PR that fixes it. Never skip, weaken or untag
-one; fix the product instead. `corepack pnpm test` fails when this list and the `@journey` tests in
-`web/e2e/` differ. Run locally: `make e2e E2E_ARGS='--grep @journey'`.
-
-- `redeems a CLI pairing link and completes the inbox workflow` (`web/e2e/inbox-workflow.spec.ts`)
-- `a conversation opens at its newest message from the list, from its address and when another one is picked` (`web/e2e/thread-newest-message.spec.ts`)
-- `an opened conversation takes the screen, and Back or the browser back returns to the list where it was` (`web/e2e/phone-thread.spec.ts`)
-- `the open conversation stays on screen with its reply box while an action moves it out of the list` (`web/e2e/open-conversation-stays.spec.ts`)
-- `an unsent reply survives a reload and the browser Back, and is gone once sent` (`web/e2e/reply-draft-persists.spec.ts`)
-- `selects conversations with the keyboard and resolves them in one action` (`web/e2e/bulk-actions.spec.ts`)
-- `two people on one conversation: who is writing, a warning before a second reply, and leaving` (`web/e2e/collision.spec.ts`)
-- `a private note asks a teammate with @: Mentions counts it, opening it marks it read, the writer sees it was seen` (`web/e2e/mentions.spec.ts`)
-- `review: the rail counts the cards, a person opens one as a conversation, sets one aside and puts it back` (`web/e2e/review.spec.ts`)
-- `knowledge base: a collection, an article written in the Markdown editor with a pasted image, published, edited, restored from history, deleted and restored from the trash` (`web/e2e/knowledge-base.spec.ts`)
-- `knowledge base list: tags set in the editor, a hidden column stays hidden after a reload, and a saved view opens its filters again` (`web/e2e/knowledge-base-list.spec.ts`)
-- `knowledge base review: the author sends a draft for review, the reviewer approves it from Reviews, the author publishes it` (`web/e2e/knowledge-base-review.spec.ts`)
+End-to-end tests of what people do, listed in [docs/internals/journeys.md](docs/internals/journeys.md):
+`@onboarding`, the first hour of a team leaving Freshdesk (CI jobs `onboarding`, `install-smoke`), and
+`@journey`, daily use: answer, route, find, work together, keep the knowledge base (CI job `e2e`).
+A change to an onboarding surface (`install.sh`, `create-workspace` / `pair`, redeem, invites,
+sessions, cloud sign-in, the email channel, `import freshdesk` / `import undo`, the empty inbox,
+`operator pair` and the operator console) keeps them green. A journey starts from a real state (a
+conversation already open, many rows, the width people use) and asserts what the person sees. A bug
+a person hits on a listed flow adds its step to a journey, or a new one, in the PR that fixes it.
+Never skip, weaken or untag one; fix the product instead. `corepack pnpm test` fails when the list
+and the tagged tests differ. Run locally: `docker compose --profile test up -d postgres mailpit`,
+then `make e2e E2E_ARGS='--grep @journey'` (or `@onboarding`).
 
 ## Testing on Colliedesk Cloud
 

@@ -30,7 +30,7 @@ describe('compareJourneys', () => {
     expect(compareJourneys(agents, specs, daily).missing).toEqual(['search: opens the chosen conversation']);
   });
 
-  test('reports a tagged test that AGENTS.md does not list', () => {
+  test('reports a tagged test that the journey list does not list', () => {
     const specs = { 'a.spec.ts': "test('self-host first run: works', { tag: '@onboarding' }, async () => {});\ntest('invite teammate: works', { tag: '@onboarding' }, async () => {});\ntest('it\\'s new', { tag: '@onboarding' }, async () => {});",
       'c.spec.ts': "test('search: opens the chosen conversation', { tag: '@journey' }, async () => {});\ntest('kb: a new one', { tag: '@journey' }, async () => {});" };
     expect(compareJourneys(agents, specs, onboarding).unlisted).toEqual(["it's new"]);
@@ -60,7 +60,7 @@ test('the checked lists are the onboarding and the daily-use journeys', () => {
   expect(journeyLists).toEqual([onboarding, daily]);
 });
 
-test('AGENTS.md lists exactly the journey tests in web/e2e, for each list', async () => {
+test('docs/internals/journeys.md lists exactly the journey tests in web/e2e, for each list', async () => {
   expect(await checkJourneys()).toEqual({
     '@onboarding': { missing: [], unlisted: [], disabled: [] },
     '@journey': { missing: [], unlisted: [], disabled: [] },
