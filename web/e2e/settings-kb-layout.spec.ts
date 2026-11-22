@@ -25,7 +25,7 @@ test('on a 390 px screen Knowledge base → Settings fits the screen, with nothi
   await page.setViewportSize({ width: 390, height: 844 });
   await newDesk(page, 'Narrow Help Center');
   await page.goto(`${servers.main}/knowledge/settings`);
-  const card = page.getByRole('region', { name: 'Help center' });
+  const card = page.getByRole('region', { name: 'Help center', exact: true });
   await expect(card.locator('.settings-body input').first()).toBeVisible();
   const widths = await page.evaluate(() => {
     const main = document.querySelector('main')!;
