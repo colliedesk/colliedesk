@@ -33,7 +33,7 @@ type pages struct {
 	fingerprint string
 }
 
-var pageNames = []string{"home", "collection", "article", "search", "missing", "busy"}
+var pageNames = []string{"home", "collection", "article", "print", "search", "missing", "busy"}
 
 func parsePages() pages {
 	style, err := files.ReadFile("static/site.css")
@@ -144,6 +144,11 @@ type page struct {
 	Files []fileLink
 	// Tags are the article's tags, when the help center shows them.
 	Tags []string
+	// PrintURL is the address of the article's print page (print.go); Print are that page's words.
+	PrintURL string
+	Print    printText
+	// Article is the article's own address, on its print page.
+	Article string
 
 	Searched bool
 	Results  []searchResult
@@ -527,10 +532,17 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 }
 
 func (s *Site) article(response http.ResponseWriter, request *http.Request, v view, address string) {
-	address, asMarkdown := strings.CutSuffix(address, markdownSuffix)
+	address, asPrint := strings.CutSuffix(address, printSuffix)
+	asMarkdown := false
+	if !asPrint {
+		address, asMarkdown = strings.CutSuffix(address, markdownSuffix)
+	}
 	suffix := ""
-	if asMarkdown {
+	switch {
+	case asMarkdown:
 		suffix = markdownSuffix
+	case asPrint:
+		suffix = printSuffix
 	}
 	match := articleAddress.FindStringSubmatch(address)
 	if match == nil {
@@ -579,10 +591,10 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 	// The number finds the article; any other slug, an old one included, or a query moves to the
 	// current address. ?voted= after a vote is the one query kept: it shows the box's next step.
 	voted := ""
-	if !asMarkdown {
+	if !asMarkdown && !asPrint {
 		voted = voteState(request)
 	}
-	if value := request.URL.Query().Get(searchParam); value != "" && voted == "" && !asMarkdown {
+	if value := request.URL.Query().Get(searchParam); value != "" && voted == "" && !asMarkdown && !asPrint {
 		// Opened from a search: counted, then the canonical address. 302, since the address is not moved.
 		s.openedFromSearch(request, v, value, article.ID)
 		response.Header().Set("Cache-Control", "no-store")
@@ -599,6 +611,10 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 	}
 	if asMarkdown {
 		s.articleMarkdown(response, request, v, article)
+		return
+	}
+	if asPrint {
+		s.articlePrint(response, request, v, article)
 		return
 	}
 	data, plain, err := s.articlePage(request.Context(), v, article)
@@ -655,6 +671,7 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 	}
 	data.Description, data.Canonical = rendered.description, v.rootAddress+ArticlePath(article.Number, article.Slug)
 	data.Markdown = data.Canonical + markdownSuffix
+	data.PrintURL, data.Print = v.root+ArticlePath(article.Number, article.Slug)+printSuffix, printTextFor(v.locale())
 	// The article's own search title and description replace the defaults.
 	if article.SEOTitle != "" {
 		data.Title = article.SEOTitle

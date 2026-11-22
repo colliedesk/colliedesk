@@ -1,0 +1,12 @@
+{{define "content"}}
+<article class="article article-print">
+<p class="print-tools"><a class="print-back" href="{{.Article}}">{{.Print.Back}}</a> <span class="print-hint">{{.Print.Hint}}</span></p>
+<header class="page-head">
+<h1>{{.Heading}}</h1>
+<p class="meta">{{.T.Updated}} <time datetime="{{.UpdatedISO}}">{{.Updated}}</time></p>
+</header>
+<div class="prose">
+{{.Body}}
+</div>
+</article>
+{{end}}

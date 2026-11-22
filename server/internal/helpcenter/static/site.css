@@ -436,6 +436,11 @@ a:hover { text-decoration-thickness: 2px; }
 .helpful-form button:hover { border-color: var(--ink); }
 .helpful-form button:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
 .helpful-count { margin: 0.75rem 0 0; color: var(--muted); font-size: 0.9375rem; }
+
+/* Print: the article's link to its print page, and that page's way back */
+.article-tools { margin: 0; font-size: 0.9375rem; }
+.article-tools a, .print-back { display: inline-flex; align-items: center; min-height: 2.75rem; }
+.print-tools { margin: 1rem 0 0; color: var(--muted); font-size: 0.9375rem; display: flex; flex-wrap: wrap; gap: 0 1rem; align-items: center; }
 .helpful-thanks { margin: 0; }
 .helpful-missing { display: grid; gap: 0.5rem; margin: 1rem 0 0; }
 .helpful-missing label { font-weight: 600; }
@@ -518,6 +523,6 @@ a:hover { text-decoration-thickness: 2px; }
 }
 
 @media print {
-  .masthead, .rail, .contents, .foot, .skip, .search, .helpful-form, .helpful-missing { display: none; }
+  .masthead, .rail, .contents, .foot, .skip, .search, .helpful-form, .helpful-missing, .article-tools, .print-tools { display: none; }
   body { background: #fff; color: #000; }
 }

@@ -4,6 +4,9 @@
 <header class="page-head">
 <h1>{{.Heading}}</h1>
 <p class="meta">{{.T.Updated}} <time datetime="{{.UpdatedISO}}">{{.Updated}}</time>{{if .CollectionName}} {{.T.In}} <a href="{{.Collection}}">{{.CollectionName}}</a>{{end}}</p>
+{{- with .PrintURL}}
+<p class="article-tools"><a class="print-link" href="{{.}}">{{$.Print.Link}}</a></p>
+{{- end}}
 </header>
 {{- if .Contents}}
 <nav class="contents contents-top" aria-labelledby="contents-title">

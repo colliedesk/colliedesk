@@ -1334,6 +1334,11 @@ to serve on the domain again.
   ("12 out of 15 found this helpful", votes imported from Freshdesk included). After **No** the reader
   can say **What was missing?** in one line. Both are plain forms that work without script. The words
   are in the article's language (English for a language without them). See [Readers' votes](#votes-from-readers).
+- **Print** under an article's title opens its print page, at the article's address followed by
+  `/print` (`/a/12-reset-your-password/print`): the title, the date and the text, without the header,
+  the side list, the footer, the vote or the chat, so the reader prints it or saves it as a PDF with
+  the browser's own print command. **Back to the article** returns to it; neither link is printed.
+  Search engines do not index the print page and the sitemap leaves it out.
 
 Every page carries structured data for search engines (schema.org JSON-LD, which runs nothing): a
 breadcrumb trail, and on an article page an `Article` with its title, description and dates. An article
