@@ -34,7 +34,7 @@ func TestOnlyTheFirstArticleOpenedFromASearchOfTheSameWorkspaceIsKept(t *testing
 	workspace, other := testWorkspace(t, pool, "kb-search-open"), testWorkspace(t, pool, "kb-search-open-other")
 	first, second := searchArticle(t, s, workspace, "first"), searchArticle(t, s, workspace, "second")
 	foreign := searchArticle(t, s, other, "foreign")
-	id, err := s.LogKBSearch(ctx, workspace, "change plan", 2)
+	id, err := s.LogKBSearch(ctx, workspace, "", "change plan", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestPurgingTheOpenedArticleKeepsTheSearch(t *testing.T) {
 	ctx := context.Background()
 	workspace := testWorkspace(t, pool, "kb-search-purge")
 	article := searchArticle(t, s, workspace, "purged")
-	id, err := s.LogKBSearch(ctx, workspace, "old article", 1)
+	id, err := s.LogKBSearch(ctx, workspace, "", "old article", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,11 +85,11 @@ func TestSearchesOlderThanTheRetentionAreDeleted(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	workspace := testWorkspace(t, pool, "kb-search-retention")
-	old, err := s.LogKBSearch(ctx, workspace, "old words", 0)
+	old, err := s.LogKBSearch(ctx, workspace, "", "old words", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	kept, err := s.LogKBSearch(ctx, workspace, "new words", 0)
+	kept, err := s.LogKBSearch(ctx, workspace, "", "new words", 0)
 	if err != nil {
 		t.Fatal(err)
 	}

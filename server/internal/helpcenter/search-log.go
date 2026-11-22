@@ -40,7 +40,7 @@ func (s *Site) logsSearch(request *http.Request, query string) bool {
 // kept (the workspace's searches of the minute are kept already, or the write failed): the page is the
 // same, its links without the search.
 func (s *Site) logSearch(request *http.Request, v view, query string, results int) string {
-	id, err := s.config.Store.LogKBSearch(request.Context(), v.site.WorkspaceID, query, results)
+	id, err := s.config.Store.LogKBSearch(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, query, results)
 	if err != nil {
 		log.Printf("help center: keep a search of workspace %s: %v", v.site.WorkspaceID, err)
 		return ""

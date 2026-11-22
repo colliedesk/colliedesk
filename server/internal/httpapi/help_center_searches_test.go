@@ -148,3 +148,28 @@ func TestASearchPastTheWorkspaceCapIsAnsweredWithoutASearchInItsLinks(t *testing
 		t.Fatalf("searches = %d, want the 120 kept before", count)
 	}
 }
+
+// A search keeps the help center that served it: one on the second help center's domain records the
+// second help center, one on the primary's domain records the primary.
+func TestASearchOnASecondHelpCenterRecordsThatHelpCenter(t *testing.T) {
+	f := newTwoHelpCenters(t)
+	var primary string
+	if err := f.pool.QueryRow(context.Background(), `SELECT primary_help_center_id($1)::text`, f.workspace).Scan(&primary); err != nil {
+		t.Fatal(err)
+	}
+	for index, search := range []struct{ host, path, recorded string }{
+		{hostHardware, "/search?q=copperline", f.hardware},
+		{hostMain, "/search?q=bramble", primary},
+	} {
+		page := visit(f.site, search.path, fmt.Sprintf("192.0.2.%d", 120+index), "Host", search.host, "User-Agent", browserAgent)
+		wantPage(t, page, http.StatusOK, nil, nil)
+		var recorded string
+		if err := f.pool.QueryRow(context.Background(), `SELECT help_center_id::text FROM kb_searches
+			WHERE workspace_id=$1 ORDER BY id DESC LIMIT 1`, f.workspace).Scan(&recorded); err != nil {
+			t.Fatalf("search %s%s: %v", search.host, search.path, err)
+		}
+		if recorded != search.recorded {
+			t.Fatalf("search %s%s recorded help center %s, want %s", search.host, search.path, recorded, search.recorded)
+		}
+	}
+}

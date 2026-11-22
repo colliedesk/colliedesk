@@ -20,10 +20,11 @@ const KBSearchesPerMinute = 120
 // kbSearchOpenWindow is how long after a search a reader's open from its results still counts.
 const kbSearchOpenWindow = "24 hours"
 
-// LogKBSearch keeps a reader's search of the help center: the words masked, their folded key, and
-// how many articles the page listed. It returns the new row's id, or 0 when the workspace already
-// kept KBSearchesPerMinute searches in the last minute or the words are empty once masked.
-func (s *Store) LogKBSearch(ctx context.Context, workspaceID, query string, results int) (int64, error) {
+// LogKBSearch keeps a reader's search of help center helpCenterID ("" is the primary): the words
+// masked, their folded key, and how many articles the page listed. It returns the new row's id, or 0
+// when the workspace already kept KBSearchesPerMinute searches in the last minute or the words are
+// empty once masked. A help center of another workspace is refused by the table's foreign key.
+func (s *Store) LogKBSearch(ctx context.Context, workspaceID, helpCenterID, query string, results int) (int64, error) {
 	query = strings.Join(strings.Fields(textmask.Mask(query)), " ")
 	if query == "" {
 		return 0, nil
@@ -33,10 +34,11 @@ func (s *Store) LogKBSearch(ctx context.Context, workspaceID, query string, resu
 		// One statement: the count and the insert read the same snapshot, so the cap holds per
 		// statement; searches arriving at the same instant can pass it by as many as run at once.
 		var id int64
-		err := tx.QueryRow(ctx, `INSERT INTO kb_searches (workspace_id, query, query_key, results)
-			SELECT $1, $2, $3, $4
+		insert, args := onHelpCenter(helpCenterID, `INSERT INTO kb_searches (workspace_id, help_center_id, query, query_key, results)
+			SELECT $1, $H, $2, $3, $4
 			WHERE (SELECT count(*) FROM kb_searches WHERE workspace_id=$1 AND created_at > now() - interval '1 minute') < $5
-			RETURNING id`, workspaceID, query, key, results, KBSearchesPerMinute).Scan(&id)
+			RETURNING id`, workspaceID, query, key, results, KBSearchesPerMinute)
+		err := tx.QueryRow(ctx, insert, args...).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, nil
 		}

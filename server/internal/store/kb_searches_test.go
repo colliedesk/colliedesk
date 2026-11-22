@@ -26,7 +26,7 @@ func TestASearchIsStoredWithoutTheEmailAddressOrTheLongNumberInIt(t *testing.T) 
 	pool := databasetest.Pool(t)
 	s := store.New(pool)
 	workspace := testWorkspace(t, pool, "kb-search-mask")
-	id, err := s.LogKBSearch(context.Background(), workspace, "Refund for Anna.Lee@example.com order 12345678", 0)
+	id, err := s.LogKBSearch(context.Background(), workspace, "", "Refund for Anna.Lee@example.com order 12345678", 0)
 	if err != nil || id == 0 {
 		t.Fatalf("log search = %d, %v", id, err)
 	}
@@ -47,14 +47,14 @@ func TestAWorkspaceLogsAtMostItsSearchesPerMinute(t *testing.T) {
 	ctx := context.Background()
 	busy, quiet := testWorkspace(t, pool, "kb-search-busy"), testWorkspace(t, pool, "kb-search-quiet")
 	for index := range 120 {
-		if id, err := s.LogKBSearch(ctx, busy, fmt.Sprintf("word %d", index), 1); err != nil || id == 0 {
+		if id, err := s.LogKBSearch(ctx, busy, "", fmt.Sprintf("word %d", index), 1); err != nil || id == 0 {
 			t.Fatalf("search %d = %d, %v; want it stored", index, id, err)
 		}
 	}
-	if id, err := s.LogKBSearch(ctx, busy, "one more", 1); err != nil || id != 0 {
+	if id, err := s.LogKBSearch(ctx, busy, "", "one more", 1); err != nil || id != 0 {
 		t.Fatalf("search past the cap = %d, %v; want 0 and no error", id, err)
 	}
-	if id, err := s.LogKBSearch(ctx, quiet, "one more", 1); err != nil || id == 0 {
+	if id, err := s.LogKBSearch(ctx, quiet, "", "one more", 1); err != nil || id == 0 {
 		t.Fatalf("another workspace's search = %d, %v; want it stored", id, err)
 	}
 	var stored int

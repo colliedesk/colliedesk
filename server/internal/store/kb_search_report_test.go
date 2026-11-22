@@ -26,7 +26,7 @@ func TestANoResultSearchIsInTheReportAtOnceWithoutTheEmailOrTheNumber(t *testing
 	s := store.New(pool)
 	ctx := context.Background()
 	workspace := testWorkspace(t, pool, "kb-search-report-now")
-	if _, err := s.LogKBSearch(ctx, workspace, "Invoice for anna@example.com 4400123456", 0); err != nil {
+	if _, err := s.LogKBSearch(ctx, workspace, "", "Invoice for anna@example.com 4400123456", 0); err != nil {
 		t.Fatal(err)
 	}
 	report, err := s.KBSearchReport(ctx, workspace)
@@ -51,7 +51,7 @@ func TestTheSearchReportListsTopNoResultAndNothingOpenedSearchesOfTheWeek(t *tes
 	workspace, other := testWorkspace(t, pool, "kb-search-report"), testWorkspace(t, pool, "kb-search-report-other")
 	article := searchArticle(t, s, workspace, "export")
 	log := func(workspace, query string, results int) int64 {
-		id, err := s.LogKBSearch(ctx, workspace, query, results)
+		id, err := s.LogKBSearch(ctx, workspace, "", query, results)
 		if err != nil || id == 0 {
 			t.Fatalf("log %q = %d, %v", query, id, err)
 		}

@@ -314,7 +314,7 @@ MCP `catalog-kb-votes.go`, export `store/export-kb-votes.go`, web `features/kb/a
 
 ## Searches
 
-Migration `20261122031955-help-center-searches`; code `helpcenter/search-log.go` (who is kept, the
+Migrations `20261122031955-help-center-searches` and `20261122075809-kb-search-help-center`; code `helpcenter/search-log.go` (who is kept, the
 signed link, the open), `helpcenter/pages.go` (`search`, `article`), `store/kb-searches.go`,
 `store/kb-search-report.go`, `httpapi/kb-search-report-handlers.go`, MCP `catalog-kb-search-report.go`,
 retention `cmd/collie/kb-search-retention.go`, export `store/export-kb-searches.go`, web
@@ -329,6 +329,11 @@ retention `cmd/collie/kb-search-retention.go`, export `store/export-kb-searches.
 - **What a row holds.** `query` is `textmask.Mask` (emails, runs of 6+ digits) with spaces collapsed;
   `query_key` is `FoldForAIRetrieval` of it (case and accents), the report's grouping. Words empty once
   masked keep nothing. No address, cookie, user agent or email is stored, so a row names no reader.
+  `help_center_id` is the help center that served the search (`v.site.HelpCenterID`, written as `$H`
+  through `onHelpCenter`; "" is the primary). The FK `(workspace_id, help_center_id)` refuses a help
+  center of another workspace, and deleting a help center deletes its searches. Searches kept before
+  the column belong to the primary. The report and the export still cover every help center of the
+  workspace together, and the export carries no help center id: it carries only the primary.
 - **The signature.** `HMAC-SHA256(kb_search_link_key, workspace_id + "\x00" + id)`, cut to 16 base64url
   characters (96 bits). The key is a server secret (`ServerSecret`) like the vote key, shared by every
   replica, never exported. A link of another workspace, a forged one or one older than 24 hours
