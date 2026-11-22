@@ -12,6 +12,11 @@ import (
 // KBApprovalModes is what a collection says about approval: inherit (the workspace setting), on or off.
 var KBApprovalModes = []string{"inherit", "on", "off"}
 
+// KBArticleOrders is how a collection lists its articles: manual (the position set by hand), title
+// (A to Z), newest (first published first, a draft by when it was written) or updated (the most
+// recently changed first). The positions stay stored under every order.
+var KBArticleOrders = []string{"manual", "title", "newest", "updated"}
+
 // The states of a review. Only an open review can be decided; an edit while it is open supersedes it.
 const (
 	KBReviewOpen             = "open"

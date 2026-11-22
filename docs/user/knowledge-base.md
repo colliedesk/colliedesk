@@ -13,14 +13,14 @@ dates and images; see [Import from Freshdesk](import-freshdesk.md#knowledge-base
 
 ## Collections
 
-A collection groups articles, like a Freshdesk category, folder and subfolder: collections go three
+A collection groups articles, like a Freshdesk category, folder and subfolder: collections go six
 levels deep. Every article has a home collection, so a new knowledge base starts by asking for
 one, for example "Getting started". An article can also be listed in more collections; see
 [Several collections](#several-collections).
 
 - **Add**: select **New collection**, type a **Name** (and a description if you like), choose where it
   goes under **Inside** (asked once there is a collection to put it in), then **Create collection**. To add one inside the collection you are looking
-  at, select **Add a collection inside**. A collection on the third level cannot hold another one.
+  at, select **Add a collection inside**. A collection on the sixth level cannot hold another one.
 - **Choose**: select a collection on the left to list only the articles directly in it; **All
   articles** lists every one. The number next to a collection counts the articles directly in it, drafts included, not those of the collections inside it.
 - **Edit**: select the collection, then **Edit**. You can rename it, change its description, move it
@@ -52,6 +52,22 @@ before, Colliedesk takes their change into account and moves yours again; if tha
 says so and nothing changes. If someone else moved or deleted the very row you moved, the page says
 so and shows the list as it is now. The order is not part of an article's history, so restoring a
 version does not move an article.
+
+### Article order
+
+A collection can sort its articles by itself instead. Select it, then **Edit**, and pick an
+**Article order**:
+
+- **By hand**: the order you set with **Move up** and **Move down** (the default).
+- **Title, A to Z**: by title, ignoring upper and lower case. A help center page in another language
+  sorts by the translated titles.
+- **Newest first**: by when the article was first published; a draft that was never published by when
+  it was written.
+- **Recently updated first**: the article changed most recently comes first.
+
+The help center, the collection's article list, the reply box's **Articles** list follow it. Articles with the same title or date keep their article number order. While a collection sorts by
+itself, its articles have no **Move up** and **Move down** buttons, and the list says how it is
+sorted. Your order by hand is kept: pick **By hand** again and it comes back as it was.
 
 ### Several collections
 
@@ -125,6 +141,33 @@ filters**, choose **Only me** or **Everyone in the workspace**, and select **Sav
 view opens its filters again. A view's **⋯** menu replaces its filters, renames it, shares it or keeps it
 for you, and deletes it; a deleted view waits 30 days under **Recently deleted**. Knowledge base views
 and inbox views are kept apart: each list shows only its own, and a name may be used once in each.
+
+### Change many articles at once
+
+Tick the box at the start of each article you want to change. A bar above the list says how many are
+selected. **Select all matching articles** selects every article the search and filters keep, on every
+page, up to 500; it shows once a search or filter is set, so one click never changes the whole knowledge
+base. Then choose what to do:
+
+- **Move to collection**: the article's main collection; its other collections stay.
+- **Visibility**, **Credit to** (the author), **Add tag** (one the articles have, or type a new one) and
+  **Remove tag**.
+- **Send for review** to one teammate, **Approve** an open review, **Publish**, **Unpublish** and
+  **Move to trash**.
+
+The bar offers only what your role may do. Each article is still checked on its own, as if you changed
+it alone: an article that needs an approved review is not published, and a person without the publish
+permission cannot show an article to more people. A move, a new tag or a removed tag on a published
+article goes to its [unpublished changes](#unpublished-changes), as an edit would. Each changed
+article gets its own entry in its [history](#history).
+
+The message after the change counts the articles changed, the ones that already were as asked, and the
+ones refused, with the reason for each. **Undo** in that message puts the articles back, for 10 minutes
+and once. An article someone changed after the bulk action is left as it is and named in the message,
+so Undo never overwrites newer work. When putting the articles back needs a permission you do not hold
+(publish, to put a published article back on the help center or show it to more people again), Undo
+changes nothing and says so, and a teammate who holds it can still undo within the 10 minutes. An approval, and a publish that replaced an article's published
+text, cannot be undone this way: its history keeps the earlier version.
 
 ## Write an article
 
@@ -1414,7 +1457,7 @@ unpublished or deleted, or while the help center is off.
   200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
 - Files: 25 MiB each and 100 MiB per article or translation, at most 50 under one; the text read for
   search stops at 200 KiB.
-- Collections go three levels deep.
+- Collections go six levels deep.
 - Search does not find a part in the middle of a word, nor words in text written without spaces.
 - 40 languages besides the primary one; one translation per article and language.
 
@@ -1446,6 +1489,15 @@ Articles and collections:
   also write, publish, delete and restore articles, manage collections, and upload and read images.
 - Order: `colliedesk_kb_order_set` or `PUT /api/v1/kb/order` puts collections and articles in
   [order](#order).
+- Article order: `article_order` (`manual`, `title`, `newest` or `updated`) on
+  `colliedesk_kb_collection_update` or `PATCH /api/v1/kb/collections/{id}` sets a collection's
+  [article order](#article-order).
+- Many articles at once: `colliedesk_kb_articles_bulk` or `POST /api/v1/kb/articles/bulk` applies one
+  [bulk action](#change-many-articles-at-once) to up to 500 articles, by `ids` or by the list's
+  `filter`, and answers each article with `done`, `unchanged` or `refused` and the reason. Its
+  `operation.id` goes to `colliedesk_kb_articles_bulk_undo` or
+  `POST /api/v1/kb/bulk-operations/{id}/undo` within 10 minutes. `colliedesk_kb_articles_publish` and
+  `colliedesk_kb_articles_trash` stay for publishing or trashing by ids.
 - Several collections: `collection_ids` (the home first) on `colliedesk_kb_article_create` and
   `colliedesk_kb_article_update` lists an article in several collections. Every article answer carries
   `collection_ids`.

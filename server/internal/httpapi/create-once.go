@@ -50,6 +50,8 @@ const (
 	withdrawKBReviewOperation            = "kb_review_withdraw"
 	approveKBReviewsOperation            = "kb_reviews_approve"
 	publishKBArticlesOperation           = "kb_articles_publish"
+	kbArticlesBulkOperation              = "kb_articles_bulk"
+	kbBulkUndoOperation                  = "kb_articles_bulk_undo"
 	importKBImageOperation               = "kb_image_import"
 )
 
