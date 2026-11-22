@@ -417,7 +417,9 @@ Code: `ai/kb_gap_draft.go` (`DraftFromKBGap`), `httpapi/kb-gap-draft-handlers.go
 - **The source is on the article.** `source_meta.gap` holds `id` and `conversation_ids`, best match
   first; answers carry `gap_source` (`gap_id`, each conversation's `display_ref` and subject). `addressKBArticleTranslations`,
   which every whole-article answer passes, empties the list for a caller without `conversations:read`.
-  A conversation deleted later drops out of `gap_source`; its id stays in `source_meta`.
+  A conversation deleted later drops out of `gap_source`; its id stays in `source_meta`. In MCP,
+  `colliedesk_kb_gap_draft` and `colliedesk_kb_article_get` carry it (`kbGapSourceView`, each subject
+  under `untrusted_customer_content`); the other article tools leave it out.
 - **Trap: `source_meta` used to mean imported.** The primary-language check of a Freshdesk import
   counted any article with `source_meta` as imported. It now counts one with a `gap` key as the
   team's own; a new `source_meta` key that is not an import needs the same check.
