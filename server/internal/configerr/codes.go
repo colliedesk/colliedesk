@@ -57,8 +57,9 @@ var Config = map[string]string{
 	"retention_max_range":         "retention.max_deletions_per_day must be between 1 and {max}",
 	"billing_alert_email_invalid": "billing.alert_email must be an email address",
 	// Limits.
-	"mail_image_cache_invalid": "MAIL_IMAGE_CACHE_BYTES must be a whole number of bytes above zero",
-	"kb_video_max_invalid":     "KB_VIDEO_MAX_BYTES must be a whole number of bytes above zero",
+	"mail_image_cache_invalid":    "MAIL_IMAGE_CACHE_BYTES must be a whole number of bytes above zero",
+	"kb_video_max_invalid":        "KB_VIDEO_MAX_BYTES must be a whole number of bytes above zero",
+	"kb_search_retention_invalid": "kb_searches.retention_days must be a whole number of days from 1 to {max}",
 	// Sign-ups, security and network.
 	"internal_signup_email_invalid": `INTERNAL_SIGNUP_EMAILS entry {"entry"} is not @domain or an email address`,
 	"network_entry_invalid":         `{name} entry {"entry"} is not a CIDR or an IP address`,

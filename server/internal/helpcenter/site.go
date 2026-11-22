@@ -91,6 +91,8 @@ type Config struct {
 	AllowVote func(request *http.Request) (bool, time.Duration)
 	// VoteKey keys the hash of the address a vote keeps (votes.go).
 	VoteKey []byte
+	// SearchKey signs the search a result link carries (search-log.go); without it no search is kept.
+	SearchKey []byte
 	// AllowLookup reports whether the client of request may make the server look up one more host
 	// name it does not know (a privileged query), and how long to wait when not. Nil allows everything.
 	AllowLookup func(request *http.Request) (bool, time.Duration)

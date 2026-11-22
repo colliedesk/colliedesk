@@ -4180,6 +4180,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/searches/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What readers searched for on the public help center in the last 7 days, up to now: the most searched words (`top`), the words that found no article (`no_results`, the articles to write) and the words whose results nobody opened (`nothing_opened`, the titles or excerpts to fix). Each list has at most 20 rows, most searched first; searches whose words differ only in case or accents are one row, shown with the newest words. A search is in the report as soon as it is made. The words are masked (no email address, no run of 6 or more digits) and nothing about the reader is kept. Bots, prefetches and signed-in team members are not counted; searches are kept for 180 days unless the server sets `kb_searches.retention_days`. */
+        get: operations["getKBSearchReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/trash": {
         parameters: {
             query?: never;
@@ -9118,6 +9135,38 @@ export interface components {
             /** @description Every reset, newest first. */
             resets: components["schemas"]["KBArticleVoteReset"][];
         };
+        KBSearchReport: {
+            /**
+             * Format: date-time
+             * @description The start of the window: 7 days before `to`.
+             */
+            from: string;
+            /**
+             * Format: date-time
+             * @description When the report was read.
+             */
+            to: string;
+            /** @description Every search kept in the window. */
+            searches: number;
+            /** @description The most searched words. */
+            top: components["schemas"]["KBSearchTerm"][];
+            /** @description The most searched words that listed no article. */
+            no_results: components["schemas"]["KBSearchTerm"][];
+            /** @description The most searched words that listed articles of which the reader opened none. */
+            nothing_opened: components["schemas"]["KBSearchTerm"][];
+        };
+        /** @description The searches of the window whose words are the same once case and accents are ignored. */
+        KBSearchTerm: {
+            /** @description The newest words of the group, masked: "[email removed]" and "[number removed]" replace an email address and a run of 6 or more digits. */
+            query: string;
+            searches: number;
+            /** @description The searches of the group from which the reader opened an article. */
+            opened: number;
+            /** @description How many articles the newest search of the group listed. */
+            results: number;
+            /** Format: date-time */
+            last_searched_at: string;
+        };
         /** @description One anonymous reader's current vote. */
         KBArticleVote: {
             helpful: boolean;
@@ -10976,7 +11025,7 @@ export interface components {
          * @description The code of a message the operator console shows from the server, beside its English text: the console translates by code and params, and falls back to the text (docs/internals/operator-console.md › Message codes). A code is stable.
          * @enum {string}
          */
-        OperatorMessageCode: "ai_allow_private_invalid" | "ai_server_allowance_format" | "ai_server_allowance_not_number" | "ai_server_allowance_unknown" | "ai_server_allowance_unpriced" | "ai_server_base_url_invalid" | "ai_server_half_configured" | "ai_server_label_too_long" | "ai_server_models_bad_model" | "ai_server_models_format" | "ai_server_models_twice" | "ai_server_prices_format" | "ai_server_prices_not_number" | "ai_server_prices_twice" | "ai_server_provider_invalid" | "audit_unreadable" | "authenticator_needs_key_ring" | "billing_alert_email_invalid" | "body_invalid" | "body_not_a_change" | "body_not_a_product" | "body_not_json" | "body_unreadable" | "change_empty" | "change_unsaved" | "cloud_sign_in_not_configured" | "code_unchecked" | "config_changed" | "config_unreadable" | "config_unsaved" | "confirm_mismatch" | "confirm_mismatch_request" | "csrf_rejected" | "email_from_policy_invalid" | "feature_incomplete_refused" | "feature_needs_settings" | "feature_switch_invalid" | "field_choose_period" | "field_choose_plan" | "field_enter_it" | "field_no_key_ring" | "field_not_a_secret" | "field_product_id" | "field_reenter" | "field_secret_goes_in_secrets" | "field_totp_cli_only" | "field_type_phrase" | "field_type_the_phrase" | "field_unknown_setting" | "github_private_key_invalid" | "guard_ai_server_off" | "guard_ai_server_uncountable" | "guard_autofix_off" | "guard_billing_off" | "guard_billing_on" | "guard_billing_on_again" | "guard_billing_switch_off" | "guard_billing_uncountable" | "guard_cloud_auth" | "guard_cloud_sign_in_off" | "guard_from_policy_any" | "guard_help_center_back" | "guard_help_center_moves" | "guard_help_center_no_wildcard" | "guard_hosted_mail_off" | "guard_kb_video" | "guard_mail_domain_moves" | "guard_mailbox_off" | "guard_mailbox_uncountable" | "guard_no_workspace" | "guard_private_addresses" | "guard_problem_reports" | "guard_proxies_none" | "guard_proxies_read" | "guard_refused_nothing_saved" | "guard_retention_billing_off" | "guard_retention_on" | "guard_retention_uncountable" | "guard_signup_off" | "guard_workspace_unlooked" | "help_center_domain_invalid" | "history_unreadable" | "hosted_mail_domain_invalid" | "hosted_mail_needs_inbound_secret" | "idempotency_key_reused" | "internal_signup_email_invalid" | "invalid_limit" | "invalid_since" | "kb_video_max_invalid" | "link_expired" | "link_invalid" | "link_used" | "mail_from_domain_invalid" | "mail_from_domain_slug" | "mail_from_inbound_secret_needs" | "mail_image_cache_invalid" | "microsoft_tenant_invalid" | "network_entry_invalid" | "no_such_operator" | "no_such_product" | "no_such_request" | "no_such_session" | "no_such_version" | "no_trial" | "not_a_secret_setting" | "nothing_added" | "nothing_changes" | "operator_locked" | "operator_session_required" | "operator_unrevoked" | "operators_unreadable" | "person_only" | "polar_api_url_invalid" | "polar_partly_configured" | "product_exists" | "product_unchanged" | "products_unreadable" | "reauth_code_invalid" | "reauth_needs_new_link" | "reauth_required" | "reenter_secret" | "request_decided" | "request_in_progress" | "request_uncancelled" | "request_unreadable" | "request_unstored" | "requests_unreadable" | "resend_webhook_needs_mail_from" | "restore_not_changeable" | "retention_delete_invalid" | "retention_max_invalid" | "retention_max_range" | "secret_in_request" | "secret_in_request_example" | "secret_in_set" | "secret_keys_missing" | "secret_missing" | "secret_not_asked" | "secret_not_valid" | "send_base_version" | "send_link_token" | "send_on_sale" | "send_operator_email" | "send_trial_version" | "session_unended" | "sessions_unreadable" | "setting_not_changeable" | "sign_in_failed" | "sign_in_refused" | "smtp_port_implicit_tls" | "smtp_port_invalid" | "smtp_port_range" | "smtp_starttls_invalid" | "status_unreadable" | "test_ai_models_failed" | "test_ai_models_needs_base_url" | "test_ai_models_needs_key" | "test_ai_models_needs_provider" | "test_ai_models_ok" | "test_ai_models_refused" | "test_ai_needs_settings" | "test_ai_ok" | "test_ai_refused" | "test_jwks_failed" | "test_jwks_needs_settings" | "test_jwks_no_rsa" | "test_jwks_ok" | "test_needs_a_person" | "test_polar_archived" | "test_polar_needs_settings" | "test_polar_ok" | "test_polar_refused" | "test_reenter_secret" | "test_smtp_needs_host" | "test_smtp_ok" | "test_smtp_refused" | "test_smtp_unwritable" | "token_needs_name" | "too_many_tries" | "trial_pending" | "trial_pending_first" | "unknown_setting" | "version_runs_already" | "version_unreadable";
+        OperatorMessageCode: "ai_allow_private_invalid" | "ai_server_allowance_format" | "ai_server_allowance_not_number" | "ai_server_allowance_unknown" | "ai_server_allowance_unpriced" | "ai_server_base_url_invalid" | "ai_server_half_configured" | "ai_server_label_too_long" | "ai_server_models_bad_model" | "ai_server_models_format" | "ai_server_models_twice" | "ai_server_prices_format" | "ai_server_prices_not_number" | "ai_server_prices_twice" | "ai_server_provider_invalid" | "audit_unreadable" | "authenticator_needs_key_ring" | "billing_alert_email_invalid" | "body_invalid" | "body_not_a_change" | "body_not_a_product" | "body_not_json" | "body_unreadable" | "change_empty" | "change_unsaved" | "cloud_sign_in_not_configured" | "code_unchecked" | "config_changed" | "config_unreadable" | "config_unsaved" | "confirm_mismatch" | "confirm_mismatch_request" | "csrf_rejected" | "email_from_policy_invalid" | "feature_incomplete_refused" | "feature_needs_settings" | "feature_switch_invalid" | "field_choose_period" | "field_choose_plan" | "field_enter_it" | "field_no_key_ring" | "field_not_a_secret" | "field_product_id" | "field_reenter" | "field_secret_goes_in_secrets" | "field_totp_cli_only" | "field_type_phrase" | "field_type_the_phrase" | "field_unknown_setting" | "github_private_key_invalid" | "guard_ai_server_off" | "guard_ai_server_uncountable" | "guard_autofix_off" | "guard_billing_off" | "guard_billing_on" | "guard_billing_on_again" | "guard_billing_switch_off" | "guard_billing_uncountable" | "guard_cloud_auth" | "guard_cloud_sign_in_off" | "guard_from_policy_any" | "guard_help_center_back" | "guard_help_center_moves" | "guard_help_center_no_wildcard" | "guard_hosted_mail_off" | "guard_kb_video" | "guard_mail_domain_moves" | "guard_mailbox_off" | "guard_mailbox_uncountable" | "guard_no_workspace" | "guard_private_addresses" | "guard_problem_reports" | "guard_proxies_none" | "guard_proxies_read" | "guard_refused_nothing_saved" | "guard_retention_billing_off" | "guard_retention_on" | "guard_retention_uncountable" | "guard_signup_off" | "guard_workspace_unlooked" | "help_center_domain_invalid" | "history_unreadable" | "hosted_mail_domain_invalid" | "hosted_mail_needs_inbound_secret" | "idempotency_key_reused" | "internal_signup_email_invalid" | "invalid_limit" | "invalid_since" | "kb_search_retention_invalid" | "kb_video_max_invalid" | "link_expired" | "link_invalid" | "link_used" | "mail_from_domain_invalid" | "mail_from_domain_slug" | "mail_from_inbound_secret_needs" | "mail_image_cache_invalid" | "microsoft_tenant_invalid" | "network_entry_invalid" | "no_such_operator" | "no_such_product" | "no_such_request" | "no_such_session" | "no_such_version" | "no_trial" | "not_a_secret_setting" | "nothing_added" | "nothing_changes" | "operator_locked" | "operator_session_required" | "operator_unrevoked" | "operators_unreadable" | "person_only" | "polar_api_url_invalid" | "polar_partly_configured" | "product_exists" | "product_unchanged" | "products_unreadable" | "reauth_code_invalid" | "reauth_needs_new_link" | "reauth_required" | "reenter_secret" | "request_decided" | "request_in_progress" | "request_uncancelled" | "request_unreadable" | "request_unstored" | "requests_unreadable" | "resend_webhook_needs_mail_from" | "restore_not_changeable" | "retention_delete_invalid" | "retention_max_invalid" | "retention_max_range" | "secret_in_request" | "secret_in_request_example" | "secret_in_set" | "secret_keys_missing" | "secret_missing" | "secret_not_asked" | "secret_not_valid" | "send_base_version" | "send_link_token" | "send_on_sale" | "send_operator_email" | "send_trial_version" | "session_unended" | "sessions_unreadable" | "setting_not_changeable" | "sign_in_failed" | "sign_in_refused" | "smtp_port_implicit_tls" | "smtp_port_invalid" | "smtp_port_range" | "smtp_starttls_invalid" | "status_unreadable" | "test_ai_models_failed" | "test_ai_models_needs_base_url" | "test_ai_models_needs_key" | "test_ai_models_needs_provider" | "test_ai_models_ok" | "test_ai_models_refused" | "test_ai_needs_settings" | "test_ai_ok" | "test_ai_refused" | "test_jwks_failed" | "test_jwks_needs_settings" | "test_jwks_no_rsa" | "test_jwks_ok" | "test_needs_a_person" | "test_polar_archived" | "test_polar_needs_settings" | "test_polar_ok" | "test_polar_refused" | "test_reenter_secret" | "test_smtp_needs_host" | "test_smtp_ok" | "test_smtp_refused" | "test_smtp_unwritable" | "token_needs_name" | "too_many_tries" | "trial_pending" | "trial_pending_first" | "unknown_setting" | "version_runs_already" | "version_unreadable";
         /** @description What the message names (a setting, a model, a count). Never a secret's value. */
         OperatorMessageParams: {
             [key: string]: string | number;
@@ -21242,6 +21291,28 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getKBSearchReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The search report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBSearchReport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listTrashedKBArticles: {

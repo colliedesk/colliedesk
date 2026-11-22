@@ -312,6 +312,52 @@ MCP `catalog-kb-votes.go`, export `store/export-kb-votes.go`, web `features/kb/a
 - **Export.** `kb-article-vote-resets.ndjson`, then `kb-article-votes.ndjson` with closed votes too:
   after a reset the export is the only way to read them. `voter` is exported hex.
 
+## Searches
+
+Migrations `20261122031955-help-center-searches` and `20261122075809-kb-search-help-center`; code `helpcenter/search-log.go` (who is kept, the
+signed link, the open), `helpcenter/pages.go` (`search`, `article`), `store/kb-searches.go`,
+`store/kb-search-report.go`, `httpapi/kb-search-report-handlers.go`, MCP `catalog-kb-search-report.go`,
+retention `cmd/collie/kb-search-retention.go`, export `store/export-kb-searches.go`, web
+`features/kb/searches-page.tsx`.
+
+- **No script.** The open is counted from the link, not from the page: result links of a kept search
+  carry `?s=<id base36>.<signature>`, and the article handler records the open, then answers 302 with
+  `Cache-Control: no-store` to the canonical address. The canonical link, the sitemap and
+  `rel=canonical` never carry `s`. The CSP is unchanged.
+- **Only readers.** A search is kept only for `pageview.IsReader` (no bot, prefetch, HEAD or signed-in
+  teammate previewing) and only with words. A team member's search page has plain links.
+- **What a row holds.** `query` is `textmask.Mask` (emails, runs of 6+ digits) with spaces collapsed;
+  `query_key` is `FoldForAIRetrieval` of it (case and accents), the report's grouping. Words empty once
+  masked keep nothing. No address, cookie, user agent or email is stored, so a row names no reader.
+  `help_center_id` is the help center that served the search (`v.site.HelpCenterID`, written as `$H`
+  through `onHelpCenter`; "" is the primary). The FK `(workspace_id, help_center_id)` refuses a help
+  center of another workspace, and deleting a help center deletes its searches. Searches kept before
+  the column belong to the primary. The report and the export still cover every help center of the
+  workspace together, and the export carries no help center id: it carries only the primary.
+- **The signature.** `HMAC-SHA256(kb_search_link_key, workspace_id + "\x00" + id)`, cut to 16 base64url
+  characters (96 bits). The key is a server secret (`ServerSecret`) like the vote key, shared by every
+  replica, never exported. A link of another workspace, a forged one or one older than 24 hours
+  (`kbSearchOpenWindow`) changes nothing; only the first open of a search counts. The update joins
+  `kb_articles` in the same workspace.
+- **Cache.** A kept search is a new row each time, so its page has no ETag and is never a 304; it is
+  `private, max-age=300`, so Back in the reader's browser shows the same links without a new row and a
+  shared cache never stores it. A browser that prefetches result links, or a 304 from an earlier
+  page, undercounts opens; the report never overcounts.
+- **The cap.** The search limiter (per client address) is unchanged. On top of it a workspace keeps at
+  most `KBSearchesPerMinute` (120) searches a minute, with one `INSERT … SELECT … WHERE count < cap`:
+  the count and the insert read one snapshot, so searches at the same instant can pass it by as many
+  as run at once. A search past the cap, or one whose write failed, is still answered; it is only not
+  kept and its links carry no `s`.
+- **Retention.** `DeleteOldKBSearches` (`PrivilegeKBSearchRetention`) deletes rows older than
+  `kb_searches.retention_days` (default 180, 1 to 3650, `kb_search_retention_invalid`), at start and
+  daily from `serve`. The FK to the article is `ON DELETE SET NULL`: a purged article leaves the search.
+- **The report.** `GET /api/v1/kb/searches/report` and `colliedesk_kb_search_report`, `kb_articles:read`.
+  The last `KBSearchReportDays` (7) up to the read, three lists of at most `MaxKBSearchReportRows` (20)
+  groups: top, no results (`results = 0`), nothing opened (`results > 0`, nothing opened). Each group
+  shows its newest words and result count. A search shows as soon as its row is written.
+- **Export.** `kb-searches.ndjson` (query, results, opened article, `created_at` UTC), after the article
+  views; `query_key` is not exported, it is derived.
+
 ## Views and uses
 
 Migration `20261121091907-kb-article-views-and-uses`; code `pageview/` (who is a reader, the event),

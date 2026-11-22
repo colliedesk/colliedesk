@@ -87,6 +87,7 @@ export const routePermissions: ReadonlyArray<readonly [string, string]> = [
   ['/api/v1/kb/media/trash', 'kb_media:read'],
   ['/api/v1/kb/reviews', 'kb_articles:read'],
   ['/api/v1/kb/reviews/{id}', 'kb_articles:read'],
+  ['/api/v1/kb/searches/report', 'kb_articles:read'],
   ['/api/v1/kb/tags', 'kb_articles:read'],
   ['/api/v1/kb/templates', 'kb_articles:read'],
   ['/api/v1/kb/templates/{id}', 'kb_articles:read'],

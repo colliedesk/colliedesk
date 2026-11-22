@@ -1,3 +1,5 @@
+import { useLayoutEffect, useState } from 'react';
+import type { RefObject } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { kbListColumnSchema } from '../../api/schemas';
 import type { KBListColumn, Me } from '../../api/schemas';
@@ -9,6 +11,52 @@ import { listMessages } from './list-messages';
 const widths: Record<KBListColumn, string> = {
   status: '7.5rem', collection: '9rem', author: '8rem', tags: '9rem', languages: '7rem', created: '8rem', updated: '8rem', votes: '5rem',
 };
+
+// fittingColumns counts how many of the chosen columns fit beside a title of at least 12rem in a list `width` px
+// wide inside its scroll bar; the last chosen columns give way first, and the first column always stays. The row
+// padding (with the tick box of bulk select) and the gaps between tracks are px tokens, the tracks are rem. A list
+// box (`list`) of 36rem or less shows the title and the first column only (its container query in kb.css). A phone
+// keeps every column: its rows show the status beside the title, whichever column comes first.
+export function fittingColumns(columns: KBListColumn[], { width, list = width, phone = false, ordered, selects, rem }:
+  { width: number; list?: number; phone?: boolean; ordered: boolean; selects: boolean; rem: number }): number {
+  if (phone) return columns.length;
+  const first = Math.min(1, columns.length);
+  if (list <= 36 * rem) return first;
+  const pad = 16 + (selects ? 16 + 12 : 0);
+  const gap = 16;
+  const tail = (2.5 + (ordered ? 4.5 : 0)) * rem + gap * (ordered ? 1 : 0);
+  let used = pad + 12 * rem + tail + gap;
+  let count = 0;
+  for (const column of columns) {
+    used += parseFloat(widths[column]) * rem + gap;
+    if (used > width) break;
+    count += 1;
+  }
+  return Math.max(count, first);
+}
+
+// The phone layout of kb.css starts below this width.
+const desktop = '(min-width: 44.01rem)';
+
+// useFittingColumns returns the chosen columns that fit the list box `scroll` (its width inside the scroll bar),
+// following its size. Until the box is measured every chosen column shows.
+export function useFittingColumns(scroll: RefObject<HTMLElement | null>, columns: KBListColumn[], { ordered, selects }: { ordered: boolean; selects: boolean }): KBListColumn[] {
+  const [size, setSize] = useState({ width: 0, list: 0, phone: false });
+  useLayoutEffect(() => {
+    const box = scroll.current;
+    if (!box) return;
+    const measure = () => setSize({ width: box.clientWidth, list: box.closest('.kb-list')?.clientWidth ?? box.clientWidth,
+      phone: typeof window.matchMedia === 'function' && !window.matchMedia(desktop).matches });
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(box);
+    return () => watch.disconnect();
+  }, [scroll]);
+  if (size.width === 0) return columns;
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  return columns.slice(0, fittingColumns(columns, { ...size, ordered, selects, rem }));
+}
 
 // gridOf sets the list's grid for the chosen columns: the title, each column, the open-on-help-center button
 // and, while the list is its collection's order, the order buttons.
@@ -24,7 +72,7 @@ export function gridOf(columns: KBListColumn[], ordered: boolean): React.CSSProp
 }
 
 // ListColumns: the person picks the columns, saved for them on the server, so every device shows the same list.
-export function ListColumns({ columns, isDefault }: { columns: KBListColumn[]; isDefault: boolean }) {
+export function ListColumns({ columns, isDefault, hidden = 0 }: { columns: KBListColumn[]; isDefault: boolean; hidden?: number }) {
   const client = useQueryClient();
   const save = useMutation({
     mutationFn: (next: KBListColumn[] | null) => kbApi.setListColumns(next),
@@ -36,6 +84,7 @@ export function ListColumns({ columns, isDefault }: { columns: KBListColumn[]; i
   return (
     <ListMenu label={listMessages.columns} className="kb-columns-menu">
       <p className="filter-hint">{listMessages.columnsLead}</p>
+      {hidden > 0 && <p className="filter-hint" role="note">{listMessages.columnsHidden(hidden)}</p>}
       {[...shown, ...rest].map((column) => (
         <label key={column} className="check-row"><input type="checkbox" checked={shown.includes(column)} disabled={save.isPending}
           onChange={(event) => toggle(column, event.currentTarget.checked)} /><span>{listMessages.columnNames[column]}</span></label>

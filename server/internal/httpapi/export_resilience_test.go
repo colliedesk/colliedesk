@@ -227,6 +227,7 @@ func (s idleSink) KBReviewReviewer(export.KBReviewReviewer) error               
 func (s idleSink) KBArticleVote(export.KBArticleVote) error                             { return nil }
 func (s idleSink) KBArticleView(export.KBArticleView) error                             { return nil }
 func (s idleSink) KBArticleUse(export.KBArticleUse) error                               { return nil }
+func (s idleSink) KBSearch(export.KBSearch) error                                       { return nil }
 func (s idleSink) KBVideo(export.KBVideo) error                                         { return nil }
 func (s idleSink) KBFile(export.KBFile) error                                           { return nil }
 func (s idleSink) KBArticleAttachment(export.KBArticleAttachment) error                 { return nil }

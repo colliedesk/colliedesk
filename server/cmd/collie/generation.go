@@ -147,7 +147,7 @@ func (g *generation) Busy() string {
 func hotSettings(config builtConfig) httpapi.HotSettings {
 	return httpapi.HotSettings{AlertEmail: config.BillingAlertEmail, InternalSignups: config.InternalSignups,
 		ProblemReportWorkspace: config.ProblemReportWorkspace, KBVideoMaxBytes: config.KBVideoMaxBytes, MailImageCacheBytes: config.MailImageCacheBytes,
-		RequireTOTP: config.RequireTOTP}
+		KBSearchRetention: config.KBSearchRetention, RequireTOTP: config.RequireTOTP}
 }
 
 // newGeneration builds the API and the workers of config, read from loaded. It starts nothing.

@@ -81,6 +81,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listKBTemplates, a.createKBTemplate, a.listTrashedKBTemplates, a.getKBTemplate, a.updateKBTemplate, a.deleteKBTemplate,
 		a.restoreKBTemplate, a.listKBTemplateVersions, a.restoreKBTemplateVersion,
 		a.publishKBTranslationDraft, a.discardKBTranslationDraft,
+		a.getKBSearchReport,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {
