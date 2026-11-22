@@ -54,7 +54,8 @@ func helpCenterDeleteSpec() Spec {
 		Title: "Delete a help center",
 		Description: `Delete a help center other than the primary one: its pages go off line at once and its custom domain is released, so another help center may claim it. ` +
 			`Its collections and articles stay in the knowledge base and on the other help centers they are shown on. It cannot be undone. ` +
-			`One that serves on a custom domain also needs kb_articles:publish. The primary cannot be deleted; turn it off with colliedesk_help_center_update.`,
+			`One that serves on a custom domain also needs kb_articles:publish. The primary cannot be deleted; turn it off with colliedesk_help_center_update. ` +
+			`One a live help chat or web form serves is refused (help_center_in_use, naming the channels): move each with colliedesk_channels_update and help_center_id first.`,
 		REST:   []string{"DELETE /api/v1/help-centers/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["help_center_id"],"properties":{` + helpCenterIDProperty + `}}`,
 		Output: `{"type":"object","required":["help_center_id","deleted"],"properties":{"help_center_id":{"type":"string"},"deleted":{"type":"boolean"}}}`,

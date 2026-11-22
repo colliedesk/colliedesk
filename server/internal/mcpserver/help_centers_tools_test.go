@@ -77,6 +77,33 @@ func TestHelpCenterToolsAddOneWorkOnItByIDAndDeleteIt(t *testing.T) {
 	}
 }
 
+// An agent points a web form at a second help center; deleting that help center is refused with the
+// channel's name and the fix, and goes through once the form serves the primary again.
+func TestChannelToolsChooseTheHelpCenterAndTheDeleteNamesWhatServesIt(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Channel Help Centers", "admin@channel-help-centers.example.com")
+	admin := e.connect(w.adminTier, "")
+	hardware, _ := at(t, e.ok(admin, "colliedesk_help_center_create", map[string]any{"name": "Hardware", "handle": "hardware", "locale": "en"}), "help_center", "id").(string)
+
+	form := e.ok(admin, "colliedesk_channels_create", map[string]any{"type": "web_form", "name": "Hardware form",
+		"config": map[string]any{"allowed_origins": []string{}}, "help_center_id": hardware})
+	formID, _ := at(t, form, "channel", "id").(string)
+	if at(t, form, "channel", "help_center_id") != hardware || at(t, form, "channel", "help_center_name") != "Hardware" {
+		t.Fatalf("created form = %v, want it to serve Hardware by id and name", form)
+	}
+
+	message := e.fails(admin, "colliedesk_help_center_delete", map[string]any{"help_center_id": hardware})
+	if !strings.Contains(message, "Hardware form") || !strings.Contains(message, "help_center_id") {
+		t.Fatalf("delete of a help center a form serves: %q, want the form named and how to move it", message)
+	}
+
+	moved := e.ok(admin, "colliedesk_channels_update", map[string]any{"channel_id": formID, "help_center_id": nil})
+	if at(t, moved, "channel", "help_center_id") != nil {
+		t.Fatalf("form moved back = %v, want the primary (null)", moved)
+	}
+	e.ok(admin, "colliedesk_help_center_delete", map[string]any{"help_center_id": hardware})
+}
+
 // A top-level collection is shown on the help centers it names, and each help center's home keeps an
 // order of its own.
 func TestCollectionToolsChooseHelpCentersAndOrderEachHome(t *testing.T) {
