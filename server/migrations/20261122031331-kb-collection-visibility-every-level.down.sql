@@ -10,3 +10,5 @@ LEFT JOIN kb_collections p
 LEFT JOIN kb_collections g
     ON g.workspace_id = p.workspace_id AND g.id = p.parent_id AND g.deleted_at IS NULL
 WHERE c.deleted_at IS NULL;
+
+DROP FUNCTION kb_parents_visibility_rank(uuid, uuid);
