@@ -8,7 +8,7 @@ import { redeemLink } from './support/browser';
 const baseURL = servers.main;
 const headers = { Origin: baseURL };
 
-test('two people on one conversation: who is writing, a warning before a second reply, and leaving', async ({ browser }) => {
+test('two people on one conversation: who is writing, a warning before a second reply, and leaving', { tag: '@journey' }, async ({ browser }) => {
   const suffix = uniqueSuffix();
   const lanContext = await browser.newContext();
   const lan = await lanContext.newPage();

@@ -68,7 +68,7 @@ async function expectStayed(page: Page, subject: string): Promise<void> {
   expect(missing, `${subject}: what left the screen while it left the list`).toEqual([]);
 }
 
-test('the open conversation stays on screen with its reply box while an action moves it out of the list', async ({ page }) => {
+test('the open conversation stays on screen with its reply box while an action moves it out of the list', { tag: '@journey' }, async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   const desk = await fullDesk(page);

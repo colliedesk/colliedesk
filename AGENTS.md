@@ -40,7 +40,7 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    `TestToolArgumentsAreValidatedAgainstTheSchema`,
    `TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`, `TestInboxSearchLatencyBudget`,
    `TestToolsListStaysWithinItsBudget` (the tool list a client loads, `docs/internals/performance.md`),
-   the onboarding journeys below; agent journeys with call budgets are tracked in #374.
+   the onboarding and daily-use journeys below; agent journeys with call budgets are tracked in #374.
 
 ## Glossary
 
@@ -98,7 +98,7 @@ API, identity provider JWKS, Mailpit as the SMTP relay). They run on every PR in
 `create-workspace` / `pair`, redeem, invites, sessions, cloud sign-in, the email channel,
 `import freshdesk` / `import undo`, the empty inbox, `operator pair` and the operator console) must keep them green. Never skip, weaken or
 untag one; fix the product instead. `corepack pnpm test` fails when this list and the
-`@onboarding` tests in `web/e2e/` differ.
+`@onboarding` tests in `web/e2e/` differ (`web/scripts/check-journeys.mjs`).
 
 - `self-host first run: fresh database, create-workspace, pairing link, empty inbox that explains the next step` (`web/e2e/onboarding-self-host.spec.ts`)
 - `invite teammate: admin invites, teammate joins with the Agent role, admin revokes, revoked session refused` (`web/e2e/onboarding-invite.spec.ts`)
@@ -124,6 +124,30 @@ checkouts can run them at once; `COLLIEDESK_E2E_PORT_BASE` overrides the ports. 
 Run locally: `docker compose --profile test up -d postgres mailpit`, then
 `make e2e E2E_ARGS='--grep @onboarding'`; for the installer,
 `docker build -t colliedesk:smoke -f server/Dockerfile . && COLLIE_DESK_IMAGE=colliedesk:smoke sh tests/install-smoke.sh`.
+
+## Daily-use journeys
+
+What a team does every day after its first hour: answer and route conversations, find one again,
+work together, keep the knowledge base. Each line is one end-to-end test tagged `@journey`; they
+run on every PR in the CI job `e2e`. A journey goes from a real start state (a conversation
+already open, a list with many rows, the width people use) to what the person sees at the end, and
+asserts what they see, not only that a request was sent. A bug a person hits on one of these flows
+adds its step to a journey, or a new journey, in the PR that fixes it. Never skip, weaken or untag
+one; fix the product instead. `corepack pnpm test` fails when this list and the `@journey` tests in
+`web/e2e/` differ. Run locally: `make e2e E2E_ARGS='--grep @journey'`.
+
+- `redeems a CLI pairing link and completes the inbox workflow` (`web/e2e/inbox-workflow.spec.ts`)
+- `a conversation opens at its newest message from the list, from its address and when another one is picked` (`web/e2e/thread-newest-message.spec.ts`)
+- `an opened conversation takes the screen, and Back or the browser back returns to the list where it was` (`web/e2e/phone-thread.spec.ts`)
+- `the open conversation stays on screen with its reply box while an action moves it out of the list` (`web/e2e/open-conversation-stays.spec.ts`)
+- `an unsent reply survives a reload and the browser Back, and is gone once sent` (`web/e2e/reply-draft-persists.spec.ts`)
+- `selects conversations with the keyboard and resolves them in one action` (`web/e2e/bulk-actions.spec.ts`)
+- `two people on one conversation: who is writing, a warning before a second reply, and leaving` (`web/e2e/collision.spec.ts`)
+- `a private note asks a teammate with @: Mentions counts it, opening it marks it read, the writer sees it was seen` (`web/e2e/mentions.spec.ts`)
+- `review: the rail counts the cards, a person opens one as a conversation, sets one aside and puts it back` (`web/e2e/review.spec.ts`)
+- `knowledge base: a collection, an article written in the Markdown editor with a pasted image, published, edited, restored from history, deleted and restored from the trash` (`web/e2e/knowledge-base.spec.ts`)
+- `knowledge base list: tags set in the editor, a hidden column stays hidden after a reload, and a saved view opens its filters again` (`web/e2e/knowledge-base-list.spec.ts`)
+- `knowledge base review: the author sends a draft for review, the reviewer approves it from Reviews, the author publishes it` (`web/e2e/knowledge-base-review.spec.ts`)
 
 ## Testing on Colliedesk Cloud
 

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { servers } from './support/cli';
 import { createWorkspaceWithSlug } from './support/workspace';
 
-test('knowledge base list: tags set in the editor, a hidden column stays hidden after a reload, and a saved view opens its filters again', async ({ page }) => {
+test('knowledge base list: tags set in the editor, a hidden column stays hidden after a reload, and a saved view opens its filters again', { tag: '@journey' }, async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   const { url } = createWorkspaceWithSlug(`KB List ${suffix}`, `admin-${suffix}@example.com`);
   await page.goto(url);

@@ -7,7 +7,7 @@ import { writeInMarkdown } from './support/kb-editor';
 // The smallest PNG there is: one transparent pixel.
 const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
 
-test('knowledge base: a collection, an article written in the Markdown editor with a pasted image, published, edited, restored from history, deleted and restored from the trash', async ({ page }) => {
+test('knowledge base: a collection, an article written in the Markdown editor with a pasted image, published, edited, restored from history, deleted and restored from the trash', { tag: '@journey' }, async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   const { url } = createWorkspaceWithSlug(`KB Desk ${suffix}`, `admin-${suffix}@example.com`);
   // The article list never loads the editor's chunk; an article page does.

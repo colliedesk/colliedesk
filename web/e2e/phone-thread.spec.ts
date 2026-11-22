@@ -71,7 +71,7 @@ async function expectNoOverflow(locator: Locator, what: string): Promise<void> {
 test.describe('on a phone', () => {
   test.use(phone);
 
-  test('an opened conversation takes the screen, and Back or the browser back returns to the list where it was', async ({ page }) => {
+  test('an opened conversation takes the screen, and Back or the browser back returns to the list where it was', { tag: '@journey' }, async ({ page }) => {
     const desk = await signInWithTickets(page, 'Phone Desk', 30);
     // A filtered list, so coming back also proves the filters stayed.
     const listURL = `${servers.main}/?status=all`;
