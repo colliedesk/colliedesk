@@ -20,11 +20,12 @@ const kbGapTopicsMinConversations = 20
 // while another transaction holds the article.
 func fixKBGapsByArticle(ctx context.Context, tx pgx.Tx, workspaceID, articleID string) (bool, error) {
 	var title string
-	err := tx.QueryRow(ctx, `SELECT title FROM kb_articles WHERE workspace_id=$1 AND id=$2::uuid AND status='published' AND deleted_at IS NULL
-		FOR KEY SHARE SKIP LOCKED`, workspaceID, articleID).Scan(&title)
+	err := tx.QueryRow(ctx, `SELECT a.title FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2::uuid
+			AND EXISTS (SELECT 1 FROM kb_published_articles p WHERE p.workspace_id=a.workspace_id AND p.id=a.id)
+		FOR KEY SHARE OF a SKIP LOCKED`, workspaceID, articleID).Scan(&title)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var held bool
-		err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM kb_articles WHERE workspace_id=$1 AND id=$2::uuid AND status='published' AND deleted_at IS NULL)`,
+		err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM kb_published_articles WHERE workspace_id=$1 AND id=$2::uuid)`,
 			workspaceID, articleID).Scan(&held)
 		return !held, err
 	}
@@ -92,7 +93,8 @@ func (s *Store) buildKBGapTopics(ctx context.Context, workspaceID string) (read 
 		if locked, err := lockKBGaps(ctx, tx, workspaceID); err != nil || !locked {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT title FROM kb_articles WHERE workspace_id=$1 AND status='published' AND deleted_at IS NULL`, workspaceID)
+		rows, err := tx.Query(ctx, `SELECT a.title FROM kb_articles a
+			JOIN kb_published_articles p ON p.workspace_id=a.workspace_id AND p.id=a.id WHERE a.workspace_id=$1`, workspaceID)
 		if err != nil {
 			return err
 		}
