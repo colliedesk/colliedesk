@@ -23,7 +23,7 @@ func (s *Store) GetHelpCenterSearchConsole(ctx context.Context, workspaceID stri
 
 func readHelpCenterSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID string) (domain.SearchConsoleView, error) {
 	var view domain.SearchConsoleView
-	err := tx.QueryRow(ctx, `SELECT google_site_verification,bing_site_verification,content_version,updated_at FROM help_centers WHERE workspace_id=$1`, workspaceID).
+	err := tx.QueryRow(ctx, `SELECT google_site_verification,bing_site_verification,content_version,updated_at FROM help_centers WHERE workspace_id=$1 AND primary_help_center`, workspaceID).
 		Scan(&view.Google, &view.Bing, &view.ContentVersion, &view.UpdatedAt)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return domain.SearchConsoleView{}, err
@@ -55,7 +55,7 @@ func (s *Store) PutHelpCenterSearchConsole(ctx context.Context, workspaceID stri
 func writeSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID string, change domain.SearchConsoleChange) error {
 	_, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,content_version,updated_at,google_site_verification,bing_site_verification)
 		VALUES($1,1,clock_timestamp(),NULLIF($3,''),NULLIF($5,''))
-		ON CONFLICT (workspace_id) DO UPDATE SET
+		ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET
 			google_site_verification=CASE WHEN $2 THEN NULLIF($3,'') ELSE help_centers.google_site_verification END,
 			bing_site_verification=CASE WHEN $4 THEN NULLIF($5,'') ELSE help_centers.bing_site_verification END,
 			content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
@@ -75,7 +75,7 @@ func deref(text *string) string {
 // without one nothing is written.
 func CarryOverSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID string, google, bing string) (setGoogle, setBing bool, err error) {
 	var current domain.SearchConsoleView
-	err = tx.QueryRow(ctx, `SELECT google_site_verification,bing_site_verification FROM help_centers WHERE workspace_id=$1 FOR UPDATE`, workspaceID).
+	err = tx.QueryRow(ctx, `SELECT google_site_verification,bing_site_verification FROM help_centers WHERE workspace_id=$1 AND primary_help_center FOR UPDATE`, workspaceID).
 		Scan(&current.Google, &current.Bing)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, false, err

@@ -83,8 +83,8 @@ const targetExists = `CASE i.entity
 		AND x.locale=split_part(i.source_id,':',2))
 	WHEN 'kb_collection_name' THEN EXISTS(SELECT 1 FROM kb_collection_translations x WHERE x.workspace_id=i.workspace_id AND x.collection_id=i.target_id
 		AND x.locale=split_part(i.source_id,':',2))
-	WHEN 'kb_primary_language' THEN EXISTS(SELECT 1 FROM help_centers x WHERE x.workspace_id=i.workspace_id AND x.locale=i.source_id)
-	WHEN 'kb_language' THEN EXISTS(SELECT 1 FROM help_center_languages x WHERE x.workspace_id=i.workspace_id AND x.locale=i.source_id)
+	WHEN 'kb_primary_language' THEN EXISTS(SELECT 1 FROM help_centers x WHERE x.workspace_id=i.workspace_id AND x.primary_help_center AND x.locale=i.source_id)
+	WHEN 'kb_language' THEN EXISTS(SELECT 1 FROM help_center_languages x WHERE x.workspace_id=i.workspace_id AND x.help_center_id=primary_help_center_id(i.workspace_id) AND x.locale=i.source_id)
 	WHEN 'kb_image' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'kb_file' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'chat' THEN EXISTS(SELECT 1 FROM channel_threads x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
@@ -408,6 +408,7 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 	// The languages the import added go once nothing is written in them.
 	tag, err = tx.Exec(ctx, `DELETE FROM help_center_languages l USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_language'
 		AND (i.meta->>'created')::boolean AND l.workspace_id=i.workspace_id AND l.locale=i.source_id
+		AND l.help_center_id=primary_help_center_id($1)
 		AND NOT EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=l.workspace_id AND t.locale=l.locale)
 		AND NOT EXISTS (SELECT 1 FROM kb_collection_translations t WHERE t.workspace_id=l.workspace_id AND t.locale=l.locale)`, workspaceID, source)
 	if err != nil {
@@ -418,7 +419,7 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 	// and the earlier one is not now another language of the help center (a primary language never is).
 	// After the languages the import added are gone: the earlier one is often one the source supports too.
 	var set, previous, current string
-	err = tx.QueryRow(ctx, `SELECT i.source_id, i.meta->>'previous', COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1), 'en')
+	err = tx.QueryRow(ctx, `SELECT i.source_id, i.meta->>'previous', COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1 AND primary_help_center), 'en')
 		FROM import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_primary_language' AND COALESCE(i.meta->>'previous','') <> ''
 		ORDER BY i.updated_at DESC LIMIT 1`, workspaceID, source).Scan(&set, &previous, &current)
 	switch {
@@ -427,11 +428,11 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 		return nil, fmt.Errorf("read the primary language the import set: %w", err)
 	default:
 		var listed bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND lower(locale)=lower($2))`, workspaceID, previous).Scan(&listed); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) AND lower(locale)=lower($2))`, workspaceID, previous).Scan(&listed); err != nil {
 			return nil, fmt.Errorf("read the help center languages: %w", err)
 		}
 		if current == set && !listed {
-			if _, err := tx.Exec(ctx, `UPDATE help_centers SET locale=$2, content_version=content_version+1, updated_at=clock_timestamp() WHERE workspace_id=$1`,
+			if _, err := tx.Exec(ctx, `UPDATE help_centers SET locale=$2, content_version=content_version+1, updated_at=clock_timestamp() WHERE workspace_id=$1 AND primary_help_center`,
 				workspaceID, previous); err != nil {
 				return nil, fmt.Errorf("give back the primary language: %w", err)
 			}
@@ -442,7 +443,7 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 	}
 	if result.KBArticles+result.KBCollections+result.KBImages+result.KBFiles+result.KBTranslations+result.KBCollectionNames+result.KBLanguages > 0 {
 		// A help center page cached under the old content version is stale now.
-		if _, err := tx.Exec(ctx, `UPDATE help_centers SET content_version=content_version+1, updated_at=clock_timestamp() WHERE workspace_id=$1`, workspaceID); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE help_centers SET content_version=content_version+1, updated_at=clock_timestamp() WHERE workspace_id=$1 AND primary_help_center`, workspaceID); err != nil {
 			return nil, fmt.Errorf("bump knowledge base version: %w", err)
 		}
 	}

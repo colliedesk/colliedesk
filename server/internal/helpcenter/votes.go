@@ -134,7 +134,7 @@ func (s *Site) vote(response http.ResponseWriter, request *http.Request, v view,
 	missing := request.PostForm.Get("missing")
 	cookie := s.readerCookie(request, v)
 	voter := sha256.Sum256([]byte("reader\x00" + cookie.Value))
-	err = s.config.Store.VoteKBArticle(request.Context(), v.site.WorkspaceID, number, voter[:], s.voteAddress(request), helpful, missing)
+	err = s.config.Store.VoteKBArticle(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, number, voter[:], s.voteAddress(request), helpful, missing)
 	if errors.Is(err, domain.ErrKBArticleNotFound) {
 		s.writeSiteNotFound(response, v)
 		return

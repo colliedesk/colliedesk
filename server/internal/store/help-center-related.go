@@ -7,8 +7,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// relatedArticlesSQL lists, for the article numbered $2 of workspace $1 that a reader of the help
-// center may open, at most $3 other such articles: first those whose words are closest to its own,
+// relatedArticlesSQL lists, for the article numbered $2 of workspace $1 that a reader of help center
+// $H may open, at most $3 other articles that help center shows: first those whose words are closest to its own,
 // then the rest of its home collection in that collection's order. With a translation join (the
 // articles of language $4 only), the words, titles and slugs are those of the translations; words
 // joins the row whose vector is read to an article already known to be shown, without checking again.
@@ -22,14 +22,14 @@ import (
 // row-level security keeps Postgres from using one.
 func relatedArticlesSQL(translation, words, search, title, columns string) string {
 	return `WITH src AS MATERIALIZED (SELECT a.id, a.collection_id, ` + search + ` AS search, kb_search_vector(` + title + `) AS title
-		FROM kb_articles a` + translation + ` WHERE ` + publicKBArticle + ` AND a.number=$2),
+		FROM kb_articles a` + translation + ` WHERE ` + shownKBArticle + ` AND a.number=$2),
 	terms AS MATERIALIZED (SELECT w.lexeme, bool_or(w.in_title) AS in_title FROM (
 			SELECT x AS lexeme, true AS in_title FROM src, unnest(tsvector_to_array(src.title)) x
 			UNION ALL SELECT b.x, false FROM (SELECT x FROM src, unnest(tsvector_to_array(src.search)) x
 				WHERE length(x) >= 3 AND x !~ '[0-9]' ORDER BY length(x) DESC, x LIMIT 24) b) w
 		GROUP BY w.lexeme),
 	q AS MATERIALIZED (SELECT lexeme, in_title, ('''' || replace(replace(lexeme, '\', '\\'), '''', '''''') || '''')::tsquery AS query FROM terms),
-	shown AS MATERIALIZED (SELECT a.id FROM kb_articles a` + translation + ` WHERE ` + publicKBArticle + ` AND a.id <> (SELECT id FROM src)),
+	shown AS MATERIALIZED (SELECT a.id FROM kb_articles a` + translation + ` WHERE ` + shownKBArticle + ` AND a.id <> (SELECT id FROM src)),
 	hits AS MATERIALIZED (SELECT a.id, a.number, ARRAY(SELECT q.lexeme FROM q WHERE v.search @@ q.query) AS words
 		FROM shown JOIN kb_articles a ON a.workspace_id=$1 AND a.id=shown.id` + words + `
 		CROSS JOIN LATERAL (SELECT ` + search + ` || ''::tsvector AS search OFFSET 0) v),
@@ -55,20 +55,24 @@ var (
 		"t.search", "t.title", publicKBTranslationColumns)
 )
 
-// HelpCenterRelatedArticles returns the published articles a reader of article number may want
-// instead, in language locale ("" the primary one): the closest in words first, from any
-// collection, then the rest of its home collection in order, at most limit. It is empty when the
-// article is not one a reader of the help center may open. Only articles the help center shows are
-// listed, in a language only those published and shown in it, as on every other help center list.
+// HelpCenterRelatedArticles is HelpCenterRelatedArticlesIn on the workspace's primary help center.
 func (s *Store) HelpCenterRelatedArticles(ctx context.Context, workspaceID, locale string, number int64, limit int) ([]domain.PublicKBArticle, error) {
+	return s.HelpCenterRelatedArticlesIn(ctx, workspaceID, "", locale, number, limit)
+}
+
+// HelpCenterRelatedArticlesIn returns the published articles a reader of article number on help
+// center helpCenterID ("" the primary one) may want instead, in language locale ("" the primary
+// one): the closest in words first, from any collection, then the rest of its home collection in
+// order, at most limit. It is empty when the article is not one a reader of that help center may
+// open. Only articles that help center shows are listed, in a language only those published and
+// shown in it, as on every other help center list.
+func (s *Store) HelpCenterRelatedArticlesIn(ctx context.Context, workspaceID, helpCenterID, locale string, number int64, limit int) ([]domain.PublicKBArticle, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
-		var rows pgx.Rows
-		var err error
-		if locale == "" {
-			rows, err = tx.Query(ctx, relatedPrimarySQL, workspaceID, number, limit)
-		} else {
-			rows, err = tx.Query(ctx, relatedTranslatedSQL, workspaceID, number, limit, locale)
+		query, args := onHelpCenter(helpCenterID, relatedPrimarySQL, workspaceID, number, limit)
+		if locale != "" {
+			query, args = onHelpCenter(helpCenterID, relatedTranslatedSQL, workspaceID, number, limit, locale)
 		}
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return nil, err
 		}

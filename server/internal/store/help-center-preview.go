@@ -28,7 +28,7 @@ type HelpCenterPreview struct {
 // media_not_found; one accepted in the trash is left out, as on the public pages. It changes nothing.
 func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme domain.HelpCenterTheme, article bool, homeArticles, neighbours int) (HelpCenterPreview, error) {
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (HelpCenterPreview, error) {
-		got := HelpCenterPreview{Site: domain.HelpCenterSite{WorkspaceID: workspaceID, Theme: theme}}
+		got := HelpCenterPreview{Site: domain.HelpCenterSite{WorkspaceID: workspaceID, Primary: true, Theme: theme}}
 		site := &got.Site
 		var logo, icon previewImage
 		var logoWidth, logoHeight *int
@@ -37,7 +37,7 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 		batch.Queue(`SELECT w.slug, w.name, COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0),
 				h.logo_media_id::text, logo.kind, logo.deleted_at IS NOT NULL, logo.width, logo.height,
 				h.favicon_media_id::text, icon.kind, icon.deleted_at IS NOT NULL
-			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id
+			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id AND h.primary_help_center
 			LEFT JOIN kb_media logo ON logo.workspace_id=w.id AND logo.id=$2::uuid
 			LEFT JOIN kb_media icon ON icon.workspace_id=w.id AND icon.id=$3::uuid
 			WHERE w.id=$1`, workspaceID, theme.LogoMediaID, theme.FaviconMediaID).QueryRow(func(row pgx.Row) error {
@@ -57,7 +57,12 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 			}
 			return nil
 		})
-		batch.Queue(helpCenterCollectionsSQL, workspaceID, "").Query(func(rows pgx.Rows) error {
+		// The theme is the primary help center's, and so is what its preview shows.
+		onPrimary := func(query string, args ...any) *pgx.QueuedQuery {
+			query, args = onHelpCenter("", query, args...)
+			return batch.Queue(query, args...)
+		}
+		onPrimary(helpCenterCollectionsSQL, workspaceID, "").Query(func(rows pgx.Rows) error {
 			var err error
 			got.Collections, err = pgx.CollectRows(rows, scanPublicKBCollection(""))
 			return err
@@ -70,7 +75,7 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 		if !article {
 			// The top collections' first articles; one with nothing published in or below it is hidden
 			// by the caller, and has no published article of its own either.
-			batch.Queue(helpCenterArticlesSQL(`ARRAY(SELECT c.id FROM kb_collections c WHERE c.workspace_id=$1 AND c.parent_id IS NULL AND c.deleted_at IS NULL)`),
+			onPrimary(helpCenterArticlesSQL(`ARRAY(SELECT c.id FROM kb_collections c WHERE c.workspace_id=$1 AND c.parent_id IS NULL AND c.deleted_at IS NULL)`),
 				workspaceID, 0, homeArticles).Query(collectArticles)
 		} else {
 			const first = `(SELECT min(a.number) FROM kb_articles a WHERE ` + publicKBArticle + `)`
@@ -94,7 +99,7 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 					}
 					return err
 				})
-			batch.Queue(helpCenterArticlesSQL(`ARRAY(SELECT a.collection_id FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=`+first+`)`),
+			onPrimary(helpCenterArticlesSQL(`ARRAY(SELECT a.collection_id FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=`+first+`)`),
 				workspaceID, 0, neighbours).Query(collectArticles)
 		}
 		if err := tx.SendBatch(ctx, batch).Close(); err != nil {

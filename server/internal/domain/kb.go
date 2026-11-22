@@ -529,7 +529,14 @@ func CheckLocale(locale string) error {
 // HelpCenterSite is what every public help center page needs to know about its workspace. Trial is
 // true while the workspace is on a trial: its pages ask search engines not to index them.
 type HelpCenterSite struct {
-	WorkspaceID    string
+	WorkspaceID string
+	// HelpCenterID is the help center the pages are of; Primary says it is the workspace's first one,
+	// the one its own address, help chat and channel pages belong to.
+	HelpCenterID string
+	Primary      bool
+	// Handle names a help center other than the primary below /b/<handle> of the primary's
+	// addresses; "" on the primary.
+	Handle         string
 	Slug           string
 	Name           string
 	Title          string
@@ -548,6 +555,9 @@ type HelpCenterSite struct {
 	// CustomHost is the workspace's active custom domain, "" when it has none or is on its trial: the
 	// help center serves there and its other addresses redirect there.
 	CustomHost string
+	// PrimaryHost is the active custom domain of the workspace's primary help center, "" as
+	// CustomHost is: a help center without a custom domain of its own is served below its handle there.
+	PrimaryHost string
 	// Languages are the languages besides Locale that customers see, in menu order: each has its pages
 	// under /<locale>/.
 	Languages []string

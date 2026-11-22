@@ -271,11 +271,11 @@ func (a *API) checkAddress(ctx context.Context, workspaceID string, d domain.Hel
 // (a claim exists and its workspace's help center is open, so the target's redirect keeps working) and
 // whether the claim exists.
 func (a *API) certifyClaimHost(ctx context.Context, claim string) (open, claimed bool, err error) {
-	workspaceID, found, err := a.store.HelpCenterClaim(ctx, claim)
+	workspaceID, helpCenterID, found, err := a.store.HelpCenterClaim(ctx, claim)
 	if err != nil || !found {
 		return false, false, err
 	}
-	_, open, err = a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
+	_, open, err = a.store.OpenHelpCenterAt(ctx, workspaceID, helpCenterID)
 	return open, true, err
 }
 
@@ -286,11 +286,11 @@ func (a *API) certifyClaimHost(ctx context.Context, claim string) (open, claimed
 // claims host, active or pending. Live checks are bounded by liveChecks, so a stream of questions
 // cannot make the server flood DNS.
 func (a *API) certifyCustomHost(ctx context.Context, host string) (open, claimed bool, err error) {
-	if workspaceID, found, err := a.store.HelpCenterHost(ctx, host); err != nil || found {
+	if workspaceID, helpCenterID, found, err := a.store.HelpCenterHost(ctx, host); err != nil || found {
 		if err != nil {
 			return false, false, err
 		}
-		site, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
+		site, open, err := a.store.OpenHelpCenterAt(ctx, workspaceID, helpCenterID)
 		if err != nil || !open || site.CustomHost != host {
 			return false, true, err
 		}

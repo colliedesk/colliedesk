@@ -53,7 +53,7 @@ func (p *Preview) WorkspaceExists(ctx context.Context, slug string) (bool, error
 func (p *Preview) AnyOpenHelpCenter(ctx context.Context) (string, error) {
 	var slug string
 	err := p.db.Privileged(ctx, database.PrivilegeOperatorPreview, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, `SELECT w.slug FROM workspaces w JOIN help_centers h ON h.workspace_id = w.id
+		err := tx.QueryRow(ctx, `SELECT w.slug FROM workspaces w JOIN help_centers h ON h.workspace_id = w.id AND h.primary_help_center
 			WHERE h.enabled ORDER BY w.created_at, w.id LIMIT 1`).Scan(&slug)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil

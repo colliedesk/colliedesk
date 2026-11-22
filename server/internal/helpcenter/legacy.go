@@ -135,7 +135,7 @@ func (s *Site) legacyTarget(ctx context.Context, v view, old LegacyAddress, term
 	case LegacyOther:
 		return v.rootAddress, http.StatusFound, nil
 	}
-	found, err := s.config.Store.HelpCenterLegacyTarget(ctx, v.site.WorkspaceID, old.Entity(), old.ID)
+	found, err := s.config.Store.HelpCenterLegacyTarget(ctx, v.site.WorkspaceID, v.site.HelpCenterID, old.Entity(), old.ID)
 	if err != nil {
 		return "", 0, err
 	}
@@ -143,7 +143,7 @@ func (s *Site) legacyTarget(ctx context.Context, v view, old LegacyAddress, term
 	// An old address in a language (/fr/support/...) whose page is published and shown in it goes to
 	// that language's page, else to the primary language's, as it always did.
 	case found.Number > 0 && v.lang != "":
-		translated, err := s.config.Store.HelpCenterArticleIn(ctx, v.site.WorkspaceID, found.Number, v.lang)
+		translated, err := s.config.Store.HelpCenterArticleIn(ctx, v.site.WorkspaceID, v.site.HelpCenterID, found.Number, v.lang)
 		if err == nil {
 			return v.rootAddress + ArticlePath(found.Number, translated.Slug), http.StatusMovedPermanently, nil
 		}

@@ -21,7 +21,7 @@ func kbTextVersion(v string) string {
 // before it is published: a collection set to on, or set to inherit while the workspace requires it.
 func kbApprovalRequired(ctx context.Context, tx pgx.Tx, workspaceID string, collections []string) (bool, error) {
 	var required bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM kb_collections c LEFT JOIN help_centers h ON h.workspace_id=c.workspace_id
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM kb_collections c LEFT JOIN help_centers h ON h.workspace_id=c.workspace_id AND h.primary_help_center
 		WHERE c.workspace_id=$1 AND c.id=ANY($2::uuid[]) AND (c.require_approval='on' OR (c.require_approval='inherit' AND COALESCE(h.require_approval,false))))`,
 		workspaceID, collections).Scan(&required)
 	if err != nil {

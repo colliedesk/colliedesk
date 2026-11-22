@@ -42,7 +42,7 @@ func (s *Site) brandImage(response http.ResponseWriter, request *http.Request, v
 		s.writeSiteNotFound(response, v)
 		return
 	}
-	image, err := s.config.Store.HelpCenterBrandImage(request.Context(), v.site.WorkspaceID, id)
+	image, err := s.config.Store.HelpCenterBrandImage(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, id)
 	// Storage keys start with the owning workspace id; a row pointing at another workspace's bytes is never served.
 	if errors.Is(err, domain.ErrKBImageNotFound) || err == nil && !strings.HasPrefix(image.StorageKey, v.site.WorkspaceID+"/") {
 		s.writeSiteNotFound(response, v)

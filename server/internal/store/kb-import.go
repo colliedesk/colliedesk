@@ -346,7 +346,7 @@ func ImportKBCollectionTranslation(ctx context.Context, tx pgx.Tx, workspaceID, 
 // an admin set. It returns the locales it added. The primary language is never added.
 func ImportHelpCenterLanguages(ctx context.Context, tx pgx.Tx, workspaceID string, locales []string, visible map[string]bool) ([]string, error) {
 	var primary string
-	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1), 'en')`, workspaceID).Scan(&primary); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1 AND primary_help_center), 'en')`, workspaceID).Scan(&primary); err != nil {
 		return nil, err
 	}
 	shown := make([]bool, 0, len(locales))
@@ -358,9 +358,9 @@ func ImportHelpCenterLanguages(ctx context.Context, tx pgx.Tx, workspaceID strin
 		keep, shown = append(keep, locale), append(shown, visible[locale])
 	}
 	rows, err := tx.Query(ctx, `INSERT INTO help_center_languages(workspace_id,locale,visible,position)
-		SELECT $1, x.locale, x.visible, (SELECT COALESCE(max(position),0) FROM help_center_languages WHERE workspace_id=$1) + x.n
+		SELECT $1, x.locale, x.visible, (SELECT COALESCE(max(position),0) FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1)) + x.n
 		FROM unnest($2::text[], $3::boolean[]) WITH ORDINALITY AS x(locale, visible, n)
-		ON CONFLICT (workspace_id, locale) DO NOTHING RETURNING locale`, workspaceID, keep, shown)
+		ON CONFLICT (workspace_id, help_center_id, locale) DO NOTHING RETURNING locale`, workspaceID, keep, shown)
 	if err != nil {
 		return nil, fmt.Errorf("import help center languages: %w", err)
 	}
@@ -386,14 +386,14 @@ func AdoptImportedPrimaryLanguage(ctx context.Context, tx pgx.Tx, workspaceID, l
 		return false, "", nil
 	}
 	var current string
-	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1), 'en')`, workspaceID).Scan(&current); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1 AND primary_help_center), 'en')`, workspaceID).Scan(&current); err != nil {
 		return false, "", err
 	}
 	if strings.EqualFold(current, locale) {
 		return true, "", nil
 	}
 	var blocked bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1)
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1))
 		OR EXISTS(SELECT 1 FROM kb_articles a WHERE a.workspace_id=$1 AND a.source_meta IS NULL)
 		OR EXISTS(SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=$1 AND t.locale=$2)`, workspaceID, locale).Scan(&blocked); err != nil {
 		return false, "", err
@@ -402,7 +402,7 @@ func AdoptImportedPrimaryLanguage(ctx context.Context, tx pgx.Tx, workspaceID, l
 		return false, "", nil
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,locale,content_version,updated_at) VALUES($1,$2,1,clock_timestamp())
-		ON CONFLICT (workspace_id) DO UPDATE SET locale=EXCLUDED.locale, content_version=help_centers.content_version+1, updated_at=clock_timestamp()`, workspaceID, locale); err != nil {
+		ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET locale=EXCLUDED.locale, content_version=help_centers.content_version+1, updated_at=clock_timestamp()`, workspaceID, locale); err != nil {
 		return false, "", fmt.Errorf("set the help center's primary language: %w", err)
 	}
 	return true, current, nil
