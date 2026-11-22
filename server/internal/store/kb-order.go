@@ -71,6 +71,16 @@ const kbTreeOrder = `WITH RECURSIVE ranked AS (
 // cleanKBOrder checks the shape of an order: ids, each once, and no article at the top. The ids come
 // back in lowercase, as the database prints them.
 func cleanKBOrder(order *domain.KBOrder) error {
+	if order.HelpCenterID != nil {
+		if order.ParentID != nil {
+			return &domain.InvalidKBError{Message: "help_center_id orders the home of a help center: send it with parent_id null, or leave it out to order a collection's children."}
+		}
+		if !savedReplyID.MatchString(*order.HelpCenterID) {
+			return &domain.InvalidKBError{Message: "help_center_id is the id of one of the workspace's help centers (GET /api/v1/help-centers lists them)."}
+		}
+		id := strings.ToLower(*order.HelpCenterID)
+		order.HelpCenterID = &id
+	}
 	if order.ParentID != nil {
 		if !savedReplyID.MatchString(*order.ParentID) {
 			return &domain.InvalidKBError{Message: "parent_id is a collection id, or null for the top."}
@@ -144,11 +154,16 @@ func sameMembers(a, b []string) bool {
 // must name exactly what the parent holds outside the trash; otherwise nothing changes and the error is a
 // *domain.KBOrderStaleError holding the current lists. A parent that is not a live collection of the
 // workspace is domain.ErrKBCollectionNotFound. updated_at stays: an order is not an edit of the items.
+// With order.HelpCenterID set it orders that help center's home (setHelpCenterHomeOrder); a help
+// center the workspace does not have is domain.ErrHelpCenterNotFound.
 func (s *Store) SetKBOrder(ctx context.Context, workspaceID string, order domain.KBOrder) (domain.KBOrder, error) {
 	if err := cleanKBOrder(&order); err != nil {
 		return domain.KBOrder{}, err
 	}
 	result, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBOrder, error) {
+		if order.HelpCenterID != nil {
+			return setHelpCenterHomeOrder(ctx, tx, workspaceID, order)
+		}
 		if err := lockKB(ctx, tx, workspaceID); err != nil {
 			return domain.KBOrder{}, err
 		}

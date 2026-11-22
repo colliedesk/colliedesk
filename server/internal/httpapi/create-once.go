@@ -32,6 +32,7 @@ const (
 	createTagOperation                   = "tag"
 	createSavedViewOperation             = "saved_view"
 	createKBCollectionOperation          = "kb_collection"
+	createHelpCenterOperation            = "help_center"
 	createChannelOperation               = "channel"
 	addAIProviderOperation               = "ai_provider"
 	problemReportOperation               = "problem_report"

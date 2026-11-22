@@ -89,7 +89,7 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrLastAdmin):
 		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Give the Admin role to another active member first.")
 		return
-	case writeRoleError(response, err):
+	case writeRoleError(response, err), writeHelpCenterError(response, err):
 		return
 	case errors.Is(err, domain.ErrAgentDeactivated):
 		writeError(response, http.StatusConflict, "agent_deactivated", domain.ErrAgentDeactivated.Error()+".")

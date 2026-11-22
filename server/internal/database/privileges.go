@@ -130,9 +130,9 @@ const (
 	// compares its claim and token with what DNS showed inside the database, puts it back to pending and
 	// activates the new claim; only the holder's workspace id leaves it, to refresh the server's cache.
 	PrivilegeHelpCenterDomainTakeover Privilege = "help-center-domain-takeover"
-	// PrivilegeHelpCenterDomainRecheck lists the workspaces with an active custom help center domain for
-	// the daily DNS re-check. Only workspace ids leave the transaction; each check reads and records in
-	// its own workspace.
+	// PrivilegeHelpCenterDomainRecheck lists the help centers with an active custom domain for the daily
+	// DNS re-check. Only workspace and help center ids leave the transaction; each check reads and
+	// records in its own workspace.
 	PrivilegeHelpCenterDomainRecheck Privilege = "help-center-domain-recheck"
 	// PrivilegeMailboxKeepAlive lists, in every workspace, the connected mailboxes of a provider whose grant
 	// was not renewed for a week, so a quiet Microsoft 365 grant is refreshed before it expires unused. Only

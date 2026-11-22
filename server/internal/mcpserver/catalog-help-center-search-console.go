@@ -4,7 +4,7 @@ import "net/http"
 
 const (
 	searchConsoleTokenSchema = `{"type":["string","null"],"maxLength":100}`
-	searchConsoleInput       = `{"type":"object","additionalProperties":false,"properties":{` +
+	searchConsoleInput       = `{"type":"object","additionalProperties":false,"properties":{` + helpCenterIDProperty + `,` +
 		`"google_site_verification":{"type":["string","null"],"maxLength":100,"description":"The content value of Google Search Console's google-site-verification meta tag (16 to 100 letters, digits, - or _), not the whole tag. Left out: unchanged. Null or empty: removed."},` +
 		`"bing_site_verification":{"type":["string","null"],"maxLength":100,"description":"The content value of Bing Webmaster Tools' msvalidate.01 meta tag. Left out: unchanged. Null or empty: removed."}}}`
 	searchConsoleSchema = `{"type":"object","required":["google_site_verification","bing_site_verification","content_version"],"properties":{` +
@@ -19,7 +19,7 @@ func helpCenterSearchConsoleGetSpec() Spec {
 		Description: `Return the Google and Bing verification tokens of the public help center (null when not set). ` +
 			`Each is served as a meta tag on this workspace's help center pages only.`,
 		REST:   []string{"GET /api/v1/help-center/search-console"},
-		Input:  noArguments,
+		Input:  helpCenterOnlyInput,
 		Output: `{"type":"object","required":["search_console"],"properties":{"search_console":` + searchConsoleSchema + `}}`,
 		run:    helpCenterSearchConsoleGet,
 	}
@@ -41,9 +41,10 @@ func helpCenterSearchConsoleUpdateSpec() Spec {
 	}
 }
 
-func helpCenterSearchConsoleGet(c *call, _ map[string]any) (any, error) {
+func helpCenterSearchConsoleGet(c *call, arguments map[string]any) (any, error) {
+	path, _ := c.atHelpCenter("/api/v1/help-center/search-console", arguments)
 	var tokens map[string]any
-	if err := c.get("/api/v1/help-center/search-console", nil, &tokens); err != nil {
+	if err := c.get(path, nil, &tokens); err != nil {
 		return nil, err
 	}
 	return map[string]any{"search_console": tokens}, nil
@@ -51,7 +52,8 @@ func helpCenterSearchConsoleGet(c *call, _ map[string]any) (any, error) {
 
 func helpCenterSearchConsoleUpdate(c *call, arguments map[string]any) (any, error) {
 	var tokens map[string]any
-	if err := c.send(http.MethodPut, "/api/v1/help-center/search-console", arguments, &tokens); err != nil {
+	path, body := c.atHelpCenter("/api/v1/help-center/search-console", arguments)
+	if err := c.send(http.MethodPut, path, body, &tokens); err != nil {
 		return nil, err
 	}
 	return map[string]any{"search_console": tokens}, nil

@@ -75,7 +75,11 @@ func (a *API) addressedKBTranslation(response http.ResponseWriter, request *http
 }
 
 func (a *API) getHelpCenterLanguages(response http.ResponseWriter, request *http.Request) {
-	languages, err := a.store.GetHelpCenterLanguages(request.Context(), principal(request).Workspace.ID)
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
+	languages, err := a.store.GetHelpCenterLanguagesIn(request.Context(), principal(request).Workspace.ID, helpCenterID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -84,6 +88,10 @@ func (a *API) getHelpCenterLanguages(response http.ResponseWriter, request *http
 }
 
 func (a *API) putHelpCenterLanguages(response http.ResponseWriter, request *http.Request) {
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
 	var input struct {
 		Languages *[]domain.HelpCenterLanguageInput `json:"languages"`
 	}
@@ -95,12 +103,12 @@ func (a *API) putHelpCenterLanguages(response http.ResponseWriter, request *http
 	who := principal(request)
 	// Showing or hiding a language changes the public help center.
 	shown := func() (bool, error) {
-		return a.store.HelpCenterLanguagesShownChange(request.Context(), who.Workspace.ID, *input.Languages)
+		return a.store.HelpCenterLanguagesShownChange(request.Context(), who.Workspace.ID, helpCenterID, *input.Languages)
 	}
 	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, shown) {
 		return
 	}
-	languages, err := a.store.SetHelpCenterLanguages(request.Context(), who.Workspace.ID, *input.Languages)
+	languages, err := a.store.SetHelpCenterLanguagesIn(request.Context(), who.Workspace.ID, helpCenterID, *input.Languages)
 	var inUse *store.HelpCenterLanguagesInUseError
 	if errors.As(err, &inUse) {
 		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "language_in_use",

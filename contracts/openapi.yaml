@@ -6853,6 +6853,13 @@ paths:
                   allOf: [{$ref: '#/components/schemas/KBApprovalMode'}]
                   description: 'Whether its articles need an approved version before they are published. Changing it also needs help_center:update.'
                 article_order: {$ref: '#/components/schemas/KBArticleOrder'}
+                help_center_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  uniqueItems: true
+                  items: {type: string, format: uuid}
+                  description: 'Top-level only: the help centers whose home shows it; left out, as it is. Needs kb_articles:publish, as it changes what the help centers show.'
                 visibility:
                   allOf: [{$ref: '#/components/schemas/KBVisibility'}]
                   description: 'Who can see the collection and every article in it. Keeping it from more people, sent alone, needs only kb_articles:update and applies at once. Letting more people see it, like every other change here, needs kb_articles:publish; it is 409 approval_required, naming each article, when a published article it would show to more people is in a collection that needs approval and no review approved its published text.'
@@ -9717,10 +9724,105 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '413': {$ref: '#/components/responses/WebhookTooLarge'}
+  /api/v1/help-centers:
+    get:
+      operationId: listHelpCenters
+      x-permission: help_center:read
+      description: >
+        Every help center of the workspace, the primary first, then by when each was made. The primary
+        is the one GET /api/v1/help-center and the settings routes without `help_center_id` act on; it
+        has no handle. Another help center is served below the primary's address at `/<handle>` (and
+        on its own custom domain once that is active). `limit` is how many a workspace may have, the
+        primary included.
+      responses:
+        '200':
+          description: The help centers
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterList'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createHelpCenter
+      x-permission: help_center:update
+      description: >
+        Add a help center with its own name, handle, title, language, collections, theme and domain.
+        It shows the top-level collections that name it (`help_center_ids` on POST or PATCH
+        /api/v1/kb/collections). A workspace has at most 20 help centers, the primary included: one
+        more is 409 `help_center_limit` (delete one first). A handle already used by a help center of
+        the workspace is 409 `duplicate_handle`; a handle the help center's own pages use (`search`,
+        `articles`, `collections` and the like) is 400. Needs `help_center:update`; turning it on
+        (`enabled`) needs `kb_articles:publish` too.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HelpCenterCreate'}
+      responses:
+        '201':
+          description: The new help center
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSummary'}}}
+        '200':
+          description: The help center an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSummary'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/help-centers/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getHelpCenterByID
+      x-permission: help_center:read
+      description: One help center of the workspace. Another workspace's, a deleted or an unknown one is 404.
+      responses:
+        '200':
+          description: The help center
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSummary'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateHelpCenter
+      x-permission: help_center:update
+      description: >
+        Change a help center's name, handle, title, language, whether it is on, or whether article
+        pages show tags; a field left out stays as it is. The primary has no handle (400 for one).
+        Changing the handle changes the help center's address; the old one is not redirected. Needs
+        `help_center:update`; turning a help center on or off needs `kb_articles:publish` too.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HelpCenterPatch'}
+      responses:
+        '200':
+          description: The help center
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSummary'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteHelpCenter
+      x-permission: help_center:update
+      description: >
+        Delete a help center that is not the primary (409 `primary_help_center` for the primary). Its
+        pages go off line at once and its custom domain is released, so another help center can claim
+        the host name; its collections and articles stay, and keep showing on the other help centers
+        they are placed on. It cannot be restored: make a new one and place the collections on it again.
+        Needs `help_center:update`; one that serves on a custom domain needs `kb_articles:publish` too.
+      responses:
+        '204': {description: The help center is deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/help-center/languages:
     get:
       operationId: getHelpCenterLanguages
       x-permission: help_center:read
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         The help center's languages: the primary one (the articles' own language, set with PUT
         /api/v1/help-center `locale`) and the others, each shown to customers or hidden, with how many
@@ -9731,10 +9833,13 @@ paths:
         '200':
           description: The languages
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterLanguages'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
     put:
       operationId: putHelpCenterLanguages
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Set the languages besides the primary one, in the order the language menu lists them, each
         `visible` to customers or hidden (a new language is hidden until shown). Showing or hiding a
@@ -9764,12 +9869,14 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterLanguages'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/help-center/theme:
     get:
       operationId: getHelpCenterTheme
       x-permission: help_center:read
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         The brand of the public help center: logo, favicon, website and contact links, colors and
         fonts, with the contrast `checks` of the colors it shows. A null color or font is the default.
@@ -9777,10 +9884,13 @@ paths:
         '200':
           description: The help center theme
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterTheme'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
     put:
       operationId: putHelpCenterTheme
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Replace the brand of the public help center. A field left out or null goes back to its default,
         so send the whole theme (read it first). `custom_css` is the exception: it is required, and null
@@ -9806,12 +9916,14 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterTheme'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/ThemeInvalid'}
   /api/v1/help-center/search-console:
     get:
       operationId: getHelpCenterSearchConsole
       x-permission: help_center:read
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         The verification tokens of the help center: the content of the `google-site-verification`
         (Google Search Console) and `msvalidate.01` (Bing Webmaster Tools) `<meta>` tags. A token is
@@ -9821,10 +9933,13 @@ paths:
         '200':
           description: The verification tokens
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSearchConsole'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
     put:
       operationId: putHelpCenterSearchConsole
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Set or remove the verification tokens. A field left out stays as it is; null or an empty string
         removes that token. Paste only the `content` value of the meta tag Google or Bing shows (16 to
@@ -9843,6 +9958,7 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSearchConsole'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/ThemeInvalid'}
   /api/v1/help-center/analytics:
@@ -9948,6 +10064,7 @@ paths:
     post:
       operationId: checkHelpCenterTheme
       x-permission: help_center:read
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Check a candidate theme without saving it: the same checks as PUT. Contrast is answered with
         200 and `ok` false, so an editor can show every pair while a person picks colors; a theme of
@@ -9963,6 +10080,7 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterThemeChecks'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/ThemeInvalid'}
   /api/v1/help-center/theme/preview:
@@ -10004,6 +10122,7 @@ paths:
     get:
       operationId: getHelpCenterDomain
       x-permission: help_center:read
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until
         its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the
@@ -10020,10 +10139,13 @@ paths:
         '200':
           description: The custom domain
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterDomain'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
     put:
       operationId: putHelpCenterDomain
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Set or replace the help center's custom domain. Needs `help_center:update` and `kb_articles:publish`. A new
         host name is `pending` with a new token until its DNS check passes (POST
@@ -10046,6 +10168,7 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterDomain'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
         '422':
@@ -10054,6 +10177,7 @@ paths:
     delete:
       operationId: deleteHelpCenterDomain
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Remove the custom domain. The help center stops serving on it with the next request to this
         server (other server processes within 30 seconds) and its other addresses stop redirecting there.
@@ -10064,11 +10188,13 @@ paths:
           description: No custom domain
           content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterDomain'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/help-center/domain/check:
     post:
       operationId: checkHelpCenterDomain
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's
         CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or
@@ -10106,6 +10232,14 @@ components:
     resendWebhook: {type: apiKey, in: header, name: svix-signature}
     githubWebhook: {type: apiKey, in: header, name: X-Hub-Signature-256}
   parameters:
+    HelpCenterIDQuery:
+      name: help_center_id
+      in: query
+      description: >-
+        The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as
+        before a workspace could have several. Not a uuid is 400; a help center that is not this
+        workspace's, or was deleted, is 404 and nothing changes.
+      schema: {type: string, format: uuid}
     KBListQ: {name: q, in: query, schema: {type: string, maxLength: 200}}
     KBListStatus: {name: status, in: query, schema: {type: string, enum: [draft, published]}}
     KBListCollectionId: {name: collection_id, in: query, description: 'Only the articles directly in this collection (their home, collection_id). Another workspace''s or an unknown collection gives no articles.', schema: {type: string, format: uuid}}
@@ -13080,6 +13214,13 @@ components:
         visibility:
           allOf: [{$ref: '#/components/schemas/KBVisibility'}]
           description: 'Who can see the collection and every article in it, its collections included. Left out, everyone.'
+        help_center_ids:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: {type: string, format: uuid}
+          description: 'Top-level only: the help centers whose home shows it (GET /api/v1/help-centers). Left out, the primary on create and as it is on PATCH. A collection under another one is shown where its top-level collection is (400 when sent with a parent). A help center that is not this workspace''s is 400.'
     KBVisibility:
       type: string
       enum: [everyone, help_chat, agents]
@@ -13102,9 +13243,10 @@ components:
       description: 'How the collection lists its articles, in the help center, the app and the API (sort=manual): manual by the position set with PUT /api/v1/kb/order, title A to Z, newest by first publication (a draft by when it was written), updated the most recently changed first. Positions stay stored under every order, so setting manual again brings the hand order back.'
     KBCollection:
       type: object
-      required: [id, parent_id, name, slug, description, position, default_template_id, require_approval, article_order, visibility, effective_visibility, article_count, created_at, updated_at, translations]
+      required: [id, parent_id, name, slug, description, position, default_template_id, require_approval, article_order, visibility, effective_visibility, article_count, created_at, updated_at, translations, help_center_ids]
       properties:
         translations: {type: array, description: Its name and description in the help center's other languages., items: {$ref: '#/components/schemas/KBCollectionTranslation'}}
+        help_center_ids: {type: array, items: {type: string, format: uuid}, description: 'The help centers it is shown on: its own for a top-level collection, its top-level collection''s for one under it.'}
         id: {type: string, format: uuid}
         parent_id: {type: [string, 'null'], format: uuid}
         name: {type: string}
@@ -13210,6 +13352,10 @@ components:
       required: [parent_id, collection_ids, article_ids]
       properties:
         parent_id: {type: [string, 'null'], format: uuid, description: 'The collection whose children these are; null for the top.'}
+        help_center_id:
+          type: [string, 'null']
+          format: uuid
+          description: 'With parent_id null: the help center whose home order this is, listing the top-level collections shown on it; the order of one help center leaves the others as they are. Left out or null, the order of the collections themselves, which the primary''s home follows. With a parent_id it is 400; another workspace''s help center is 404.'
         collection_ids:
           type: array
           maxItems: 1000
@@ -14018,6 +14164,47 @@ components:
         bytes: {type: integer}
         kept_count: {type: integer}
         kept_bytes: {type: integer}
+    HelpCenterSummary:
+      type: object
+      required: [id, name, handle, primary, enabled, title, locale, require_approval, show_tags, content_version, updated_at, url]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, description: 'What the team calls it in the app; readers see the title. Empty: the app shows the title.'}
+        handle: {type: [string, 'null'], description: 'Its address below the primary''s, `/<handle>`; null for the primary.'}
+        primary: {type: boolean, description: 'The help center the settings routes act on without `help_center_id`; it cannot be deleted.'}
+        enabled: {type: boolean}
+        title: {type: string}
+        locale: {type: string}
+        require_approval: {type: boolean, description: 'The workspace setting (PUT /api/v1/help-center); the same on every help center.'}
+        show_tags: {type: boolean}
+        content_version: {type: integer, minimum: 0}
+        updated_at: {type: [string, 'null'], format: date-time}
+        url: {type: string, format: uri, description: 'Its public address: its active custom domain, else the primary''s address followed by `/<handle>`.'}
+    HelpCenterList:
+      type: object
+      required: [help_centers, limit]
+      properties:
+        help_centers: {type: array, items: {$ref: '#/components/schemas/HelpCenterSummary'}}
+        limit: {type: integer, description: 'How many help centers the workspace may have, the primary included.'}
+    HelpCenterCreate:
+      type: object
+      required: [name, handle, locale]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        handle: {type: string, minLength: 1, maxLength: 40, pattern: '^[a-z0-9][a-z0-9-]*$', description: 'Lowercase letters, digits and hyphens; its address is the primary''s followed by `/<handle>`.'}
+        title: {type: string, maxLength: 200, description: Shown at the top of every page; empty uses the workspace name.}
+        locale: {type: string, minLength: 2, maxLength: 35}
+        enabled: {type: boolean, description: 'Left out, off: nothing of it is public until it is turned on.'}
+        show_tags: {type: boolean}
+    HelpCenterPatch:
+      type: object
+      properties:
+        name: {type: string, maxLength: 100}
+        handle: {type: string, minLength: 1, maxLength: 40, pattern: '^[a-z0-9][a-z0-9-]*$'}
+        title: {type: string, maxLength: 200}
+        locale: {type: string, minLength: 2, maxLength: 35}
+        enabled: {type: boolean}
+        show_tags: {type: boolean}
     HelpCenterInput:
       type: object
       required: [enabled, title, locale]

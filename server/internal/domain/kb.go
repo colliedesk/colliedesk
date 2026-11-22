@@ -93,6 +93,9 @@ type KBCollection struct {
 	UpdatedAt           time.Time `json:"updated_at"`
 	// Translations are its name and description in the help center's other languages.
 	Translations []KBCollectionTranslation `json:"translations"`
+	// HelpCenterIDs are the live help centers it is shown on, the primary first; a nested collection
+	// has those of its top-level collection.
+	HelpCenterIDs []string `json:"help_center_ids"`
 }
 
 // TrashedKBCollection is a deleted collection, restorable until PurgesAt.

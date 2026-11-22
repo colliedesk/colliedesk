@@ -2,7 +2,7 @@ package mcpserver
 
 import "net/http"
 
-const kbOrderSchema = `{"type":"object","required":["parent_id","collection_ids","article_ids"],"properties":{"parent_id":{"type":["string","null"]},` +
+const kbOrderSchema = `{"type":"object","required":["parent_id","collection_ids","article_ids"],"properties":{"parent_id":{"type":["string","null"]},"help_center_id":{"type":["string","null"]},` +
 	`"collection_ids":{"type":"array","items":{"type":"string"}},"article_ids":{"type":"array","items":{"type":"string"}}}}`
 
 func kbOrderSetSpec() Spec {
@@ -13,11 +13,12 @@ func kbOrderSetSpec() Spec {
 			`and, under a collection, its articles first to last, drafts included (article_ids; the top holds no articles). Name every one outside the trash, each once: ` +
 			`read them with colliedesk_kb_collections_list (parent_id) and colliedesk_kb_articles_search (collection_id, which lists them in their current order). ` +
 			`When the lists miss one or name another, nothing changes and you are told to read them again. The help center, the collection's article list and the reply box's article picker follow the order. ` +
+			`Each help center's home keeps an order of its own: at the top, help_center_id orders the collections shown on that help center (left out, the primary's). ` +
 			`To undo, send the earlier order. It is safe to repeat.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/kb/order"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"parent_id":{"type":"string",` + uuid + `,"description":"From colliedesk_kb_collections_list; leave it out for the top."},` +
-			`"collection_ids":{"type":"array","maxItems":1000,"items":{"type":"string",` + uuid + `}},"article_ids":{"type":"array","maxItems":2000,"items":{"type":"string",` + uuid + `}}}}`,
+			helpCenterIDProperty + `,"collection_ids":{"type":"array","maxItems":1000,"items":{"type":"string",` + uuid + `}},"article_ids":{"type":"array","maxItems":2000,"items":{"type":"string",` + uuid + `}}}}`,
 		Output: kbOrderSchema,
 		run:    kbOrderSet,
 	}
@@ -26,6 +27,7 @@ func kbOrderSetSpec() Spec {
 func kbOrderSet(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
 		ParentID      *string  `json:"parent_id"`
+		HelpCenterID  *string  `json:"help_center_id"`
 		CollectionIDs []string `json:"collection_ids"`
 		ArticleIDs    []string `json:"article_ids"`
 	}](arguments)
@@ -33,6 +35,10 @@ func kbOrderSet(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	body := map[string]any{"parent_id": args.ParentID, "collection_ids": orEmpty(args.CollectionIDs), "article_ids": orEmpty(args.ArticleIDs)}
+	if args.HelpCenterID != nil {
+		body["help_center_id"] = *args.HelpCenterID
+		c.notFound = helpCenterNotFound(*args.HelpCenterID)
+	}
 	if args.ParentID != nil {
 		c.forCollection(*args.ParentID)
 	}
