@@ -26,7 +26,7 @@ func lockKB(ctx context.Context, tx pgx.Tx, workspaceID string) error {
 // row (off) on the first write, so a help center page cached under an older version is stale.
 func bumpKB(ctx context.Context, tx pgx.Tx, workspaceID string) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,content_version,updated_at) VALUES($1,1,clock_timestamp())
-		ON CONFLICT (workspace_id) DO UPDATE SET content_version=help_centers.content_version+1, updated_at=clock_timestamp()`, workspaceID); err != nil {
+		ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET content_version=help_centers.content_version+1, updated_at=clock_timestamp()`, workspaceID); err != nil {
 		return fmt.Errorf("bump knowledge base version: %w", err)
 	}
 	return nil

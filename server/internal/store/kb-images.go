@@ -208,7 +208,7 @@ func (s *Store) GetHelpCenter(ctx context.Context, workspaceID string) (domain.H
 
 func readHelpCenter(ctx context.Context, tx pgx.Tx, workspaceID string) (domain.HelpCenter, error) {
 	center := domain.HelpCenter{Locale: "en"}
-	err := tx.QueryRow(ctx, `SELECT enabled,title,locale,require_approval,show_tags,content_version,updated_at FROM help_centers WHERE workspace_id=$1`, workspaceID).
+	err := tx.QueryRow(ctx, `SELECT enabled,title,locale,require_approval,show_tags,content_version,updated_at FROM help_centers WHERE workspace_id=$1 AND primary_help_center`, workspaceID).
 		Scan(&center.Enabled, &center.Title, &center.Locale, &center.RequireApproval, &center.ShowTags, &center.ContentVersion, &center.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return center, nil
@@ -242,7 +242,7 @@ func (s *Store) PutHelpCenter(ctx context.Context, workspaceID string, change He
 	center, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenter, error) {
 		// The primary language is the articles' own: it cannot also be one of the other languages.
 		var listed bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND lower(locale)=lower($2))`, workspaceID, locale).Scan(&listed); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) AND lower(locale)=lower($2))`, workspaceID, locale).Scan(&listed); err != nil {
 			return domain.HelpCenter{}, err
 		}
 		if listed {
@@ -250,7 +250,7 @@ func (s *Store) PutHelpCenter(ctx context.Context, workspaceID string, change He
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,enabled,title,locale,require_approval,show_tags,content_version,updated_at)
 			VALUES($1,$2,$3,$4,COALESCE($5,false),COALESCE($6,false),1,clock_timestamp())
-			ON CONFLICT (workspace_id) DO UPDATE SET enabled=$2, title=$3, locale=$4, require_approval=COALESCE($5,help_centers.require_approval),
+			ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET enabled=$2, title=$3, locale=$4, require_approval=COALESCE($5,help_centers.require_approval),
 				show_tags=COALESCE($6,help_centers.show_tags), content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
 			workspaceID, enabled, title, locale, change.RequireApproval, change.ShowTags); err != nil {
 			return domain.HelpCenter{}, err

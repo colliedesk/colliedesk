@@ -370,7 +370,7 @@ func TestHelpCenterDomainNeedsItsWildcardAndIsFetchedOnTrial(t *testing.T) {
 	}
 	if err := database.New(e.pool).Privileged(context.Background(), database.PrivilegeMigrate, func(tx pgx.Tx) error {
 		_, err := tx.Exec(context.Background(), `INSERT INTO help_centers(workspace_id, enabled) SELECT id, true FROM workspaces ORDER BY created_at LIMIT 1
-			ON CONFLICT (workspace_id) DO UPDATE SET enabled = true`)
+			ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET enabled = true`)
 		return err
 	}); err != nil {
 		t.Fatal(err)

@@ -96,7 +96,7 @@ func (filter KBArticleFilter) where(args []any) (string, []any, bool) {
 	case filter.Translation == domain.KBLanguageMissing && filter.Locale != "":
 		where += fmt.Sprintf(` AND NOT EXISTS (SELECT 1 %s AND t.locale=$%d)`, live, add(filter.Locale))
 	case filter.Translation == domain.KBLanguageMissing:
-		where += ` AND EXISTS (SELECT 1 FROM help_center_languages l WHERE l.workspace_id=a.workspace_id AND NOT EXISTS (SELECT 1 ` + live + ` AND t.locale=l.locale))`
+		where += ` AND EXISTS (SELECT 1 FROM help_center_languages l WHERE l.workspace_id=a.workspace_id AND l.help_center_id=primary_help_center_id(a.workspace_id) AND NOT EXISTS (SELECT 1 ` + live + ` AND t.locale=l.locale))`
 	case filter.Translation == domain.KBLanguageOutdated && filter.Locale != "":
 		where += fmt.Sprintf(` AND EXISTS (SELECT 1 %s AND t.outdated AND t.locale=$%d)`, live, add(filter.Locale))
 	case filter.Translation == domain.KBLanguageOutdated:
@@ -135,7 +135,7 @@ func checkKBFilterLocale(ctx context.Context, tx pgx.Tx, workspaceID, locale str
 		return nil
 	}
 	var listed bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND locale=$2)`, workspaceID, locale).Scan(&listed); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) AND locale=$2)`, workspaceID, locale).Scan(&listed); err != nil {
 		return err
 	}
 	if !listed {

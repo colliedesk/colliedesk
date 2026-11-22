@@ -387,7 +387,7 @@ func admitKBArticle(ctx context.Context, tx pgx.Tx, workspaceID string) (int64, 
 	}
 	var number int64
 	if err := tx.QueryRow(ctx, `INSERT INTO help_centers(workspace_id,last_article_number) VALUES($1,1)
-		ON CONFLICT (workspace_id) DO UPDATE SET last_article_number=help_centers.last_article_number+1 RETURNING last_article_number`, workspaceID).Scan(&number); err != nil {
+		ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET last_article_number=help_centers.last_article_number+1 RETURNING last_article_number`, workspaceID).Scan(&number); err != nil {
 		return 0, fmt.Errorf("number the article: %w", err)
 	}
 	return number, nil

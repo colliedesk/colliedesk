@@ -41,7 +41,7 @@ func (e *importEnv) linkOptions(options *freshdesk.Options) {
 func (e *importEnv) setHelpCenter(t *testing.T, enabled bool) {
 	t.Helper()
 	if _, err := e.pool.Exec(context.Background(), `INSERT INTO help_centers(workspace_id,enabled,content_version,updated_at) VALUES($1,$2,1,now())
-		ON CONFLICT (workspace_id) DO UPDATE SET enabled=EXCLUDED.enabled`, e.workspaceID, enabled); err != nil {
+		ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET enabled=EXCLUDED.enabled`, e.workspaceID, enabled); err != nil {
 		t.Fatal(err)
 	}
 }

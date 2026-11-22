@@ -37,7 +37,7 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 		batch.Queue(`SELECT w.slug, w.name, COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0),
 				h.logo_media_id::text, logo.kind, logo.deleted_at IS NOT NULL, logo.width, logo.height,
 				h.favicon_media_id::text, icon.kind, icon.deleted_at IS NOT NULL
-			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id
+			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id AND h.primary_help_center
 			LEFT JOIN kb_media logo ON logo.workspace_id=w.id AND logo.id=$2::uuid
 			LEFT JOIN kb_media icon ON icon.workspace_id=w.id AND icon.id=$3::uuid
 			WHERE w.id=$1`, workspaceID, theme.LogoMediaID, theme.FaviconMediaID).QueryRow(func(row pgx.Row) error {

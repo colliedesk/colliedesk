@@ -867,7 +867,8 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	err = tx.QueryRow(ctx, `SELECT h.enabled,h.title,h.locale,h.require_approval,h.show_tags,h.content_version,h.last_article_number,h.updated_at,
 		h.logo_media_id::text,h.favicon_media_id::text,h.logo_alt,h.linkback_url,h.contact_url,h.contact_phone,h.color_primary,h.color_header,h.color_header_text,
 		h.color_background,h.color_text,h.color_link,h.color_footer,h.body_font,h.heading_font,h.custom_css,h.google_site_verification,h.bing_site_verification,d.hostname,d.status,d.verified_at
-		FROM help_centers h LEFT JOIN help_center_domains d ON d.workspace_id=h.workspace_id WHERE h.workspace_id=$1`, workspaceID).
+		FROM help_centers h LEFT JOIN help_center_domains d ON d.workspace_id=h.workspace_id AND d.help_center_id=h.id
+		WHERE h.workspace_id=$1 AND h.primary_help_center`, workspaceID).
 		Scan(&center.Enabled, &center.Title, &center.Locale, &center.RequireApproval, &center.ShowTags, &center.ContentVersion, &center.LastArticleNumber, &center.UpdatedAt,
 			&center.LogoMediaID, &center.FaviconMediaID, &center.LogoAlt, &center.LinkbackURL, &center.ContactURL, &center.ContactPhone,
 			&center.ColorPrimary, &center.ColorHeader, &center.ColorHeaderText, &center.ColorBackground, &center.ColorText, &center.ColorLink,
@@ -883,7 +884,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	if center.Analytics, err = exportHelpCenterAnalytics(ctx, tx, workspaceID); err != nil {
 		return err
 	}
-	rows, err = tx.Query(ctx, `SELECT locale,visible,position,created_at,updated_at FROM help_center_languages WHERE workspace_id=$1 ORDER BY position,locale`, workspaceID)
+	rows, err = tx.Query(ctx, `SELECT locale,visible,position,created_at,updated_at FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) ORDER BY position,locale`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export help center languages: %w", err)
 	}

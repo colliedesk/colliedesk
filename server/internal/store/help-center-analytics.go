@@ -19,7 +19,7 @@ func analyticsSecretContext(workspaceID string) string {
 const analyticsSettingsSQL = `SELECT h.provider, h.enabled, h.ga4_measurement_id, h.ga4_api_secret_sealed IS NOT NULL, h.plausible_domain,
 	h.plausible_base_url, h.last_sent_at, h.last_error, h.last_error_at, h.updated_at, COALESCE(NULLIF(a.display_name,''),a.email)
 	FROM help_center_analytics h LEFT JOIN agents a ON a.workspace_id=h.workspace_id AND a.id=h.updated_by_agent_id
-	WHERE h.workspace_id=$1`
+	WHERE h.workspace_id=$1 AND h.help_center_id=primary_help_center_id($1)`
 
 func readAnalyticsSettings(ctx context.Context, tx pgx.Tx, workspaceID string) (hcanalytics.Settings, error) {
 	settings := hcanalytics.Settings{BaseURL: hcanalytics.DefaultPlausibleBase}
@@ -70,14 +70,14 @@ func (s *Store) PutHelpCenterAnalytics(ctx context.Context, workspaceID, actorID
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (hcanalytics.Settings, error) {
 		// The help center's row (off) is created on the first save, so the export's help-center line carries it.
 		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,content_version,updated_at) VALUES($1,1,clock_timestamp())
-			ON CONFLICT (workspace_id) DO NOTHING`, workspaceID); err != nil {
+			ON CONFLICT (workspace_id) WHERE primary_help_center DO NOTHING`, workspaceID); err != nil {
 			return hcanalytics.Settings{}, fmt.Errorf("save the help center analytics: %w", err)
 		}
 		var secretSet bool
 		err := tx.QueryRow(ctx, `INSERT INTO help_center_analytics AS h (workspace_id, provider, enabled, ga4_measurement_id, ga4_api_secret_sealed,
 				ga4_api_secret_key_id, plausible_domain, plausible_base_url, updated_by_agent_id)
 			VALUES ($1, $2, $3, NULLIF($4,''), $5, $6, NULLIF($7,''), $8, $9)
-			ON CONFLICT (workspace_id) DO UPDATE SET provider=EXCLUDED.provider, enabled=EXCLUDED.enabled,
+			ON CONFLICT (workspace_id, help_center_id) DO UPDATE SET provider=EXCLUDED.provider, enabled=EXCLUDED.enabled,
 				ga4_measurement_id=EXCLUDED.ga4_measurement_id,
 				ga4_api_secret_sealed=CASE WHEN $10 THEN h.ga4_api_secret_sealed ELSE EXCLUDED.ga4_api_secret_sealed END,
 				ga4_api_secret_key_id=CASE WHEN $10 THEN h.ga4_api_secret_key_id ELSE EXCLUDED.ga4_api_secret_key_id END,
@@ -111,7 +111,7 @@ func (s *Store) HelpCenterAnalyticsTarget(ctx context.Context, workspaceID strin
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (*row, error) {
 		r := row{target: hcanalytics.Target{WorkspaceID: workspaceID}}
 		err := tx.QueryRow(ctx, `SELECT provider, enabled, ga4_measurement_id, ga4_api_secret_key_id, ga4_api_secret_sealed, plausible_domain,
-				plausible_base_url, updated_at FROM help_center_analytics WHERE workspace_id=$1`, workspaceID).Scan(&r.target.Provider, &r.target.Enabled,
+				plausible_base_url, updated_at FROM help_center_analytics WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1)`, workspaceID).Scan(&r.target.Provider, &r.target.Enabled,
 			&r.measurementID, &r.keyID, &r.sealed, &r.domain, &r.target.BaseURL, &r.updatedAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -149,7 +149,8 @@ func (s *Store) HelpCenterAnalyticsTarget(ctx context.Context, workspaceID strin
 func (s *Store) HelpCenterAnalyticsTargets(ctx context.Context) ([]hcanalytics.Target, error) {
 	var workspaces []string
 	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterAnalytics, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM help_center_analytics WHERE enabled`)
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM help_center_analytics
+			WHERE enabled AND help_center_id=primary_help_center_id(workspace_id)`)
 		if err != nil {
 			return err
 		}
@@ -196,7 +197,8 @@ func (s *Store) RecordHelpCenterAnalyticsResults(ctx context.Context, results []
 		_, err := tx.Exec(ctx, `UPDATE help_center_analytics h SET last_sent_at=COALESCE(GREATEST(h.last_sent_at, r.sent_at), h.last_sent_at),
 				last_error=COALESCE(r.error, h.last_error), last_error_at=COALESCE(r.error_at, h.last_error_at)
 			FROM unnest($1::uuid[], $2::timestamptz[], $3::text[], $4::timestamptz[], $5::timestamptz[]) AS r(workspace_id, sent_at, error, error_at, version)
-			WHERE h.workspace_id=r.workspace_id AND h.updated_at=r.version`, workspaces, sent, failures, failed, versions)
+			WHERE h.workspace_id=r.workspace_id AND h.help_center_id=primary_help_center_id(h.workspace_id)
+				AND h.updated_at=r.version`, workspaces, sent, failures, failed, versions)
 		return err
 	})
 	if err != nil {

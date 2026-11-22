@@ -174,7 +174,7 @@ func addKBMediaUsage(ctx context.Context, tx pgx.Tx, workspaceID string, items [
 		return err
 	}
 	var logo, favicon *string
-	if err := tx.QueryRow(ctx, `SELECT logo_media_id::text, favicon_media_id::text FROM help_centers WHERE workspace_id=$1`, workspaceID).
+	if err := tx.QueryRow(ctx, `SELECT logo_media_id::text, favicon_media_id::text FROM help_centers WHERE workspace_id=$1 AND primary_help_center`, workspaceID).
 		Scan(&logo, &favicon); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}

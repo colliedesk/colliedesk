@@ -40,8 +40,8 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 				logo.id::text, logo.width, logo.height, icon.id::text, COALESCE(h.logo_alt, ''), h.linkback_url, h.contact_url, h.contact_phone,
 				h.color_primary, h.color_header, h.color_header_text, h.color_background, h.color_text, h.color_link, h.color_footer, h.body_font, h.heading_font,
 				COALESCE(h.custom_css, ''), COALESCE(d.hostname, ''), COALESCE(h.google_site_verification, ''), COALESCE(h.bing_site_verification, '')
-			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id
-			LEFT JOIN help_center_domains d ON d.workspace_id=w.id AND d.status='active'
+			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id AND h.primary_help_center
+			LEFT JOIN help_center_domains d ON d.workspace_id=w.id AND d.help_center_id=h.id AND d.status='active'
 			LEFT JOIN kb_media logo ON logo.workspace_id=w.id AND logo.id=h.logo_media_id AND logo.kind='image' AND logo.deleted_at IS NULL
 			LEFT JOIN kb_media icon ON icon.workspace_id=w.id AND icon.id=h.favicon_media_id AND icon.kind='image' AND icon.deleted_at IS NULL
 			WHERE w.id=$1`, workspaceID).
@@ -55,7 +55,7 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 		if err != nil || !got.enabled {
 			return got, err
 		}
-		rows, err := tx.Query(ctx, `SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND visible AND locale <> $2 ORDER BY position, locale`, workspaceID, site.Locale)
+		rows, err := tx.Query(ctx, `SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) AND visible AND locale <> $2 ORDER BY position, locale`, workspaceID, site.Locale)
 		if err != nil {
 			return got, err
 		}
@@ -95,7 +95,7 @@ const listedKBArticles = `(SELECT a.workspace_id, a.id, a.number, a.slug, a.titl
 // language, by position and name.
 const helpCenterCollectionsSQL = `WITH shown AS (SELECT a.listed AS collection_id, t.locale, count(*) AS n
 		FROM ` + listedKBArticles + ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + publicKBTranslation + `
-		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.locale=t.locale AND hl.visible
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible
 		WHERE ` + publicKBArticle + ` GROUP BY a.listed, t.locale),
 	byc AS (SELECT collection_id, jsonb_object_agg(locale, n) AS counts FROM shown GROUP BY collection_id)
 	SELECT c.id::text, COALESCE(c.parent_id::text, ''), COALESCE(ct.name, c.name), CASE WHEN ct.collection_id IS NULL THEN c.description ELSE ct.description END,
@@ -155,7 +155,7 @@ const publicKBArticleColumns = `a.number, a.slug, a.title, a.collection_id::text
 // shownTranslation joins t, the published translation in language $L shown to customers, of articles a.
 func shownTranslation(locale string) string {
 	return ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=` + locale + ` AND ` + publicKBTranslation + `
-		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.locale=t.locale AND hl.visible`
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible`
 }
 
 // publicKBTranslationColumns read a translation t of article a as publicKBArticleColumns read the article.
@@ -179,7 +179,7 @@ const helpCenterTranslatedArticlesSQL = `SELECT x.number, x.tslug, x.ttitle, x.l
 			row_number() OVER (PARTITION BY a.listed ORDER BY a.extra, CASE WHEN a.extra THEN 0 ELSE a.position END, lower(t.title), a.number) AS place
 		FROM ` + listedKBArticles + `
 		JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$5 AND ` + publicKBTranslation + `
-		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.locale=t.locale AND hl.visible
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible
 		WHERE ` + publicKBArticle + ` AND a.listed = ANY($4::uuid[])) x
 	WHERE x.place > $2 AND x.place <= $2 + $3 ORDER BY x.listed, x.place`
 
@@ -310,7 +310,7 @@ func (s *Store) HelpCenterArticleIn(ctx context.Context, workspaceID string, num
 // text of a published article outside the trash names it, or the text of one of its published
 // translations in a language customers see.
 const shownTextNames = publicKBArticle + ` AND (strpos(a.body_md, $3) > 0 OR EXISTS (SELECT 1 FROM kb_article_translations t
-		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.locale=t.locale AND hl.visible
+		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible
 		WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + publicKBTranslation + ` AND strpos(t.body_md, $3) > 0))`
 
 // HelpCenterVideo returns a video the help center may play, by the rule of HelpCenterImage: the
@@ -451,7 +451,7 @@ func chatKBSelect(body string) string {
 		FROM kb_articles a JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
 		LEFT JOIN LATERAL (SELECT max(version) AS version FROM kb_article_versions WHERE workspace_id=a.workspace_id AND article_id=a.id AND ` + kbTextVersion("") + `) v ON true
 		LEFT JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$2 AND $2 <> '' AND ` + helpChatKBTranslation + `
-			AND EXISTS (SELECT 1 FROM help_center_languages hl WHERE hl.workspace_id=t.workspace_id AND hl.locale=t.locale AND hl.visible)
+			AND EXISTS (SELECT 1 FROM help_center_languages hl WHERE hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible)
 		LEFT JOIN kb_collection_translations ct ON ct.workspace_id=c.workspace_id AND ct.collection_id=c.id AND ct.locale=t.locale`
 }
 

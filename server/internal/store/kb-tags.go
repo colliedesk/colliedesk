@@ -114,7 +114,7 @@ var kbTagHits = `tagged AS (SELECT kt.article_id, kb_search_vector(string_agg(kt
 func shownKBTags(ctx context.Context, tx pgx.Tx, workspaceID, id string) ([]string, error) {
 	var tags []string
 	err := tx.QueryRow(ctx, `SELECT COALESCE(array_agg(t.tag ORDER BY t.tag), '{}') FROM kb_article_tags t
-		JOIN help_centers h ON h.workspace_id=t.workspace_id AND h.show_tags
+		JOIN help_centers h ON h.workspace_id=t.workspace_id AND h.primary_help_center AND h.show_tags
 		WHERE t.workspace_id=$1 AND t.article_id=$2`, workspaceID, id).Scan(&tags)
 	return tags, err
 }
