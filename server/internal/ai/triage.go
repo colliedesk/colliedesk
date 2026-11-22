@@ -222,15 +222,18 @@ func (s *Service) CreateTriage(ctx context.Context, workspaceID string, actor Ac
 	return triage, err
 }
 
-// underMinuteCap counts the drafts and suggestions a workspace asked for by hand in the last minute
-// (draftsPerMinute together), under one advisory lock.
+// underMinuteCap counts the drafts, suggestions and gap articles a workspace asked for by hand in the
+// last minute (draftsPerMinute together), under one advisory lock. A gap article leaves no row but its
+// usage: the only draft call without a task.
 func (s *Service) underMinuteCap(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "ai-drafts:"+workspaceID); err != nil {
 		return err
 	}
 	var recent int
 	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM ai_drafts WHERE workspace_id=$1 AND NOT automatic AND created_at>$2)
-		+ (SELECT count(*) FROM ai_triage_suggestions WHERE workspace_id=$1 AND NOT automatic AND created_at>$2)`, workspaceID, now.Add(-time.Minute)).Scan(&recent); err != nil {
+		+ (SELECT count(*) FROM ai_triage_suggestions WHERE workspace_id=$1 AND NOT automatic AND created_at>$2)
+		+ (SELECT count(*) FROM ai_usage WHERE workspace_id=$1 AND feature='`+FeatureDraft+`' AND task_id IS NULL AND NOT automatic AND started_at>$2)`,
+		workspaceID, now.Add(-time.Minute)).Scan(&recent); err != nil {
 		return err
 	}
 	if recent >= draftsPerMinute {

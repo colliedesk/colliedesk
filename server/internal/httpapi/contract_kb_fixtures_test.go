@@ -197,6 +197,7 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/kb/gaps":                                         {"/api/v1/kb/gaps?status=open&kind=vote_no", nil, admin, 200, ""},
 		"GET /api/v1/kb/gaps/{id}":                                    {"/api/v1/kb/gaps/" + contractMissingGap, nil, admin, 404, ""},
 		"PATCH /api/v1/kb/gaps/{id}":                                  {"/api/v1/kb/gaps/" + contractMissingGap, map[string]any{"status": "dismissed"}, admin, 404, ""},
+		"POST /api/v1/kb/gaps/{id}/draft":                             {"/api/v1/kb/gaps/" + contractMissingGap + "/draft", map[string]any{}, admin, 404, ""},
 		"GET /api/v1/kb/articles/{id}":                                {"/api/v1/kb/articles/" + kb.articleID, nil, admin, 200, ""},
 		"PATCH /api/v1/kb/articles/{id}":                              {"/api/v1/kb/articles/" + kb.articleID, map[string]any{"updated_at": kb.articleSeen, "status": "published"}, admin, 200, ""},
 		"DELETE /api/v1/kb/articles/{id}":                             {"/api/v1/kb/articles/" + kb.deleteArticleID + "?updated_at=" + url.QueryEscape(kb.deleteArticleSeen), nil, admin, 204, ""},

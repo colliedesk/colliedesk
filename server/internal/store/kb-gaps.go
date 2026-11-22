@@ -69,6 +69,15 @@ func (s *Store) GetKBGap(ctx context.Context, workspaceID, id string) (domain.KB
 	return detail, kbError("read knowledge gap", err)
 }
 
+// KBGapForDraft reads one gap of the workspace with its newest signals, for an AI draft of the article
+// it misses. Run it in the workspace's scoped transaction.
+func KBGapForDraft(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.KBGapDetail, error) {
+	if !savedReplyID.MatchString(id) {
+		return domain.KBGapDetail{}, domain.ErrKBGapNotFound
+	}
+	return readKBGap(ctx, tx, workspaceID, id)
+}
+
 func readKBGapRow(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.KBGap, error) {
 	gap, err := scanKBGap(tx.QueryRow(ctx, fmt.Sprintf(kbGapSelect, `WHERE g.workspace_id=$1 AND g.id=$2`), workspaceID, id))
 	if errors.Is(err, pgx.ErrNoRows) {

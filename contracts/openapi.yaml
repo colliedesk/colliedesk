@@ -7336,6 +7336,48 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/gaps/{id}/draft:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: draftKBGapArticle
+      x-permission: kb_articles:create
+      description: >
+        Has the reply-draft model write an article for the gap and keeps it as a draft, never published:
+        publish it with the normal publish call (`kb_articles:publish`, review gate and approvals). The model
+        reads the gap's masked signals and up to 8 resolved conversations of the workspace that match it best,
+        masked (no email address, no run of 6 or more digits); the answer names them in `gap_source`. The
+        article goes to `collection_id`, else to the first collection; 400 when the workspace has none. It
+        counts against the workspace's AI limits like a reply draft: 409 `ai_feature_off` when no model
+        writes reply drafts, 402 `ai_allowance_reached` when the server's provider spent this month's
+        allowance, 429 `ai_drafts_rate_limited` past 30 drafts a minute, 502 `ai_failed` when the model gave
+        no usable answer.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                collection_id: {type: string, format: uuid, description: 'A live collection of the workspace; the first collection when left out.'}
+      responses:
+        '201':
+          description: The draft article
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '200':
+          description: The article an earlier request with the same Idempotency-Key wrote; the model was not called again
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/PlanLimitReached'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+        '429': {$ref: '#/components/responses/AIChecksRateLimited'}
+        '502': {$ref: '#/components/responses/BadGateway'}
   /api/v1/kb/articles/trash:
     get:
       operationId: listTrashedKBArticles
@@ -13558,6 +13600,23 @@ components:
           type: array
           description: 'Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through.'
           items: {type: string, format: uuid}
+        gap_source: {$ref: '#/components/schemas/KBArticleGapSource'}
+    KBArticleGapSource:
+      type: object
+      description: 'Only on an article the AI drafted from a knowledge gap (POST /api/v1/kb/gaps/{id}/draft): the gap and the resolved conversations the draft was written from, at most 8. conversations is empty for a caller without conversations:read.'
+      required: [gap_id, conversations]
+      properties:
+        gap_id: {type: string, format: uuid}
+        conversations:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            required: [conversation_id, display_ref, subject]
+            properties:
+              conversation_id: {type: string, format: uuid}
+              display_ref: {type: string, description: 'The conversation''s number as the team sees it, such as #42.'}
+              subject: {type: string}
     KBArticleDraft:
       type: object
       description: 'The unpublished changes of a published article: every field as it will be once published.'
