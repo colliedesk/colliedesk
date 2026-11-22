@@ -401,6 +401,15 @@ a:hover { text-decoration-thickness: 2px; }
 }
 .file-size { margin-left: auto; color: var(--muted); font-size: 0.9375rem; }
 
+/* Related articles, below the text */
+.related { max-width: 42rem; margin-top: 2.5rem; }
+.related .section-label { margin: 0 0 0.5rem; }
+.related-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.related-list li { border-bottom: 1px solid var(--rule); }
+.related-list a { display: flex; align-items: center; min-height: 2.75rem; padding: 0.5rem 0; color: var(--link); overflow-wrap: anywhere; }
+.related-list a:hover { text-decoration: underline; }
+.related-list a:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+
 /* "Was this article helpful?" */
 .helpful { max-width: 42rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); }
 .helpful-title { font: 600 1.125rem/1.35 var(--font-head); margin: 0 0 0.75rem; }

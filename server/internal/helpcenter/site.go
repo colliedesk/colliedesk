@@ -39,6 +39,8 @@ const (
 	homeArticles = 6
 	// articleNeighbours is how many articles of its collection an article page lists beside it.
 	articleNeighbours = 40
+	// relatedArticles is how many articles close to it an article page lists below its text.
+	relatedArticles = 5
 	// searchResults is how many matches a search shows; maxSearchChars bounds the query.
 	searchResults  = 25
 	maxSearchChars = 200
@@ -120,6 +122,8 @@ type Site struct {
 	pages      pages
 	// renders renders article pages, at most once per text (render.go).
 	renders *renders
+	// related keeps the related articles of article pages per knowledge base version (related-lists.go).
+	related *relatedLists
 	// notFound and notFoundOnHost are the 404 page of an address that is no open help center.
 	notFound, notFoundOnHost []byte
 	// videos bounds the videos being sent at once (streams.go).
@@ -135,7 +139,7 @@ type Site struct {
 func New(config Config) *Site {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	config.Domain = strings.ToLower(strings.TrimSpace(config.Domain))
-	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), videos: newStreams(), hosts: newCustomHosts(time.Now), routes: http.NewServeMux()}
+	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), related: newRelatedLists(relatedListsKept), videos: newStreams(), hosts: newCustomHosts(time.Now), routes: http.NewServeMux()}
 	for _, route := range config.ChannelRoutes {
 		handler := route.Handler
 		// Two types claiming one route is a programming error: the mux panics.

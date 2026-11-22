@@ -134,6 +134,8 @@ type page struct {
 	Updated, UpdatedISO        string
 	CollectionName, Collection string
 	Neighbours                 []articleLink
+	// Related are the articles closest to the article, listed below its text.
+	Related []articleLink
 	// Contents are the article's headings, listed above its text and in the rail.
 	Contents []contentsItem
 	// Votes is the article's "Was this article helpful?" box (votes.go).
@@ -621,7 +623,16 @@ func (s *Site) articlePage(ctx context.Context, v view, article domain.PublicKBA
 	if err != nil {
 		return page{}, false, err
 	}
+	key := relatedKey{workspaceID: v.site.WorkspaceID, version: v.site.ContentVersion, lang: v.lang, number: article.Number}
+	related, ok := s.related.get(key)
+	if !ok {
+		if related, err = s.config.Store.HelpCenterRelatedArticles(ctx, v.site.WorkspaceID, v.lang, article.Number, relatedArticles); err != nil {
+			return page{}, false, err
+		}
+		s.related.keep(key, related)
+	}
 	data, plain = s.articleOf(v, t, article, neighbours)
+	data.Related = v.articleLinks(related, article.Number)
 	return data, plain, nil
 }
 
