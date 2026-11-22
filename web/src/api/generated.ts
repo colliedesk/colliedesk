@@ -5541,6 +5541,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/help-centers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Every help center of the workspace, the primary first, then by when each was made. The primary is the one GET /api/v1/help-center and the settings routes without `help_center_id` act on; it has no handle. Another help center is served below the primary's address at `/<handle>` (and on its own custom domain once that is active). `limit` is how many a workspace may have, the primary included. */
+        get: operations["listHelpCenters"];
+        put?: never;
+        /** @description Add a help center with its own name, handle, title, language, collections, theme and domain. It shows the top-level collections that name it (`help_center_ids` on POST or PATCH /api/v1/kb/collections). A workspace has at most 20 help centers, the primary included: one more is 409 `help_center_limit` (delete one first). A handle already used by a help center of the workspace is 409 `duplicate_handle`; a handle the help center's own pages use (`search`, `articles`, `collections` and the like) is 400. Needs `help_center:update`; turning it on (`enabled`) needs `kb_articles:publish` too. */
+        post: operations["createHelpCenter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-centers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description One help center of the workspace. Another workspace's, a deleted or an unknown one is 404. */
+        get: operations["getHelpCenterByID"];
+        put?: never;
+        post?: never;
+        /** @description Delete a help center that is not the primary (409 `primary_help_center` for the primary). Its pages go off line at once and its custom domain is released, so another help center can claim the host name; its collections and articles stay, and keep showing on the other help centers they are placed on. It cannot be restored: make a new one and place the collections on it again. Needs `help_center:update` and `kb_articles:publish`. */
+        delete: operations["deleteHelpCenter"];
+        options?: never;
+        head?: never;
+        /** @description Change a help center's name, handle, title, language, whether it is on, or whether article pages show tags; a field left out stays as it is. The primary has no handle (400 for one). Changing the handle changes the help center's address; the old one is not redirected. Needs `help_center:update`; turning a help center on or off needs `kb_articles:publish` too. */
+        patch: operations["updateHelpCenter"];
+        trace?: never;
+    };
     "/api/v1/help-center/languages": {
         parameters: {
             query?: never;
@@ -8447,6 +8486,8 @@ export interface components {
             default_template_id?: string | null;
             /** @description Who can see the collection and every article in it, its collections included. Left out, everyone. */
             visibility?: components["schemas"]["KBVisibility"];
+            /** @description Top-level only: the help centers whose home shows it (GET /api/v1/help-centers). Left out, the primary on create and as it is on PATCH. A collection under another one is shown where its top-level collection is (400 when sent with a parent). A help center that is not this workspace's is 400. */
+            help_center_ids?: string[];
         };
         /**
          * @description Who can see it. everyone: the help center, help chat and the team. help_chat: help chat may quote it without linking it; the help center never shows it, its search, sitemap.xml and llms.txt leave it out, and its address is 404. agents: only the team (reply suggestions and AI drafts, which never link it). An article is as restricted as the most restrictive of itself and every collection it is in, their parents included (effective_visibility).
@@ -8473,6 +8514,8 @@ export interface components {
         KBCollection: {
             /** @description Its name and description in the help center's other languages. */
             translations: components["schemas"]["KBCollectionTranslation"][];
+            /** @description The help centers it is shown on: its own for a top-level collection, its top-level collection's for one under it. */
+            help_center_ids: string[];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -8606,6 +8649,11 @@ export interface components {
              * @description The collection whose children these are; null for the top.
              */
             parent_id: string | null;
+            /**
+             * Format: uuid
+             * @description With parent_id null: the help center whose home order this is, listing the top-level collections shown on it; the order of one help center leaves the others as they are. Left out or null, the order of the collections themselves, which the primary's home follows. With a parent_id it is 400; another workspace's help center is 404.
+             */
+            help_center_id?: string | null;
             /** @description Its collections outside the trash, first to last. */
             collection_ids: string[];
             /** @description Its articles outside the trash, drafts included, first to last; empty at the top. */
@@ -9351,6 +9399,54 @@ export interface components {
             bytes: number;
             kept_count: number;
             kept_bytes: number;
+        };
+        HelpCenterSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @description What the team calls it in the app; readers see the title. Empty: the app shows the title. */
+            name: string;
+            /** @description Its address below the primary's, `/<handle>`; null for the primary. */
+            handle: string | null;
+            /** @description The help center the settings routes act on without `help_center_id`; it cannot be deleted. */
+            primary: boolean;
+            enabled: boolean;
+            title: string;
+            locale: string;
+            /** @description The workspace setting (PUT /api/v1/help-center); the same on every help center. */
+            require_approval: boolean;
+            show_tags: boolean;
+            content_version: number;
+            /** Format: date-time */
+            updated_at: string | null;
+            /**
+             * Format: uri
+             * @description Its public address: its active custom domain, else the primary's address followed by `/<handle>`.
+             */
+            url: string;
+        };
+        HelpCenterList: {
+            help_centers: components["schemas"]["HelpCenterSummary"][];
+            /** @description How many help centers the workspace may have, the primary included. */
+            limit: number;
+        };
+        HelpCenterCreate: {
+            name: string;
+            /** @description Lowercase letters, digits and hyphens; its address is the primary's followed by `/<handle>`. */
+            handle: string;
+            /** @description Shown at the top of every page; empty uses the workspace name. */
+            title?: string;
+            locale: string;
+            /** @description Left out, off: nothing of it is public until it is turned on. */
+            enabled?: boolean;
+            show_tags?: boolean;
+        };
+        HelpCenterPatch: {
+            name?: string;
+            handle?: string;
+            title?: string;
+            locale?: string;
+            enabled?: boolean;
+            show_tags?: boolean;
         };
         HelpCenterInput: {
             enabled: boolean;
@@ -12104,6 +12200,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+        HelpCenterIDQuery: string;
         KBListQ: string;
         KBListStatus: "draft" | "published";
         /** @description Only the articles directly in this collection (their home, collection_id). Another workspace's or an unknown collection gives no articles. */
@@ -20856,6 +20954,8 @@ export interface operations {
                     /** @description Whether its articles need an approved version before they are published. Changing it also needs help_center:update. */
                     require_approval?: components["schemas"]["KBApprovalMode"];
                     article_order?: components["schemas"]["KBArticleOrder"];
+                    /** @description Top-level only: the help centers whose home shows it; left out, as it is. Needs kb_articles:publish, as it changes what the help centers show. */
+                    help_center_ids?: string[];
                     /** @description Who can see the collection and every article in it. Keeping it from more people, sent alone, needs only kb_articles:update and applies at once. Letting more people see it, like every other change here, needs kb_articles:publish; it is 409 approval_required, naming each article, when a published article it would show to more people is in a collection that needs approval and no review approved its published text. */
                     visibility?: components["schemas"]["KBVisibility"];
                 };
@@ -24488,9 +24588,140 @@ export interface operations {
             413: components["responses"]["WebhookTooLarge"];
         };
     };
-    getHelpCenterLanguages: {
+    listHelpCenters: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The help centers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createHelpCenter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterCreate"];
+            };
+        };
+        responses: {
+            /** @description The new help center */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getHelpCenterByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The help center */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteHelpCenter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The help center is deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateHelpCenter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterPatch"];
+            };
+        };
+        responses: {
+            /** @description The help center */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getHelpCenterLanguages: {
+        parameters: {
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24506,12 +24737,17 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterLanguages"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     putHelpCenterLanguages: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24539,12 +24775,16 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };
     };
     getHelpCenterTheme: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24560,12 +24800,17 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterTheme"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     putHelpCenterTheme: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24588,12 +24833,16 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["ThemeInvalid"];
         };
     };
     getHelpCenterSearchConsole: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24609,12 +24858,17 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterSearchConsole"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     putHelpCenterSearchConsole: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24637,6 +24891,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["ThemeInvalid"];
         };
     };
@@ -24749,7 +25004,10 @@ export interface operations {
     };
     checkHelpCenterTheme: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24772,6 +25030,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["ThemeInvalid"];
         };
     };
@@ -24815,7 +25074,10 @@ export interface operations {
     };
     getHelpCenterDomain: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24831,12 +25093,17 @@ export interface operations {
                     "application/json": components["schemas"]["HelpCenterDomain"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     putHelpCenterDomain: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24859,6 +25126,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             /** @description The host name cannot be a custom domain; `error.fields.hostname` says why */
             422: {
@@ -24873,7 +25141,10 @@ export interface operations {
     };
     deleteHelpCenterDomain: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24891,11 +25162,15 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     checkHelpCenterDomain: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;

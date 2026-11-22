@@ -3,27 +3,38 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
 
-// GetHelpCenterSearchConsole returns the verification tokens of the help center; a workspace without a
-// help center row has none.
+// GetHelpCenterSearchConsole returns the verification tokens of the primary help center
+// (GetHelpCenterSearchConsoleIn).
 func (s *Store) GetHelpCenterSearchConsole(ctx context.Context, workspaceID string) (domain.SearchConsoleView, error) {
-	view, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.SearchConsoleView, error) {
-		return readHelpCenterSearchConsole(ctx, tx, workspaceID)
-	})
-	if err != nil {
-		return domain.SearchConsoleView{}, fmt.Errorf("get help center search console: %w", err)
-	}
-	return view, nil
+	return s.GetHelpCenterSearchConsoleIn(ctx, workspaceID, "")
 }
 
-func readHelpCenterSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID string) (domain.SearchConsoleView, error) {
+// GetHelpCenterSearchConsoleIn returns the verification tokens of help center helpCenterID ("" the
+// primary one); a workspace without a help center row has none.
+func (s *Store) GetHelpCenterSearchConsoleIn(ctx context.Context, workspaceID, helpCenterID string) (domain.SearchConsoleView, error) {
+	view, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.SearchConsoleView, error) {
+		target, err := resolveHelpCenter(ctx, tx, workspaceID, helpCenterID, false)
+		if err != nil {
+			return domain.SearchConsoleView{}, err
+		}
+		return readHelpCenterSearchConsole(ctx, tx, workspaceID, target)
+	})
+	return view, helpCenterStoreError("get help center search console", err)
+}
+
+// helpCenterContentVersion is the knowledge base's content version, kept on the primary row of
+// workspace $1, for a query on any of its help centers.
+const helpCenterContentVersion = `(SELECT p.content_version FROM help_centers p WHERE p.workspace_id=$1 AND p.primary_help_center)`
+
+func readHelpCenterSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID, helpCenterID string) (domain.SearchConsoleView, error) {
 	var view domain.SearchConsoleView
-	err := tx.QueryRow(ctx, `SELECT google_site_verification,bing_site_verification,content_version,updated_at FROM help_centers WHERE workspace_id=$1 AND primary_help_center`, workspaceID).
+	err := tx.QueryRow(ctx, `SELECT google_site_verification,bing_site_verification,`+helpCenterContentVersion+`,updated_at
+		FROM help_centers WHERE workspace_id=$1 AND id=NULLIF($2,'')::uuid`, workspaceID, helpCenterID).
 		Scan(&view.Google, &view.Bing, &view.ContentVersion, &view.UpdatedAt)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return domain.SearchConsoleView{}, err
@@ -32,35 +43,44 @@ func readHelpCenterSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID str
 	return view, nil
 }
 
-// PutHelpCenterSearchConsole changes the verification tokens: a field left out (nil) stays, "" removes
-// it. A save bumps content_version, since every page carries the tags.
+// PutHelpCenterSearchConsole changes the verification tokens of the primary help center
+// (PutHelpCenterSearchConsoleIn).
 func (s *Store) PutHelpCenterSearchConsole(ctx context.Context, workspaceID string, change domain.SearchConsoleChange) (domain.SearchConsoleView, error) {
+	return s.PutHelpCenterSearchConsoleIn(ctx, workspaceID, "", change)
+}
+
+// PutHelpCenterSearchConsoleIn changes the verification tokens of help center helpCenterID ("" the
+// primary one): a field left out (nil) stays, "" removes it. A save bumps content_version, since every
+// page carries the tags.
+func (s *Store) PutHelpCenterSearchConsoleIn(ctx context.Context, workspaceID, helpCenterID string, change domain.SearchConsoleChange) (domain.SearchConsoleView, error) {
 	if err := domain.CheckSearchConsole(change); err != nil {
 		return domain.SearchConsoleView{}, err
 	}
 	view, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.SearchConsoleView, error) {
-		if err := writeSearchConsole(ctx, tx, workspaceID, change); err != nil {
+		target, err := resolveHelpCenter(ctx, tx, workspaceID, helpCenterID, true)
+		if err != nil {
 			return domain.SearchConsoleView{}, err
 		}
-		return readHelpCenterSearchConsole(ctx, tx, workspaceID)
+		if err := writeSearchConsole(ctx, tx, workspaceID, target, change); err != nil {
+			return domain.SearchConsoleView{}, err
+		}
+		return readHelpCenterSearchConsole(ctx, tx, workspaceID, target)
 	})
-	if err != nil {
-		return domain.SearchConsoleView{}, fmt.Errorf("put help center search console: %w", err)
-	}
-	return view, nil
+	return view, helpCenterStoreError("put help center search console", err)
 }
 
-// writeSearchConsole applies change to the workspace's help center row, creating it (off) when the
-// workspace has none yet.
-func writeSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID string, change domain.SearchConsoleChange) error {
-	_, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,content_version,updated_at,google_site_verification,bing_site_verification)
-		VALUES($1,1,clock_timestamp(),NULLIF($3,''),NULLIF($5,''))
-		ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET
-			google_site_verification=CASE WHEN $2 THEN NULLIF($3,'') ELSE help_centers.google_site_verification END,
-			bing_site_verification=CASE WHEN $4 THEN NULLIF($5,'') ELSE help_centers.bing_site_verification END,
-			content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
-		workspaceID, change.Google != nil, deref(change.Google), change.Bing != nil, deref(change.Bing))
-	return err
+// writeSearchConsole applies change to help center helpCenterID of the workspace and bumps the
+// knowledge base's content version.
+func writeSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID, helpCenterID string, change domain.SearchConsoleChange) error {
+	if _, err := tx.Exec(ctx, `UPDATE help_centers SET
+			google_site_verification=CASE WHEN $3 THEN NULLIF($4,'') ELSE google_site_verification END,
+			bing_site_verification=CASE WHEN $5 THEN NULLIF($6,'') ELSE bing_site_verification END,
+			updated_at=clock_timestamp()
+		WHERE workspace_id=$1 AND id=$2`,
+		workspaceID, helpCenterID, change.Google != nil, deref(change.Google), change.Bing != nil, deref(change.Bing)); err != nil {
+		return err
+	}
+	return bumpKB(ctx, tx, workspaceID)
 }
 
 func deref(text *string) string {
@@ -90,5 +110,9 @@ func CarryOverSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID string, 
 	if !setGoogle && !setBing {
 		return false, false, nil
 	}
-	return setGoogle, setBing, writeSearchConsole(ctx, tx, workspaceID, change)
+	primary, err := resolveHelpCenter(ctx, tx, workspaceID, "", true)
+	if err != nil {
+		return false, false, err
+	}
+	return setGoogle, setBing, writeSearchConsole(ctx, tx, workspaceID, primary, change)
 }

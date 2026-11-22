@@ -31,26 +31,41 @@ func scanHelpCenterDomain(row pgx.Row) (domain.HelpCenterDomain, error) {
 	return d, err
 }
 
-// GetHelpCenterDomain returns the workspace's custom domain; found is false when it has none.
+// GetHelpCenterDomain returns the primary help center's custom domain (GetHelpCenterDomainIn).
 func (s *Store) GetHelpCenterDomain(ctx context.Context, workspaceID string) (domain.HelpCenterDomain, bool, error) {
+	return s.GetHelpCenterDomainIn(ctx, workspaceID, "")
+}
+
+// GetHelpCenterDomainIn returns the custom domain of help center helpCenterID ("" the primary one);
+// found is false when it has none.
+func (s *Store) GetHelpCenterDomainIn(ctx context.Context, workspaceID, helpCenterID string) (domain.HelpCenterDomain, bool, error) {
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
-		return scanHelpCenterDomain(tx.QueryRow(ctx, `SELECT `+helpCenterDomainColumns+` FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1)`, workspaceID))
+		target, err := resolveHelpCenter(ctx, tx, workspaceID, helpCenterID, false)
+		if err != nil {
+			return domain.HelpCenterDomain{}, err
+		}
+		return scanHelpCenterDomain(tx.QueryRow(ctx, `SELECT `+helpCenterDomainColumns+` FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=NULLIF($2,'')::uuid`, workspaceID, target))
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.HelpCenterDomain{}, false, nil
 	}
 	if err != nil {
-		return domain.HelpCenterDomain{}, false, fmt.Errorf("get help center domain: %w", err)
+		return domain.HelpCenterDomain{}, false, helpCenterStoreError("get help center domain", err)
 	}
 	return got, true, nil
 }
 
-// SetHelpCenterDomain sets the workspace's custom domain to host (already cleaned by
-// helpcenter.CustomHost). The same host name again changes nothing; another one replaces the old
-// with a new claim: a new token and a new CNAME target, pending until a check passes. Whether another
-// workspace serves on host is the caller's question (HelpCenterHost): pending claims of several
-// workspaces may coexist.
+// SetHelpCenterDomain sets the primary help center's custom domain (SetHelpCenterDomainIn).
 func (s *Store) SetHelpCenterDomain(ctx context.Context, workspaceID, host string, now time.Time) (domain.HelpCenterDomain, error) {
+	return s.SetHelpCenterDomainIn(ctx, workspaceID, "", host, now)
+}
+
+// SetHelpCenterDomainIn sets the custom domain of help center helpCenterID ("" the primary one) to host
+// (already cleaned by helpcenter.CustomHost). The same host name again changes nothing; another one
+// replaces the old with a new claim: a new token and a new CNAME target, pending until a check passes.
+// Whether another workspace serves on host is the caller's question (HelpCenterHost): pending claims of
+// several workspaces may coexist.
+func (s *Store) SetHelpCenterDomainIn(ctx context.Context, workspaceID, helpCenterID, host string, now time.Time) (domain.HelpCenterDomain, error) {
 	token, err := randomHex(16)
 	if err != nil {
 		return domain.HelpCenterDomain{}, err
@@ -60,26 +75,27 @@ func (s *Store) SetHelpCenterDomain(ctx context.Context, workspaceID, host strin
 		return domain.HelpCenterDomain{}, err
 	}
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
-		current, err := scanHelpCenterDomain(tx.QueryRow(ctx, `SELECT `+helpCenterDomainColumns+` FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) FOR UPDATE`, workspaceID))
+		// The export writes the domain on the help center's line, so the line must exist.
+		target, err := resolveHelpCenter(ctx, tx, workspaceID, helpCenterID, true)
+		if err != nil {
+			return domain.HelpCenterDomain{}, err
+		}
+		current, err := scanHelpCenterDomain(tx.QueryRow(ctx, `SELECT `+helpCenterDomainColumns+` FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=$2 FOR UPDATE`, workspaceID, target))
 		if err == nil && current.Hostname == host {
 			return current, nil
 		}
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return domain.HelpCenterDomain{}, err
 		}
-		// The export writes the domain on the help center's line, so the line must exist.
-		if _, err := tx.Exec(ctx, `INSERT INTO help_centers (workspace_id) VALUES ($1) ON CONFLICT (workspace_id) WHERE primary_help_center DO NOTHING`, workspaceID); err != nil {
-			return domain.HelpCenterDomain{}, err
-		}
-		return scanHelpCenterDomain(tx.QueryRow(ctx, `INSERT INTO help_center_domains (workspace_id, hostname, claim, token, status, created_at)
-			VALUES ($1, $2, $3, $4, 'pending', $5)
+		return scanHelpCenterDomain(tx.QueryRow(ctx, `INSERT INTO help_center_domains (workspace_id, help_center_id, hostname, claim, token, status, created_at)
+			VALUES ($1, $6, $2, $3, $4, 'pending', $5)
 			ON CONFLICT (workspace_id, help_center_id) DO UPDATE SET hostname=EXCLUDED.hostname, claim=EXCLUDED.claim, token=EXCLUDED.token, status='pending', created_at=EXCLUDED.created_at,
 				verified_at=NULL, checked_at=NULL, check_error=NULL, certificate_requested_at=NULL, failing_since=NULL, pending_reason=NULL,
 				address_checked_at=NULL, address_error=NULL
-			RETURNING `+helpCenterDomainColumns, workspaceID, host, claim, token, now))
+			RETURNING `+helpCenterDomainColumns, workspaceID, host, claim, token, now, target))
 	})
 	if err != nil {
-		return domain.HelpCenterDomain{}, fmt.Errorf("set help center domain: %w", err)
+		return domain.HelpCenterDomain{}, helpCenterStoreError("set help center domain", err)
 	}
 	return got, nil
 }
@@ -245,17 +261,26 @@ func (s *Store) NoteHelpCenterCertificate(ctx context.Context, workspaceID, host
 	return nil
 }
 
-// DeleteHelpCenterDomain removes the workspace's custom domain and returns it; removing none changes
-// nothing (found is false).
+// DeleteHelpCenterDomain removes the primary help center's custom domain (DeleteHelpCenterDomainIn).
 func (s *Store) DeleteHelpCenterDomain(ctx context.Context, workspaceID string) (removed domain.HelpCenterDomain, found bool, err error) {
+	return s.DeleteHelpCenterDomainIn(ctx, workspaceID, "")
+}
+
+// DeleteHelpCenterDomainIn removes the custom domain of help center helpCenterID ("" the primary one)
+// and returns it; removing none changes nothing (found is false).
+func (s *Store) DeleteHelpCenterDomainIn(ctx context.Context, workspaceID, helpCenterID string) (removed domain.HelpCenterDomain, found bool, err error) {
 	removed, err = scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
-		return scanHelpCenterDomain(tx.QueryRow(ctx, `DELETE FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) RETURNING `+helpCenterDomainColumns, workspaceID))
+		target, err := resolveHelpCenter(ctx, tx, workspaceID, helpCenterID, false)
+		if err != nil {
+			return domain.HelpCenterDomain{}, err
+		}
+		return scanHelpCenterDomain(tx.QueryRow(ctx, `DELETE FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=NULLIF($2,'')::uuid RETURNING `+helpCenterDomainColumns, workspaceID, target))
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.HelpCenterDomain{}, false, nil
 	}
 	if err != nil {
-		return domain.HelpCenterDomain{}, false, fmt.Errorf("delete help center domain: %w", err)
+		return domain.HelpCenterDomain{}, false, helpCenterStoreError("delete help center domain", err)
 	}
 	return removed, true, nil
 }
