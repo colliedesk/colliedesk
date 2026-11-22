@@ -30,8 +30,9 @@ const (
 	MaxKBDescription    = 2000
 	MaxKBSlug           = 120
 	MaxKBPosition       = 1000000
-	// MaxKBDepth is how deep collections nest: a Freshdesk category, folder and subfolder.
-	MaxKBDepth = 3
+	// MaxKBDepth is how deep collections nest. Six levels fit a product with areas, sub-areas and
+	// guides; the help center folds the middle of a deep breadcrumb so it stays on one phone line.
+	MaxKBDepth = 6
 	// MaxKBImageBytes bounds one image.
 	MaxKBImageBytes = 5 << 20
 	// KBTrashRetention is how long a deleted article or collection stays restorable, and how old an
@@ -81,6 +82,9 @@ type KBCollection struct {
 	// RequireApproval is whether an article in it needs an approved version before it is published:
 	// inherit (the workspace setting), on or off.
 	RequireApproval string `json:"require_approval"`
+	// ArticleOrder is how it lists its articles (KBArticleOrders): by the position set by hand, by
+	// title, newest first or most recently updated first.
+	ArticleOrder string `json:"article_order"`
 	// Visibility is who can see the collection and its articles (KBVisibilities); EffectiveVisibility
 	// also counts its live parents.
 	Visibility          string    `json:"visibility"`

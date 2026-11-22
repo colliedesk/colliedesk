@@ -44,6 +44,11 @@ func (w *itemErrorWriter) Write(b []byte) (int, error) {
 func kbItemError(err error) *kbBulkResultError {
 	writer := &itemErrorWriter{header: http.Header{}}
 	writeKBError(writer, err)
+	return parsedItemError(writer)
+}
+
+// parsedItemError is the code and message of the error written to writer.
+func parsedItemError(writer *itemErrorWriter) *kbBulkResultError {
 	var answer struct {
 		Error kbBulkResultError `json:"error"`
 	}

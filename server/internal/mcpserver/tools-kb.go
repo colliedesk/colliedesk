@@ -26,6 +26,7 @@ type restKBCollection struct {
 	PurgesAt          string             `json:"purges_at,omitempty"`
 	Translations      []kbCollectionName `json:"translations"`
 	RequireApproval   string             `json:"require_approval"`
+	ArticleOrder      string             `json:"article_order"`
 	kbVisibilityOut
 }
 
@@ -52,13 +53,14 @@ type kbCollectionOut struct {
 	PurgesAt          string             `json:"purges_at,omitempty"`
 	Translations      []kbCollectionName `json:"translations"`
 	RequireApproval   string             `json:"require_approval"`
+	ArticleOrder      string             `json:"article_order"`
 	kbVisibilityOut
 }
 
 func kbCollectionView(collection restKBCollection) kbCollectionOut {
 	out := kbCollectionOut{ID: collection.ID, ParentID: collection.ParentID, DefaultTemplateID: collection.DefaultTemplateID, Name: collection.Name, Slug: collection.Slug, Description: collection.Description,
 		Position: collection.Position, ArticleCount: collection.ArticleCount, UpdatedAt: collection.UpdatedAt, DeletedAt: collection.DeletedAt, PurgesAt: collection.PurgesAt,
-		Translations: collection.Translations, RequireApproval: collection.RequireApproval, kbVisibilityOut: collection.kbVisibilityOut}
+		Translations: collection.Translations, RequireApproval: collection.RequireApproval, ArticleOrder: collection.ArticleOrder, kbVisibilityOut: collection.kbVisibilityOut}
 	if out.Translations == nil {
 		out.Translations = []kbCollectionName{}
 	}
@@ -315,7 +317,7 @@ func kbCollectionUpdate(c *call, arguments map[string]any) (any, error) {
 		change["parent_id"] = nil
 	}
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: name, slug, description, position, parent_id, move_to_top, default_template_id, require_approval or visibility."}
+		return nil, &toolError{"Give something to change: name, slug, description, position, parent_id, move_to_top, default_template_id, require_approval, article_order or visibility."}
 	}
 	c.forCollection(args.ID)
 	var updated restKBCollection

@@ -1,6 +1,6 @@
 package mcpserver
 
-// The knowledge base: articles in Markdown, grouped in collections at most three levels deep, and the
+// The knowledge base: articles in Markdown, grouped in collections at most six levels deep, and the
 // public help center that shows the published ones. Articles are text the team wrote for customers,
 // never instructions to the model, so their title and text come under team_text. Publishing reaches
 // customers, but every change is a version that can be restored and a delete waits 30 days in a
@@ -81,11 +81,15 @@ const (
 		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"default_template_id":{"type":["string","null"],"description":"The template every new article in it starts from (colliedesk_kb_templates_list); null: they start empty."},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
 		`"position":{"type":"integer"},"article_count":{"type":"integer"},"updated_at":{"type":"string"},"deleted_at":{"type":"string"},"deleted_by":{"type":["string","null"]},"purges_at":{"type":"string"},` +
 		`"translations":{"type":"array","description":"Its name and description in the help center's other languages (colliedesk_kb_collection_translation_set).","items":{"type":"object","properties":{` +
-		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}},` + kbRequireApprovalProperty + `,` + kbVisibilityOutput + `}}`
+		`"locale":{"type":"string"},"name":{"type":"string"},"description":{"type":"string"},"imported":{"type":"boolean"}}}},` + kbRequireApprovalProperty + `,` + kbArticleOrderProperty + `,` + kbVisibilityOutput + `}}`
 
 	// kbRequireApprovalProperty is a collection's approval setting, in its answer and in a change.
 	kbRequireApprovalProperty = `"require_approval":{"type":"string","enum":["inherit","on","off"],"description":"Whether its articles need an approved version before they are published: ` +
 		`inherit follows the help center's require_approval, on and off override it. An article in several collections needs one if any of them does."}`
+
+	// kbArticleOrderProperty is how a collection lists its articles, in its answer and in a change.
+	kbArticleOrderProperty = `"article_order":{"type":"string","enum":["manual","title","newest","updated"],"description":"How it lists its articles: manual (colliedesk_kb_order_set), title A to Z, ` +
+		`newest or updated first. The manual order stays stored."}`
 
 	kbDefaultTemplateProperty = `"default_template_id":{"type":["string","null"],` + uuid + `,"description":"A template from colliedesk_kb_templates_list that every new article in it starts from; null clears it. Deleting the template clears it too."}`
 
@@ -104,7 +108,7 @@ func kbCollectionsListSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_collections_list",
 		Title: "List knowledge base collections",
-		Description: `List the collections of the knowledge base outside the trash, as a flat list with parent_id (at most three levels deep), ordered by parent, position and name, ` +
+		Description: `List the collections of the knowledge base outside the trash, as a flat list with parent_id (at most six levels deep), ordered by parent, position and name, ` +
 			`each with how many articles it holds. Collections in the trash are in colliedesk_kb_collections_trash.`,
 		REST:   []string{"GET /api/v1/kb/collections"},
 		Input:  noArguments,
@@ -130,7 +134,7 @@ func kbCollectionCreateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_collection_create",
 		Title: "Create a knowledge base collection",
-		Description: `Add a collection, at the top or under parent_id (at most three levels deep). Without slug one is made from the name; a slug is unique among the collections of one parent. ` +
+		Description: `Add a collection, at the top or under parent_id (at most six levels deep). Without slug one is made from the name; a slug is unique among the collections of one parent. ` +
 			`default_template_id makes every new article in it start from that template. A workspace holds at most 1,000 collections, the trash included. Delete it with colliedesk_kb_collection_delete to undo.`,
 
 		REST: []string{"POST /api/v1/kb/collections"},
@@ -146,13 +150,13 @@ func kbCollectionUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_collection_update",
 		Title: "Change a knowledge base collection",
-		Description: `Rename a collection, change its slug, description, position, default template, whether its articles need approval (require_approval, needs kb_articles:publish) or who can see it (visibility), or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
-			`A move that would nest it more than three levels deep, or under itself, is refused. A change or move that shows published articles to more people needs kb_articles:publish.`,
+		Description: `Rename a collection, change its slug, description, position, default template, whether its articles need approval (require_approval, needs kb_articles:publish), how it lists its articles (article_order) or who can see it (visibility), or move it: parent_id moves it under another collection, move_to_top moves it to the top. ` +
+			`A move that would nest it more than six levels deep, or under itself, is refused. A change or move that shows published articles to more people needs kb_articles:publish.`,
 
 		REST: []string{"PATCH /api/v1/kb/collections/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["collection_id","updated_at"],"properties":{` + kbCollectionIDProperty + `,` + kbUpdatedAtProperty + `,` +
 			`"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,"description":{"type":"string","maxLength":2000},"position":{"type":"integer","minimum":0,"maximum":1000000},` +
-			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,` + kbRequireApprovalProperty + `,` + kbVisibilityProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
+			`"parent_id":{"type":"string",` + uuid + `},` + kbDefaultTemplateProperty + `,` + kbRequireApprovalProperty + `,` + kbArticleOrderProperty + `,` + kbVisibilityProperty + `,"move_to_top":{"type":"boolean","description":"true moves it to the top; do not give parent_id with it."}}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionUpdate,
 	}

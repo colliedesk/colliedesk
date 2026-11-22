@@ -88,7 +88,7 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 				"Freshdesk limits a folder to logged-in users, selected companies or segments.", key)
 		}
 		if flattened {
-			r.warn("kb_folder_flattened", "Colliedesk collections nest three levels deep. This Freshdesk folder sits deeper, so it became a collection named after the folders from the third level down (\"Advanced / Deep\") beside them.", key)
+			r.warn("kb_folder_flattened", "The Freshdesk import places folders three levels deep (category, folder, subfolder), as earlier imports did. This Freshdesk folder sits deeper, so it became a collection named after the folders from the third level down (\"Advanced / Deep\") beside them.", key)
 		}
 		meta := map[string]any{"freshdesk_id": folder.ID, "kind": "folder", "category_id": folder.categoryID, "parent_folder_id": folder.ParentFolderID,
 			"visibility": folder.Visibility, "company_ids": folder.CompanyIDs, "contact_segment_ids": folder.ContactSegmentIDs, "company_segment_ids": folder.CompanySegmentIDs,

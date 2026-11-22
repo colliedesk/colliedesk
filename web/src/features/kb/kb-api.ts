@@ -15,6 +15,8 @@ const statusSchema = z.enum(['draft', 'published']) satisfies z.ZodType<Generate
 const reviewKinds = ['review_request', 'review_approve', 'review_changes', 'review_withdraw'] as const;
 // A help center or a collection that requires approval publishes only text a teammate approved; inherit follows the help center.
 export const approvalModeSchema = z.enum(['inherit', 'on', 'off']) satisfies z.ZodType<Generated<'KBApprovalMode'>>;
+// How a collection lists its articles: by hand (position), title A to Z, newest or most recently updated first.
+export const articleOrderSchema = z.enum(['manual', 'title', 'newest', 'updated']) satisfies z.ZodType<Generated<'KBArticleOrder'>>;
 // Who can see an article or a collection: the help center and help chat, help chat only, or only the team.
 export const visibilitySchema = z.enum(['everyone', 'help_chat', 'agents']) satisfies z.ZodType<Generated<'KBVisibility'>>;
 const visibilityFields = { visibility: visibilitySchema, effective_visibility: visibilitySchema };
@@ -33,9 +35,9 @@ const collectionFields = {
   id: z.string().uuid(), parent_id: z.string().uuid().nullable(), name: z.string(), slug: z.string(), description: z.string(),
   position: z.number().int(), article_count: z.number().int(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 };
-export const kbCollectionSchema = z.object({ ...collectionFields, ...visibilityFields, default_template_id: z.string().uuid().nullable(), require_approval: approvalModeSchema, translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
+export const kbCollectionSchema = z.object({ ...collectionFields, ...visibilityFields, default_template_id: z.string().uuid().nullable(), require_approval: approvalModeSchema, article_order: articleOrderSchema, translations: z.array(collectionNameSchema) }) satisfies z.ZodType<Generated<'KBCollection'>>;
 const trashedCollectionSchema = z.object({
-  ...collectionFields, visibility: visibilitySchema.optional(), effective_visibility: visibilitySchema.optional(), default_template_id: z.string().uuid().nullable().optional(), require_approval: approvalModeSchema.optional(), translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
+  ...collectionFields, visibility: visibilitySchema.optional(), effective_visibility: visibilitySchema.optional(), default_template_id: z.string().uuid().nullable().optional(), require_approval: approvalModeSchema.optional(), article_order: articleOrderSchema.optional(), translations: z.array(collectionNameSchema).optional(), deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBCollection'>>;
 const translationChangeSchema = z.object({
   ...changeFields, kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace', 'mark_current', 'mark_outdated', 'draft', ...reviewKinds]),

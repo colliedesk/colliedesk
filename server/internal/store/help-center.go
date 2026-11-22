@@ -83,11 +83,19 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 // listedKBArticles is a FROM item a over the articles of workspace $1, once for each collection it
 // is listed in: listed is that collection, extra false for its home and true for another one. The extra
 // branch reads kb_article_collections by its index, so it costs nothing while no article has one.
-const listedKBArticles = `(SELECT a.workspace_id, a.id, a.number, a.slug, a.title, a.position, a.status, a.deleted_at, a.published_at, a.updated_at,
+const listedKBArticles = `(SELECT a.workspace_id, a.id, a.number, a.slug, a.title, a.position, a.status, a.deleted_at, a.published_at, a.created_at, a.updated_at,
 			a.collection_id AS listed, false AS extra FROM kb_articles a
-		UNION ALL SELECT a.workspace_id, a.id, a.number, a.slug, a.title, a.position, a.status, a.deleted_at, a.published_at, a.updated_at,
+		UNION ALL SELECT a.workspace_id, a.id, a.number, a.slug, a.title, a.position, a.status, a.deleted_at, a.published_at, a.created_at, a.updated_at,
 			x.collection_id, true FROM kb_article_collections x JOIN kb_articles a ON a.workspace_id=x.workspace_id AND a.id=x.article_id
 		WHERE x.workspace_id=$1 AND x.collection_id<>a.collection_id) a`
+
+// kbListedCollection joins lc, the collection articles a of listedKBArticles are listed in; kbListedMode
+// is its article_order and kbListedPosition the place an article has there by hand.
+const (
+	kbListedCollection = ` LEFT JOIN kb_collections lc ON lc.workspace_id=a.workspace_id AND lc.id=a.listed`
+	kbListedMode       = `COALESCE(lc.article_order, 'manual')`
+	kbListedPosition   = `CASE WHEN a.extra THEN 0 ELSE a.position END`
+)
 
 // helpCenterCollectionsSQL lists the live collections of workspace $1 with their name and description
 // in language $2 ("" the primary one; a missing name falls back to it), the published articles each
@@ -162,22 +170,22 @@ func shownTranslation(locale string) string {
 const publicKBTranslationColumns = `a.number, t.slug, t.title, a.collection_id::text, t.published_at, t.updated_at`
 
 // helpCenterArticlesSQL lists, for each collection of workspace $1 that collections (an SQL array
-// of ids) names, the published articles it lists in their order: its own by position, then title; then
-// those listed in it from another home, by title; skipping the first $2 and keeping at most $3. The
+// of ids) names, the published articles it lists in their order: its own, then those listed in it
+// from another home, each in the collection's article order (kbArticlesBy); skipping the first $2 and keeping at most $3. The
 // collection id read is the one listed in, so a list groups by it; the article page reads the home.
 func helpCenterArticlesSQL(collections string) string {
 	return `SELECT a.number, a.slug, a.title, a.listed::text, a.published_at, a.updated_at FROM (
-			SELECT a.*, row_number() OVER (PARTITION BY a.listed ORDER BY a.extra, CASE WHEN a.extra THEN 0 ELSE a.position END, lower(a.title), a.number) AS place
-			FROM ` + listedKBArticles + ` WHERE ` + publicKBArticle + ` AND a.listed = ANY(` + collections + `)) a
+			SELECT a.*, row_number() OVER (PARTITION BY a.listed ORDER BY a.extra, ` + kbArticlesBy(kbListedMode, kbListedPosition, `a.title`) + `) AS place
+			FROM ` + listedKBArticles + kbListedCollection + ` WHERE ` + publicKBArticle + ` AND a.listed = ANY(` + collections + `)) a
 		WHERE a.place > $2 AND a.place <= $2 + $3 ORDER BY a.listed, a.place`
 }
 
 // helpCenterTranslatedArticlesSQL is helpCenterArticlesSQL for the translations in language $5: only
 // the articles published in it count, in the same order.
-const helpCenterTranslatedArticlesSQL = `SELECT x.number, x.tslug, x.ttitle, x.listed::text, x.tpublished, x.tupdated FROM (
+var helpCenterTranslatedArticlesSQL = `SELECT x.number, x.tslug, x.ttitle, x.listed::text, x.tpublished, x.tupdated FROM (
 		SELECT a.number, a.listed, t.slug AS tslug, t.title AS ttitle, t.published_at AS tpublished, t.updated_at AS tupdated,
-			row_number() OVER (PARTITION BY a.listed ORDER BY a.extra, CASE WHEN a.extra THEN 0 ELSE a.position END, lower(t.title), a.number) AS place
-		FROM ` + listedKBArticles + `
+			row_number() OVER (PARTITION BY a.listed ORDER BY a.extra, ` + kbArticlesBy(kbListedMode, kbListedPosition, `t.title`) + `) AS place
+		FROM ` + listedKBArticles + kbListedCollection + `
 		JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$5 AND ` + publicKBTranslation + `
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.locale=t.locale AND hl.visible
 		WHERE ` + publicKBArticle + ` AND a.listed = ANY($4::uuid[])) x

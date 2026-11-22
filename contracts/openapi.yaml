@@ -6761,8 +6761,7 @@ paths:
       x-permission: kb_articles:read
       description: >
         The knowledge base collections of the workspace that are not in the trash, as a flat list
-        ordered by parent, position and name. A collection sits at most three levels deep (category,
-        folder, subfolder). `article_count` counts its articles outside the trash, drafts included.
+        ordered by parent, position and name. A collection sits at most six levels deep. `article_count` counts its articles outside the trash, drafts included.
       responses:
         '200':
           description: Knowledge base collections
@@ -6780,7 +6779,7 @@ paths:
       description: >
         Needs `kb_articles:create`. Without `slug` one is made from the name. The slug is unique among the
         collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash,
-        or one already three levels deep, is 400. A workspace holds at most 1,000 collections,
+        or one already six levels deep, is 400. A workspace holds at most 1,000 collections,
         counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after
         its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and
         falls in by name.
@@ -6831,7 +6830,7 @@ paths:
         Rename a collection, change its slug, description or position, or move it under another
         parent (`parent_id`; null moves it to the top). Send back the `updated_at` you read (409
         `changed_elsewhere` when it was saved since). A move that would put a collection under itself
-        or more than three levels deep is 400. Changing the slug changes the addresses of the help
+        or more than six levels deep is 400. Changing the slug changes the addresses of the help
         center pages under it; old addresses are not redirected. A collection in the trash is 404.
       requestBody:
         required: true
@@ -6851,6 +6850,7 @@ paths:
                 require_approval:
                   allOf: [{$ref: '#/components/schemas/KBApprovalMode'}]
                   description: 'Whether its articles need an approved version before they are published. Changing it also needs help_center:update.'
+                article_order: {$ref: '#/components/schemas/KBArticleOrder'}
                 visibility:
                   allOf: [{$ref: '#/components/schemas/KBVisibility'}]
                   description: 'Who can see the collection and every article in it. Keeping it from more people, sent alone, needs only kb_articles:update and applies at once. Letting more people see it, like every other change here, needs kb_articles:publish; it is 409 approval_required, naming each article, when a published article it would show to more people is in a collection that needs approval and no review approved its published text.'
@@ -7027,6 +7027,73 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/bulk:
+    post:
+      operationId: bulkKBArticles
+      x-permission: kb_articles:update
+      description: >
+        Apply one action to up to 500 articles, named by `ids` or by `filter` (the query of
+        GET /api/v1/kb/articles as an object, every page of it; more than 500 matches is 400, and so is a
+        filter with no key that narrows the articles, such as `{}` or only `sort`). `action`
+        needs kb_articles:update for move, visibility, author, tags_add, tags_remove and
+        send_for_review, kb_articles:publish for approve, publish and unpublish, and kb_articles:delete
+        for trash. Each article is answered on its own in `results`, in order: `done`, `unchanged` (it
+        already was as asked) or `refused` with the error the call for that article alone gives, such as
+        409 `approval_required`, `permission_missing` for a visibility raise or for trashing a published
+        article without kb_articles:publish, or `not_found` for an id this workspace does not have. A
+        move or tag change of a published article goes to its draft. When something can be put back,
+        `operation` is the undo record: POST /api/v1/kb/bulk-operations/{id}/undo before `undo_until`
+        (10 minutes). A repeat with the same Idempotency-Key answers what the first one got.
+        x-permission is what most actions need; the handler checks the one `action` needs.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KBBulkInput'}
+      responses:
+        '200':
+          description: One result per article, and the undo record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KBBulkResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/bulk-operations/{id}/undo:
+    post:
+      operationId: undoKBBulkOperation
+      x-permission: kb_articles:update
+      description: >
+        Put back what a bulk action changed, once and within 10 minutes of it. An article changed since
+        the action is left as it is and listed as `not_undone` with 409 `changed_elsewhere`. When putting
+        an article back needs a permission the caller lacks (publish, to put a published article back on
+        the help center or raise its visibility; delete, to take it out of the trash), the whole undo is
+        refused with 403 `permission_missing` before anything changes, and the action stays undoable by a
+        teammate who holds it. Each article put back gets its own history entry. 404 `not_found` for an
+        id this workspace has no bulk action for, 409 `already_undone` and 409 `undo_expired`. A repeat
+        with the same Idempotency-Key answers what the first one got.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false}
+      responses:
+        '200':
+          description: One result per article the bulk action changed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KBBulkUndoResult'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles:
     get:
       operationId: listKBArticles
@@ -7034,8 +7101,9 @@ paths:
       description: >
         Knowledge base articles outside the trash, without their text, in pages. Without `q` the
         order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's
-        order (collections in their order, a collection's own articles before those of its collections,
-        and in each collection by `position`, then title, then number). `sort` is `manual` with
+        order (collections in their order; in each, its own articles, then those listed in it from another
+        home, each in the collection's `article_order`, then its collections; an article listed in several
+        collections shows once, at its first place). `sort` is `manual` with
         `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of
         `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words
         are split the same way in the query and the text, with no language rules, so a word inside
@@ -12933,9 +13001,13 @@ components:
       type: string
       enum: [inherit, 'on', 'off']
       description: 'Whether an article listed in the collection is published only once a teammate approved its exact text: inherit (the workspace setting require_approval of the help center), on or off. An article needs approval when any of its collections does.'
+    KBArticleOrder:
+      type: string
+      enum: [manual, title, newest, updated]
+      description: 'How the collection lists its articles, in the help center, the app and the API (sort=manual): manual by the position set with PUT /api/v1/kb/order, title A to Z, newest by first publication (a draft by when it was written), updated the most recently changed first. Positions stay stored under every order, so setting manual again brings the hand order back.'
     KBCollection:
       type: object
-      required: [id, parent_id, name, slug, description, position, default_template_id, require_approval, visibility, effective_visibility, article_count, created_at, updated_at, translations]
+      required: [id, parent_id, name, slug, description, position, default_template_id, require_approval, article_order, visibility, effective_visibility, article_count, created_at, updated_at, translations]
       properties:
         translations: {type: array, description: Its name and description in the help center's other languages., items: {$ref: '#/components/schemas/KBCollectionTranslation'}}
         id: {type: string, format: uuid}
@@ -12946,6 +13018,7 @@ components:
         position: {type: integer}
         default_template_id: {type: [string, 'null'], format: uuid, description: 'The template every new article in it starts from; null for none.'}
         require_approval: {$ref: '#/components/schemas/KBApprovalMode'}
+        article_order: {$ref: '#/components/schemas/KBArticleOrder'}
         visibility: {$ref: '#/components/schemas/KBVisibility'}
         effective_visibility:
           allOf: [{$ref: '#/components/schemas/KBVisibility'}]
@@ -16053,6 +16126,82 @@ components:
         previous_trial_ends_at: {type: string, format: date-time}
         trial_ends_at: {type: string, format: date-time, description: 'The trial end now.'}
         extended: {type: boolean, description: 'False when the trial already ended later than 14 days from now and was kept.'}
+    KBBulkInput:
+      type: object
+      required: [action]
+      additionalProperties: false
+      description: One action and its articles, by ids or by filter (exactly one of them), with what the action needs.
+      properties:
+        action: {type: string, enum: [move, visibility, author, tags_add, tags_remove, send_for_review, approve, publish, unpublish, trash]}
+        ids: {type: array, minItems: 1, maxItems: 500, uniqueItems: true, items: {type: string}}
+        filter: {$ref: '#/components/schemas/KBArticleFilters'}
+        collection_id: {type: string, format: uuid, description: 'move: the collection to move the articles to.'}
+        visibility: {$ref: '#/components/schemas/KBVisibility'}
+        author_agent_id: {type: string, format: uuid, description: 'author: the team member to credit the articles to.'}
+        tags: {type: array, minItems: 1, maxItems: 20, items: {type: string, minLength: 1, maxLength: 40}, description: 'tags_add, tags_remove: the tags.'}
+        reviewer_ids: {type: array, minItems: 1, items: {type: string, format: uuid}, description: 'send_for_review: teammates who may publish.'}
+        note: {type: string, maxLength: 2000, description: 'send_for_review, approve: a note for the review.'}
+    KBBulkResult:
+      type: object
+      required: [operation, counts, results]
+      properties:
+        operation:
+          description: The undo record; null when nothing can be put back.
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [id, action, undo_until]
+              properties:
+                id: {type: string, format: uuid}
+                action: {type: string}
+                undo_until: {type: string, format: date-time}
+        counts:
+          type: object
+          required: [done, unchanged, refused]
+          properties:
+            done: {type: integer}
+            unchanged: {type: integer}
+            refused: {type: integer}
+        results:
+          type: array
+          items:
+            type: object
+            required: [id, outcome, undoable]
+            properties:
+              id: {type: string}
+              number: {type: integer, format: int64}
+              title: {type: string, description: 'Absent for an id this workspace does not have.'}
+              outcome: {type: string, enum: [done, unchanged, refused]}
+              undoable: {type: boolean, description: 'true when undo can put this article back.'}
+              error: {$ref: '#/components/schemas/BulkItemError'}
+    KBBulkUndoResult:
+      type: object
+      required: [operation, counts, results]
+      properties:
+        operation:
+          type: object
+          required: [id, action, undone_at]
+          properties:
+            id: {type: string, format: uuid}
+            action: {type: string}
+            undone_at: {type: string, format: date-time}
+        counts:
+          type: object
+          required: [undone, not_undone]
+          properties:
+            undone: {type: integer}
+            not_undone: {type: integer}
+        results:
+          type: array
+          items:
+            type: object
+            required: [id, outcome]
+            properties:
+              id: {type: string}
+              number: {type: integer, format: int64}
+              title: {type: string}
+              outcome: {type: string, enum: [undone, not_undone]}
+              error: {$ref: '#/components/schemas/BulkItemError'}
     BulkItemError:
       type: object
       description: Why one item of a bulk request was not done; the same code and message a call for that item alone answers.

@@ -16,6 +16,8 @@ type contractKBReviews struct {
 	withdrawID       string
 	bulkApproveID    string
 	bulkPublishID    string
+	bulkArticleID    string
+	bulkOperationID  string
 }
 
 func seedContractKBReviews(t *testing.T, api http.Handler, admin, agent, collectionID string) contractKBReviews {
@@ -34,6 +36,9 @@ func seedContractKBReviews(t *testing.T, api http.Handler, admin, agent, collect
 	_, reviews.withdrawID = review("Contract article to withdraw")
 	_, reviews.bulkApproveID = review("Contract article to approve in bulk")
 	reviews.bulkPublishID = kbArticle(t, api, admin, map[string]any{"collection_id": collectionID, "title": "Contract article to publish in bulk", "body_md": "x"}).ID
+	reviews.bulkArticleID = kbArticle(t, api, admin, map[string]any{"collection_id": collectionID, "title": "Contract article to tag in bulk", "body_md": "x"}).ID
+	undoable := kbArticle(t, api, admin, map[string]any{"collection_id": collectionID, "title": "Contract article to untag by undo", "body_md": "x"}).ID
+	reviews.bulkOperationID = kbBulkAction(t, api, admin, map[string]any{"action": "tags_add", "tags": []string{"contract"}, "ids": []string{undoable}}).Operation.ID
 	return reviews
 }
 
@@ -52,5 +57,8 @@ func kbReviewContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/kb/articles/{id}/translations/{locale}/reviews": {"/api/v1/kb/articles/" + reviews.translatedID + "/translations/fr/reviews", nil, admin, 200, ""},
 		"POST /api/v1/kb/reviews/approve":                            {"/api/v1/kb/reviews/approve", map[string]any{"review_ids": []string{reviews.bulkApproveID}}, admin, 200, ""},
 		"POST /api/v1/kb/articles/publish":                           {"/api/v1/kb/articles/publish", map[string]any{"article_ids": []string{reviews.bulkPublishID}}, admin, 200, ""},
+		"POST /api/v1/kb/articles/bulk": {"/api/v1/kb/articles/bulk", map[string]any{"action": "tags_add", "tags": []string{"contract"},
+			"ids": []string{reviews.bulkArticleID}}, admin, 200, ""},
+		"POST /api/v1/kb/bulk-operations/{id}/undo": {"/api/v1/kb/bulk-operations/" + reviews.bulkOperationID + "/undo", map[string]any{}, admin, 200, ""},
 	}
 }
