@@ -118,6 +118,14 @@ func kbMediaGet(c *call, arguments map[string]any) (any, error) {
 			InTrash bool   `json:"in_trash"`
 			Current bool   `json:"current"`
 		} `json:"articles"`
+		EarlierVersions []struct {
+			ReplacementID string   `json:"replacement_id"`
+			MediaID       string   `json:"media_id"`
+			Name          string   `json:"name"`
+			URL           string   `json:"url"`
+			ArticleIDs    []string `json:"article_ids"`
+			ReplacedAt    string   `json:"replaced_at"`
+		} `json:"earlier_versions"`
 	}
 	if err := c.get(kbMediaPath(args.ID, "details"), nil, &details); err != nil {
 		return nil, err
@@ -127,7 +135,12 @@ func kbMediaGet(c *call, arguments map[string]any) (any, error) {
 		articles = append(articles, map[string]any{"id": article.ID, "number": article.Number, "status": article.Status, "in_trash": article.InTrash,
 			"current": article.Current, "team_text": map[string]any{"title": article.Title}})
 	}
-	out := map[string]any{"media": kbMediaView(details.restKBMedia), "articles": articles}
+	earlier := make([]map[string]any, 0, len(details.EarlierVersions))
+	for _, version := range details.EarlierVersions {
+		earlier = append(earlier, map[string]any{"replacement_id": version.ReplacementID, "media_id": version.MediaID, "url": version.URL,
+			"article_ids": version.ArticleIDs, "replaced_at": version.ReplacedAt, "team_text": map[string]any{"name": version.Name}})
+	}
+	out := map[string]any{"media": kbMediaView(details.restKBMedia), "articles": articles, "earlier_versions": earlier}
 	if details.ThumbnailURL == nil || (args.Thumbnail != nil && !*args.Thumbnail) {
 		return out, nil
 	}
@@ -296,15 +309,21 @@ func kbMediaReplacementView(replacement restKBMediaReplacement) map[string]any {
 
 func kbMediaReplace(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		ID   string `json:"media_id"`
-		With string `json:"with_media_id"`
+		ID      string `json:"media_id"`
+		With    string `json:"with_media_id"`
+		Article string `json:"article_id"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = "No knowledge base media " + args.ID + " or " + args.With + " in this workspace. Use ids from colliedesk_kb_media_list."
+	body := map[string]any{"with_media_id": args.With}
+	if args.Article != "" {
+		c.notFound = "No knowledge base media " + args.ID + " or " + args.With + ", or no live article " + args.Article + ", in this workspace. Use ids from colliedesk_kb_media_list and colliedesk_kb_articles_search."
+		body["article_id"] = args.Article
+	}
 	var replacement restKBMediaReplacement
-	if err := c.send(http.MethodPost, kbMediaPath(args.ID, "replace"), map[string]any{"with_media_id": args.With}, &replacement); err != nil {
+	if err := c.send(http.MethodPost, kbMediaPath(args.ID, "replace"), body, &replacement); err != nil {
 		return nil, err
 	}
 	return kbMediaReplacementView(replacement), nil

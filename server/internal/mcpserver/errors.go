@@ -50,6 +50,9 @@ func (c *call) refuse(err error, notFound string) error {
 		return c.refusal("conflict", "A collection of this article needs an approved version of exactly this text before it is published. "+
 			"Send it for review with colliedesk_kb_article_send_for_review (reviewer_ids: teammates who may publish, from colliedesk_agents_list; "+
 			"locale for a translation, which must be a draft first); once one approves it, publish it. colliedesk_kb_reviews_list shows its reviews.")
+	case failure.Status == 409 && failure.Code == "media_kept":
+		return c.refusal("conflict", "Colliedesk refused this: "+failure.Message+" colliedesk_kb_media_replace_undo (replacement_id) undoes it; "+
+			"then purge the items again, leaving them in the trash until then.")
 	case failure.Status == 409:
 		return c.refusal("conflict", "Colliedesk refused this: "+failure.Message)
 	case failure.Status == 400 || failure.Status == 422:

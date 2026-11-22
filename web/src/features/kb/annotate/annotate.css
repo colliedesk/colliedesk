@@ -1,0 +1,14 @@
+/* The annotate dialog: the tools above the image, drawn on at its own size and shown no wider than the dialog. */
+.kb-dialog.kb-annotate { width: min(64rem, calc(100vw - 2 * var(--space-4))); }
+.kb-annotate-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.kb-annotate-tools button { min-height: 2rem; }
+.kb-annotate-tools [aria-pressed="true"] { border-color: var(--focus); font-weight: 600; }
+.kb-annotate-tools input { min-width: 0; flex: 1 1 12rem; }
+.kb-annotate-stage { margin-top: var(--space-3); overflow: auto; max-height: 70dvh; background: var(--surface-0); border: 1px solid var(--line); border-radius: var(--radius); }
+.kb-annotate-stage[hidden] { display: none; }
+.kb-annotate-stage canvas { display: block; max-width: 100%; height: auto; margin: 0 auto; touch-action: none; cursor: crosshair; }
+.kb-annotate-stage canvas[data-tool="text"] { cursor: text; }
+
+@media (max-width: 44rem) {
+  .kb-annotate-tools button { min-height: var(--touch); }
+}

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import type { Editor } from '@tiptap/core';
 import { expect, vi } from 'vitest';
-import type { EditorHandle, UploadHooks } from '../editor-types';
+import type { EditorHandle, ImageAnnotation, UploadHooks } from '../editor-types';
 import VisualEditor from './visual-editor';
 
 // jsdom lays nothing out; ProseMirror measures text ranges to scroll the cursor into view.
@@ -11,10 +11,10 @@ if (!('elementFromPoint' in document)) Object.assign(document, { elementFromPoin
 export const never: UploadHooks = { accept: (files) => files, upload: () => new Promise(() => {}), store: () => new Promise(() => {}), onStart: () => {}, onDone: () => {}, onError: () => {} };
 
 // make shows the visual editor with initial as its text, and gives what a test drives it with.
-export async function make(initial: string, uploads: UploadHooks = never) {
+export async function make(initial: string, uploads: UploadHooks = never, annotate?: ImageAnnotation) {
   let handle: EditorHandle | undefined;
   const onChange = vi.fn();
-  render(<VisualEditor initial={initial} uploads={uploads} label="Text" describedBy="help" invalid={false} mode="edit" onChange={onChange}
+  render(<VisualEditor initial={initial} uploads={uploads} label="Text" describedBy="help" invalid={false} mode="edit" annotate={annotate} onChange={onChange}
     onReady={(ready) => { handle = ready; }} />);
   await waitFor(() => expect(handle).toBeDefined());
   const text = screen.getByRole('textbox', { name: 'Text' });

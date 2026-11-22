@@ -237,7 +237,7 @@ test('alt text from the picker still goes in when the item was saved since witho
         ? new Response(JSON.stringify({ error: { code: 'changed_elsewhere', message: 'Changed.' } }), { status: 409 })
         : new Response(JSON.stringify({ ...bare, alt: 'Plans', updated_at: '2026-10-05T00:00:00Z' }), { status: 200 });
     }
-    if (url.endsWith('/details')) return new Response(JSON.stringify({ ...bare, updated_at: '2026-10-04T00:00:00Z', articles: [] }), { status: 200 });
+    if (url.endsWith('/details')) return new Response(JSON.stringify({ ...bare, updated_at: '2026-10-04T00:00:00Z', articles: [], earlier_versions: [] }), { status: 200 });
     return new Response(JSON.stringify({ items: [bare], next_cursor: null }), { status: 200 });
   }));
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');

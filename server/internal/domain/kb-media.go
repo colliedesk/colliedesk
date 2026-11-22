@@ -114,6 +114,19 @@ type KBMediaArticle struct {
 type KBMediaDetails struct {
 	KBMedia
 	Articles []KBMediaArticle `json:"articles"`
+	// EarlierVersions are the items this one replaced in articles, by replacements not undone, the
+	// newest first; undoing a replacement puts its item back. Empty, never null.
+	EarlierVersions []KBMediaEarlierVersion `json:"earlier_versions"`
+}
+
+// KBMediaEarlierVersion is an item a replacement put this one in the place of.
+type KBMediaEarlierVersion struct {
+	ReplacementID string    `json:"replacement_id"`
+	MediaID       string    `json:"media_id"`
+	Name          string    `json:"name"`
+	URL           string    `json:"url"`
+	ArticleIDs    []string  `json:"article_ids"`
+	ReplacedAt    time.Time `json:"replaced_at"`
 }
 
 // KBMediaSummary adds up the items of a library list that no live article uses: their count and
@@ -243,6 +256,10 @@ var (
 	ErrKBMediaKindMismatch = errors.New("an image is replaced by an image, a video by a video, a file by a file")
 	// ErrKBMediaGone means the item a replacement would bring back was deleted for good.
 	ErrKBMediaGone = errors.New("the replaced item was deleted for good, so the replacement cannot be undone")
+	// ErrKBMediaNotInArticle means a replacement in one article found the item nowhere in its text, its
+	// translations or their unpublished changes, so nothing was replaced.
+	ErrKBMediaNotInArticle = errors.New("the article does not show this item now, in its text, a translation or unpublished changes, so nothing was replaced: " +
+		"open the article again to see its current text")
 )
 
 // ReplaceKBMediaIDs rewrites every link of the item from in text to the item to: image and media paths,

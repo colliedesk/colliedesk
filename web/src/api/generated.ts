@@ -4800,7 +4800,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The library's trash, last moved there first, 60 items a page unless `limit` says otherwise, each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its usage. An item the purge keeps (the help center's logo or favicon) has no `purge_at`. An item in the trash still counts toward the plan's storage until it is purged. */
+        /** @description The library's trash, last moved there first, 60 items a page unless `limit` says otherwise, each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its usage. An item the purge keeps (the help center's logo or favicon, or the earlier version of a replacement not undone) has no `purge_at`. An item in the trash still counts toward the plan's storage until it is purged. */
         get: operations["listTrashedKBMedia"];
         put?: never;
         /** @description Move up to 100 library items to the trash, each only while no live article's current text names it, and answer each id: `trashed`, `already_in_trash`, `in_use` or `not_found`. Send the `batch_id` of an earlier call to add to its batch; `POST /api/v1/kb/media/restore` with that `batch_id` brings back the whole batch. Saving an article that names an item in the trash takes it out again. Calling it twice changes nothing more. */
@@ -4854,7 +4854,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. It needs `kb_media:purge`. */
+        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. It needs `kb_media:purge`. An item a replacement put another in the place of, and that is not undone, is its earlier version: the call then purges nothing and answers 409 `media_kept`, naming the articles and the replacement in `kept_by`. Undo the replacement first; the item may stay in the trash meanwhile. */
         post: operations["purgeKBMedia"];
         delete?: never;
         options?: never;
@@ -4916,6 +4916,7 @@ export interface paths {
         /**
          * @description Put another library item (`with_media_id`, an image for an image, a video for a video) in the place of this one in every live article whose current text or a translation shows it. Each such article gets a new version of kind `media_replace`, and published ones change on the help center at once. Ids never change their bytes, so the new item keeps its own id and caches stay right. The answer is the replacement; `POST /api/v1/kb/media-replacements/{id}/undo` reverses it. 400 when the kinds differ.
          *     A file (kind `file`) is replaced in place, since articles list it by its id: it keeps its id and address and takes the bytes and name of `with_media_id`, which goes to the trash holding the earlier version (`in_place` true, no article gets a new version). 400 when an article or a draft lists `with_media_id`: upload the new version as a file no article lists. Replacing a file a published article lists needs kb_articles:publish.
+         *     With `article_id`, only that article and its translations change: the others that show the image or video keep it. This is how an edited copy (an annotated screenshot) goes in one article, and the new item's details list this one in `earlier_versions` until the replacement is undone. A published article and its published translations keep their text: the copy goes into their unpublished changes (made from the published text when there are none), so the help center shows it once someone publishes them, and the article is listed with no new version. This needs kb_articles:update, not publish. 409 `media_not_in_article` when neither the article, its translations nor their unpublished changes show the item (nothing is recorded); 400 when the item is a file; 404 when no live article in the workspace has that id.
          */
         post: operations["replaceKBMedia"];
         delete?: never;
@@ -4935,7 +4936,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Put back the text each article and translation had before the replacement, where nothing changed since (an article whose newest version is still the replacement's, a translation that still holds the replaced text), as new versions. Anything changed since keeps its text and is listed in `skipped_article_ids`. Undoing twice changes nothing more. 409 `media_gone` when the replaced item was deleted for good. */
+        /** @description Put back the text each article and translation had before the replacement, where nothing changed since (an article whose newest version is still the replacement's, a translation that still holds the replaced text), as new versions. Anything changed since keeps its text and is listed in `skipped_article_ids`. Unpublished changes that took an edited copy get the item back the same way, while they still hold the copy. Undoing twice changes nothing more. 409 `media_gone` when the replaced item was deleted for good. */
         post: operations["undoKBMediaReplacement"];
         delete?: never;
         options?: never;
@@ -9148,7 +9149,7 @@ export interface components {
             usage?: components["schemas"]["KBMediaUsage"];
             /**
              * Format: date-time
-             * @description When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article and not the help center names.
+             * @description When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article, not the help center and no replacement not undone keeps.
              */
             purge_at?: string;
         };
@@ -9173,6 +9174,22 @@ export interface components {
                 in_trash: boolean;
                 /** @description False when only an older version names the item. */
                 current: boolean;
+            }[];
+            /** @description The items replacements put this one in the place of (by replacements not undone, newest first), each an earlier version the articles showed. Undoing the replacement puts it back. Empty when there are none. */
+            earlier_versions: {
+                /**
+                 * Format: uuid
+                 * @description Undo with POST /api/v1/kb/media-replacements/{replacement_id}/undo.
+                 */
+                replacement_id: string;
+                /** Format: uuid */
+                media_id: string;
+                name: string;
+                url: string;
+                /** @description The articles the replacement changed. */
+                article_ids: string[];
+                /** Format: date-time */
+                replaced_at: string;
             }[];
         };
         KBMediaResult: {
@@ -11214,6 +11231,27 @@ export interface components {
                     title: string;
                     /** @enum {string} */
                     status: "draft" | "published";
+                }[];
+                /** @description Only on media_kept: each item asked for that a replacement not undone keeps as its earlier version. */
+                kept_by?: {
+                    /** Format: uuid */
+                    media_id: string;
+                    /**
+                     * Format: uuid
+                     * @description Undo it (POST /api/v1/kb/media-replacements/{id}/undo) to let the item go.
+                     */
+                    replacement_id: string;
+                    /**
+                     * Format: uuid
+                     * @description The item shown in its place.
+                     */
+                    to_media_id: string;
+                    articles: {
+                        /** Format: uuid */
+                        id: string;
+                        number: number;
+                        title: string;
+                    }[];
                 }[];
                 /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
                 refused_cc?: string[];
@@ -22703,6 +22741,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
     getKBMediaFile: {
@@ -22903,6 +22942,11 @@ export interface operations {
                 "application/json": {
                     /** Format: uuid */
                     with_media_id: string;
+                    /**
+                     * Format: uuid
+                     * @description Replace in this article only; leave out to replace in every live article.
+                     */
+                    article_id?: string;
                 };
             };
         };
@@ -22920,6 +22964,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     undoKBMediaReplacement: {
