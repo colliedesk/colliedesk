@@ -69,7 +69,7 @@ async function checkGrid(page: Page, label: string, columns: string[], ordered: 
   await menu.locator('summary').click();
   const note = menu.getByRole('note');
   const left = columns.length - shown;
-  if (left > 0) await expect(note, `${label}: the menu counts the columns left out`).toContainText(`too narrow for the last ${left === 1 ? 'column' : `${left} columns`}`);
+  if (left > 0) await expect(note, `${label}: the menu counts the columns left out`).toContainText(`Too narrow for the last ${left === 1 ? 'column' : `${left} columns`}`);
   else await expect(note).toHaveCount(0);
   await menu.locator('summary').click();
   return shown;
