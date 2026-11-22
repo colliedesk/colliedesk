@@ -1275,6 +1275,66 @@ Then press **Verify** in Search Console or Bing.
   `kb_articles:publish`, for a person and an AI agent token alike; without either it is refused.
 - The tokens are in the [export](export.md) (`help-center.ndjson`), so a move away keeps them.
 
+### Analytics
+
+The help center can send its page views to your own Google Analytics 4 property or Plausible site.
+The Colliedesk server sends them itself, after it served the page. The pages get no script, no
+cookie and no change to their Content-Security-Policy, and a reader never waits for the service.
+
+What is sent, for each page a reader opens (the home page, a collection, an article, a search):
+
+- **GA4** gets a `page_view` with the page address, its title, the referrer, the language and, on a
+  search page, the search words (`search_term`). Its visitor id is a hash of your workspace, the
+  reader's address and browser under a key that lives only in the server's memory and changes every
+  UTC day, so the same reader has another id in another workspace and on the next day. GA4 counts all
+  of one reader's page views of a UTC day as one session. GA4 never gets the reader's address or
+  browser.
+- **Plausible** gets a `pageview` with the page address and the referrer, and the reader's address
+  and browser in the request headers. Plausible turns them into its own daily visitor id and does not
+  keep them.
+
+Bots, crawlers, link previews, prefetches, `HEAD` requests, the theme preview and a team member signed
+in on the same address send nothing. These are the visits that the article
+[views](#views-and-replies) leave out too.
+
+Whether your readers must consent first is for your team to judge. Colliedesk does not ask them.
+
+To turn it on:
+
+1. Open **Knowledge base → Settings → Analytics** and choose **Google Analytics 4** or **Plausible**.
+2. For GA4, paste the **Measurement ID** of the web stream (`G-` and 4 to 16 letters or digits, in GA4
+   Admin → Data streams) and an **API secret** (Admin → Data streams → the stream → Measurement
+   Protocol API secrets → Create; copy its secret value).
+3. For Plausible, type the **Site domain** exactly as Plausible names the site (`help.example.com`).
+   Leave **Plausible address** empty for `https://plausible.io`, or type the `https` address of your
+   own Plausible server.
+4. Select **Send page views** and press **Save analytics**.
+5. Press **Send a test event**. It sends one page view of `/colliedesk-analytics-test` from your
+   browser now and shows what the service answered. GA4 checks the event first and names a wrong
+   measurement ID, but it never checks the API secret: look for the page view in GA4 Reports →
+   Realtime. Plausible says only whether its bot filter dropped the event.
+
+The status line says **Last page view accepted 12:04** or the last error with its time, such as GA4
+refusing the request. A failed send is tried again after 10 and 30 seconds; each try waits at most
+5 seconds for the service. After 5 failed sends in a row, the server sends nothing for your help
+center for 5 minutes, and the status shows the last error; saving the settings ends the pause.
+Saving the settings clears the status. If the server can no longer open the saved API secret (its key
+was removed), the status and the test say so: enter the secret again and save.
+
+- The API secret is write-only: nobody reads it back, not the app, the API, MCP or the export. It is
+  stored sealed (a self-hosted server needs `MAILBOX_TOKEN_KEYS`, see
+  [environment variables](../self-host/environment-variables.md); without that key a secret is
+  refused and nothing is saved). Leave the field empty to keep the saved secret.
+- To stop sending, clear **Send page views** and save. **Remove secret** deletes the saved API secret
+  and stops sending to GA4 (through the API or `colliedesk_help_center_analytics_set`, save
+  `"ga4_api_secret": ""`). Once the save answers, page views waiting to be sent or tried again with the
+  old settings are dropped; only a send already on its way can still arrive.
+- A Plausible on a private, loopback or link-local address, or on plain `http`, is refused and
+  nothing is saved; a public name that resolves to a private address is refused when the server sends.
+- Reading the settings needs `help_center:read`; saving and sending a test need `help_center:update`,
+  for a person and an AI agent token alike.
+- The settings (without the secret) are in the [export](export.md) (`help-center.ndjson`, `analytics`).
+
 ### Limits
 
 - One visitor address can load 600 pages, run 30 searches and vote 20 times a minute; past that the
@@ -1505,6 +1565,10 @@ Help center:
   accident.
 - Search Console: `GET` and `PUT /api/v1/help-center/search-console`; AI agents use
   `colliedesk_help_center_search_console_get` and `colliedesk_help_center_search_console_update`.
+- [Analytics](#analytics): `GET` and `PUT /api/v1/help-center/analytics` and
+  `POST /api/v1/help-center/analytics/test`; AI agents use `colliedesk_help_center_analytics_get`,
+  `_set` and `_test`. A save replaces every field; `ga4_api_secret` left out or `null` keeps the saved secret and
+  `""` removes it. The answer never carries the secret, only `ga4_api_secret_set`.
 - Custom domain: `colliedesk_help_center_domain_get` reads it. A token with `help_center:update` and
   `kb_articles:publish` also sets, checks and removes it (`colliedesk_help_center_domain_set`, `_check`,
   `_remove`); without either it is refused.

@@ -5577,6 +5577,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/help-center/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Where the help center sends its page views: the workspace's own Google Analytics 4 property (`ga4`) or Plausible site (`plausible`), or nowhere (`provider` null until first saved). The server sends one page view for each public page a reader is served, from the server; the pages carry no analytics script, so their Content-Security-Policy stays the same. Bots, prefetches, HEAD requests, theme previews and signed-in team members send nothing. GA4 receives the page address, title, referrer, language and search words, with a client id keyed each day (no IP address, browser or cookie); Plausible receives the address, the referrer, and the reader's browser and IP address, which it needs to count visitors and does not store. The GA4 API secret is never returned, only whether one is stored. `last_sent_at` is the last page view a service accepted, `last_error` the last one it refused after the retries; a save clears both. */
+        get: operations["getHelpCenterAnalytics"];
+        /** @description Save where the page views go. Every field replaces the stored one except `ga4_api_secret`: left out or null keeps the stored secret, an empty string removes it. The other service's fields are kept, so switching back needs no retyping. Turning on GA4 needs `ga4_measurement_id` (the web stream's `G-…` id) and a Measurement Protocol API secret (GA4 Admin › Data streams › the stream › Measurement Protocol API secrets); turning on Plausible needs `plausible_domain`, the site domain exactly as in Plausible. `plausible_base_url` is a self-hosted Plausible's https address on a public network; empty is https://plausible.io. A bad field is refused (422 `validation_failed`, with `fields`) and nothing is saved; 409 `secret_keys_missing` on a server without MAILBOX_TOKEN_KEYS, which cannot keep the API secret. The change applies to the next page view. */
+        put: operations["putHelpCenterAnalytics"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/analytics/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send one test page view of `/colliedesk-analytics-test` to the saved service now, on or off, with the caller's browser and address, and say what it answered. GA4 first checks the event at its validation endpoint, which names a wrong measurement ID but never checks the API secret, so an `ok` GA4 test still asks you to look at Reports › Realtime. Plausible accepts every event and says only whether its bot filter dropped it. A service that cannot be reached, answers an error or is on a private address gives `ok` false with the reason. 409 `analytics_not_set` before any save, and `analytics_secret_unreadable` when no key of this server opens the saved GA4 API secret (enter it again and save); 503 `analytics_unavailable` on a server that does not send page views. */
+        post: operations["testHelpCenterAnalytics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/help-center/freshdesk-redirect": {
         parameters: {
             query?: never;
@@ -9410,6 +9445,56 @@ export interface components {
                 /** @description False when the knowledge base was too large to embed: the snippet then redirects every old address by its id to the help center, which maps it. */
                 embedded: boolean;
             } | null;
+        };
+        HelpCenterAnalyticsInput: {
+            /**
+             * @description Google Analytics 4 or Plausible.
+             * @enum {string}
+             */
+            provider: "ga4" | "plausible";
+            /** @description True sends every reader page view to the provider. */
+            enabled: boolean;
+            /** @description The GA4 web stream's measurement ID, for example G-ABC123XYZ9. */
+            ga4_measurement_id?: string | null;
+            /** @description A Measurement Protocol API secret of that stream. Left out or null: unchanged. Empty: removed. Never returned. */
+            ga4_api_secret?: string | null;
+            /** @description The site domain exactly as in Plausible, for example help.example.com. */
+            plausible_domain?: string | null;
+            /** @description A self-hosted Plausible's public https address; empty or null is https://plausible.io. */
+            plausible_base_url?: string | null;
+        };
+        HelpCenterAnalytics: {
+            /**
+             * @description Null until first saved.
+             * @enum {string|null}
+             */
+            provider: "ga4" | "plausible" | null;
+            enabled: boolean;
+            ga4_measurement_id: string | null;
+            /** @description Whether an API secret is stored; the secret itself is never returned. */
+            ga4_api_secret_set: boolean;
+            plausible_domain: string | null;
+            /** @description https://plausible.io unless a self-hosted address is saved. */
+            plausible_base_url: string;
+            /**
+             * Format: date-time
+             * @description The last page view the service accepted since the last save.
+             */
+            last_sent_at: string | null;
+            /** @description Why the last page view was refused after its retries, since the last save. */
+            last_error: string | null;
+            /** Format: date-time */
+            last_error_at: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            /** @description Who saved the settings last. */
+            updated_by_name: string | null;
+        };
+        HelpCenterAnalyticsTest: {
+            /** @description True when the service accepted the test page view. */
+            ok: boolean;
+            /** @description What the service answered and where to look for the event. */
+            message: string;
         };
         HelpCenterSearchConsoleInput: {
             /** @description The content of Google Search Console's `google-site-verification` meta tag. Left out: unchanged. Null or empty: removed. */
@@ -24437,6 +24522,88 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    getHelpCenterAnalytics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The analytics settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterAnalytics"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putHelpCenterAnalytics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterAnalyticsInput"];
+            };
+        };
+        responses: {
+            /** @description The saved settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterAnalytics"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    testHelpCenterAnalytics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What the service answered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterAnalyticsTest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description This server does not send help center page views (`analytics_unavailable`). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getFreshdeskRedirect: {

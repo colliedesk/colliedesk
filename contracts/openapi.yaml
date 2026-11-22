@@ -9728,6 +9728,77 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/ThemeInvalid'}
+  /api/v1/help-center/analytics:
+    get:
+      operationId: getHelpCenterAnalytics
+      x-permission: help_center:read
+      description: >
+        Where the help center sends its page views: the workspace's own Google Analytics 4 property
+        (`ga4`) or Plausible site (`plausible`), or nowhere (`provider` null until first saved). The
+        server sends one page view for each public page a reader is served, from the server; the pages
+        carry no analytics script, so their Content-Security-Policy stays the same. Bots, prefetches,
+        HEAD requests, theme previews and signed-in team members send nothing. GA4 receives the page
+        address, title, referrer, language and search words, with a client id keyed each day (no IP
+        address, browser or cookie); Plausible receives the address, the referrer, and the reader's
+        browser and IP address, which it needs to count visitors and does not store. The GA4 API secret
+        is never returned, only whether one is stored. `last_sent_at` is the last page view a service
+        accepted, `last_error` the last one it refused after the retries; a save clears both.
+      responses:
+        '200':
+          description: The analytics settings
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterAnalytics'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    put:
+      operationId: putHelpCenterAnalytics
+      x-permission: help_center:update
+      description: >
+        Save where the page views go. Every field replaces the stored one except `ga4_api_secret`: left
+        out or null keeps the stored secret, an empty string removes it. The other service's fields are
+        kept, so switching back needs no retyping. Turning on GA4 needs `ga4_measurement_id` (the web
+        stream's `G-…` id) and a Measurement Protocol API secret (GA4 Admin › Data streams › the stream ›
+        Measurement Protocol API secrets); turning on Plausible needs `plausible_domain`, the site domain
+        exactly as in Plausible. `plausible_base_url` is a self-hosted Plausible's https address on a
+        public network; empty is https://plausible.io. A bad field is refused (422 `validation_failed`,
+        with `fields`) and nothing is saved; 409 `secret_keys_missing` on a server without
+        MAILBOX_TOKEN_KEYS, which cannot keep the API secret. The change applies to the next page view.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HelpCenterAnalyticsInput'}
+      responses:
+        '200':
+          description: The saved settings
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterAnalytics'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ThemeInvalid'}
+  /api/v1/help-center/analytics/test:
+    post:
+      operationId: testHelpCenterAnalytics
+      x-permission: help_center:update
+      description: >
+        Send one test page view of `/colliedesk-analytics-test` to the saved service now, on or off, with
+        the caller's browser and address, and say what it answered. GA4 first checks the event at its
+        validation endpoint, which names a wrong measurement ID but never checks the API secret, so an
+        `ok` GA4 test still asks you to look at Reports › Realtime. Plausible accepts every event and
+        says only whether its bot filter dropped it. A service that cannot be reached, answers an error
+        or is on a private address gives `ok` false with the reason. 409 `analytics_not_set` before any
+        save, and `analytics_secret_unreadable` when no key of this server opens the saved GA4 API
+        secret (enter it again and save); 503 `analytics_unavailable` on a server that does not send
+        page views.
+      responses:
+        '200':
+          description: What the service answered
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterAnalyticsTest'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503':
+          description: This server does not send help center page views (`analytics_unavailable`).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/help-center/freshdesk-redirect:
     get:
       operationId: getFreshdeskRedirect
@@ -13906,6 +13977,38 @@ components:
             folders: {type: integer}
             categories: {type: integer}
             embedded: {type: boolean, description: 'False when the knowledge base was too large to embed: the snippet then redirects every old address by its id to the help center, which maps it.'}
+    HelpCenterAnalyticsInput:
+      type: object
+      additionalProperties: false
+      required: [provider, enabled]
+      properties:
+        provider: {type: string, enum: [ga4, plausible], description: 'Google Analytics 4 or Plausible.'}
+        enabled: {type: boolean, description: 'True sends every reader page view to the provider.'}
+        ga4_measurement_id: {type: [string, 'null'], maxLength: 20, description: 'The GA4 web stream''s measurement ID, for example G-ABC123XYZ9.'}
+        ga4_api_secret: {type: [string, 'null'], maxLength: 100, description: 'A Measurement Protocol API secret of that stream. Left out or null: unchanged. Empty: removed. Never returned.'}
+        plausible_domain: {type: [string, 'null'], maxLength: 253, description: 'The site domain exactly as in Plausible, for example help.example.com.'}
+        plausible_base_url: {type: [string, 'null'], maxLength: 200, description: 'A self-hosted Plausible''s public https address; empty or null is https://plausible.io.'}
+    HelpCenterAnalytics:
+      type: object
+      required: [provider, enabled, ga4_measurement_id, ga4_api_secret_set, plausible_domain, plausible_base_url, last_sent_at, last_error, last_error_at, updated_at, updated_by_name]
+      properties:
+        provider: {type: [string, 'null'], enum: [ga4, plausible, null], description: Null until first saved.}
+        enabled: {type: boolean}
+        ga4_measurement_id: {type: [string, 'null']}
+        ga4_api_secret_set: {type: boolean, description: 'Whether an API secret is stored; the secret itself is never returned.'}
+        plausible_domain: {type: [string, 'null']}
+        plausible_base_url: {type: string, description: 'https://plausible.io unless a self-hosted address is saved.'}
+        last_sent_at: {type: [string, 'null'], format: date-time, description: 'The last page view the service accepted since the last save.'}
+        last_error: {type: [string, 'null'], description: 'Why the last page view was refused after its retries, since the last save.'}
+        last_error_at: {type: [string, 'null'], format: date-time}
+        updated_at: {type: [string, 'null'], format: date-time}
+        updated_by_name: {type: [string, 'null'], description: 'Who saved the settings last.'}
+    HelpCenterAnalyticsTest:
+      type: object
+      required: [ok, message]
+      properties:
+        ok: {type: boolean, description: 'True when the service accepted the test page view.'}
+        message: {type: string, description: 'What the service answered and where to look for the event.'}
     HelpCenterSearchConsoleInput:
       type: object
       additionalProperties: false

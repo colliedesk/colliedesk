@@ -724,6 +724,20 @@ type HelpCenter struct {
 	CustomDomain           *string    `json:"custom_domain"`
 	CustomDomainStatus     *string    `json:"custom_domain_status"`
 	CustomDomainVerifiedAt *time.Time `json:"custom_domain_verified_at"`
+	// Analytics is where the help center sends its page views (null before the first save).
+	Analytics *HelpCenterAnalytics `json:"analytics"`
+}
+
+// HelpCenterAnalytics is the workspace's own GA4 or Plausible target. The GA4 API secret is never
+// exported, only whether one is stored; after a restore, type it again.
+type HelpCenterAnalytics struct {
+	Provider         string    `json:"provider"`
+	Enabled          bool      `json:"enabled"`
+	GA4MeasurementID *string   `json:"ga4_measurement_id"`
+	GA4APISecretSet  bool      `json:"ga4_api_secret_set"`
+	PlausibleDomain  *string   `json:"plausible_domain"`
+	PlausibleBaseURL string    `json:"plausible_base_url"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // AgentRequest is a call an agent token asked a person to approve, and what became of it. The answer
