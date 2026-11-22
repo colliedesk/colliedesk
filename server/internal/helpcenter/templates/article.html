@@ -26,6 +26,12 @@
 <ul class="tags-list">{{range .Tags}}<li>{{.}}</li>{{end}}</ul>
 </section>
 {{- end}}
+{{- if .Related}}
+<section class="related" aria-labelledby="related-title">
+<h2 id="related-title" class="section-label">{{.T.RelatedArticles}}</h2>
+<ul class="related-list">{{range .Related}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
+</section>
+{{- end}}
 {{- with .Votes}}
 <section class="helpful" id="helpful" aria-labelledby="helpful-title">
 <h2 id="helpful-title" class="helpful-title">{{.T.Question}}</h2>

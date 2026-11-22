@@ -165,9 +165,20 @@ words, a short prefix, no match and a title, and the files for crawlers and AI a
 and the 100,000-character article's Markdown (4 ms). `TestPublicPagesMakeNoExternalCall` fails when
 a help center source other than the admin's domain check names an outbound client (HTTP, DNS, SMTP). Each must stay at or below 100 ms p95 (6–16 ms locally).
 A page is five short scoped transactions at most (slug lookup, settings and lock, collections,
-articles, neighbours); a 304 stops after the second. Workspace A carries a full theme with about
+articles, neighbours), and an article page a sixth for its related articles when they are not kept
+yet; a 304 stops after the second. Workspace A carries a full theme with about
 31 KiB of custom CSS, the worst case of what every page reads and hashes into the brand sheet's name
 (page p95 unchanged, and the gate took 0.4 s longer locally).
+
+An article page also lists its related articles. That query reads every shown article's vector, so
+the list is kept per knowledge base `content_version` and served from memory on later visits: the
+gate's article pages went from 15 and 20 ms p95 without the list to 21 and 26 ms with it (44 and
+90 ms before the list was kept). `TestHelpCenterPagesAfterAnEditLatencyBudget` holds the first visit
+after a write, when the list is ranked again, to the same 100 ms p95: on the same fixture it grows
+`content_version` before each of 20 visits to the 9,000-character article and to its French
+translation (48 to 74 ms and 67 to 82 ms locally on 2026-11-22, about 30 ms of them the ranking).
+On a knowledge base of 300 articles of 250 to 750 words with a French translation each, the query
+alone took 7 ms median and 8 ms p95, 8 and 9 ms in French.
 
 A workspace's help center analytics (GA4 or Plausible) is sent by the server after the page is
 written: `PageViewed` only puts the delivery in a buffered queue and returns, and the sends run on
