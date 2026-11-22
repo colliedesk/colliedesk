@@ -11,6 +11,7 @@ export { TemplatesRoute } from './templates-page';
 export { ReviewsRoute } from './reviews-page';
 export { ReviewRoute } from './review-page';
 export { SearchesRoute } from './searches-page';
+export { GapsRoute } from './gaps-page';
 export { TranslationRoute } from './translation-editor';
 export { MediaRoute } from './media-page';
 // The library picker, for the help center's logo and icon in Settings.

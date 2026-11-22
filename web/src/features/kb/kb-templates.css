@@ -27,3 +27,13 @@
 .kb-review-ok { color: var(--ok); }
 .kb-review .kb-diff { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-2) 0; }
 .kb-reviewer-list { display: grid; gap: var(--space-1); margin: 0; border: 0; padding: 0; }
+/* Knowledge → Gaps: the filters, a gap's kind labels and what its readers asked. */
+.kb-gap-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+.kb-gap-title { justify-self: start; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; text-align: start; }
+.kb-gap-kinds { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.kb-gap-kinds > li { border-radius: var(--radius-sm); background: var(--surface-2); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-label); line-height: 18px; }
+.kb-gap-signals { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.kb-gap-signal-list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.kb-gap-signal-list > li { display: grid; grid-template-columns: 12rem minmax(0, 1fr) auto; gap: var(--space-2); align-items: baseline; }
+.kb-gap-signal-list .kb-gap-text { color: var(--text-1); }
+@media (max-width: 640px) { .kb-gap-signal-list > li { grid-template-columns: minmax(0, 1fr); gap: 0; } }
