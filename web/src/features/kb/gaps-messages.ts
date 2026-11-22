@@ -43,8 +43,8 @@ export const gapsMessages = {
   draftTitle: 'The AI writes a draft from what readers asked and the resolved conversations that match it, usually in 10 to 20 seconds. It is never published until you publish it.',
   draftFailed: 'The article could not be drafted. Try again in a moment.',
   sources: 'Sources',
-  sourcesLead: 'Drafted by AI from a knowledge gap and these resolved conversations. Check it before publishing.',
-  sourcesHidden: 'Drafted by AI from a knowledge gap and resolved conversations you may not open.',
-  sourcesNone: 'Drafted by AI from what readers asked in a knowledge gap; no resolved conversation matched it. Check it before publishing.',
+  sourcesLead: 'AI drafted it from these resolved conversations.',
+  sourcesHidden: 'AI drafted it from conversations you may not open.',
+  sourcesNone: 'AI drafted it from readers\' questions only.',
   sourcesLabel: 'Conversations it was written from',
 };

@@ -30,7 +30,7 @@ test('an article drafted from a gap lists the conversations it was written from 
   });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ArticleRoute articleId={ids.article} /></QueryClientProvider>);
   const box = await screen.findByRole('region', { name: 'Sources' });
-  expect(within(box).getByText('Drafted by AI from a knowledge gap and these resolved conversations. Check it before publishing.')).toBeInTheDocument();
+  expect(within(box).getByText('AI drafted it from these resolved conversations.')).toBeInTheDocument();
   expect(within(box).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
     ['#41 Printer jam in tray two', `/conversations/${jam}`],
     ['#57 Paper jams in tray two again', `/conversations/${again}`],
@@ -48,12 +48,12 @@ test('a team member who may not read conversations sees that the draft came from
   const box = screen.getByRole('region', { name: 'Sources' });
   expect(within(box).queryByRole('link')).not.toBeInTheDocument();
   expect(within(box).queryByText(/tray two/)).not.toBeInTheDocument();
-  expect(within(box).getByText('Drafted by AI from a knowledge gap and resolved conversations you may not open.')).toBeInTheDocument();
+  expect(within(box).getByText('AI drafted it from conversations you may not open.')).toBeInTheDocument();
 });
 
 test('a draft no resolved conversation matched says it was written from what readers asked alone', () => {
   render(<ArticleSourcesBox source={{ ...source, conversations: [] }} headingId="sources" />);
   const box = screen.getByRole('region', { name: 'Sources' });
   expect(within(box).queryByRole('link')).not.toBeInTheDocument();
-  expect(within(box).getByText('Drafted by AI from what readers asked in a knowledge gap; no resolved conversation matched it. Check it before publishing.')).toBeInTheDocument();
+  expect(within(box).getByText('AI drafted it from readers\' questions only.')).toBeInTheDocument();
 });
