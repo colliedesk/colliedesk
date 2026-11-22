@@ -7262,6 +7262,80 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/KBSearchReport'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/kb/gaps:
+    get:
+      operationId: listKBGaps
+      x-permission: kb_articles:read
+      description: >
+        The knowledge gaps: what readers asked for and did not find, grouped by their words. A gap
+        collects signals: a help center search that found no article (`search_no_result`), a "No"
+        vote with its "What was missing?" line (`vote_no`), a help chat handed off to a person
+        (`chat_handoff`), a help chat answer that used no article or was rated not helpful
+        (`chat_unanswered`) and a resolved conversation no article title matches
+        (`recurring_topic`, read nightly in workspaces with 20 or more resolved in 30 days). A
+        signal joins a gap within a minute. The list is ranked by `recent_askers` (distinct askers
+        in the last 30 days), then by `last_seen`. Open gaps by default; `status` and `kind` filter.
+        `GET /api/v1/kb/gaps/{id}` lists a gap's signals; `PATCH` links it to an article or dismisses it.
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [open, fixed, dismissed], default: open}}
+        - {name: kind, in: query, description: Only the gaps with a signal of this kind., schema: {$ref: '#/components/schemas/KBGapSignalKind'}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: The gaps, highest rank first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/KBGap'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/kb/gaps/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBGap
+      x-permission: kb_articles:read
+      description: >
+        One knowledge gap with its newest 100 signals, newest first. Signal text is masked (no email
+        address, no run of 6 or more digits) and nothing tells the askers apart.
+      responses:
+        '200':
+          description: The gap
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBGapDetail'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateKBGap
+      x-permission: kb_articles:update
+      description: >
+        Mark the gap fixed by an article (`fixed_by_article_id`, an article of the workspace outside
+        the trash; `status` may be left out), dismiss it (`status: dismissed`: it leaves the open list
+        and keeps counting) or open it again (`status: open`, which also undoes a fix made
+        automatically when a matching article was published). Opening or dismissing clears the
+        article. A fixed gap opens again by itself when it is asked for more than 7 days after the
+        fix. An article that is not in the workspace is 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                status: {type: string, enum: [open, fixed, dismissed]}
+                fixed_by_article_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: The changed gap
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBGap'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/kb/articles/trash:
     get:
       operationId: listTrashedKBArticles
@@ -13694,6 +13768,60 @@ components:
           maxItems: 20
           description: The most searched words that listed articles of which the reader opened none.
           items: {$ref: '#/components/schemas/KBSearchTerm'}
+    KBGapSignalKind:
+      type: string
+      enum: [search_no_result, vote_no, chat_handoff, chat_unanswered, recurring_topic]
+    KBGap:
+      type: object
+      description: What readers asked for and did not find, grouped by their words.
+      required: [id, title, status, kinds, askers, recent_askers, first_seen, last_seen, fixed_by_article, fixed_automatically, status_changed_by, status_changed_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, minLength: 1, description: 'The words of the first signal, masked: "[email removed]" and "[number removed]" replace an email address and a run of 6 or more digits.'}
+        status: {type: string, enum: [open, fixed, dismissed]}
+        kinds:
+          type: array
+          description: The kinds of the gap's signals.
+          items: {$ref: '#/components/schemas/KBGapSignalKind'}
+        askers: {type: integer, minimum: 0, description: Distinct askers since the first signal.}
+        recent_askers: {type: integer, minimum: 0, description: Distinct askers in the last 30 days; the rank.}
+        first_seen: {type: string, format: date-time}
+        last_seen: {type: string, format: date-time}
+        fixed_by_article:
+          description: The article that answers the gap; null unless it is fixed by one.
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, title]
+              properties:
+                id: {type: string, format: uuid}
+                title: {type: string}
+        fixed_automatically: {type: boolean, description: True when a matching article was published and no person changed the gap since.}
+        status_changed_by:
+          description: The team member who last changed the status; null when it never changed, changed by itself or they were removed.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        status_changed_at: {type: [string, 'null'], format: date-time}
+    KBGapDetail:
+      allOf:
+        - {$ref: '#/components/schemas/KBGap'}
+        - type: object
+          required: [signal_count, signals]
+          properties:
+            signal_count: {type: integer, minimum: 0, description: 'Every signal of the gap; `signals` lists the newest 100.'}
+            signals:
+              type: array
+              maxItems: 100
+              items: {$ref: '#/components/schemas/KBGapSignal'}
+    KBGapSignal:
+      type: object
+      description: One thing a reader could not find. Which reader is never shown.
+      required: [kind, text, created_at]
+      properties:
+        kind: {$ref: '#/components/schemas/KBGapSignalKind'}
+        text: {type: string, description: 'What the reader searched, wrote or asked, masked.'}
+        created_at: {type: string, format: date-time}
     KBSearchTerm:
       type: object
       description: The searches of the window whose words are the same once case and accents are ignored.
