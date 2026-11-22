@@ -31,6 +31,8 @@ var appRoleStoreMethods = map[string]string{
 	"HelpCenterLegacyItems":   "old helpdesk links are redirected to wherever the article is now, which may be another help center",
 	"HelpCenterLegacyTarget":  "old helpdesk links are redirected to wherever the article is now, which may be another help center",
 	"HelpCenterPreview":       "a signed staff preview shows drafts and agents-only content to the team",
+	"LogKBSearch":             "the per-minute cap counts the whole workspace's searches, and a search written before the workspace has a help center makes the primary one; the reader has no grant on kb_searches, so stored search words stay out of its reach",
+	"OpenKBSearch":            "records an open on a search row the reader cannot read; the signed link names the workspace and the row",
 	"OpenHelpCenter":          "resolves the help center row; content_version and last_article_number live on the primary row",
 	"OpenHelpCenterAt":        "resolves the help center row; content_version and last_article_number live on the primary row",
 	"OpenHelpCenterHandle":    "resolves a handle to its help center among the workspace's help centers",

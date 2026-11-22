@@ -257,6 +257,7 @@ review; `appRoleStoreMethods` in `internal/helpcenter/store_reader_guard_test.go
 | `WorkspaceForMailSlug` | Resolves a workspace from its slug before any help center is chosen. |
 | `HelpCenterLegacyTarget`, `HelpCenterLegacyItems` | Old helpdesk links redirect to wherever the article is now, which may be another help center. Only the new address leaves. |
 | `HelpCenterPreview` | A signed staff preview shows drafts and agents-only content to the team. |
+| `LogKBSearch`, `OpenKBSearch` | The search log. The per-minute cap (`KBSearchesPerMinute`) counts the whole workspace's searches; read as the reader it would count one help center's. A search written before the workspace has a help center makes the primary one (`kb_searches_on_primary`). The reader has no grant on `kb_searches`, so it never reads stored search words. The open is signed with the workspace and the row id; the foreign key keeps `help_center_id` inside the workspace. |
 
 Other routes that touch more than one help center:
 
