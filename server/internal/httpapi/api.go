@@ -916,6 +916,10 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/kb/articles/{id}/translations/{locale}/draft", auth.PermissionSession},
 		// What readers searched for on the help center.
 		{http.MethodGet, "/api/v1/kb/searches/report", auth.PermissionSession},
+		// Knowledge gaps: what readers asked for and did not find.
+		{http.MethodGet, "/api/v1/kb/gaps", auth.PermissionSession},
+		{http.MethodGet, "/api/v1/kb/gaps/{id}", auth.PermissionSession},
+		{http.MethodPatch, "/api/v1/kb/gaps/{id}", auth.PermissionSession},
 	}
 }
 
