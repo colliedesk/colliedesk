@@ -6,6 +6,7 @@ import type { IconName } from './editor/icons';
 import { kbMessages } from './kb-messages';
 import { mediaMessages } from './media-messages';
 import { ReviewsTab } from './reviews-tab';
+import { gapsMessages } from './gaps-messages';
 import { searchesMessages } from './searches-messages';
 import { templateMessages } from './template-messages';
 import { translationMessages } from './translation-messages';
@@ -166,7 +167,7 @@ export function KBToast({ text, undo, onUndo, onDismiss }: { text: string; undo?
 }
 
 interface HeadProps {
-  current: 'articles' | 'media' | 'languages' | 'templates' | 'reviews' | 'searches' | 'settings';
+  current: 'articles' | 'media' | 'languages' | 'templates' | 'reviews' | 'searches' | 'gaps' | 'settings';
   heading: string;
   // articles counts the live articles, from the collections; the Media tab has no count the API gives.
   articles?: number;
@@ -191,6 +192,7 @@ export function KBHead({ current, heading, articles, actions }: HeadProps) {
         {holds('kb_articles:read') && <a href="/knowledge/templates" aria-current={current === 'templates' ? 'page' : undefined}>{templateMessages.templatesTab}</a>}
         {holds('kb_articles:read') && <ReviewsTab current={current === 'reviews'} />}
         {holds('kb_articles:read') && <a href="/knowledge/searches" aria-current={current === 'searches' ? 'page' : undefined}>{searchesMessages.searchesTab}</a>}
+        {holds('kb_articles:read') && <a href="/knowledge/gaps" aria-current={current === 'gaps' ? 'page' : undefined}>{gapsMessages.gapsTab}</a>}
         {holds('help_center:read') && <a href="/knowledge/settings" aria-current={current === 'settings' ? 'page' : undefined}>{kbMessages.settingsTab}</a>}
       </nav>
       {actions && <div className="kb-head-actions">{actions}</div>}

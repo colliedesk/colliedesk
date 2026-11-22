@@ -43,6 +43,8 @@ func writeKBError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "kb_limit", err.Error()+".")
 	case errors.Is(err, domain.ErrKBArticleNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The article was not found.")
+	case errors.Is(err, domain.ErrKBGapNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "The knowledge gap was not found. GET /api/v1/kb/gaps lists them.")
 	case errors.Is(err, domain.ErrKBArticleVersionNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The article has no version with that number.")
 	case errors.Is(err, domain.ErrKBCollectionNotFound):

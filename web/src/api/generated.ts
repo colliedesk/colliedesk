@@ -4197,6 +4197,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The knowledge gaps: what readers asked for and did not find, grouped by their words. A gap collects signals: a help center search that found no article (`search_no_result`), a "No" vote with its "What was missing?" line (`vote_no`), a help chat handed off to a person (`chat_handoff`), a help chat answer that used no article or was rated not helpful (`chat_unanswered`) and a resolved conversation no article title matches (`recurring_topic`, read nightly in workspaces with 20 or more resolved in 30 days). A signal joins a gap within a minute. The list is ranked by `recent_askers` (distinct askers in the last 30 days), then by `last_seen`. Open gaps by default; `status` and `kind` filter. `GET /api/v1/kb/gaps/{id}` lists a gap's signals; `PATCH` links it to an article or dismisses it. */
+        get: operations["listKBGaps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/gaps/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description One knowledge gap with its newest 100 signals, newest first. Signal text is masked (no email address, no run of 6 or more digits) and nothing tells the askers apart. */
+        get: operations["getKBGap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Mark the gap fixed by an article (`fixed_by_article_id`, an article of the workspace outside the trash; `status` may be left out), dismiss it (`status: dismissed`: it leaves the open list and keeps counting) or open it again (`status: open`, which also undoes a fix made automatically when a matching article was published). Opening or dismissing clears the article. A fixed gap opens again by itself when it is asked for more than 7 days after the fix. An article that is not in the workspace is 404. */
+        patch: operations["updateKBGap"];
+        trace?: never;
+    };
     "/api/v1/kb/articles/trash": {
         parameters: {
             query?: never;
@@ -9202,6 +9239,52 @@ export interface components {
             no_results: components["schemas"]["KBSearchTerm"][];
             /** @description The most searched words that listed articles of which the reader opened none. */
             nothing_opened: components["schemas"]["KBSearchTerm"][];
+        };
+        /** @enum {string} */
+        KBGapSignalKind: "search_no_result" | "vote_no" | "chat_handoff" | "chat_unanswered" | "recurring_topic";
+        /** @description What readers asked for and did not find, grouped by their words. */
+        KBGap: {
+            /** Format: uuid */
+            id: string;
+            /** @description The most common words of its signals, the newest on a tie, masked: "[email removed]" and "[number removed]" replace an email address and a run of 6 or more digits. */
+            title: string;
+            /** @enum {string} */
+            status: "open" | "fixed" | "dismissed";
+            /** @description The kinds of the gap's signals. */
+            kinds: components["schemas"]["KBGapSignalKind"][];
+            /** @description Distinct askers since the first signal. */
+            askers: number;
+            /** @description Distinct askers in the last 30 days; the rank. */
+            recent_askers: number;
+            /** Format: date-time */
+            first_seen: string;
+            /** Format: date-time */
+            last_seen: string;
+            /** @description The article that answers the gap; null unless it is fixed by one. */
+            fixed_by_article: null | {
+                /** Format: uuid */
+                id: string;
+                title: string;
+            };
+            /** @description True when a matching article was published and no person changed the gap since. */
+            fixed_automatically: boolean;
+            /** @description The team member who last changed the status; null when it never changed, changed by itself or they were removed. */
+            status_changed_by: null | components["schemas"]["SavedReplyPerson"];
+            /** Format: date-time */
+            status_changed_at: string | null;
+        };
+        KBGapDetail: components["schemas"]["KBGap"] & {
+            /** @description Every signal of the gap; `signals` lists the newest 100. */
+            signal_count: number;
+            signals: components["schemas"]["KBGapSignal"][];
+        };
+        /** @description One thing a reader could not find. Which reader is never shown. */
+        KBGapSignal: {
+            kind: components["schemas"]["KBGapSignalKind"];
+            /** @description What the reader searched, wrote or asked, masked. */
+            text: string;
+            /** Format: date-time */
+            created_at: string;
         };
         /** @description The searches of the window whose words are the same once case and accents are ignored. */
         KBSearchTerm: {
@@ -21413,6 +21496,96 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listKBGaps: {
+        parameters: {
+            query?: {
+                status?: "open" | "fixed" | "dismissed";
+                /** @description Only the gaps with a signal of this kind. */
+                kind?: components["schemas"]["KBGapSignalKind"];
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The gaps, highest rank first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBGap"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getKBGap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The gap */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBGapDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateKBGap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    status?: "open" | "fixed" | "dismissed";
+                    /** Format: uuid */
+                    fixed_by_article_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The changed gap */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBGap"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listTrashedKBArticles: {

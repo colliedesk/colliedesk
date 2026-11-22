@@ -907,6 +907,42 @@ Searches are kept for 180 days, then deleted; a server operator can change this 
 [export](export.md) includes them. An AI agent reads the same report with the MCP tool
 `colliedesk_kb_search_report`.
 
+## Gaps
+
+**Knowledge → Gaps** (with the right to read articles, `kb_articles:read`) lists what readers asked
+for and did not find, grouped by their words. The gaps with the most distinct askers in the last 30
+days come first. Each row shows the words, how many people asked in 30 days and in all, the kinds of
+signal and when someone last asked. A gap gathers:
+
+- **Searched, no result**: a help center search that listed nothing.
+- **Voted No**: a "No" vote on an article, with its "What was missing?" line when the reader wrote one.
+- **Chat handed to a person**: a help chat handed to a person on your team.
+- **Chat not answered**: a help chat answer that used no article, or that the reader rated not helpful.
+- **Recurring topic**: a conversation resolved in the last 30 days whose subject no published
+  article title matches. It is looked for once a day, only in a workspace that resolved at least 20
+  conversations in 30 days, and it uses no AI.
+
+A signal shows within a minute. Words that differ only in case or accents join the same gap, and so
+do close wordings ("how to export invoices" and "export invoices"). The gap's title is its most
+common wording. Emails and numbers of 6 digits or more are replaced with "[email removed]" and
+"[number removed]" before a signal is kept. Who asked is never shown, to you or to an AI agent.
+
+Choose **Status** (Open, Fixed, Dismissed) and **Kind** to filter the list. Open a row to read what
+each reader searched, wrote or asked, newest first. With the right to edit articles
+(`kb_articles:update`):
+
+- **Link to an article** marks the gap fixed by a published article (the help center must be on).
+  A fixed gap that people still ask about more than 7 days after the fix opens again by itself.
+- **Dismiss** takes the gap off the open list. It keeps counting, and you can open it again.
+- **Open again** puts a fixed or dismissed gap back on the open list.
+
+**Undo** in the message after a change opens the gap again. Publishing an article whose title
+matches an open gap marks that gap fixed by it at once; the row says it was fixed automatically.
+
+A deleted help chat takes its signals with it. Gaps are not in the [export](export.md) yet; the
+searches, votes and chats they come from are. An AI agent works the same list with the MCP tools
+`colliedesk_kb_gaps_list`, `colliedesk_kb_gap_get` and `colliedesk_kb_gap_update`.
+
 ## Keep an article away from AI
 
 AI features (reply drafts and triage suggestions, once an admin turns them on) find the published

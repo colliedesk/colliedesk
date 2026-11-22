@@ -151,6 +151,14 @@ const (
 	// queued for AI retrieval to build. Only workspace ids leave the transaction; each is built in its
 	// own scope.
 	PrivilegeAIRetrievalQueue Privilege = "ai-retrieval-queue"
+	// PrivilegeKBGapQueue lists the workspaces that have knowledge gap signals queued for the gap
+	// worker. Only workspace ids leave the transaction; each workspace's signals are read, masked and
+	// grouped in its own scope.
+	PrivilegeKBGapQueue Privilege = "kb-gap-queue"
+	// PrivilegeKBGapTopics lists the workspaces that resolved enough conversations in the last 30 days
+	// to look for recurring topics no article answers. Only workspace ids leave the transaction; each
+	// workspace's conversations and articles are compared in its own scope.
+	PrivilegeKBGapTopics Privilege = "kb-gap-topics"
 	// PrivilegeResultsClaim adds a results_state row for every workspace without one and leases the
 	// workspaces whose results page numbers are due. Only workspace ids leave the transaction; each is
 	// computed and stored in its own scope.

@@ -46,6 +46,9 @@ type contractKB struct {
 	helpCenterID, deleteHelpCenterID string
 }
 
+// contractMissingGap is a gap id of no workspace: the contract workspace has no signals to group.
+const contractMissingGap = "00000000-0000-4000-8000-000000000346"
+
 // contractVideoPart is the part the contract case sends: the whole of a tiny upload.
 var contractVideoPart = []byte("ten bytes!")
 
@@ -195,6 +198,9 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/kb/articles/export.csv":                          {"/api/v1/kb/articles/export.csv?status=draft&tag=contract", nil, admin, 200, ""},
 		"GET /api/v1/kb/tags":                                         {"/api/v1/kb/tags", nil, admin, 200, ""},
 		"GET /api/v1/kb/searches/report":                              {"/api/v1/kb/searches/report", nil, admin, 200, ""},
+		"GET /api/v1/kb/gaps":                                         {"/api/v1/kb/gaps?status=open&kind=vote_no", nil, admin, 200, ""},
+		"GET /api/v1/kb/gaps/{id}":                                    {"/api/v1/kb/gaps/" + contractMissingGap, nil, admin, 404, ""},
+		"PATCH /api/v1/kb/gaps/{id}":                                  {"/api/v1/kb/gaps/" + contractMissingGap, map[string]any{"status": "dismissed"}, admin, 404, ""},
 		"GET /api/v1/kb/articles/{id}":                                {"/api/v1/kb/articles/" + kb.articleID, nil, admin, 200, ""},
 		"PATCH /api/v1/kb/articles/{id}":                              {"/api/v1/kb/articles/" + kb.articleID, map[string]any{"updated_at": kb.articleSeen, "status": "published"}, admin, 200, ""},
 		"DELETE /api/v1/kb/articles/{id}":                             {"/api/v1/kb/articles/" + kb.deleteArticleID + "?updated_at=" + url.QueryEscape(kb.deleteArticleSeen), nil, admin, 204, ""},

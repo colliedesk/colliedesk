@@ -1,0 +1,41 @@
+import type { KBGapKind, KBGapStatus } from './gaps-api';
+
+// The words of Knowledge → Gaps: what readers asked for and did not find.
+const count = (n: number, one: string, many: string) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
+
+export const gapsMessages = {
+  gapsTab: 'Gaps',
+  heading: 'Knowledge gaps',
+  lead: 'What readers asked for and did not find.',
+  tip: 'Gaps are grouped by their words; the most askers in 30 days come first. A gap gathers help center searches with no result, "No" votes with what was missing, and help chats handed to a person. An email address or a long number is removed before it is kept. Who asked is never shown.',
+  status: 'Status',
+  kind: 'Kind',
+  allKinds: 'All kinds',
+  statuses: { open: 'Open', fixed: 'Fixed', dismissed: 'Dismissed' } satisfies Record<KBGapStatus, string>,
+  listLabel: (status: KBGapStatus) => `${gapsMessages.statuses[status]} gaps`,
+  kinds: {
+    search_no_result: 'Searched, no result', vote_no: 'Voted No', chat_handoff: 'Chat handed to a person',
+    chat_unanswered: 'Chat not answered', recurring_topic: 'Recurring topic',
+  } satisfies Record<KBGapKind, string>,
+  kindsLabel: 'Kinds',
+  stats: (recent: number, all: number, lastSeen: string) => `${count(recent, 'asker', 'askers')} in 30 days · ${all.toLocaleString('en')} in all · last seen ${lastSeen}`,
+  empty: {
+    open: 'No open gaps. A help center search with no result, a "No" vote or a help chat handed to a person shows here within a minute.',
+    fixed: 'No gap is fixed yet. Link an open gap to the article that answers it.',
+    dismissed: 'No gap is dismissed.',
+  } satisfies Record<KBGapStatus, string>,
+  asked: (title: string) => `What readers asked: ${title}`,
+  more: (shown: number, all: number) => `The newest ${shown.toLocaleString('en')} of ${count(all, 'signal', 'signals')}.`,
+  link: 'Link to an article',
+  dismiss: 'Dismiss',
+  reopen: 'Open again',
+  fixedBy: 'Fixed by',
+  fixedAutomatically: 'Fixed when a matching article was published.',
+  fixed: (title: string, article: string) => `${title} is fixed by ${article}.`,
+  dismissed: (title: string) => `${title} is dismissed.`,
+  reopened: (title: string) => `${title} is open again.`,
+  undo: 'Undo',
+  loadFailed: 'The gaps could not be loaded.',
+  signalsFailed: 'What readers asked could not be loaded.',
+  saveFailed: 'The gap could not be changed. Try again.',
+};
