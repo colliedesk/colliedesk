@@ -126,22 +126,27 @@ func TestHelpCenterSettingsWithoutAnIDActOnThePrimary(t *testing.T) {
 	}
 
 	type theme struct {
-		Theme struct {
-			Colors struct {
-				Primary *string `json:"primary"`
-			} `json:"colors"`
-		} `json:"theme"`
+		Colors struct {
+			Primary *string `json:"primary"`
+		} `json:"colors"`
 	}
 	kbCall(t, f.api, http.MethodPut, "/api/v1/help-center/theme?help_center_id="+f.hardware,
 		map[string]any{"colors": map[string]any{"primary": "#aa3300"}, "custom_css": nil}, f.admin, http.StatusOK, nil)
 	var mainTheme, hardwareTheme theme
 	kbCall(t, f.api, http.MethodGet, "/api/v1/help-center/theme", nil, f.admin, http.StatusOK, &mainTheme)
 	kbCall(t, f.api, http.MethodGet, "/api/v1/help-center/theme?help_center_id="+f.hardware, nil, f.admin, http.StatusOK, &hardwareTheme)
-	if mainTheme.Theme.Colors.Primary != nil || hardwareTheme.Theme.Colors.Primary == nil || *hardwareTheme.Theme.Colors.Primary != "#aa3300" {
+	if mainTheme.Colors.Primary != nil || hardwareTheme.Colors.Primary == nil || *hardwareTheme.Colors.Primary != "#aa3300" {
 		t.Fatalf("main %+v, hardware %+v", mainTheme, hardwareTheme)
 	}
-	wantPage(t, f.at(hostHardware, "/"), http.StatusOK, []string{"#aa3300"}, nil)
-	wantPage(t, f.at(hostMain, "/"), http.StatusOK, nil, []string{"#aa3300"})
+	// The colors reach a page through its brand sheet: the hardware help center has one, the primary none.
+	sheet := brandSheet(t, f.at(hostHardware, "/"))
+	if sheet == "" {
+		t.Fatal("the hardware help center's home links no brand sheet")
+	}
+	wantPage(t, f.at(hostHardware, sheet), http.StatusOK, []string{"#aa3300"}, nil)
+	if other := brandSheet(t, f.at(hostMain, "/")); other != "" {
+		t.Errorf("the primary help center links brand sheet %s", other)
+	}
 
 	type domainView struct {
 		Hostname *string `json:"hostname"`
