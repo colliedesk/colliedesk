@@ -471,6 +471,13 @@
     "text": "since is an RFC 3339 time.",
     "message": "since is an RFC 3339 time."
   },
+  "kb_search_retention_invalid": {
+    "text": "kb_searches.retention_days must be a whole number of days from 1 to {max}",
+    "params": {
+      "max": 3650
+    },
+    "message": "kb_searches.retention_days must be a whole number of days from 1 to 3650"
+  },
   "kb_video_max_invalid": {
     "text": "kb_video.max_bytes must be a whole number of bytes above zero",
     "message": "kb_video.max_bytes must be a whole number of bytes above zero"

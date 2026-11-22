@@ -119,7 +119,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	p.operators = auth.NewOperatorService(db, configStore.Keys(), consoleBase(origin), func() bool { return hot.Load().RequireTOTP })
 	processCtx, stopProcess := context.WithCancel(ctx)
 	defer stopProcess()
-	p.Go(processCtx, func(ctx context.Context) { sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage)) })
+	p.Go(processCtx, func(ctx context.Context) {
+		sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage), func() time.Duration { return hot.Load().KBSearchRetention })
+	})
 	p.Go(processCtx, func(ctx context.Context) {
 		sweepMailImageCache(ctx, store.NewWithDB(db).WithObjects(storage), func() int64 { return hot.Load().MailImageCacheBytes })
 	})
@@ -263,8 +265,9 @@ func recheckHelpCenterDomainsDaily(ctx context.Context, api *httpapi.Server) {
 // sweepDaily runs the daily clean-up at start and then daily until ctx ends: it clears the call and
 // answer of agent requests decided more than 90 days ago (the rows stay as the record of who asked and
 // who decided), erases the reasons of AI intake decisions older than 90 days, and deletes for good the saved replies and knowledge base articles and collections that
-// have been in the trash for 30 days, and knowledge base images no article has linked for 30 days.
-func sweepDaily(ctx context.Context, data *store.Store) {
+// have been in the trash for 30 days, knowledge base images no article has linked for 30 days, and help
+// center searches older than kbSearchRetention (kb_searches.retention_days).
+func sweepDaily(ctx context.Context, data *store.Store, kbSearchRetention func() time.Duration) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -294,6 +297,7 @@ func sweepDaily(ctx context.Context, data *store.Store) {
 		} else if removed > 0 {
 			slog.Info("removed the files of reply drafts that were sent, stopped or ended more than 90 days ago", "count", removed)
 		}
+		deleteOldKBSearches(ctx, data, kbSearchRetention())
 		backfillKBMedia(ctx, data)
 		select {
 		case <-ctx.Done():

@@ -55,6 +55,7 @@ export const fields: Record<string, FieldWords> = {
   'ai.allow_private_base_urls': { label: 'Cho workspace dùng địa chỉ AI nội bộ' },
   'mail_image_cache.max_bytes': { label: 'Bộ nhớ đệm ảnh trong email' },
   'kb_video.max_bytes': { label: 'Video cơ sở tri thức lớn nhất', help: 'Reverse proxy của bạn phải nhận được từng phần 8 MiB.' },
+  'kb_searches.retention_days': { label: 'Giữ lượt tìm kiếm trên trung tâm trợ giúp (ngày)', help: 'Lượt tìm cũ hơn bị xoá mỗi ngày.' },
   'problem_report.workspace': { label: 'Báo lỗi gửi tới workspace', help: 'Địa chỉ (slug) của một workspace; để trống thì không gửi gì.' },
   'telemetry.enabled': { label: 'Báo cáo sử dụng' },
   'operator.require_totp': { label: 'Bắt buộc ứng dụng xác thực', help: 'Chỉ tắt được trên máy chủ, không bao giờ trên cloud hosted.' },

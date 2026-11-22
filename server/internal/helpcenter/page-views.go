@@ -15,8 +15,7 @@ func (s *Site) viewed(request *http.Request, v view, kind pageview.Kind, data pa
 	if s.config.PageViews == nil {
 		return
 	}
-	team := s.config.Team != nil && s.config.Team(request)
-	if !pageview.IsReader(pageview.Visit{Method: request.Method, Status: http.StatusOK, Header: request.Header, Preview: team}) {
+	if !s.reader(request) {
 		return
 	}
 	address := data.Canonical

@@ -61,6 +61,7 @@ export const codes: CodeTable = {
   billing_alert_email_invalid: 'billing.alert_email phải là một địa chỉ email',
   mail_image_cache_invalid: 'mail_image_cache.max_bytes phải là số byte nguyên lớn hơn 0',
   kb_video_max_invalid: 'kb_video.max_bytes phải là số byte nguyên lớn hơn 0',
+  kb_search_retention_invalid: 'kb_searches.retention_days phải là số ngày nguyên từ 1 đến {max}',
   test_polar_needs_settings: 'Hãy đặt token Polar, webhook secret của nó và các sản phẩm Team và Founding trước.',
   test_polar_refused: 'Polar từ chối: {detail}',
   test_polar_archived: 'Sản phẩm {product} đã bị lưu trữ trên Polar: không ai mua được.',

@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
@@ -52,6 +53,7 @@ type builtConfig struct {
 	SignupHashKey          string
 	MailImageCacheBytes    int64
 	KBVideoMaxBytes        int64
+	KBSearchRetention      time.Duration
 	Retention              retentionSettings
 	ProblemReportWorkspace string
 	BillingAlertEmail      string
@@ -104,6 +106,8 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 	built.MailImageCacheBytes, err = mailImageCacheBytesFromEnv(getenv)
 	keep(err)
 	built.KBVideoMaxBytes, err = kbVideoMaxBytesFromEnv(getenv)
+	keep(err)
+	built.KBSearchRetention, err = kbSearchRetentionFromEnv(getenv)
 	keep(err)
 	built.Retention, err = retentionSettingsFromEnv(getenv)
 	keep(err)

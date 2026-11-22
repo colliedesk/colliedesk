@@ -15732,6 +15732,7 @@ components:
         - internal_signup_email_invalid
         - invalid_limit
         - invalid_since
+        - kb_search_retention_invalid
         - kb_video_max_invalid
         - link_expired
         - link_invalid

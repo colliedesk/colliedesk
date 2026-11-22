@@ -95,6 +95,8 @@ type HotSettings struct {
 	ProblemReportWorkspace string
 	KBVideoMaxBytes        int64
 	MailImageCacheBytes    int64
+	// KBSearchRetention is kb_searches.retention_days: the daily job deletes help center searches older.
+	KBSearchRetention time.Duration
 	// RequireTOTP is operator.require_totp: an operator must set up an authenticator to sign in.
 	RequireTOTP bool
 }

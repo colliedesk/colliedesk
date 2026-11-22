@@ -50,6 +50,7 @@ var codeExamples = map[string]configerr.Params{
 	"polar_api_url_invalid":          {"example": "https://api.polar.sh"},
 	"retention_max_invalid":          {"max": 20},
 	"retention_max_range":            {"max": 20},
+	"kb_search_retention_invalid":    {"max": 3650},
 	"test_polar_refused":             {"detail": "401 Unauthorized"},
 	"test_polar_archived":            {"product": "prod_123"},
 	"feature_switch_invalid":         {"key": "features.gmail"},
