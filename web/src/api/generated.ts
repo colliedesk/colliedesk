@@ -5572,7 +5572,7 @@ export interface paths {
         get: operations["getHelpCenterByID"];
         put?: never;
         post?: never;
-        /** @description Delete a help center that is not the primary (409 `primary_help_center` for the primary). Its pages go off line at once and its custom domain is released, so another help center can claim the host name; its collections and articles stay, and keep showing on the other help centers they are placed on. It cannot be restored: make a new one and place the collections on it again. Needs `help_center:update` and `kb_articles:publish`. */
+        /** @description Delete a help center that is not the primary (409 `primary_help_center` for the primary). Its pages go off line at once and its custom domain is released, so another help center can claim the host name; its collections and articles stay, and keep showing on the other help centers they are placed on. It cannot be restored: make a new one and place the collections on it again. Needs `help_center:update`; one that serves on a custom domain needs `kb_articles:publish` too. */
         delete: operations["deleteHelpCenter"];
         options?: never;
         head?: never;

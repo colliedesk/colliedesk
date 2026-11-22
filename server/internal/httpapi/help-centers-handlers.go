@@ -10,7 +10,7 @@ import (
 
 // A workspace has a primary help center, served at its own address, and up to domain.MaxHelpCenters
 // minus one more, each served below the primary's address at /<handle> or on a custom domain of its
-// own (docs/user/help-center.md, "Several help centers").
+// own (docs/user/knowledge-base.md, "Several help centers").
 
 // addressHelpCenters fills in the public address of each help center: its active custom domain while
 // the workspace's help center is paid for, else the primary's address, below /<handle> for the others.

@@ -40,7 +40,7 @@ func helpCenterCreateSpec() Spec {
 			`A workspace has at most 20 help centers, the primary included (help_center_limit). Remove it with colliedesk_help_center_delete.`,
 		REST: []string{"POST /api/v1/help-centers"},
 		Input: `{"type":"object","additionalProperties":false,"required":["name","handle","locale"],"properties":{` +
-			`"name":{"type":"string","minLength":1,"maxLength":200,"description":"What the team calls it in the app."},"handle":{"type":"string","minLength":1,"maxLength":40},` +
+			`"name":{"type":"string","minLength":1,"maxLength":100,"description":"What the team calls it in the app."},"handle":{"type":"string","minLength":1,"maxLength":40},` +
 			`"title":{"type":"string","maxLength":200,"description":"Shown to readers; empty uses the workspace name."},"locale":{"type":"string","minLength":2,"maxLength":35},` +
 			`"enabled":{"type":"boolean"},` + kbHelpCenterShowTagsProperty + `}}`,
 		Output: helpCenterOutput,
