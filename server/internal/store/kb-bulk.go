@@ -70,15 +70,35 @@ type KBBulkOperation struct {
 // id this workspace has no action for, an action undone already and one older than the undo window.
 // The claim comes first, so two undos at once never both put the articles back.
 func (s *Store) ClaimKBBulkUndo(ctx context.Context, workspaceID string, actor Actor, id string) (KBBulkOperation, error) {
+	return s.kbBulkUndo(ctx, workspaceID, id, func(tx pgx.Tx, operation *KBBulkOperation) error {
+		return tx.QueryRow(ctx, `UPDATE kb_bulk_operations SET undone_at=clock_timestamp(), undone_by_agent_id=$3,
+			undone_by_token_id=(SELECT t.id FROM sessions t WHERE t.workspace_id=$1 AND t.id=$4)
+			WHERE workspace_id=$1 AND id=$2 RETURNING undone_at`, workspaceID, id, optionalID(actor.AgentID), optionalID(actor.TokenID)).Scan(&operation.UndoneAt)
+	})
+}
+
+// KBBulkUndoable returns what undoing the bulk action id would put back without claiming it, so a caller
+// who may not do all of it is refused while the action stays undoable. It refuses what ClaimKBBulkUndo does.
+func (s *Store) KBBulkUndoable(ctx context.Context, workspaceID, id string) (KBBulkOperation, error) {
+	return s.kbBulkUndo(ctx, workspaceID, id, nil)
+}
+
+// kbBulkUndo reads the bulk action id and its entries, refusing one that is missing, undone or too old.
+// claim, when given, runs after that check with the action's row locked.
+func (s *Store) kbBulkUndo(ctx context.Context, workspaceID, id string, claim func(pgx.Tx, *KBBulkOperation) error) (KBBulkOperation, error) {
 	if !savedReplyID.MatchString(id) {
 		return KBBulkOperation{}, domain.ErrKBBulkOperationNotFound
+	}
+	lock := ""
+	if claim != nil {
+		lock = " FOR UPDATE"
 	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (KBBulkOperation, error) {
 		operation := KBBulkOperation{ID: id}
 		var undone *time.Time
 		var expired bool
 		err := tx.QueryRow(ctx, `SELECT action, undone_at, created_at <= clock_timestamp() - make_interval(secs => $3)
-			FROM kb_bulk_operations WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, workspaceID, id, domain.KBBulkUndoWindow.Seconds()).Scan(&operation.Action, &undone, &expired)
+			FROM kb_bulk_operations WHERE workspace_id=$1 AND id=$2`+lock, workspaceID, id, domain.KBBulkUndoWindow.Seconds()).Scan(&operation.Action, &undone, &expired)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return operation, domain.ErrKBBulkOperationNotFound
@@ -89,10 +109,10 @@ func (s *Store) ClaimKBBulkUndo(ctx context.Context, workspaceID string, actor A
 		case expired:
 			return operation, domain.ErrKBBulkExpired
 		}
-		if err := tx.QueryRow(ctx, `UPDATE kb_bulk_operations SET undone_at=clock_timestamp(), undone_by_agent_id=$3,
-			undone_by_token_id=(SELECT t.id FROM sessions t WHERE t.workspace_id=$1 AND t.id=$4)
-			WHERE workspace_id=$1 AND id=$2 RETURNING undone_at`, workspaceID, id, optionalID(actor.AgentID), optionalID(actor.TokenID)).Scan(&operation.UndoneAt); err != nil {
-			return operation, err
+		if claim != nil {
+			if err := claim(tx, &operation); err != nil {
+				return operation, err
+			}
 		}
 		rows, err := tx.Query(ctx, `SELECT article_id::text, before, after_token, undo, COALESCE(ref,'') FROM kb_bulk_operation_articles
 			WHERE workspace_id=$1 AND operation_id=$2 ORDER BY ordinal`, workspaceID, id)

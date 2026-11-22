@@ -163,7 +163,9 @@ article gets its own entry in its [history](#history).
 The message after the change counts the articles changed, the ones that already were as asked, and the
 ones refused, with the reason for each. **Undo** in that message puts the articles back, for 10 minutes
 and once. An article someone changed after the bulk action is left as it is and named in the message,
-so Undo never overwrites newer work. An approval, and a publish that replaced an article's published
+so Undo never overwrites newer work. When putting the articles back needs a permission you do not hold
+(publish, to put a published article back on the help center or show it to more people again), Undo
+changes nothing and says so, and a teammate who holds it can still undo within the 10 minutes. An approval, and a publish that replaced an article's published
 text, cannot be undone this way: its history keeps the earlier version.
 
 ## Write an article

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -31,6 +32,20 @@ func (a *API) undoKBBulkOperation(response http.ResponseWriter, request *http.Re
 	id := request.PathValue("id")
 	a.runOnce(response, request, http.StatusOK, kbBulkUndoOperation, []string{id}, func(ctx context.Context) (any, error) {
 		ctx = context.WithoutCancel(ctx)
+		// A caller who may not put back every article is refused before the claim, so the action stays
+		// undoable for a teammate who may. Any other error is left to that article's own line below.
+		pending, err := a.store.KBBulkUndoable(ctx, who.Workspace.ID, id)
+		if err != nil {
+			writeKBError(response, err)
+			return nil, errAnswered
+		}
+		for _, entry := range pending.Entries {
+			var missing kbBulkPermissionError
+			if errors.As(a.kbUndoAllowed(ctx, who, entry), &missing) {
+				a.writePermissionMissing(response, request, who, missing.permission)
+				return nil, errAnswered
+			}
+		}
 		operation, err := a.store.ClaimKBBulkUndo(ctx, who.Workspace.ID, savedReplyActor(ctx, who), id)
 		if err != nil {
 			writeKBError(response, err)
@@ -57,19 +72,23 @@ func (a *API) undoKBBulkOperation(response http.ResponseWriter, request *http.Re
 	})
 }
 
-// kbUndoOne puts one article back as entry says, refusing what the caller may not do by hand and an
-// article whose token moved since the bulk action.
-func (a *API) kbUndoOne(ctx context.Context, who auth.Principal, entry store.KBBulkEntry) error {
-	ws, actor, id := who.Workspace.ID, savedReplyActor(ctx, who), entry.ArticleID
-	var seen time.Time
-	if entry.AfterToken != nil {
-		seen = *entry.AfterToken
-	}
+// kbBulkBeforeOf reads the fields entry puts back.
+func kbBulkBeforeOf(entry store.KBBulkEntry) (kbBulkBefore, error) {
 	var before kbBulkBefore
 	if len(entry.Before) > 0 {
 		if err := json.Unmarshal(entry.Before, &before); err != nil {
-			return err
+			return before, err
 		}
+	}
+	return before, nil
+}
+
+// kbUndoAllowed refuses with kbBulkPermissionError what putting entry's article back needs and the
+// caller may not do by hand: publish to republish, unpublish or raise visibility, delete to restore.
+func (a *API) kbUndoAllowed(ctx context.Context, who auth.Principal, entry store.KBBulkEntry) error {
+	before, err := kbBulkBeforeOf(entry)
+	if err != nil {
+		return err
 	}
 	need := func(permission string) error {
 		if !who.Can(permission) {
@@ -77,18 +96,53 @@ func (a *API) kbUndoOne(ctx context.Context, who auth.Principal, entry store.KBB
 		}
 		return nil
 	}
-	setStatus := func(status string) error {
-		if err := need(auth.PermKBArticlesPublish); err != nil {
+	switch entry.Undo {
+	case "update":
+		if before.Visibility != nil {
+			return a.kbBulkMayRaise(ctx, who, entry.ArticleID, *before.Visibility)
+		}
+	case "unpublish", "republish":
+		return need(auth.PermKBArticlesPublish)
+	case "restore":
+		if err := need(auth.PermKBArticlesDelete); err != nil {
 			return err
 		}
+		if before.Status != nil && *before.Status == domain.KBPublished {
+			return need(auth.PermKBArticlesPublish)
+		}
+	}
+	return nil
+}
+
+// kbUndoOne puts one article back as entry says, refusing what the caller may not do by hand and an
+// article changed since the bulk action: its token moved, or its visibility is no longer what the
+// action set (a visibility change leaves the token as it is).
+func (a *API) kbUndoOne(ctx context.Context, who auth.Principal, entry store.KBBulkEntry) error {
+	ws, actor, id := who.Workspace.ID, savedReplyActor(ctx, who), entry.ArticleID
+	var seen time.Time
+	if entry.AfterToken != nil {
+		seen = *entry.AfterToken
+	}
+	if err := a.kbUndoAllowed(ctx, who, entry); err != nil {
+		return err
+	}
+	before, err := kbBulkBeforeOf(entry)
+	if err != nil {
+		return err
+	}
+	setStatus := func(status string) error {
 		_, err := a.store.UpdateKBArticle(ctx, ws, actor, id, seen, store.KBArticleChange{Status: &status})
 		return err
 	}
 	switch entry.Undo {
 	case "update":
-		if before.Visibility != nil {
-			if err := a.kbBulkMayRaise(ctx, who, id, *before.Visibility); err != nil {
+		if before.AfterVisibility != nil {
+			article, err := a.store.GetKBArticle(ctx, ws, id)
+			if err != nil {
 				return err
+			}
+			if article.Visibility != *before.AfterVisibility {
+				return domain.ErrKBChanged
 			}
 		}
 		_, err := a.store.UpdateKBArticle(ctx, ws, actor, id, seen, store.KBArticleChange{CollectionID: before.CollectionID,
@@ -107,14 +161,6 @@ func (a *API) kbUndoOne(ctx context.Context, who auth.Principal, entry store.KBB
 	case "republish":
 		return setStatus(domain.KBPublished)
 	case "restore":
-		if err := need(auth.PermKBArticlesDelete); err != nil {
-			return err
-		}
-		if before.Status != nil && *before.Status == domain.KBPublished {
-			if err := need(auth.PermKBArticlesPublish); err != nil {
-				return err
-			}
-		}
 		_, err := a.store.UndeleteKBArticle(ctx, ws, actor, id, seen)
 		return err
 	}

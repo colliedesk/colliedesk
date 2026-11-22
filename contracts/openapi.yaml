@@ -7067,11 +7067,13 @@ paths:
       x-permission: kb_articles:update
       description: >
         Put back what a bulk action changed, once and within 10 minutes of it. An article changed since
-        the action is left as it is and listed as `not_undone` with 409 `changed_elsewhere`; one that
-        needs a permission the caller lacks (publish, to put a published article back on the help
-        center) is `not_undone` with `permission_missing`. Each article put back gets its own history
-        entry. 404 `not_found` for an id this workspace has no bulk action for, 409 `already_undone` and
-        409 `undo_expired`. A repeat with the same Idempotency-Key answers what the first one got.
+        the action is left as it is and listed as `not_undone` with 409 `changed_elsewhere`. When putting
+        an article back needs a permission the caller lacks (publish, to put a published article back on
+        the help center or raise its visibility; delete, to take it out of the trash), the whole undo is
+        refused with 403 `permission_missing` before anything changes, and the action stays undoable by a
+        teammate who holds it. Each article put back gets its own history entry. 404 `not_found` for an
+        id this workspace has no bulk action for, 409 `already_undone` and 409 `undo_expired`. A repeat
+        with the same Idempotency-Key answers what the first one got.
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
         - {$ref: '#/components/parameters/CreateIdempotencyKey'}

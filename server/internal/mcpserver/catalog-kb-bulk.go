@@ -49,8 +49,8 @@ func kbArticlesBulkUndoSpec() Spec {
 		Name:  "colliedesk_kb_articles_bulk_undo",
 		Title: "Undo a bulk change of knowledge base articles",
 		Description: `Put back what one colliedesk_kb_articles_bulk call changed, once and within ten minutes. ` +
-			`An article changed again since is left as it is and answered not_undone, so undo never overwrites newer work; ` +
-			`putting a published article back on the help center needs kb_articles:publish, as by hand.` + "\n\n" + kbTextNotice,
+			`An article changed since is left as it is (not_undone), never overwritten. ` +
+			`Lacking a permission an article needs (kb_articles:publish, as by hand) refuses it all and keeps it undoable.` + "\n\n" + kbTextNotice,
 		REST:  []string{"POST /api/v1/kb/bulk-operations/{id}/undo"},
 		Input: `{"type":"object","additionalProperties":false,"required":["operation_id"],"properties":{"operation_id":{"type":"string",` + uuid + `,"description":"operation.id of the bulk answer."}}}`,
 		Output: `{"type":"object","required":["operation","counts","results"],"properties":{` +

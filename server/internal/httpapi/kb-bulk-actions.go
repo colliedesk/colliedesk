@@ -20,6 +20,9 @@ type kbBulkBefore struct {
 	AuthorAgentID      *string   `json:"author_agent_id,omitempty"`
 	Tags               *[]string `json:"tags,omitempty"`
 	Status             *string   `json:"status,omitempty"`
+	// AfterVisibility is the visibility the action set. Changing visibility leaves the article's token
+	// as it is, so undo compares this instead to leave a newer change alone.
+	AfterVisibility *string `json:"after_visibility,omitempty"`
 }
 
 // kbBulkRefusal is a refusal that has no store error of its own.
@@ -108,7 +111,7 @@ func (a *API) kbBulkApply(ctx context.Context, who auth.Principal, input kbBulkI
 		if err := a.kbBulkMayRaise(ctx, who, current.ID, input.Visibility); err != nil {
 			return nil, false, err
 		}
-		return update(store.KBArticleChange{Visibility: &input.Visibility}, kbBulkBefore{Visibility: &current.Visibility}, false)
+		return update(store.KBArticleChange{Visibility: &input.Visibility}, kbBulkBefore{Visibility: &current.Visibility, AfterVisibility: &input.Visibility}, false)
 	case "author":
 		if current.AuthorAgentID != nil && *current.AuthorAgentID == input.AuthorAgentID {
 			return nil, false, nil

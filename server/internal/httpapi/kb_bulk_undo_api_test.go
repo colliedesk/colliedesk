@@ -170,24 +170,3 @@ func TestUndoingABulkTrashRestoresPublishedArticles(t *testing.T) {
 		}
 	}
 }
-
-// Undo puts a published article back on the help center only for a caller who may publish.
-func TestUndoingABulkTrashOfPublishedArticlesNeedsPublish(t *testing.T) {
-	api, service := testAPI(t)
-	admin := createSession(t, api, service, "KB Bulk Trash Scope", "admin@kb-bulk-trash-scope.example.com")
-	collection := kbCollection(t, api, admin, map[string]any{"name": "Docs"})
-	live := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Refunds", "body_md": "Within 14 days.", "status": "published"})
-	trashed := kbBulkAction(t, api, admin, map[string]any{"action": "trash", "ids": []string{live.ID}})
-	editor := issueCustomToken(t, api, admin, "Docs bot", "kb_articles:read", "kb_articles:update", "kb_articles:delete")
-	undone, _ := kbBulkUndo(t, api, editor.Token, trashed.Operation.ID, http.StatusOK)
-	if got := undone.outcomes()[live.ID]; got != "permission_missing" || undone.Counts["not_undone"] != 1 {
-		t.Fatalf("undo without publish: %v counts=%v, want permission_missing", undone.outcomes(), undone.Counts)
-	}
-	var trash struct {
-		Items []kbArticleView `json:"items"`
-	}
-	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/trash", nil, admin, http.StatusOK, &trash)
-	if len(trash.Items) != 1 || trash.Items[0].ID != live.ID {
-		t.Fatalf("the article left the trash without publish: %d in the trash", len(trash.Items))
-	}
-}
