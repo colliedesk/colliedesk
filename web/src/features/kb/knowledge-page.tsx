@@ -235,7 +235,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             <a className="button-link kb-export" href={kbApi.exportHref(filter)} download data-tip={listMessages.exportTip}>{listMessages.exportCsv}</a>
           </div>
           {(bulk.count > 0 || bulk.all) && <KBBulkBar count={bulk.count} all={bulk.all} nodes={nodes} meId={me.data?.agent.id} busy={bulk.busy}
-            onSelectAll={bulk.selectAll} onApply={(change) => void bulk.run(change)} onClear={bulk.clear} />}
+            onSelectAll={Object.keys(filter).length > 0 ? bulk.selectAll : undefined} onApply={(change) => void bulk.run(change)} onClear={bulk.clear} />}
           <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span>
             {columns.map((column, index) => <span key={column} data-extra={index > 0 ? 'true' : undefined}>{columnHead(column)}</span>)}<span />{ordered && <span />}</div>
           <div className="kb-list-scroll">

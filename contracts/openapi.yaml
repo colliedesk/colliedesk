@@ -7033,7 +7033,8 @@ paths:
       x-permission: kb_articles:update
       description: >
         Apply one action to up to 500 articles, named by `ids` or by `filter` (the query of
-        GET /api/v1/kb/articles as an object, every page of it; more than 500 matches is 400). `action`
+        GET /api/v1/kb/articles as an object, every page of it; more than 500 matches is 400, and so is a
+        filter with no key that narrows the articles, such as `{}` or only `sort`). `action`
         needs kb_articles:update for move, visibility, author, tags_add, tags_remove and
         send_for_review, kb_articles:publish for approve, publish and unpublish, and kb_articles:delete
         for trash. Each article is answered on its own in `results`, in order: `done`, `unchanged` (it

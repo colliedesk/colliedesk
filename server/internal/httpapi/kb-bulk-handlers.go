@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -69,15 +68,28 @@ func (a *API) bulkKBArticles(response http.ResponseWriter, request *http.Request
 		writeError(response, http.StatusBadRequest, "invalid_request", problem)
 		return
 	}
-	ids, ok := a.kbBulkTargets(response, request, who, input)
-	if !ok {
-		return
+	named := input.IDs
+	var filter *store.KBArticleFilter
+	if len(input.IDs) == 0 {
+		matching, query, ok := kbBulkFilterOf(response, who, input.Filter)
+		if !ok {
+			return
+		}
+		filter, named = &matching, []string{"filter", query}
 	}
 	params := input
 	params.IDs, params.Filter = nil, nil
 	key, _ := json.Marshal(params)
-	a.runOnce(response, request, http.StatusOK, kbArticlesBulkOperation, append([]string{string(key)}, ids...), func(ctx context.Context) (any, error) {
+	a.runOnce(response, request, http.StatusOK, kbArticlesBulkOperation, append([]string{string(key)}, named...), func(ctx context.Context) (any, error) {
 		ctx = context.WithoutCancel(ctx)
+		ids := input.IDs
+		if filter != nil {
+			matches, err := a.kbBulkMatches(ctx, response, who.Workspace.ID, *filter)
+			if err != nil {
+				return nil, err
+			}
+			ids = matches
+		}
 		results := make([]kbBulkItem, 0, len(ids))
 		entries := []store.KBBulkEntry{}
 		counts := map[string]int{"done": 0, "unchanged": 0, "refused": 0}
@@ -92,6 +104,9 @@ func (a *API) bulkKBArticles(response http.ResponseWriter, request *http.Request
 		}
 		answer := map[string]any{"operation": nil, "counts": counts, "results": results}
 		if len(entries) > 0 {
+			// Each article changed in its own transaction, through the same path as the call for it alone, so
+			// a refusal of one keeps the others; the undo record cannot share them. When writing it fails the
+			// changes stay, with no undo: each article's history still has its versions to restore.
 			operation, ran, err := a.store.RecordKBBulkOperation(ctx, who.Workspace.ID, savedReplyActor(ctx, who), input.Action, key, entries)
 			if err != nil {
 				return nil, err
@@ -129,7 +144,7 @@ func (input *kbBulkInput) check() string {
 		}
 	}
 	if (len(input.IDs) == 0) == (len(input.Filter) == 0) {
-		return "Send either ids (1 to 500 articles) or filter (the query of GET /api/v1/kb/articles as an object, {} for every article), not both."
+		return "Send either ids (1 to 500 articles) or filter (the query of GET /api/v1/kb/articles as an object, with at least one key such as collection_id), not both."
 	}
 	sorted := slices.Clone(input.IDs)
 	slices.Sort(sorted)
@@ -137,54 +152,6 @@ func (input *kbBulkInput) check() string {
 		return "ids holds 1 to 500 different article ids."
 	}
 	return ""
-}
-
-// kbBulkTargets is the ids sent, or every live article the filter matches; false when it answered.
-func (a *API) kbBulkTargets(response http.ResponseWriter, request *http.Request, who auth.Principal, input kbBulkInput) ([]string, bool) {
-	if len(input.IDs) > 0 {
-		return input.IDs, true
-	}
-	decoder := json.NewDecoder(bytes.NewReader(input.Filter))
-	decoder.DisallowUnknownFields()
-	var filters kbViewFilters
-	if err := decoder.Decode(&filters); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request",
-			"filter is the query of GET /api/v1/kb/articles as an object, with tag and author as lists; a key it does not know is refused.")
-		return nil, false
-	}
-	if filters.CollectionID != "" && !isUUID(filters.CollectionID) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "collection_id is a collection id; GET /api/v1/kb/collections lists them.")
-		return nil, false
-	}
-	filter, err := kbArticleFilter(filters.query(), who.Workspace.Timezone)
-	if message, bad := isFilterError(err); bad {
-		writeError(response, http.StatusBadRequest, "invalid_request", message)
-		return nil, false
-	}
-	filter.Limit = kbBulkMax
-	items, next, err := a.store.ListKBArticles(request.Context(), who.Workspace.ID, filter)
-	if message, bad := isFilterError(err); bad {
-		writeError(response, http.StatusBadRequest, "invalid_request", message)
-		return nil, false
-	}
-	if err != nil {
-		writeKBError(response, err)
-		return nil, false
-	}
-	if next != "" {
-		writeError(response, http.StatusBadRequest, "invalid_request",
-			"The filter matches more than 500 articles. Narrow it (a collection, a tag, a status) and run the action on each part.")
-		return nil, false
-	}
-	if len(items) == 0 {
-		writeError(response, http.StatusBadRequest, "invalid_request", "No article matches the filter: nothing to change.")
-		return nil, false
-	}
-	ids := make([]string, 0, len(items))
-	for _, item := range items {
-		ids = append(ids, item.ID)
-	}
-	return ids, true
 }
 
 // kbBulkPermissionError is an article that needs a permission the caller lacks, such as publish to take

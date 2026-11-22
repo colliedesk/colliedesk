@@ -22,7 +22,8 @@ interface KBBulkBarProps {
   nodes: TreeNode[];
   meId?: string;
   busy: boolean;
-  onSelectAll: () => void;
+  // Left out with no search or filter: the server refuses a filter that keeps every article.
+  onSelectAll?: () => void;
   onApply: (change: KBBulkChange) => void;
   onClear: () => void;
 }
@@ -45,7 +46,7 @@ export function KBBulkBar({ count, all, nodes, meId, busy, onSelectAll, onApply,
   return (
     <div className="bulk-bar kb-bulk-bar" role="group" aria-label={m.bar} onKeyDown={clearOnEscape}>
       <strong className="bulk-count">{all ? m.allMatching : m.selected(count)}</strong>
-      {!all && <button type="button" className="link-action" data-tip={m.selectAllMatchingTip} disabled={busy} onClick={onSelectAll}>{m.selectAllMatching}</button>}
+      {!all && onSelectAll && <button type="button" className="link-action" data-tip={m.selectAllMatchingTip} disabled={busy} onClick={onSelectAll}>{m.selectAllMatching}</button>}
       <div className="bulk-actions">
         <ActionMenu label={m.move} icon={<ArrowRightIcon />} disabled={busy} onApply={onApply}>
           {(apply) => nodes.map((node) => <button type="button" key={node.collection.id}

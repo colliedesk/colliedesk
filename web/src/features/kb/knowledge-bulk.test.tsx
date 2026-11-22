@@ -93,3 +93,17 @@ test('the actions follow the permissions: no publish without kb_articles:publish
   await screen.findByRole('link', { name: /Invoices/ });
   expect(screen.queryByRole('checkbox', { name: 'Select Invoices' })).not.toBeInTheDocument();
 });
+
+test('with no search or filter there is no select all matching: one click must not change every article', async () => {
+  serve(base);
+  open({});
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Invoices' }));
+  expect(within(screen.getByRole('group', { name: 'Selected articles' }))
+    .queryByRole('button', { name: 'Select all matching articles' })).not.toBeInTheDocument();
+  cleanup();
+  serve(base);
+  open({ status: 'draft' });
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Invoices' }));
+  expect(within(screen.getByRole('group', { name: 'Selected articles' }))
+    .getByRole('button', { name: 'Select all matching articles' })).toBeInTheDocument();
+});

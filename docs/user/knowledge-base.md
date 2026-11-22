@@ -146,7 +146,8 @@ and inbox views are kept apart: each list shows only its own, and a name may be 
 
 Tick the box at the start of each article you want to change. A bar above the list says how many are
 selected. **Select all matching articles** selects every article the search and filters keep, on every
-page, up to 500. Then choose what to do:
+page, up to 500; it shows once a search or filter is set, so one click never changes the whole knowledge
+base. Then choose what to do:
 
 - **Move to collection**: the article's main collection; its other collections stay.
 - **Visibility**, **Credit to** (the author), **Add tag** (one the articles have, or type a new one) and

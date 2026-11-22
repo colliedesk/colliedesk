@@ -21,7 +21,7 @@ func kbArticlesBulkSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_articles_bulk",
 		Title: "Change many knowledge base articles at once",
-		Description: `Apply one action to up to 500 articles: ids, or filter (the filters of colliedesk_kb_articles_search; {} for every article), never both. ` +
+		Description: `Apply one action to up to 500 articles: ids, or filter (the filters of colliedesk_kb_articles_search, not empty), never both. ` +
 			`Actions: move (collection_id), visibility, author (author_agent_id), tags_add and tags_remove (tags), send_for_review (reviewer_ids, note), approve (note), publish, unpublish, trash. ` +
 			`approve, publish and unpublish need kb_articles:publish, trash needs kb_articles:delete, and an article that would leave or join the help center needs kb_articles:publish too. ` +
 			`Each article is answered on its own: done, unchanged (it already was so) or refused with the error the call for it alone gives, such as approval_required. ` +
