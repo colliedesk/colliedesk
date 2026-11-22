@@ -188,13 +188,33 @@ SELECT secure_help_center_table('kb_media',
     ' OR id IN (SELECT media_id FROM kb_article_attachments)'
     ' OR id IN (SELECT logo_media_id FROM help_centers)'
     ' OR id IN (SELECT favicon_media_id FROM help_centers)', 'SELECT');
+-- An old helpdesk address of an imported item leads to the page it became: the ledger rows whose
+-- article or collection this help center shows, and only the columns that find it, never the
+-- import's errors or source data.
+SELECT secure_help_center_table('import_items',
+    'target_id IN (SELECT id FROM kb_articles)'
+    ' OR target_id IN (SELECT id FROM kb_collections)', 'SELECT');
+DO $$
+BEGIN
+    EXECUTE format('REVOKE SELECT ON import_items FROM %I', reader_role());
+    EXECUTE format('GRANT SELECT (workspace_id, source, entity, source_id, target_id, status, '
+        'updated_at) ON import_items TO %I', reader_role());
+END
+$$;
 
 -- Whether an article is public depends on every collection it is in, and a listing may sit on
 -- another help center the reader cannot see. These views decide it for the whole workspace: they
 -- belong to the app role and are not security_invoker, so they read the tables as the app role
 -- (workspace_isolation alone) whoever selects from them. They read only tables and immutable
 -- functions, because a function that reads a table runs as the caller. They match
--- kb_public_articles and kb_public_translations row for row.
+-- kb_public_articles and kb_public_translations row for row. Each also keeps to the scoped
+-- workspace itself, so a view that ends up owned by another role (a restore with --no-owner, a
+-- superuser) still returns no other workspace's ids; Verify refuses to serve with such an owner.
+-- They are not security_barrier: a barrier keeps each view from being merged into the query that
+-- reads it, and the help center pages then take seconds instead of milliseconds. Without it, a
+-- function the caller writes into its own WHERE could see a row before the view's filters, but only
+-- the columns the view returns (workspace and article ids, locale) of rows the owner's workspace
+-- isolation already allows: the scoped workspace's own articles.
 CREATE VIEW kb_help_center_collection_ranks AS
 SELECT c.workspace_id, c.id,
     GREATEST(kb_visibility_rank(c.visibility), COALESCE((
@@ -211,11 +231,14 @@ SELECT c.workspace_id, c.id,
             WHERE u.depth < 9
         )
         SELECT max(visibility_rank) FROM up), 0)) AS visibility_rank
-FROM kb_collections c WHERE c.deleted_at IS NULL;
+FROM kb_collections c
+WHERE c.workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid)
+    AND c.deleted_at IS NULL;
 
 CREATE VIEW kb_help_center_public_articles AS
 SELECT a.workspace_id, a.id FROM kb_articles a
-WHERE a.status = 'published' AND a.deleted_at IS NULL AND a.visibility = 'everyone'
+WHERE a.workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid)
+    AND a.status = 'published' AND a.deleted_at IS NULL AND a.visibility = 'everyone'
     AND EXISTS (SELECT 1 FROM kb_help_center_collection_ranks h
         WHERE h.workspace_id = a.workspace_id AND h.id = a.collection_id AND h.visibility_rank = 0)
     AND NOT EXISTS (SELECT 1 FROM kb_article_collections x
@@ -225,7 +248,8 @@ WHERE a.status = 'published' AND a.deleted_at IS NULL AND a.visibility = 'everyo
 
 CREATE VIEW kb_help_center_public_translations AS
 SELECT t.workspace_id, t.article_id, t.locale FROM kb_article_translations t
-WHERE t.status = 'published' AND t.deleted_at IS NULL
+WHERE t.workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid)
+    AND t.status = 'published' AND t.deleted_at IS NULL
     AND EXISTS (SELECT 1 FROM kb_help_center_public_articles a
         WHERE a.workspace_id = t.workspace_id AND a.id = t.article_id);
 

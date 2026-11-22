@@ -14,7 +14,8 @@ BEGIN
     FOREACH t IN ARRAY ARRAY['help_centers', 'help_center_languages', 'kb_collection_help_centers',
         'kb_collections', 'kb_collection_translations', 'kb_article_collections', 'kb_articles',
         'kb_article_translations', 'kb_article_media', 'kb_article_attachments', 'kb_article_tags',
-        'kb_article_vote_resets', 'kb_article_votes', 'kb_article_vote_versions', 'kb_media']
+        'kb_article_vote_resets', 'kb_article_votes', 'kb_article_vote_versions', 'kb_media',
+        'import_items']
     LOOP
         EXECUTE format('DROP POLICY help_center_isolation ON %I', t);
         EXECUTE format('ALTER POLICY workspace_isolation ON %I TO %I', t, app_role());

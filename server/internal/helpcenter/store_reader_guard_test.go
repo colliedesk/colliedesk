@@ -16,7 +16,7 @@ import (
 // no grant on the inbox, contacts or channels. docs/internals/workspace-isolation.md lists them.
 var readerStoreMethods = []string{
 	"HelpCenterArticleIn", "HelpCenterArticlesIn", "HelpCenterBrandImage", "HelpCenterCollectionsIn",
-	"HelpCenterFile", "HelpCenterImage", "HelpCenterIndex", "HelpCenterRelatedArticlesIn",
+	"HelpCenterFile", "HelpCenterImage", "HelpCenterIndex", "HelpCenterLegacyTarget", "HelpCenterRelatedArticlesIn",
 	"HelpCenterTranslationIndex", "HelpCenterVideo", "KBArticleVotesVersion", "SearchHelpCenterIn",
 	"VoteKBArticle",
 }
@@ -28,9 +28,8 @@ var appRoleStoreMethods = map[string]string{
 	"GetHelpCenterDomain":     "the custom domain record decides which help center a host serves; the reader has no grant on help_center_domains",
 	"HelpCenterClaim":         "answers the domain ownership check before any help center is resolved",
 	"HelpCenterHost":          "resolves a host name to its workspace and help center, before there is a help center to read as",
-	"HelpCenterLegacyItems":   "old helpdesk links are redirected to wherever the article is now, which may be another help center",
-	"HelpCenterLegacyTarget":  "old helpdesk links are redirected to wherever the article is now, which may be another help center",
-	"HelpCenterPreview":       "a signed staff preview shows drafts and agents-only content to the team",
+	"HelpCenterLegacyItems":   "staff only: the session route that builds the old helpdesk redirect snippet lists every imported article and collection of the workspace, with no help center filter",
+	"HelpCenterPreview":       "staff only: the theme preview shows the primary help center's public articles (onPrimary, publicKBArticle), but checks the candidate logo and favicon against the whole media library, trash included, which the reader cannot read",
 	"LogKBSearch":             "the per-minute cap counts the whole workspace's searches, and a search written before the workspace has a help center makes the primary one; the reader has no grant on kb_searches, so stored search words stay out of its reach",
 	"OpenKBSearch":            "records an open on a search row the reader cannot read; the signed link names the workspace and the row",
 	"OpenHelpCenter":          "resolves the help center row; content_version and last_article_number live on the primary row",

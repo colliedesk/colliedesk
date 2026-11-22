@@ -38,6 +38,8 @@ var helpCenterPolicies = map[string]string{
 		"(id IN ( SELECT kb_article_attachments.media_id\n   FROM kb_article_attachments)) OR " +
 		"(id IN ( SELECT help_centers.logo_media_id\n   FROM help_centers)) OR " +
 		"(id IN ( SELECT help_centers.favicon_media_id\n   FROM help_centers)))",
+	"import_items": "((target_id IN ( SELECT kb_articles.id\n   FROM kb_articles)) OR " +
+		"(target_id IN ( SELECT kb_collections.id\n   FROM kb_collections)))",
 }
 
 const articleScope = "(article_id IN ( SELECT kb_articles.id\n   FROM kb_articles))"
@@ -54,6 +56,9 @@ var readerPrivileges = map[string]string{
 	"kb_collection_visibility":           "SELECT",
 	"kb_published_articles":              "SELECT",
 	"kb_published_translations":          "SELECT",
+	// An old helpdesk address is looked up in the import ledger by the columns readerColumns names;
+	// the reader reads them only, never the import's errors or source data.
+	"import_items": "",
 }
 
 func readerPrivilegesOn(name string) string {

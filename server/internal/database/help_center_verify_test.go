@@ -17,12 +17,15 @@ import (
 func TestVerifyRefusesAReaderThatSkipsHelpCenterIsolation(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	for name, breakIt := range map[string]string{
+	for name, breakIt := range map[string]struct{ sql, want string }{
 		// A reader that bypasses row-level security reads every help center of every workspace.
-		"bypassrls": `ALTER ROLE %[1]s BYPASSRLS`,
+		"bypassrls": {`ALTER ROLE %[1]s BYPASSRLS`, ""},
 		// An app role that inherits the reader gets its RESTRICTIVE policies: staff would lose every
 		// unplaced article, so the server refuses to start instead.
-		"inherited": `GRANT %[1]s TO %[2]s WITH INHERIT TRUE`,
+		"inherited": {`GRANT %[1]s TO %[2]s WITH INHERIT TRUE`, ""},
+		// The public-article views read their tables as their owner. Owned by anyone but the app role
+		// (a restore with --no-owner, a superuser), they would skip workspace isolation.
+		"view owner": {`ALTER VIEW kb_help_center_public_articles OWNER TO CURRENT_USER`, "kb_help_center_public_articles"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			other := otherDatabase(t, pool, fmt.Sprintf("colliedesk_test_reader_%d", time.Now().UnixNano()))
@@ -38,11 +41,19 @@ func TestVerifyRefusesAReaderThatSkipsHelpCenterIsolation(t *testing.T) {
 				t.Fatal(err)
 			}
 			app := pgx.Identifier{policyRole(t, other)}.Sanitize()
-			if _, err := other.Exec(ctx, fmt.Sprintf(breakIt, pgx.Identifier{reader}.Sanitize(), app)); err != nil {
+			statement := breakIt.sql
+			if strings.Contains(statement, "%") {
+				statement = fmt.Sprintf(statement, pgx.Identifier{reader}.Sanitize(), app)
+			}
+			if _, err := other.Exec(ctx, statement); err != nil {
 				t.Fatal(err)
 			}
-			if err := New(other).Verify(ctx); err == nil || !strings.Contains(err.Error(), reader) {
-				t.Fatalf("Verify = %v, want a refusal naming %s", err, reader)
+			want := breakIt.want
+			if want == "" {
+				want = reader
+			}
+			if err := New(other).Verify(ctx); err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("Verify = %v, want a refusal naming %s", err, want)
 			}
 		})
 	}

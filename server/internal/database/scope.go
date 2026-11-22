@@ -47,7 +47,7 @@ func NewSplit(owner, request *pgxpool.Pool) *DB {
 // AppRole returns the role every workspace-scoped transaction switches to. The migration creates it
 // per database (colliedesk_app_<database>) and binds the workspace_isolation policies to it; the
 // name is read back from the policy on workspaces, so the migration stays the single source.
-// The role owns nothing, cannot log in and has no BYPASSRLS.
+// It owns only the help center definer views (helpCenterViews), cannot log in and has no BYPASSRLS.
 func (d *DB) AppRole(ctx context.Context) (string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()

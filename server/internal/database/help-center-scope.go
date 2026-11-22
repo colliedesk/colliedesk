@@ -113,5 +113,30 @@ func (d *DB) verifyReader(ctx context.Context, app string) error {
 	if d.request != d.pool && inherits {
 		return fmt.Errorf("the request login %s must not inherit %s", user, reader)
 	}
+	return d.verifyHelpCenterViews(ctx, app)
+}
+
+// helpCenterViews decide which articles a help center shows. They are not security_invoker: they read
+// their tables as their owner, which must be the app role so workspace isolation still binds them.
+var helpCenterViews = []string{"kb_help_center_collection_ranks", "kb_help_center_public_articles", "kb_help_center_public_translations"}
+
+// verifyHelpCenterViews refuses to serve when a help center view is missing or owned by another role,
+// as after a restore with --no-owner: owned by a superuser it would read every workspace's rows.
+func (d *DB) verifyHelpCenterViews(ctx context.Context, app string) error {
+	for _, view := range helpCenterViews {
+		var owner string
+		err := d.pool.QueryRow(ctx, `SELECT pg_get_userbyid(relowner) FROM pg_class
+			WHERE relnamespace=current_schema()::regnamespace AND relname=$1 AND relkind='v'`, view).Scan(&owner)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("view %s is missing; run `collie migrate` first", view)
+		}
+		if err != nil {
+			return fmt.Errorf("check view %s: %w", view, err)
+		}
+		if owner != app {
+			return fmt.Errorf("view %s is owned by %s and must be owned by %s; run `ALTER VIEW %s OWNER TO %s`",
+				view, owner, app, view, app)
+		}
+	}
 	return nil
 }

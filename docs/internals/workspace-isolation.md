@@ -62,7 +62,7 @@ composite foreign keys keep working across the scoped tables.
 | Role | Who | Sees |
 |---|---|---|
 | `DATABASE_URL` role (owner) | Runs migrations, privileged lookups, the advisory lock, `ANALYZE` through `DB.RefreshStatistics` before an import undo (owner-pool maintenance: statistics only, no rows returned; `pg_stats` hides RLS tables from the app role) | Superuser: all rows (PostgreSQL skips RLS for superusers). Other owner: only rows of a transaction marked `app.privileged`. |
-| `colliedesk_app_<database>` (app role) | Every workspace-scoped transaction switches to it | Only the workspace in `app.workspace_id` |
+| `colliedesk_app_<database>` (app role) | Every workspace-scoped transaction switches to it; owns the three help center definer views (below) and nothing else | Only the workspace in `app.workspace_id` |
 | `colliedesk_reader_<database>` (help center reader) | Every help-center-scoped transaction of the public help center switches to it | Only the rows the help center in `app.help_center_id` shows, of the workspace in `app.workspace_id`; no grant on any other table |
 | `DATABASE_REQUEST_URL` login (optional, `colliedesk_request` in installs) | Opens the request pool | Nothing by itself; it can only `SET ROLE` to the app role, and through it to the reader |
 
@@ -151,7 +151,10 @@ shows, even through a query that forgets a filter. The reader role enforces this
 - Grants: `SELECT` on the knowledge base tables and on `help_centers`, `help_center_languages`,
   `kb_collection_help_centers`. `SELECT, INSERT, UPDATE` on `kb_article_votes` and
   `kb_article_vote_versions` (a visitor's vote), with their sequences. `SELECT` on the views listed
-  below. Nothing on conversations, messages, contacts, channels, tokens, sessions, billing or
+  below. Column `SELECT` on `import_items` (`workspace_id`, `source`, `entity`, `source_id`,
+  `target_id`, `status`, `updated_at`), so an old helpdesk address finds its page; never the
+  import's errors or source data (`TestTheHelpCenterReaderReadsOnlyTheLedgerColumnsARedirectNeeds`).
+  Nothing on conversations, messages, contacts, channels, tokens, sessions, billing or
   `help_center_domains`.
 
 ### The policies
@@ -173,6 +176,7 @@ Each table reads the one above it through its own policy, so one chain decides e
 | `kb_articles` | its home collection is visible, or it is listed in a visible collection |
 | `kb_article_translations`, `_media`, `_attachments`, `_tags`, `_vote_resets`, `_votes`, `_vote_versions` | its article is visible |
 | `kb_media` | an article, attachment, logo or favicon visible to the reader names it |
+| `import_items` | its `target_id` is an article or collection visible to the reader |
 
 An unset or empty `app.help_center_id` is `NULL`, so the reader sees no row
 (`TestAHelpCenterReaderWithoutAHelpCenterSeesNothing`). The app role keeps seeing every article of
@@ -214,6 +218,15 @@ Three views decide this for the whole workspace: `kb_help_center_collection_rank
 
 - They are owned by the app role and are not `security_invoker`. They read the tables as the app role
   (`workspace_isolation` only), whoever selects from them.
+- Each also filters on `workspace_id = app.workspace_id` itself. Restored with `--no-owner`, or owned
+  by a superuser, they would otherwise return every workspace's ids
+  (`TestHelpCenterViewsKeepToTheWorkspaceWhoeverOwnsThem`). `DB.Verify` refuses to serve when a view
+  is missing or owned by any role but the app role, and names the `ALTER VIEW … OWNER TO` to run
+  (`TestVerifyRefusesAReaderThatSkipsHelpCenterIsolation/view_owner`).
+- They are not `security_barrier`. The barrier stops the planner from pushing the article id into
+  the view: the French article page after an edit went from about 53 ms to 101–108 ms as the reader,
+  and a barrier on only some of the views from about 50 ms to 1.7 s. The views return ids only, and
+  the explicit workspace filter is what keeps them inside the workspace.
 - They read only tables and immutable functions. A function that reads a table runs as its caller, so
   the parent walk is a correlated recursive subquery (one key lookup per level, at most nine levels),
   not `kb_parents_visibility_rank`.
@@ -233,7 +246,7 @@ The public site reaches the store only through these methods. Each runs through 
 (`internal/store/help-center-scope.go`) and never through the app role's scope:
 
 `HelpCenterArticleIn`, `HelpCenterArticlesIn`, `HelpCenterBrandImage`, `HelpCenterCollectionsIn`,
-`HelpCenterFile`, `HelpCenterImage`, `HelpCenterIndex`, `HelpCenterRelatedArticlesIn`,
+`HelpCenterFile`, `HelpCenterImage`, `HelpCenterIndex`, `HelpCenterLegacyTarget`, `HelpCenterRelatedArticlesIn`,
 `HelpCenterTranslationIndex`, `HelpCenterVideo`, `KBArticleVotesVersion`, `SearchHelpCenterIn`,
 `VoteKBArticle`.
 
@@ -255,8 +268,8 @@ review; `appRoleStoreMethods` in `internal/helpcenter/store_reader_guard_test.go
 | `OpenHelpCenter`, `OpenHelpCenterAt`, `OpenHelpCenterWorkspace` | Resolve the help center row. `content_version` (the page cache key) is read here. `last_article_number` lives on the primary row and only the staff path increments it (`store/kb-articles.go`). |
 | `OpenHelpCenterHandle` | Resolves a handle among the workspace's help centers. |
 | `WorkspaceForMailSlug` | Resolves a workspace from its slug before any help center is chosen. |
-| `HelpCenterLegacyTarget`, `HelpCenterLegacyItems` | Old helpdesk links redirect to wherever the article is now, which may be another help center. Only the new address leaves. |
-| `HelpCenterPreview` | A signed staff preview shows drafts and agents-only content to the team. |
+| `HelpCenterLegacyItems` | Staff only. It has no help center filter: it lists every imported article and collection of the workspace for the redirect snippet, and only the session route `GET /api/v1/help-center/freshdesk-redirect` (`PermHelpCenterRead`) calls it. The public lookup of one old address, `HelpCenterLegacyTarget`, runs as the reader. |
+| `HelpCenterPreview` | Staff only: the theme preview of a session route (`httpapi/help-center-theme-handlers.go`). It shows the primary help center's public articles (`onPrimary`, `publicKBArticle`), never drafts or agents-only content. It stays on the app role because it checks the candidate logo and favicon against the whole media library, trash included, as a save does; the reader sees only media its help center already uses. |
 | `LogKBSearch`, `OpenKBSearch` | The search log. The per-minute cap (`KBSearchesPerMinute`) counts the whole workspace's searches; read as the reader it would count one help center's. A search written before the workspace has a help center makes the primary one (`kb_searches_on_primary`). The reader has no grant on `kb_searches`, so it never reads stored search words. The open is signed with the workspace and the row id; the foreign key keeps `help_center_id` inside the workspace. |
 
 Other routes that touch more than one help center:
@@ -274,7 +287,13 @@ Other routes that touch more than one help center:
   below); no row is read back.
 - **Web form:** `store.OpenWebForm` runs through `PrivilegeWorkspaceBySlug`, then in the app role's
   scope; it writes a conversation, which the reader must never reach.
-- **Help chat:** `ChatKBArticlesIn` is an AI path and stays on the app role.
+- **Help chat (known exception):** `ChatKBArticlesIn` (`store/help-center.go`) runs as the app role
+  through `DB.InWorkspace` (`ai/chat-context.go`). It reads `helpChatKBArticle`
+  (`kb_help_chat_articles`), which has no help center filter: every published article of the
+  workspace that is public or kept for help chat, on whichever help center it sits, or on none. Translations are checked
+  against the primary help center's languages. The guard test scans only the `helpcenter` package,
+  so this path and the channel routes that read the knowledge base (`httpapi/help-chat-handlers.go`,
+  `helpChatAdditions`) are not covered by it.
 
 ## Workspace hosts
 
