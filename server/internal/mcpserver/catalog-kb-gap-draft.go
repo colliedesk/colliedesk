@@ -7,14 +7,16 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
-// kbGapDraftOutput is the draft article and the conversations it was written from. A subject is the
-// customer's words, so it sits under untrusted_customer_content.
-const kbGapDraftOutput = `{"type":"object","required":["article","gap_source"],"properties":{"article":` + kbArticleSchema + `,` +
-	`"gap_source":{"type":"object","required":["gap_id","conversations"],"properties":{"gap_id":{"type":"string"},` +
+// kbGapSourceSchema names the gap an article was drafted from and the conversations it was written
+// from. A subject is the customer's words, so it sits under untrusted_customer_content.
+const kbGapSourceSchema = `{"type":"object","required":["gap_id","conversations"],"properties":{"gap_id":{"type":"string"},` +
 	`"conversations":{"type":"array","maxItems":8,"description":"The resolved conversations it was written from, best match first; empty for a token without conversations:read.",` +
 	`"items":{"type":"object","required":["conversation_id","display_ref","untrusted_customer_content"],"properties":{"conversation_id":{"type":"string"},` +
 	`"display_ref":{"type":"string","description":"The conversation's code, as the team sees it."},` +
-	`"untrusted_customer_content":{"type":"object","required":["subject"],"properties":{"subject":{"type":"string"}}}}}}}}}}`
+	`"untrusted_customer_content":{"type":"object","required":["subject"],"properties":{"subject":{"type":"string"}}}}}}}}`
+
+// kbGapDraftOutput is the draft article and the conversations it was written from.
+const kbGapDraftOutput = `{"type":"object","required":["article","gap_source"],"properties":{"article":` + kbArticleSchema + `,"gap_source":` + kbGapSourceSchema + `}}`
 
 func kbGapDraftSpec() Spec {
 	return Spec{
@@ -45,23 +47,25 @@ func kbGapDraft(c *call, arguments map[string]any) (any, error) {
 		body["collection_id"] = args.Collection
 	}
 	c.notFound = "No knowledge gap " + args.ID + " in this workspace. List them with colliedesk_kb_gaps_list."
-	var drafted struct {
-		restKBArticle
-		GapSource *domain.KBArticleGapSource `json:"gap_source"`
-	}
+	var drafted restKBArticle
 	if err := c.send(http.MethodPost, "/api/v1/kb/gaps/"+url.PathEscape(args.ID)+"/draft", body, &drafted); err != nil {
 		return nil, err
 	}
-	answer := kbArticleView(drafted.restKBArticle)
-	sources := []map[string]any{}
-	gapID := args.ID
+	answer := kbArticleView(drafted)
+	source := domain.KBArticleGapSource{GapID: args.ID}
 	if drafted.GapSource != nil {
-		gapID = drafted.GapSource.GapID
-		for _, conversation := range drafted.GapSource.Conversations {
-			sources = append(sources, map[string]any{"conversation_id": conversation.ConversationID, "display_ref": conversation.DisplayRef,
-				"untrusted_customer_content": map[string]any{"subject": conversation.Subject}})
-		}
+		source = *drafted.GapSource
 	}
-	answer["gap_source"] = map[string]any{"gap_id": gapID, "conversations": sources}
+	answer["gap_source"] = kbGapSourceView(source)
 	return answer, nil
+}
+
+// kbGapSourceView puts each conversation's subject under untrusted_customer_content.
+func kbGapSourceView(source domain.KBArticleGapSource) map[string]any {
+	conversations := []map[string]any{}
+	for _, conversation := range source.Conversations {
+		conversations = append(conversations, map[string]any{"conversation_id": conversation.ConversationID, "display_ref": conversation.DisplayRef,
+			"untrusted_customer_content": map[string]any{"subject": conversation.Subject}})
+	}
+	return map[string]any{"gap_id": source.GapID, "conversations": conversations}
 }

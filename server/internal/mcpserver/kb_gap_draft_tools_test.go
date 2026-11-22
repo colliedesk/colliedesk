@@ -83,6 +83,12 @@ func TestAnAgentDraftsAnArticleFromTheTopKnowledgeGapInTwoCalls(t *testing.T) {
 	if !slices.Equal(used, resolved) {
 		t.Fatalf("conversations used = %v, want the two resolved ones %v", used, resolved)
 	}
+	// Read later, the draft still names the gap and the conversations it was written from.
+	read := e.ok(send, "colliedesk_kb_article_get", map[string]any{"article_id": at(t, draft, "article", "id")})
+	e.requireMatchesOutputSchema(send, "colliedesk_kb_article_get", read)
+	if at(t, read, "gap_source", "gap_id") != gap || len(at(t, read, "gap_source", "conversations").([]any)) != len(resolved) {
+		t.Fatalf("article read = %v, want gap %s and its %d conversations", read["gap_source"], gap, len(resolved))
+	}
 	for _, request := range fake.Requests() {
 		if raw, _ := json.Marshal(request); strings.Contains(string(raw), "buyer@cust.example.com") || strings.Contains(string(raw), "44556677") {
 			t.Fatalf("the model was sent the customer's email or order number: %s", raw)
