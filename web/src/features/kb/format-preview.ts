@@ -1,11 +1,12 @@
-import { blockClass } from './editor/format-tags';
+import { blockClass, figureClass } from './editor/format-tags';
 import { formatTree } from './editor/format-tree';
 import type { FormatNode } from './editor/format-tree';
 import './editor/formatting.css';
 
 // formatting shows an article's formatting HTML in the preview as the help center renders it
 // (server/internal/kbformat): <u>, <mark>, <span class="kb-color-…">, kb-align/kb-indent classes on a
-// wrapped paragraph or heading, and an HTML table with colspan, rowspan and kb-bg classes. A span with no
+// wrapped paragraph or heading, an HTML table with colspan, rowspan and kb-bg classes, and an image's
+// <figure class="kb-figure …"> with its <figcaption>. A span with no
 // colour of the palette shows its text only.
 export function formatting() {
   return (tree: FormatNode) => {
@@ -29,6 +30,10 @@ function decorate(parent: FormatNode) {
       }
       case 'kbTable':
         return [{ ...child, data: { hName: 'table' }, children: [{ type: 'kbBody', data: { hName: 'tbody' }, children: child.children }] }];
+      case 'kbFigure':
+        return [{ ...child, data: { hName: 'figure', hProperties: { className: figureClass(tag!) } } }];
+      case 'kbCaption':
+        return [{ ...child, data: { hName: 'figcaption' } }];
       case 'kbRow':
         return [{ ...child, data: { hName: 'tr' } }];
       case 'kbCell': {

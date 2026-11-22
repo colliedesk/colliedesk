@@ -54,7 +54,9 @@ func TestStyleSheetStylesEveryFormattingClass(t *testing.T) {
 	dark := sheet[strings.Index(sheet, "@media (prefers-color-scheme: dark)"):]
 	for _, class := range []string{"kb-align-center", "kb-align-right", "kb-indent-1", "kb-indent-4",
 		"kb-color-accent", "kb-color-success", "kb-color-warning", "kb-color-danger", "kb-color-muted",
-		"kb-bg-accent", "kb-bg-success", "kb-bg-warning", "kb-bg-danger", "kb-bg-muted"} {
+		"kb-bg-accent", "kb-bg-success", "kb-bg-warning", "kb-bg-danger", "kb-bg-muted",
+		"kb-figure", "kb-figure-small", "kb-figure-medium", "kb-figure-full", "kb-figure-left", "kb-figure-center",
+		"kb-figure-right", "kb-figure-inline", "kb-figure-border"} {
 		if !regexp.MustCompile(`\.` + class + `\b`).MatchString(sheet) {
 			t.Errorf("site.css has no rule for .%s", class)
 		}

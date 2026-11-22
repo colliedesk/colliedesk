@@ -168,6 +168,11 @@ func (a *API) purgeKBMedia(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	results, err := a.store.PurgeKBMediaNow(request.Context(), principal(request).Workspace.ID, input.IDs)
+	if kept := (*domain.KBMediaKeptError)(nil); errors.As(err, &kept) {
+		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "media_kept",
+			"message": kept.Error(), "kept_by": kept.Kept})})
+		return
+	}
 	if err != nil {
 		writeKBMediaTrashError(response, err)
 		return
@@ -183,27 +188,36 @@ func writeKBMediaReplaceError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+".")
 	case errors.Is(err, domain.ErrKBMediaGone):
 		writeError(response, http.StatusConflict, "media_gone", sentence(err)+".")
+	case errors.Is(err, domain.ErrKBMediaNotInArticle):
+		writeError(response, http.StatusConflict, "media_not_in_article", sentence(err)+".")
 	default:
 		writeKBMediaError(response, err)
 	}
 }
 
 func (a *API) replaceKBMedia(response http.ResponseWriter, request *http.Request) {
-	// A replacement writes a new version of every live article that shows the item.
+	// A replacement writes a new version of every live article that shows the item, so changing a
+	// published one needs publish. With article_id it changes that one article only, and a published
+	// one only in its unpublished changes, so editing articles is enough.
 	who := principal(request)
-	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, func() (bool, error) {
-		return a.store.KBMediaShownPublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
-	}) {
-		return
-	}
 	var input struct {
-		With string `json:"with_media_id"`
+		With    string `json:"with_media_id"`
+		Article string `json:"article_id"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.With == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send with_media_id, the item to put in its place.")
 		return
 	}
-	replacement, err := a.store.ReplaceKBMedia(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), input.With)
+	if input.Article != "" {
+		if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesUpdate, nil) {
+			return
+		}
+	} else if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, func() (bool, error) {
+		return a.store.KBMediaShownPublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
+	}) {
+		return
+	}
+	replacement, err := a.store.ReplaceKBMedia(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), input.With, input.Article)
 	if err != nil {
 		writeKBMediaReplaceError(response, err)
 		return

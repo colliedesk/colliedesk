@@ -40,6 +40,7 @@ type whoamiOut struct {
 	Permissions        []string     `json:"permissions"`
 	PermissionsMeaning string       `json:"permissions_meaning"`
 	WorkspaceLocked    bool         `json:"workspace_locked"`
+	KBEditor           *string      `json:"kb_editor"`
 	ToolsYouCanUse     []string     `json:"tools_you_can_use"`
 }
 
@@ -48,7 +49,7 @@ func whoami(c *call, _ map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := whoamiOut{WorkspaceLocked: me.Plan != nil && me.Plan.Locked, Permissions: me.Permissions}
+	out := whoamiOut{WorkspaceLocked: me.Plan != nil && me.Plan.Locked, Permissions: me.Permissions, KBEditor: me.KBEditor}
 	if out.Permissions == nil {
 		out.Permissions = []string{}
 	}

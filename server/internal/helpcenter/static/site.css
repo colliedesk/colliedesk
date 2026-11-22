@@ -379,6 +379,25 @@ a:hover { text-decoration-thickness: 2px; }
 .prose th > p, .prose td > p { margin: 0 0 0.5rem; }
 .prose th > :last-child, .prose td > :last-child { margin-bottom: 0; }
 .prose .footnotes { font-size: 0.9375rem; color: var(--muted); }
+/* An image's figure: a named width is a share of the column, a width in pixels is the image's own
+   width attribute; left and right let the text wrap, except on a narrow screen. */
+.prose .kb-figure { display: table; max-width: 100%; margin: 0 0 1.25rem; }
+.prose .kb-figure img { display: block; }
+.prose .kb-figure figcaption { display: table-caption; caption-side: bottom; margin-top: 0.5rem; color: var(--muted); font-size: 0.9375rem; }
+.prose .kb-figure-small { width: 33%; }
+.prose .kb-figure-medium { width: 60%; }
+.prose .kb-figure-full { width: 100%; }
+.prose .kb-figure-small img, .prose .kb-figure-medium img, .prose .kb-figure-full img { width: 100%; }
+.prose .kb-figure-center { margin-left: auto; margin-right: auto; }
+.prose .kb-figure-left { float: left; margin: 0.25rem 1.5rem 1rem 0; }
+.prose .kb-figure-right { float: right; margin: 0.25rem 0 1rem 1.5rem; }
+.prose .kb-figure-inline { display: inline-table; vertical-align: middle; margin: 0 0.5rem 0.5rem 0; }
+.prose .kb-figure-border { padding: 0.5rem; border: 1px solid var(--muted); border-radius: 12px; background: var(--surface); }
+.prose .kb-figure-border img { border-color: transparent; }
+@media (max-width: 40rem) {
+  .prose .kb-figure-left, .prose .kb-figure-right { float: none; margin: 0 0 1.25rem; }
+  .prose .kb-figure-small, .prose .kb-figure-medium { width: 100%; }
+}
 
 /* Files the article lists for download */
 .tags { max-width: 42rem; margin-top: 2rem; }

@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Editor, Extension } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { EditorState } from '@tiptap/pm/state';
+import { EditorState, NodeSelection } from '@tiptap/pm/state';
 import { UndoRedo } from '@tiptap/extensions';
 import { EditorFrame } from '../editor-frame';
 import type { Active, EditorProps, ToolTarget, UploadHooks } from '../editor-types';
 import { sameActive } from '../editor-types';
+import { pickedImage, samePicked } from './figure-commands';
+import type { Picked } from './figure-commands';
+import { ImageBar } from './image-bar';
+import { AnnotateButton } from './annotate-button';
+import { libraryImageID } from '../../annotate/library-image';
 import { LinkDialog } from './link-dialog';
 import { articleContent } from './schema';
 import { docToMarkdown } from './to-markdown';
@@ -19,13 +24,15 @@ import './visual-editor.css';
 // VisualEditor shows the article as it reads (Tiptap on ProseMirror), holding only what an article can store.
 // What it saves is the Markdown the document reads to, except that an article nobody changed is saved exactly as
 // it was written: opening and saving an article never rewrites its text.
-export default function VisualEditor({ initial, uploads, label, describedBy, invalid, mode, articleId, preview, onChange, onReady }: EditorProps) {
+export default function VisualEditor({ initial, uploads, label, describedBy, invalid, mode, articleId, preview, annotate, onChange, onReady }: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | undefined>(undefined);
   const [target, setTarget] = useState<ToolTarget>();
   const [active, setActive] = useState<Active>();
   // linking is the address of the link the cursor is in while the link dialog is open ('' for a new one).
   const [linking, setLinking] = useState<string>();
+  // picked is the image the image bar works on.
+  const [picked, setPicked] = useState<Picked>();
   // The editor is made once; what its callbacks call reads the latest props through this.
   const latest = useRef({ onChange, onReady, initial, label, describedBy });
   useEffect(() => { latest.current = { onChange, onReady, initial, label, describedBy }; });
@@ -63,6 +70,12 @@ export default function VisualEditor({ initial, uploads, label, describedBy, inv
           spellcheck: 'true', class: 'markdown-body kb-preview kb-visual',
         },
         handlePaste: (view, event) => pasteEvent(view, event, hooks.current),
+        // A click on a figure's image picks the figure; one in its caption puts the cursor there.
+        handleClickOn: (view, _pos, node, nodePos, event) => {
+          if (node.type.name !== 'articleFigure' || (event.target as Element).closest('figcaption')) return false;
+          view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos)));
+          return true;
+        },
         handleDrop: (view, event, _slice, moved) => {
           const files = [...(event.dataTransfer?.files ?? [])];
           if (moved || files.length === 0) return false;
@@ -83,6 +96,8 @@ export default function VisualEditor({ initial, uploads, label, describedBy, inv
     const show = () => {
       const next = activeOf(editor);
       setActive((current) => (sameActive(current, next) ? current : next));
+      const image = pickedImage(editor.state);
+      setPicked((current) => (samePicked(current, image) ? current : image));
     };
     // load shows other text, with a fresh undo history and no upload places (an upload still on its way ends
     // without going in).
@@ -137,7 +152,9 @@ export default function VisualEditor({ initial, uploads, label, describedBy, inv
   const editor = editorRef.current;
   const closeLink = () => { setLinking(undefined); editor?.commands.focus(); };
   return (
-    <EditorFrame mode={mode} articleId={articleId} preview={preview} target={target} active={active}>
+    <EditorFrame mode={mode} articleId={articleId} preview={preview} target={target} active={active}
+      overlay={picked && editor && <ImageBar key={picked.pos} editor={editor} picked={picked}
+      extra={annotate && libraryImageID(picked.attrs.src) ? <AnnotateButton src={picked.attrs.src} annotate={annotate} /> : undefined} />}>
       <div ref={host} className="kb-visual-host" hidden={mode === 'preview'} />
       {linking !== undefined && editor && <LinkDialog current={linking} onClose={closeLink}
         onRemove={() => { setLinking(undefined); editor.chain().focus().extendMarkRange('link').unsetMark('link').run(); }}

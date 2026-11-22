@@ -1,8 +1,9 @@
 // Package kbformat reads the formatting HTML a knowledge base article may hold (kbhtml's
 // allowlist.json, "formatting"): <u>, <mark>, a coloured <span>, a paragraph or heading wrapped to be
-// aligned or indented, and a table with merged or coloured cells. Normalize rewrites each such tag of
-// a text to its one canonical spelling, and Extension renders them for the help center with its own
-// classes. docs/internals/knowledge-base.md shows the forms.
+// aligned or indented, a table with merged or coloured cells, and an image in a <figure> that sizes,
+// aligns, frames or captions it. Normalize rewrites each such tag of a text to its one canonical
+// spelling, and Extension renders them for the help center with its own classes.
+// docs/internals/knowledge-base.md shows the forms.
 package kbformat
 
 import (
@@ -18,7 +19,10 @@ import (
 var rules = kbhtml.FormattingRules()
 
 // attributeOrder is the order a canonical tag writes its attributes in.
-var attributeOrder = []string{"colspan", "rowspan", "data-align", "data-indent", "data-color", "data-bg"}
+var attributeOrder = []string{"colspan", "rowspan", "data-width", "data-align", "data-indent", "data-color", "data-bg", "data-border"}
+
+// bare are the attributes whose presence is their value: a canonical tag writes them with none.
+var bare = []string{"data-border"}
 
 // Tag is one formatting tag: its element, whether it closes it, and the attributes it keeps, in
 // attributeOrder.
@@ -38,6 +42,11 @@ func (t Tag) Attr(key string) string {
 	return ""
 }
 
+// Has reports whether the tag keeps the attribute key, with a value or a bare one.
+func (t Tag) Has(key string) bool {
+	return slices.ContainsFunc(t.Attrs, func(attr nethtml.Attribute) bool { return attr.Key == key })
+}
+
 // String is the tag's canonical spelling.
 func (t Tag) String() string {
 	var out strings.Builder
@@ -47,7 +56,10 @@ func (t Tag) String() string {
 	}
 	out.WriteString(t.Name)
 	for _, attr := range t.Attrs {
-		out.WriteString(" " + attr.Key + `="` + attr.Val + `"`)
+		out.WriteString(" " + attr.Key)
+		if !slices.Contains(bare, attr.Key) {
+			out.WriteString(`="` + attr.Val + `"`)
+		}
 	}
 	out.WriteByte('>')
 	return out.String()
@@ -63,6 +75,9 @@ func (t Tag) IsBlock() bool { return slices.Contains(rules.Blocks, t.Name) }
 func (t Tag) IsTable() bool {
 	return t.Name == "table" || t.Name == "tr" || t.Name == "th" || t.Name == "td"
 }
+
+// IsFigure reports whether the tag is an image's <figure> or its <figcaption>.
+func (t Tag) IsFigure() bool { return t.Name == "figure" || t.Name == "figcaption" }
 
 // ParseTag reads raw as exactly one formatting tag, keeping only the attributes and values the
 // element allows. It reports false for anything else: text, several tags, another element.
@@ -89,7 +104,7 @@ func ParseTags(raw string) ([]Tag, bool) {
 		case nethtml.StartTagToken, nethtml.EndTagToken:
 			token := tokens.Token()
 			tag := Tag{Name: token.Data, Close: token.Type == nethtml.EndTagToken}
-			if !tag.IsInline() && !tag.IsBlock() && !tag.IsTable() {
+			if !tag.IsInline() && !tag.IsBlock() && !tag.IsTable() && !tag.IsFigure() {
 				return nil, false
 			}
 			if !tag.Close {
@@ -108,7 +123,11 @@ func kept(name string, attrs []nethtml.Attribute) []nethtml.Attribute {
 	for _, key := range attributeOrder {
 		for _, attr := range attrs {
 			if attr.Namespace == "" && attr.Key == key && allowed(name, key, attr.Val) {
-				out = append(out, nethtml.Attribute{Key: key, Val: attr.Val})
+				value := attr.Val
+				if slices.Contains(bare, key) {
+					value = ""
+				}
+				out = append(out, nethtml.Attribute{Key: key, Val: value})
 				break
 			}
 		}
@@ -119,18 +138,25 @@ func kept(name string, attrs []nethtml.Attribute) []nethtml.Attribute {
 func allowed(name, key, value string) bool {
 	cell := name == "th" || name == "td"
 	block := slices.Contains(rules.Blocks, name)
+	figure := name == "figure"
 	switch key {
 	case "data-color":
 		return name == "span" && slices.Contains(rules.Colors, value)
 	case "data-bg":
 		return cell && slices.Contains(rules.Colors, value)
 	case "data-align":
-		return (cell || block) && slices.Contains(rules.Align, value)
+		return (cell || block) && slices.Contains(rules.Align, value) ||
+			figure && slices.Contains(rules.Figure.Align, value)
 	case "data-indent":
 		return block && within(value, 1, rules.Indent)
 	case "colspan", "rowspan":
 		// 1 is every cell's span already, so it is never written.
 		return cell && within(value, 2, rules.Span)
+	case "data-width":
+		return figure && (slices.Contains(rules.Figure.Widths, value) || within(value, 1, rules.Figure.Pixels))
+	case "data-border":
+		// A border is on or off, so whatever value it was written with means on.
+		return figure
 	}
 	return false
 }

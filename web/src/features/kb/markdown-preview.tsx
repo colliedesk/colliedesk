@@ -105,8 +105,8 @@ const rehypePlugins = [articleHtml];
 // Only images uploaded to the knowledge base are shown, as on the help center (its pages allow images from
 // their own site only); an image from another site would also tell that site who is reading the preview.
 const components: Components = {
-  img: ({ src, alt }) => (typeof src === 'string' && src.startsWith('/api/v1/kb/images/')
-    ? <img src={src} alt={alt ?? ''} />
+  img: ({ src, alt, title, width }) => (typeof src === 'string' && src.startsWith('/api/v1/kb/images/')
+    ? <img src={src} alt={alt ?? ''} title={title} loading="lazy" width={width} />
     : <span className="kb-external-image">{kbMessages.externalImage(alt ?? '', typeof src === 'string' ? src : '')}</span>),
 };
 

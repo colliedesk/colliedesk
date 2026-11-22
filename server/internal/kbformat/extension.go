@@ -10,7 +10,7 @@ import (
 )
 
 // Extension reads a text's formatting HTML into nodes (Transformer) and renders them with the help
-// center's classes: kb-color-<name>, kb-align-<align>, kb-indent-<n> and kb-bg-<name>, and colspan
+// center's classes: kb-color-<name>, kb-align-<align>, kb-indent-<n>, kb-bg-<name> and kb-figure-*, and colspan
 // and rowspan as attributes. Formatting HTML it cannot read stays raw HTML, for the page's own rules.
 var Extension goldmark.Extender = extension{}
 
@@ -22,10 +22,10 @@ const transformerPriority = 150
 
 func (extension) Extend(m goldmark.Markdown) {
 	m.Parser().AddOptions(parser.WithASTTransformers(util.Prioritized(Transformer, transformerPriority)))
-	m.Renderer().AddOptions(renderer.WithNodeRenderers(util.Prioritized(inlineHTML{}, 100), util.Prioritized(tableHTML{}, 100)))
+	m.Renderer().AddOptions(renderer.WithNodeRenderers(util.Prioritized(inlineHTML{}, 100), util.Prioritized(tableHTML{}, 100), util.Prioritized(figureHTML{}, 100)))
 }
 
-// Transformer turns the formatting HTML of a parsed text into Inline, Table, Row and Cell nodes and
+// Transformer turns the formatting HTML of a parsed text into Inline, Table, Row, Cell and Figure nodes and
 // classes on wrapped paragraphs and headings.
 var Transformer parser.ASTTransformer = transformer{}
 
@@ -41,6 +41,7 @@ func (transformer) Transform(document *ast.Document, reader text.Reader, _ parse
 			pairInline(node, source)
 		} else {
 			buildTables(node, source)
+			buildFigures(node, source)
 			unwrapBlocks(node, source)
 		}
 		return ast.WalkContinue, nil

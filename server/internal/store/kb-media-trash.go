@@ -283,7 +283,9 @@ func (s *Store) RestoreKBMedia(ctx context.Context, workspaceID string, ids []st
 // PurgeKBMediaNow deletes for good the items of ids that are in the library's trash, with their files,
 // and answers each: purged, not_in_trash, not_found, or in_use for the help center's logo or favicon
 // or an image a live template names, which stays in the trash until nothing names it. Articles in the
-// trash and older versions that named one then show "Media no longer exists".
+// trash and older versions that named one then show "Media no longer exists". When one it would delete
+// is the earlier version of a replacement not undone, it deletes nothing and returns a
+// *domain.KBMediaKeptError.
 func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []string) ([]domain.KBMediaResult, error) {
 	ids, err := validKBMediaIDs(ids)
 	if err != nil {
@@ -324,6 +326,14 @@ func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []s
 				gone = append(gone, id)
 			}
 			results[i] = domain.KBMediaResult{ID: id, Status: status}
+		}
+		// The earlier version of a replacement not undone refuses the whole call: undo needs it.
+		kept, err := kbMediaKeptBy(ctx, tx, workspaceID, gone)
+		if err != nil {
+			return answer{}, err
+		}
+		if len(kept) > 0 {
+			return answer{}, &domain.KBMediaKeptError{Kept: kept}
 		}
 		rows, err := tx.Query(ctx, `DELETE FROM kb_media WHERE workspace_id=$1 AND id=ANY($2::uuid[])
 			RETURNING storage_key, COALESCE(thumb_storage_key,''), COALESCE(poster_storage_key,'')`, workspaceID, gone)
@@ -376,6 +386,7 @@ func (s *Store) ListTrashedKBMedia(ctx context.Context, workspaceID, cursor stri
 	if cursor != "" {
 		condition, key, id = `AND (m.deleted_at, m.id) < ($2::timestamptz, $3::uuid)`, after.Key, after.ID
 	}
+	var kept map[string]bool
 	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]StoredKBMedia, error) {
 		rows, err := tx.Query(ctx, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.deleted_at IS NOT NULL `+condition+`
 			ORDER BY m.deleted_at DESC, m.id DESC LIMIT `+strconv.Itoa(limit+1), workspaceID, key, id)
@@ -384,6 +395,13 @@ func (s *Store) ListTrashedKBMedia(ctx context.Context, workspaceID, cursor stri
 		}
 		items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (StoredKBMedia, error) { return scanKBMedia(row) })
 		if err != nil {
+			return nil, err
+		}
+		ids := make([]string, len(items))
+		for i, item := range items {
+			ids[i] = item.ID
+		}
+		if kept, err = kbMediaIDsWhere(ctx, tx, workspaceID, ids, kbMediaKeptByReplacement); err != nil {
 			return nil, err
 		}
 		return items, addKBMediaUsage(ctx, tx, workspaceID, items)
@@ -401,8 +419,9 @@ func (s *Store) ListTrashedKBMedia(ctx context.Context, workspaceID, cursor stri
 	out := make([]domain.KBMedia, len(items))
 	for i, item := range items {
 		out[i] = item.KBMedia
-		// The purge keeps an item a live article or the help center still names (kbMediaPurgeable).
-		if usage := item.Usage; usage == nil || (usage.Articles == 0 && len(usage.HelpCenter) == 0) {
+		// The purge keeps an item a live article or the help center still names, or a replacement not
+		// undone keeps as its earlier version (kbMediaPurgeable).
+		if usage := item.Usage; !kept[item.ID] && (usage == nil || (usage.Articles == 0 && len(usage.HelpCenter) == 0)) {
 			purgeAt := item.DeletedAt.Add(domain.KBTrashRetention)
 			out[i].PurgeAt = &purgeAt
 		}

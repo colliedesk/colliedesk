@@ -4,7 +4,7 @@ import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { gfm } from 'micromark-extension-gfm';
 import { takeMarker } from '../../callouts';
-import { formatTree } from '../format-tree';
+import { formatTree, imageOf } from '../format-tree';
 import type { FormatNode } from '../format-tree';
 import { inline, Unsupported, unsupported } from './from-markdown-inline';
 import { gfmTable, kbTable } from './from-markdown-table';
@@ -75,8 +75,29 @@ function block(node: FormatNode): JSONContent {
       return gfmTable(node);
     case 'kbTable':
       return kbTable(node, blocks);
+    case 'kbFigure':
+      return figure(node);
   }
   return unsupported();
+}
+
+interface ImageNode extends FormatNode { url?: string; alt?: string | null; title?: string | null }
+
+// figure reads an image's <figure>: the link around the image, if any, and the caption's text.
+function figure(node: FormatNode): JSONContent {
+  const [shown, caption] = node.children ?? [];
+  const image = imageOf(shown) as ImageNode;
+  const attrs = node.tag!.attrs;
+  return {
+    type: 'articleFigure',
+    attrs: {
+      src: image.url ?? '', alt: image.alt ?? null, title: image.title ?? null,
+      href: shown!.type === 'link' ? ((shown as ImageNode).url ?? '') : null,
+      linkTitle: shown!.type === 'link' ? ((shown as ImageNode).title ?? null) : null,
+      width: attrs['data-width'] ?? null, align: attrs['data-align'] ?? null, border: attrs['data-border'] !== undefined,
+    },
+    content: caption ? inline(caption.children ?? []) : [],
+  };
 }
 
 const itemContent = (item: FormatNode) => ((item.children ?? []).length > 0 ? blocks(item.children!) : [{ type: 'paragraph' }]);
