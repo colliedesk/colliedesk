@@ -29,7 +29,7 @@ CREATE INDEX kb_gap_pending_workspace_idx ON kb_gap_pending(workspace_id, id);
 CREATE TABLE kb_gaps (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    -- The most common masked text of its signals.
+    -- The masked text of the signal that opened it.
     title text NOT NULL CHECK (char_length(title) BETWEEN 1 AND 1000),
     -- The folded text of the signal that opened it: the same words join it at once.
     query_key text NOT NULL,
