@@ -532,13 +532,20 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   Domains, languages and analytics are keyed by help center; `content_version` and
   `last_article_number` are read from the primary row only, because they count the whole
   knowledge base. The custom host cache holds `<workspace id> <help center id>`.
-- **Another help center lives below `/b/<handle>` until it has a domain.** On every address of the
-  primary (`/help/<slug>`, `<slug>.<domain>/help`, the primary's custom domain) `/b/<handle>/…` is
-  that help center, with its own name, collections and canonical links; one letter like `/a/` and
-  `/c/`, so it never takes a language segment or a channel type's route (`channelRoute` skips it).
-  Once its own custom domain is active, the `/b/<handle>` address moves there with a 301. Help chat
-  and the other channel pages answer on the primary only; the help center API and the help chat's
-  article set still act on the primary.
+- **Another help center lives at `/<handle>` until it has a domain.** On every address of the
+  primary (`/help/<slug>`, `<slug>.<domain>/help`, the primary's custom domain) `/<handle>/…` is
+  that help center, with its own name, collections and canonical links. The handle shares the
+  first path segment with the site's own routes, so `domain.CheckHelpCenterHandle` and the
+  `help_centers_handle_not_a_route` CHECK refuse every route name (`a`, `b`, `c`, `search`,
+  `images`, `media`, `files`, `_`, `robots.txt`, `sitemap.xml`, `llms.txt`, `support`, `chat`) and
+  every language-tag shape (`vi`, `pt-br`, also `api` or `eu-store`: 2 or 3 letters, then
+  `-` parts). A new route adds its first segment to both, or
+  `TestEveryFirstPathSegmentTheSiteRoutesIsRefusedAsAHandle` (site routes) and
+  `TestEveryChannelRouteBelowTheHelpCenterIsRefusedAsAHandle` (channel routes) fail. A first
+  segment that names no open help center stays the primary's path, so it gets the primary's 404.
+  `/b/<handle>` is gone (404). Once its own custom domain is active, the `/<handle>` address moves
+  there with a 301. Help chat and the other channel pages answer on the primary only; the help
+  center API and the help chat's article set still act on the primary.
 
 ## Traps
 

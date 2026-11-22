@@ -274,7 +274,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	slug, base, sub := at.slug, at.base, at.sub
 	route := s.channelRoute(request, sub)
 	// inner is the path below the root of the help center the request is for: another one of the
-	// workspace is below /b/<handle>.
+	// workspace is below /<handle>.
 	inner := sub
 	if _, rest, ok := handlePath(sub); ok {
 		inner = rest
@@ -338,23 +338,23 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		s.writeNotFound(response, base == "")
 		return
 	}
-	// Another help center of the workspace is served below /b/<handle> of the primary's addresses
-	// until its own custom domain is active; then it moves there.
+	// Another help center of the workspace is served below /<handle> of the primary's addresses until
+	// its own custom domain is active; then it moves there. A first segment that names no open help
+	// center is the primary's path, so it gets the primary's own answer (its 404 page).
 	if handle, rest, ok := handlePath(sub); ok && site.Primary {
-		onHost := base == ""
-		if site, open, err = s.config.Store.OpenHelpCenterHandle(ctx, site.WorkspaceID, handle); err != nil {
+		other, otherOpen, err := s.config.Store.OpenHelpCenterHandle(ctx, site.WorkspaceID, handle)
+		if err != nil {
 			s.writeError(response, err)
 			return
 		}
-		base, sub = base+strings.TrimSuffix(handlePrefix, "/")+"/"+handle, rest
-		at.base, at.sub = base, sub
-		switch {
-		case !open:
-			s.writeNotFound(response, onHost)
-			return
-		case site.CustomHost != "":
-			s.redirect(response, request, s.movedTo(request, at, site), onHost)
-			return
+		if otherOpen {
+			onHost := base == ""
+			site, base, sub = other, base+"/"+handle, rest
+			at.base, at.sub = base, sub
+			if site.CustomHost != "" {
+				s.redirect(response, request, s.movedTo(request, at, site), onHost)
+				return
+			}
 		}
 	}
 	// On its custom domain the help center says whose it is, for the custom domain check (CheckAddress).
@@ -489,7 +489,7 @@ func (s *Site) channelRoute(request *http.Request, sub string) http.Handler {
 	if sub == "" || sub == "/" || sub == "/search" || sub == "/robots.txt" {
 		return nil
 	}
-	for _, prefix := range []string{"/c/", "/a/", handlePrefix, "/images/", "/media/", filesPath, stylePath} {
+	for _, prefix := range []string{"/c/", "/a/", "/images/", "/media/", filesPath, stylePath} {
 		if strings.HasPrefix(sub, prefix) {
 			return nil
 		}
