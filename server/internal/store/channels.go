@@ -25,7 +25,7 @@ func (s *Store) WithChannels(registry *channels.Registry) *Store {
 // Channels is the registry the store routes through; nil when none was given.
 func (s *Store) Channels() *channels.Registry { return s.channels }
 
-const channelRowColumns = `id::text,workspace_id::text,type,name,enabled,settings,COALESCE(external_account,''),created_at,updated_at,disabled_at,deleted_at,is_default,processing_paused_at`
+const channelRowColumns = `id::text,workspace_id::text,type,name,enabled,settings,COALESCE(external_account,''),created_at,updated_at,disabled_at,deleted_at,is_default,processing_paused_at,COALESCE(help_center_id::text,'')`
 
 // scanChannelRow reads a channel and resolves its settings over its type's defaults. A type this
 // server does not run keeps empty defaults.
@@ -34,7 +34,7 @@ func (s *Store) scanChannelRow(row rowScanner) (channels.Channel, error) {
 	var kind string
 	var settings []byte
 	if err := row.Scan(&channel.ID, &channel.WorkspaceID, &kind, &channel.Name, &channel.Enabled, &settings, &channel.ExternalAccount,
-		&channel.CreatedAt, &channel.UpdatedAt, &channel.DisabledAt, &channel.DeletedAt, &channel.IsDefault, &channel.ProcessingPausedAt); err != nil {
+		&channel.CreatedAt, &channel.UpdatedAt, &channel.DisabledAt, &channel.DeletedAt, &channel.IsDefault, &channel.ProcessingPausedAt, &channel.HelpCenterID); err != nil {
 		return channels.Channel{}, err
 	}
 	channel.Type = channels.Type(kind)

@@ -157,6 +157,19 @@ func (s *Store) DeleteHelpCenter(ctx context.Context, workspaceID, id string) (r
 		if primary {
 			return nil, domain.ErrPrimaryHelpCenter
 		}
+		// A channel that names the help center holds its row FOR SHARE until it commits, so the row lock
+		// above has waited for it and the channel is seen here.
+		serving, err := tx.Query(ctx, `SELECT id::text,name FROM channels WHERE workspace_id=$1 AND help_center_id=$2 AND deleted_at IS NULL ORDER BY name,id`, workspaceID, id)
+		if err != nil {
+			return nil, err
+		}
+		inUse, err := pgx.CollectRows(serving, pgx.RowToStructByPos[domain.ChannelName])
+		if err != nil {
+			return nil, err
+		}
+		if len(inUse) > 0 {
+			return nil, &domain.HelpCenterInUseError{Channels: inUse}
+		}
 		if _, err := tx.Exec(ctx, `UPDATE help_centers SET deleted_at=clock_timestamp(), updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2`, workspaceID, id); err != nil {
 			return nil, err
 		}
@@ -178,9 +191,12 @@ func (s *Store) DeleteHelpCenter(ctx context.Context, workspaceID, id string) (r
 func helpCenterStoreError(what string, err error) error {
 	var invalid *domain.InvalidKBError
 	var violation *pgconn.PgError
+	var inUse *domain.HelpCenterInUseError
 	switch {
 	case err == nil:
 		return nil
+	case errors.As(err, &inUse):
+		return err
 	case errors.As(err, &violation) && violation.Code == uniqueViolation && violation.ConstraintName == "help_centers_handle":
 		return domain.ErrHelpCenterHandleTaken
 	case errors.Is(err, domain.ErrHelpCenterNotFound), errors.Is(err, domain.ErrHelpCenterLimit), errors.Is(err, domain.ErrPrimaryHelpCenter),

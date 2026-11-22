@@ -42,6 +42,9 @@ type Channel struct {
 	// ProcessingPausedAt is set while the channel's processing is paused: what arrives waits in its
 	// journal, nothing is decided or sent.
 	ProcessingPausedAt *time.Time
+	// HelpCenterID is the help center a help chat or web form serves; empty serves the primary (and
+	// is always empty for another type).
+	HelpCenterID string
 }
 
 // Live is whether the channel was not removed.

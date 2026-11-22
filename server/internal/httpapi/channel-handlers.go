@@ -49,8 +49,12 @@ type channelBody struct {
 	// ProcessingPausedAt is when the channel's processing was paused; null while it runs.
 	ProcessingPausedAt *time.Time `json:"processing_paused_at"`
 	// PausedCount is how many messages wait while it is paused (0 while it runs).
-	PausedCount int       `json:"paused_count"`
-	CreatedAt   time.Time `json:"created_at"`
+	PausedCount int `json:"paused_count"`
+	// HelpCenterID is the help center a help chat or web form serves, null for the primary (and for
+	// another type); HelpCenterName names the one it serves, null for a type that serves none.
+	HelpCenterID   *string   `json:"help_center_id"`
+	HelpCenterName *string   `json:"help_center_name"`
+	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	// DeletedAt is set on a removed channel, which only the list with include_removed shows.
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
@@ -74,6 +78,27 @@ func detailBody(a *API, public store.ChannelPublic) channelDetailBody {
 	return body
 }
 
+// channelHelpCenterInput reads help_center_id of a channel body: nil when left out, "" for null (the
+// primary), else the id. An empty string is refused, as it names no help center; it reports false
+// once it answered.
+func channelHelpCenterInput(response http.ResponseWriter, raw json.RawMessage) (*string, bool) {
+	if raw == nil {
+		return nil, true
+	}
+	var id *string
+	if err := json.Unmarshal(raw, &id); err != nil || (id != nil && *id == "") {
+		message := "Name a help center by its id (GET /api/v1/help-centers lists them), or null for the primary."
+		writeJSON(response, http.StatusBadRequest, map[string]any{"error": errorBody(response, map[string]any{"code": "invalid_request",
+			"message": "Check the help center.", "fields": map[string]string{"help_center_id": message}})})
+		return nil, false
+	}
+	if id == nil {
+		primary := ""
+		return &primary, true
+	}
+	return id, true
+}
+
 func optionalText(value string) *string {
 	if value == "" {
 		return nil
@@ -90,7 +115,8 @@ func (a *API) channelJSON(public store.ChannelPublic) channelBody {
 	return channelBody{ID: channel.ID, Type: channel.Type, Name: channel.Name, Enabled: channel.Enabled,
 		Status:  channelStateBody{State: public.Status.State, ReasonCode: optionalText(public.Status.ReasonCode), Message: optionalText(public.Status.Message)},
 		Summary: public.Summary, Capabilities: capabilities, HeldCount: public.Held, UnsentCount: public.Unsent, LastInboundAt: public.LastSeen,
-		IsDefault: channel.IsDefault, ProcessingPausedAt: channel.ProcessingPausedAt, PausedCount: public.Paused, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt, DeletedAt: channel.DeletedAt}
+		IsDefault: channel.IsDefault, ProcessingPausedAt: channel.ProcessingPausedAt, PausedCount: public.Paused,
+		HelpCenterID: optionalText(channel.HelpCenterID), HelpCenterName: public.HelpCenterName, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt, DeletedAt: channel.DeletedAt}
 }
 
 func (a *API) writeChannelDetail(response http.ResponseWriter, status int, public store.ChannelPublic) {
@@ -257,15 +283,20 @@ func (a *API) recordActivation(workspaceID string, before *store.ChannelPublic, 
 
 func (a *API) createChannel(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Type      channels.Type   `json:"type"`
-		Name      *string         `json:"name"`
-		Enabled   *bool           `json:"enabled"`
-		IsDefault *bool           `json:"is_default"`
-		Config    json.RawMessage `json:"config"`
-		Settings  json.RawMessage `json:"settings"`
+		Type         channels.Type   `json:"type"`
+		Name         *string         `json:"name"`
+		Enabled      *bool           `json:"enabled"`
+		IsDefault    *bool           `json:"is_default"`
+		Config       json.RawMessage `json:"config"`
+		Settings     json.RawMessage `json:"settings"`
+		HelpCenterID json.RawMessage `json:"help_center_id"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Type == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "The body must be a channel with its type.")
+		return
+	}
+	helpCenterID, ok := channelHelpCenterInput(response, input.HelpCenterID)
+	if !ok {
 		return
 	}
 	workspaceID := principal(request).Workspace.ID
@@ -279,10 +310,11 @@ func (a *API) createChannel(response http.ResponseWriter, request *http.Request)
 	if input.IsDefault != nil {
 		isDefault = strconv.FormatBool(*input.IsDefault)
 	}
-	fingerprint := []string{string(input.Type), name, enabled, isDefault, string(input.Config), string(input.Settings)}
+	fingerprint := []string{string(input.Type), name, enabled, isDefault, string(input.Config), string(input.Settings), string(input.HelpCenterID)}
 	a.createOnce(response, request, createChannelOperation, fingerprint, func(ctx context.Context) (any, error) {
 		public, err := a.store.CreateChannelPublic(ctx, workspaceID, input.Type,
-			store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings}, channelActor(request))
+			store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings,
+				HelpCenterID: helpCenterID}, channelActor(request))
 		if err != nil {
 			writeChannelError(response, err)
 			return nil, errAnswered
@@ -304,10 +336,15 @@ func (a *API) updateChannel(response http.ResponseWriter, request *http.Request)
 		Config           json.RawMessage `json:"config"`
 		Settings         json.RawMessage `json:"settings"`
 		ProcessingPaused *bool           `json:"processing_paused"`
+		HelpCenterID     json.RawMessage `json:"help_center_id"`
 	}
 	if err := decodeJSON(request, &input); err != nil || (input.Name == nil && input.Enabled == nil && input.IsDefault == nil && input.Config == nil && input.Settings == nil &&
-		input.ProcessingPaused == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send at least one of name, enabled, is_default, config, settings or processing_paused.")
+		input.ProcessingPaused == nil && input.HelpCenterID == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send at least one of name, enabled, is_default, config, settings, processing_paused or help_center_id.")
+		return
+	}
+	helpCenterID, ok := channelHelpCenterInput(response, input.HelpCenterID)
+	if !ok {
 		return
 	}
 	workspaceID := principal(request).Workspace.ID
@@ -318,7 +355,7 @@ func (a *API) updateChannel(response http.ResponseWriter, request *http.Request)
 	}
 	if _, err := a.store.UpdateChannel(request.Context(), workspaceID, id,
 		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings,
-			ProcessingPaused: input.ProcessingPaused}, channelActor(request)); err != nil {
+			ProcessingPaused: input.ProcessingPaused, HelpCenterID: helpCenterID}, channelActor(request)); err != nil {
 		writeChannelError(response, err)
 		return
 	}

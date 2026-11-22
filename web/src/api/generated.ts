@@ -5609,7 +5609,7 @@ export interface paths {
         get: operations["getHelpCenterByID"];
         put?: never;
         post?: never;
-        /** @description Delete a help center that is not the primary (409 `primary_help_center` for the primary). Its pages go off line at once and its custom domain is released, so another help center can claim the host name; its collections and articles stay, and keep showing on the other help centers they are placed on. It cannot be restored: make a new one and place the collections on it again. Needs `help_center:update`; one that serves on a custom domain needs `kb_articles:publish` too. */
+        /** @description Delete a help center that is not the primary (409 `primary_help_center` for the primary). While a live help chat or web form serves it, the delete is refused with 409 `help_center_in_use`, whose message and `error.channels` name those channels: move each to another help center or remove it first. Its pages go off line at once and its custom domain is released, so another help center can claim the host name; its collections and articles stay, and keep showing on the other help centers they are placed on. It cannot be restored: make a new one and place the collections on it again. Needs `help_center:update`; one that serves on a custom domain needs `kb_articles:publish` too. */
         delete: operations["deleteHelpCenter"];
         options?: never;
         head?: never;
@@ -10695,6 +10695,13 @@ export interface components {
             processing_paused_at?: string | null;
             /** @description Messages kept while the channel's processing is paused, waiting to be processed (0 while it runs). */
             paused_count?: number;
+            /**
+             * Format: uuid
+             * @description The help center a help chat or web form serves: its articles are the ones the chat answers from, and a conversation it opens is marked with it. null serves the workspace's primary help center, and is always null for another type.
+             */
+            help_center_id?: string | null;
+            /** @description The name of the help center the channel serves (the primary's when help_center_id is null); null for a type that serves none. */
+            help_center_name?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -10823,6 +10830,8 @@ export interface components {
             is_default?: boolean;
             config?: components["schemas"]["ChannelConfigInput"];
             settings?: components["schemas"]["ChannelSettings"];
+            /** @description Only for a help chat or a web form: the help center it serves (GET /api/v1/help-centers lists them). Left out or null serves the primary. Another type, or an id that is not a help center of this workspace, is refused (400, fields.help_center_id). */
+            help_center_id?: string | null;
         };
         ChannelChange: {
             name?: string;
@@ -10833,6 +10842,8 @@ export interface components {
             settings?: components["schemas"]["ChannelSettings"];
             /** @description true pauses the channel's processing (recorded as paused), false resumes it (resumed). Only a channel whose messages wait in a journal (Zalo) can be paused; another answers 400. */
             processing_paused?: boolean;
+            /** @description Only for a help chat or a web form: the help center it serves from now on (recorded as config_changed); null, or the primary's id, serves the primary. Conversations it opened keep the help center they were opened on. Another type, or an id that is not a help center of this workspace, is refused (400, fields.help_center_id). */
+            help_center_id?: string | null;
         };
         ChannelCredentialInput: {
             name: string;
@@ -11564,6 +11575,12 @@ export interface components {
                     channel_id: string;
                     channel_name: string;
                 };
+                /** @description Only on help_center_in_use: the live channels that serve the help center; move each to another help center (PATCH /api/v1/channels/{id}, help_center_id) or remove it first. */
+                channels?: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                }[];
                 /** @description Only on media_in_use: the live articles whose current text names the item. */
                 articles?: {
                     /** Format: uuid */

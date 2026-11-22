@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
@@ -22,7 +23,17 @@ func helpCenterIDOf(response http.ResponseWriter, request *http.Request) (string
 
 // writeHelpCenterError answers the help center errors; false when err is none of them.
 func writeHelpCenterError(response http.ResponseWriter, err error) bool {
+	var inUse *domain.HelpCenterInUseError
 	switch {
+	case errors.As(err, &inUse):
+		names := make([]string, len(inUse.Channels))
+		for i, channel := range inUse.Channels {
+			names[i] = channel.Name
+		}
+		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "help_center_in_use",
+			"message": "This help center is served by " + strings.Join(names, ", ") + ". Move each channel to another help center " +
+				"(PATCH /api/v1/channels/{id} with help_center_id) or remove it, then delete the help center. Nothing was changed.",
+			"channels": inUse.Channels})})
 	case errors.Is(err, domain.ErrHelpCenterNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No help center of this workspace has that id. GET /api/v1/help-centers lists them.")
 	case errors.Is(err, domain.ErrHelpCenterLimit):

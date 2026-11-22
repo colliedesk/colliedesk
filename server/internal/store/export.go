@@ -1291,7 +1291,7 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 		var kind, external string
 		if err := rows.Scan(&item.channel.ID, &item.channel.WorkspaceID, &kind, &item.channel.Name, &item.channel.Enabled, &item.settings, &external,
 			&item.channel.CreatedAt, &item.channel.UpdatedAt, &item.channel.DisabledAt, &item.channel.DeletedAt, &item.channel.IsDefault,
-			&item.channel.ProcessingPausedAt, &item.autoCloseSince); err != nil {
+			&item.channel.ProcessingPausedAt, &item.channel.HelpCenterID, &item.autoCloseSince); err != nil {
 			rows.Close()
 			return fmt.Errorf("export channels: %w", err)
 		}

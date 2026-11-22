@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -31,6 +32,40 @@ type ChannelInput struct {
 	// ProcessingPaused pauses (true) or resumes (false) the channel's processing; only a type whose
 	// messages wait in the journal (Async) can be paused.
 	ProcessingPaused *bool
+	// HelpCenterID names the help center a help chat or web form serves: "" (or the primary's id)
+	// serves the primary. Another type is refused.
+	HelpCenterID *string
+}
+
+// servedHelpCenter checks the help center a channel of the type is to serve and returns what the
+// channel stores: "" for the primary. It holds the help center's row (FOR SHARE) until the caller
+// commits, so a delete of the help center waits for it, and then sees the channel.
+func servedHelpCenter(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type, id string) (string, error) {
+	field := func(message string) error {
+		return &channels.FieldError{Fields: map[string]string{"help_center_id": message}, Message: "Check the help center."}
+	}
+	if !servesHelpCenter(kind) {
+		return "", field("Only a help chat or a web form serves a help center.")
+	}
+	if id == "" {
+		return "", nil
+	}
+	if !savedReplyID.MatchString(id) {
+		return "", field("No help center of this workspace has this id: GET /api/v1/help-centers lists them.")
+	}
+	var primary bool
+	err := tx.QueryRow(ctx, `SELECT primary_help_center FROM help_centers WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL FOR SHARE`,
+		workspaceID, id).Scan(&primary)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", field("No help center of this workspace has this id: GET /api/v1/help-centers lists them.")
+	}
+	if err != nil {
+		return "", fmt.Errorf("check the channel's help center: %w", err)
+	}
+	if primary {
+		return "", nil
+	}
+	return id, nil
 }
 
 // nameTaken returns the live channel of the type that has the name (whatever its case), other than
@@ -256,6 +291,12 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 	if err != nil {
 		return channels.Channel{}, err
 	}
+	var helpCenterID string
+	if input.HelpCenterID != nil {
+		if helpCenterID, err = servedHelpCenter(ctx, tx, workspaceID, kind, *input.HelpCenterID); err != nil {
+			return channels.Channel{}, err
+		}
+	}
 	// The first live channel of a type is its default; asked for, a later one takes it over.
 	current, hasDefault, err := s.defaultChannelOfType(ctx, tx, workspaceID, kind)
 	if err != nil {
@@ -282,9 +323,9 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 	}
 	enabled := input.Enabled == nil || *input.Enabled
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name,enabled,settings,external_account,created_by_agent_id,disabled_at,disabled_by_agent_id,is_default,auto_close_since)
-		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,CASE WHEN NOT $4 THEN now() END,CASE WHEN NOT $4 THEN NULLIF($7,'')::uuid END,$8,CASE WHEN $9 > 0 THEN now() END) RETURNING id::text`,
-		workspaceID, string(kind), name, enabled, settings, change.ExternalAccount, actor.AgentID, makeDefault, autoCloseHours(definition, settings)).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name,enabled,settings,external_account,created_by_agent_id,disabled_at,disabled_by_agent_id,is_default,auto_close_since,help_center_id)
+		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,CASE WHEN NOT $4 THEN now() END,CASE WHEN NOT $4 THEN NULLIF($7,'')::uuid END,$8,CASE WHEN $9 > 0 THEN now() END,NULLIF($10,'')::uuid) RETURNING id::text`,
+		workspaceID, string(kind), name, enabled, settings, change.ExternalAccount, actor.AgentID, makeDefault, autoCloseHours(definition, settings), helpCenterID).Scan(&id)
 	if err != nil {
 		return channels.Channel{}, channelWriteError(err)
 	}
@@ -444,6 +485,25 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 		}
 		if err := insertChannelEvent(ctx, tx, current, kind, actor, nil); err != nil {
 			return channels.Channel{}, err
+		}
+	}
+	if input.HelpCenterID != nil {
+		helpCenterID, err := servedHelpCenter(ctx, tx, workspaceID, current.Type, *input.HelpCenterID)
+		if err != nil {
+			return channels.Channel{}, err
+		}
+		if helpCenterID != current.HelpCenterID {
+			if _, err := tx.Exec(ctx, `UPDATE channels SET help_center_id=NULLIF($3,'')::uuid,updated_at=now() WHERE workspace_id=$1 AND id=$2`,
+				workspaceID, id, helpCenterID); err != nil {
+				return channels.Channel{}, channelWriteError(err)
+			}
+			var to any
+			if helpCenterID != "" {
+				to = helpCenterID
+			}
+			if err := insertChannelEvent(ctx, tx, current, "config_changed", actor, map[string]any{"help_center_id": to}); err != nil {
+				return channels.Channel{}, err
+			}
 		}
 	}
 	var change channels.ConfigChange
@@ -608,6 +668,15 @@ type ChannelPublic struct {
 	// Paused counts the messages kept while the channel's processing is paused (0 while it runs).
 	Paused   int
 	LastSeen *string
+	// HelpCenterName names the help center a help chat or web form serves (the primary's when the
+	// channel names none); nil for another type, or while the workspace has no help center.
+	HelpCenterName *string
+}
+
+// servesHelpCenter is whether a channel of the type serves a help center: its articles, and the mark
+// on the conversations it opens.
+func servesHelpCenter(kind channels.Type) bool {
+	return kind == channels.Type(domain.ChannelHelpChat) || kind == channels.Type(domain.ChannelWebForm)
 }
 
 // DescribeChannel reads what the API shows of a channel: its configuration, state and counts.
@@ -643,8 +712,10 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 		(SELECT count(*) FROM channel_outbox WHERE workspace_id=$1 AND channel_id=$2 AND status='failed' AND last_error_code=$4),
 		(SELECT to_char(max(received_at) AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') FROM channel_inbound_events
 			WHERE workspace_id=$1 AND channel_id=$2 AND state NOT IN ('received','failed')),
-		CASE WHEN $5 THEN (SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state IN ('received','failed','pending')) ELSE 0 END`,
-		channel.WorkspaceID, channel.ID, channels.HoldChannelOff, DeliveryCodeChannelOff, channel.ProcessingPausedAt != nil).Scan(&public.Held, &public.Unsent, &public.LastSeen, &public.Paused); err != nil {
+		CASE WHEN $5 THEN (SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state IN ('received','failed','pending')) ELSE 0 END,
+		CASE WHEN $6 THEN (SELECT name FROM help_centers WHERE workspace_id=$1 AND id=COALESCE(NULLIF($7,'')::uuid,primary_help_center_id($1))) END`,
+		channel.WorkspaceID, channel.ID, channels.HoldChannelOff, DeliveryCodeChannelOff, channel.ProcessingPausedAt != nil,
+		servesHelpCenter(channel.Type), channel.HelpCenterID).Scan(&public.Held, &public.Unsent, &public.LastSeen, &public.Paused, &public.HelpCenterName); err != nil {
 		return public, fmt.Errorf("count channel messages: %w", err)
 	}
 	// Any event the channel received and decided on (made a message, held, dropped as the desk's own
