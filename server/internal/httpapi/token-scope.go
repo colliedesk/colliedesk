@@ -221,6 +221,7 @@ var routeAccess = map[string]TokenAccess{
 	"GET /api/v1/help-center/theme":              need(auth.PermHelpCenterRead),
 	"GET /api/v1/help-center/languages":          need(auth.PermHelpCenterRead),
 	"GET /api/v1/help-center/search-console":     need(auth.PermHelpCenterRead),
+	"GET /api/v1/help-center/analytics":          need(auth.PermHelpCenterRead),
 	"GET /api/v1/help-center/freshdesk-redirect": need(auth.PermHelpCenterRead),
 	"POST /api/v1/help-center/theme/check":       need(auth.PermHelpCenterRead),
 	"POST /api/v1/help-center/theme/preview":     need(auth.PermHelpCenterRead),
@@ -321,6 +322,8 @@ var routeAccess = map[string]TokenAccess{
 	"PUT /api/v1/help-center/theme":                                need(auth.PermHelpCenterUpdate),
 	"PUT /api/v1/help-center/languages":                            need(auth.PermHelpCenterUpdate),
 	"PUT /api/v1/help-center/search-console":                       need(auth.PermHelpCenterUpdate),
+	"PUT /api/v1/help-center/analytics":                            need(auth.PermHelpCenterUpdate),
+	"POST /api/v1/help-center/analytics/test":                      need(auth.PermHelpCenterUpdate),
 
 	// Allowing an AI app makes a grant that acts with everything its person holds: a grant that allowed
 	// apps would leave them connected after it was disconnected, like a token that made tokens.

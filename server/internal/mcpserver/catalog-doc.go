@@ -32,6 +32,9 @@ var toolDocs = map[string]string{
 	"colliedesk_help_center_domain_remove": "Removes the custom domain and restores the slug address",
 
 	"colliedesk_help_center_freshdesk_redirect_get":  "Says how the old Freshdesk help center addresses move and, for a Freshdesk plan that allows it, returns the snippet that redirects them",
+	"colliedesk_help_center_analytics_get":           "Reads where the help center sends its page views (GA4 or Plausible), whether it is on and the last send result",
+	"colliedesk_help_center_analytics_set":           "Sends the help center's page views from the server to the workspace's own GA4 or Plausible, or stops it",
+	"colliedesk_help_center_analytics_test":          "Sends one test page view to the saved GA4 or Plausible and says what the service answered",
 	"colliedesk_help_center_search_console_get":      "Reads the Google and Bing Search Console verification tokens of the help center",
 	"colliedesk_help_center_search_console_update":   "Sets or removes the Google and Bing verification tokens served as meta tags on the help center's pages",
 	"colliedesk_help_center_theme_get":               "Reads the public help center's logo, colors, fonts, custom CSS and links",

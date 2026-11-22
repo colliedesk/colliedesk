@@ -169,6 +169,12 @@ articles, neighbours); a 304 stops after the second. Workspace A carries a full 
 31 KiB of custom CSS, the worst case of what every page reads and hashes into the brand sheet's name
 (page p95 unchanged, and the gate took 0.4 s longer locally).
 
+A workspace's help center analytics (GA4 or Plausible) is sent by the server after the page is
+written: `PageViewed` only puts the delivery in a buffered queue and returns, and the sends run on
+their own goroutines with a 5 s timeout each (docs/internals/knowledge-base.md › Analytics).
+`TestAPageNeverWaitsOnAHangingAnalyticsServiceAndTheFailureIsShown` loads 20 pages while the stub
+GA4 never answers and fails when one takes more than 100 ms.
+
 `TestHelpCenterCustomHostLatencyBudget` gives workspace A of the same fixture an active custom domain
 and loads it by host name: the first request, which looks the host up (cold cache, 15 ms locally),
 then the home page, the collection and an article 20 times each (warm, 8–9 ms p95), all under the same

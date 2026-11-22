@@ -104,6 +104,11 @@ const (
 	// workspace, to kb_article_views in one statement; each row names its own workspace and article, a
 	// count whose article is gone is skipped, and nothing leaves the transaction.
 	PrivilegeKBArticleViews Privilege = "kb-article-views"
+	// PrivilegeHelpCenterAnalytics lists the workspaces that send their help center page views to GA4 or
+	// Plausible, and records in one statement, for every workspace, when a page view was last accepted
+	// or refused. Only workspace ids leave the transaction; each target and its sealed API secret are
+	// read in their own workspace.
+	PrivilegeHelpCenterAnalytics Privilege = "help-center-analytics"
 	// PrivilegeBillingReconcile reads every workspace id and every stored Polar subscription, so the
 	// operator command can compare them with Polar's list. Writes go through the scoped path.
 	PrivilegeBillingReconcile Privilege = "billing-reconcile"

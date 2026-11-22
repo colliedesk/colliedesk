@@ -47,6 +47,7 @@ export const routePermissions: ReadonlyArray<readonly [string, string]> = [
   ['/api/v1/conversations/{id}/time-entries', 'conversations:read'],
   ['/api/v1/export', 'workspace:export'],
   ['/api/v1/help-center', 'help_center:read'],
+  ['/api/v1/help-center/analytics', 'help_center:read'],
   ['/api/v1/help-center/domain', 'help_center:read'],
   ['/api/v1/help-center/freshdesk-redirect', 'help_center:read'],
   ['/api/v1/help-center/languages', 'help_center:read'],

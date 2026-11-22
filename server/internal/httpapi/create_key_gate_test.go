@@ -77,6 +77,7 @@ var postWithoutKey = map[string]string{
 	"POST /api/v1/export/link":                             "Stores no row: a short-lived signed link held in memory, to the same export.",
 	"POST /api/v1/conversations/{id}/fixes/preview":        "Shows what a fix would send; it stores nothing.",
 	"POST /api/v1/autofix/connectors/{kind}/check":         "Checks one coding agent and stores its last result: repeats leave one result.",
+	"POST /api/v1/help-center/analytics/test":              "Sends one test page view to the workspace's own service and answers what it said; it stores nothing, and a repeat is one more test view there.",
 	// Sessions opened at another service: nothing is stored here until it calls back.
 	"POST /api/v1/channels/{id}/email/gmail":     "Answers Google's consent address; the connection is stored only when Google calls back, once.",
 	"POST /api/v1/channels/{id}/email/microsoft": "Answers Microsoft's consent address; the connection is stored only when Microsoft calls back, once.",
@@ -94,8 +95,8 @@ var postWithoutKey = map[string]string{
 
 // maxPostWithoutKey is the ceiling of postWithoutKey; lower it when a route leaves the list.
 // One DNS status check added for the workspace's single help center domain; eight Autofix routes, each
-// with its reason above.
-const maxPostWithoutKey = 67
+// with its reason above; the help center analytics test, which stores nothing.
+const maxPostWithoutKey = 68
 
 func takesIdempotencyKey(path *openapi3.PathItem, operation *openapi3.Operation) bool {
 	for _, parameters := range []openapi3.Parameters{path.Parameters, operation.Parameters} {

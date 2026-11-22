@@ -25,6 +25,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/gmailinbox"
+	"github.com/colliedesk/colliedesk/server/internal/hcanalytics"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
@@ -33,6 +34,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/mentionmail"
 	"github.com/colliedesk/colliedesk/server/internal/metaconversions"
+	"github.com/colliedesk/colliedesk/server/internal/pageview"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/results"
@@ -70,7 +72,9 @@ type process struct {
 	configStore    *serverconfig.Store
 	// views counts help center article views for every generation; serve writes what is left at shutdown.
 	views *kbviews.Counter
-	wait  sync.WaitGroup
+	// analytics sends the same page views to each workspace's GA4 or Plausible, when it set one.
+	analytics *hcanalytics.Sender
+	wait      sync.WaitGroup
 }
 
 // Go runs a loop that does not depend on the configuration for the life of the process.
@@ -319,8 +323,17 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		ProblemReportWorkspace: config.ProblemReportWorkspace, SwitchedOff: off, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
 		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv,
 		ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
+	// Only a set consumer goes in, so a nil pointer never sits inside the interface.
+	var pageViews pageview.Fanout
 	if p.views != nil {
-		apiConfig.PageViews = p.views
+		pageViews = append(pageViews, p.views)
+	}
+	if p.analytics != nil {
+		pageViews = append(pageViews, p.analytics)
+		apiConfig.Analytics = p.analytics
+	}
+	if len(pageViews) > 0 {
+		apiConfig.PageViews = pageViews
 	}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
