@@ -48,6 +48,8 @@ work together, keep the knowledge base. Tag `@journey`; CI job `e2e`.
 - `knowledge base list: tags set in the editor, a hidden column stays hidden after a reload, and a saved view opens its filters again` (`web/e2e/knowledge-base-list.spec.ts`)
 - `kb article list: at desktop width with 1, 4 and 8 columns, with bulk select and in a collection's order view, the head lines up with the cells, the title keeps the free width, the open button stays on its row` (`web/e2e/knowledge-base-list-grid.spec.ts`)
 - `kb article list: on a narrow window the head still lines up with the cells and the chosen columns give way in order` (`web/e2e/knowledge-base-list-grid.spec.ts`)
+- `kb article list: on a phone the status shows beside the title whichever column the person put first` (`web/e2e/knowledge-base-list-grid.spec.ts`)
+- `kb languages: at desktop width the articles of a language keep the title wide and the Translate button on its row` (`web/e2e/knowledge-base-list-grid.spec.ts`)
 - `knowledge base review: the author sends a draft for review, the reviewer approves it from Reviews, the author publishes it` (`web/e2e/knowledge-base-review.spec.ts`)
 
 ## Running them

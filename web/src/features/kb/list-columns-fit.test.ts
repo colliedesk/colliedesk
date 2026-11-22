@@ -43,4 +43,16 @@ describe('fittingColumns', () => {
     expect(fittingColumns(defaults, { width: 1064, ordered: false, selects: true, rem: 20 })).toBe(4);
     expect(fittingColumns(defaults, { width: 1063, ordered: false, selects: true, rem: 20 })).toBe(3);
   });
+
+  it('shows only the first column when the list is 36rem or narrower, as its container query does', () => {
+    // 600 px inside the scroll bar: votes and languages fit (16 + 192 + 96 + 128 + 40 + 16 = 488), but a list of
+    // 576 px (36rem) shows the title and the first column only.
+    const narrow: KBListColumn[] = ['votes', 'languages', 'status'];
+    expect(fittingColumns(narrow, { width: 600, list: 577, ordered: false, selects: false, rem: 16 })).toBe(2);
+    expect(fittingColumns(narrow, { width: 600, list: 576, ordered: false, selects: false, rem: 16 })).toBe(1);
+  });
+
+  it('keeps every chosen column on a phone, whose rows show the status beside the title', () => {
+    expect(fittingColumns(['author', 'status'], { width: 300, list: 300, phone: true, ordered: false, selects: false, rem: 16 })).toBe(2);
+  });
 });

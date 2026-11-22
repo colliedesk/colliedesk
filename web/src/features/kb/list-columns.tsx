@@ -13,9 +13,15 @@ const widths: Record<KBListColumn, string> = {
 };
 
 // fittingColumns counts how many of the chosen columns fit beside a title of at least 12rem in a list `width` px
-// wide; the last chosen columns give way first, and the first column always stays. The row padding (with the
-// tick box of bulk select) and the gaps between tracks are px tokens, the tracks are rem.
-export function fittingColumns(columns: KBListColumn[], { width, ordered, selects, rem }: { width: number; ordered: boolean; selects: boolean; rem: number }): number {
+// wide inside its scroll bar; the last chosen columns give way first, and the first column always stays. The row
+// padding (with the tick box of bulk select) and the gaps between tracks are px tokens, the tracks are rem. A list
+// box (`list`) of 36rem or less shows the title and the first column only (its container query in kb.css). A phone
+// keeps every column: its rows show the status beside the title, whichever column comes first.
+export function fittingColumns(columns: KBListColumn[], { width, list = width, phone = false, ordered, selects, rem }:
+  { width: number; list?: number; phone?: boolean; ordered: boolean; selects: boolean; rem: number }): number {
+  if (phone) return columns.length;
+  const first = Math.min(1, columns.length);
+  if (list <= 36 * rem) return first;
   const pad = 16 + (selects ? 16 + 12 : 0);
   const gap = 16;
   const tail = (2.5 + (ordered ? 4.5 : 0)) * rem + gap * (ordered ? 1 : 0);
@@ -26,26 +32,30 @@ export function fittingColumns(columns: KBListColumn[], { width, ordered, select
     if (used > width) break;
     count += 1;
   }
-  return Math.max(count, Math.min(1, columns.length));
+  return Math.max(count, first);
 }
+
+// The phone layout of kb.css starts below this width.
+const desktop = '(min-width: 44.01rem)';
 
 // useFittingColumns returns the chosen columns that fit the list box `scroll` (its width inside the scroll bar),
 // following its size. Until the box is measured every chosen column shows.
 export function useFittingColumns(scroll: RefObject<HTMLElement | null>, columns: KBListColumn[], { ordered, selects }: { ordered: boolean; selects: boolean }): KBListColumn[] {
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, list: 0, phone: false });
   useLayoutEffect(() => {
     const box = scroll.current;
     if (!box) return;
-    const measure = () => setWidth(box.clientWidth);
+    const measure = () => setSize({ width: box.clientWidth, list: box.closest('.kb-list')?.clientWidth ?? box.clientWidth,
+      phone: typeof window.matchMedia === 'function' && !window.matchMedia(desktop).matches });
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const watch = new ResizeObserver(measure);
     watch.observe(box);
     return () => watch.disconnect();
   }, [scroll]);
-  if (width === 0) return columns;
+  if (size.width === 0) return columns;
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  return columns.slice(0, fittingColumns(columns, { width, ordered, selects, rem }));
+  return columns.slice(0, fittingColumns(columns, { ...size, ordered, selects, rem }));
 }
 
 // gridOf sets the list's grid for the chosen columns: the title, each column, the open-on-help-center button

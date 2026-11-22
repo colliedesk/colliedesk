@@ -39,6 +39,9 @@ async function checkGrid(page: Page, label: string, columns: string[], ordered: 
   expect(shown).toBeLessThanOrEqual(columns.length);
   const want = columns.slice(0, shown).map((column) => names[column]);
   expect(await labels.evaluateAll((spans) => spans.slice(1, -1).map((span) => span.textContent ?? '').filter(Boolean)), `${label}: the head shows the first chosen columns`).toEqual(want);
+  // Every column the head has must show: a list of 36rem or less hides all but the first, so it must have only that one.
+  const visible = await labels.evaluateAll((spans) => spans.slice(1, -1).filter((span) => span.textContent && span.checkVisibility()).length);
+  expect.soft(visible, `${label}: every column in the head shows`).toBe(shown);
   const link = row.locator('.kb-article-row');
   const cells = link.locator('> *');
   await expect(cells).toHaveCount(shown + 1);
@@ -51,8 +54,11 @@ async function checkGrid(page: Page, label: string, columns: string[], ordered: 
   // The first chosen column always stays, so with one column the title only has to stay wider than any column.
   if (shown > 1) expect.soft(title.width, `${label}: the title keeps at least 12rem`).toBeGreaterThanOrEqual(191);
   else expect.soft(title.width, `${label}: the title is wider than any fixed column`).toBeGreaterThan(144);
-  // A column is left out only when it would not fit: the title has less spare room than that column and its gap.
-  if (shown < columns.length) expect.soft(title.width - 192, `${label}: ${columns[shown]} is left out only for want of room`).toBeLessThan(px[columns[shown]] + 16);
+  // A list of 36rem or less shows the title and the first column only (its container query); a wider one leaves
+  // a column out only when it would not fit: the title has less spare room than that column and its gap.
+  const narrow = await page.locator('.kb-list').evaluate((list) => list.clientWidth <= 36 * parseFloat(getComputedStyle(document.documentElement).fontSize));
+  if (narrow) expect.soft(shown, `${label}: a narrow list has the first column only`).toBe(1);
+  else if (shown < columns.length) expect.soft(title.width - 192, `${label}: ${columns[shown]} is left out only for want of room`).toBeLessThan(px[columns[shown]] + 16);
   const [rowBox, open] = [await box(link), await box(row.locator('.kb-article-open'))];
   expect.soft(Math.abs(open.y + open.height / 2 - (rowBox.y + rowBox.height / 2)), `${label}: the open button is on the row's line`).toBeLessThanOrEqual(2);
   const item = await box(row);
@@ -62,7 +68,8 @@ async function checkGrid(page: Page, label: string, columns: string[], ordered: 
   const menu = page.locator('.kb-columns-menu');
   await menu.locator('summary').click();
   const note = menu.getByRole('note');
-  if (shown < columns.length) await expect(note, `${label}: the menu says columns were left out`).toContainText('too narrow');
+  const left = columns.length - shown;
+  if (left > 0) await expect(note, `${label}: the menu counts the columns left out`).toContainText(`too narrow for the last ${left === 1 ? 'column' : `${left} columns`}`);
   else await expect(note).toHaveCount(0);
   await menu.locator('summary').click();
   return shown;
@@ -108,17 +115,60 @@ test.describe('at 1440 px', () => {
   });
 });
 
-test.describe('at 900 px', () => {
-  test.use({ viewport: { width: 900, height: 800 } });
-
+test.describe('on narrower windows', () => {
   test('kb article list: on a narrow window the head still lines up with the cells and the chosen columns give way in order', { tag: '@journey' }, async ({ page }) => {
     const billing = await seed(page);
+    // 1280 px: the list (about 690 px) is wider than 36rem, so the fit decides how many columns show.
+    await page.setViewportSize({ width: 1280, height: 800 });
     await setColumns(page, choices['all eight']);
     await page.goto(`${base}/knowledge`);
-    await checkGrid(page, 'all eight at 900 px, all articles', choices['all eight'], false);
+    await checkGrid(page, 'all eight at 1280 px, all articles', choices['all eight'], false);
     await page.goto(`${base}/knowledge?collection=${billing}`);
     await expect(page.locator('.kb-list[data-order="true"]')).toBeVisible();
-    await checkGrid(page, 'all eight at 900 px, the collection\'s order', choices['all eight'], true);
-    await page.screenshot({ path: test.info().outputPath('kb-list-8-columns-900.png') });
+    await checkGrid(page, 'all eight at 1280 px, the collection\'s order', choices['all eight'], true);
+    // 1150 px: the collections sit beside the list, which is under 36rem and shows the title and the first column
+    // only, although two narrow columns would fit.
+    await page.setViewportSize({ width: 1150, height: 800 });
+    const narrow = ['votes', 'languages', 'status'];
+    await setColumns(page, narrow);
+    await page.goto(`${base}/knowledge`);
+    expect(await checkGrid(page, 'votes, languages, status at 1150 px', narrow, false)).toBe(1);
+    await page.screenshot({ path: test.info().outputPath('kb-list-narrow.png') });
+  });
+});
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('kb article list: on a phone the status shows beside the title whichever column the person put first', { tag: '@journey' }, async ({ page }) => {
+    await seed(page);
+    await setColumns(page, ['author', 'status']);
+    await page.goto(`${base}/knowledge`);
+    const row = page.locator('.kb-article-item').filter({ hasText: 'Refund rules' });
+    await expect(row.locator('.kb-article-status'), 'the status shows beside the title').toBeVisible();
+    await expect(row.locator('.kb-article-status')).toContainText('Published');
+    await expect(page.locator('.kb-article-item').filter({ hasText: 'Change your plan' }).locator('.kb-article-status')).toContainText('Draft');
+  });
+});
+
+test.describe('the languages page at 1440 px', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('kb languages: at desktop width the articles of a language keep the title wide and the Translate button on its row', { tag: '@journey' }, async ({ page }) => {
+    await seed(page);
+    expect((await page.request.put(`${base}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Grid help', locale: 'en' } })).status()).toBe(200);
+    expect((await page.request.put(`${base}/api/v1/help-center/languages`, { headers, data: { languages: [{ locale: 'fr', visible: true }] } })).status()).toBe(200);
+    await page.goto(`${base}/knowledge/languages?locale=fr&state=missing`);
+    const row = page.locator('.kb-language-articles .kb-article-item').filter({ hasText: 'Refund rules' });
+    await expect(row).toBeVisible();
+    const [item, link, main, status, button] = [await box(row), await box(row.locator('.kb-article-row')),
+      await box(row.locator('.kb-article-main')), await box(row.locator('.kb-article-status')), await box(row.locator('.button-link'))];
+    // The title takes all the width the status (7.5rem) and the button (8rem) leave, after the row's 16 px padding and two gaps.
+    expect.soft(main.width, 'the title takes the free width').toBeGreaterThanOrEqual(item.width - 16 - 120 - 128 - 32 - 2);
+    expect.soft(status.x, 'the status sits right after the title').toBeGreaterThanOrEqual(main.x + main.width);
+    expect.soft(Math.abs(button.y + button.height / 2 - (link.y + link.height / 2)), 'the Translate button is on the row\'s line').toBeLessThanOrEqual(2);
+    expect.soft(button.x + button.width, 'the Translate button ends inside the row').toBeLessThanOrEqual(item.x + item.width);
+    expect.soft(Math.round(item.height), 'the row is one line of the grid').toBeLessThanOrEqual(Math.round(link.height) + 1);
+    await page.screenshot({ path: test.info().outputPath('kb-languages-1440.png') });
   });
 });
