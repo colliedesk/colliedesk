@@ -1,0 +1,1 @@
+ALTER TABLE help_centers DROP CONSTRAINT help_centers_handle_not_a_route;

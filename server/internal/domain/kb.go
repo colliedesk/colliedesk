@@ -534,8 +534,8 @@ type HelpCenterSite struct {
 	// the one its own address, help chat and channel pages belong to.
 	HelpCenterID string
 	Primary      bool
-	// Handle names a help center other than the primary below /b/<handle> of the primary's
-	// addresses; "" on the primary.
+	// Handle names a help center other than the primary at /<handle> below the primary's
+	// addresses (CheckHelpCenterHandle); "" on the primary.
 	Handle         string
 	Slug           string
 	Name           string
