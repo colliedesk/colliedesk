@@ -7101,8 +7101,9 @@ paths:
       description: >
         Knowledge base articles outside the trash, without their text, in pages. Without `q` the
         order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's
-        order (collections in their order, a collection's own articles before those of its collections,
-        and in each collection by `position`, then title, then number). `sort` is `manual` with
+        order (collections in their order; in each, its own articles, then those listed in it from another
+        home, each in the collection's `article_order`, then its collections; an article listed in several
+        collections shows once, at its first place). `sort` is `manual` with
         `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of
         `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words
         are split the same way in the query and the text, with no language rules, so a word inside

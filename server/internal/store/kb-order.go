@@ -34,6 +34,18 @@ const kbArticleCollection = ` LEFT JOIN kb_collections ko ON ko.workspace_id=a.w
 // kbArticleMode is the article_order of ko, the collection kbArticleCollection joins.
 const kbArticleMode = `COALESCE(ko.article_order, 'manual')`
 
+// kbFirstListing joins fl, the first place the help center lists article a among the collections that
+// inside (an SQL condition on l.id) keeps: its home or a collection it is also listed in, first by the
+// path of kbTreeOrder's tree, the home first in a tie; and ko, that collection, for kbArticleMode. In fl
+// another home's article (fl.extra) comes after the collection's own ones, with position 0 as there.
+func kbFirstListing(inside string) string {
+	return ` LEFT JOIN LATERAL (SELECT l.id, l.extra, k.path FROM (SELECT a.collection_id AS id, false AS extra
+			UNION ALL SELECT x.collection_id, true FROM kb_article_collections x
+			WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id AND x.collection_id<>a.collection_id) l
+		LEFT JOIN tree k ON k.id=l.id WHERE ` + inside + ` ORDER BY k.path NULLS LAST, l.extra LIMIT 1) fl ON true
+		LEFT JOIN kb_collections ko ON ko.workspace_id=a.workspace_id AND ko.id=fl.id`
+}
+
 // kbArticleEnd is the position of an article added to collection (an SQL expression) of workspace $1:
 // after the last one once the collection was ordered by hand, else 0, which keeps the title order.
 func kbArticleEnd(collection string) string {

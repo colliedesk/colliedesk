@@ -173,9 +173,15 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 		join = kbArticleCollection
 		order = ` ORDER BY ` + kbArticlesBy(kbArticleMode, `a.position`, `a.title`)
 	case query == "" && sort == KBSortManual:
-		// Across collections, as the help center lists them: a collection's articles, then its collections'.
-		with, join = kbTreeOrder, ` LEFT JOIN tree k ON k.id=a.collection_id`+kbArticleCollection
-		order = ` ORDER BY k.path NULLS LAST, ` + kbArticlesBy(kbArticleMode, `a.position`, `a.title`)
+		// Across collections, as the help center lists them: a collection's articles, then those listed in
+		// it from another home, then its collections'. An article listed twice shows once, at its first place.
+		inside := `true`
+		if filter.CollectionID != "" {
+			args = append(args, filter.CollectionID)
+			inside = `l.id = ANY(` + fmt.Sprintf(kbLiveSubtreeSQL, len(args)) + `)`
+		}
+		with, join = kbTreeOrder, kbFirstListing(inside)
+		order = ` ORDER BY fl.path NULLS LAST, fl.extra, ` + kbArticlesBy(kbArticleMode, `CASE WHEN fl.extra THEN 0 ELSE a.position END`, `a.title`)
 	}
 	if query != "" {
 		args = append(args, "%"+likePattern.Replace(query)+"%")
