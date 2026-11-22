@@ -38,24 +38,34 @@ export function fittingColumns(columns: KBListColumn[], { width, list = width, p
 // The phone layout of kb.css starts below this width.
 const desktop = '(min-width: 44.01rem)';
 
+// atWidest says whether the page around the list is as wide as its content may grow (the max-width in kb.css):
+// a wider window then gives the list no more room.
+function atWidest(box: HTMLElement): boolean {
+  const layout = box.closest<HTMLElement>('.kb-art-layout');
+  if (!layout) return false;
+  const max = parseFloat(getComputedStyle(layout).maxWidth);
+  return Number.isFinite(max) && layout.getBoundingClientRect().width >= max - 1;
+}
+
 // useFittingColumns returns the chosen columns that fit the list box `scroll` (its width inside the scroll bar),
-// following its size. Until the box is measured every chosen column shows.
-export function useFittingColumns(scroll: RefObject<HTMLElement | null>, columns: KBListColumn[], { ordered, selects }: { ordered: boolean; selects: boolean }): KBListColumn[] {
-  const [size, setSize] = useState({ width: 0, list: 0, phone: false });
+// following its size, and whether the page is at its widest. Until the box is measured every chosen column shows.
+export function useFittingColumns(scroll: RefObject<HTMLElement | null>, columns: KBListColumn[], { ordered, selects }: { ordered: boolean; selects: boolean }):
+  { shown: KBListColumn[]; widest: boolean } {
+  const [size, setSize] = useState({ width: 0, list: 0, phone: false, widest: false });
   useLayoutEffect(() => {
     const box = scroll.current;
     if (!box) return;
     const measure = () => setSize({ width: box.clientWidth, list: box.closest('.kb-list')?.clientWidth ?? box.clientWidth,
-      phone: typeof window.matchMedia === 'function' && !window.matchMedia(desktop).matches });
+      phone: typeof window.matchMedia === 'function' && !window.matchMedia(desktop).matches, widest: atWidest(box) });
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const watch = new ResizeObserver(measure);
     watch.observe(box);
     return () => watch.disconnect();
   }, [scroll]);
-  if (size.width === 0) return columns;
+  if (size.width === 0) return { shown: columns, widest: size.widest };
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  return columns.slice(0, fittingColumns(columns, { ...size, ordered, selects, rem }));
+  return { shown: columns.slice(0, fittingColumns(columns, { ...size, ordered, selects, rem })), widest: size.widest };
 }
 
 // gridOf sets the list's grid for the chosen columns: the title, each column, the open-on-help-center button
@@ -72,7 +82,8 @@ export function gridOf(columns: KBListColumn[], ordered: boolean): React.CSSProp
 }
 
 // ListColumns: the person picks the columns, saved for them on the server, so every device shows the same list.
-export function ListColumns({ columns, isDefault, hidden = 0 }: { columns: KBListColumn[]; isDefault: boolean; hidden?: number }) {
+// `hidden` columns did not fit; `widest` says a wider window would not make room for them.
+export function ListColumns({ columns, isDefault, hidden = 0, widest = false }: { columns: KBListColumn[]; isDefault: boolean; hidden?: number; widest?: boolean }) {
   const client = useQueryClient();
   const save = useMutation({
     mutationFn: (next: KBListColumn[] | null) => kbApi.setListColumns(next),
@@ -84,7 +95,7 @@ export function ListColumns({ columns, isDefault, hidden = 0 }: { columns: KBLis
   return (
     <ListMenu label={listMessages.columns} className="kb-columns-menu">
       <p className="filter-hint">{listMessages.columnsLead}</p>
-      {hidden > 0 && <p className="filter-hint" role="note">{listMessages.columnsHidden(hidden)}</p>}
+      {hidden > 0 && <p className="filter-hint" role="note">{widest ? listMessages.columnsNoRoom(hidden) : listMessages.columnsHidden(hidden)}</p>}
       {[...shown, ...rest].map((column) => (
         <label key={column} className="check-row"><input type="checkbox" checked={shown.includes(column)} disabled={save.isPending}
           onChange={(event) => toggle(column, event.currentTarget.checked)} /><span>{listMessages.columnNames[column]}</span></label>

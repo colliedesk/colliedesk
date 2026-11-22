@@ -15,7 +15,7 @@ const member = (id: string, name: string) => ({ id, email: `${name.toLowerCase()
 const tagged = { ...summary(1, 'Refund rules', 'published'), author_agent_id: bea, author: { agent_id: bea, name: 'Bea', left: true }, tags: ['billing', 'faq'],
   languages: [{ locale: 'de', outdated: true }], votes: { helpful: 3, not_helpful: 1 } };
 const base = {
-  'GET /api/v1/auth/me': () => json(200, { ...me, kb_list_columns: { columns: ['status', 'author', 'tags', 'updated'], default: true } }),
+  'GET /api/v1/auth/me': () => json(200, { ...me, kb_list_columns: { columns: ['status', 'author', 'updated'], default: true } }),
   'GET /api/v1/kb/collections': () => json(200, { items: collections }),
   'GET /api/v1/kb/articles': () => json(200, { items: [tagged], next_cursor: null }),
   'GET /api/v1/kb/tags': () => json(200, { items: [{ tag: 'billing', article_count: 2 }, { tag: 'faq', article_count: 1 }] }),
@@ -32,32 +32,32 @@ test('the list shows the columns the person chose, and a change is saved for the
   const calls = serve({ ...base,
     'PUT /api/v1/agents/me/kb-list-columns': (call) => {
       const columns = (call.body as { columns: string[] | null }).columns;
-      return json(200, columns ? { columns, default: false } : { columns: ['status', 'author', 'tags', 'updated'], default: true });
+      return json(200, columns ? { columns, default: false } : { columns: ['status', 'author', 'updated'], default: true });
     } });
   open();
   const row = await screen.findByRole('link', { name: /Refund rules/ });
   expect(row).toHaveTextContent('Bea (left)');
-  expect(row).toHaveTextContent('billing');
+  expect(row).not.toHaveTextContent('billing');
   expect(row).not.toHaveTextContent('3 / 1');
   fireEvent.click(screen.getByText('Columns'));
   const chooser = screen.getByRole('group', { name: 'Columns' });
   expect(within(chooser).getAllByRole('checkbox').map((box) => box.getAttribute('aria-label') ?? box.closest('label')?.textContent))
-    .toEqual(['Status', 'Author', 'Tags', 'Updated', 'Collection', 'Languages', 'Created', 'Votes']);
+    .toEqual(['Status', 'Author', 'Updated', 'Collection', 'Tags', 'Languages', 'Created', 'Votes']);
   fireEvent.click(within(chooser).getByRole('checkbox', { name: 'Tags' }));
-  await waitFor(() => expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ columns: ['status', 'author', 'updated'] }));
-  await waitFor(() => expect(screen.getByRole('link', { name: /Refund rules/ })).not.toHaveTextContent('billing'));
+  await waitFor(() => expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ columns: ['status', 'author', 'updated', 'tags'] }));
+  await waitFor(() => expect(screen.getByRole('link', { name: /Refund rules/ })).toHaveTextContent('billing'));
   fireEvent.click(within(chooser).getByRole('checkbox', { name: 'Votes' }));
-  await waitFor(() => expect(calls.filter((call) => call.method === 'PUT').at(-1)?.body).toEqual({ columns: ['status', 'author', 'updated', 'votes'] }));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'PUT').at(-1)?.body).toEqual({ columns: ['status', 'author', 'updated', 'tags', 'votes'] }));
   await waitFor(() => expect(screen.getByRole('link', { name: /Refund rules/ })).toHaveTextContent('3 / 1'));
   fireEvent.click(within(chooser).getByRole('button', { name: 'Reset columns' }));
   await waitFor(() => expect(calls.filter((call) => call.method === 'PUT').at(-1)?.body).toEqual({ columns: null }));
-  await waitFor(() => expect(screen.getByRole('link', { name: /Refund rules/ })).toHaveTextContent('billing'));
+  await waitFor(() => expect(screen.getByRole('link', { name: /Refund rules/ })).not.toHaveTextContent('billing'));
 });
 
 test('a list menu closes when the pointer presses outside it, even after its focused button went away', async () => {
   serve({ ...base,
     'GET /api/v1/auth/me': () => json(200, { ...me, kb_list_columns: { columns: ['status', 'author', 'updated'], default: false } }),
-    'PUT /api/v1/agents/me/kb-list-columns': () => json(200, { columns: ['status', 'author', 'tags', 'updated'], default: true }) });
+    'PUT /api/v1/agents/me/kb-list-columns': () => json(200, { columns: ['status', 'author', 'updated'], default: true }) });
   open();
   await screen.findByRole('link', { name: /Refund rules/ });
   const columns = screen.getByText('Columns').closest('details') as HTMLDetailsElement;

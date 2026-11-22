@@ -17,7 +17,7 @@ func myKBListColumnsSetSpec() Spec {
 		Name:  "colliedesk_my_kb_list_columns_set",
 		Title: "Choose your knowledge base list columns",
 		Description: `Choose the columns the team member this token acts as sees in the knowledge base article list, in order, after Article; ` +
-			`null gives back the default (status, author, tags, updated). It changes only what that person sees, on every device. ` +
+			`null gives back the default (status, author, updated). It changes only what that person sees, on every device. ` +
 			`colliedesk_workspace_settings_get shows the choice as your_kb_list_columns. It is safe to repeat.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/agents/me/kb-list-columns"},

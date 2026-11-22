@@ -11,7 +11,7 @@ import (
 var KBListColumnNames = []string{"status", "collection", "author", "tags", "languages", "created", "updated", "votes"}
 
 // kbListDefaultColumns is what a member sees before choosing.
-var kbListDefaultColumns = []string{"status", "author", "tags", "updated"}
+var kbListDefaultColumns = []string{"status", "author", "updated"}
 
 // KBListColumns is a member's columns of the knowledge base article list, in order. Default is true
 // while they have not chosen.
