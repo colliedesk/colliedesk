@@ -39,8 +39,8 @@ export function height(node: TreeNode): number {
 }
 
 // parentChoices are the collections node may move into: not itself or one inside it, and not so deep
-// that it, or a collection inside it, would pass the third level. Without node, any collection that can
-// still hold one.
+// that it, or a collection inside it, would pass the sixth level (maxDepth). Without node, any collection
+// that can still hold one.
 export function parentChoices(tree: TreeNode[], node?: TreeNode): TreeNode[] {
   const inside = new Set(node ? flatten([node]).map((item) => item.collection.id) : []);
   const levels = node ? height(node) : 1;

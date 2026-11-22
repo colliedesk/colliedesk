@@ -103,7 +103,7 @@ test('changing a collection\'s address name warns that its old help center addre
   expect(within(form).queryByRole('note')).not.toBeInTheDocument();
   fireEvent.change(within(form).getByRole('textbox', { name: 'Address name' }), { target: { value: 'getting-started' } });
   expect(within(form).getByRole('note')).toHaveTextContent('Old addresses are not redirected');
-  // Setup holds a collection, so it can only move to the top or stay where it is: not into itself or a third level.
+  // Setup may move to the top or into another collection, never into itself or a collection inside it.
   expect(within(within(form).getByRole('combobox', { name: 'Inside' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['Top level', 'Guides', 'Billing']);
   fireEvent.click(within(form).getByRole('button', { name: 'Save collection' }));
   await waitFor(() => expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: collections[1].updated_at, slug: 'getting-started' }));
