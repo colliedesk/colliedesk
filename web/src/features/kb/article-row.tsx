@@ -17,7 +17,8 @@ interface ArticleRowProps {
   collection?: string;
   timezone: string;
   isPublic?: boolean;
-  // order holds the buttons that move the article in its collection, while the list is the whole order.
+  // order holds the buttons that move the article in its collection, while the list is the whole order;
+  // they share the last track with the open button.
   order?: ReactNode;
   // select ticks the row for a bulk action; missing for a person who may not change articles.
   select?: { checked: boolean; onChange: () => void };
@@ -28,6 +29,9 @@ export function ArticleRow({ article, columns, collection, timezone, isPublic, o
   // Readers can open it only while it is published, for everyone, and the help center is on.
   const everyone = article.effective_visibility === 'everyone';
   const open = published && everyone && isPublic === true;
+  const openButton = open
+    ? <a className="kb-article-open icon-button" href={article.url} target="_blank" rel="noreferrer" aria-label={kbMessages.openPublic(article.title)} data-tip={kbMessages.openOnHelpCenter}><Icon name="external" /></a>
+    : <span className="kb-article-open" aria-hidden="true" title={published && everyone ? kbMessages.turnOnToOpen : undefined}><Icon name="external" /></span>;
   const meta = [columns.includes('collection') ? undefined : collection, kbMessages.articleNumber(article.number)];
   return (
     <li className="kb-article-item" data-selected={select?.checked ? 'true' : undefined}>
@@ -40,10 +44,7 @@ export function ArticleRow({ article, columns, collection, timezone, isPublic, o
         {columns.map((column, index) => <Cell key={column} column={column} article={article} collection={collection} timezone={timezone}
           isPublic={isPublic} extra={index > 0} />)}
       </a>
-      {open
-        ? <a className="kb-article-open icon-button" href={article.url} target="_blank" rel="noreferrer" aria-label={kbMessages.openPublic(article.title)} data-tip={kbMessages.openOnHelpCenter}><Icon name="external" /></a>
-        : <span className="kb-article-open" aria-hidden="true" title={published && everyone ? kbMessages.turnOnToOpen : undefined}><Icon name="external" /></span>}
-      {order}
+      {order ? <span className="kb-article-tail">{openButton}{order}</span> : openButton}
     </li>
   );
 }

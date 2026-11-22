@@ -86,10 +86,17 @@ select.kb-filter-select { width: calc(100% - 2 * var(--space-2)); margin: 0 var(
 span.kb-article-open { opacity: 0.35; }
 .kb-article-open svg { width: 16px; height: 16px; }
 .kb-more-row { padding: var(--space-3) var(--space-4); }
-/* Move up and Move down: a column of their own while a collection's list is its order. */
-.kb-list[data-order="true"] :is(.kb-cols-head, .kb-article-item) { grid-template-columns: var(--kb-grid, minmax(0, 1fr) 7.5rem 8rem 8rem 8rem 2.5rem 4.5rem); }
+/* Move up and Move down, while a collection's list is its order: on a desktop they stand one above the other
+   beside the open button, in its track, so the order view keeps the room of the columns. */
+.kb-list[data-order="true"] :is(.kb-cols-head, .kb-article-item) { grid-template-columns: var(--kb-grid, minmax(0, 1fr) 7.5rem 8rem 8rem 8rem 4.5rem); }
 .kb-order { display: flex; justify-content: flex-end; gap: 2px; padding-right: var(--space-2); }
-.kb-order-gap { width: var(--control); flex: none; }
+.kb-order-gap { width: var(--control); height: var(--control); flex: none; }
+@media (min-width: 44.01rem) {
+  .kb-article-tail { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-1); padding-right: var(--space-2); }
+  /* Two 26 px buttons and their gap stay inside the 56 px row. */
+  .kb-article-tail .kb-order { --control: 26px; flex-direction: column; padding-right: 0; }
+  .kb-article-tail .kb-order .icon-button { height: var(--control); }
+}
 .kb-order button[aria-disabled="true"] { opacity: 0.5; cursor: progress; }
 .kb-order[data-text="true"] { display: contents; }
 .kb-order[data-text="true"] svg { width: 16px; height: 16px; }
@@ -187,6 +194,7 @@ span.kb-article-open { opacity: 0.35; }
   .kb-list-scroll { overflow: visible; }
   .kb-article-item { grid-template-columns: minmax(0, 1fr); }
   .kb-list[data-order="true"] .kb-article-item { grid-template-columns: minmax(0, 1fr) auto; }
+  .kb-article-tail { display: contents; }
   .kb-order .icon-button, .kb-order-gap { width: var(--touch); height: var(--touch); }
   .kb-article-row { grid-column: 1; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); padding: var(--space-3) var(--space-4); }
   .kb-article-when, .kb-article-open, .kb-article-cell { display: none; }
@@ -986,7 +994,7 @@ span.kb-article-open { opacity: 0.35; }
 @container kb-list (max-width: 36rem) {
   .kb-cols-head > [data-extra], .kb-article-row > [data-extra] { display: none; }
   .kb-cols-head, .kb-article-item { grid-template-columns: var(--kb-grid-narrow, minmax(0, 1fr) 7.5rem 2.5rem); }
-  .kb-list[data-order="true"] :is(.kb-cols-head, .kb-article-item) { grid-template-columns: var(--kb-grid-narrow, minmax(0, 1fr) 7.5rem 2.5rem 4.5rem); }
+  .kb-list[data-order="true"] :is(.kb-cols-head, .kb-article-item) { grid-template-columns: var(--kb-grid-narrow, minmax(0, 1fr) 7.5rem 4.5rem); }
   .kb-article-row { grid-column: 1 / span var(--kb-span-narrow, 2); }
 }
 @container kb-list (max-width: 28rem) {
@@ -994,7 +1002,7 @@ span.kb-article-open { opacity: 0.35; }
   .kb-cols-head + .kb-list-scroll { margin-top: 0; border-radius: var(--radius-lg); }
   .kb-article-cell { display: none; }
   .kb-article-item { grid-template-columns: minmax(0, 1fr) 2.5rem; }
-  .kb-list[data-order="true"] .kb-article-item { grid-template-columns: minmax(0, 1fr) 2.5rem 4.5rem; }
+  .kb-list[data-order="true"] .kb-article-item { grid-template-columns: minmax(0, 1fr) 4.5rem; }
   .kb-article-row { grid-column: 1; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); padding: var(--space-3) 0 var(--space-3) var(--space-4); }
   /* The status reads on one line under the title: "Published · public". */
   .kb-article-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
