@@ -10012,12 +10012,23 @@ export interface components {
             channel_ref?: null | components["schemas"]["ChannelRef"];
             /** @description Where an imported conversation came from; null for conversations created in Colliedesk. */
             origin: null | components["schemas"]["ConversationOrigin"];
+            /** @description The help center it came in through: the one its web form or help chat served when it opened (a help chat's Talk to a person included). It stays when the channel later serves another one. Null for one that came through none: email, a chat app, started by the team, imported. Find them with help_center:<handle> in q (help_center:primary for the primary). */
+            help_center: null | components["schemas"]["ConversationHelpCenter"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
             /** @description What its customer wrote last (never the team's replies or notes), on one line: what an inbox row shows under the subject. Only in GET /conversations; missing on a single conversation and when the customer never wrote (a conversation the team started and nobody answered yet). */
             latest_customer_message?: components["schemas"]["CustomerMessageExcerpt"];
+        };
+        ConversationHelpCenter: {
+            /** Format: uuid */
+            id: string;
+            /** @description What the team calls it: its name (GET /api/v1/help-centers), else its title, its handle or the workspace name. */
+            name: string;
+            /** @description Its handle; "" for the primary, which has none and is searched as help_center:primary. */
+            handle: string;
+            primary: boolean;
         };
         CustomerMessageExcerpt: {
             /** @description The start of the message, spaces and line breaks folded into one space, at most 140 characters; a longer one is cut at a word and ends with "…". */
