@@ -912,6 +912,8 @@ func Routes() []Route {
 		// The unpublished changes of a published translation.
 		{http.MethodPost, "/api/v1/kb/articles/{id}/translations/{locale}/draft/publish", auth.PermissionSession},
 		{http.MethodDelete, "/api/v1/kb/articles/{id}/translations/{locale}/draft", auth.PermissionSession},
+		// What readers searched for on the help center.
+		{http.MethodGet, "/api/v1/kb/searches/report", auth.PermissionSession},
 	}
 }
 

@@ -7175,6 +7175,25 @@ paths:
                         tag: {type: string, minLength: 1, maxLength: 40}
                         article_count: {type: integer, minimum: 1}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/kb/searches/report:
+    get:
+      operationId: getKBSearchReport
+      x-permission: kb_articles:read
+      description: >
+        What readers searched for on the public help center in the last 7 days, up to now: the most
+        searched words (`top`), the words that found no article (`no_results`, the articles to write) and
+        the words whose results nobody opened (`nothing_opened`, the titles or excerpts to fix). Each
+        list has at most 20 rows, most searched first; searches whose words differ only in case or
+        accents are one row, shown with the newest words. A search is in the report as soon as it is
+        made. The words are masked (no email address, no run of 6 or more digits) and nothing about
+        the reader is kept. Bots, prefetches and signed-in team members are not counted; searches are
+        kept for 180 days unless the server sets `kb_searches.retention_days`.
+      responses:
+        '200':
+          description: The search report
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBSearchReport'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/kb/articles/trash:
     get:
       operationId: listTrashedKBArticles
@@ -13562,6 +13581,38 @@ components:
           type: array
           description: Every reset, newest first.
           items: {$ref: '#/components/schemas/KBArticleVoteReset'}
+    KBSearchReport:
+      type: object
+      required: [from, to, searches, top, no_results, nothing_opened]
+      properties:
+        from: {type: string, format: date-time, description: 'The start of the window: 7 days before `to`.'}
+        to: {type: string, format: date-time, description: When the report was read.}
+        searches: {type: integer, minimum: 0, description: Every search kept in the window.}
+        top:
+          type: array
+          maxItems: 20
+          description: The most searched words.
+          items: {$ref: '#/components/schemas/KBSearchTerm'}
+        no_results:
+          type: array
+          maxItems: 20
+          description: The most searched words that listed no article.
+          items: {$ref: '#/components/schemas/KBSearchTerm'}
+        nothing_opened:
+          type: array
+          maxItems: 20
+          description: The most searched words that listed articles of which the reader opened none.
+          items: {$ref: '#/components/schemas/KBSearchTerm'}
+    KBSearchTerm:
+      type: object
+      description: The searches of the window whose words are the same once case and accents are ignored.
+      required: [query, searches, opened, results, last_searched_at]
+      properties:
+        query: {type: string, minLength: 1, description: 'The newest words of the group, masked: "[email removed]" and "[number removed]" replace an email address and a run of 6 or more digits.'}
+        searches: {type: integer, minimum: 1}
+        opened: {type: integer, minimum: 0, description: The searches of the group from which the reader opened an article.}
+        results: {type: integer, minimum: 0, description: How many articles the newest search of the group listed.}
+        last_searched_at: {type: string, format: date-time}
     KBArticleVote:
       type: object
       description: One anonymous reader's current vote.

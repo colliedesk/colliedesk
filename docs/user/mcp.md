@@ -182,6 +182,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_article_votes_get` | Reads an article's "Was this article helpful?" counts, each reader's vote and what they said was missing | `kb_articles:read` |
 | `colliedesk_kb_article_votes_reset` | Starts an article's helpful count again from 0; the earlier counts stay under resets. Cannot be undone | `kb_articles:update` |
 | `colliedesk_kb_article_stats` | Counts an article's help center views and the sent replies that used it, per day, with those replies' conversations | `kb_articles:read` |
+| `colliedesk_kb_search_report` | Lists what readers searched for on the help center in 7 days: top words, words with no result, words whose results nobody opened | `kb_articles:read` |
 | `colliedesk_kb_article_send_for_review` | Saves an article's or translation's text and asks teammates who may publish to approve it | `kb_articles:update` |
 | `colliedesk_kb_reviews_list` | Lists the reviews waiting for you, or the reviews of one article | `kb_articles:read` |
 | `colliedesk_kb_review_get` | Reads a review with the text proposed, what is live and the line diff between them | `kb_articles:read` |

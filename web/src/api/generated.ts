@@ -4146,6 +4146,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/searches/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What readers searched for on the public help center in the last 7 days, up to now: the most searched words (`top`), the words that found no article (`no_results`, the articles to write) and the words whose results nobody opened (`nothing_opened`, the titles or excerpts to fix). Each list has at most 20 rows, most searched first; searches whose words differ only in case or accents are one row, shown with the newest words. A search is in the report as soon as it is made. The words are masked (no email address, no run of 6 or more digits) and nothing about the reader is kept. Bots, prefetches and signed-in team members are not counted; searches are kept for 180 days unless the server sets `kb_searches.retention_days`. */
+        get: operations["getKBSearchReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/trash": {
         parameters: {
             query?: never;
@@ -9076,6 +9093,38 @@ export interface components {
             votes: components["schemas"]["KBArticleVote"][];
             /** @description Every reset, newest first. */
             resets: components["schemas"]["KBArticleVoteReset"][];
+        };
+        KBSearchReport: {
+            /**
+             * Format: date-time
+             * @description The start of the window: 7 days before `to`.
+             */
+            from: string;
+            /**
+             * Format: date-time
+             * @description When the report was read.
+             */
+            to: string;
+            /** @description Every search kept in the window. */
+            searches: number;
+            /** @description The most searched words. */
+            top: components["schemas"]["KBSearchTerm"][];
+            /** @description The most searched words that listed no article. */
+            no_results: components["schemas"]["KBSearchTerm"][];
+            /** @description The most searched words that listed articles of which the reader opened none. */
+            nothing_opened: components["schemas"]["KBSearchTerm"][];
+        };
+        /** @description The searches of the window whose words are the same once case and accents are ignored. */
+        KBSearchTerm: {
+            /** @description The newest words of the group, masked: "[email removed]" and "[number removed]" replace an email address and a run of 6 or more digits. */
+            query: string;
+            searches: number;
+            /** @description The searches of the group from which the reader opened an article. */
+            opened: number;
+            /** @description How many articles the newest search of the group listed. */
+            results: number;
+            /** Format: date-time */
+            last_searched_at: string;
         };
         /** @description One anonymous reader's current vote. */
         KBArticleVote: {
@@ -21025,6 +21074,28 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getKBSearchReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The search report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBSearchReport"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listTrashedKBArticles: {
