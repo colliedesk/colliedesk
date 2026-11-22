@@ -94,7 +94,7 @@ async function scrollPaneTo(page: Page, top: number) {
 test.describe('on a wide screen', () => {
   test.use(desktop);
 
-  test('a conversation opens at its newest message from the list, from its address and when another one is picked', async ({ page }) => {
+  test('a conversation opens at its newest message from the list, from its address and when another one is picked', { tag: '@journey' }, async ({ page }) => {
     const desk = await signIn(page, 'Newest Desk');
     const first = await longThread(page, desk, 'Parcel late', 'Message 9: any news today?');
     const second = await longThread(page, desk, 'Invoice wrong', 'Message 9: the total is still wrong.');

@@ -4,7 +4,7 @@ import { databaseURL, goEnv, servers } from './support/cli';
 
 const baseURL = servers.main;
 
-test('selects conversations with the keyboard and resolves them in one action', async ({ page }) => {
+test('selects conversations with the keyboard and resolves them in one action', { tag: '@journey' }, async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   const pairingURL = execFileSync('go', [
     'run', './cmd/collie', 'create-workspace',

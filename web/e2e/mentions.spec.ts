@@ -7,7 +7,7 @@ import { redeemLink } from './support/browser';
 const baseURL = servers.main;
 const headers = { Origin: baseURL };
 
-test('a private note asks a teammate with @: Mentions counts it, opening it marks it read, the writer sees it was seen', async ({ browser }, testInfo) => {
+test('a private note asks a teammate with @: Mentions counts it, opening it marks it read, the writer sees it was seen', { tag: '@journey' }, async ({ browser }, testInfo) => {
   const suffix = uniqueSuffix();
   const tuContext = await browser.newContext();
   const tu = await tuContext.newPage();

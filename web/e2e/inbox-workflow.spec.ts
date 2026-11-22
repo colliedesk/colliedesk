@@ -4,7 +4,7 @@ import { databaseURL, goEnv, servers } from './support/cli';
 
 const baseURL = servers.main;
 
-test('redeems a CLI pairing link and completes the inbox workflow', async ({ page }) => {
+test('redeems a CLI pairing link and completes the inbox workflow', { tag: '@journey' }, async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   const pairingURL = execFileSync('go', [
     'run', './cmd/collie', 'create-workspace',
