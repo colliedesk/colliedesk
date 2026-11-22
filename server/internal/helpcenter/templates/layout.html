@@ -84,7 +84,12 @@
 {{- end}}
 <main id="main" class="wrap">
 {{- if .Crumbs}}
-<nav class="crumbs" aria-label="{{.T.Breadcrumb}}"><ol>{{range .Crumbs}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ol></nav>
+{{- with .Trail}}
+<nav class="crumbs" aria-label="{{$.T.Breadcrumb}}"><ol{{if .Folded}} class="crumbs-folded"{{end}}>
+{{- range .Head}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}
+{{- if .Folded}}<li class="crumbs-fold"><details><summary><span aria-hidden="true">…</span><span class="visually-hidden">{{$.T.FullPath}}</span></summary><ol>{{range .Path}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ol></details></li>{{end}}
+{{- range .Tail}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ol></nav>
+{{- end}}
 {{- end}}
 {{template "content" .}}
 </main>

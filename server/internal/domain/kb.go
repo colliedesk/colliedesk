@@ -30,8 +30,9 @@ const (
 	MaxKBDescription    = 2000
 	MaxKBSlug           = 120
 	MaxKBPosition       = 1000000
-	// MaxKBDepth is how deep collections nest: a Freshdesk category, folder and subfolder.
-	MaxKBDepth = 3
+	// MaxKBDepth is how deep collections nest. Six levels fit a product with areas, sub-areas and
+	// guides; the help center folds the middle of a deep breadcrumb so it stays on one phone line.
+	MaxKBDepth = 6
 	// MaxKBImageBytes bounds one image.
 	MaxKBImageBytes = 5 << 20
 	// KBTrashRetention is how long a deleted article or collection stays restorable, and how old an
@@ -81,6 +82,9 @@ type KBCollection struct {
 	// RequireApproval is whether an article in it needs an approved version before it is published:
 	// inherit (the workspace setting), on or off.
 	RequireApproval string `json:"require_approval"`
+	// ArticleOrder is how it lists its articles (KBArticleOrders): by the position set by hand, by
+	// title, newest first or most recently updated first.
+	ArticleOrder string `json:"article_order"`
 	// Visibility is who can see the collection and its articles (KBVisibilities); EffectiveVisibility
 	// also counts its live parents.
 	Visibility          string    `json:"visibility"`
@@ -525,7 +529,14 @@ func CheckLocale(locale string) error {
 // HelpCenterSite is what every public help center page needs to know about its workspace. Trial is
 // true while the workspace is on a trial: its pages ask search engines not to index them.
 type HelpCenterSite struct {
-	WorkspaceID    string
+	WorkspaceID string
+	// HelpCenterID is the help center the pages are of; Primary says it is the workspace's first one,
+	// the one its own address, help chat and channel pages belong to.
+	HelpCenterID string
+	Primary      bool
+	// Handle names a help center other than the primary below /b/<handle> of the primary's
+	// addresses; "" on the primary.
+	Handle         string
 	Slug           string
 	Name           string
 	Title          string
@@ -544,6 +555,9 @@ type HelpCenterSite struct {
 	// CustomHost is the workspace's active custom domain, "" when it has none or is on its trial: the
 	// help center serves there and its other addresses redirect there.
 	CustomHost string
+	// PrimaryHost is the active custom domain of the workspace's primary help center, "" as
+	// CustomHost is: a help center without a custom domain of its own is served below its handle there.
+	PrimaryHost string
 	// Languages are the languages besides Locale that customers see, in menu order: each has its pages
 	// under /<locale>/.
 	Languages []string

@@ -105,9 +105,13 @@ func TestKnowledgeBaseArticlesHaveStableNumbersVersionsAndATrash(t *testing.T) {
 	}
 	middle := kbCollection(t, api, agent, map[string]any{"name": "Accounts", "parent_id": top.ID})
 	bottom := kbCollection(t, api, agent, map[string]any{"name": "Passwords", "parent_id": middle.ID})
-	tooDeep := request(t, api, http.MethodPost, "/api/v1/kb/collections", map[string]any{"name": "Fourth", "parent_id": bottom.ID}, agent, nil)
+	deepest := kbCollection(t, api, agent, map[string]any{"name": "First"})
+	for _, name := range []string{"Second", "Third", "Fourth", "Fifth", "Sixth"} {
+		deepest = kbCollection(t, api, agent, map[string]any{"name": name, "parent_id": deepest.ID})
+	}
+	tooDeep := request(t, api, http.MethodPost, "/api/v1/kb/collections", map[string]any{"name": "Seventh", "parent_id": deepest.ID}, agent, nil)
 	if tooDeep.Code != http.StatusBadRequest {
-		t.Fatalf("fourth level status=%d body=%s, want 400", tooDeep.Code, tooDeep.Body.String())
+		t.Fatalf("seventh level status=%d body=%s, want 400", tooDeep.Code, tooDeep.Body.String())
 	}
 	clash := request(t, api, http.MethodPost, "/api/v1/kb/collections", map[string]any{"name": "Accounts!", "parent_id": top.ID}, agent, nil)
 	if clash.Code != http.StatusConflict || errorCode(t, clash) != "duplicate_slug" {

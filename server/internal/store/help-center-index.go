@@ -8,14 +8,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// HelpCenterIndex returns every published article of the workspace outside the trash, without its
-// text, in the help center's order (collection, then position and title): what sitemap.xml and
-// llms.txt list, each with the files its own page lists. The article cap bounds it to
-// domain.MaxKBArticles rows.
-func (s *Store) HelpCenterIndex(ctx context.Context, workspaceID string) ([]domain.PublicKBArticle, error) {
+// HelpCenterIndex returns every published article outside the trash that help center helpCenterID (""
+// the primary one) shows, without its text, in the help center's order (collection, then its article
+// order): what sitemap.xml and llms.txt list, each with the files its own page lists. The article cap
+// bounds it to domain.MaxKBArticles rows.
+func (s *Store) HelpCenterIndex(ctx context.Context, workspaceID, helpCenterID string) ([]domain.PublicKBArticle, error) {
 	articles, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
-		rows, err := tx.Query(ctx, `SELECT `+publicKBArticleColumns+` FROM kb_articles a WHERE `+publicKBArticle+`
-			ORDER BY a.collection_id NULLS LAST, a.position, lower(a.title), a.number`, workspaceID)
+		query, args := onHelpCenter(helpCenterID, `SELECT `+publicKBArticleColumns+` FROM kb_articles a`+kbArticleCollection+` WHERE `+shownKBArticle+`
+			ORDER BY a.collection_id NULLS LAST, `+kbArticlesBy(kbArticleMode, `a.position`, `a.title`), workspaceID)
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -31,12 +32,13 @@ func (s *Store) HelpCenterIndex(ctx context.Context, workspaceID string) ([]doma
 	return articles, nil
 }
 
-// HelpCenterTranslationIndex returns every published translation of a published article in a language
-// customers see, by article number and language: what sitemap.xml adds to HelpCenterIndex.
-func (s *Store) HelpCenterTranslationIndex(ctx context.Context, workspaceID string) ([]domain.PublicKBTranslation, error) {
+// HelpCenterTranslationIndex returns every published translation of an article HelpCenterIndex lists,
+// in a language that help center shows, by article number and language: what sitemap.xml adds to it.
+func (s *Store) HelpCenterTranslationIndex(ctx context.Context, workspaceID, helpCenterID string) ([]domain.PublicKBTranslation, error) {
 	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBTranslation, error) {
-		rows, err := tx.Query(ctx, `SELECT a.number, t.locale, t.slug, t.updated_at FROM kb_articles a`+shownTranslation(`t.locale`)+`
-			WHERE `+publicKBArticle+` ORDER BY a.number, hl.position, t.locale`, workspaceID)
+		query, args := onHelpCenter(helpCenterID, `SELECT a.number, t.locale, t.slug, t.updated_at FROM kb_articles a`+shownTranslation(`t.locale`)+`
+			WHERE `+shownKBArticle+` ORDER BY a.number, hl.position, t.locale`, workspaceID)
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return nil, err
 		}

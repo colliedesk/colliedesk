@@ -646,7 +646,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	if err := exportKBTemplates(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,c.default_template_id::text,c.require_approval,c.source_meta,c.created_at,c.updated_at,c.deleted_at,c.deleted_by_agent_id::text,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.parent_id::text,c.name,c.slug,c.description,c.position,c.default_template_id::text,c.require_approval,c.article_order,c.source_meta,c.created_at,c.updated_at,c.deleted_at,c.deleted_by_agent_id::text,
 			COALESCE((SELECT jsonb_agg(jsonb_build_object('locale',t.locale,'name',t.name,'description',t.description,'source_meta',t.source_meta,
 				'created_at',to_char(t.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'updated_at',to_char(t.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
 				ORDER BY t.locale) FROM kb_collection_translations t WHERE t.workspace_id=c.workspace_id AND t.collection_id=c.id), '[]'::jsonb)
@@ -657,7 +657,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	for rows.Next() {
 		var record export.KBCollection
 		var meta []byte
-		if err := rows.Scan(&record.ID, &record.ParentID, &record.Name, &record.Slug, &record.Description, &record.Position, &record.DefaultTemplateID, &record.RequireApproval, &meta,
+		if err := rows.Scan(&record.ID, &record.ParentID, &record.Name, &record.Slug, &record.Description, &record.Position, &record.DefaultTemplateID, &record.RequireApproval, &record.ArticleOrder, &meta,
 			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID, &record.Translations); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base collections: %w", err)
@@ -870,7 +870,8 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	err = tx.QueryRow(ctx, `SELECT h.enabled,h.title,h.locale,h.require_approval,h.show_tags,h.content_version,h.last_article_number,h.updated_at,
 		h.logo_media_id::text,h.favicon_media_id::text,h.logo_alt,h.linkback_url,h.contact_url,h.contact_phone,h.color_primary,h.color_header,h.color_header_text,
 		h.color_background,h.color_text,h.color_link,h.color_footer,h.body_font,h.heading_font,h.custom_css,h.google_site_verification,h.bing_site_verification,d.hostname,d.status,d.verified_at
-		FROM help_centers h LEFT JOIN help_center_domains d ON d.workspace_id=h.workspace_id WHERE h.workspace_id=$1`, workspaceID).
+		FROM help_centers h LEFT JOIN help_center_domains d ON d.workspace_id=h.workspace_id AND d.help_center_id=h.id
+		WHERE h.workspace_id=$1 AND h.primary_help_center`, workspaceID).
 		Scan(&center.Enabled, &center.Title, &center.Locale, &center.RequireApproval, &center.ShowTags, &center.ContentVersion, &center.LastArticleNumber, &center.UpdatedAt,
 			&center.LogoMediaID, &center.FaviconMediaID, &center.LogoAlt, &center.LinkbackURL, &center.ContactURL, &center.ContactPhone,
 			&center.ColorPrimary, &center.ColorHeader, &center.ColorHeaderText, &center.ColorBackground, &center.ColorText, &center.ColorLink,
@@ -886,7 +887,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	if center.Analytics, err = exportHelpCenterAnalytics(ctx, tx, workspaceID); err != nil {
 		return err
 	}
-	rows, err = tx.Query(ctx, `SELECT locale,visible,position,created_at,updated_at FROM help_center_languages WHERE workspace_id=$1 ORDER BY position,locale`, workspaceID)
+	rows, err = tx.Query(ctx, `SELECT locale,visible,position,created_at,updated_at FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) ORDER BY position,locale`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export help center languages: %w", err)
 	}

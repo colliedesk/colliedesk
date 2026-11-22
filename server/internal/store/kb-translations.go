@@ -65,12 +65,12 @@ func readKBTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articleID, l
 	var item domain.KBArticleTranslation
 	var original domain.KBTranslationOriginal
 	summary, err := scanKBTranslationSummary(tx.QueryRow(ctx, kbTranslationSelect(`,t.body_md,t.seo_title,t.seo_description,t.source_html IS NOT NULL,t.deleted_at,
-			COALESCE((SELECT l.visible FROM help_center_languages l WHERE l.workspace_id=t.workspace_id AND l.locale=t.locale), false),
+			COALESCE((SELECT l.visible FROM help_center_languages l WHERE l.workspace_id=t.workspace_id AND l.help_center_id=primary_help_center_id($1) AND l.locale=t.locale), false),
 			a.id::text,a.number,COALESCE(h.locale,'en'),a.title,a.body_md,a.seo_title,a.seo_description,a.status,a.collection_id::text,c.name,
 			COALESCE((SELECT max(w.version) FROM kb_article_versions w WHERE w.workspace_id=a.workspace_id AND w.article_id=a.id AND `+kbTextVersion("w.")+`), 0),a.updated_at`,
 		` JOIN kb_articles a ON a.workspace_id=t.workspace_id AND a.id=t.article_id
 			JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
-			LEFT JOIN help_centers h ON h.workspace_id=t.workspace_id`)+` WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3`, workspaceID, articleID, locale),
+			LEFT JOIN help_centers h ON h.workspace_id=t.workspace_id AND h.primary_help_center`)+` WHERE t.workspace_id=$1 AND t.article_id=$2 AND t.locale=$3`, workspaceID, articleID, locale),
 		&item.BodyMD, &item.SEOTitle, &item.SEODescription, &item.HasSourceHTML, &item.DeletedAt, &item.LanguageVisible,
 		&original.ID, &original.Number, &original.Locale, &original.Title, &original.BodyMD, &original.SEOTitle, &original.SEODescription, &original.Status,
 		&original.CollectionID, &original.CollectionName, &original.Version, &original.UpdatedAt)
@@ -193,8 +193,8 @@ func insertKBTranslationVersion(ctx context.Context, tx pgx.Tx, workspaceID, art
 // included: the article itself is in it).
 func checkKBLanguage(ctx context.Context, tx pgx.Tx, workspaceID, locale string) error {
 	var listed bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages l WHERE l.workspace_id=$1 AND l.locale=$2
-			AND l.locale <> COALESCE((SELECT h.locale FROM help_centers h WHERE h.workspace_id=$1), 'en'))`, workspaceID, locale).Scan(&listed); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages l WHERE l.workspace_id=$1 AND l.help_center_id=primary_help_center_id($1) AND l.locale=$2
+			AND l.locale <> COALESCE((SELECT h.locale FROM help_centers h WHERE h.workspace_id=$1 AND h.primary_help_center), 'en'))`, workspaceID, locale).Scan(&listed); err != nil {
 		return err
 	}
 	if !listed {
@@ -706,7 +706,7 @@ func (s *Store) ListKBLanguage(ctx context.Context, workspaceID string, filter K
 			LEFT JOIN tree k ON k.id=a.collection_id
 			LEFT JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$2 AND t.deleted_at IS NULL
 			WHERE a.workspace_id=$1 AND a.deleted_at IS NULL`+where+`
-			ORDER BY k.path NULLS LAST, a.position, lower(a.title), a.number LIMIT $3 OFFSET $4`, workspaceID, filter.Locale, filter.Limit+1, offset)
+			ORDER BY k.path NULLS LAST, `+kbArticlesBy(`c.article_order`, `a.position`, `a.title`)+` LIMIT $3 OFFSET $4`, workspaceID, filter.Locale, filter.Limit+1, offset)
 		if err != nil {
 			return nil, err
 		}
@@ -746,7 +746,7 @@ func (s *Store) ListKBLanguage(ctx context.Context, workspaceID string, filter K
 // locales translations exist in that are neither.
 func readHelpCenterLanguages(ctx context.Context, tx pgx.Tx, workspaceID string) (domain.HelpCenterLanguages, error) {
 	result := domain.HelpCenterLanguages{Languages: []domain.HelpCenterLanguage{}, Unlisted: []string{}}
-	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1), 'en')`, workspaceID).Scan(&result.Primary); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1 AND primary_help_center), 'en')`, workspaceID).Scan(&result.Primary); err != nil {
 		return result, err
 	}
 	rows, err := tx.Query(ctx, `WITH live AS (SELECT count(*) AS n FROM kb_articles WHERE workspace_id=$1 AND deleted_at IS NULL),
@@ -756,7 +756,7 @@ func readHelpCenterLanguages(ctx context.Context, tx pgx.Tx, workspaceID string)
 				WHERE t.workspace_id=$1 AND t.deleted_at IS NULL GROUP BY t.locale)
 		SELECT l.locale, l.visible, l.position, COALESCE(c.published,0), COALESCE(c.drafts,0), COALESCE(c.outdated,0), (SELECT n FROM live) - COALESCE(c.translated,0)
 		FROM help_center_languages l LEFT JOIN counts c ON c.locale=l.locale
-		WHERE l.workspace_id=$1 AND l.locale <> $2 ORDER BY l.position, l.locale`, workspaceID, result.Primary)
+		WHERE l.workspace_id=$1 AND l.help_center_id=primary_help_center_id($1) AND l.locale <> $2 ORDER BY l.position, l.locale`, workspaceID, result.Primary)
 	if err != nil {
 		return result, err
 	}
@@ -772,7 +772,7 @@ func readHelpCenterLanguages(ctx context.Context, tx pgx.Tx, workspaceID string)
 	}
 	rows, err = tx.Query(ctx, `SELECT locale FROM kb_article_translations WHERE workspace_id=$1
 			UNION SELECT locale FROM kb_collection_translations WHERE workspace_id=$1
-		EXCEPT SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND locale <> $2 ORDER BY 1`, workspaceID, result.Primary)
+		EXCEPT SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) AND locale <> $2 ORDER BY 1`, workspaceID, result.Primary)
 	if err != nil {
 		return result, err
 	}
@@ -829,13 +829,13 @@ func (s *Store) SetHelpCenterLanguages(ctx context.Context, workspaceID string, 
 			return domain.HelpCenterLanguages{}, err
 		}
 		var primary string
-		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1), 'en')`, workspaceID).Scan(&primary); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1 AND primary_help_center), 'en')`, workspaceID).Scan(&primary); err != nil {
 			return domain.HelpCenterLanguages{}, err
 		}
 		if slices.ContainsFunc(locales, func(locale string) bool { return strings.EqualFold(locale, primary) }) {
 			return domain.HelpCenterLanguages{}, &domain.InvalidKBError{Message: primary + " is the primary language of the help center (the articles' own language); list only the other languages."}
 		}
-		rows, err := tx.Query(ctx, `SELECT DISTINCT l.locale FROM help_center_languages l WHERE l.workspace_id=$1 AND l.locale <> ALL($2::text[]) AND l.locale <> $3
+		rows, err := tx.Query(ctx, `SELECT DISTINCT l.locale FROM help_center_languages l WHERE l.workspace_id=$1 AND l.help_center_id=primary_help_center_id($1) AND l.locale <> ALL($2::text[]) AND l.locale <> $3
 			AND (EXISTS (SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=l.workspace_id AND t.locale=l.locale)
 				OR EXISTS (SELECT 1 FROM kb_collection_translations t WHERE t.workspace_id=l.workspace_id AND t.locale=l.locale)) ORDER BY 1`, workspaceID, locales, primary)
 		if err != nil {
@@ -848,12 +848,12 @@ func (s *Store) SetHelpCenterLanguages(ctx context.Context, workspaceID string, 
 		if len(inUse) > 0 {
 			return domain.HelpCenterLanguages{}, &HelpCenterLanguagesInUseError{Locales: inUse}
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM help_center_languages WHERE workspace_id=$1 AND locale <> ALL($2::text[])`, workspaceID, locales); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) AND locale <> ALL($2::text[])`, workspaceID, locales); err != nil {
 			return domain.HelpCenterLanguages{}, err
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO help_center_languages(workspace_id,locale,visible,position)
 			SELECT $1, x.locale, x.visible, x.position FROM unnest($2::text[], $3::boolean[]) WITH ORDINALITY AS x(locale, visible, position)
-			ON CONFLICT (workspace_id, locale) DO UPDATE SET visible=EXCLUDED.visible, position=EXCLUDED.position,
+			ON CONFLICT (workspace_id, help_center_id, locale) DO UPDATE SET visible=EXCLUDED.visible, position=EXCLUDED.position,
 				updated_at=CASE WHEN (help_center_languages.visible, help_center_languages.position) IS DISTINCT FROM (EXCLUDED.visible, EXCLUDED.position)
 					THEN clock_timestamp() ELSE help_center_languages.updated_at END`, workspaceID, locales, visible); err != nil {
 			return domain.HelpCenterLanguages{}, err
@@ -883,7 +883,7 @@ func (s *Store) HelpCenterLanguagesShownChange(ctx context.Context, workspaceID 
 		}
 	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
-		rows, err := tx.Query(ctx, `SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND visible ORDER BY 1`, workspaceID)
+		rows, err := tx.Query(ctx, `SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) AND visible ORDER BY 1`, workspaceID)
 		if err != nil {
 			return false, err
 		}
@@ -973,8 +973,8 @@ func lockLiveKBCollection(ctx context.Context, tx pgx.Tx, workspaceID, collectio
 // ShownHelpCenterLanguages returns the languages besides the primary one that customers see.
 func (s *Store) ShownHelpCenterLanguages(ctx context.Context, workspaceID string) (map[string]bool, error) {
 	shown, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]string, error) {
-		rows, err := tx.Query(ctx, `SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND visible
-			AND locale <> COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1), 'en')`, workspaceID)
+		rows, err := tx.Query(ctx, `SELECT locale FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) AND visible
+			AND locale <> COALESCE((SELECT locale FROM help_centers WHERE workspace_id=$1 AND primary_help_center), 'en')`, workspaceID)
 		if err != nil {
 			return nil, err
 		}

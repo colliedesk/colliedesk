@@ -170,11 +170,18 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 	join, with := ``, ``
 	switch {
 	case query == "" && sort == KBSortManual && filter.CollectionID != "" && !filter.IncludeSubcollections:
-		order = ` ORDER BY a.position, lower(a.title), a.number`
+		join = kbArticleCollection
+		order = ` ORDER BY ` + kbArticlesBy(kbArticleMode, `a.position`, `a.title`)
 	case query == "" && sort == KBSortManual:
-		// Across collections, as the help center lists them: a collection's articles, then its collections'.
-		with, join = kbTreeOrder, ` LEFT JOIN tree k ON k.id=a.collection_id`
-		order = ` ORDER BY k.path NULLS LAST, a.position, lower(a.title), a.number`
+		// Across collections, as the help center lists them: a collection's articles, then those listed in
+		// it from another home, then its collections'. An article listed twice shows once, at its first place.
+		inside := `true`
+		if filter.CollectionID != "" {
+			args = append(args, filter.CollectionID)
+			inside = `l.id = ANY(` + fmt.Sprintf(kbLiveSubtreeSQL, len(args)) + `)`
+		}
+		with, join = kbTreeOrder, kbFirstListing(inside)
+		order = ` ORDER BY fl.path NULLS LAST, fl.extra, ` + kbArticlesBy(kbArticleMode, `CASE WHEN fl.extra THEN 0 ELSE a.position END`, `a.title`)
 	}
 	if query != "" {
 		args = append(args, "%"+likePattern.Replace(query)+"%")
@@ -387,7 +394,7 @@ func admitKBArticle(ctx context.Context, tx pgx.Tx, workspaceID string) (int64, 
 	}
 	var number int64
 	if err := tx.QueryRow(ctx, `INSERT INTO help_centers(workspace_id,last_article_number) VALUES($1,1)
-		ON CONFLICT (workspace_id) DO UPDATE SET last_article_number=help_centers.last_article_number+1 RETURNING last_article_number`, workspaceID).Scan(&number); err != nil {
+		ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET last_article_number=help_centers.last_article_number+1 RETURNING last_article_number`, workspaceID).Scan(&number); err != nil {
 		return 0, fmt.Errorf("number the article: %w", err)
 	}
 	return number, nil
@@ -574,6 +581,9 @@ type KBArticleChange struct {
 	// AuthorAgentID credits the article to another active team member at once, also on a published
 	// article, as a version of kind author_change.
 	AuthorAgentID *string
+	// Position puts the article back at this place in its collection, as undo of a bulk move does;
+	// without it a move goes to the end of the new collection.
+	Position *int
 }
 
 // immediate tells whether the change sets something that applies at once, and whether that is all
@@ -721,11 +731,11 @@ func writeKBArticleChange(ctx context.Context, tx pgx.Tx, workspaceID, id string
 // updateKBArticleRow writes the fields of change that are set to the article's row.
 func updateKBArticleRow(ctx context.Context, tx pgx.Tx, workspaceID, id string, change KBArticleChange) error {
 	_, err := tx.Exec(ctx, `UPDATE kb_articles SET title=COALESCE($3,title), slug=COALESCE($4,slug), body_md=COALESCE($5,body_md),
-		position=CASE WHEN $6::uuid IS DISTINCT FROM collection_id AND $6::uuid IS NOT NULL THEN `+kbArticleEnd(`$6::uuid`)+` ELSE position END,
+		position=COALESCE($11::int, CASE WHEN $6::uuid IS DISTINCT FROM collection_id AND $6::uuid IS NOT NULL THEN `+kbArticleEnd(`$6::uuid`)+` ELSE position END),
 		collection_id=COALESCE($6::uuid,collection_id), status=COALESCE($7,status),
 		published_at=CASE WHEN COALESCE($7,status)='published' THEN COALESCE(published_at, clock_timestamp()) END,
 		seo_title=COALESCE($8,seo_title), seo_description=COALESCE($9,seo_description), show_contents=COALESCE($10,show_contents), updated_at=clock_timestamp()
-		WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Title, change.Slug, change.BodyMD, change.CollectionID, change.Status, change.SEOTitle, change.SEODescription, change.ShowContents)
+		WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Title, change.Slug, change.BodyMD, change.CollectionID, change.Status, change.SEOTitle, change.SEODescription, change.ShowContents, change.Position)
 	return err
 }
 

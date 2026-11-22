@@ -3972,10 +3972,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The knowledge base collections of the workspace that are not in the trash, as a flat list ordered by parent, position and name. A collection sits at most three levels deep (category, folder, subfolder). `article_count` counts its articles outside the trash, drafts included. */
+        /** @description The knowledge base collections of the workspace that are not in the trash, as a flat list ordered by parent, position and name. A collection sits at most six levels deep. `article_count` counts its articles outside the trash, drafts included. */
         get: operations["listKBCollections"];
         put?: never;
-        /** @description Needs `kb_articles:create`. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
+        /** @description Needs `kb_articles:create`. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already six levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
         post: operations["createKBCollection"];
         delete?: never;
         options?: never;
@@ -4016,7 +4016,7 @@ export interface paths {
         delete: operations["deleteKBCollection"];
         options?: never;
         head?: never;
-        /** @description Rename a collection, change its slug, description or position, or move it under another parent (`parent_id`; null moves it to the top). Send back the `updated_at` you read (409 `changed_elsewhere` when it was saved since). A move that would put a collection under itself or more than three levels deep is 400. Changing the slug changes the addresses of the help center pages under it; old addresses are not redirected. A collection in the trash is 404. */
+        /** @description Rename a collection, change its slug, description or position, or move it under another parent (`parent_id`; null moves it to the top). Send back the `updated_at` you read (409 `changed_elsewhere` when it was saved since). A move that would put a collection under itself or more than six levels deep is 400. Changing the slug changes the addresses of the help center pages under it; old addresses are not redirected. A collection in the trash is 404. */
         patch: operations["updateKBCollection"];
         trace?: never;
     };
@@ -4094,6 +4094,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/articles/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Apply one action to up to 500 articles, named by `ids` or by `filter` (the query of GET /api/v1/kb/articles as an object, every page of it; more than 500 matches is 400, and so is a filter with no key that narrows the articles, such as `{}` or only `sort`). `action` needs kb_articles:update for move, visibility, author, tags_add, tags_remove and send_for_review, kb_articles:publish for approve, publish and unpublish, and kb_articles:delete for trash. Each article is answered on its own in `results`, in order: `done`, `unchanged` (it already was as asked) or `refused` with the error the call for that article alone gives, such as 409 `approval_required`, `permission_missing` for a visibility raise or for trashing a published article without kb_articles:publish, or `not_found` for an id this workspace does not have. A move or tag change of a published article goes to its draft. When something can be put back, `operation` is the undo record: POST /api/v1/kb/bulk-operations/{id}/undo before `undo_until` (10 minutes). A repeat with the same Idempotency-Key answers what the first one got. x-permission is what most actions need; the handler checks the one `action` needs. */
+        post: operations["bulkKBArticles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/bulk-operations/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Put back what a bulk action changed, once and within 10 minutes of it. An article changed since the action is left as it is and listed as `not_undone` with 409 `changed_elsewhere`. When putting an article back needs a permission the caller lacks (publish, to put a published article back on the help center or raise its visibility; delete, to take it out of the trash), the whole undo is refused with 403 `permission_missing` before anything changes, and the action stays undoable by a teammate who holds it. Each article put back gets its own history entry. 404 `not_found` for an id this workspace has no bulk action for, 409 `already_undone` and 409 `undo_expired`. A repeat with the same Idempotency-Key answers what the first one got. */
+        post: operations["undoKBBulkOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles": {
         parameters: {
             query?: never;
@@ -4101,7 +4135,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's order (collections in their order, a collection's own articles before those of its collections, and in each collection by `position`, then title, then number). `sort` is `manual` with `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
+        /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's order (collections in their order; in each, its own articles, then those listed in it from another home, each in the collection's `article_order`, then its collections; an article listed in several collections shows once, at its first place). `sort` is `manual` with `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
         get: operations["listKBArticles"];
         put?: never;
         /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. At most 64 KiB of JSON. With `template_id` the server copies the template's text (see `GET /api/v1/kb/templates`); without `body_md` or `template_id` the article starts from the collection's `default_template_id` when it has one, else empty. */
@@ -8431,6 +8465,11 @@ export interface components {
          * @enum {string}
          */
         KBApprovalMode: "inherit" | "on" | "off";
+        /**
+         * @description How the collection lists its articles, in the help center, the app and the API (sort=manual): manual by the position set with PUT /api/v1/kb/order, title A to Z, newest by first publication (a draft by when it was written), updated the most recently changed first. Positions stay stored under every order, so setting manual again brings the hand order back.
+         * @enum {string}
+         */
+        KBArticleOrder: "manual" | "title" | "newest" | "updated";
         KBCollection: {
             /** @description Its name and description in the help center's other languages. */
             translations: components["schemas"]["KBCollectionTranslation"][];
@@ -8448,6 +8487,7 @@ export interface components {
              */
             default_template_id: string | null;
             require_approval: components["schemas"]["KBApprovalMode"];
+            article_order: components["schemas"]["KBArticleOrder"];
             visibility: components["schemas"]["KBVisibility"];
             /** @description The most restrictive of its own visibility and that of its parents: who can see what is in it. */
             effective_visibility: components["schemas"]["KBVisibility"];
@@ -11206,6 +11246,79 @@ export interface components {
             trial_ends_at: string;
             /** @description False when the trial already ended later than 14 days from now and was kept. */
             extended: boolean;
+        };
+        /** @description One action and its articles, by ids or by filter (exactly one of them), with what the action needs. */
+        KBBulkInput: {
+            /** @enum {string} */
+            action: "move" | "visibility" | "author" | "tags_add" | "tags_remove" | "send_for_review" | "approve" | "publish" | "unpublish" | "trash";
+            ids?: string[];
+            filter?: components["schemas"]["KBArticleFilters"];
+            /**
+             * Format: uuid
+             * @description move: the collection to move the articles to.
+             */
+            collection_id?: string;
+            visibility?: components["schemas"]["KBVisibility"];
+            /**
+             * Format: uuid
+             * @description author: the team member to credit the articles to.
+             */
+            author_agent_id?: string;
+            /** @description tags_add, tags_remove: the tags. */
+            tags?: string[];
+            /** @description send_for_review: teammates who may publish. */
+            reviewer_ids?: string[];
+            /** @description send_for_review, approve: a note for the review. */
+            note?: string;
+        };
+        KBBulkResult: {
+            /** @description The undo record; null when nothing can be put back. */
+            operation: null | {
+                /** Format: uuid */
+                id: string;
+                action: string;
+                /** Format: date-time */
+                undo_until: string;
+            };
+            counts: {
+                done: number;
+                unchanged: number;
+                refused: number;
+            };
+            results: {
+                id: string;
+                /** Format: int64 */
+                number?: number;
+                /** @description Absent for an id this workspace does not have. */
+                title?: string;
+                /** @enum {string} */
+                outcome: "done" | "unchanged" | "refused";
+                /** @description true when undo can put this article back. */
+                undoable: boolean;
+                error?: components["schemas"]["BulkItemError"];
+            }[];
+        };
+        KBBulkUndoResult: {
+            operation: {
+                /** Format: uuid */
+                id: string;
+                action: string;
+                /** Format: date-time */
+                undone_at: string;
+            };
+            counts: {
+                undone: number;
+                not_undone: number;
+            };
+            results: {
+                id: string;
+                /** Format: int64 */
+                number?: number;
+                title?: string;
+                /** @enum {string} */
+                outcome: "undone" | "not_undone";
+                error?: components["schemas"]["BulkItemError"];
+            }[];
         };
         /** @description Why one item of a bulk request was not done; the same code and message a call for that item alone answers. */
         BulkItemError: {
@@ -20742,6 +20855,7 @@ export interface operations {
                     default_template_id?: string | null;
                     /** @description Whether its articles need an approved version before they are published. Changing it also needs help_center:update. */
                     require_approval?: components["schemas"]["KBApprovalMode"];
+                    article_order?: components["schemas"]["KBArticleOrder"];
                     /** @description Who can see the collection and every article in it. Keeping it from more people, sent alone, needs only kb_articles:update and applies at once. Letting more people see it, like every other change here, needs kb_articles:publish; it is 409 approval_required, naming each article, when a published article it would show to more people is in a collection that needs approval and no review approved its published text. */
                     visibility?: components["schemas"]["KBVisibility"];
                 };
@@ -20923,6 +21037,71 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    bulkKBArticles: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KBBulkInput"];
+            };
+        };
+        responses: {
+            /** @description One result per article, and the undo record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBBulkResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    undoKBBulkOperation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description One result per article the bulk action changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBBulkUndoResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["IdempotencyKeyReused"];
         };

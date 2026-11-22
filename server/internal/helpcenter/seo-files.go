@@ -75,7 +75,7 @@ func (s *Site) indexed(request *http.Request, v view) (tree, []*node, []domain.P
 	if err != nil {
 		return tree{}, nil, nil, err
 	}
-	articles, err := s.config.Store.HelpCenterIndex(request.Context(), v.site.WorkspaceID)
+	articles, err := s.config.Store.HelpCenterIndex(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID)
 	if err != nil {
 		return tree{}, nil, nil, err
 	}
@@ -105,7 +105,7 @@ func (s *Site) sitemap(response http.ResponseWriter, request *http.Request, v vi
 	languages := len(v.site.Languages) > 0 && !v.site.Trial
 	var translations []domain.PublicKBTranslation
 	if languages {
-		if translations, err = s.config.Store.HelpCenterTranslationIndex(request.Context(), v.site.WorkspaceID); err != nil {
+		if translations, err = s.config.Store.HelpCenterTranslationIndex(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID); err != nil {
 			s.writeError(response, err)
 			return
 		}

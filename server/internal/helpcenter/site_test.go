@@ -95,7 +95,7 @@ func TestTouchTargetsAreAtLeast44Pixels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, selector := range []string{".brand {", ".crumbs a {", ".card-tab a {", ".card-list a {", ".chips a {", ".card-more {", ".index-rail a {", ".contents-list a {", ".result-title {", ".foot a {", ".pager a {", ".meta a {", ".site-link {"} {
+	for _, selector := range []string{".brand {", ".crumbs a {", ".crumbs-fold summary {", ".card-tab a {", ".card-list a {", ".chips a {", ".card-more {", ".index-rail a {", ".contents-list a {", ".result-title {", ".foot a {", ".pager a {", ".meta a {", ".site-link {"} {
 		start := strings.Index(string(style), selector)
 		if start < 0 {
 			t.Errorf("no rule %s", selector)

@@ -149,7 +149,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_saved_view_update` | Changes the name, the filters or who sees a view | `saved_views:update` |
 | `colliedesk_saved_view_delete` | Moves a view to the trash for 30 days; changes no conversation | `saved_views:delete` |
 | `colliedesk_saved_view_restore` | Takes a view out of the trash | `saved_views:delete` |
-| `colliedesk_kb_collections_list` | Lists the knowledge base collections (at most three levels deep) with how many articles each holds | `kb_articles:read` |
+| `colliedesk_kb_collections_list` | Lists the knowledge base collections (at most six levels deep) with how many articles each holds | `kb_articles:read` |
 | `colliedesk_kb_collection_create` | Adds a collection, at the top or inside another | `kb_articles:create` |
 | `colliedesk_kb_collection_update` | Renames, reorders or moves a collection | `kb_articles:update` |
 | `colliedesk_kb_collection_delete` | Moves an empty collection to the trash for 30 days | `kb_articles:delete` |
@@ -190,6 +190,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_review_request_changes` | Sends text back to its author with a one-line note | `kb_articles:publish` |
 | `colliedesk_kb_review_withdraw` | Takes back a review you sent | `kb_articles:update` |
 | `colliedesk_kb_articles_publish` | Publishes several articles at once, each answered on its own; text that needs an approval is refused without one | `kb_articles:publish` |
+| `colliedesk_kb_articles_bulk` | Moves, tags, credits, reviews, publishes, unpublishes or trashes up to 500 articles by ids or by filter, each answered on its own | `kb_articles:update` |
+| `colliedesk_kb_articles_bulk_undo` | Puts back what one bulk change did, within ten minutes, leaving articles changed since | `kb_articles:update` |
 | `colliedesk_kb_image_upload` | Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one | `kb_media:create` |
 | `colliedesk_kb_image_import` | Stores an image found at a public web address in the media library and gives the link to put in an article | `kb_media:create` |
 | `colliedesk_kb_image_get` | Shows a knowledge base image to the model | `kb_media:read` |

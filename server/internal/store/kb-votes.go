@@ -96,15 +96,17 @@ func (s *Store) KBArticleVotesVersion(ctx context.Context, workspaceID string, n
 // vote came from; a new reader past kbVoteReadersPerAddress of it is not counted, with no error, so the
 // page thanks them like any reader. A "No" may carry missing, the reader's "What was missing?" line,
 // kept masked (textmask) and cut to MaxKBVoteMissingChars; an empty one keeps the line the vote had. A
-// "Yes" has none. domain.ErrKBArticleNotFound when no such article is shown.
-func (s *Store) VoteKBArticle(ctx context.Context, workspaceID string, number int64, voter, address []byte, helpful bool, missing string) error {
+// "Yes" has none. domain.ErrKBArticleNotFound when help center helpCenterID ("" the primary one) shows
+// no such article.
+func (s *Store) VoteKBArticle(ctx context.Context, workspaceID, helpCenterID string, number int64, voter, address []byte, helpful bool, missing string) error {
 	missing = maskedKBVoteLine(missing)
 	if helpful {
 		missing = ""
 	}
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
 		var articleID string
-		err := tx.QueryRow(ctx, `SELECT a.id::text FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=$2`, workspaceID, number).Scan(&articleID)
+		query, args := onHelpCenter(helpCenterID, `SELECT a.id::text FROM kb_articles a WHERE `+shownKBArticle+` AND a.number=$2`, workspaceID, number)
+		err := tx.QueryRow(ctx, query, args...).Scan(&articleID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return struct{}{}, domain.ErrKBArticleNotFound
 		}

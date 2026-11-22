@@ -4,6 +4,7 @@ import { formatDate } from '../../lib/format-date';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { Icon } from './editor/icons';
 import type { KBArticleSummary } from './kb-api';
+import { kbBulkMessages } from './kb-bulk-messages';
 import { kbMessages } from './kb-messages';
 import { listMessages } from './list-messages';
 import { languageName } from './translation-messages';
@@ -18,16 +19,19 @@ interface ArticleRowProps {
   isPublic?: boolean;
   // order holds the buttons that move the article in its collection, while the list is the whole order.
   order?: ReactNode;
+  // select ticks the row for a bulk action; missing for a person who may not change articles.
+  select?: { checked: boolean; onChange: () => void };
 }
 
-export function ArticleRow({ article, columns, collection, timezone, isPublic, order }: ArticleRowProps) {
+export function ArticleRow({ article, columns, collection, timezone, isPublic, order, select }: ArticleRowProps) {
   const published = article.status === 'published';
   // Readers can open it only while it is published, for everyone, and the help center is on.
   const everyone = article.effective_visibility === 'everyone';
   const open = published && everyone && isPublic === true;
   const meta = [columns.includes('collection') ? undefined : collection, kbMessages.articleNumber(article.number)];
   return (
-    <li className="kb-article-item">
+    <li className="kb-article-item" data-selected={select?.checked ? 'true' : undefined}>
+      {select && <input type="checkbox" className="kb-article-select" aria-label={kbBulkMessages.select(article.title)} checked={select.checked} onChange={select.onChange} />}
       <a className="kb-article-row" href={`/knowledge/articles/${article.id}`}>
         <span className="kb-article-main">
           <span className="kb-article-title">{article.title}</span>

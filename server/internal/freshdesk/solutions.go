@@ -91,10 +91,13 @@ const (
 // internal article made public is a leak, a public one kept as a draft costs one click. A folder's
 // visibility does not make a draft: its collection gets that visibility (collectionVisibility).
 const (
-	draftInFreshdesk     = "draft_in_freshdesk"
-	draftNotInPortal     = "category_not_in_any_portal"
-	draftPortalUnknown   = "category_portal_unknown"
-	draftSeveralPortals  = "category_in_another_portal"
+	draftInFreshdesk    = "draft_in_freshdesk"
+	draftNotInPortal    = "category_not_in_any_portal"
+	draftPortalUnknown  = "category_portal_unknown"
+	draftSeveralPortals = "category_in_another_portal"
+	// kbCollectionLevelMax is how deep the import nests: category, folder, subfolder. Collections go
+	// deeper (domain.MaxKBDepth), but the import keeps the depth it always had so a re-run places each
+	// folder where the first run did.
 	kbCollectionLevelMax = 3
 )
 

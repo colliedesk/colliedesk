@@ -109,12 +109,13 @@ var kbTagHits = `tagged AS (SELECT kt.article_id, kb_search_vector(string_agg(kt
 		FROM kb_article_tags kt WHERE kt.workspace_id=$1 AND kb_search_vector(kt.tag) @@ ` + kbAnyWordQuery + `
 		GROUP BY kt.article_id)`
 
-// shownKBTags returns the published tags of the article, sorted, when the help center shows tags, and
-// none when it does not.
-func shownKBTags(ctx context.Context, tx pgx.Tx, workspaceID, id string) ([]string, error) {
+// shownKBTags returns the published tags of the article, sorted, when help center helpCenterID ("" the
+// primary one) shows tags, and none when it does not.
+func shownKBTags(ctx context.Context, tx pgx.Tx, workspaceID, helpCenterID, id string) ([]string, error) {
 	var tags []string
-	err := tx.QueryRow(ctx, `SELECT COALESCE(array_agg(t.tag ORDER BY t.tag), '{}') FROM kb_article_tags t
-		JOIN help_centers h ON h.workspace_id=t.workspace_id AND h.show_tags
-		WHERE t.workspace_id=$1 AND t.article_id=$2`, workspaceID, id).Scan(&tags)
+	query, args := onHelpCenter(helpCenterID, `SELECT COALESCE(array_agg(t.tag ORDER BY t.tag), '{}') FROM kb_article_tags t
+		JOIN help_centers h ON h.workspace_id=t.workspace_id AND h.id=$H AND h.show_tags
+		WHERE t.workspace_id=$1 AND t.article_id=$2`, workspaceID, id)
+	err := tx.QueryRow(ctx, query, args...).Scan(&tags)
 	return tags, err
 }

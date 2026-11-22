@@ -35,7 +35,7 @@ func (s *Store) GetHelpCenterTheme(ctx context.Context, workspaceID string) (dom
 func readHelpCenterTheme(ctx context.Context, tx pgx.Tx, workspaceID string) (domain.HelpCenterThemeView, error) {
 	var view domain.HelpCenterThemeView
 	theme, colors := &view.HelpCenterTheme, &view.Colors
-	err := tx.QueryRow(ctx, `SELECT logo_media_id::text,favicon_media_id::text,`+strings.TrimPrefix(helpCenterThemeColumns, "logo_media_id,favicon_media_id,")+`,content_version,updated_at FROM help_centers WHERE workspace_id=$1`, workspaceID).Scan(
+	err := tx.QueryRow(ctx, `SELECT logo_media_id::text,favicon_media_id::text,`+strings.TrimPrefix(helpCenterThemeColumns, "logo_media_id,favicon_media_id,")+`,content_version,updated_at FROM help_centers WHERE workspace_id=$1 AND primary_help_center`, workspaceID).Scan(
 		&theme.LogoMediaID, &theme.FaviconMediaID, &theme.LogoAlt, &theme.LinkbackURL, &theme.ContactURL, &theme.ContactPhone,
 		&colors.Primary, &colors.Header, &colors.HeaderText, &colors.Background, &colors.Text, &colors.Link, &colors.Footer,
 		&theme.BodyFont, &theme.HeadingFont, &theme.CustomCSS, &view.ContentVersion, &view.UpdatedAt)
@@ -70,7 +70,7 @@ func checkThemeMedia(ctx context.Context, tx pgx.Tx, workspaceID string, theme d
 		itemLock, centerLock = " FOR SHARE", " FOR UPDATE"
 	}
 	var storedLogo, storedFavicon *string
-	err := tx.QueryRow(ctx, `SELECT logo_media_id::text, favicon_media_id::text FROM help_centers WHERE workspace_id=$1`+centerLock,
+	err := tx.QueryRow(ctx, `SELECT logo_media_id::text, favicon_media_id::text FROM help_centers WHERE workspace_id=$1 AND primary_help_center`+centerLock,
 		workspaceID).Scan(&storedLogo, &storedFavicon)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
@@ -139,7 +139,7 @@ func (s *Store) PutHelpCenterTheme(ctx context.Context, workspaceID string, them
 		colors := cleaned.Colors
 		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,content_version,updated_at,`+helpCenterThemeColumns+`)
 			VALUES($1,1,clock_timestamp(),$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-			ON CONFLICT (workspace_id) DO UPDATE SET logo_media_id=EXCLUDED.logo_media_id, favicon_media_id=EXCLUDED.favicon_media_id,
+			ON CONFLICT (workspace_id) WHERE primary_help_center DO UPDATE SET logo_media_id=EXCLUDED.logo_media_id, favicon_media_id=EXCLUDED.favicon_media_id,
 				logo_alt=EXCLUDED.logo_alt, linkback_url=EXCLUDED.linkback_url, contact_url=EXCLUDED.contact_url, contact_phone=EXCLUDED.contact_phone,
 				color_primary=EXCLUDED.color_primary, color_header=EXCLUDED.color_header, color_header_text=EXCLUDED.color_header_text,
 				color_background=EXCLUDED.color_background, color_text=EXCLUDED.color_text, color_link=EXCLUDED.color_link,

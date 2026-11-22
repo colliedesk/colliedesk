@@ -39,6 +39,8 @@ const (
 	homeArticles = 6
 	// articleNeighbours is how many articles of its collection an article page lists beside it.
 	articleNeighbours = 40
+	// relatedArticles is how many articles close to it an article page lists below its text.
+	relatedArticles = 5
 	// searchResults is how many matches a search shows; maxSearchChars bounds the query.
 	searchResults  = 25
 	maxSearchChars = 200
@@ -122,6 +124,8 @@ type Site struct {
 	pages      pages
 	// renders renders article pages, at most once per text (render.go).
 	renders *renders
+	// related keeps the related articles of article pages per knowledge base version (related-lists.go).
+	related *relatedLists
 	// notFound and notFoundOnHost are the 404 page of an address that is no open help center.
 	notFound, notFoundOnHost []byte
 	// videos bounds the videos being sent at once (streams.go).
@@ -137,7 +141,7 @@ type Site struct {
 func New(config Config) *Site {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	config.Domain = strings.ToLower(strings.TrimSpace(config.Domain))
-	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), videos: newStreams(), hosts: newCustomHosts(time.Now), routes: http.NewServeMux()}
+	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), related: newRelatedLists(relatedListsKept), videos: newStreams(), hosts: newCustomHosts(time.Now), routes: http.NewServeMux()}
 	for _, route := range config.ChannelRoutes {
 		handler := route.Handler
 		// Two types claiming one route is a programming error: the mux panics.
@@ -205,7 +209,7 @@ func (s *Site) appHost(host string) bool {
 // lookup (custom-host.go): an active custom domain, or a claim's CNAME target (claim), which moves to
 // the help center's address. A name that belongs to none is the help center's 404.
 func (s *Site) serveHost(response http.ResponseWriter, request *http.Request, host string, claim bool) {
-	workspaceID, found, wait, err := s.workspaceOfHost(request, host)
+	workspaceID, helpCenterID, found, wait, err := s.helpCenterOfHost(request, host)
 	switch {
 	case err != nil:
 		s.writeError(response, err)
@@ -214,7 +218,7 @@ func (s *Site) serveHost(response http.ResponseWriter, request *http.Request, ho
 	case !found:
 		s.writeNotFound(response, true)
 	default:
-		s.serve(response, request, address{workspaceID: workspaceID, host: host, claim: claim, sub: request.URL.Path})
+		s.serve(response, request, address{workspaceID: workspaceID, helpCenterID: helpCenterID, host: host, claim: claim, sub: request.URL.Path})
 	}
 }
 
@@ -228,16 +232,16 @@ func requestHost(host string) string {
 }
 
 // address is where a request reached a help center: a slug (on the workspace's host name, workspaceHost,
-// or below /help/), or the workspace and host name of an active custom domain or of a claim's CNAME
-// target (claim). base is the path prefix the help center's own links start with ("" on a custom
+// or below /help/), or the workspace, help center and host name of an active custom domain or of a
+// claim's CNAME target (claim). base is the path prefix the help center's own links start with ("" on a custom
 // domain, /help on a workspace's host name) and sub the path below it; atRoot marks a file of the
 // workspace's host name served outside base (robots.txt).
 type address struct {
-	slug                  string
-	workspaceID, host     string
-	claim                 bool
-	workspaceHost, atRoot bool
-	base, sub             string
+	slug                            string
+	workspaceID, helpCenterID, host string
+	claim                           bool
+	workspaceHost, atRoot           bool
+	base, sub                       string
 }
 
 // movedTo is where an old address of a help center with an active custom domain moves: the same path
@@ -252,7 +256,7 @@ func (s *Site) movedTo(request *http.Request, at address, site domain.HelpCenter
 		}
 		sub = rest
 	}
-	target := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
+	target := s.siteAddress(site)
 	switch {
 	// An address with a path (/help on a workspace's host name) is its home page without a slash.
 	case (sub == "/" || sub == "") && strings.Count(target, "/") > 2:
@@ -271,13 +275,19 @@ func (s *Site) movedTo(request *http.Request, at address, site domain.HelpCenter
 func (s *Site) serve(response http.ResponseWriter, request *http.Request, at address) {
 	slug, base, sub := at.slug, at.base, at.sub
 	route := s.channelRoute(request, sub)
+	// inner is the path below the root of the help center the request is for: another one of the
+	// workspace is below /b/<handle>.
+	inner := sub
+	if _, rest, ok := handlePath(sub); ok {
+		inner = rest
+	}
 	// The one form the help center's own pages post: a vote on an article.
-	vote := request.Method == http.MethodPost && votePath.MatchString(sub)
+	vote := request.Method == http.MethodPost && votePath.MatchString(inner)
 	if route == nil && !vote && request.Method != http.MethodGet && request.Method != http.MethodHead {
 		notAllowed(response)
 		return
 	}
-	if sub == stylePath+s.pages.styleName || base == pathPrefix+"_" && sub == "/"+s.pages.styleName {
+	if inner == stylePath+s.pages.styleName || base == pathPrefix+"_" && sub == "/"+s.pages.styleName {
 		s.writeStyle(response, request, s.pages.style)
 		return
 	}
@@ -297,7 +307,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	var open bool
 	var err error
 	if at.host != "" {
-		site, open, err = s.config.Store.OpenHelpCenterWorkspace(ctx, at.workspaceID)
+		site, open, err = s.config.Store.OpenHelpCenterAt(ctx, at.workspaceID, at.helpCenterID)
 	} else {
 		site, open, err = s.config.Store.OpenHelpCenter(ctx, slug)
 	}
@@ -330,12 +340,36 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		s.writeNotFound(response, base == "")
 		return
 	}
+	// Another help center of the workspace is served below /b/<handle> of the primary's addresses
+	// until its own custom domain is active; then it moves there.
+	if handle, rest, ok := handlePath(sub); ok && site.Primary {
+		onHost := base == ""
+		if site, open, err = s.config.Store.OpenHelpCenterHandle(ctx, site.WorkspaceID, handle); err != nil {
+			s.writeError(response, err)
+			return
+		}
+		base, sub = base+strings.TrimSuffix(handlePrefix, "/")+"/"+handle, rest
+		at.base, at.sub = base, sub
+		switch {
+		case !open:
+			s.writeNotFound(response, onHost)
+			return
+		case site.CustomHost != "":
+			s.redirect(response, request, s.movedTo(request, at, site), onHost)
+			return
+		}
+	}
 	// On its custom domain the help center says whose it is, for the custom domain check (CheckAddress).
 	if at.host != "" {
 		response.Header().Set(MarkerHeader, Marker(at.workspaceID, at.host))
 	}
 	view := s.newView(site, base, channels.HelpCenterAdditions{})
 	reached := s.helpCenterAt(view, base)
+	// The channel types (help chat) answer on the primary help center only.
+	if route != nil && !site.Primary {
+		s.writeNotFound(response, base == "")
+		return
+	}
 	if route != nil {
 		route.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), helpCenterKey{}, reached)))
 		return
@@ -344,7 +378,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	if _, rest, _, ok := view.splitLanguage(sub); ok && languagePage(rest) {
 		pageSub = rest
 	}
-	if s.config.Additions != nil && !vote && (pageSub == "/" || pageSub == "" || pageSub == "/search" || strings.HasPrefix(pageSub, "/c/") || strings.HasPrefix(pageSub, "/a/")) {
+	if s.config.Additions != nil && site.Primary && !vote && (pageSub == "/" || pageSub == "" || pageSub == "/search" || strings.HasPrefix(pageSub, "/c/") || strings.HasPrefix(pageSub, "/a/")) {
 		additions, err := s.config.Additions(ctx, reached)
 		if err != nil {
 			s.writeError(response, err)
@@ -457,7 +491,7 @@ func (s *Site) channelRoute(request *http.Request, sub string) http.Handler {
 	if sub == "" || sub == "/" || sub == "/search" || sub == "/robots.txt" {
 		return nil
 	}
-	for _, prefix := range []string{"/c/", "/a/", "/images/", "/media/", filesPath, stylePath} {
+	for _, prefix := range []string{"/c/", "/a/", handlePrefix, "/images/", "/media/", filesPath, stylePath} {
 		if strings.HasPrefix(sub, prefix) {
 			return nil
 		}
@@ -566,13 +600,14 @@ func (s *Site) newView(site domain.HelpCenterSite, base string, additions channe
 	if home == "" {
 		home = "/"
 	}
-	// Everything a page shows besides the knowledge base itself: the build (its templates and the chat's
-	// words count too, for a build whose version stays "dev"), the trial (noindex), the title, language
-	// and name the header uses, the address and the brand. The brand counts what is shown, not only the
+	// Everything a page shows besides the knowledge base itself: which help center of the workspace it
+	// is, the build (its templates and the chat's words count too, for a build whose version stays
+	// "dev"), the trial (noindex), the title, language and name the header uses, the address and the
+	// brand. The brand counts what is shown, not only the
 	// saved theme: a logo moved to the trash changes no content version.
 	brand := newBrand(site)
-	address := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
-	sum := sha256.Sum256([]byte(strings.Join([]string{site.Slug, strconv.FormatInt(site.ContentVersion, 10), strconv.FormatBool(site.Trial),
+	address := s.siteAddress(site)
+	sum := sha256.Sum256([]byte(strings.Join([]string{site.Slug, site.HelpCenterID, strconv.FormatInt(site.ContentVersion, 10), strconv.FormatBool(site.Trial),
 		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, chatVersion, brand.key, additions.Version, strings.Join(site.Languages, ",")}, "\x00")))
 	v := view{site: site, base: base, home: home, address: address, brand: brand, additions: additions, tag: hex.EncodeToString(sum[:12])}
 	return v.in("")
@@ -706,7 +741,7 @@ func (s *Site) video(response http.ResponseWriter, request *http.Request, v view
 		s.writeSiteNotFound(response, v)
 		return
 	}
-	video, err := s.config.Store.HelpCenterVideo(request.Context(), site.WorkspaceID, id)
+	video, err := s.config.Store.HelpCenterVideo(request.Context(), site.WorkspaceID, site.HelpCenterID, id)
 	if errors.Is(err, domain.ErrKBMediaNotFound) || err == nil && !strings.HasPrefix(video.StorageKey, site.WorkspaceID+"/") {
 		s.writeSiteNotFound(response, v)
 		return
@@ -760,7 +795,7 @@ func (s *Site) image(response http.ResponseWriter, request *http.Request, v view
 		s.writeSiteNotFound(response, v)
 		return
 	}
-	image, err := s.config.Store.HelpCenterImage(request.Context(), site.WorkspaceID, id)
+	image, err := s.config.Store.HelpCenterImage(request.Context(), site.WorkspaceID, site.HelpCenterID, id)
 	// Storage keys start with the owning workspace id; a row pointing at another workspace's bytes is never served.
 	if errors.Is(err, domain.ErrKBImageNotFound) || err == nil && !strings.HasPrefix(image.StorageKey, site.WorkspaceID+"/") {
 		s.writeSiteNotFound(response, v)

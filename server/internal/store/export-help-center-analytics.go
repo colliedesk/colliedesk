@@ -15,7 +15,7 @@ import (
 func exportHelpCenterAnalytics(ctx context.Context, tx pgx.Tx, workspaceID string) (*export.HelpCenterAnalytics, error) {
 	var record export.HelpCenterAnalytics
 	err := tx.QueryRow(ctx, `SELECT provider,enabled,ga4_measurement_id,ga4_api_secret_sealed IS NOT NULL,plausible_domain,plausible_base_url,updated_at
-		FROM help_center_analytics WHERE workspace_id=$1`, workspaceID).Scan(&record.Provider, &record.Enabled, &record.GA4MeasurementID,
+		FROM help_center_analytics WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1)`, workspaceID).Scan(&record.Provider, &record.Enabled, &record.GA4MeasurementID,
 		&record.GA4APISecretSet, &record.PlausibleDomain, &record.PlausibleBaseURL, &record.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

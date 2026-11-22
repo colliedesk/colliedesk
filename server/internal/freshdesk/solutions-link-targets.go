@@ -30,8 +30,9 @@ func (r *run) linkSite(ctx context.Context) (linkSite, error) {
 	}
 	var slug, custom, claimed string
 	if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT w.slug, COALESCE((SELECT hostname FROM help_center_domains d WHERE d.workspace_id=w.id AND d.status='active'), ''),
-				COALESCE((SELECT hostname FROM help_center_domains d WHERE d.workspace_id=w.id), '')
+		return tx.QueryRow(ctx, `SELECT w.slug, COALESCE((SELECT hostname FROM help_center_domains d WHERE d.workspace_id=w.id AND d.help_center_id=primary_help_center_id(w.id)
+				AND d.status='active'), ''),
+				COALESCE((SELECT hostname FROM help_center_domains d WHERE d.workspace_id=w.id AND d.help_center_id=primary_help_center_id(w.id)), '')
 			FROM workspaces w WHERE w.id=$1`, r.workspaceID).Scan(&slug, &custom, &claimed)
 	}); err != nil {
 		return site, fmt.Errorf("read the help center address: %w", err)

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useHolds } from '../../lib/permissions-context';
 import { HelpTip } from '../../ui/help-tip';
 import { CollectionApprovalField } from './collection-approval-field';
+import { CollectionOrderField } from './collection-order-field';
 import { CollectionVisibilityField } from './collection-visibility-field';
 import type { KBCollection, KBVisibility } from './kb-api';
 import { kbMessages } from './kb-messages';
@@ -21,6 +22,8 @@ export interface CollectionValues {
   default_template_id: string | null;
   // require_approval overrides the help center's approval before publishing for its articles.
   require_approval: KBCollection['require_approval'];
+  // article_order is how it lists its articles; the order set by hand stays stored under every other.
+  article_order: KBCollection['article_order'];
   // visibility narrows who can see every article in it and its collections.
   visibility: KBVisibility;
 }
@@ -42,7 +45,7 @@ export function CollectionForm({ tree, node, parentId = null, onSubmit, onCancel
   const [values, setValues] = useState<CollectionValues>({
     name: original?.name ?? '', slug: original?.slug ?? '', description: original?.description ?? '', parent_id: original ? original.parent_id : parentId,
     default_template_id: original?.default_template_id ?? null, require_approval: original?.require_approval ?? 'inherit',
-    visibility: original?.visibility ?? 'everyone',
+    article_order: original?.article_order ?? 'manual', visibility: original?.visibility ?? 'everyone',
   });
   const holds = useHolds();
   const templates = useQuery({ queryKey: templatesKey, queryFn: kbTemplatesApi.list }).data?.items ?? [];
@@ -90,6 +93,7 @@ export function CollectionForm({ tree, node, parentId = null, onSubmit, onCancel
         </select>
         <small className="muted-copy"><span id={`${id}-template-note`}>{templateMessages.defaultTemplateNote}</span>{' '}
           <HelpTip label={templateMessages.defaultTemplate} text={templateMessages.defaultTemplateTip} id={`${id}-template-tip`} /></small></div>}
+      {original && <CollectionOrderField value={values.article_order} onChange={(order) => set({ article_order: order })} />}
       <CollectionVisibilityField value={values.visibility} onChange={(visibility) => set({ visibility })} />
       {/* Changing it is a help center setting: the server asks for help_center:update too. */}
       {original && holds('help_center:update') && <CollectionApprovalField value={values.require_approval} onChange={(mode) => set({ require_approval: mode })} />}
