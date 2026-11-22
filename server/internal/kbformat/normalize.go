@@ -46,10 +46,17 @@ func Normalize(body string) string {
 			if node.HasClosure() {
 				edits = append(edits, blockLine(source, node.ClosureLine)...)
 			}
+			edits = append(edits, figureApart(source, node)...)
 		}
 		return ast.WalkContinue, nil
 	})
-	slices.SortFunc(edits, func(a, b replacement) int { return b.start - a.start })
+	// From the end back, and at one place a tag's rewrite before the blank line put ahead of it.
+	slices.SortStableFunc(edits, func(a, b replacement) int {
+		if a.start != b.start {
+			return b.start - a.start
+		}
+		return b.stop - a.stop
+	})
 	for _, edit := range edits {
 		source = slices.Concat(source[:edit.start], []byte(edit.with), source[edit.stop:])
 	}

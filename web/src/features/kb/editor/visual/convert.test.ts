@@ -38,7 +38,7 @@ describe('the visual editor saves an article as it read it', () => {
 
   it('it reads each of those elements as itself, none as a Markdown block', () => {
     expect(inventory(markdownToDoc(everything))).toEqual({
-      nodes: ['blockquote', 'bulletList', 'callout', 'codeBlock', 'hardBreak', 'heading', 'horizontalRule', 'image', 'listItem',
+      nodes: ['articleFigure', 'blockquote', 'bulletList', 'callout', 'codeBlock', 'hardBreak', 'heading', 'horizontalRule', 'image', 'listItem',
         'orderedList', 'paragraph', 'table', 'tableCell', 'tableHeader', 'tableRow', 'taskItem', 'taskList', 'text'],
       marks: ['bold', 'code', 'color', 'highlight', 'italic', 'link', 'strike', 'underline'],
     });

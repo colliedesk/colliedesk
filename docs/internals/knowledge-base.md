@@ -661,11 +661,13 @@ in a workspace's custom CSS.
 | `<span data-color="accent\|success\|warning\|danger\|muted">…</span>` | text colour from the palette |
 | `<p data-align="center\|right" data-indent="1..4">`, blank line, Markdown, blank line, `</p>` | a top-level paragraph's alignment and indent; `<h1>`…`<h6>` the same for a heading |
 | `<table>` with `<th>`/`<td>` and `colspan`, `rowspan` (each up to 20), `data-align`, `data-bg` | a table GFM cannot hold |
+| `<figure data-width="small\|medium\|full\|1..4096" data-align="left\|center\|right\|inline" data-border>`, blank line, an image line (or a link holding only an image), optional `<figcaption>` with Markdown between blank lines, `</figure>` | an image's size, position, frame, caption and link |
 
 - **One spelling.** `kbformat.Normalize` (`server/internal/store/kb-body.go`, on every save of an article,
   translation, draft or template) lowercases the tags, writes double quotes, keeps only those attributes,
-  in the order `colspan`, `rowspan`, `data-align`, `data-indent`, `data-color`, `data-bg`, drops a colour
-  outside the palette and a span of 1. The editors write that spelling (`editor/format-tags.ts`
+  in the order `colspan`, `rowspan`, `data-align`, `data-indent`, `data-color`, `data-bg` (a figure's:
+  `data-width`, `data-align`, `data-border`), drops a colour outside the palette, a span of 1, and a figure
+  width or alignment outside `figure` in the allowlist (a width with a leading zero too). The editors write that spelling (`editor/format-tags.ts`
   `tagString`), so a save never changes what the person sees in the source. The cases are
   `server/internal/kbformat/testdata/normalize.json`, run by Go and by vitest (`format-tags.test.ts`).
 - **One render.** `kbformat.Extension` renders the forms in the help center's goldmark with the classes
@@ -673,6 +675,42 @@ in a workspace's custom CSS.
   the same classes their look in `editor/formatting.css`. `testdata/render.json` is the expected HTML of
   each form, run by `server/internal/helpcenter/formatting_test.go` and by vitest
   (`markdown-preview.test.tsx`).
+- **A figure's classes.** `kbformat` (`figure.go`) renders `kb-figure`, `kb-figure-<width>`,
+  `kb-figure-<align>` and `kb-figure-border`; a width in pixels becomes the image's own `width`
+  attribute, the one dimension the sanitizer already allows, so no `style` is needed and the CSP stays
+  byte-identical. A run that breaks the shape is left as plain blocks, so its image and caption still
+  show. A figure set back to Original size and Default stays a bare `<figure>` (rendered as `kb-figure`
+  only); the editor never unwraps it, so the image keeps its place.
+- **Annotate is a copy plus a one-article replace.** The dialog (`features/kb/annotate/`) draws on a
+  canvas at the image's natural size from its own bytes (an object URL, so the canvas is never tainted).
+  Blur is `pixelate` over `getImageData`, burned into the exported bytes, never a layer the reader's
+  browser draws. Saving uploads the copy (JPEG for a JPEG, else PNG), then
+  `POST /api/v1/kb/media/{id}/replace` with `article_id`, which changes that article and its
+  translations only. The replacement row is the copy's history: `GET /api/v1/kb/media/{copy}` lists the
+  original under `earlier_versions`, and undoing the replacement puts it back. The editor refuses
+  while the text on screen differs from what is saved, since the replace rewrites the saved text.
+  When the replace is refused, the editor moves the copy to the trash (it is in no article) and the
+  dialog keeps the drawing and shows the refusal.
+- **A one-article replace never changes the help center.** With `article_id`, a published article and
+  its published translations keep their text: the new item goes into their unpublished changes, made
+  from the published text when there are none (`replaceInOneKBArticle`), so the call needs
+  `kb_articles:update`, not `kb_articles:publish`. A draft article is rewritten as a new version. The
+  article is locked before its text is read, so a save that drops the item meanwhile is seen; when
+  nothing is rewritten the call answers 409 `media_not_in_article` and records no replacement. Such a
+  replacement lists the published article with version 0, so its undo needs no publish either
+  (`KBReplacementTouchesPublished` counts only versions above 0).
+- **A figure's lines are set apart.** An HTML block runs to the next blank line, so a `<figure>` or
+  `<figcaption>` tag with the image or caption right under it would show that Markdown as text. The
+  normalizer (`kbformat/figure-apart.go`) puts a blank line before and after each such tag of a
+  top-level block; code and figures inside a list item or a quote are left as they are. Titles of the
+  image and of its link (`![a](src "t")`, `[…](href "t")`) round-trip through the visual editor
+  (`linkTitle` on the figure node).
+- **A replacement not undone keeps its earlier version.** `kbMediaKeptByReplacement` (a row of
+  `kb_media_replacements` with this `from_media_id`, `undone_at IS NULL` and not `in_place`) keeps the
+  item from every purge: `PurgeKBMediaNow` deletes nothing and answers 409 `media_kept` with the
+  articles and the replacement in `kept_by`; `kbMediaPurgeable` skips it, so the trash shows no
+  `purge_at`. It may still go to the trash. The guard lifts once the replacement is undone. An in-place
+  file replacement keeps no earlier bytes, so it keeps nothing.
 
 ## Files
 

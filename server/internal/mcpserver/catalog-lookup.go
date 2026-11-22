@@ -5,11 +5,11 @@ func whoamiSpec() Spec {
 		Name:  "colliedesk_whoami",
 		Title: "Show who this token acts as",
 		Description: `Show the workspace and the team member this token acts as with their roles, how the token got its permissions (a role it follows, ` +
-			`or a list picked when it was made), the permissions this call has now, whether the workspace is locked, and which tools those permissions can use. ` +
+			`or a list picked when it was made), the permissions this call has now, whether the workspace is locked, which article editor the member chose, and which tools those permissions can use. ` +
 			`Call it first, and again when a tool is refused with permission_missing.`,
 		REST:  []string{"GET /api/v1/auth/me"},
 		Input: noArguments,
-		Output: `{"type":"object","required":["workspace","agent","token","permissions","permissions_meaning","workspace_locked","tools_you_can_use"],"properties":{` +
+		Output: `{"type":"object","required":["workspace","agent","token","permissions","permissions_meaning","workspace_locked","kb_editor","tools_you_can_use"],"properties":{` +
 			`"workspace":{"type":"object","properties":{"name":{"type":"string"},"slug":{"type":"string"},"timezone":{"type":"string"}}},` +
 			`"agent":{"type":"object","properties":{"name":{"type":"string"},"email":{"type":"string"},"roles":{"type":"array","items":{"type":"string"},"description":"Names of the roles the team member holds."}}},` +
 			`"token":{"type":["object","null"],"description":"null for a person's own sign-in.","properties":{` +
@@ -17,7 +17,9 @@ func whoamiSpec() Spec {
 			`"role":{"type":["string","null"],"description":"Name of the role it follows."},"given":{"type":"array","items":{"type":"string"},"description":"What the token was given, before it is limited to what its person holds."},` +
 			`"legacy_tier":{"type":["string","null"]},"stopped":{"type":"string","description":"Only while the token is stopped: its person no longer holds every permission of the role it follows, and how to start it again."}}},` +
 			`"permissions":{"type":"array","items":{"type":"string"},"description":"What this call may do now (resource:action)."},"permissions_meaning":{"type":"string"},` +
-			`"workspace_locked":{"type":"boolean"},"tools_you_can_use":{"type":"array","items":{"type":"string"}}}}`,
+			`"workspace_locked":{"type":"boolean"},` +
+			`"kb_editor":{"type":["string","null"],"enum":["visual","markdown",null],"description":"The article editor the team member chose (colliedesk_my_kb_editor_set); null until they choose, and the visual editor opens."},` +
+			`"tools_you_can_use":{"type":"array","items":{"type":"string"}}}}`,
 		run: whoami,
 	}
 }

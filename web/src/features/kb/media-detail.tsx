@@ -10,6 +10,7 @@ import { mediaApi, updateFields } from './media-api';
 import type { KBMedia, KBMediaDetails } from './media-api';
 import { FileGlyph, embedFor, mediaName } from './media-grid';
 import { FileReplace } from './media-file-replace';
+import { EarlierVersions } from './media-earlier-versions';
 import { mediaMessages } from './media-messages';
 import { reason } from './kb-tree';
 import { posterFrom } from './video-poster';
@@ -119,6 +120,7 @@ function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDet
             : <img src={item.url} alt={item.alt} />}
         </div>
         <Actions item={item} onChanged={onChanged} onNotice={onNotice} onTrashed={onTrashed} />
+        <EarlierVersions item={item} onChanged={onChanged} onNotice={onNotice} />
         <div className="media-tabs" role="tablist" aria-label={mediaMessages.itemTabs}>
           {tabs.map(([name_, label], at) => (
             <button key={name_} type="button" role="tab" id={`${id}-${name_}-tab`} aria-selected={tab === name_} aria-controls={`${id}-${name_}`} tabIndex={tab === name_ ? 0 : -1}

@@ -8367,7 +8367,8 @@ paths:
       description: >
         The library's trash, last moved there first, 60 items a page unless `limit` says otherwise,
         each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its
-        usage. An item the purge keeps (the help center's logo or favicon) has no `purge_at`. An item
+        usage. An item the purge keeps (the help center's logo or favicon, or the earlier version of a
+        replacement not undone) has no `purge_at`. An item
         in the trash still counts toward the plan's storage until it is purged.
       parameters:
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string}}
@@ -8488,6 +8489,9 @@ paths:
         the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no
         longer names it) or `not_found`. Articles in the trash and older versions that named one
         then show "Media no longer exists". This cannot be undone. It needs `kb_media:purge`.
+        An item a replacement put another in the place of, and that is not undone, is its earlier
+        version: the call then purges nothing and answers 409 `media_kept`, naming the articles and the
+        replacement in `kept_by`. Undo the replacement first; the item may stay in the trash meanwhile.
       requestBody:
         required: true
         content:
@@ -8510,6 +8514,7 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/kb/media/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -8658,6 +8663,16 @@ paths:
         earlier version (`in_place` true, no article gets a new version). 400 when an article or a
         draft lists `with_media_id`: upload the new version as a file no article lists. Replacing a
         file a published article lists needs kb_articles:publish.
+
+        With `article_id`, only that article and its translations change: the others that show the image
+        or video keep it. This is how an edited copy (an annotated screenshot) goes in one article, and
+        the new item's details list this one in `earlier_versions` until the replacement is undone. A
+        published article and its published translations keep their text: the copy goes into their
+        unpublished changes (made from the published text when there are none), so the help center
+        shows it once someone publishes them, and the article is listed with no new version. This needs
+        kb_articles:update, not publish. 409 `media_not_in_article` when neither the article, its
+        translations nor their unpublished changes show the item (nothing is recorded); 400 when the
+        item is a file; 404 when no live article in the workspace has that id.
       requestBody:
         required: true
         content:
@@ -8667,6 +8682,7 @@ paths:
               required: [with_media_id]
               properties:
                 with_media_id: {type: string, format: uuid}
+                article_id: {type: string, format: uuid, description: 'Replace in this article only; leave out to replace in every live article.'}
       responses:
         '200':
           description: The replacement
@@ -8675,6 +8691,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/kb/media-replacements/{id}/undo:
     parameters: [{$ref: '#/components/parameters/ID'}]
     post:
@@ -8684,8 +8701,9 @@ paths:
         Put back the text each article and translation had before the replacement, where nothing changed
         since (an article whose newest version is still the replacement's, a translation that still
         holds the replaced text), as new versions. Anything changed since keeps its text and is listed in
-        `skipped_article_ids`. Undoing twice changes nothing more. 409 `media_gone` when the replaced
-        item was deleted for good.
+        `skipped_article_ids`. Unpublished changes that took an edited copy get the item back the same
+        way, while they still hold the copy. Undoing twice changes nothing more. 409 `media_gone` when
+        the replaced item was deleted for good.
       responses:
         '200':
           description: The replacement, with undone_at
@@ -13691,7 +13709,7 @@ components:
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         usage: {$ref: '#/components/schemas/KBMediaUsage'}
-        purge_at: {type: string, format: date-time, description: 'When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article and not the help center names.'}
+        purge_at: {type: string, format: date-time, description: 'When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article, not the help center and no replacement not undone keeps.'}
     KBMediaUsage:
       type: object
       required: [articles, trashed_articles, older_versions, help_center]
@@ -13710,7 +13728,7 @@ components:
       allOf:
         - {$ref: '#/components/schemas/KBMedia'}
         - type: object
-          required: [articles]
+          required: [articles, earlier_versions]
           properties:
             articles:
               type: array
@@ -13724,6 +13742,22 @@ components:
                   status: {type: string, enum: [draft, published]}
                   in_trash: {type: boolean}
                   current: {type: boolean, description: False when only an older version names the item.}
+            earlier_versions:
+              type: array
+              description: >-
+                The items replacements put this one in the place of (by replacements not undone, newest
+                first), each an earlier version the articles showed. Undoing the replacement puts it back.
+                Empty when there are none.
+              items:
+                type: object
+                required: [replacement_id, media_id, name, url, article_ids, replaced_at]
+                properties:
+                  replacement_id: {type: string, format: uuid, description: 'Undo with POST /api/v1/kb/media-replacements/{replacement_id}/undo.'}
+                  media_id: {type: string, format: uuid}
+                  name: {type: string}
+                  url: {type: string}
+                  article_ids: {type: array, items: {type: string, format: uuid}, description: The articles the replacement changed.}
+                  replaced_at: {type: string, format: date-time}
     KBMediaResult:
       type: object
       required: [id, status]
@@ -16137,6 +16171,25 @@ components:
                   number: {type: integer}
                   title: {type: string}
                   status: {type: string, enum: [draft, published]}
+            kept_by:
+              type: array
+              description: 'Only on media_kept: each item asked for that a replacement not undone keeps as its earlier version.'
+              items:
+                type: object
+                required: [media_id, replacement_id, to_media_id, articles]
+                properties:
+                  media_id: {type: string, format: uuid}
+                  replacement_id: {type: string, format: uuid, description: 'Undo it (POST /api/v1/kb/media-replacements/{id}/undo) to let the item go.'}
+                  to_media_id: {type: string, format: uuid, description: The item shown in its place.}
+                  articles:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, number, title]
+                      properties:
+                        id: {type: string, format: uuid}
+                        number: {type: integer}
+                        title: {type: string}
             refused_cc:
               type: array
               items: {type: string}

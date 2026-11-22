@@ -23,7 +23,7 @@ const pdf = (fields: Record<string, unknown> = {}) => ({
   id: fileId, kind: 'file', content_type: 'application/pdf', size: 40_960, sha256: 'a'.repeat(64), url: `/api/v1/kb/media/${fileId}`, name: 'Warranty form.pdf', alt: '',
   width: null, height: null, duration_ms: null, codecs: [], thumbnail_url: null, poster_url: null, kept: false, deleted_at: null,
   created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-02T00:00:00Z', usage: { articles: 1, trashed_articles: 0, older_versions: 0, help_center: [] },
-  articles: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000010', number: 12, title: 'Warranty', status: 'published', in_trash: false, current: true }], ...fields,
+  articles: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000010', number: 12, title: 'Warranty', status: 'published', in_trash: false, current: true }], earlier_versions: [], ...fields,
 });
 const replacement = { id: replacementId, from_media_id: fileId, to_media_id: newId, article_ids: [], translations: [], skipped_article_ids: [], in_place: true,
   created_at: '2026-10-03T00:00:00Z', undone_at: null };

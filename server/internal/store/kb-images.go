@@ -274,15 +274,16 @@ type KBPurge struct {
 
 // kbMediaPurgeable is the purge rule for library items, on rows aliased m: in the trash for longer than
 // domain.KBTrashRetention, or never kept, linked by no article (no version either) and last uploaded
-// before that. Either way no live article's current text may name it, and the help center may not
-// show it as its logo or favicon.
+// before that. Either way no live article's current text may name it, the help center may not show it
+// as its logo or favicon, and no replacement not undone may keep it as its earlier version.
 const kbMediaPurgeable = `((m.deleted_at IS NOT NULL AND m.deleted_at<$1)
 		OR (m.deleted_at IS NULL AND NOT m.kept AND m.last_uploaded_at<$1
 			AND NOT EXISTS(SELECT 1 FROM ` + kbMediaUses + ` l WHERE l.workspace_id=m.workspace_id AND l.media_id=m.id)))
 	AND NOT EXISTS(SELECT 1 FROM ` + kbMediaUses + ` l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
 		WHERE l.workspace_id=m.workspace_id AND l.media_id=m.id AND l.current AND a.deleted_at IS NULL)
 	AND NOT ` + kbMediaNamedByHelpCenter + `
-	AND NOT ` + kbMediaNamedByTemplate
+	AND NOT ` + kbMediaNamedByTemplate + `
+	AND NOT ` + kbMediaKeptByReplacement
 
 // PurgeKBTrash deletes for good, in every workspace, the articles and collections that have been in
 // the trash longer than domain.KBTrashRetention (with the articles' history, translations and media

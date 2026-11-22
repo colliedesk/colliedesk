@@ -18,3 +18,15 @@
 :is(.kb-preview, .kb-visual) .kb-bg-muted { background: var(--surface-2); }
 :is(.kb-preview, .kb-visual) mark { background: color-mix(in srgb, var(--warn) 28%, transparent); color: inherit; padding: 0 0.1em; border-radius: 3px; }
 :is(.kb-preview, .kb-visual) :is(th, td) > p { margin: 0.25rem 0; }
+:is(.kb-preview, .kb-visual) .kb-figure { display: table; max-width: 100%; margin: 0 0 1.25rem; }
+:is(.kb-preview, .kb-visual) .kb-figure img { display: block; max-width: 100%; }
+:is(.kb-preview, .kb-visual) .kb-figure figcaption { display: table-caption; caption-side: bottom; margin-top: 0.5rem; color: var(--text-3); font-size: 0.9375rem; }
+:is(.kb-preview, .kb-visual) .kb-figure-small { width: 33%; }
+:is(.kb-preview, .kb-visual) .kb-figure-medium { width: 60%; }
+:is(.kb-preview, .kb-visual) .kb-figure-full { width: 100%; }
+:is(.kb-preview, .kb-visual) :is(.kb-figure-small, .kb-figure-medium, .kb-figure-full) img { width: 100%; }
+:is(.kb-preview, .kb-visual) .kb-figure-center { margin-left: auto; margin-right: auto; }
+:is(.kb-preview, .kb-visual) .kb-figure-left { float: left; margin: 0.25rem 1.5rem 1rem 0; }
+:is(.kb-preview, .kb-visual) .kb-figure-right { float: right; margin: 0.25rem 0 1rem 1.5rem; }
+:is(.kb-preview, .kb-visual) .kb-figure-inline { display: inline-table; vertical-align: middle; margin: 0 0.5rem 0.5rem 0; }
+:is(.kb-preview, .kb-visual) .kb-figure-border { padding: 0.5rem; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-1); }
