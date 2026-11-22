@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 // votePathSuffix follows an article's address for its votes: a form posts there.
@@ -49,11 +51,17 @@ type voteBox struct {
 	State string
 	// MaxMissing is the longest "What was missing?" line.
 	MaxMissing int
+	// Ask is the address field of the "No" form, nil unless the knowledge base opens conversations from it.
+	Ask *feedbackText
 }
 
 // voteBoxOf is the box of article in view v.
 func voteBoxOf(v view, article domain.PublicKBArticle) *voteBox {
 	box := &voteBox{T: voteTextFor(v.locale()), Action: v.root + ArticlePath(article.Number, article.Slug) + votePathSuffix, MaxMissing: domain.MaxKBVoteMissingChars}
+	if v.site.FeedbackConversations {
+		ask := feedbackTextFor(v.locale())
+		box.Ask = &ask
+	}
 	if count := article.Votes; count.Total > 0 {
 		box.Count = fmt.Sprintf(box.T.Count, count.Helpful, count.Total)
 	}
@@ -132,9 +140,20 @@ func (s *Site) vote(response http.ResponseWriter, request *http.Request, v view,
 		return
 	}
 	missing := request.PostForm.Get("missing")
+	// The address is read only where the page asks for it: a "No" on a knowledge base that opens
+	// conversations from feedback.
+	var from string
+	if !helpful && v.site.FeedbackConversations {
+		from = strings.TrimSpace(request.PostForm.Get("email"))
+		if from != "" && (len(from) > maxFeedbackAddress || !email.ValidAddress(from)) {
+			http.Error(response, feedbackTextFor(v.locale()).InvalidEmail, http.StatusBadRequest)
+			return
+		}
+	}
 	cookie := s.readerCookie(request, v)
 	voter := sha256.Sum256([]byte("reader\x00" + cookie.Value))
-	err = s.config.Store.VoteKBArticle(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, number, voter[:], s.voteAddress(request), helpful, missing)
+	client := s.voteAddress(request)
+	err = s.config.Store.VoteKBArticle(request.Context(), v.site.WorkspaceID, v.site.HelpCenterID, number, voter[:], client, helpful, missing)
 	if errors.Is(err, domain.ErrKBArticleNotFound) {
 		s.writeSiteNotFound(response, v)
 		return
@@ -142,6 +161,15 @@ func (s *Site) vote(response http.ResponseWriter, request *http.Request, v view,
 	if err != nil {
 		s.writeError(response, err)
 		return
+	}
+	if from != "" && strings.TrimSpace(missing) != "" {
+		feedback := store.KBArticleFeedback{Number: number, Voter: voter[:], Address: client, From: from,
+			Page: func(slug string) string { return v.rootAddress + ArticlePath(number, slug) }}
+		// The vote is kept even when this fails; it has no conversation yet, so sending again retries.
+		if err := s.config.Store.OpenKBArticleFeedback(request.Context(), v.site.WorkspaceID, feedback); err != nil {
+			s.writeError(response, err)
+			return
+		}
 	}
 	http.SetCookie(response, cookie)
 	state := votedNo

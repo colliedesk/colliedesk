@@ -19,7 +19,7 @@ const signals = [
   { kind: 'vote_no', text: 'I could not find the invoices', created_at: '2026-11-21T09:00:00Z' },
   { kind: 'search_no_result', text: 'where are my invoices', created_at: '2026-11-20T09:00:00Z' },
 ];
-const center = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' };
+const center = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, show_tags: false, feedback_conversations: false, url: 'https://desk.example.com/help/acme' };
 const answer = summary(9, 'Download your invoices', 'published');
 // rowsOf is the gaps of the list, not the kind labels and signals listed inside each one.
 const rowsOf = (list: HTMLElement) => within(list).getAllByRole('listitem').filter((row) => row.parentElement === list);

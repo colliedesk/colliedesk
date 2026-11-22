@@ -20,7 +20,7 @@ type headingIDs struct {
 // "## Main" is main-1 and the skip link still leads to <main id="main">.
 var reservedIDs = []string{
 	"main", "q-top", "q", "ask-launch", "chatbox", "contents-title", "rail-contents-title", "rail-title",
-	"topics", "sections", "articles", "results", "helpful", "helpful-title", "helpful-hint", "helpful-missing",
+	"topics", "sections", "articles", "results", "helpful", "helpful-title", "helpful-hint", "helpful-missing", "helpful-email", "helpful-email-hint",
 	"chat", "chat-title", "q-article", "q-article-note", "q-article-count", "w-article", "resume-article",
 	"cn-t", "cn-d", "h-article-email", "h-article-name", "h-article-note", "h-article-email-err",
 	"h-article-note-hint", "h-article-t", "downloads-title", "tags-title", "related-title",

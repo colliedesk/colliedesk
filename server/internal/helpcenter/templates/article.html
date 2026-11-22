@@ -47,6 +47,11 @@
 <label for="helpful-missing">{{.T.Missing}}</label>
 <textarea id="helpful-missing" name="missing" rows="3" maxlength="{{.MaxMissing}}" aria-describedby="helpful-hint"></textarea>
 <p class="helpful-hint" id="helpful-hint">{{.T.MissingHint}}</p>
+{{- with .Ask}}
+<label for="helpful-email">{{.Email}}</label>
+<input type="email" id="helpful-email" name="email" autocomplete="email" maxlength="254" aria-describedby="helpful-email-hint">
+<p class="helpful-hint" id="helpful-email-hint">{{.EmailHint}}</p>
+{{- end}}
 <button type="submit">{{.T.Send}}</button>
 </form>
 {{- else if eq .State "sent"}}

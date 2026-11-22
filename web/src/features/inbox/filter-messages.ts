@@ -4,7 +4,7 @@ import { channelUI } from '../../channels/registry';
 // of the inbox, not with the first screen; the words the first screen shows stay in src/messages.ts.
 export const filterMessages = {
   // How a conversation started without a channel; a channel type's label is its registry entry's (channelLabel).
-  origins: { imported: 'Imported', agent: 'Started by the team', problem_report: 'Problem report' } as Record<string, string>,
+  origins: { imported: 'Imported', agent: 'Started by the team', problem_report: 'Problem report', article_feedback: 'Article feedback' } as Record<string, string>,
   priority: 'Priority',
   assignee: 'Assignee',
   anyoneAssigned: 'Assigned to anyone',

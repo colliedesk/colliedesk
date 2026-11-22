@@ -455,11 +455,12 @@ a:hover { text-decoration-thickness: 2px; }
 .helpful-thanks { margin: 0; }
 .helpful-missing { display: grid; gap: 0.5rem; margin: 1rem 0 0; }
 .helpful-missing label { font-weight: 600; }
-.helpful-missing textarea {
+.helpful-missing textarea, .helpful-missing input {
   font: 1rem/1.5 var(--font-body); color: var(--ink); background: var(--surface); padding: 0.625rem 0.75rem;
   border: 1px solid var(--rule); border-radius: 0.5rem; resize: vertical; min-height: 5rem;
 }
-.helpful-missing textarea:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+.helpful-missing input { min-height: 2.75rem; }
+.helpful-missing textarea:focus-visible, .helpful-missing input:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
 .helpful-hint { margin: 0; color: var(--muted); font-size: 0.875rem; }
 .helpful-missing button {
   justify-self: start; font: 600 1rem/1 var(--font-body); cursor: pointer; min-height: 2.75rem; padding: 0 1.25rem;

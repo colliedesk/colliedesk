@@ -874,6 +874,34 @@ counting and leave the list; nothing is deleted. **Earlier counts** keeps the co
 and the [export](export.md) keeps every vote and reset. After a reset the Freshdesk votes no longer
 count. A reset cannot be undone.
 
+### Conversations from votes
+
+A "No" can become a conversation, so the team can write back to the reader. It is off by default.
+Turn it on in **Knowledge → Settings → Help center** with **Open a conversation from a "No" vote**.
+It applies to every help center of the workspace. Changing it needs the right to change the help
+center (`help_center:update`) and to change channels (`channels:update`), since it lets readers
+open conversations. A role without `channels:update` sees whether it is on.
+
+While it is on, the box under **What was missing?** also asks for an email address. It is optional.
+When a reader answers **No**, writes what was missing and leaves an address:
+
+- A conversation opens with the subject "Article feedback: " and the article's title, tagged
+  `article-feedback`, from that address. Its first message names the article, its public address and
+  the reader's line, with emails and long numbers already removed.
+- The article's author, while still on the team, is asked on it with a note and gets it in
+  **Mentions**.
+- The sender shows as **Unverified sender (help center)**: anyone can type any address, so check
+  the request before you share account details.
+- Sending the same vote again opens no second conversation. The vote keeps a link to its
+  conversation, and the [export](export.md) carries it.
+
+At most 5 conversations open from one visitor address and 50 in the workspace every 10 minutes.
+Past that the vote still counts, and no conversation opens. A "No" without an address only counts,
+as before.
+
+An AI agent turns it on or off with `colliedesk_help_center_update` and `feedback_conversations`,
+without `help_center_id`.
+
 ## Views and replies
 
 **Last 30 days** (on the right of the editor; on a phone, under the text) shows how many readers opened
