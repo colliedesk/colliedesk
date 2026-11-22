@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
@@ -107,8 +109,20 @@ func (a *API) patchHelpCenter(response http.ResponseWriter, request *http.Reques
 // deleteHelpCenter takes a help center other than the primary off line and releases its custom domain
 // at once: the cache forgets the host, so it no longer serves it and another help center may claim it.
 func (a *API) deleteHelpCenter(response http.ResponseWriter, request *http.Request) {
-	workspaceID := principal(request).Workspace.ID
-	released, err := a.store.DeleteHelpCenter(request.Context(), workspaceID, request.PathValue("id"))
+	who := principal(request)
+	workspaceID, id := who.Workspace.ID, request.PathValue("id")
+	// A help center on a custom domain leaves the public web with it, as DELETE /help-center/domain does.
+	onDomain := func() (bool, error) {
+		_, found, err := a.store.GetHelpCenterDomainIn(request.Context(), workspaceID, id)
+		if errors.Is(err, domain.ErrHelpCenterNotFound) {
+			return false, nil
+		}
+		return found, err
+	}
+	if a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, onDomain) {
+		return
+	}
+	released, err := a.store.DeleteHelpCenter(request.Context(), workspaceID, id)
 	if err != nil {
 		writeStoreError(response, err)
 		return
