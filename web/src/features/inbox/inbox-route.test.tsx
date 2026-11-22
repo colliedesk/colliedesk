@@ -975,7 +975,7 @@ test('a saved view is saved from the filters on screen and opens them again', as
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
   views.create.mockResolvedValue({});
-  const urgent = { id: '99999999-9999-4999-8999-999999999999', name: 'Urgent', scope: 'shared', filters: { priority: ['urgent'] }, owner_agent_id: null,
+  const urgent = { id: '99999999-9999-4999-8999-999999999999', name: 'Urgent', area: 'inbox', scope: 'shared', filters: { priority: ['urgent'] }, owner_agent_id: null,
     created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', deleted_at: null, purges_at: null };
   views.list.mockResolvedValue({ items: [urgent] });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
@@ -1704,7 +1704,7 @@ test('a saved view the sidebar has read titles the list with its name, without a
   api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
   views.list.mockClear();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(['saved-views'], { items: [{ id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', name: 'Urgent', scope: 'shared', filters: { priority: ['urgent'] },
+  client.setQueryData(['saved-views'], { items: [{ id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', name: 'Urgent', area: 'inbox', scope: 'shared', filters: { priority: ['urgent'] },
     owner_agent_id: null, created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', deleted_at: null, purges_at: null }] });
   testRouter.search = { priority: 'urgent', status: 'all' };
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);

@@ -341,6 +341,8 @@ export type SetupProgress = z.infer<typeof setupProgressSchema>;
 export type ReplyTargetPreset = SetupProgress['reply_target_presets'][number];
 export type ReplyTargetPresetKey = ReplyTargetPreset['key'];
 export const setupGuideHiddenSchema = z.object({ hidden: z.boolean() }) satisfies z.ZodType<JsonResponse<'setSetupGuideHidden', 200>>;
+export const kbListColumnSchema = z.enum(['status', 'collection', 'author', 'tags', 'languages', 'created', 'updated', 'votes']) satisfies z.ZodType<Generated<'KBListColumn'>>;
+export type KBListColumn = z.infer<typeof kbListColumnSchema>;
 export const kbEditorSchema = z.enum(['visual', 'markdown']);
 export type KBEditor = z.infer<typeof kbEditorSchema>;
 export const kbEditorChoiceSchema = z.object({ editor: kbEditorSchema }) satisfies z.ZodType<JsonResponse<'setKBEditor', 200>>;
@@ -354,6 +356,8 @@ export const meSchema = z.object({
   kb_editor: kbEditorSchema.nullable().catch(null),
   // An older server offers no AI feature.
   ai_features: z.object({ triage: z.boolean(), draft: z.boolean() }).catch({ triage: false, draft: false }),
+  // An older server stores no columns: the list shows the default ones.
+  kb_list_columns: z.object({ columns: z.array(kbListColumnSchema), default: z.boolean() }).catch({ columns: ['status', 'author', 'tags', 'updated'], default: true }),
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean(), internal: z.boolean(), admins: z.array(z.string()).optional() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
@@ -422,7 +426,8 @@ export type Session = Generated<'Session'>;
 export type AgentToken = Generated<'AgentToken'>;
 export type Tag = Generated<'Tag'>;
 export type SavedReply = Generated<'SavedReply'>;
-export type SavedView = Generated<'SavedView'>;
+// An inbox view; a knowledge base view has its own type in the knowledge base feature.
+export type SavedView = Generated<'SavedView'> & { area: 'inbox'; filters: Generated<'ConversationFilters'> };
 export type ConversationFilters = Generated<'ConversationFilters'>;
 export type SavedReplyChange = Generated<'SavedReplyChange'>;
 export type TrashedSavedReply = Generated<'TrashedSavedReply'>;

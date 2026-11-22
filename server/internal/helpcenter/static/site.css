@@ -385,6 +385,10 @@ a:hover { text-decoration-thickness: 2px; }
 }
 
 /* Files the article lists for download */
+.tags { max-width: 42rem; margin-top: 2rem; }
+.tags .section-label { margin: 0 0 0.5rem; }
+.tags-list { display: flex; flex-wrap: wrap; gap: 0.5rem; list-style: none; margin: 0; padding: 0; }
+.tags-list li { padding: 0.25rem 0.75rem; border: 1px solid var(--rule); border-radius: 999px; color: var(--ink); font-size: 0.875rem; overflow-wrap: anywhere; }
 .downloads { max-width: 42rem; margin-top: 2.5rem; }
 .downloads .section-label { margin: 0 0 0.5rem; }
 .downloads-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }

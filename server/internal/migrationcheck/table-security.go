@@ -8,18 +8,27 @@ import (
 	"strings"
 )
 
-// tableSecurityHelpers is the migration that added secure_workspace_table, secure_server_table and
-// limit_app_role. Migrations after it call those instead of writing row-level security by hand.
-const tableSecurityHelpers = "20261121132937-workspace-table-security"
+// tableSecurityHelpers defines secure_workspace_table, secure_server_table and limit_app_role, and
+// rowLevelSecurity sets row-level security up with them: the two spell it out by hand. Every other up
+// migration calls the helpers. A down migration up to oldDownMigrations may still undo row-level
+// security by hand, as it did when it was applied.
+const (
+	tableSecurityHelpers = "20261014135949-table-security-helpers"
+	rowLevelSecurity     = "20261014135950-workspace-row-level-security"
+	oldDownMigrations    = "20261121132937-workspace-table-security"
+)
 
 var handWrittenTableSecurity = regexp.MustCompile(
 	`(?i)(create|alter|drop)\s+policy|row\s+level\s+security|pg_policies|app\.privileged`)
 
 func checkTableSecurity(dir, stem string, files map[string]string) error {
-	if stem <= tableSecurityHelpers {
+	if stem == tableSecurityHelpers || stem == rowLevelSecurity {
 		return nil
 	}
-	for _, name := range files {
+	for direction, name := range files {
+		if direction == "down" && stem <= oldDownMigrations {
+			continue
+		}
 		contents, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			return fmt.Errorf("read migration %q: %w", name, err)

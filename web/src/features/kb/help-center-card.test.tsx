@@ -7,7 +7,7 @@ import { json, serve } from './kb.test.fixture';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const off = { enabled: false, title: '', locale: 'pt-BR', require_approval: false, content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' };
+const off = { enabled: false, title: '', locale: 'pt-BR', require_approval: false, content_version: 3, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' };
 
 function open(canManage: boolean) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><HelpCenterSettings canManage={canManage} workspaceName="Acme" /></QueryClientProvider>);
@@ -81,4 +81,31 @@ test('the title says where it shows and what an empty one uses, in one line', as
   serve({ 'GET /api/v1/help-center': () => json(200, off) });
   open(true);
   expect(await screen.findByText('Shown on top of every page. Empty uses the workspace name.')).toBeInTheDocument();
+});
+
+test('an admin shows article tags to readers with one click; only show_tags is sent with the settings as they are', async () => {
+  const calls = serve({ 'GET /api/v1/help-center': () => json(200, off), 'PUT /api/v1/help-center': (call) => json(200, { ...off, ...(call.body as object) }) });
+  open(true);
+  const box = await screen.findByRole('checkbox', { name: 'Show tags on article pages' });
+  expect(box).not.toBeChecked();
+  fireEvent.click(box);
+  await waitFor(() => expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ enabled: false, title: '', locale: 'pt-BR', show_tags: true }));
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Show tags on article pages' })).toBeChecked());
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Show tags on article pages' }));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'PUT').at(-1)?.body).toEqual({ enabled: false, title: '', locale: 'pt-BR', show_tags: false }));
+});
+
+test('the tags switch keeps one short line and explains the rest in its tip', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, off) });
+  open(true);
+  const box = await screen.findByRole('checkbox', { name: 'Show tags on article pages' });
+  expect(box).toHaveAccessibleDescription('Readers see an article\'s tags under its title. Search on the help center finds articles by their tags either way.');
+  expect(screen.getByRole('button', { name: 'About Show tags on article pages' })).toBeInTheDocument();
+  expect(screen.queryByText('Readers see an article\'s tags under its title. Search on the help center finds articles by their tags either way.', { selector: 'small' })).not.toBeInTheDocument();
+});
+
+test('an agent reads whether readers see tags', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, { ...off, show_tags: true }) });
+  open(false);
+  expect(await screen.findByText('Article pages show their tags to readers.')).toBeInTheDocument();
 });

@@ -8,7 +8,7 @@ import { collections, ids, json, me, serve, summary } from './kb.test.fixture';
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
 afterEach(() => { vi.unstubAllGlobals(); });
 
-const center = (on: boolean) => ({ enabled: true, title: '', locale: 'en', require_approval: on, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' });
+const center = (on: boolean) => ({ enabled: true, title: '', locale: 'en', require_approval: on, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' });
 const base = {
   'GET /api/v1/auth/me': () => json(200, me),
   'GET /api/v1/kb/collections': () => json(200, { items: collections }),

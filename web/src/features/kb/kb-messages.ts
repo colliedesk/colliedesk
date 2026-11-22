@@ -233,6 +233,9 @@ export const kbMessages = {
   historyOf: (title: string) => `History of ${title}`,
   closeHistory: 'Close history',
   slugChanged: 'Address name changed',
+  // An author who left the team still shows, marked (left); no author reads Nobody.
+  authorName: (author: { name: string; left: boolean } | null | undefined) => (author ? (author.left ? `${author.name} (left)` : author.name) : 'Nobody'),
+  authorChangedFromTo: (from: string, to: string) => `Author: ${from} → ${to}`,
   articleActionFailed: 'The article could not be saved. Try again.',
   articleNotFound: 'This article does not exist, or was deleted for good.',
   articleInTrash: 'This article is in the trash. Restore it from the trash on the knowledge base page to edit it.',

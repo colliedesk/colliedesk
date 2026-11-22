@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -23,6 +24,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
+	"github.com/colliedesk/colliedesk/server/internal/hcanalytics"
 	"github.com/colliedesk/colliedesk/server/internal/health"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
@@ -130,6 +132,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	p.Go(processCtx, func(ctx context.Context) {
 		p.views.Run(ctx, viewFlushEvery, func(err error) { slog.Error("write help center article views", "error", err) })
 	})
+	// Page views also go to a workspace's own GA4 or Plausible, from the server, never a script on the page.
+	p.analytics = hcanalytics.New(store.NewWithDB(db).WithSealKeys(configStore.Keys()), hcanalytics.Options{Origin: origin})
+	p.Go(processCtx, p.analytics.Run)
 	first := newGeneration(p, loaded, config, slog.Default())
 	first.Start(processCtx)
 	handler := &swapHandler{}
@@ -150,7 +155,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		}
 		return nil
 	case <-ctx.Done():
-		if err := stopServing(server.Shutdown, p.views.Flush, 10*time.Second, 5*time.Second); err != nil {
+		if err := stopServing(server.Shutdown, func(ctx context.Context) error {
+			return errors.Join(p.views.Flush(ctx), p.analytics.Flush(ctx))
+		}, 10*time.Second, 5*time.Second); err != nil {
 			return err
 		}
 		reload.Stop(stopWorkersWithin)

@@ -3,9 +3,13 @@
 DO $$
 BEGIN
     PERFORM set_config('app.privileged', 'on', true);
-    IF EXISTS (SELECT 1 FROM kb_articles WHERE ai_excluded) OR EXISTS (SELECT 1 FROM kb_article_versions WHERE kind IN ('ai_exclude', 'ai_include')) THEN
-        RAISE EXCEPTION 'AI retrieval rollback refused: % articles are excluded from AI and % versions record it',
-            (SELECT count(*) FROM kb_articles WHERE ai_excluded), (SELECT count(*) FROM kb_article_versions WHERE kind IN ('ai_exclude', 'ai_include'));
+    IF EXISTS (SELECT 1 FROM kb_articles WHERE ai_excluded)
+        OR EXISTS (SELECT 1 FROM kb_article_versions WHERE kind IN ('ai_exclude', 'ai_include'))
+    THEN
+        RAISE EXCEPTION 'AI retrieval rollback refused: '
+            '% articles are excluded from AI and % versions record it',
+            (SELECT count(*) FROM kb_articles WHERE ai_excluded),
+            (SELECT count(*) FROM kb_article_versions WHERE kind IN ('ai_exclude', 'ai_include'));
     END IF;
 END $$;
 

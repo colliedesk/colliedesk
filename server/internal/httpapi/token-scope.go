@@ -110,6 +110,7 @@ var routeAccess = map[string]TokenAccess{
 	"POST /api/v1/kb/collections/{id}/restore":                                       need(auth.PermKBArticlesDelete),
 	"GET /api/v1/kb/articles":                                                        need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/articles/trash":                                                  need(auth.PermKBArticlesRead),
+	"GET /api/v1/kb/articles/export.csv":                                             need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/articles/{id}":                                                   need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/articles/{id}/versions":                                          need(auth.PermKBArticlesRead),
 	"POST /api/v1/kb/articles":                                                       need(auth.PermKBArticlesCreate),
@@ -134,6 +135,7 @@ var routeAccess = map[string]TokenAccess{
 	"POST /api/v1/kb/articles/publish":                                               need(auth.PermKBArticlesPublish),
 	"GET /api/v1/kb/articles/{id}/reviews":                                           need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/reviews":                                                         need(auth.PermKBArticlesRead),
+	"GET /api/v1/kb/tags":                                                            need(auth.PermKBArticlesRead),
 	"GET /api/v1/kb/reviews/{id}":                                                    need(auth.PermKBArticlesRead),
 	"POST /api/v1/kb/reviews/{id}/request-changes":                                   need(auth.PermKBArticlesPublish),
 	"POST /api/v1/kb/reviews/{id}/withdraw":                                          need(auth.PermKBArticlesUpdate),
@@ -210,6 +212,7 @@ var routeAccess = map[string]TokenAccess{
 	"PATCH /api/v1/agents/me/results-email":      need(auth.PermProfileUpdate),
 	"GET /api/v1/workspace/setup":                need(auth.PermConversationsRead),
 	"PUT /api/v1/agents/me/setup-guide":          need(auth.PermProfileUpdate),
+	"PUT /api/v1/agents/me/kb-list-columns":      need(auth.PermProfileUpdate),
 	"PUT /api/v1/agents/me/kb-editor":            need(auth.PermProfileUpdate),
 	"POST /api/v1/tags":                          need(auth.PermTagsCreate),
 	"PATCH /api/v1/tags/{id}":                    need(auth.PermTagsUpdate),
@@ -218,6 +221,7 @@ var routeAccess = map[string]TokenAccess{
 	"GET /api/v1/help-center/theme":              need(auth.PermHelpCenterRead),
 	"GET /api/v1/help-center/languages":          need(auth.PermHelpCenterRead),
 	"GET /api/v1/help-center/search-console":     need(auth.PermHelpCenterRead),
+	"GET /api/v1/help-center/analytics":          need(auth.PermHelpCenterRead),
 	"GET /api/v1/help-center/freshdesk-redirect": need(auth.PermHelpCenterRead),
 	"POST /api/v1/help-center/theme/check":       need(auth.PermHelpCenterRead),
 	"POST /api/v1/help-center/theme/preview":     need(auth.PermHelpCenterRead),
@@ -318,6 +322,8 @@ var routeAccess = map[string]TokenAccess{
 	"PUT /api/v1/help-center/theme":                                need(auth.PermHelpCenterUpdate),
 	"PUT /api/v1/help-center/languages":                            need(auth.PermHelpCenterUpdate),
 	"PUT /api/v1/help-center/search-console":                       need(auth.PermHelpCenterUpdate),
+	"PUT /api/v1/help-center/analytics":                            need(auth.PermHelpCenterUpdate),
+	"POST /api/v1/help-center/analytics/test":                      need(auth.PermHelpCenterUpdate),
 
 	// Allowing an AI app makes a grant that acts with everything its person holds: a grant that allowed
 	// apps would leave them connected after it was disconnected, like a token that made tokens.

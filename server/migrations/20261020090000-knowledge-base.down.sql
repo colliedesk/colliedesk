@@ -3,9 +3,14 @@
 DO $$
 BEGIN
     PERFORM set_config('app.privileged', 'on', true);
-    IF EXISTS (SELECT 1 FROM kb_collections) OR EXISTS (SELECT 1 FROM kb_articles) OR EXISTS (SELECT 1 FROM kb_images) THEN
-        RAISE EXCEPTION 'knowledge base rollback refused: % collections, % articles and % images would be deleted',
-            (SELECT count(*) FROM kb_collections), (SELECT count(*) FROM kb_articles), (SELECT count(*) FROM kb_images);
+    IF EXISTS (SELECT 1 FROM kb_collections)
+        OR EXISTS (SELECT 1 FROM kb_articles)
+        OR EXISTS (SELECT 1 FROM kb_images)
+    THEN
+        RAISE EXCEPTION 'knowledge base rollback refused: '
+            '% collections, % articles and % images would be deleted',
+            (SELECT count(*) FROM kb_collections), (SELECT count(*) FROM kb_articles),
+            (SELECT count(*) FROM kb_images);
     END IF;
 END $$;
 

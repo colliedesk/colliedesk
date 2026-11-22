@@ -1,11 +1,13 @@
--- Rolling back would put every article kept for help chat or the team on the help center, so it refuses
--- while any article or collection is not visible to everyone. Set them back to everyone first.
+-- Rolling back would put every article kept for help chat or the team on the help center, so
+-- it refuses while any article or collection is not visible to everyone. Set them back to
+-- everyone first.
 DO $$
 BEGIN
     PERFORM set_config('app.privileged', 'on', true);
     IF EXISTS (SELECT 1 FROM kb_articles WHERE visibility <> 'everyone')
         OR EXISTS (SELECT 1 FROM kb_collections WHERE visibility <> 'everyone') THEN
-        RAISE EXCEPTION 'knowledge base visibility rollback refused: % articles and % collections are not visible to everyone',
+        RAISE EXCEPTION 'knowledge base visibility rollback refused: % articles and % collections '
+            'are not visible to everyone',
             (SELECT count(*) FROM kb_articles WHERE visibility <> 'everyone'),
             (SELECT count(*) FROM kb_collections WHERE visibility <> 'everyone');
     END IF;

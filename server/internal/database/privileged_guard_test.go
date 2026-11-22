@@ -54,6 +54,7 @@ var privilegedCallSites = []string{
 	"internal/store/email-provider-domains.go: PrivilegeProviderDomainSweep",
 	"internal/store/email-relay-bounce.go: PrivilegeVerifiedSender",
 	"internal/store/fix-work.go: PrivilegeAutofixClaim",
+	"internal/store/help-center-analytics.go: PrivilegeHelpCenterAnalytics",
 	"internal/store/help-center-domains.go: PrivilegeHelpCenterDomainRecheck",
 	"internal/store/help-center-domains.go: PrivilegeHelpCenterDomainTakeover",
 	"internal/store/help-center-domains.go: PrivilegeHelpCenterHost",

@@ -188,7 +188,7 @@ func (c *call) inboxQuery(args inboxArgs) (url.Values, error) {
 
 // savedViewFilters reads a live view the caller can see and turns its filters into query values.
 func (c *call) savedViewFilters(id string) (url.Values, error) {
-	views, err := c.savedViews(false)
+	views, err := c.savedViews("", false)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,8 @@ func (c *call) savedViewFilters(id string) (url.Values, error) {
 		}
 		return query, nil
 	}
-	return nil, &toolError{"No saved view with that id that this token's person can see. List them with colliedesk_saved_views_list."}
+	return nil, &toolError{"No saved view with that id that this token's person can see in the inbox. List them with colliedesk_saved_views_list; " +
+		"a knowledge base view (area kb) is not opened here: pass its filters to colliedesk_kb_articles_search."}
 }
 
 func contactIDs(items []restConversation) []string {

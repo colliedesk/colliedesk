@@ -19,9 +19,9 @@ BEGIN
 END
 $$;
 
--- Statement-level triggers with transition tables: one workspaces update per statement and workspace,
--- however many files the statement touches (a row-level trigger would rewrite the workspace row once
--- per file and slow a bulk insert quadratically).
+-- Statement-level triggers with transition tables: one workspaces update per statement and
+-- workspace, however many files the statement touches (a row-level trigger would rewrite the
+-- workspace row once per file and slow a bulk insert quadratically).
 CREATE FUNCTION attachments_count_inserted() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     UPDATE workspaces w SET counted_storage_bytes = w.counted_storage_bytes + d.bytes
@@ -54,8 +54,11 @@ $$;
 CREATE TRIGGER attachments_set_counted BEFORE INSERT ON attachments
     FOR EACH ROW EXECUTE FUNCTION attachments_set_counted();
 CREATE TRIGGER attachments_count_inserted AFTER INSERT ON attachments
-    REFERENCING NEW TABLE AS added_files FOR EACH STATEMENT EXECUTE FUNCTION attachments_count_inserted();
+    REFERENCING NEW TABLE AS added_files
+    FOR EACH STATEMENT EXECUTE FUNCTION attachments_count_inserted();
 CREATE TRIGGER attachments_count_deleted AFTER DELETE ON attachments
-    REFERENCING OLD TABLE AS removed_files FOR EACH STATEMENT EXECUTE FUNCTION attachments_count_deleted();
+    REFERENCING OLD TABLE AS removed_files
+    FOR EACH STATEMENT EXECUTE FUNCTION attachments_count_deleted();
 CREATE TRIGGER attachments_count_updated AFTER UPDATE ON attachments
-    REFERENCING OLD TABLE AS old_files NEW TABLE AS new_files FOR EACH STATEMENT EXECUTE FUNCTION attachments_count_updated();
+    REFERENCING OLD TABLE AS old_files NEW TABLE AS new_files
+    FOR EACH STATEMENT EXECUTE FUNCTION attachments_count_updated();

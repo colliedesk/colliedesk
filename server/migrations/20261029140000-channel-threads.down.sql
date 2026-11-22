@@ -2,7 +2,8 @@
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM channel_thread_items) THEN
-        RAISE EXCEPTION 'chat threads hold messages; restore the backup taken before the upgrade instead';
+        RAISE EXCEPTION 'chat threads hold messages; '
+            'restore the backup taken before the upgrade instead';
     END IF;
 END
 $$;

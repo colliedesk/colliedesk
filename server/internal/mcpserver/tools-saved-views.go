@@ -9,6 +9,7 @@ import (
 type restSavedView struct {
 	ID           string          `json:"id"`
 	Name         string          `json:"name"`
+	Area         string          `json:"area"`
 	Scope        string          `json:"scope"`
 	Filters      json.RawMessage `json:"filters"`
 	OwnerAgentID *string         `json:"owner_agent_id"`
@@ -20,6 +21,7 @@ type restSavedView struct {
 type savedViewOut struct {
 	ID        string          `json:"id"`
 	Name      string          `json:"name"`
+	Area      string          `json:"area"`
 	Scope     string          `json:"scope"`
 	Mine      bool            `json:"mine"`
 	Filters   json.RawMessage `json:"filters"`
@@ -33,7 +35,7 @@ func (c *call) savedViewOut(view restSavedView) (savedViewOut, error) {
 	if err != nil {
 		return savedViewOut{}, err
 	}
-	out := savedViewOut{ID: view.ID, Name: view.Name, Scope: view.Scope, Filters: view.Filters, UpdatedAt: view.UpdatedAt,
+	out := savedViewOut{ID: view.ID, Name: view.Name, Area: view.Area, Scope: view.Scope, Filters: view.Filters, UpdatedAt: view.UpdatedAt,
 		Mine: view.OwnerAgentID != nil && *view.OwnerAgentID == me.Agent.ID}
 	if view.DeletedAt != nil {
 		out.DeletedAt = *view.DeletedAt
@@ -44,15 +46,20 @@ func (c *call) savedViewOut(view restSavedView) (savedViewOut, error) {
 	return out, nil
 }
 
-func (c *call) savedViews(trash bool) ([]restSavedView, error) {
+// savedViews lists the live views of area, or those in its trash; "" is the inbox.
+func (c *call) savedViews(area string, trash bool) ([]restSavedView, error) {
 	path := "/api/v1/saved-views"
 	if trash {
 		path += "/trash"
 	}
+	query := url.Values{}
+	if area != "" {
+		query.Set("area", area)
+	}
 	var list struct {
 		Items []restSavedView `json:"items"`
 	}
-	if err := c.get(path, nil, &list); err != nil {
+	if err := c.get(path, query, &list); err != nil {
 		return nil, err
 	}
 	return list.Items, nil
@@ -60,12 +67,13 @@ func (c *call) savedViews(trash bool) ([]restSavedView, error) {
 
 func savedViewsList(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		Trash bool `json:"trash"`
+		Area  string `json:"area"`
+		Trash bool   `json:"trash"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
-	views, err := c.savedViews(args.Trash)
+	views, err := c.savedViews(args.Area, args.Trash)
 	if err != nil {
 		return nil, err
 	}
@@ -101,13 +109,18 @@ func savedViewPath(id string, rest string) string {
 func savedViewCreate(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
 		Name    string          `json:"name"`
+		Area    string          `json:"area"`
 		Scope   string          `json:"scope"`
 		Filters json.RawMessage `json:"filters"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
-	return c.savedViewAnswer(http.MethodPost, "/api/v1/saved-views", map[string]any{"name": args.Name, "scope": args.Scope, "filters": args.Filters})
+	body := map[string]any{"name": args.Name, "scope": args.Scope, "filters": args.Filters}
+	if args.Area != "" {
+		body["area"] = args.Area
+	}
+	return c.savedViewAnswer(http.MethodPost, "/api/v1/saved-views", body)
 }
 
 func savedViewUpdate(c *call, arguments map[string]any) (any, error) {

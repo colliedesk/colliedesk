@@ -315,6 +315,21 @@ test('an open history loads again after a save adds a version', async () => {
   expect(await screen.findByText(/Version 2 ·/)).toBeInTheDocument();
 });
 
+test('the history names an author change with the author before and after, also one who left', async () => {
+  const version = { version: 1, kind: 'create', restored_from_version: null, changed_by: { agent_id: null, name: 'Ada' }, token: null, agent_request_id: null,
+    created_at: '2026-10-02T00:00:00Z', title: 'Reset your password', slug: 'reset', body_md: 'Text', seo_title: '', seo_description: '', show_contents: true, status: 'draft', collection_id: ids.setup };
+  const credited = { ...version, version: 2, kind: 'author_change', created_at: '2026-10-03T00:00:00Z',
+    author_change: { from: { agent_id: ids.article, name: 'Ben Tran', left: true }, to: { agent_id: ids.setup, name: 'Lan Pham', left: false } } };
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()),
+    'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions': () => json(200, { items: [credited, version], next_before_version: null }) });
+  open({ articleId: ids.article });
+  fireEvent.click(await screen.findByRole('button', { name: 'More article actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^Version history/ }));
+  const history = await screen.findByRole('region', { name: 'History of Reset your password' });
+  expect(await within(history).findByText(/Author changed by Ada/)).toBeInTheDocument();
+  expect(within(history).getByText('Author: Ben Tran (left) → Lan Pham')).toBeInTheDocument();
+});
+
 test('spaces around the title or address name are not a change, so the form never stays unsaved with nothing to send', async () => {
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()) });
   open({ articleId: ids.article });
@@ -481,7 +496,7 @@ test('Publish anyway publishes an article whose images still lack alt text', asy
 
 // withChanges is a published article whose unpublished changes have the text body.
 const withChanges = (live: string, body: string) => article({ status: 'published', body_md: live, has_draft: true, draft: { title: 'Reset your password', slug: 'reset-your-password',
-  body_md: body, seo_title: '', seo_description: '', collection_id: ids.setup, collection_ids: [ids.setup], show_contents: true, attachments: [], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: null } });
+  body_md: body, seo_title: '', seo_description: '', collection_id: ids.setup, collection_ids: [ids.setup], show_contents: true, attachments: [], created_at: '2026-10-03T00:00:00Z', updated_at: '2026-10-03T00:00:00Z', updated_by: null, tags: [] } });
 
 test('publishing changes does not ask about an image without alt text the published article already has', async () => {
   const old = '![](https://example.com/old.png)';
@@ -511,7 +526,7 @@ test('an article is excluded from AI and let back without touching an edit in pr
   const excluded = { ...shown, ai_exclusion: { at: '2026-10-22T09:00:00Z', by: { agent_id: me.agent.id, name: 'Mai Tran' } },
     last_change: { ...shown.last_change, version: 2, kind: 'ai_exclude' } };
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, shown),
-    'GET /api/v1/help-center': () => json(200, { enabled: true, title: 'Acme', locale: 'en', require_approval: false, content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
+    'GET /api/v1/help-center': () => json(200, { enabled: true, title: 'Acme', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' }),
     'POST /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/ai-exclusion': () => json(200, excluded),
     'DELETE /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/ai-exclusion': () => json(200, { ...shown, last_change: { ...shown.last_change, version: 3, kind: 'ai_include' } }) });
   open({ articleId: ids.article });

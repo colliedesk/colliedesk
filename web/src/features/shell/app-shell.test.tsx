@@ -14,7 +14,9 @@ const me = {
   timezone: 'UTC',
   token: null, permissions: permissionsOf('agent'),
   plan: null,
-  ai_features: { triage: false, draft: false }, onboarding_goal: null, setup_guide_hidden: false, kb_editor: null,
+  ai_features: { triage: false, draft: false }, onboarding_goal: null, setup_guide_hidden: false,
+  kb_list_columns: { columns: ['status' as const, 'author' as const, 'tags' as const, 'updated' as const], default: true },
+  kb_editor: null,
 };
 
 test('shows the page content next to the rail', () => {

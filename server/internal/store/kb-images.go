@@ -208,8 +208,8 @@ func (s *Store) GetHelpCenter(ctx context.Context, workspaceID string) (domain.H
 
 func readHelpCenter(ctx context.Context, tx pgx.Tx, workspaceID string) (domain.HelpCenter, error) {
 	center := domain.HelpCenter{Locale: "en"}
-	err := tx.QueryRow(ctx, `SELECT enabled,title,locale,require_approval,content_version,updated_at FROM help_centers WHERE workspace_id=$1`, workspaceID).
-		Scan(&center.Enabled, &center.Title, &center.Locale, &center.RequireApproval, &center.ContentVersion, &center.UpdatedAt)
+	err := tx.QueryRow(ctx, `SELECT enabled,title,locale,require_approval,show_tags,content_version,updated_at FROM help_centers WHERE workspace_id=$1`, workspaceID).
+		Scan(&center.Enabled, &center.Title, &center.Locale, &center.RequireApproval, &center.ShowTags, &center.ContentVersion, &center.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return center, nil
 	}
@@ -217,11 +217,12 @@ func readHelpCenter(ctx context.Context, tx pgx.Tx, workspaceID string) (domain.
 	return center, err
 }
 
-// HelpCenterChange is a save of the help center settings. RequireApproval nil keeps the stored value.
+// HelpCenterChange is a save of the help center settings. RequireApproval and ShowTags nil keep the
+// stored value.
 type HelpCenterChange struct {
-	Enabled         bool
-	Title, Locale   string
-	RequireApproval *bool
+	Enabled                   bool
+	Title, Locale             string
+	RequireApproval, ShowTags *bool
 }
 
 // PutHelpCenter turns the help center on or off and sets its title, language and whether articles need
@@ -247,11 +248,11 @@ func (s *Store) PutHelpCenter(ctx context.Context, workspaceID string, change He
 		if listed {
 			return domain.HelpCenter{}, &domain.InvalidKBError{Message: locale + " is one of the help center's other languages. Remove it there first (Knowledge base, Languages), then make it the primary language."}
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,enabled,title,locale,require_approval,content_version,updated_at)
-			VALUES($1,$2,$3,$4,COALESCE($5,false),1,clock_timestamp())
+		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,enabled,title,locale,require_approval,show_tags,content_version,updated_at)
+			VALUES($1,$2,$3,$4,COALESCE($5,false),COALESCE($6,false),1,clock_timestamp())
 			ON CONFLICT (workspace_id) DO UPDATE SET enabled=$2, title=$3, locale=$4, require_approval=COALESCE($5,help_centers.require_approval),
-				content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
-			workspaceID, enabled, title, locale, change.RequireApproval); err != nil {
+				show_tags=COALESCE($6,help_centers.show_tags), content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
+			workspaceID, enabled, title, locale, change.RequireApproval, change.ShowTags); err != nil {
 			return domain.HelpCenter{}, err
 		}
 		return readHelpCenter(ctx, tx, workspaceID)

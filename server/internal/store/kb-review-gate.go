@@ -10,10 +10,11 @@ import (
 )
 
 // kbTextVersion is the SQL condition that version row v holds the text the article had then. A draft
-// save and a review event hold text that was not published, so they never count as the article's text.
+// save and a review event hold text that was not published, and an author change copies the text it
+// did not change, so they never count as the article's text.
 func kbTextVersion(v string) string {
 	return v + `kind NOT IN ('` + domain.KBArticleDrafted + `','` + domain.KBReviewRequested + `','` + domain.KBReviewApprovedKind + `','` +
-		domain.KBReviewChangesKind + `','` + domain.KBReviewWithdrawnKind + `')`
+		domain.KBReviewChangesKind + `','` + domain.KBReviewWithdrawnKind + `','` + domain.KBArticleAuthorChanged + `')`
 }
 
 // kbApprovalRequired tells whether a text listed in any of collections needs an approved version
