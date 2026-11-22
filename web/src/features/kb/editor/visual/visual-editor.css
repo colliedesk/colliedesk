@@ -30,8 +30,18 @@
 .kb-visual .kb-markdown-block pre { margin: 0; background: none; padding: 0; font-family: var(--font-mono); font-size: var(--fs-small); }
 .kb-visual .cm-uploading { margin: var(--space-2) 0; }
 .kb-visual span.cm-uploading { display: inline-flex; margin: 0 var(--space-1); }
+/* The image bar shows over the text while an image is picked: its width, alignment, border, caption and link. */
+.kb-image-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line); background: var(--surface-0);
+}
+.kb-image-bar select, .kb-image-bar button { min-height: 2rem; }
+.kb-image-bar .kb-image-pixels { width: 6rem; }
+.kb-image-bar [aria-pressed="true"] { border-color: var(--focus); font-weight: 600; }
+.kb-image-bar small { flex-basis: 100%; }
 
 @media (max-width: 44rem) {
+  .kb-image-bar select, .kb-image-bar button { min-height: var(--touch); }
   .kb-visual-host { height: 60dvh; min-height: 18rem; }
   .kb-visual { padding: var(--space-4) var(--space-3); font-size: 16px; }
 }

@@ -102,7 +102,7 @@ test('on a phone, Use and Sort wait under Filter: the row has no room for both',
 });
 
 test('the panel saves a name and alt text with the version it read, and a used item stays out of the trash', async () => {
-  const details = { ...video, articles: [{ id: id(9), number: 12, title: 'Getting started', status: 'published', in_trash: false, current: true }] };
+  const details = { ...video, articles: [{ id: id(9), number: 12, title: 'Getting started', status: 'published', in_trash: false, current: true }], earlier_versions: [] };
   const calls = serve({
     ...base,
     [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, details),
@@ -391,7 +391,7 @@ test('a file that cannot go up opens the tray with why, instead of a full bar; D
 
 test('a new version of the item arriving while the person types (a poster drawn after the upload) keeps what they typed', async () => {
   let version = 0;
-  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, updated_at: `2026-10-0${2 + version++}T00:00:00Z`, poster_url: version > 1 ? '/p' : null, articles: [] }) });
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, updated_at: `2026-10-0${2 + version++}T00:00:00Z`, poster_url: version > 1 ? '/p' : null, articles: [], earlier_versions: [] }) });
   open('library', { item: id(2) });
   const panel = await screen.findByRole('complementary', { name: 'Product tour' });
   fireEvent.change(within(panel).getByRole('textbox', { name: 'Name' }), { target: { value: 'Tour' } });
@@ -406,7 +406,7 @@ test('a new version of the item arriving while the person types (a poster drawn 
 test('a save refused because only the poster changed since goes again over the new version', async () => {
   let reads = 0;
   const calls = serve({ ...base,
-    [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, updated_at: reads++ === 0 ? video.updated_at : '2026-10-09T00:00:00Z', articles: [] }),
+    [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, updated_at: reads++ === 0 ? video.updated_at : '2026-10-09T00:00:00Z', articles: [], earlier_versions: [] }),
     [`PATCH /api/v1/kb/media/${id(2)}`]: (call) => ((call.body as { updated_at: string }).updated_at === video.updated_at
       ? refusal(409, 'changed_elsewhere', 'This was changed by someone else.') : json(200, { ...video, name: 'Tour', updated_at: '2026-10-10T00:00:00Z' })) });
   open('library', { item: id(2) });
@@ -440,7 +440,7 @@ test('the tray closes only when every upload is over, and closing clears them', 
 test('on a phone the panel is a modal sheet: a dialog, and Tab from its last control comes back to its first', async () => {
   const phone = { matches: true, addEventListener: () => undefined, removeEventListener: () => undefined };
   vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? phone : { ...phone, matches: false }));
-  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, articles: [] }) });
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, articles: [], earlier_versions: [] }) });
   open('library', { item: id(2) });
   const sheet = await screen.findByRole('dialog', { name: 'Product tour' });
   expect(sheet).toHaveAttribute('aria-modal', 'true');
@@ -454,7 +454,7 @@ test('on a phone the panel is a modal sheet: a dialog, and Tab from its last con
 test('on a phone, Tab from the last control the person can reach wraps in the sheet, past the controls of hidden tabs', async () => {
   const phone = { matches: true, addEventListener: () => undefined, removeEventListener: () => undefined };
   vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? phone : { ...phone, matches: false }));
-  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, articles: [{ id: id(9), number: 12, title: 'Getting started', status: 'published', in_trash: false, current: true }] }) });
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, articles: [{ id: id(9), number: 12, title: 'Getting started', status: 'published', in_trash: false, current: true }], earlier_versions: [] }) });
   open('library', { item: id(2) });
   const sheet = await screen.findByRole('dialog', { name: 'Product tour' });
   // Nothing changed: Save and Discard are disabled, so the Keep box is the last control on screen.
@@ -466,7 +466,7 @@ test('on a phone, Tab from the last control the person can reach wraps in the sh
 
 // Each row keeps one short line; the how and why sit in the tip next to it.
 test('an image\'s panel says what alt text is for in one line, and who offers it in a tip; keeping says what is deleted and when the days count from', async () => {
-  serve({ ...base, [`GET /api/v1/kb/media/${id(1)}/details`]: () => json(200, { ...item(1), usage: usage(0), articles: [] }) });
+  serve({ ...base, [`GET /api/v1/kb/media/${id(1)}/details`]: () => json(200, { ...item(1), usage: usage(0), articles: [], earlier_versions: [] }) });
   open('library', { item: id(1) });
   const panel = await screen.findByRole('complementary', { name: 'Screenshot 1' });
   expect(panel).toHaveTextContent('Describe what the image shows.');
@@ -476,7 +476,7 @@ test('an image\'s panel says what alt text is for in one line, and who offers it
 });
 
 test('a video\'s poster says what it is in one line, and how to pick a frame in a tip', async () => {
-  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, poster_url: '/p', articles: [] }) });
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, poster_url: '/p', articles: [], earlier_versions: [] }) });
   open('library', { item: id(2) });
   const panel = await screen.findByRole('complementary', { name: 'Product tour' });
   fireEvent.click(within(panel).getByRole('tab', { name: 'File' }));
@@ -486,7 +486,7 @@ test('a video\'s poster says what it is in one line, and how to pick a frame in 
 });
 
 test('replacing an item says which articles change in one line, and that each gets a new version in a tip', async () => {
-  serve({ ...base, [`GET /api/v1/kb/media/${id(1)}/details`]: () => json(200, { ...item(1), articles: [] }) });
+  serve({ ...base, [`GET /api/v1/kb/media/${id(1)}/details`]: () => json(200, { ...item(1), articles: [], earlier_versions: [] }) });
   open('library', { item: id(1) });
   const panel = await screen.findByRole('complementary', { name: 'Screenshot 1' });
   fireEvent.click(within(panel).getByRole('button', { name: 'Replace…' }));
@@ -520,7 +520,7 @@ const dangling = (root: HTMLElement) => Array.from(root.querySelectorAll('[aria-
 const usedBy = [{ id: id(9), number: 12, title: 'Getting started', status: 'published', in_trash: false, current: true }];
 
 test('a video\'s title field describes itself only with ids that are on the page', async () => {
-  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, articles: usedBy }) });
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, articles: usedBy, earlier_versions: [] }) });
   open('library', { item: id(2) });
   const panel = await screen.findByRole('complementary', { name: 'Product tour' });
   expect(within(panel).getByRole('textbox', { name: 'Title for screen readers' })).toBeInTheDocument();
@@ -528,7 +528,7 @@ test('a video\'s title field describes itself only with ids that are on the page
 });
 
 test('an image used by an article describes its keep switch only with ids that are on the page', async () => {
-  serve({ ...base, [`GET /api/v1/kb/media/${id(1)}/details`]: () => json(200, { ...item(1), articles: usedBy }) });
+  serve({ ...base, [`GET /api/v1/kb/media/${id(1)}/details`]: () => json(200, { ...item(1), articles: usedBy, earlier_versions: [] }) });
   open('library', { item: id(1) });
   const panel = await screen.findByRole('complementary', { name: 'Screenshot 1' });
   expect(within(panel).getByRole('checkbox', { name: /Keep even when no article uses it/ })).toBeInTheDocument();

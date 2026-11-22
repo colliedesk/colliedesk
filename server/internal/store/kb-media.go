@@ -224,7 +224,11 @@ func (s *Store) GetKBMediaDetails(ctx context.Context, workspaceID, id string) (
 			var article domain.KBMediaArticle
 			return article, row.Scan(&article.ID, &article.Number, &article.Title, &article.Status, &article.InTrash, &article.Current)
 		})
-		return domain.KBMediaDetails{KBMedia: items[0].KBMedia, Articles: articles}, err
+		if err != nil {
+			return domain.KBMediaDetails{}, err
+		}
+		earlier, err := kbMediaEarlierVersions(ctx, tx, workspaceID, id)
+		return domain.KBMediaDetails{KBMedia: items[0].KBMedia, Articles: articles, EarlierVersions: earlier}, err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.KBMediaDetails{}, domain.ErrKBMediaNotFound

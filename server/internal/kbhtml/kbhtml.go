@@ -91,6 +91,13 @@ type Formatting struct {
 	Blocks []string `json:"blocks"`
 	// Span is the largest colspan and rowspan of a table cell.
 	Span int `json:"span"`
+	// Figure is what an image's <figure> may say of it: a named width or one in pixels up to Pixels,
+	// and an alignment, where left and right let the text wrap around it.
+	Figure struct {
+		Widths []string `json:"widths"`
+		Pixels int      `json:"pixels"`
+		Align  []string `json:"align"`
+	} `json:"figure"`
 }
 
 // FormattingRules is the formatting part of allowlist.json.

@@ -12,8 +12,15 @@ func TestKBEditorToolStoresTheChoiceOfTheTokensMember(t *testing.T) {
 	other := e.newWorkspace("Other Editor Desk", "admin@other-editor.example.com")
 
 	draft := e.connect(w.draft, "")
+	// whoami tells an agent which editor its member's articles open in: null until the member chooses.
+	if before, ok := e.ok(draft, "colliedesk_whoami", nil)["kb_editor"]; !ok || before != nil {
+		t.Fatalf("whoami before a choice: kb_editor=%v (present %v), want null", before, ok)
+	}
 	if chosen := e.ok(draft, "colliedesk_my_kb_editor_set", map[string]any{"editor": "markdown"}); chosen["editor"] != "markdown" {
 		t.Fatalf("choose markdown = %v", chosen)
+	}
+	if after := e.ok(draft, "colliedesk_whoami", nil)["kb_editor"]; after != "markdown" {
+		t.Fatalf("whoami after choosing markdown: kb_editor=%v", after)
 	}
 	_, me := e.rest(http.MethodGet, "/api/v1/auth/me", nil, w.admin)
 	if me["kb_editor"] != "markdown" {
