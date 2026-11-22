@@ -186,6 +186,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_gaps_list` | Lists what readers asked for and did not find, grouped by their words, most askers in 30 days first | `kb_articles:read` |
 | `colliedesk_kb_gap_get` | Reads one knowledge gap with its newest signals: what each reader searched, wrote or asked | `kb_articles:read` |
 | `colliedesk_kb_gap_update` | Links a knowledge gap to the article that answers it, dismisses it or opens it again | `kb_articles:update` |
+| `colliedesk_kb_gap_draft` | Drafts the missing article for a knowledge gap from the resolved conversations that match it | `kb_articles:create` |
 | `colliedesk_kb_article_send_for_review` | Saves an article's or translation's text and asks teammates who may publish to approve it | `kb_articles:update` |
 | `colliedesk_kb_reviews_list` | Lists the reviews waiting for you, or the reviews of one article | `kb_articles:read` |
 | `colliedesk_kb_review_get` | Reads a review with the text proposed, what is live and the line diff between them | `kb_articles:read` |
