@@ -7,7 +7,7 @@ import { redeemLink } from './support/browser';
 const baseURL = servers.main;
 const headers = { Origin: baseURL };
 
-test('knowledge base review: the author sends a draft for review, the reviewer approves it from Reviews, the author publishes it', async ({ browser }) => {
+test('knowledge base review: the author sends a draft for review, the reviewer approves it from Reviews, the author publishes it', { tag: '@journey' }, async ({ browser }) => {
   const suffix = uniqueSuffix();
   const authorContext = await browser.newContext();
   const author = await authorContext.newPage();

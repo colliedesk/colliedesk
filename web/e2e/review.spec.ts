@@ -11,7 +11,7 @@ let chat: ChatServer;
 test.beforeAll(async () => { chat = await startChatServer(); });
 test.afterAll(async () => { await chat?.stop(); });
 
-test('review: the rail counts the cards, a person opens one as a conversation, sets one aside and puts it back', async ({ page }) => {
+test('review: the rail counts the cards, a person opens one as a conversation, sets one aside and puts it back', { tag: '@journey' }, async ({ page }) => {
   const { origin } = chat;
   const suffix = uniqueSuffix();
   const admin = `admin-${suffix}@example.com`;

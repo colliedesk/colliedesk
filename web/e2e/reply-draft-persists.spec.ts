@@ -5,7 +5,7 @@ import { createWorkspaceWithSlug } from './support/workspace';
 
 // An unsent reply is kept in this browser for its conversation: a reload, or Settings and the browser's
 // Back, finds the text where it was. A sent reply leaves nothing behind.
-test('an unsent reply survives a reload and the browser Back, and is gone once sent', async ({ page }) => {
+test('an unsent reply survives a reload and the browser Back, and is gone once sent', { tag: '@journey' }, async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   await redeemLink(page, createWorkspaceWithSlug(`Draft Desk ${suffix}`, `owner-${suffix}@example.com`).url);
   const headers = { Origin: servers.main };
