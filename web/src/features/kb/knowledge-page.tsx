@@ -240,7 +240,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
           {(bulk.count > 0 || bulk.all) && <KBBulkBar count={bulk.count} all={bulk.all} nodes={nodes} meId={me.data?.agent.id} busy={bulk.busy}
             onSelectAll={Object.keys(filter).length > 0 ? bulk.selectAll : undefined} onApply={(change) => void bulk.run(change)} onClear={bulk.clear} />}
           <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span>
-            {shown.map((column, index) => <span key={column} data-extra={index > 0 ? 'true' : undefined}>{columnHead(column)}</span>)}<span />{ordered && <span />}</div>
+            {shown.map((column, index) => <span key={column} data-extra={index > 0 ? 'true' : undefined}>{columnHead(column)}</span>)}<span /></div>
           <div className="kb-list-scroll" ref={listBox}>
             {articles.isError && <p role="alert" className="error-copy kb-list-note">{kbMessages.listFailed}{' '}
               <button type="button" className="link-action" onClick={() => void articles.refetch()}>{kbMessages.retry}</button></p>}
