@@ -78,17 +78,19 @@ func (a *API) putHelpCenterAnalytics(response http.ResponseWriter, request *http
 // testHelpCenterAnalytics sends one test page view to the saved service, on or off, as the person
 // asking (their browser and address), and answers what the service said.
 func (a *API) testHelpCenterAnalytics(response http.ResponseWriter, request *http.Request) {
-	if a.config.Analytics == nil {
-		writeError(response, http.StatusServiceUnavailable, "analytics_unavailable", "This server does not send help center page views, so it cannot send a test.")
-		return
-	}
 	helpCenterID, ok := helpCenterIDOf(response, request)
 	if !ok {
 		return
 	}
+	// The help center is resolved first: an id of another workspace or a deleted one is not found on
+	// every server, with or without the sender.
 	target, err := a.store.HelpCenterAnalyticsTargetIn(request.Context(), principal(request).Workspace.ID, helpCenterID)
 	if err != nil {
 		writeStoreError(response, err)
+		return
+	}
+	if a.config.Analytics == nil {
+		writeError(response, http.StatusServiceUnavailable, "analytics_unavailable", "This server does not send help center page views, so it cannot send a test.")
 		return
 	}
 	if target == nil {
