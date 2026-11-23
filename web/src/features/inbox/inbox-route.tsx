@@ -38,6 +38,7 @@ import type { TokenPermission } from '../../api/schemas';
 import { MentionsPane, useMarkMentionsRead } from './mentions-pane';
 import { mentionMessages } from './mention-messages';
 import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
+import { helpCentersApi, helpCentersKey } from '../kb/help-centers-api';
 import { usePhone } from '../../lib/use-phone';
 import { restartQuery } from '../../lib/restart-query';
 
@@ -279,6 +280,12 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     const ref = conversation.channel_ref;
     return ref && several.has(ref.type) ? (ref.deleted ? messages.removedChannel(ref.name) : ref.name) : undefined;
   };
+  // The help center the open conversation came through, once the workspace has two: one that is not the primary
+  // says so by itself, so the list is read only for the primary.
+  const cameThrough = selected?.help_center;
+  const helpCenterCount = useQuery({ queryKey: helpCentersKey, queryFn: helpCentersApi.list,
+    enabled: cameThrough?.primary === true && reads('help_center:read') }).data?.help_centers.length ?? 0;
+  const helpCenterLabel = cameThrough && (!cameThrough.primary || helpCenterCount > 1) ? messages.cameThrough(cameThrough.name) : undefined;
   // Inside one channel the list's title already names it, so the rows leave it out; the open thread still says it.
   const rowChannelLabel = scopedChannel(filters) ? () => undefined : channelLabel;
   // Shared with the app shell, so the limits cost no extra request.
@@ -424,7 +431,7 @@ export function InboxRoute({ list }: { list?: 'mentions' } = {}) {
     onManageSavedReplies={() => { window.open('/settings/saved-replies', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
     defaultMailbox={defaultMailbox} replyMailbox={selected && (!repliesVia || repliesVia.type === 'email') ? emailChannel.data : undefined}
-    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} rowChannelLabel={rowChannelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice?.conversationId === selected?.id ? draftNotice?.text : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} rowChannelLabel={rowChannelLabel} helpCenterLabel={helpCenterLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice?.conversationId === selected?.id ? draftNotice?.text : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && reads('messages:read') && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()} onRetryTimeline={() => void restartQuery(client, ['messages', openID])}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void restartQuery(client, ['conversations', query])}

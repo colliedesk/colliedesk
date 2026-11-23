@@ -25,6 +25,8 @@ export const helpCentersMessages = {
   deleteName: (name: string) => `Delete ${name}`,
   confirmDelete: (name: string) => `Delete ${name}? Its pages go off line at once and its custom domain is released. Its collections and articles stay. This cannot be undone.`,
   deleteButton: 'Delete help center',
+  and: ' and ',
+  servedBy: (count: number) => ` ${count === 1 ? 'serves' : 'serve'} this help center. Choose another help center in ${count === 1 ? 'its' : 'each channel’s'} settings, then delete it. Nothing was deleted.`,
   actionFailed: 'That did not work. Try again.',
   settings: 'Settings',
   settingsOf: (name: string) => `Settings of ${name}`,

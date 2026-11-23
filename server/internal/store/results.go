@@ -15,7 +15,13 @@ func (s *Store) ReadResults(ctx context.Context, workspaceID string, viewer resu
 		if err != nil {
 			return page, err
 		}
-		page.HelpCenter, err = helpCenterResults(ctx, tx, workspaceID, viewer.Now)
+		helpCenterID := ""
+		if viewer.HelpCenterID != "" {
+			if helpCenterID, err = resolveHelpCenter(ctx, tx, workspaceID, viewer.HelpCenterID, false); err != nil {
+				return page, err
+			}
+		}
+		page.HelpCenter, err = helpCenterResults(ctx, tx, workspaceID, helpCenterID, viewer.Now)
 		return page, err
 	})
 }

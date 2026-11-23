@@ -124,6 +124,9 @@ func conversationFilterFromQuery(query url.Values, channels []string) (store.Con
 		}
 		*target = value
 	}
+	if filter.Search, filter.HelpCenters, err = takeHelpCenterWords(filter.Search); err != nil {
+		return filter, err
+	}
 	for key, target := range map[string]**bool{"has_pending_draft": &filter.HasPendingDraft, "delivery_failed": &filter.DeliveryFailed} {
 		switch query.Get(key) {
 		case "":

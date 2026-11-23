@@ -130,17 +130,20 @@ const (
 // helpCenterCollectionsSQL lists the live collections of workspace $1 with their name and description
 // in language $2 ("" the primary one; a missing name falls back to it), the published articles each
 // lists itself (its own and those listed in it too), and how many of those are published in each shown
-// language, by position and name. byc is computed once: left to the planner, the low row counts it
-// expects under row security make it count again for every collection.
-const helpCenterCollectionsSQL = `WITH shown AS (SELECT a.listed AS collection_id, t.locale, count(*) AS n
-		FROM ` + listedKBArticles + ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + shownArticleKBTranslation + `
+// language, by position and name. The published articles are listed once (listed) and both counts
+// read that list: reading kb_articles again would make Postgres plan its row security again. byc is
+// computed once: left to the planner, the low row counts it expects under row security make it count
+// again for every collection.
+const helpCenterCollectionsSQL = `WITH listed AS MATERIALIZED (SELECT a.id, a.listed FROM ` + listedKBArticles + ` WHERE ` + publicKBArticle + `),
+	shown AS (SELECT a.listed AS collection_id, t.locale, count(*) AS n
+		FROM listed a JOIN kb_article_translations t ON t.workspace_id=$1 AND t.article_id=a.id AND ` + shownArticleKBTranslation + `
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
-		WHERE ` + publicKBArticle + ` GROUP BY a.listed, t.locale),
+		GROUP BY a.listed, t.locale),
 	byc AS MATERIALIZED (SELECT collection_id, jsonb_object_agg(locale, n) AS counts FROM shown GROUP BY collection_id)
 	SELECT c.id::text, COALESCE(c.parent_id::text, ''), COALESCE(ct.name, c.name), CASE WHEN ct.collection_id IS NULL THEN c.description ELSE ct.description END,
 		c.slug, COALESCE(n.published, 0), COALESCE(byc.counts, '{}'::jsonb)
 	FROM kb_collections c
-	LEFT JOIN (SELECT a.listed AS collection_id, count(*) AS published FROM ` + listedKBArticles + ` WHERE ` + publicKBArticle + ` GROUP BY a.listed) n
+	LEFT JOIN (SELECT listed AS collection_id, count(*) AS published FROM listed GROUP BY listed) n
 		ON n.collection_id=c.id
 	LEFT JOIN byc ON byc.collection_id=c.id
 	LEFT JOIN kb_collection_translations ct ON ct.workspace_id=c.workspace_id AND ct.collection_id=c.id AND ct.locale=$2 AND $2 <> ''
@@ -173,6 +176,9 @@ func (s *Store) HelpCenterCollections(ctx context.Context, workspaceID string) (
 func (s *Store) HelpCenterCollectionsIn(ctx context.Context, workspaceID, helpCenterID, locale string) ([]domain.PublicKBCollection, error) {
 	collections, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) ([]domain.PublicKBCollection, error) {
 		query, args := onHelpCenter(helpCenterID, helpCenterCollectionsSQL, workspaceID, locale)
+		if err := genericPlan(ctx, tx); err != nil {
+			return nil, err
+		}
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return nil, err
@@ -489,16 +495,21 @@ func ChatKBArticles(ctx context.Context, tx pgx.Tx, workspaceID string, withBodi
 	return ChatKBArticlesIn(ctx, tx, workspaceID, withBodies, "")
 }
 
-// chatKBSelect reads articles a for the help chat in language $2: an article with a published
-// translation in it that customers see is read in that language, with its collection's name in it;
-// the others in their own ("" is the primary language).
+// chatKBSelect reads articles a for the help chat in language $2, in a help chat transaction
+// (database.InHelpChat): an article with a published translation in it that the chat's help center
+// shows is read in that language, with its collection's name in it; the others in their own ("" is
+// the help center's primary language). An article listed on the help center from a collection
+// elsewhere has no collection the reader sees, so its folder is "". It joins
+// kb_help_center_chat_articles once, for what help chat may read (helpChatKBArticle) and whether it
+// may link it (public): each further visibility view computes every collection's rank again.
 func chatKBSelect(body string) string {
-	return `SELECT a.id::text,a.number,COALESCE(v.version,1),COALESCE(t.title,a.title),COALESCE(ct.name,c.name),octet_length(COALESCE(t.body_md,a.body_md)),` + body + `,
-		COALESCE(t.locale,''),COALESCE(t.updated_at::text,''),` + publicKBArticleFlag + `
-		FROM kb_articles a JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
+	return `SELECT a.id::text,a.number,COALESCE(v.version,1),COALESCE(t.title,a.title),COALESCE(ct.name,c.name,''),octet_length(COALESCE(t.body_md,a.body_md)),` + body + `,
+		COALESCE(t.locale,''),COALESCE(t.updated_at::text,''),kv.public
+		FROM kb_articles a JOIN kb_help_center_chat_articles kv ON kv.workspace_id=a.workspace_id AND kv.id=a.id
+		LEFT JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
 		LEFT JOIN LATERAL (SELECT max(version) AS version FROM kb_article_versions WHERE workspace_id=a.workspace_id AND article_id=a.id AND ` + kbTextVersion("") + `) v ON true
-		LEFT JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$2 AND $2 <> '' AND ` + helpChatKBTranslation + `
-			AND EXISTS (SELECT 1 FROM help_center_languages hl WHERE hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible)
+		LEFT JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$2 AND $2 <> '' AND ` + chatArticleKBTranslation + `
+			AND EXISTS (SELECT 1 FROM help_center_languages hl WHERE hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT NULLIF(current_setting('app.help_center_id',true),'')::uuid) AND hl.locale=t.locale AND hl.visible)
 		LEFT JOIN kb_collection_translations ct ON ct.workspace_id=c.workspace_id AND ct.collection_id=c.id AND ct.locale=t.locale`
 }
 
@@ -508,7 +519,7 @@ func ChatKBArticlesIn(ctx context.Context, tx pgx.Tx, workspaceID string, withBo
 	if withBodies {
 		body = `COALESCE(t.body_md,a.body_md)`
 	}
-	rows, err := tx.Query(ctx, chatKBSelect(body)+` WHERE `+helpChatKBArticle+` AND NOT a.ai_excluded ORDER BY a.number`, workspaceID, locale)
+	rows, err := tx.Query(ctx, chatKBSelect(body)+` WHERE a.workspace_id=$1 AND NOT a.ai_excluded ORDER BY a.number`, workspaceID, locale)
 	if err != nil {
 		return nil, fmt.Errorf("read the help center for AI chat: %w", err)
 	}
@@ -547,7 +558,7 @@ func ChatKBArticlesByIDIn(ctx context.Context, tx pgx.Tx, workspaceID string, id
 	if len(ids) == 0 {
 		return found, nil
 	}
-	rows, err := tx.Query(ctx, chatKBSelect(`COALESCE(t.body_md,a.body_md)`)+` WHERE `+helpChatKBArticle+` AND NOT a.ai_excluded AND a.id = ANY($3::uuid[])`, workspaceID, locale, ids)
+	rows, err := tx.Query(ctx, chatKBSelect(`COALESCE(t.body_md,a.body_md)`)+` WHERE a.workspace_id=$1 AND NOT a.ai_excluded AND a.id = ANY($3::uuid[])`, workspaceID, locale, ids)
 	if err != nil {
 		return nil, fmt.Errorf("read help center articles for AI chat: %w", err)
 	}
@@ -571,7 +582,7 @@ func ChatKBArticlesByIDIn(ctx context.Context, tx pgx.Tx, workspaceID string, id
 // ChatKBArticleByIDIn is ChatKBArticleByID in language locale (chatKBSelect).
 func ChatKBArticleByIDIn(ctx context.Context, tx pgx.Tx, workspaceID, id, locale string) (ChatKBArticle, bool, error) {
 	var a ChatKBArticle
-	err := tx.QueryRow(ctx, chatKBSelect(`COALESCE(t.body_md,a.body_md)`)+` WHERE `+helpChatKBArticle+` AND NOT a.ai_excluded AND a.id::text=$3`, workspaceID, locale, id).
+	err := tx.QueryRow(ctx, chatKBSelect(`COALESCE(t.body_md,a.body_md)`)+` WHERE a.workspace_id=$1 AND NOT a.ai_excluded AND a.id::text=$3`, workspaceID, locale, id).
 		Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey, &a.Public)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ChatKBArticle{}, false, nil

@@ -29,12 +29,23 @@ var ReservedHelpCenterHandles = []string{
 	"support", "chat",
 }
 
+// PrimaryHelpCenterHandle is the word inbox search reads as the primary help center
+// (help_center:primary). The primary has no handle of its own, so no other help center may take
+// this one. It is not a route of the site, so the database does not refuse it.
+const PrimaryHelpCenterHandle = "primary"
+
+// IsHelpCenterHandle says a text is shaped like a help center's handle.
+func IsHelpCenterHandle(text string) bool { return helpCenterHandleShape.MatchString(text) }
+
 // CheckHelpCenterHandle refuses a handle that cannot name a help center at /<handle> below the
-// primary's root: one not shaped like a handle, a route of the site, or a language tag.
+// primary's root: one not shaped like a handle, a route of the site, or a language tag. It also
+// refuses the word search uses for the primary.
 func CheckHelpCenterHandle(handle string) error {
 	switch {
 	case !helpCenterHandleShape.MatchString(handle):
 		return invalidKB("A handle is 1 to %d lowercase letters, digits or hyphens, starting with a letter or digit, such as hardware.", MaxHelpCenterHandle)
+	case handle == PrimaryHelpCenterHandle:
+		return invalidKB("%q stands for the primary help center in inbox search (help_center:primary); choose another handle, such as %s-help.", handle, handle)
 	case slices.Contains(ReservedHelpCenterHandles, handle):
 		return invalidKB("%q is a page of the help center site; choose another handle, such as %s-help.", handle, handle)
 	case languageSegmentShape.MatchString(handle):

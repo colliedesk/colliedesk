@@ -11,9 +11,11 @@ func resultsGetSpec() Spec {
 			`To read the conversations behind a number, call colliedesk_inbox_search with result "<snapshot id>:<window>.<metric>" (for example the current id and "30d.first_response"). ` +
 			`help_center is read live: help center article views, requests opened (colliedesk_inbox_search with source native, created_after from, created_before to) and the self-service score, views per request (null without a request), per week and per day, ` +
 			`and the most viewed articles with their helpful votes and the sent replies that used them (colliedesk_kb_article_stats for one article per day). ` +
+			`help_center_id (colliedesk_help_centers_list) narrows help_center to one help center: the articles it shows and their views, and the requests that came in through it; the other numbers stay the workspace's. ` +
 			`How each number is counted: colliedesk_docs_search "results".`,
-		REST:  []string{"GET /api/v1/results"},
-		Input: noArguments,
+		REST: []string{"GET /api/v1/results"},
+		Input: `{"type":"object","additionalProperties":false,"properties":{"help_center_id":{"type":"string",` + uuid + `,` +
+			`"description":"One of colliedesk_help_centers_list; left out, help_center reads the whole workspace."}}}`,
 		Output: `{"type":"object","required":["results"],"properties":{"results":{"type":"object","required":["current","baseline","baseline_state","hours_saved","help_center"],"properties":{` +
 			`"current":{"type":["object","null"]},"baseline":{"type":["object","null"]},` +
 			`"baseline_state":{"type":"string","enum":["none","computing","ready"]},"hours_saved":{"type":"object"},"error":{"type":["object","null"]},"help_center":` + resultsHelpCenterOutput + `}}}}`,

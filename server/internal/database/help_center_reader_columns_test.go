@@ -7,10 +7,12 @@ import (
 )
 
 // readerColumns are the only columns the reader may read on a table it has no table-wide grant on:
-// what finds the page an old helpdesk address of an imported item became.
+// what finds the page an old helpdesk address of an imported item became, and which version an
+// article's text is at, which help chat keeps with what it cites.
 const readerColumns = "import_items.entity SELECT, import_items.source SELECT, import_items.source_id SELECT, " +
 	"import_items.status SELECT, import_items.target_id SELECT, import_items.updated_at SELECT, " +
-	"import_items.workspace_id SELECT"
+	"import_items.workspace_id SELECT, kb_article_versions.article_id SELECT, kb_article_versions.kind SELECT, " +
+	"kb_article_versions.version SELECT, kb_article_versions.workspace_id SELECT"
 
 func TestTheHelpCenterReaderReadsOnlyTheLedgerColumnsARedirectNeeds(t *testing.T) {
 	pool := testPool(t)

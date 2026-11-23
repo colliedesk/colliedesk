@@ -138,3 +138,19 @@ test('an agent reads the list without adding or deleting', async () => {
   expect(screen.queryByRole('button', { name: 'Delete Hardware' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Turn on Hardware' })).not.toBeInTheDocument();
 });
+
+test('a help center a channel still serves is not deleted, and the row names each channel with a link to move it', async () => {
+  const channels = [{ id: '77777777-7777-4777-8777-777777777777', name: 'Hardware chat' }, { id: '88888888-8888-4888-8888-888888888888', name: 'Repair form' }];
+  open('admin', {
+    'GET /api/v1/help-centers': () => json(200, { help_centers: [primaryCenter, hardwareCenter], limit: 20 }),
+    [`DELETE /api/v1/help-centers/${hardwareCenter.id}`]: () => json(409, { error: { code: 'help_center_in_use', message: 'This help center is served by Hardware chat, Repair form. Move each channel (PATCH /api/v1/channels/{id}).', channels } }),
+  });
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete Hardware' }));
+  fireEvent.click(within(screen.getByRole('group', { name: 'Delete Hardware' })).getByRole('button', { name: 'Delete help center' }));
+  const alert = await within(within(screen.getByRole('list', { name: 'Help centers' })).getAllByRole('listitem')[1]!).findByRole('alert');
+  expect(alert).toHaveTextContent('Hardware chat and Repair form serve this help center. Choose another help center in each channel’s settings, then delete it. Nothing was deleted.');
+  expect(alert).not.toHaveTextContent('PATCH');
+  expect(within(alert).getByRole('link', { name: 'Hardware chat' })).toHaveAttribute('href', `/settings/channels/${channels[0]!.id}`);
+  expect(within(alert).getByRole('link', { name: 'Repair form' })).toHaveAttribute('href', `/settings/channels/${channels[1]!.id}`);
+  expect(within(screen.getByRole('list', { name: 'Help centers' })).getAllByRole('listitem')).toHaveLength(2);
+});

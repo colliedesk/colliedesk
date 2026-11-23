@@ -2846,7 +2846,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description The reconcile report of the import (`status` OK, FAILED or UNVERIFIED), or while only the recent tickets are in, the interim report (`status` INTERIM, never OK; no Markdown yet). For an undo, what it removed. `format=markdown` answers the report as a Markdown file to download. 404 `report_not_ready` before there is one. `knowledge_base.help_centers` lists each Freshdesk portal and the help center its categories went to (items as in ImportPortalHelpCenter). An undo report counts the help centers it removed in `kb_help_centers` and names the ones it kept in `kept_kb_help_centers` (they have a custom domain). */
+        /** @description The reconcile report of the import (`status` OK, FAILED or UNVERIFIED), or while only the recent tickets are in, the interim report (`status` INTERIM, never OK; no Markdown yet). For an undo, what it removed. `format=markdown` answers the report as a Markdown file to download. 404 `report_not_ready` before there is one. `knowledge_base.help_centers` lists each Freshdesk portal and the help center its categories went to (items as in ImportPortalHelpCenter). An undo report counts the help centers it removed in `kb_help_centers` and names the ones it kept in `kept_kb_help_centers` (they have a custom domain, or a help chat or web form serves them). */
         get: operations["getImportReport"];
         put?: never;
         post?: never;
@@ -5611,7 +5611,7 @@ export interface paths {
         get: operations["getHelpCenterByID"];
         put?: never;
         post?: never;
-        /** @description Delete a help center that is not the primary (409 `primary_help_center` for the primary). Its pages go off line at once and its custom domain is released, so another help center can claim the host name; its collections and articles stay, and keep showing on the other help centers they are placed on. It cannot be restored: make a new one and place the collections on it again. Needs `help_center:update`; one that serves on a custom domain needs `kb_articles:publish` too. */
+        /** @description Delete a help center that is not the primary (409 `primary_help_center` for the primary). While a live help chat or web form serves it, the delete is refused with 409 `help_center_in_use`, whose message and `error.channels` name those channels: move each to another help center or remove it first. Its pages go off line at once and its custom domain is released, so another help center can claim the host name; its collections and articles stay, and keep showing on the other help centers they are placed on. It cannot be restored: make a new one and place the collections on it again. Needs `help_center:update`; one that serves on a custom domain needs `kb_articles:publish` too. */
         delete: operations["deleteHelpCenter"];
         options?: never;
         head?: never;
@@ -9545,7 +9545,7 @@ export interface components {
         };
         HelpCenterCreate: {
             name: string;
-            /** @description Lowercase letters, digits and hyphens; its address is the primary's followed by `/<handle>`. */
+            /** @description Lowercase letters, digits and hyphens; its address is the primary's followed by `/<handle>`. `primary` is refused: inbox search reads `help_center:primary` as the primary. */
             handle: string;
             /** @description Shown at the top of every page; empty uses the workspace name. */
             title?: string;
@@ -10047,12 +10047,23 @@ export interface components {
             channel_ref?: null | components["schemas"]["ChannelRef"];
             /** @description Where an imported conversation came from; null for conversations created in Colliedesk. */
             origin: null | components["schemas"]["ConversationOrigin"];
+            /** @description The help center it came in through: the one its web form or help chat served when it opened (a help chat's Talk to a person included). It stays when the channel later serves another one. Null for one that came through none: email, a chat app, started by the team, imported. Find them with help_center:<handle> in search (help_center:primary for the primary). */
+            help_center: null | components["schemas"]["ConversationHelpCenter"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
             /** @description What its customer wrote last (never the team's replies or notes), on one line: what an inbox row shows under the subject. Only in GET /conversations; missing on a single conversation and when the customer never wrote (a conversation the team started and nobody answered yet). */
             latest_customer_message?: components["schemas"]["CustomerMessageExcerpt"];
+        };
+        ConversationHelpCenter: {
+            /** Format: uuid */
+            id: string;
+            /** @description What the team calls it: its name (GET /api/v1/help-centers), else its title, its handle or the workspace name. */
+            name: string;
+            /** @description Its handle; "" for the primary, which has none and is searched as help_center:primary. */
+            handle: string;
+            primary: boolean;
         };
         CustomerMessageExcerpt: {
             /** @description The start of the message, spaces and line breaks folded into one space, at most 140 characters; a longer one is cut at a word and ends with "…". */
@@ -10730,6 +10741,13 @@ export interface components {
             processing_paused_at?: string | null;
             /** @description Messages kept while the channel's processing is paused, waiting to be processed (0 while it runs). */
             paused_count?: number;
+            /**
+             * Format: uuid
+             * @description The help center a help chat or web form serves: its articles are the ones the chat answers from, and a conversation it opens is marked with it. null serves the workspace's primary help center, and is always null for another type.
+             */
+            help_center_id?: string | null;
+            /** @description The name of the help center the channel serves (the primary's when help_center_id is null); null for a type that serves none. */
+            help_center_name?: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -10858,6 +10876,8 @@ export interface components {
             is_default?: boolean;
             config?: components["schemas"]["ChannelConfigInput"];
             settings?: components["schemas"]["ChannelSettings"];
+            /** @description Only for a help chat or a web form: the help center it serves (GET /api/v1/help-centers lists them). Left out or null serves the primary. Another type, or an id that is not a help center of this workspace, is refused (400, fields.help_center_id). */
+            help_center_id?: string | null;
         };
         ChannelChange: {
             name?: string;
@@ -10868,6 +10888,8 @@ export interface components {
             settings?: components["schemas"]["ChannelSettings"];
             /** @description true pauses the channel's processing (recorded as paused), false resumes it (resumed). Only a channel whose messages wait in a journal (Zalo) can be paused; another answers 400. */
             processing_paused?: boolean;
+            /** @description Only for a help chat or a web form: the help center it serves from now on (recorded as config_changed); null, or the primary's id, serves the primary. Conversations it opened keep the help center they were opened on. Another type, or an id that is not a help center of this workspace, is refused (400, fields.help_center_id). */
+            help_center_id?: string | null;
         };
         ChannelCredentialInput: {
             name: string;
@@ -11599,6 +11621,12 @@ export interface components {
                     channel_id: string;
                     channel_name: string;
                 };
+                /** @description Only on help_center_in_use: the live channels that serve the help center; move each to another help center (PATCH /api/v1/channels/{id}, help_center_id) or remove it first. */
+                channels?: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                }[];
                 /** @description Only on media_in_use: the live articles whose current text names the item. */
                 articles?: {
                     /** Format: uuid */
@@ -14411,7 +14439,7 @@ export interface operations {
                 sort?: components["schemas"]["ConversationSort"];
                 /** @description true adds status_counts: how many conversations each status holds under every other filter given (the inbox's status tabs). Leave it out when only the page is needed. */
                 counts?: boolean;
-                /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
+                /** @description Words to find in the subject, in any message text, or in the name or email of the contact. A word `help_center:<handle>` is not text to find: it keeps the conversations that came through that help center (`help_center:primary` for the primary; several such words keep any of them), and the other words still match. A handle no live help center has matches nothing; one that cannot be a handle is 400. */
                 search?: string;
                 /** @description Only the conversations one number of the results page counts: `<snapshot id>:<window>.<metric>`, as `GET /results` names them (for example `…:30d.first_response`). Send it without a status filter: a number counts conversations in any status. A snapshot that is no longer kept (numbers are worked out again every hour or so; a replaced one stays 24 hours) answers 410 `results_refreshed`. */
                 result?: string;
@@ -18826,7 +18854,10 @@ export interface operations {
     };
     getResults: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Reads the help center section for one help center (`GET /help-centers` lists them): the conversations that came in through it, the articles it shows and their views. Without it the section reads the whole workspace. The other numbers stay the workspace's. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404. */
+                help_center_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -18842,7 +18873,9 @@ export interface operations {
                     "application/json": components["schemas"]["Results"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getResultsShareLink: {

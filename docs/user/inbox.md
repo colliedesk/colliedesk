@@ -146,6 +146,11 @@ page. Close it with **Esc**: the focus goes back to where it was.
   status first, so imported closed tickets are found; the list stays on **All statuses** after you clear
   the search. Inside a saved view that saved a status, the search keeps that status and the view stays the place. Characters such as `%` and `_` are matched
   literally.
+- With more than one help center, `help_center:hardware` in the search keeps the conversations that came in
+  through the help center with the handle `hardware` (its web form or its help chat), and `help_center:primary`
+  those of the primary help center: **help_center:hardware printer** finds the Hardware requests about a
+  printer. The handle is the last part of the help center's address in Settings › Help center. Email and the conversations the
+  team starts came through no help center, so these words never find them.
 - A search for a name or an email address also lists the matching customers under **Customers**,
   above the conversations. Select one to open the customer's page with every conversation they had;
   see [Customers](contacts.md).
@@ -165,6 +170,8 @@ page. Close it with **Esc**: the focus goes back to where it was.
   whose reply target passed; a screen reader reads the status in words.
 - When the workspace has two or more channels of one type, each row also names its channel. Inside one channel the
   title already names it, so the rows leave it out; the open conversation still shows it above the thread.
+- With more than one help center, the open conversation also says which help center it came through, above
+  the thread ("via Hardware"), when it came through a web form or a help chat.
 - The time on the right is when the customer last wrote: your own replies and private notes never change
   it. A conversation the customer never wrote in shows when it last changed. While a
   [reply target](response-targets.md) runs, the row shows **Due** and the time instead, and once it passed,

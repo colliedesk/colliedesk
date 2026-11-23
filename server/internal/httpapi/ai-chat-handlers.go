@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
 )
 
@@ -91,7 +92,25 @@ func (a *API) previewAIChat(response http.ResponseWriter, request *http.Request)
 	who := principal(request)
 	ctx := request.Context()
 	surface := ai.ChatSurface{WorkspaceName: who.Workspace.Name}
-	channel, found, err := channelRouteKit{api: a, kind: helpchat.Type}.Channel(ctx, who.Workspace.ID, input.ChannelID)
+	primary, err := a.store.PrimaryHelpCenterID(ctx, who.Workspace.ID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	// A channel named is tried on its own help center; none named, the primary's channel.
+	kit := channelRouteKit{api: a, kind: helpchat.Type}
+	at := channels.HelpCenter{WorkspaceID: who.Workspace.ID, HelpCenterID: primary, Primary: true}
+	if input.ChannelID != "" && uuidShape.MatchString(input.ChannelID) {
+		named, err := a.store.GetChannel(ctx, who.Workspace.ID, input.ChannelID)
+		if err != nil && !errors.Is(err, channels.ErrNotFound) {
+			writeStoreError(response, err)
+			return
+		}
+		if err == nil && named.HelpCenterID != "" {
+			at = channels.HelpCenter{WorkspaceID: who.Workspace.ID, HelpCenterID: named.HelpCenterID}
+		}
+	}
+	channel, found, err := kit.Channel(ctx, at, input.ChannelID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -100,6 +119,7 @@ func (a *API) previewAIChat(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusNotFound, "not_found", "No help chat channel with that id in this workspace.")
 		return
 	}
+	surface.HelpCenterID = at.HelpCenterID
 	if found {
 		config, err := a.store.ChannelConfigOf(ctx, channel)
 		if err != nil {

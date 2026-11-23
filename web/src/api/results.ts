@@ -61,7 +61,8 @@ export type ShareLink = z.infer<typeof shareLinkSchema>;
 export type SharedResults = z.infer<typeof sharedResultsSchema>;
 
 export const resultsApi = {
-  get: () => request('/api/v1/results', resultsSchema),
+  // helpCenterID narrows the help center block to one help center; the other numbers stay the workspace's.
+  get: (helpCenterID?: string) => request(helpCenterID ? `/api/v1/results?help_center_id=${encodeURIComponent(helpCenterID)}` : '/api/v1/results', resultsSchema),
   shareLink: () => request('/api/v1/results/share-link', shareLinkStateSchema),
   createShareLink: () => request('/api/v1/results/share-link', shareLinkCreatedSchema, { method: 'POST' }),
   revokeShareLink: () => request('/api/v1/results/share-link', shareLinkStateSchema, { method: 'DELETE' }),

@@ -117,7 +117,7 @@ type helpChatArticle struct {
 // come from the help center's own pages (Origin) with JSON.
 func (a *API) openHelpChat(kit channels.HelpCenterKit, response http.ResponseWriter, request *http.Request, at channels.HelpCenter, write bool) (*helpChat, bool) {
 	ctx := request.Context()
-	channel, found, err := kit.Channel(ctx, at.WorkspaceID, request.URL.Query().Get("channel"))
+	channel, found, err := kit.Channel(ctx, at, request.URL.Query().Get("channel"))
 	if err == nil && found && channel.Enabled {
 		found, err = a.ai.ChatActive(ctx, at.WorkspaceID)
 	}
@@ -223,7 +223,7 @@ func (c *helpChat) setCookie(token string, remove bool) {
 }
 
 func (c *helpChat) chatSurface() ai.ChatSurface {
-	return ai.ChatSurface{ChannelID: c.channel.ID, WorkspaceName: c.at.Name, Instructions: c.surface.Instructions}
+	return ai.ChatSurface{ChannelID: c.channel.ID, HelpCenterID: c.at.HelpCenterID, WorkspaceName: c.at.Name, Instructions: c.surface.Instructions}
 }
 
 // sourceView is a cited article as the browser shows it, with its address on the help center.
@@ -541,7 +541,7 @@ func (a *API) helpChatPage(c *helpChat) {
 	embed := query.Get("embed") == "1"
 	// Opened from an article's "Still need help?": the chat is about it, and a hand-off names it.
 	if number, err := strconv.ParseInt(query.Get("article"), 10, 64); err == nil && !embed {
-		article, found, err := a.ai.ChatArticleOf(c.request.Context(), c.at.WorkspaceID, number, c.lang)
+		article, found, err := a.ai.ChatArticleOf(c.request.Context(), c.at.WorkspaceID, c.at.HelpCenterID, number, c.lang)
 		if err != nil {
 			a.helpChatFailed(c, err)
 			return
@@ -652,7 +652,7 @@ func (a *API) helpChatTransfer(c *helpChat) {
 // and the AI chat feature are on: Ask AI in the header and on the home page, and an article's chat box.
 func (a *API) helpChatAdditions(kit channels.HelpCenterKit) func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error) {
 	return func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error) {
-		channel, found, err := kit.Channel(ctx, at.WorkspaceID, "")
+		channel, found, err := kit.Channel(ctx, at, "")
 		if err != nil || !found || !channel.Enabled {
 			return channels.HelpCenterAdditions{}, err
 		}
@@ -726,7 +726,7 @@ func (a *API) helpChatHandoff(c *helpChat) {
 		handoff.Transcript = "(No new questions.)"
 	}
 	if input.ArticleNumber > 0 {
-		article, found, err := a.ai.ChatArticleOf(ctx, c.at.WorkspaceID, input.ArticleNumber, c.lang)
+		article, found, err := a.ai.ChatArticleOf(ctx, c.at.WorkspaceID, c.at.HelpCenterID, input.ArticleNumber, c.lang)
 		if err != nil {
 			a.helpChatFailed(c, err)
 			return

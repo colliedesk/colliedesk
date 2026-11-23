@@ -44,7 +44,7 @@ func inboxSearchSpec() Spec {
 			`"sla":` + oneOrMany(`{"type":"string","enum":["overdue","due_soon"]}`, 2, `"overdue: a running response target is past. due_soon: one is near (colliedesk_response_targets_get)."`) + `,` +
 			`"sort":{"type":"string","enum":["updated_desc","updated_asc","created_desc","created_asc","priority","waiting_longest","due"],"default":"updated_desc",` +
 			`"description":"priority: urgent first. waiting_longest: open conversations whose customer wrote last, the oldest customer message first, then the rest. due: the earliest running response target first; waiting_longest while reply targets are off."},` +
-			`"q":{"type":"string","maxLength":200,"description":"Words to find in the subject, in any message text, or in the customer's name or email."},` +
+			`"q":{"type":"string","maxLength":200,"description":"Words to find in the subject, in any message text, or in the customer's name or email. The word help_center:<handle> (help_center:primary for the primary help center) keeps the conversations that came through that help center; the handle is in colliedesk_help_centers_list."},` +
 			`"query":{"type":"string","maxLength":200,"description":"The same as q, the name the other search tools use. Give one of them."},` +
 			`"result":{"type":"string","maxLength":120,"pattern":"^[0-9a-f-]{36}:(30d|7d)\\.[a-z_]+$","description":"Only the conversations one number of colliedesk_results_get counts: <snapshot id>:<window>.<metric>, for example <current id>:30d.first_response. Leave status out: a number counts any status."},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":20,"description":"Rows per page."},` +

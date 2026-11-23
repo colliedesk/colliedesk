@@ -19,8 +19,10 @@ const (
 		`zalo {oa_id, app_id (both to add one), staff_user_ids, groups (group id to organization), site_verification (the code Zalo gives the app's URL prefix with the HTML file method; the meta tag or file name may be given; empty clears it)}. ` +
 		`Setting up Zalo: Zalo takes the webhook only on a verified address, so give the person the channel's verification_prefix_url to verify in the Zalo app (URL prefix, HTML file method), ` +
 		`set the code Zalo shows as site_verification with colliedesk_channels_update, then give them webhook_url for the app's webhook settings."}`
-	channelDefault = `"is_default":{"type":"boolean","enum":[true],"description":"true makes the channel its type's default; the one that was loses it."}`
-	heldEventIDs   = `"event_ids":{"type":"array","maxItems":500,"items":{"type":"string",` + uuid + `},"description":"Leave out for every held message."}`
+	channelDefault    = `"is_default":{"type":"boolean","enum":[true],"description":"true makes the channel its type's default; the one that was loses it."}`
+	channelHelpCenter = `"help_center_id":{"type":["string","null"],` + uuid + `,"description":"Help chat and web form only: the help center it serves (from colliedesk_help_centers_list); null or left out serves the primary. ` +
+		`A help chat answers from that help center's articles alone, and its conversations show its name."}`
+	heldEventIDs = `"event_ids":{"type":"array","maxItems":500,"items":{"type":"string",` + uuid + `},"description":"Leave out for every held message."}`
 )
 
 func channelsListSpec() Spec {
@@ -69,7 +71,7 @@ func channelsCreateSpec() Spec {
 
 		REST: []string{"POST /api/v1/channels"},
 		Input: `{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":` + channelTypeEnum + `},` +
-			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `}}`,
+			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `,` + channelHelpCenter + `}}`,
 		Output: channelOutput,
 		run:    channelsCreate,
 	}
@@ -85,7 +87,7 @@ func channelsUpdateSpec() Spec {
 		Idempotent: true,
 		REST:       []string{"PATCH /api/v1/channels/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"minProperties":2,"properties":{` + channelIDInput + `,` +
-			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `,` +
+			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `,` + channelHelpCenter + `,` +
 			`"processing_paused":{"type":"boolean","description":"true pauses the channel's processing, false resumes it (Zalo channels only)."}}}`,
 		Output: channelOutput,
 		run:    channelsUpdate,

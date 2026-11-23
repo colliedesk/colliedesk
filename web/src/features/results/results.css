@@ -78,6 +78,7 @@
 .results-helpcenter { display: grid; gap: var(--space-3); padding: var(--space-5); min-width: 0; }
 .results-helpcenter > header { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
 .results-helpcenter h2 { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; }
+.results-helpcenter-choice { display: flex; align-items: baseline; gap: var(--space-2); margin-left: auto; }
 .results-helpcenter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
 .results-helpcenter-grid > div { display: grid; gap: 2px; align-content: start; min-width: 0; }
 .results-number-button { padding: 0; border: 0; background: none; cursor: pointer; }

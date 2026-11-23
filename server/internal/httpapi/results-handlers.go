@@ -11,10 +11,18 @@ import (
 
 func (a *API) getResults(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
+	helpCenterID := request.URL.Query().Get("help_center_id")
+	if helpCenterID != "" && !isUUID(helpCenterID) {
+		writeError(response, http.StatusBadRequest, "invalid_request",
+			"help_center_id is the id of one of the workspace's help centers (GET /api/v1/help-centers lists them); leave it out to read the whole workspace.")
+		return
+	}
 	page, err := a.store.ReadResults(request.Context(), who.Workspace.ID, results.Viewer{AgentID: who.Agent.ID, Admin: who.Can(auth.PermResultsShare),
-		CanSend: a.config.Email.SMTP.Configured() && a.config.Email.MailFromDomain != "", Now: a.now()})
+		CanSend: a.config.Email.SMTP.Configured() && a.config.Email.MailFromDomain != "", Now: a.now(), HelpCenterID: helpCenterID})
 	if err != nil {
-		writeStoreError(response, err)
+		if !writeHelpCenterError(response, err) {
+			writeStoreError(response, err)
+		}
 		return
 	}
 	writeJSON(response, http.StatusOK, page)
