@@ -16,12 +16,12 @@ describe('inbox menus and details', () => {
     expect(popover).toContain('scrollbar-gutter: stable');
   });
 
-  it('draws an empty box on each Filter option, and the tick in it once ticked, so the rows read as choices', () => {
-    const box = rule('.filter-popover .check-row:has(> input[type="checkbox"])::before');
-    expect(box).toContain('border: 1.5px solid');
-    const ticked = rule('.filter-popover .check-row:has(> input[type="checkbox"]:checked)::before');
-    expect(ticked).toContain('background-color: var(--accent)');
-    expect(ticked).toContain('url(');
+  it('shows the app checkbox itself on each Filter option, not a second box drawn by the row', () => {
+    // The checkbox in base-plain.css is the one box of the app: the menu neither hides it nor draws its own.
+    expect(css).not.toContain('input[type="checkbox"])::before');
+    expect(css).not.toMatch(/\.filter-popover \.check-row > input:is\(\[type="checkbox"\]/);
+    // A radio row still ends with a tick and hides its dot behind the whole row.
+    expect(rule('.filter-popover .check-row > input[type="radio"]')).toContain('opacity: 0');
   });
 
   it('lets a details value wrap instead of cutting it with "…" while the column has room for it', () => {

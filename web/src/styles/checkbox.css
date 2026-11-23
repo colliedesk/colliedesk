@@ -1,0 +1,33 @@
+/* One checkbox for the whole workspace app (Paper "Checkbox — states"), switches aside (ui/controls.css). The input
+   stays a real checkbox, so keyboards and screen readers are unchanged; it is drawn from tokens so it looks the same on
+   every system and follows the theme. Its own file, imported by base.css only: the operator console imports
+   base-plain.css and keeps the browser's checkbox within its CSS budget (docs/internals/performance.md). */
+:root, :root[data-theme="light"] {
+  --check-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");   /* stroke = --on-accent */
+  --check-mixed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");   /* stroke = --on-accent */
+  --check-mark-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23636363' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");   /* stroke = --text-3 */
+  --check-mixed-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23636363' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");   /* stroke = --text-3 */
+}
+:root[data-theme="dark"] {
+  --check-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%230a0a0a' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");   /* stroke = --on-accent */
+  --check-mixed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%230a0a0a' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");   /* stroke = --on-accent */
+  --check-mark-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23a3a3a3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");   /* stroke = --text-3 */
+  --check-mixed-disabled: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23a3a3a3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");   /* stroke = --text-3 */
+}
+input:where([type="checkbox"]:not([role="switch"], .switch input)) {
+  appearance: none; display: inline-block; vertical-align: middle; box-sizing: border-box;
+  border: 1.5px solid var(--line-strong); border-radius: var(--radius-sm);
+  background-color: var(--surface-1); background-position: center; background-size: 12px; background-repeat: no-repeat;
+}
+input:where([type="checkbox"]:not([role="switch"], .switch input)):hover:not(:disabled) { border-color: var(--text-3); }
+input:where([type="checkbox"]:not([role="switch"], .switch input)):checked { border-color: var(--accent); background-color: var(--accent); background-image: var(--check-mark); }
+input:where([type="checkbox"]:not([role="switch"], .switch input)):indeterminate { border-color: var(--accent); background-color: var(--accent); background-image: var(--check-mixed); }
+input:where([type="checkbox"]:not([role="switch"], .switch input)):is(:checked, :indeterminate):hover:not(:disabled) { border-color: var(--accent-hover); background-color: var(--accent-hover); }
+input:where([type="checkbox"]:not([role="switch"], .switch input)):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+input:where([type="checkbox"]:not([role="switch"], .switch input)):disabled { border-color: var(--line-control); background-color: var(--surface-2); }
+input:where([type="checkbox"]:not([role="switch"], .switch input)):disabled:is(:checked, :indeterminate) { background-color: var(--surface-3); background-image: var(--check-mark-disabled); }
+input:where([type="checkbox"]:not([role="switch"], .switch input)):disabled:indeterminate { background-image: var(--check-mixed-disabled); }
+/* Forced colours (Windows high contrast) draw no backgrounds: the system checkbox comes back, its check and mixed mark too. */
+@media (forced-colors: active) {
+  input:where([type="checkbox"]:not([role="switch"], .switch input)) { appearance: auto; }
+}
