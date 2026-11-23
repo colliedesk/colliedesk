@@ -175,6 +175,29 @@ func (s *Service) findChat(ctx context.Context, tx pgx.Tx, workspaceID string, b
 	return id, status, last, err == nil, err
 }
 
+// ChatArticleOf is the article the help center shows under number, in language locale, when the chat
+// may read it; found is false for a draft, a number of no article, one the help center does not show
+// and one kept away from AI.
+func (s *Service) ChatArticleOf(ctx context.Context, workspaceID string, number int64, locale string) (ChatArticleRef, bool, error) {
+	var ref ChatArticleRef
+	var found bool
+	if number <= 0 {
+		return ref, false, nil
+	}
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		id, err := store.ChatKBArticleIDOf(ctx, tx, workspaceID, number)
+		if err != nil || id == "" {
+			return err
+		}
+		article, ok, err := store.ChatKBArticleByIDIn(ctx, tx, workspaceID, id, locale)
+		if ok && article.Public {
+			ref, found = refOf(article), true
+		}
+		return err
+	})
+	return ref, found, err
+}
+
 // ChatSessionOf reads a browser's chat; found is false without one.
 func (s *Service) ChatSessionOf(ctx context.Context, workspaceID string, browser ChatBrowser) (ChatSessionView, bool, error) {
 	var view ChatSessionView

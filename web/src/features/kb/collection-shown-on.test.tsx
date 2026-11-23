@@ -12,7 +12,7 @@ const base = (centers = [primaryCenter, hardwareCenter]) => ({
   'GET /api/v1/auth/me': () => json(200, me),
   'GET /api/v1/kb/collections': () => json(200, { items: collections }),
   'GET /api/v1/kb/articles': () => json(200, { items: [summary(1, 'Reset your password')], next_cursor: null }),
-  'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: primaryCenter.url }),
+  'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, feedback_conversations: false, url: primaryCenter.url }),
   'GET /api/v1/help-centers': () => json(200, { help_centers: centers, limit: 20 }),
 });
 const guides = collections.find((item) => item.id === ids.guides)!;

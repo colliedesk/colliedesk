@@ -122,9 +122,10 @@ function kindLabel({ kind, notice_kind }: Pick<Message, 'kind' | 'notice_kind'>)
 }
 
 function EmailEnvelope({ email, storedFiles }: { email: NonNullable<Message['email']>; storedFiles: number }) {
-  // Anyone can type any address into a web form, so that label replaces the generic one.
-  const kind = email.via === 'web_form' ? 'web_form' : email.authentication;
+  // Anyone can type any address into a web form or under a help center article, so that label replaces the generic one.
+  const kind = email.via === 'web_form' || email.via === 'help_center' ? email.via : email.authentication;
   const warning = kind === 'web_form' ? messages.webFormSender
+    : kind === 'help_center' ? messages.helpCenterSender
     : kind === 'fail' ? messages.senderFailedVerification
     : kind === 'none' ? messages.senderNotVerified : undefined;
   const help = kind === 'pass' ? undefined : messages.senderHelp[kind];

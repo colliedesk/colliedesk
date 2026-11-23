@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { beforeAll, expect, test } from 'vitest';
-import type { Message } from '../../api/schemas';
+import { messageSchema, type Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
 import { presenceViewPart } from './presence-part';
 
@@ -23,6 +23,14 @@ test('labels a web form message as an unverified sender', () => {
   render(<TimelinePanel items={[typed]} timezone="UTC" />);
   expect(screen.getByText('reader@example.com')).toBeInTheDocument();
   expect(screen.getByText('Unverified sender (web form)')).toBeInTheDocument();
+  expect(screen.queryByText('Sender not verified')).not.toBeInTheDocument();
+});
+
+test('a message a reader left on a help center article loads and is labelled as an unverified sender', () => {
+  const left = messageSchema.parse({ ...typed, email: { ...typed.email, via: 'help_center' } });
+  render(<TimelinePanel items={[left]} timezone="UTC" />);
+  expect(screen.getByText('reader@example.com')).toBeInTheDocument();
+  expect(screen.getByText('Unverified sender (help center)')).toBeInTheDocument();
   expect(screen.queryByText('Sender not verified')).not.toBeInTheDocument();
 });
 

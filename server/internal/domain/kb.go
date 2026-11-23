@@ -381,9 +381,11 @@ type HelpCenter struct {
 	// collection that inherits the setting.
 	RequireApproval bool `json:"require_approval"`
 	// ShowTags shows readers each article's tags on its page.
-	ShowTags       bool       `json:"show_tags"`
-	ContentVersion int64      `json:"content_version"`
-	UpdatedAt      *time.Time `json:"updated_at"`
+	ShowTags bool `json:"show_tags"`
+	// FeedbackConversations opens a conversation from a "No" that leaves a line and an email address.
+	FeedbackConversations bool       `json:"feedback_conversations"`
+	ContentVersion        int64      `json:"content_version"`
+	UpdatedAt             *time.Time `json:"updated_at"`
 	// URL is the public address; the API sets it, the store leaves it empty.
 	URL string `json:"url"`
 }
@@ -564,6 +566,9 @@ type HelpCenterSite struct {
 	// Languages are the languages besides Locale that customers see, in menu order: each has its pages
 	// under /<locale>/.
 	Languages []string
+	// FeedbackConversations: a "No" on an article asks for an email address, and one left opens a
+	// conversation (HelpCenter.FeedbackConversations of the primary help center).
+	FeedbackConversations bool
 }
 
 // PublicKBCollection is a live collection as the help center lists it; Published counts its own

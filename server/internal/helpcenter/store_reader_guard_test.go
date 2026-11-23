@@ -32,6 +32,7 @@ var appRoleStoreMethods = map[string]string{
 	"HelpCenterPreview":       "staff only: the theme preview shows the public articles of the help center it names (onCenter, shownKBArticle), but checks the candidate logo and favicon against the whole media library, trash included, which the reader cannot read",
 	"LogKBSearch":             "the per-minute cap counts the whole workspace's searches, and a search written before the workspace has a help center makes the primary one; the reader has no grant on kb_searches, so stored search words stay out of its reach",
 	"OpenKBSearch":            "records an open on a search row the reader cannot read; the signed link names the workspace and the row",
+	"OpenKBArticleFeedback":   "after the vote is written as the reader, opens a conversation from it; the reader has no grant on conversations, contacts or messages, and the setting lives on the primary row",
 	"OpenHelpCenter":          "resolves the help center row; content_version and last_article_number live on the primary row",
 	"OpenHelpCenterAt":        "resolves the help center row; content_version and last_article_number live on the primary row",
 	"OpenHelpCenterHandle":    "resolves a handle to its help center among the workspace's help centers",

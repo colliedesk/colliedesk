@@ -139,6 +139,8 @@ const helpCenterSchema = z.object({
   enabled: z.boolean(), title: z.string(), locale: z.string(), require_approval: z.boolean(), content_version: z.number().int(), updated_at: nullableDate, url: z.string(),
   // Readers see an article's tags only while this is on.
   show_tags: z.boolean(),
+  // A "No" vote that leaves an address opens a conversation only while this is on (workspace-wide).
+  feedback_conversations: z.boolean(),
 }) satisfies z.ZodType<Generated<'HelpCenter'>>;
 
 const orderSchema = z.object({

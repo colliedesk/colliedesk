@@ -11,7 +11,7 @@ const path = `/api/v1/kb/articles/${ids.article}/translations/fr`;
 const bo = '99999999-9999-4999-8999-999999999991';
 // Setup, the article's collection, requires approval before anything in it goes live, translations too.
 const approving = [{ ...collection(ids.setup, 'Setup', null, 1), require_approval: 'on' as const }];
-const center = { enabled: true, title: 'Help', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' };
+const center = { enabled: true, title: 'Help', locale: 'en', require_approval: false, content_version: 1, updated_at: null, show_tags: false, feedback_conversations: false, url: 'https://desk.example.com/help/acme' };
 const translation = {
   article_id: ids.article, locale: 'fr', title: 'Réinitialiser', slug: 'reinitialiser', status: 'draft', published_at: null, outdated: false, outdated_at: null,
   created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z', in_trash: false, has_draft: false, draft: null, last_change: change, url: 'https://desk.example.com/help/acme/fr/a/7-r',

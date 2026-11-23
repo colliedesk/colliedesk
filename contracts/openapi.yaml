@@ -106,6 +106,7 @@ paths:
       - {name: embed, in: query, required: false, schema: {type: string, enum: ['1']}, description: 'The chat in a site''s frame (the widget): only the channel''s sites may frame it (frame-ancestors).'}
       - {name: t, in: query, required: false, schema: {type: string}, description: 'A one-time code from Open full chat: moves the frame''s chat to this page, then 303 to the page without it.'}
       - {name: lang, in: query, required: false, schema: {type: string}, description: 'The language the reader reads: one the help center shows (any case) gives the page, its words and its home link in it; any other value, or none, is the primary language. Kept through the 303 of t.'}
+      - {name: article, in: query, required: false, schema: {type: string}, description: 'The number of the article whose Still need help? opened the page: a published article the AI may read starts the chat about it (the end user can stop that), and a hand-off names it. Any other value, and embed=1, are ignored.'}
     get:
       operationId: getHelpChatPage
       tags: [HelpCenterChat]
@@ -245,6 +246,7 @@ paths:
                 email: {type: string, maxLength: 254}
                 name: {type: string, maxLength: 120}
                 note: {type: string, maxLength: 2000}
+                article_number: {type: integer, format: int64, minimum: 1, description: 'The article the chat is about (the chat page opened from its Still need help?): its title and address start the message. An article that is not published or is kept away from AI is not named.'}
       responses:
         '201':
           description: 'Sent: a reference the end user may quote (the start of the conversation''s id) and whether the workspace is on a trial (it cannot reply by email then).'
@@ -9123,6 +9125,9 @@ paths:
         `require_approval` makes publishing need an approved review in every collection that inherits
         it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes).
         `show_tags` shows each article's tags on its page; left out, it stays as it is.
+        `feedback_conversations` makes a "No" vote ask for an email address and open a conversation
+        when the reader leaves one with their line; sending it needs `channels:update` too (403
+        `permission_missing`, nothing changes), since it opens a way for anyone to write in.
       requestBody:
         required: true
         content:
@@ -12377,14 +12382,16 @@ components:
       pattern: '^[a-z_]{1,40}$'
       description: >-
         How the conversation started: a channel type this server runs, or an origin that comes through no
-        channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report. A test build may run another type
+        channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report, article_feedback. A test build may run another type
         (the loopback chat stand-in), so a client names a value it does not know by itself.
         email: a customer's mail. web_form: the public web form.
         help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified).
         zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in.
         imported: brought over from another helpdesk (its original channel is in origin.source).
         agent: a team member started it in Colliedesk; an older image that does not know this field
-        also writes agent. problem_report: an agent's Report a problem.
+        also writes agent. problem_report: an agent's Report a problem. article_feedback: a reader's
+        "No" on a help center article that left a line and an email address (never verified), when the
+        workspace turns on `feedback_conversations`.
     ConversationSort: {type: string, enum: [updated_desc, updated_asc, created_desc, created_asc, priority, waiting_longest, due], default: updated_desc}
     ConversationFilters:
       type: object
@@ -14223,15 +14230,26 @@ components:
             every collection whose `require_approval` is `inherit`. Left out, it stays as it is. Sending it
             needs kb_articles:publish too.
         show_tags: {type: boolean, description: 'Whether an article page shows the article''s tags to readers. Left out, it stays as it is.'}
+        feedback_conversations:
+          type: boolean
+          description: >-
+            Whether a "No" vote asks for an email address and opens a conversation when the reader leaves
+            one with their line. Left out, it stays as it is. Sending it needs channels:update too.
     HelpCenter:
       type: object
-      required: [enabled, title, locale, require_approval, show_tags, content_version, updated_at, url]
+      required: [enabled, title, locale, require_approval, show_tags, feedback_conversations, content_version, updated_at, url]
       properties:
         enabled: {type: boolean}
         title: {type: string}
         locale: {type: string}
         require_approval: {type: boolean, description: 'Articles in collections that inherit the setting need an approved version to be published (POST /api/v1/kb/articles/{id}/reviews).'}
         show_tags: {type: boolean, description: 'Article pages show the article''s published tags. Help center search finds an article by its tags either way.'}
+        feedback_conversations:
+          type: boolean
+          description: >-
+            A "No" vote asks for an email address (optional for the reader); a line left with an address
+            opens a conversation (channel article_feedback, tag article-feedback) on which the article's
+            author is mentioned. Off by default.
         content_version: {type: integer, minimum: 0}
         updated_at: {type: [string, 'null'], format: date-time, description: Null until the knowledge base or its settings were first changed.}
         url:
@@ -15152,10 +15170,11 @@ components:
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}
         via:
           type: string
-          enum: [platform, workspace, gmail, web_form]
+          enum: [platform, workspace, gmail, web_form, help_center]
           description: >-
             Door the message came through; absent on mail stored before this was recorded. `web_form`
             is text typed into the public web form: the address is unverified (authentication `none`).
+            `help_center` is a line left with a "No" on a help center article, also unverified.
             `gmail` was read from the channel's connected Gmail inbox; authentication is Gmail's verdict.
             Trial replies need `platform`.
         cc:

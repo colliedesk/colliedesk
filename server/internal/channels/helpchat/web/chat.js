@@ -178,7 +178,7 @@
       top.appendChild(iconBtn('close', word('closeChat'), function () { c.onClose && c.onClose(); }));
     }
     root.appendChild(top);
-    if (c.surface === 'article') { this.chipRow = el('div', { 'class': 'chip-row' }); root.appendChild(this.chipRow); this.renderChip(); }
+    if (c.surface === 'article' || this.article) { this.chipRow = el('div', { 'class': 'chip-row' }); root.appendChild(this.chipRow); this.renderChip(); }
     this.scroll = el('div', { 'class': 'chat-scroll' });
     this.thread = el('div', { 'class': 'thread' });
     this.scroll.appendChild(this.thread);
@@ -521,7 +521,7 @@
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return fieldError(word('emailInvalid'));
       err.hidden = true; email.setAttribute('aria-invalid', 'false'); formErr.hidden = true;
       sendBtn.disabled = true; sendBtn.textContent = word('sending');
-      self.api.call('POST', '/handoff', { email: address, name: name.value.trim() || undefined, note: text.value.trim() || undefined }).then(function (response) {
+      self.api.call('POST', '/handoff', { email: address, name: name.value.trim() || undefined, note: text.value.trim() || undefined, article_number: self.article ? self.article.number : undefined }).then(function (response) {
         if (response.status === 201) return response.json().then(function (sent) { self.sentEmail = address; self.sentName = name.value.trim(); self.closeHandoff(false); self.handedOff(sent); });
         sendBtn.disabled = false; sendBtn.textContent = word('sendTo', { name: self.c.name });
         if (response.status === 422) return fieldError(word('emailInvalid'));
