@@ -92,6 +92,7 @@ var routeEffects = map[string]Effect{
 	// A DELETE that another call reverses: a trash with undelete, an unlink, a switch turned off.
 	"DELETE /api/v1/conversations/{id}/tags/{tagId}":              Changes,
 	"DELETE /api/v1/conversations/{id}/presence/{clientId}":       Changes,
+	"DELETE /api/v1/conversations/{id}/article-request":           Changes,
 	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":               Changes,
 	"DELETE /api/v1/saved-replies/{id}":                           Changes,
 	"DELETE /api/v1/kb/templates/{id}":                            Changes,

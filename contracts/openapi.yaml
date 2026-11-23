@@ -5232,6 +5232,95 @@ paths:
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/article-request:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: requestKBArticle
+      x-permission: conversations:read
+      description: >-
+        Ask for a help center article from this conversation; needs kb_articles:read too. The request is a
+        knowledge gap signal of kind `requested` whose source is the conversation: it joins the open gap whose
+        title is close to `title` (or the open gap `gap_id` names), else it opens a gap, and it shows in
+        Knowledge gaps within a minute with the conversations it was asked from. `title` is the subject of the
+        conversation when left out. The title and `note` are masked: the customer's names and company, an email
+        address and a run of 6 or more digits never reach the gap. A conversation asks once: asking again with the
+        same words changes nothing (200, `created` false), other words move the request.
+        `DELETE` takes it back. Nobody is told and nothing is sent.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                title: {type: string, minLength: 1, maxLength: 300, description: 'What the article should answer; the conversation subject when left out.'}
+                note: {type: string, minLength: 1, maxLength: 300, description: 'One line for the writer.'}
+                gap_id: {type: string, format: uuid, description: 'An open gap of the workspace to add this conversation to, from GET /api/v1/kb/gaps?similar=.'}
+      responses:
+        '201':
+          description: The request was filed
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleRequest'}}}
+        '200':
+          description: The conversation asked for this already; nothing changed
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleRequest'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: withdrawKBArticleRequest
+      x-permission: conversations:read
+      description: >-
+        Take back this conversation's request for an article; needs kb_articles:read too. The gap counts again,
+        and a gap left without signals goes. 404 when the conversation asked for none.
+      responses:
+        '204': {description: The request was taken back}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/messages/{messageId}/article:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - name: messageId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: makeKBArticleFromReply
+      x-permission: kb_articles:create
+      description: >-
+        Make a draft article from a reply the team sent; needs conversations:read too. The text is the reply's,
+        the title the conversation subject, and the customer question it answered (the customer message just
+        before it) is kept as `reply_source` for the editor to show beside it. All three are masked: the
+        customer's names and company, the team members' names, an email address and a run of 6 or more digits
+        are replaced. The draft is never published. A private note, a customer message or a notice answers 400.
+        It goes to `collection_id`, else to the first collection; 400 when the workspace has none.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                collection_id: {type: string, format: uuid, description: 'A live collection of the workspace; the first collection when left out.'}
+      responses:
+        '201':
+          description: The draft article
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '200':
+          description: The article an earlier request with the same Idempotency-Key wrote
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/mentions:
     get:
       operationId: listMentions
@@ -7301,13 +7390,17 @@ paths:
         vote with its "What was missing?" line (`vote_no`), a help chat handed off to a person
         (`chat_handoff`), a help chat answer that used no article or was rated not helpful
         (`chat_unanswered`) and a resolved conversation no article title matches
-        (`recurring_topic`, read nightly in workspaces with 20 or more resolved in 30 days). A
-        signal joins a gap within a minute. The list is ranked by `recent_askers` (distinct askers
-        in the last 30 days), then by `last_seen`. Open gaps by default; `status` and `kind` filter.
+        (`recurring_topic`, read nightly in workspaces with 20 or more resolved in 30 days) and a
+        team member's request for an article from a conversation (`requested`, `POST
+        /api/v1/conversations/{id}/article-request`). A signal joins a gap within a minute. The list is
+        ranked by `recent_askers` (distinct askers in the last 30 days), then by `last_seen`. Open gaps
+        by default; `status` and `kind` filter. `similar` lists only the open gaps whose title is close
+        to these words, closest first, to see whether an article was asked for already.
         `GET /api/v1/kb/gaps/{id}` lists a gap's signals; `PATCH` links it to an article or dismisses it.
       parameters:
         - {name: status, in: query, schema: {type: string, enum: [open, fixed, dismissed], default: open}}
         - {name: kind, in: query, description: Only the gaps with a signal of this kind., schema: {$ref: '#/components/schemas/KBGapSignalKind'}}
+        - {name: similar, in: query, description: 'Only the open gaps whose title is close to these words, closest first; status must be open or left out.', schema: {type: string, minLength: 1, maxLength: 300}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
         '200':
@@ -7407,6 +7500,41 @@ paths:
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
         '429': {$ref: '#/components/responses/AIChecksRateLimited'}
         '502': {$ref: '#/components/responses/BadGateway'}
+  /api/v1/kb/gaps/{id}/article:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: startKBGapArticle
+      x-permission: kb_articles:create
+      description: >
+        Starts a draft article for the gap without AI and keeps it as a draft, never published. The title is
+        the gap's title; the text is the collection's default template, else empty. The answer's `gap_source`
+        names up to 8 conversations the gap was asked from (a team member's request or a recurring topic),
+        newest first, so the editor shows them beside the text; it is empty for a caller without
+        conversations:read. The article goes to `collection_id`, else to the first collection; 400 when the
+        workspace has none.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                collection_id: {type: string, format: uuid, description: 'A live collection of the workspace; the first collection when left out.'}
+      responses:
+        '201':
+          description: The draft article
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '200':
+          description: The article an earlier request with the same Idempotency-Key wrote
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles/trash:
     get:
       operationId: listTrashedKBArticles
@@ -13813,12 +13941,24 @@ components:
           description: 'Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through.'
           items: {type: string, format: uuid}
         gap_source: {$ref: '#/components/schemas/KBArticleGapSource'}
+        reply_source: {$ref: '#/components/schemas/KBArticleReplySource'}
+    KBArticleReplySource:
+      type: object
+      description: 'Only on an article made from a sent reply (POST /api/v1/conversations/{id}/messages/{messageId}/article): the conversation and the customer question the reply answered, masked. Left out for a caller without conversations:read.'
+      required: [conversation_id, display_ref, subject, message_id, question]
+      properties:
+        conversation_id: {type: string, format: uuid}
+        display_ref: {type: string, description: 'The conversation''s number as the team sees it, such as #42.'}
+        subject: {type: string}
+        message_id: {type: string, format: uuid}
+        question: {type: string, description: 'The customer message just before the reply, masked; empty when there was none.'}
     KBArticleGapSource:
       type: object
-      description: 'Only on an article the AI drafted from a knowledge gap (POST /api/v1/kb/gaps/{id}/draft): the gap and the resolved conversations the draft was written from, at most 8. conversations is empty for a caller without conversations:read.'
-      required: [gap_id, conversations]
+      description: 'Only on an article drafted from a knowledge gap: by the AI (POST /api/v1/kb/gaps/{id}/draft), with the resolved conversations it was written from, or started by a person (POST /api/v1/kb/gaps/{id}/article), with the conversations it was asked from; at most 8. conversations is empty for a caller without conversations:read.'
+      required: [gap_id, requested, conversations]
       properties:
         gap_id: {type: string, format: uuid}
+        requested: {type: boolean, description: 'True when the conversations asked for the article; false when the AI read them.'}
         conversations:
           type: array
           maxItems: 8
@@ -14041,11 +14181,11 @@ components:
           items: {$ref: '#/components/schemas/KBSearchTerm'}
     KBGapSignalKind:
       type: string
-      enum: [search_no_result, vote_no, chat_handoff, chat_unanswered, recurring_topic]
+      enum: [search_no_result, vote_no, chat_handoff, chat_unanswered, recurring_topic, requested]
     KBGap:
       type: object
       description: What readers asked for and did not find, grouped by their words.
-      required: [id, title, status, kinds, askers, recent_askers, first_seen, last_seen, fixed_by_article, fixed_automatically, status_changed_by, status_changed_at]
+      required: [id, title, status, kinds, askers, recent_askers, conversation_count, first_seen, last_seen, fixed_by_article, fixed_automatically, status_changed_by, status_changed_at]
       properties:
         id: {type: string, format: uuid}
         title: {type: string, minLength: 1, description: 'The most common words of its signals, the newest on a tie, masked: "[email removed]" and "[number removed]" replace an email address and a run of 6 or more digits.'}
@@ -14056,6 +14196,7 @@ components:
           items: {$ref: '#/components/schemas/KBGapSignalKind'}
         askers: {type: integer, minimum: 0, description: Distinct askers since the first signal.}
         recent_askers: {type: integer, minimum: 0, description: Distinct askers in the last 30 days; the rank.}
+        conversation_count: {type: integer, minimum: 0, description: 'The conversations it was asked from: a team member''s request or a recurring topic.'}
         first_seen: {type: string, format: date-time}
         last_seen: {type: string, format: date-time}
         fixed_by_article:
@@ -14078,9 +14219,14 @@ components:
       allOf:
         - {$ref: '#/components/schemas/KBGap'}
         - type: object
-          required: [signal_count, signals]
+          required: [signal_count, signals, conversations]
           properties:
             signal_count: {type: integer, minimum: 0, description: 'Every signal of the gap; `signals` lists the newest 100.'}
+            conversations:
+              type: array
+              maxItems: 100
+              description: 'The newest 100 conversations it was asked from, newest first; empty for a caller without conversations:read.'
+              items: {$ref: '#/components/schemas/KBConversationRef'}
             signals:
               type: array
               maxItems: 100
@@ -14088,11 +14234,27 @@ components:
     KBGapSignal:
       type: object
       description: One thing a reader could not find. Which reader is never shown.
-      required: [kind, text, created_at]
+      required: [kind, text, note, created_at]
       properties:
         kind: {$ref: '#/components/schemas/KBGapSignalKind'}
         text: {type: string, description: 'What the reader searched, wrote or asked, masked.'}
+        note: {type: [string, 'null'], description: 'The one line a team member wrote with a request, masked; null on every other signal.'}
         created_at: {type: string, format: date-time}
+    KBArticleRequest:
+      type: object
+      description: A conversation's request for an article and the gap it is in.
+      required: [gap, created, added_to_existing]
+      properties:
+        gap: {$ref: '#/components/schemas/KBGap'}
+        created: {type: boolean, description: 'False when the conversation asked for this already and nothing changed; only a created request is worth an undo.'}
+        added_to_existing: {type: boolean, description: True when the request joined a gap that was there before.}
+    KBConversationRef:
+      type: object
+      required: [conversation_id, display_ref, subject]
+      properties:
+        conversation_id: {type: string, format: uuid}
+        display_ref: {type: string, description: 'The conversation''s number as the team sees it, such as #42.'}
+        subject: {type: string}
     KBSearchTerm:
       type: object
       description: The searches of the window whose words are the same once case and accents are ignored.

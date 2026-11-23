@@ -4,13 +4,14 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // listKBGaps lists what readers asked for and did not find, highest rank first.
 func (a *API) listKBGaps(response http.ResponseWriter, request *http.Request) {
 	query := request.URL.Query()
-	filter := domain.KBGapFilter{Status: query.Get("status"), Kind: query.Get("kind")}
+	filter := domain.KBGapFilter{Status: query.Get("status"), Kind: query.Get("kind"), Similar: query.Get("similar")}
 	if raw := query.Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit < 1 {
@@ -27,12 +28,17 @@ func (a *API) listKBGaps(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, map[string]any{"items": gaps})
 }
 
-// getKBGap answers one gap with its newest signals.
+// getKBGap answers one gap with its newest signals and, for a caller who may read conversations, the
+// conversations that asked for its article.
 func (a *API) getKBGap(response http.ResponseWriter, request *http.Request) {
-	gap, err := a.store.GetKBGap(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	who := principal(request)
+	gap, err := a.store.GetKBGap(request.Context(), who.Workspace.ID, request.PathValue("id"))
 	if err != nil {
 		writeKBError(response, err)
 		return
+	}
+	if !who.Can(auth.PermConversationsRead) {
+		gap.Conversations = []domain.KBArticleGapConversation{}
 	}
 	writeJSON(response, http.StatusOK, gap)
 }

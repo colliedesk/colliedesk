@@ -50,6 +50,7 @@ var postWithoutKey = map[string]string{
 	"POST /api/v1/kb/media-uploads/{id}/complete":                      "Acts on one upload by its id: a repeated complete answers the same item.",
 	"POST /api/v1/channels/{id}/held/replay":                           "Opens the held messages it names: an opened message is no longer held, so a repeat passes it by.",
 	"POST /api/v1/channels/{id}/held/discard":                          "Discards the held messages it names: a repeat finds them gone.",
+	"POST /api/v1/conversations/{id}/article-request":                  "One request per conversation: a repeat with the same words changes nothing (200), other words move it.",
 	// One value per channel or workspace, replaced: repeats leave one.
 	"POST /api/v1/channels/{id}/email/secret":   "Replaces the channel's inbound secret: repeats leave one secret, the last.",
 	"POST /api/v1/channels/email/secret":        "Replaces the default channel's inbound secret: repeats leave one secret, the last.",
@@ -95,8 +96,9 @@ var postWithoutKey = map[string]string{
 
 // maxPostWithoutKey is the ceiling of postWithoutKey; lower it when a route leaves the list.
 // One DNS status check added for the workspace's single help center domain; eight Autofix routes, each
-// with its reason above; the help center analytics test, which stores nothing.
-const maxPostWithoutKey = 68
+// with its reason above; the help center analytics test, which stores nothing; a conversation's one
+// request for an article.
+const maxPostWithoutKey = 69
 
 func takesIdempotencyKey(path *openapi3.PathItem, operation *openapi3.Operation) bool {
 	for _, parameters := range []openapi3.Parameters{path.Parameters, operation.Parameters} {
