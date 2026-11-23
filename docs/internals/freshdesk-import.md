@@ -361,19 +361,30 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   `thumbs_*`, `type`, `status`, `hierarchy`, `agent_id` and the draft reason. Timestamps are
   Freshdesk's; `published_at` is `updated_at` (Freshdesk has no publish time). The author is the
   Colliedesk agent with the Freshdesk agent's email.
-- **Published only under the strictest reading.** `status` 2 and the category in the help center's
-  portal. A folder's `visibility` does not make a draft: it becomes the collection's visibility
+- **Published only under the strictest reading.** `status` 2 and the category in a portal. A folder's `visibility` does not make a draft: it becomes the collection's visibility
   (1 everyone, 3 agents, 5 help_chat; 2, 4, 6 and 7 limit a folder to some customers, which has no
   equivalent yet, so agents with `kb_folder_limited_to_some_customers`). Effective visibility is the
   most restrictive along the collection path, so a collection takes only its own folder's; a folder
   flattened beside its parents (`collectionPlacement`) takes the most restrictive of `chain[1:]`. The docs say
   `visible_in_portals` is "allowed only if the account is configured with multiple portals"
-  (category attributes), so: no category with the field → one portal, every category in it; the
-  field present → it must hold the portal (the only one the categories name, or
-  `--help-center-portal`; another id is refused before writing); an empty array → draft; a category
-  without the field while others have it → draft (portal unknown). `/products` only adds a note when
+  (category attributes), so: no category with the field → one portal, every category in it, on the
+  primary help center; the field present → the category is published on the help center of each
+  portal it names; an empty array → draft; a category without the field while others have it → draft
+  (portal unknown). `/products` only adds a note when
   the account has products and no category names a portal. Everything else is a draft, counted by
   reason in `knowledge_base.drafts`.
+- **One help center per portal.** Freshdesk's API names a portal only in the ticket forms
+  (`/ticket-forms` → `portals`); a portal it does not name is `Portal <id>` with a note. The portal
+  with the most categories (lowest id on a tie) maps to the primary help center, which is never
+  renamed; each other one gets a help center from `store.ImportHelpCenter` (handle from the name,
+  `portal-<id>` when the name gives none, `-2`, `-3` on a collision). The mapping is sticky: a ledger
+  row `kb_help_center` per portal id, the primary's included (not `Created`), so a rerun reuses it
+  even when another portal has more categories now. A help center deleted in Colliedesk is not made
+  again (`trashed`, its categories on the primary), and a portal past `domain.MaxHelpCenters` goes on
+  the primary (`over_limit`). A dry run cannot read the ledger, so it reports `planned` for every
+  non-primary portal. Undo moves the help centers with a `Created` row to the trash and keeps one
+  with a custom domain (`kept_kb_help_centers`): the domain claim would otherwise go with it.
+  `help_center_portal` (CLI flag, import option) is accepted from earlier clients and ignored.
 - **Images** go through the same host allowlist, type sniffing, 5 MiB limit and SHA-256 as message
   images, into `kb_media` with `counted` false (an imported file, like imported attachments), and
   the `src` becomes `/api/v1/kb/images/<id>` before converting. 404/410 is gone (ledger `skipped`,

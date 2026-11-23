@@ -84,18 +84,35 @@ The whole knowledge base is imported on every run, whatever `--since` says:
 | Category and folder names in other languages | The collection's [names in other languages](knowledge-base.md#collection-names) |
 | Supported languages | The help center's [languages](knowledge-base.md#languages): those your Freshdesk portal shows (`portal_languages`) are shown, the others hidden. The Freshdesk primary language becomes the help center's while it has no languages or articles of its own; otherwise it stays and the report warns `kb_primary_language_differs`. `import undo` gives back the primary language the help center had, unless someone changed it since (undo then says it kept it) |
 
-An article is **published** only when it is published in Freshdesk and its category is in your
-help center's portal. Everything else is imported as a **draft**. Each folder's visibility becomes its
+An article is **published** only when it is published in Freshdesk and its category is in a
+Freshdesk portal. Everything else is imported as a **draft**. Each folder's visibility becomes its
 collection's [visibility](knowledge-base.md#visibility), so an internal article never becomes public by
 mistake: **All Users** is Everyone, **Agents** is Agents only, **Bots** is Help chat only. A folder
 limited to some customers (logged-in users, selected companies or segments) is kept for **Agents
 only** until Colliedesk has that limit; the report lists each one under
 `kb_folder_limited_to_some_customers`. A subfolder that becomes a collection beside its parent gets
 the most restrictive visibility of the folders it no longer sits in. The report lists the
-drafts by reason; publish the ones that should be public. If your Freshdesk account has several
-portals, choose the one whose articles stay published with `--help-center-portal <id>` (the portal ids
-are in the report under `knowledge_base.portals`); without it, all articles of those categories are
-drafts.
+drafts by reason; publish the ones that should be public.
+
+If your Freshdesk account has several portals, each portal becomes a
+[help center](knowledge-base.md#several-help-centers) of its own:
+
+- The portal with the most categories goes on your primary help center, which keeps its name.
+- Every other portal gets a new help center, named after the portal in Freshdesk, at `/<handle>`. The
+  handle comes from that name (`portal-<id>` when the name gives none, `-2`, `-3` when it is taken).
+  When Freshdesk gives no name, the help center is called `Portal <id>` and the report says so: rename
+  it in Settings → Help center.
+- A category shown in several portals is shown in each of their help centers.
+- A workspace has at most 20 help centers. A portal past that goes on the primary help center, and
+  the report says so.
+
+The preview lists the help center each portal will get, and the report lists the one it got (Settings
+→ Import, the Markdown report, and `knowledge_base.help_centers` in the JSON). Running the import again
+keeps each portal on its help center and makes no new ones; the preview does not read that, so it
+can list a portal as getting a help center that an earlier run already made. A help center your team
+deleted is not made again: that portal's categories go on the primary. `import undo` deletes the help
+centers the import made, unless your team gave one a custom domain (undo then names it), and never
+touches the primary or the help centers your team made.
 
 A Freshdesk callout card becomes a [callout](knowledge-base.md#callouts): Note and Info as Note, Tip
 and Idea as Tip, Warning as Warning. A card of another type becomes a plain quote.
@@ -342,8 +359,6 @@ Options:
 - `--dry-run`: count only.
 - `--last-ticket-id N`: the highest ticket number you see in Freshdesk. Recommended: the ticket
   check then covers at least this far (see "How completeness is checked").
-- `--help-center-portal ID`: on an account with several portals, the portal whose published
-  knowledge base articles stay published (see "Knowledge base").
 - `--old-help-center-domain HOST`: your Freshdesk help center's own domain, such as
   `support.acme.com`, so links on it are rewritten too (see "Old help center links").
 - `--report-dir DIR`: where to write the report. Default: the current directory.
