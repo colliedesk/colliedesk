@@ -107,7 +107,7 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		return
 	}
 	if len(choices) > 0 {
-		writeJSON(response, http.StatusConflict, map[string]any{"workspaces": choices})
+		writeJSON(response, http.StatusConflict, map[string]any{"email": email, "workspaces": a.withHosts(choices)})
 		return
 	}
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
@@ -145,7 +145,18 @@ func (a *API) listCloudWorkspaces(response http.ResponseWriter, request *http.Re
 		return
 	}
 	response.Header().Set("Cache-Control", "no-store")
-	writeJSON(response, http.StatusOK, map[string]any{"workspaces": choices})
+	writeJSON(response, http.StatusOK, map[string]any{"workspaces": a.withHosts(choices)})
+}
+
+// withHosts names, on each choice, the host its desk runs on, so a person tells two workspaces apart by
+// their addresses; nil where the workspace has no host of its own (no HELP_CENTER_DOMAIN).
+func (a *API) withHosts(choices []auth.WorkspaceChoice) []auth.WorkspaceChoice {
+	for index := range choices {
+		if host := workspacehost.Host(a.config.HelpCenterDomain, choices[index].Slug); host != "" {
+			choices[index].Host = &host
+		}
+	}
+	return choices
 }
 
 func bearerToken(header string) (string, bool) {
