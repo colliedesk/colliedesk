@@ -10,29 +10,22 @@
 export const reloadMarkKey = 'colliedesk:reloaded-for-new-build';
 // A reload newer than this is the one that should have fixed the chunk; an older one was for an earlier deploy.
 const loopWindowMs = 60_000;
-// Tells this page's own reload (already under way) from one an earlier page made.
-const thisPage = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+// The mark this page wrote: a page that finds its own mark has a reload under way already.
+let ownMark: string | undefined;
 
 // navigation is the browser boundary: tests replace assign, the app never does.
 export const navigation = { assign: (href: string) => window.location.assign(href) };
 
-interface ReloadMark { at: number; page: string }
-
-// reloadForNewBuild loads href as a full page, unless this tab did so less than
-// a minute ago or session storage cannot hold the mark. It says whether a reload is under way: then the caller
-// keeps its placeholder instead of an error, as the page is about to be replaced.
+// reloadForNewBuild loads href as a full page, unless this tab did so less than a minute ago or session storage
+// cannot hold the mark (the time of the reload). It says whether a reload is under way: then the caller keeps its
+// placeholder instead of an error, as the page is about to be replaced.
 export function reloadForNewBuild(href: string): boolean {
-  let mark: ReloadMark | undefined;
   try {
-    const stored = sessionStorage.getItem(reloadMarkKey);
-    mark = stored ? JSON.parse(stored) as ReloadMark : undefined;
-  } catch {
-    return false;
-  }
-  if (mark?.page === thisPage) return true;
-  if (mark && Date.now() - mark.at < loopWindowMs) return false;
-  try {
-    sessionStorage.setItem(reloadMarkKey, JSON.stringify({ at: Date.now(), page: thisPage } satisfies ReloadMark));
+    const mark = sessionStorage.getItem(reloadMarkKey);
+    if (mark && mark === ownMark) return true;
+    if (Date.now() - Number(mark) < loopWindowMs) return false;
+    ownMark = String(Date.now());
+    sessionStorage.setItem(reloadMarkKey, ownMark);
   } catch {
     return false;
   }

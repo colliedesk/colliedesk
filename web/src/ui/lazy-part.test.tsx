@@ -23,7 +23,7 @@ beforeEach(() => {
 // The page before this one already loaded the app again for a missing chunk a moment ago: one more failure is
 // not a deploy the reload can fix, so it is shown, never reloaded in a loop.
 function markReloadedByEarlierPage() {
-  sessionStorage.setItem(reloadMarkKey, JSON.stringify({ at: Date.now(), page: 'an-earlier-page' }));
+  sessionStorage.setItem(reloadMarkKey, String(Date.now() - 1000));
 }
 
 function Host({ part }: { part: ReturnType<typeof lazyPart<{ Text: ComponentType }>> }) {
@@ -143,7 +143,7 @@ test('a chunk that still fails right after that reload is shown with its Reload 
 });
 
 test('a reload that happened long ago does not stop the next deploy from recovering', async () => {
-  sessionStorage.setItem(reloadMarkKey, JSON.stringify({ at: Date.now() - 10 * 60_000, page: 'an-earlier-page' }));
+  sessionStorage.setItem(reloadMarkKey, String(Date.now() - 10 * 60_000));
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   const assign = vi.spyOn(navigation, 'assign').mockImplementation(() => {});
   const part = lazyPart(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')));

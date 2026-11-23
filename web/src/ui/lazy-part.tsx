@@ -47,8 +47,7 @@ export function lazyPart<T>(load: () => Promise<T>): LazyPart<T> {
   // until it is replaced. A part drawn inside another page (a picker, a dialog, a block in a conversation) never
   // reloads by itself: the person may be typing. A reload the person cancels on the leave prompt shows the error.
   const recover = () => {
-    const here = `${window.location.pathname}${window.location.search}`;
-    if (!target || (!opening && target.split('#')[0] !== here) || !reloadForNewBuild(target)) return false;
+    if (!target || (!opening && target !== location.pathname + location.search) || !reloadForNewBuild(target)) return false;
     set({ status: 'loading' });
     setTimeout(() => { if (state?.status === 'loading') set({ status: 'error' }); }, cancelledReloadMs);
     return true;
