@@ -1013,8 +1013,10 @@ and when, the model's sentence and its conversation. A teammate who may not read
 (`conversations:read`) sees the reply without the link. Fix the article if the reply is right.
 
 **Clear the flag** (with the right to edit articles, `kb_articles:update`) marks the article up to
-date again. The box then says who cleared it and when, and the replies stay listed. A clear cannot
-be undone; a new reply that contradicts the article marks it again.
+date again. The box then says who cleared it and when; the next time the article opens, the box is
+gone. The cleared replies stay on record, with who cleared them and when, for an AI agent
+(`colliedesk_kb_article_conflicts_list`). A clear cannot be undone; a new reply that contradicts the
+article marks it again.
 
 At most 50 replies of a workspace are checked a day (UTC); past that, the day's other replies are
 not checked. Each check counts in **Settings → AI & agents → Usage** as triage, like a suggestion.
