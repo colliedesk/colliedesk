@@ -59,3 +59,24 @@ test('request article: Start a draft opens the editor with the conversation that
   await expect(sources).toContainText('Requested from these conversations.');
   await expect(sources.getByRole('link', { name: new RegExp(subject) })).toHaveAttribute('href', `/conversations/${id}`);
 });
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('request article: the button sits in the title row beside Details, and one tap opens the request', async ({ page }) => {
+    const suffix = uniqueSuffix();
+    await redeemLink(page, createWorkspace(`Phone Requests ${suffix}`, `admin-${suffix}@acme.example`, baseURL));
+    const id = await openConversation(page.request, suffix, 'Export invoices to CSV');
+
+    await page.goto(`${baseURL}/conversations/${id}`);
+    const button = page.getByRole('button', { name: 'Request article' });
+    await expect(button).toBeInViewport();
+    // The header keeps its two short rows: the button shares the first row with Details instead of adding a third.
+    const at = (await button.boundingBox())!;
+    const details = (await page.locator('.timeline-header .details-toggle').boundingBox())!;
+    expect(Math.abs((at.y + at.height / 2) - (details.y + details.height / 2)), 'Request article is in the title row').toBeLessThan(4);
+    expect(at.width, 'Request article is one touch target').toBeLessThanOrEqual(48);
+    await button.tap();
+    await expect(page.getByRole('dialog', { name: 'Request an article' })).toBeVisible();
+  });
+});

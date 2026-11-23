@@ -7,7 +7,7 @@ import { useCreateAction } from '../../api/use-create';
 import { useHolds } from '../../lib/permissions-context';
 import { Dialog, Field } from '../../ui/dialog';
 import { HelpTip } from '../../ui/help-tip';
-import { XIcon } from '../../ui/icons';
+import { BookIcon, XIcon } from '../../ui/icons';
 import { gapsApi } from '../kb/gaps-api';
 import type { KBArticleRequest } from '../kb/gaps-api';
 import { ActionMenu } from './action-menu';
@@ -52,7 +52,9 @@ export function RequestArticleButton({ conversation, timeline }: { conversation:
     }
   };
   return <>
-    <button type="button" title={m.buttonTip} onClick={() => setOpen(true)}>{m.button}</button>
+    {/* On a phone the button is an icon in the title row, so the header keeps its two rows. */}
+    <button type="button" className="article-request-button" title={m.buttonTip} onClick={() => setOpen(true)}>
+      <BookIcon /><span className="article-request-button-label">{m.button}</span></button>
     {open && <RequestDialog conversation={conversation} timeline={timeline} onClose={() => setOpen(false)} onFiled={filed} />}
     {toast && <div role="status" className="article-request-toast"><span>{toast.text}</span>
       {toast.undo && <button type="button" className="link-action" disabled={undoing} onClick={() => void undo()}>{m.undo}</button>}
