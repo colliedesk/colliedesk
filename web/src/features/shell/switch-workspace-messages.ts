@@ -1,0 +1,21 @@
+// The words of Switch workspace (account menu and its dialog) and of the sign-in chooser's rows.
+export const switchMessages = {
+  menuItem: 'Switch workspace…',
+  title: 'Switch workspace',
+  signedInAs: (email: string) => `Signed in as ${email}`,
+  close: 'Close',
+  loading: 'Loading your workspaces',
+  current: 'Current',
+  opening: 'Opening…',
+  onlyOneTitle: 'This is your only workspace',
+  onlyOneText: 'Workspaces you are invited to show up here. To run support for another team or client, create one.',
+  failedTitle: 'Could not load your other workspaces',
+  failedText: (appHost: string) => `Your sign-in on this address could not be checked. You can still pick a workspace on ${appHost}.`,
+  tryAgain: 'Try again',
+  chooseOn: (appHost: string) => `Choose on ${appHost}`,
+  createWorkspace: 'Create a workspace',
+  keyMove: 'Move',
+  keyOpen: 'Open',
+  keyClose: 'Close',
+  useAnotherEmail: 'Use another email',
+} as const;

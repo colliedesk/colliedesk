@@ -39,21 +39,24 @@ const continueURL = 'https://alpha-desk.example.com/sign-in#handoff=one-time';
 // onAppHost: the page runs on APP_ORIGIN (jsdom's origin); otherwise on a workspace host.
 function config(onAppHost: boolean) {
   return { app_origin: onAppHost ? window.location.origin : appOrigin, workspace_hosts: true, cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: false },
-    signup: { enabled: false }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 }, product_analytics: { enabled: false, key: null, host: null, realm: null },
+    signup: { enabled: !onAppHost }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 }, product_analytics: { enabled: false, key: null, host: null, realm: null },
     ai: { server_provider: false } };
 }
-const alpha = { slug: 'alpha-desk', name: 'Alpha Desk' };
-const beta = { slug: 'beta-desk', name: 'Beta Desk' };
+const alpha = { slug: 'alpha-desk', name: 'Alpha Desk', host: 'alpha-desk.example.com', roles: ['Admin'] };
+const beta = { slug: 'beta-desk', name: 'Beta Desk', host: 'beta-desk.example.com', roles: ['Agent'] };
+const zeta = { slug: 'a-zeta', name: 'Zeta Desk', host: 'a-zeta.example.com', roles: ['Agent'] };
+type Choice = typeof alpha;
 
 const thisDevice = { id: '44444444-4444-4444-8444-444444444444', agent_id: me.agent.id, agent_email: me.agent.email, agent_name: 'Sam', label: 'Cloud sign-in', current: true,
   token: null, role: null, permissions: [],
   created_at: '2026-11-13T00:00:00Z', last_seen_at: '2026-11-13T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null };
 
 // ended is why a missing session answers 401: revoked by someone, or expired (plain unauthorized).
-function serve(options: { signedIn: boolean; onAppHost: boolean; workspaces?: { slug: string; name: string }[]; ended?: 'session_revoked' | 'unauthorized' }) {
+// choose makes an exchange without a workspace answer 409 with the chooser.
+function serve(options: { signedIn: boolean; onAppHost: boolean; workspaces?: Choice[]; listStatus?: number; choose?: boolean; ended?: 'session_revoked' | 'unauthorized' }) {
   let signedIn = options.signedIn;
   let ended = options.ended ?? 'unauthorized';
-  fetchMock.mockImplementation((url: string) => {
+  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     const path = url.split('?')[0];
     if (path === '/api/v1/config') return Promise.resolve(json(200, config(options.onAppHost)));
     if (path === '/api/v1/auth/me') {
@@ -63,7 +66,13 @@ function serve(options: { signedIn: boolean; onAppHost: boolean; workspaces?: { 
       ended = 'unauthorized';
       return Promise.resolve(json(401, { error: { code, message: 'Sign in.' } }));
     }
-    if (path === '/api/v1/auth/cloud/workspaces') return Promise.resolve(json(200, { workspaces: options.workspaces ?? [alpha, beta] }));
+    if (path === '/api/v1/auth/cloud/workspaces') {
+      if (options.listStatus) return Promise.resolve(json(options.listStatus, { error: { code: 'unauthorized', message: 'A valid cloud session is required.' } }));
+      return Promise.resolve(json(200, { workspaces: options.workspaces ?? [alpha, beta] }));
+    }
+    if (path === '/api/v1/auth/cloud/exchange' && options.choose && !String(init?.body ?? '').includes('workspace_slug')) {
+      return Promise.resolve(json(409, { email: 'sam@example.com', workspaces: [beta, alpha] }));
+    }
     if (path === '/api/v1/auth/cloud/exchange') return Promise.resolve(json(200, { agent: me.agent, workspace: { ...me.workspace, slug: 'alpha-desk', name: 'Alpha Desk' }, continue_url: continueURL }));
     if (path === '/api/v1/auth/logout') { signedIn = false; return Promise.resolve(new Response(null, { status: 204 })); }
     if (path === '/api/v1/auth/sessions') return Promise.resolve(json(200, { items: [thisDevice] }));
@@ -82,38 +91,98 @@ function open(path: string) {
 const calls = (path: string) => fetchMock.mock.calls.filter(([url]) => String(url) === path);
 const openAccountMenu = async () => fireEvent.click(await screen.findByRole('button', { name: /^Account/ }));
 
-test('on a workspace host the account menu lists the other workspaces of the verified identity, each a link to it', async () => {
-  serve({ signedIn: true, onAppHost: false });
+const openSwitch = async () => {
+  await openAccountMenu();
+  fireEvent.click(await screen.findByRole('button', { name: 'Switch workspace…' }));
+  return screen.findByRole('dialog', { name: 'Switch workspace' });
+};
+// rowNames lists the dialog's workspace rows top to bottom by their names.
+const rowNames = (dialog: HTMLElement) => Array.from(dialog.querySelectorAll('.workspace-row-name')).map((name) => name.firstChild?.textContent);
+
+test('the account menu offers Switch workspace before any list is read, also to a person with one workspace', async () => {
+  serve({ signedIn: true, onAppHost: false, workspaces: [beta] });
   open('/');
   await openAccountMenu();
-  const link = await screen.findByRole('link', { name: 'Alpha Desk' });
+  const menu = screen.getByRole('group', { name: 'Account' });
+  // Name and role and address first, then the switch, Report a problem and Sign out.
+  expect(within(menu).getByText('Agent · sam@example.com')).toBeInTheDocument();
+  expect(within(menu).getAllByRole('button').map((button) => button.textContent)).toEqual(['Switch workspace…', 'Report a problem', 'Sign out']);
+  // Nothing is read for the switch until the person asks for it.
+  expect(calls('/api/v1/auth/cloud/workspaces')).toHaveLength(0);
+});
+
+test('Switch workspace opens a dialog that shows the current workspace at once and loads the others', async () => {
+  serve({ signedIn: true, onAppHost: false, workspaces: [zeta, beta, alpha] });
+  open('/');
+  const dialog = await openSwitch();
+  expect(within(dialog).getByText('Signed in as sam@example.com')).toBeInTheDocument();
+  // Loading: the current workspace and two placeholder rows, never a blank dialog.
+  expect(within(dialog).getByRole('status', { name: 'Loading your workspaces' })).toBeInTheDocument();
+  expect(rowNames(dialog)).toEqual(['Beta Desk']);
+  await waitFor(() => expect(rowNames(dialog)).toEqual(['Beta Desk', 'Alpha Desk', 'Zeta Desk']));
+  // The current workspace is marked and opens nothing; the others link to the existing hand-off.
+  expect(within(dialog).getByText('· Current')).toBeInTheDocument();
+  expect(within(dialog).queryByRole('link', { name: /Beta Desk/ })).not.toBeInTheDocument();
+  const link = within(dialog).getByRole('link', { name: 'Alpha Desk' });
   expect(link).toHaveAttribute('href', `${appOrigin}/sign-in?workspace=alpha-desk`);
-  expect(screen.getByRole('group', { name: 'Switch workspace' })).toBeInTheDocument();
-  // The workspace on screen is no place to switch to.
-  expect(screen.queryByRole('link', { name: 'Beta Desk' })).not.toBeInTheDocument();
+  expect(link).toHaveAccessibleDescription('alpha-desk.example.com, Admin');
+  expect(within(dialog).getByRole('link', { name: 'Create a workspace' })).toHaveAttribute('href', `${appOrigin}/sign-in?intent=trial`);
   // The list is asked with the identity provider's token, never with the workspace's cookie.
   const [, init] = calls('/api/v1/auth/cloud/workspaces')[0];
   expect(new Headers(init.headers).get('Authorization')).toBe('Bearer clerk-session-token');
   expect(init.credentials).toBe('omit');
 });
 
-test('a person with no other workspace gets no switch in the account menu', async () => {
+test('a person with one workspace is told it is their only one', async () => {
   serve({ signedIn: true, onAppHost: false, workspaces: [beta] });
   open('/');
-  await openAccountMenu();
-  await waitFor(() => expect(calls('/api/v1/auth/cloud/workspaces')).toHaveLength(1));
-  expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
-  expect(screen.queryByRole('group', { name: 'Switch workspace' })).not.toBeInTheDocument();
+  const dialog = await openSwitch();
+  expect(await within(dialog).findByText('This is your only workspace')).toBeInTheDocument();
+  expect(within(dialog).queryByRole('link', { name: /Desk/ })).not.toBeInTheDocument();
 });
 
-test('without an identity provider session the account menu asks for no list and offers no switch', async () => {
+test('without an identity provider session the dialog says the list could not be read and offers the chooser on APP_ORIGIN', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   clerk.signedIn = false;
   serve({ signedIn: true, onAppHost: false });
   open('/');
-  await openAccountMenu();
-  expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  const dialog = await openSwitch();
+  expect(await within(dialog).findByText('Could not load your other workspaces')).toBeInTheDocument();
+  expect(within(dialog).getByRole('link', { name: 'Choose on app.example.com' })).toHaveAttribute('href', `${appOrigin}/sign-in`);
+  expect(warn).toHaveBeenCalledWith('Switch workspace: could not load the workspaces', 'not-signed-in');
   expect(calls('/api/v1/auth/cloud/workspaces')).toHaveLength(0);
-  expect(screen.queryByRole('group', { name: 'Switch workspace' })).not.toBeInTheDocument();
+  // Try again reads the list once the sign-in is there.
+  clerk.signedIn = true;
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(rowNames(dialog)).toEqual(['Beta Desk', 'Alpha Desk']));
+  warn.mockRestore();
+});
+
+test('a list the server refuses is an error the person sees, never an empty list', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  serve({ signedIn: true, onAppHost: false, listStatus: 401 });
+  open('/');
+  const dialog = await openSwitch();
+  expect(await within(dialog).findByText('Could not load your other workspaces')).toBeInTheDocument();
+  expect(within(dialog).queryByText('This is your only workspace')).not.toBeInTheDocument();
+  expect(warn).toHaveBeenCalledWith('Switch workspace: could not load the workspaces', 'request-failed', expect.any(Error));
+  warn.mockRestore();
+});
+
+test('arrow keys move between the workspaces and Escape closes the dialog back to the account button', async () => {
+  serve({ signedIn: true, onAppHost: false, workspaces: [zeta, beta, alpha] });
+  open('/');
+  const dialog = await openSwitch();
+  await waitFor(() => expect(rowNames(dialog)).toHaveLength(3));
+  fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+  expect(within(dialog).getByRole('link', { name: 'Alpha Desk' })).toHaveFocus();
+  fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+  expect(within(dialog).getByRole('link', { name: 'Zeta Desk' })).toHaveFocus();
+  fireEvent.keyDown(dialog, { key: 'ArrowUp' });
+  expect(within(dialog).getByRole('link', { name: 'Alpha Desk' })).toHaveFocus();
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Account/ })).toHaveFocus();
 });
 
 test('the switch link signs in to the chosen workspace on APP_ORIGIN without asking again', async () => {
@@ -123,6 +192,25 @@ test('the switch link signs in to the chosen workspace on APP_ORIGIN without ask
   expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange')[0][1].body))).toMatchObject({ workspace_slug: 'alpha-desk' });
   expect(clerk.signOut).not.toHaveBeenCalled();
   expect(screen.queryByText('Choose a workspace')).not.toBeInTheDocument();
+});
+
+test('the sign-in chooser opens the chosen workspace from the live sign-in, or signs out for another email', async () => {
+  serve({ signedIn: false, onAppHost: true, choose: true });
+  open('/sign-in');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Choose a workspace' })).toBeInTheDocument();
+  expect(screen.getByText(/Signed in as sam@example\.com\./)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Use another email' }));
+  await waitFor(() => expect(clerk.signOut).toHaveBeenCalled());
+  expect(screen.queryByRole('heading', { name: 'Choose a workspace' })).not.toBeInTheDocument();
+});
+
+test('choosing a workspace in the sign-in chooser shows it opening and hands the browser to it', async () => {
+  serve({ signedIn: false, onAppHost: true, choose: true });
+  open('/sign-in');
+  fireEvent.click(await screen.findByRole('button', { name: 'Alpha Desk' }));
+  expect(screen.getByRole('button', { name: 'Alpha Desk' })).toHaveTextContent('Opening…');
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(continueURL));
+  expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange').at(-1)?.[1].body))).toMatchObject({ workspace_slug: 'alpha-desk' });
 });
 
 test('a page without a session opens the sign-in page and keeps the identity provider session', async () => {

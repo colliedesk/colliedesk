@@ -2,7 +2,12 @@ import type { ReactNode } from 'react';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
 import { LogoMark, LogoWordmark } from '../../ui/logo';
+import { WorkspaceRow } from '../../ui/workspace-row';
+import { switchMessages } from '../shell/switch-workspace-messages';
 import './auth.css';
+
+const rowCopy = { current: switchMessages.current, opening: switchMessages.opening };
+const byName = (a: WorkspaceChoice, b: WorkspaceChoice) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug);
 
 interface RedeemPageProps {
   token: string;
@@ -17,6 +22,11 @@ interface RedeemPageProps {
   cloudSignIn?: ReactNode;
   workspaces?: WorkspaceChoice[];
   onSelectWorkspace?: (slug: string) => void;
+  // signedInEmail is the verified email the workspaces were found for; onUseAnotherEmail ends that sign-in and
+  // returns to the email step. openingWorkspace is the slug whose sign-in is on its way.
+  signedInEmail?: string;
+  onUseAnotherEmail?: () => void;
+  openingWorkspace?: string;
   // buying is the plan a visitor came from the website to buy; the page then greets a buyer.
   buying?: string;
   // signedOut is true when the browser arrived here because its session ended.
@@ -28,8 +38,10 @@ interface RedeemPageProps {
 }
 
 export function RedeemPage({
-  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying, signedOut = false, trial = false, hostedCloud = false,
+  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace,
+  signedInEmail, onUseAnotherEmail, openingWorkspace, buying, signedOut = false, trial = false, hostedCloud = false,
 }: RedeemPageProps) {
+  const choosing = !token && cloudEnabled && workspaces.length > 0;
   const buyer = !token && cloudEnabled && buying !== undefined;
   // A new team can only start a trial where sign-up is on; a buy link wins, since the buyer pays at once.
   const newTeam = !token && cloudEnabled && signupEnabled && trial && !buyer;
@@ -48,19 +60,28 @@ export function RedeemPage({
       <section className="redeem-panel">
         <div className="brand-lockup"><LogoMark size={36} /><span>{messages.brand}</span></div>
         {signedOut && <p role="alert" className="muted-copy">{messages.signedOutCloud}</p>}
-        {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
-        <h1>{buyer ? messages.buyingTitle(buying) : newTeam ? messages.cloudTrialTitle : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
-        {buyer && buying === 'founding' && <p className="signin-offer">{messages.buyingFoundingOffer}</p>}
-        <p>{buyer ? messages.buyingExplanation : newTeam ? messages.cloudTrialExplanation : !token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
-        {(buyer || newTeam) && <p className="muted-copy">{messages.workspaceExplained}</p>}
+        {choosing ? <>
+          {/* The person is already identified: the page names the email and offers another, and asks for nothing. */}
+          <h1>{messages.chooseWorkspace}</h1>
+          {signedInEmail && <p>{`${switchMessages.signedInAs(signedInEmail)}. `}
+            <button type="button" className="link-action" onClick={onUseAnotherEmail} disabled={pending}>{switchMessages.useAnotherEmail}</button></p>}
+        </> : <>
+          {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
+          <h1>{buyer ? messages.buyingTitle(buying) : newTeam ? messages.cloudTrialTitle : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
+          {buyer && buying === 'founding' && <p className="signin-offer">{messages.buyingFoundingOffer}</p>}
+          <p>{buyer ? messages.buyingExplanation : newTeam ? messages.cloudTrialExplanation : !token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
+          {(buyer || newTeam) && <p className="muted-copy">{messages.workspaceExplained}</p>}
+        </>}
         {!token && !cloudEnabled && <p className="muted-copy">{messages.requestLink}</p>}
         {!token && cloudEnabled && <div className="cloud-sign-in">
-          {workspaces.length > 0 ? <>
-            <h2>{messages.chooseWorkspace}</h2>
+          {choosing ? <>
             <div className="workspace-choices">
-              {workspaces.map((workspace) => <button type="button" key={workspace.slug}
-                onClick={() => onSelectWorkspace?.(workspace.slug)} disabled={pending}>{workspace.name}</button>)}
+              {[...workspaces].sort(byName).map((workspace) => <WorkspaceRow key={workspace.slug} workspace={workspace} copy={rowCopy}
+                opening={openingWorkspace === workspace.slug} disabled={pending || openingWorkspace !== undefined}
+                onOpen={() => onSelectWorkspace?.(workspace.slug)} />)}
             </div>
+            {/* The sign-in that opens the chosen workspace runs out of sight under the list. */}
+            {openingWorkspace && <div hidden>{cloudSignIn}</div>}
           </> : cloudSignIn}
           {newTeam && workspaces.length === 0 && <p className="muted-copy">{messages.cloudTrialWorkspace}</p>}
           {(newTeam || buyer) && workspaces.length === 0 && <p className="muted-copy">{messages.cloudTrialSignInInstead}</p>}
