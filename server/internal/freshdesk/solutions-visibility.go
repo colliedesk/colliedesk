@@ -54,10 +54,10 @@ func mostRestrictive(folders []*kbFolder) string {
 	return visibility
 }
 
-// publicInFreshdesk is whether the old portal showed article to everyone: published, in a category of
-// the help center's portal and in folders all visible to all users.
-func (kb *knowledgeBase) publicInFreshdesk(article kbArticle, chosenPortal int64) bool {
-	return kb.draftReason(article, chosenPortal) == "" && mostRestrictive(kb.path(article.folder)) == domain.KBVisibleEveryone
+// publicInFreshdesk is whether a portal showed article to everyone: published, in a category of a
+// portal and in folders all visible to all users.
+func (kb *knowledgeBase) publicInFreshdesk(article kbArticle) bool {
+	return kb.draftReason(article) == "" && mostRestrictive(kb.path(article.folder)) == domain.KBVisibleEveryone
 }
 
 // restrictKBCollection gives an imported collection the visibility of its folder in Freshdesk when that

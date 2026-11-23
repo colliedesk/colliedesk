@@ -126,6 +126,8 @@ type KnowledgeBaseCount struct {
 	Languages []string `json:"languages"`
 	// Portals are the portal ids the categories name; empty when the account has one portal.
 	Portals []int64 `json:"portals"`
+	// HelpCenters says which help center each portal became, the primary one first.
+	HelpCenters []KBPortalHelpCenter `json:"help_centers"`
 	// Products is the number of Freshdesk products, nil when they could not be read.
 	Products *int     `json:"products"`
 	Notes    []string `json:"notes"`

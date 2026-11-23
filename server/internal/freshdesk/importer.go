@@ -135,9 +135,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	if err := r.client.fatalErr(); err != nil {
 		return nil, err
 	}
-	if err := r.kb.checkPortal(options.HelpCenterPortal); err != nil {
-		return nil, err
-	}
 	if r.kbRefused, err = r.kbLimitProblems(ctx); err != nil {
 		return nil, err
 	}

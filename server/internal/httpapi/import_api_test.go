@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -180,6 +181,35 @@ func TestAnotherWorkspaceCannotReachAnImport(t *testing.T) {
 	decode(t, request(t, api, http.MethodGet, "/api/v1/imports/"+jobs.previewed, nil, adminA, nil), &job)
 	if job.State != "previewed" {
 		t.Fatalf("the job changed: %+v", job)
+	}
+}
+
+func TestThePreviewAndTheReportNameTheHelpCenterOfEachFreshdeskPortal(t *testing.T) {
+	api, admin, _, _, jobs, _ := newImportDesk(t)
+	type portal struct {
+		PortalID       int64  `json:"portal_id"`
+		PortalName     string `json:"portal_name"`
+		HelpCenterName string `json:"help_center_name"`
+		Handle         string `json:"handle"`
+		Status         string `json:"status"`
+	}
+	var job struct {
+		Preview struct {
+			HelpCenters []portal `json:"help_centers"`
+		} `json:"preview"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/imports/"+jobs.previewed, nil, admin, nil), &job)
+	if got := fmt.Sprint(job.Preview.HelpCenters); got != "[{6 Help desk   primary} {5 Hardware store   planned}]" {
+		t.Fatalf("preview help centers = %s", got)
+	}
+	var report struct {
+		KnowledgeBase struct {
+			HelpCenters []portal `json:"help_centers"`
+		} `json:"knowledge_base"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/imports/"+jobs.finished+"/report", nil, admin, nil), &report)
+	if got := fmt.Sprint(report.KnowledgeBase.HelpCenters); got != "[{6 Help desk Acme support  primary} {5 Hardware store Hardware store hardware-store created}]" {
+		t.Fatalf("report help centers = %s", got)
 	}
 }
 

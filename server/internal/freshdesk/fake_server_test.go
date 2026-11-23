@@ -319,6 +319,9 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 		f.page(w, r, f.cannedResponses(parts[1]))
 	case f.solutions && r.URL.Path == "/api/v2/products":
 		f.page(w, r, []map[string]any{})
+	case f.solutions && r.URL.Path == "/api/v2/ticket-forms":
+		// Ticket forms name the portals they show on; the fixture key ticket_forms holds them.
+		f.page(w, r, items(map[string]any{"all": map[string]any{"forms": f.solutionsFixture()["ticket_forms"]}}, "all", "forms"))
 	case f.solutions && (parts[0] == "solutions" || r.URL.Path == "/api/v2/settings/helpdesk"):
 		f.serveSolutions(w, r, parts)
 	case r.URL.Path == "/api/v2/time_entries":

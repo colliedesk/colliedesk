@@ -58,7 +58,6 @@ func importPreview(c *call, arguments map[string]any) (any, error) {
 		APIKey                         string `json:"api_key"`
 		RecentDays                     *int   `json:"recent_days"`
 		IncludePersonalCannedResponses bool   `json:"include_personal_canned_responses"`
-		HelpCenterPortal               int64  `json:"help_center_portal"`
 		OldHelpCenterDomain            string `json:"old_help_center_domain"`
 	}](arguments)
 	if err != nil {
@@ -67,9 +66,6 @@ func importPreview(c *call, arguments map[string]any) (any, error) {
 	options := map[string]any{"include_personal_canned_responses": args.IncludePersonalCannedResponses}
 	if args.RecentDays != nil {
 		options["recent_days"] = *args.RecentDays
-	}
-	if args.HelpCenterPortal > 0 {
-		options["help_center_portal"] = args.HelpCenterPortal
 	}
 	if args.OldHelpCenterDomain != "" {
 		options["old_help_center_domain"] = args.OldHelpCenterDomain

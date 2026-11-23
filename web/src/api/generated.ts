@@ -2846,7 +2846,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description The reconcile report of the import (`status` OK, FAILED or UNVERIFIED), or while only the recent tickets are in, the interim report (`status` INTERIM, never OK; no Markdown yet). For an undo, what it removed. `format=markdown` answers the report as a Markdown file to download. 404 `report_not_ready` before there is one. */
+        /** @description The reconcile report of the import (`status` OK, FAILED or UNVERIFIED), or while only the recent tickets are in, the interim report (`status` INTERIM, never OK; no Markdown yet). For an undo, what it removed. `format=markdown` answers the report as a Markdown file to download. 404 `report_not_ready` before there is one. `knowledge_base.help_centers` lists each Freshdesk portal and the help center its categories went to (items as in ImportPortalHelpCenter). An undo report counts the help centers it removed in `kb_help_centers` and names the ones it kept in `kept_kb_help_centers` (they have a custom domain). */
         get: operations["getImportReport"];
         put?: never;
         post?: never;
@@ -5830,7 +5830,10 @@ export interface components {
             recent_days?: number;
             /** @description Also import canned responses from personal folders; they become shared with the whole workspace. */
             include_personal_canned_responses?: boolean;
-            /** @description On an account with several portals, the portal whose published articles stay published. */
+            /**
+             * @deprecated
+             * @description Ignored. Every Freshdesk portal becomes a help center of its own (see help_centers in the preview and the report).
+             */
             help_center_portal?: number;
             /** @description The old Freshdesk help center's own custom domain, for example support.acme.com (an http:// or https:// prefix and a trailing slash are dropped; stored as the host). Its /support/ links in imported articles and saved replies are pointed at the new help center like the account domain's. Answers 400 when it is not a host name. */
             old_help_center_domain?: string;
@@ -5881,11 +5884,37 @@ export interface components {
             archive: components["schemas"]["ImportAccess"];
             canned_responses: components["schemas"]["ImportAccess"];
             knowledge_base: components["schemas"]["ImportAccess"];
+            /** @description The help center each Freshdesk portal would become, the portal with the most categories on the primary help center first; empty when the categories name no portal. Missing on a preview made before portals became help centers. The preview cannot see an earlier import: the import keeps the help centers an earlier run made. */
+            help_centers?: components["schemas"]["ImportPortalHelpCenter"][];
             /** @description X-Ratelimit-Total; 0 when Freshdesk sent none */
             rate_limit_per_minute: number;
             api_calls: number;
             /** Format: date-time */
             checked_at: string;
+        };
+        /** @description One Freshdesk portal and the help center its categories are on. */
+        ImportPortalHelpCenter: {
+            portal_id: number;
+            /** @description The name of the portal's ticket form, or "Portal <id>" when Freshdesk gives none */
+            portal_name: string;
+            name_from_freshdesk: boolean;
+            /** @description The categories the portal shows */
+            categories: number;
+            /**
+             * Format: uuid
+             * @description Missing before the help center exists
+             */
+            help_center_id?: string;
+            help_center_name?: string;
+            /** @description The help center's path, /<handle>; missing for the primary */
+            handle?: string;
+            /** @description The portal's categories are on the primary help center */
+            primary: boolean;
+            /**
+             * @description primary: on the primary help center. created: this import made its help center. existing: an earlier import made it. planned: the import would make it. over_limit: the workspace has the most help centers it may have, so its categories are on the primary. trashed: the help center an earlier import made was deleted in Colliedesk, so its categories are on the primary. failed: its help center could not be made (see the failures); its categories are on the primary.
+             * @enum {string}
+             */
+            status: "primary" | "created" | "existing" | "planned" | "over_limit" | "trashed" | "failed";
         };
         /**
          * @description Whether the key can read this part: none means the account has none; refused (403) for the archive means the report can be UNVERIFIED at best.
