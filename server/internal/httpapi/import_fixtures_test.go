@@ -22,7 +22,9 @@ func seedImportJobs(t *testing.T, pool *pgxpool.Pool, workspaceID string) import
 			VALUES($1,'import','freshdesk','acme.freshdesk.com','freshdesk:account:777',$2,
 				CASE WHEN $2='previewed' THEN 'preview' ELSE 'full' END,
 				CASE WHEN $2='previewed' THEN $3::jsonb END,
-				CASE WHEN $2='finished' THEN '{"status":"OK","tickets":{"source":4,"imported":4}}'::jsonb END,
+				CASE WHEN $2='finished' THEN '{"status":"OK","tickets":{"source":4,"imported":4},"knowledge_base":{"help_centers":[
+					{"portal_id":6,"portal_name":"Help desk","name_from_freshdesk":true,"categories":3,"help_center_name":"Acme support","primary":true,"status":"primary"},
+					{"portal_id":5,"portal_name":"Hardware store","name_from_freshdesk":true,"categories":2,"help_center_name":"Hardware store","handle":"hardware-store","primary":false,"status":"created"}]}}'::jsonb END,
 				CASE WHEN $2='finished' THEN '# Freshdesk import: OK' END,
 				CASE WHEN $2='finished' THEN 'OK' END,
 				CASE WHEN $2<>'previewed' THEN now() END, CASE WHEN $2='finished' THEN now() END)
@@ -33,7 +35,9 @@ func seedImportJobs(t *testing.T, pool *pgxpool.Pool, workspaceID string) import
 		return id
 	}
 	preview := `{"domain":"acme.freshdesk.com","account_id":777,"source":"freshdesk:account:777","agents":[{"id":101,"name":"Alice","email":"alice@acme.example","active":true}],` +
-		`"companies":2,"contacts":3,"tickets_outside_archive":5,"highest_listed_ticket_id":6,"archive":"readable","canned_responses":"readable","knowledge_base":"none",` +
+		`"companies":2,"contacts":3,"tickets_outside_archive":5,"highest_listed_ticket_id":6,"archive":"readable","canned_responses":"readable","knowledge_base":"readable",` +
+		`"help_centers":[{"portal_id":6,"portal_name":"Help desk","name_from_freshdesk":true,"categories":3,"primary":true,"status":"primary"},` +
+		`{"portal_id":5,"portal_name":"Hardware store","name_from_freshdesk":true,"categories":2,"primary":false,"status":"planned"}],` +
 		`"rate_limit_per_minute":400,"api_calls":9,"checked_at":"2026-10-22T08:00:00Z"}`
 	jobs := importJobs{previewed: insert("previewed", preview), waitingKey: insert("waiting_key", "{}"), finished: insert("finished", "{}")}
 	// The account's two Freshdesk agents, as the preview records them.

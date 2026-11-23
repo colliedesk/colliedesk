@@ -55,7 +55,7 @@ func helpCenterLanguagesGetSpec() Spec {
 		Description: `Read the help center's languages: its primary language (the articles' own) and the others, each shown to customers or hidden, with how many articles are published, drafts, ` +
 			`outdated and missing in each. Start here before translating: colliedesk_kb_translations_list then names the articles to translate in one language.`,
 		REST:   []string{"GET /api/v1/help-center/languages"},
-		Input:  noArguments,
+		Input:  helpCenterOnlyInput,
 		Output: `{"type":"object","required":["languages"],"properties":{"languages":` + helpCenterLanguagesSchema + `}}`,
 		run:    helpCenterLanguagesGet,
 	}
@@ -70,7 +70,7 @@ func helpCenterLanguagesSetSpec() Spec {
 			`(language_in_use): keep it with visible false instead. Call it again with the previous list to undo.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/help-center/languages"},
-		Input: `{"type":"object","additionalProperties":false,"required":["languages"],"properties":{"languages":{"type":"array","maxItems":40,"items":{"type":"object",` +
+		Input: `{"type":"object","additionalProperties":false,"required":["languages"],"properties":{` + helpCenterIDProperty + `,"languages":{"type":"array","maxItems":40,"items":{"type":"object",` +
 			`"additionalProperties":false,"required":["locale","visible"],"properties":{` + kbLocaleProperty + `,"visible":{"type":"boolean"}}}}}}`,
 		Output: `{"type":"object","required":["languages"],"properties":{"languages":` + helpCenterLanguagesSchema + `}}`,
 		run:    helpCenterLanguagesSet,

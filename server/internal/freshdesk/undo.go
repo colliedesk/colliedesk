@@ -61,6 +61,10 @@ type UndoResult struct {
 	// KeptKBFiles counts imported files no article lists any more that stay because a person kept them
 	// in the media library or replaced their bytes.
 	KeptKBFiles int `json:"kept_kb_files"`
+	// KBHelpCenters counts the help centers the import made from Freshdesk portals and moved to the
+	// trash; KeptKBHelpCenters names those it left because the team gave them a custom domain.
+	KBHelpCenters     int      `json:"kb_help_centers"`
+	KeptKBHelpCenters []string `json:"kept_kb_help_centers"`
 }
 
 // targetExists tells whether the Colliedesk row a ledger row points at still exists.
@@ -87,6 +91,8 @@ const targetExists = `CASE i.entity
 	WHEN 'kb_language' THEN EXISTS(SELECT 1 FROM help_center_languages x WHERE x.workspace_id=i.workspace_id AND x.help_center_id=primary_help_center_id(i.workspace_id) AND x.locale=i.source_id)
 	WHEN 'kb_image' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'kb_file' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
+	WHEN 'kb_help_center' THEN EXISTS(SELECT 1 FROM help_centers x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id
+		AND x.deleted_at IS NULL AND NOT x.primary_help_center)
 	WHEN 'chat' THEN EXISTS(SELECT 1 FROM channel_threads x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'chat_item' THEN EXISTS(SELECT 1 FROM channel_thread_items x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	ELSE false END`
@@ -118,6 +124,12 @@ func (u UndoResult) Markdown() string {
 		if len(item.ids) > 0 {
 			fmt.Fprintf(&b, "- %s: %s\n", item.what, strings.Join(item.ids, ", "))
 		}
+	}
+	if u.KBHelpCenters > 0 {
+		fmt.Fprintf(&b, "- Help centers removed: %d (made from Freshdesk portals; they are in the trash)\n", u.KBHelpCenters)
+	}
+	if len(u.KeptKBHelpCenters) > 0 {
+		fmt.Fprintf(&b, "- Help centers kept because they have a custom domain: %s; delete them in Settings, Help centers\n", strings.Join(u.KeptKBHelpCenters, ", "))
 	}
 	if u.KBPrimaryLanguage != "" {
 		fmt.Fprintf(&b, "- Help center primary language given back: %s\n", u.KBPrimaryLanguage)
@@ -209,7 +221,8 @@ func undoSource(ctx context.Context, tx pgx.Tx, workspaceID, requested string) (
 }
 
 func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoResult, []string, error) {
-	result := UndoResult{Source: source, KeptConversationTickets: []string{}, KeptSavedReplies: []string{}, KeptKBArticles: []string{}, KeptKBTranslations: []string{}}
+	result := UndoResult{Source: source, KeptConversationTickets: []string{}, KeptSavedReplies: []string{}, KeptKBArticles: []string{}, KeptKBTranslations: []string{},
+		KeptKBHelpCenters: []string{}}
 	rows, err := tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN conversations c ON c.workspace_id=i.workspace_id AND c.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='ticket' AND EXISTS (
 			SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND NOT EXISTS (
@@ -405,6 +418,9 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 		return nil, err
 	}
 	keys = append(keys, fileKeys...)
+	if err := undoKBHelpCenters(ctx, tx, workspaceID, source, result); err != nil {
+		return nil, err
+	}
 	// The languages the import added go once nothing is written in them.
 	tag, err = tx.Exec(ctx, `DELETE FROM help_center_languages l USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_language'
 		AND (i.meta->>'created')::boolean AND l.workspace_id=i.workspace_id AND l.locale=i.source_id

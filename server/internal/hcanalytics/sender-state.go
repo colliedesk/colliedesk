@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// failing counts one workspace's failed sends in a row and, once there are PauseAfter of them,
+// failing counts one help center's failed sends in a row and, once there are PauseAfter of them,
 // until when its page views are dropped.
 type failing struct {
 	count  int
@@ -17,8 +17,8 @@ type failing struct {
 // workspace is not paused. A save that turns analytics off, removes the secret or changes the
 // service makes every queued and waiting delivery of the old settings stale. s.mu must be held.
 func (s *Sender) current(item *delivery) bool {
-	target, ok := s.targets[item.target.WorkspaceID]
-	return ok && target == item.target && !s.pausedLocked(item.target.WorkspaceID)
+	target, ok := s.targets[item.target.key()]
+	return ok && target == item.target && !s.pausedLocked(item.target.key())
 }
 
 func (s *Sender) stillCurrent(item *delivery) bool {
@@ -27,8 +27,8 @@ func (s *Sender) stillCurrent(item *delivery) bool {
 	return s.current(item)
 }
 
-func (s *Sender) pausedLocked(workspaceID string) bool {
-	state, ok := s.failing[workspaceID]
+func (s *Sender) pausedLocked(center centerKey) bool {
+	state, ok := s.failing[center]
 	return ok && s.options.Now().Before(state.paused)
 }
 
@@ -38,61 +38,68 @@ func (s *Sender) pausedLocked(workspaceID string) bool {
 func (s *Sender) sent(item *delivery, failure string, final bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	workspaceID := item.target.WorkspaceID
-	if target, ok := s.targets[workspaceID]; !ok || target != item.target {
+	center := item.target.key()
+	if target, ok := s.targets[center]; !ok || target != item.target {
 		return
 	}
 	now := s.options.Now()
 	if failure == "" {
-		delete(s.failing, workspaceID)
+		delete(s.failing, center)
 		s.recordLocked(item.target, func(r *Result) { r.SentAt = now })
 		return
 	}
-	state := s.failing[workspaceID]
+	state := s.failing[center]
 	state.count++
 	if state.count >= s.options.PauseAfter {
 		state = failing{paused: now.Add(s.options.PauseFor)}
 		slog.Warn("help center analytics: pausing a workspace whose service keeps failing",
-			"workspace", workspaceID, "for", s.options.PauseFor, "error", failure)
+			"workspace", center.workspace, "help_center", center.helpCenter, "for", s.options.PauseFor, "error", failure)
 		final = true
 	}
-	s.failing[workspaceID] = state
+	s.failing[center] = state
 	if final {
 		s.recordLocked(item.target, func(r *Result) { r.Error, r.ErrorAt = failure, now })
 	}
 }
 
 func (s *Sender) recordLocked(target Target, change func(*Result)) {
-	result := s.results[target.WorkspaceID]
+	result := s.results[target.key()]
 	if result.Version != target.Version {
 		result = Result{}
 	}
-	result.WorkspaceID, result.Version = target.WorkspaceID, target.Version
+	result.WorkspaceID, result.HelpCenterID, result.Version = target.WorkspaceID, target.HelpCenterID, target.Version
 	change(&result)
-	s.results[target.WorkspaceID] = result
+	s.results[target.key()] = result
 }
 
-// Reload reads the targets again: every workspace's for "", one workspace's otherwise (after a
-// team changes its settings, so the change applies to the next page view). A workspace whose own
-// read failed sends nothing until a later read succeeds.
+// Reload reads the targets again: every help center's for "", the primary help center's of one
+// workspace otherwise. ReloadIn reads one help center's.
 func (s *Sender) Reload(ctx context.Context, workspaceID string) error {
 	if workspaceID == "" {
 		return s.reloadAll(ctx)
 	}
-	target, err := s.store.HelpCenterAnalyticsTarget(ctx, workspaceID)
+	return s.ReloadIn(ctx, workspaceID, "")
+}
+
+// ReloadIn reads the target of one help center ("" for the workspace's primary) again, after a team
+// changes its settings, so the change applies to the next page view. A help center whose own read
+// failed sends nothing until a later read succeeds.
+func (s *Sender) ReloadIn(ctx context.Context, workspaceID, helpCenterID string) error {
+	target, err := s.store.HelpCenterAnalyticsTargetIn(ctx, workspaceID, helpCenterID)
+	center := centerKey{workspaceID, helpCenterID}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.generation++
-	s.changed[workspaceID] = s.generation
+	s.changed[center] = s.generation
 	if err != nil || target == nil || !target.Enabled || target.Problem != "" {
-		s.replaceLocked(workspaceID, nil)
+		s.replaceLocked(center, nil)
 		return err
 	}
-	s.replaceLocked(workspaceID, target)
+	s.replaceLocked(center, target)
 	return nil
 }
 
-// reloadAll swaps in every enabled target. A workspace one Reload changed after this read began
+// reloadAll swaps in every enabled target. A help center one ReloadIn changed after this read began
 // keeps what that Reload loaded, since this read may hold its older settings. A target the store
 // could not read keeps the one loaded; with none loaded, its problem becomes the last error.
 func (s *Sender) reloadAll(ctx context.Context) error {
@@ -105,55 +112,55 @@ func (s *Sender) reloadAll(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next := make(map[string]*Target, len(targets))
+	next := make(map[centerKey]*Target, len(targets))
 	for _, target := range targets {
 		if target.Problem == "" {
-			next[target.WorkspaceID] = &target
+			next[target.key()] = &target
 			continue
 		}
-		if loaded, ok := s.targets[target.WorkspaceID]; ok {
-			next[target.WorkspaceID] = &loaded
+		if loaded, ok := s.targets[target.key()]; ok {
+			next[target.key()] = &loaded
 			continue
 		}
 		problem := target.Problem
 		s.recordLocked(target, func(r *Result) { r.Error, r.ErrorAt = problem, s.options.Now() })
 	}
-	for workspaceID, stamp := range s.changed {
+	for center, stamp := range s.changed {
 		if stamp <= began {
-			delete(s.changed, workspaceID)
+			delete(s.changed, center)
 			continue
 		}
-		if loaded, ok := s.targets[workspaceID]; ok {
-			next[workspaceID] = &loaded
+		if loaded, ok := s.targets[center]; ok {
+			next[center] = &loaded
 		} else {
-			delete(next, workspaceID)
+			delete(next, center)
 		}
 	}
-	for workspaceID := range s.targets {
-		if _, ok := next[workspaceID]; !ok {
-			s.replaceLocked(workspaceID, nil)
+	for center := range s.targets {
+		if _, ok := next[center]; !ok {
+			s.replaceLocked(center, nil)
 		}
 	}
-	for workspaceID, target := range next {
-		s.replaceLocked(workspaceID, target)
+	for center, target := range next {
+		s.replaceLocked(center, target)
 	}
 	return nil
 }
 
-// replaceLocked loads target for workspaceID, or none when it is nil. New settings end a pause and
+// replaceLocked loads target for a help center, or none when it is nil. New settings end a pause and
 // drop the results gathered for the old ones. s.mu must be held.
-func (s *Sender) replaceLocked(workspaceID string, target *Target) {
-	old, had := s.targets[workspaceID]
+func (s *Sender) replaceLocked(center centerKey, target *Target) {
+	old, had := s.targets[center]
 	if target == nil {
-		delete(s.targets, workspaceID)
+		delete(s.targets, center)
 	} else {
-		s.targets[workspaceID] = *target
+		s.targets[center] = *target
 	}
 	if had && target != nil && old == *target {
 		return
 	}
-	delete(s.failing, workspaceID)
-	if result, ok := s.results[workspaceID]; ok && (target == nil || result.Version != target.Version) {
-		delete(s.results, workspaceID)
+	delete(s.failing, center)
+	if result, ok := s.results[center]; ok && (target == nil || result.Version != target.Version) {
+		delete(s.results, center)
 	}
 }

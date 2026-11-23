@@ -15,7 +15,7 @@ const (
 	// The check takes the theme and, to render a page with it, preview.
 	themeCheckInputSchema = `{"type":"object","additionalProperties":false,"properties":{` + themeInputProperties +
 		`,"preview":{"type":"string","enum":["home","article"],"description":"Also render this page of the help center with the theme, as the settings card shows it: html is a whole document with its own policy, the help center style sheet linked under /help/_/, the brand inline and no script."}}}`
-	themeInputProperties = `"logo_media_id":{"type":["string","null"],"description":"An image of the media library (colliedesk_kb_media_list), outside its trash unless it is the logo the theme already has."},` +
+	themeInputProperties = helpCenterIDProperty + `,"logo_media_id":{"type":["string","null"],"description":"An image of the media library (colliedesk_kb_media_list), outside its trash unless it is the logo the theme already has."},` +
 		`"favicon_media_id":{"type":["string","null"],"description":"An image of the media library for the browser tab."},` +
 		`"logo_alt":{"type":["string","null"],"maxLength":200,"description":"What the logo says, for screen readers; empty uses the title."},` +
 		`"linkback_url":{"type":["string","null"],"maxLength":2000,"description":"Your website, absolute http or https."},` +
@@ -48,7 +48,7 @@ func helpCenterThemeGetSpec() Spec {
 		Description: `Return the brand of the public help center: logo and favicon (media library ids), logo text, website and contact links, colors, fonts and custom CSS, ` +
 			`with the contrast of every color pair (checks). A null color or font is the default look.`,
 		REST:   []string{"GET /api/v1/help-center/theme"},
-		Input:  noArguments,
+		Input:  helpCenterOnlyInput,
 		Output: `{"type":"object","required":["theme"],"properties":{"theme":` + themeSchema + `}}`,
 		run:    helpCenterThemeGet,
 	}
@@ -60,7 +60,7 @@ func helpCenterThemeCheckSpec() Spec {
 		Title: "Check a help center brand without saving it",
 		Description: `Check a candidate brand the way colliedesk_help_center_theme_update would, and save nothing. ` + themeContrastRule +
 			`ok is false when a pair fails; fields then says, per color, its ratio and the nearest color that passes. A field of the wrong shape or a logo that is not a library image is an error. ` +
-			`With preview (home or article), html also holds that page rendered with the theme from the workspace's published articles, the way the settings card shows it.`,
+			`With preview (home or article), html also holds that page of the help center rendered with the theme from its published articles, the way the settings card shows it.`,
 		REST:   []string{"POST /api/v1/help-center/theme/check", "POST /api/v1/help-center/theme/preview"},
 		Input:  themeCheckInputSchema,
 		Output: `{"type":"object","required":["ok","checks","fields"],"properties":{"ok":{"type":"boolean"},"checks":{"type":"array","items":` + themeCheckSchema + `},"fields":{"type":"object","additionalProperties":{"type":"string"}},"html":{"type":"string"}}}`,
@@ -86,9 +86,10 @@ func helpCenterThemeUpdateSpec() Spec {
 	}
 }
 
-func helpCenterThemeGet(c *call, _ map[string]any) (any, error) {
+func helpCenterThemeGet(c *call, arguments map[string]any) (any, error) {
+	path, _ := c.atHelpCenter("/api/v1/help-center/theme", arguments)
 	var theme map[string]any
-	if err := c.get("/api/v1/help-center/theme", nil, &theme); err != nil {
+	if err := c.get(path, nil, &theme); err != nil {
 		return nil, err
 	}
 	return map[string]any{"theme": theme}, nil
@@ -97,18 +98,20 @@ func helpCenterThemeGet(c *call, _ map[string]any) (any, error) {
 func helpCenterThemeCheck(c *call, arguments map[string]any) (any, error) {
 	var checked map[string]any
 	if page, ok := arguments["preview"]; ok {
-		theme := make(map[string]any, len(arguments))
-		for field, value := range arguments {
+		path, candidate := c.atHelpCenter("/api/v1/help-center/theme/preview", arguments)
+		theme := make(map[string]any, len(candidate))
+		for field, value := range candidate {
 			if field != "preview" {
 				theme[field] = value
 			}
 		}
-		if err := c.send(http.MethodPost, "/api/v1/help-center/theme/preview", map[string]any{"page": page, "theme": theme}, &checked); err != nil {
+		if err := c.send(http.MethodPost, path, map[string]any{"page": page, "theme": theme}, &checked); err != nil {
 			return nil, err
 		}
 		return checked, nil
 	}
-	if err := c.send(http.MethodPost, "/api/v1/help-center/theme/check", arguments, &checked); err != nil {
+	path, theme := c.atHelpCenter("/api/v1/help-center/theme/check", arguments)
+	if err := c.send(http.MethodPost, path, theme, &checked); err != nil {
 		return nil, err
 	}
 	return checked, nil
@@ -116,7 +119,8 @@ func helpCenterThemeCheck(c *call, arguments map[string]any) (any, error) {
 
 func helpCenterThemeUpdate(c *call, arguments map[string]any) (any, error) {
 	var theme map[string]any
-	if err := c.send(http.MethodPut, "/api/v1/help-center/theme", arguments, &theme); err != nil {
+	path, body := c.atHelpCenter("/api/v1/help-center/theme", arguments)
+	if err := c.send(http.MethodPut, path, body, &theme); err != nil {
 		return nil, err
 	}
 	return map[string]any{"theme": theme}, nil

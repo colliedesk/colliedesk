@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
-import type { ImportJob, ImportPreview, ImportReport } from '../../api/imports';
+import type { ImportJob, ImportPreview, ImportReport, PortalHelpCenter } from '../../api/imports';
 import { ImportPage } from './import-page';
 import type { ImportPageProps } from './import-page';
 import { currentJob } from './import-route';
@@ -253,6 +253,50 @@ test('without a help center address the links section names none', () => {
   const section = screen.getByRole('region', { name: 'Old help center links' });
   expect(section).toHaveTextContent('0 of 4 old addresses lead to their new page.');
   expect(section).not.toHaveTextContent(' on .');
+});
+
+test('a finished import names the help center each Freshdesk portal became', () => {
+  const helpCenters: PortalHelpCenter[] = [
+    { portal_id: 6, portal_name: 'Help desk', name_from_freshdesk: true, categories: 3, help_center_name: 'Acme support', primary: true, status: 'primary' },
+    { portal_id: 5, portal_name: 'Hardware store', name_from_freshdesk: true, categories: 2, help_center_name: 'Hardware store', handle: 'hardware-store', primary: false, status: 'created' },
+    { portal_id: 9, portal_name: 'Portal 9', name_from_freshdesk: false, categories: 1, primary: false, status: 'over_limit' },
+  ];
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', knowledge_base: { help_centers: helpCenters } } });
+  const section = screen.getByRole('region', { name: 'Help centers from Freshdesk portals' });
+  const lines = within(section).getAllByRole('listitem').map((item) => item.textContent);
+  expect(lines).toEqual([
+    'Help desk (Freshdesk portal 6, 3 categories): on the primary help center, Acme support',
+    'Hardware store (Freshdesk portal 5, 2 categories): made the help center Hardware store at /hardware-store',
+    'Portal 9 (Freshdesk portal 9, 1 category): on the primary help center: a workspace has at most 20 help centers',
+  ]);
+  expect(section).toHaveTextContent('Freshdesk gave no name for portal 9');
+  expect(section).toHaveTextContent('A help center the import makes starts off: turn it on in Knowledge base → Settings → Help centers.');
+});
+
+test('the preview says which Freshdesk portals get a help center of their own', () => {
+  page({ job: job({ preview: { ...preview, knowledge_base: 'readable', help_centers: [
+    { portal_id: 6, portal_name: 'Help desk', name_from_freshdesk: true, categories: 3, primary: true, status: 'primary' },
+    { portal_id: 5, portal_name: 'Hardware store', name_from_freshdesk: true, categories: 2, primary: false, status: 'planned' },
+  ] } }) });
+  const section = screen.getByRole('region', { name: 'Help centers from Freshdesk portals' });
+  expect(section).toHaveTextContent('Hardware store (Freshdesk portal 5, 2 categories): gets a help center of its own');
+});
+
+test('an import run again, with no portal left on the primary, still says how to turn on its help centers', () => {
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', knowledge_base: { help_centers: [
+    { portal_id: 5, portal_name: 'Hardware store', name_from_freshdesk: true, categories: 2, help_center_name: 'Hardware store', handle: 'hardware-store', primary: false, status: 'existing' },
+    { portal_id: 7, portal_name: 'Partners', name_from_freshdesk: true, categories: 1, help_center_name: 'Partners', handle: 'partners', primary: false, status: 'existing' },
+  ] } } });
+  const section = screen.getByRole('region', { name: 'Help centers from Freshdesk portals' });
+  expect(within(section).getAllByRole('listitem')).toHaveLength(2);
+  expect(section).toHaveTextContent('A help center the import makes starts off: turn it on in Knowledge base → Settings → Help centers.');
+});
+
+test('an account with one Freshdesk portal shows no help center section', () => {
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', knowledge_base: { help_centers: [
+    { portal_id: 6, portal_name: 'Help desk', name_from_freshdesk: true, categories: 3, help_center_name: 'Acme support', primary: true, status: 'primary' },
+  ] } } });
+  expect(screen.queryByRole('region', { name: 'Help centers from Freshdesk portals' })).not.toBeInTheDocument();
 });
 
 test('an import without a knowledge base shows no links section', () => {

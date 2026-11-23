@@ -53,6 +53,8 @@ export const routePermissions: ReadonlyArray<readonly [string, string]> = [
   ['/api/v1/help-center/languages', 'help_center:read'],
   ['/api/v1/help-center/search-console', 'help_center:read'],
   ['/api/v1/help-center/theme', 'help_center:read'],
+  ['/api/v1/help-centers', 'help_center:read'],
+  ['/api/v1/help-centers/{id}', 'help_center:read'],
   ['/api/v1/imports', 'imports:read'],
   ['/api/v1/imports/{id}', 'imports:read'],
   ['/api/v1/imports/{id}/people', 'imports:read'],

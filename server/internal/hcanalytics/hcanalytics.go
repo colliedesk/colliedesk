@@ -18,9 +18,11 @@ const (
 // DefaultPlausibleBase is Plausible's hosted service, used when a workspace names no base URL.
 const DefaultPlausibleBase = "https://plausible.io"
 
-// Target is where one workspace's page views go, with its secret opened.
+// Target is where the page views of one help center go, with its secret opened.
 type Target struct {
-	WorkspaceID   string
+	WorkspaceID string
+	// HelpCenterID is the help center whose page views these are, "" for the workspace's primary.
+	HelpCenterID  string
 	Provider      string
 	MeasurementID string
 	APISecret     string
@@ -39,21 +41,31 @@ type Target struct {
 // Version.
 type Result struct {
 	WorkspaceID string
-	Version     int64
-	SentAt      time.Time
-	Error       string
-	ErrorAt     time.Time
+	// HelpCenterID is "" for the workspace's primary help center, as in Target.
+	HelpCenterID string
+	Version      int64
+	SentAt       time.Time
+	Error        string
+	ErrorAt      time.Time
 }
 
 // Store reads the targets and records the results. HelpCenterAnalyticsTargets returns every
-// enabled target of every workspace; HelpCenterAnalyticsTarget returns one workspace's saved target,
-// enabled or not, or nil when it has none. Either may return a target with only its Problem set.
-// RecordHelpCenterAnalyticsResults applies a result only while its Version is still the saved one.
+// enabled target of every help center; HelpCenterAnalyticsTargetIn returns one help center's saved
+// target ("" names the workspace's primary), enabled or not, or nil when it has none. Either may
+// return a target with only its Problem set. RecordHelpCenterAnalyticsResults applies a result only
+// while its Version is still the saved one.
 type Store interface {
 	HelpCenterAnalyticsTargets(ctx context.Context) ([]Target, error)
-	HelpCenterAnalyticsTarget(ctx context.Context, workspaceID string) (*Target, error)
+	HelpCenterAnalyticsTargetIn(ctx context.Context, workspaceID, helpCenterID string) (*Target, error)
 	RecordHelpCenterAnalyticsResults(ctx context.Context, results []Result) error
 }
+
+// centerKey names one help center: its workspace and its id, "" for the workspace's primary.
+type centerKey struct{ workspace, helpCenter string }
+
+func (t Target) key() centerKey { return centerKey{t.WorkspaceID, t.HelpCenterID} }
+
+func (r Result) key() centerKey { return centerKey{r.WorkspaceID, r.HelpCenterID} }
 
 // Options tune a Sender; the zero value is the production setting.
 type Options struct {

@@ -69,17 +69,19 @@ const (
 		"## Steps\n\n1. Open **Settings**.\n2. Choose *Help center*.\n3. Save.\n\n> A quote stands out from the text.\n\n`Ctrl+K` opens search."
 )
 
-// Preview renders a page of the workspace's help center with theme as the brand, through the real
-// templates, from its live collections and published articles only, whether the help center is on or
-// off, read in one transaction. theme must be clean (domain.CleanTheme); a logo or favicon that is not
-// this workspace's image is a domain.ThemeError, one in the trash is left out as on the public pages.
-// The answer is a whole document under previewPolicy for a sandboxed frame without scripts: the help
-// center's sheet loads by its hashed, immutable address, and the candidate brand is inline.
-func (s *Site) Preview(ctx context.Context, workspaceID string, theme domain.HelpCenterTheme, which string) ([]byte, error) {
+// Preview renders a page of the workspace's help center helpCenterID ("" the primary) with theme as the
+// brand, through the real templates, from the live collections and published articles that help center
+// shows only, whether it is on or off, read in one transaction. theme must be clean
+// (domain.CleanTheme); a logo or favicon that is not this workspace's image is a domain.ThemeError, one
+// in the trash is left out as on the public pages; an id that is not a live help center of the
+// workspace is domain.ErrHelpCenterNotFound. The answer is a whole document under previewPolicy for a
+// sandboxed frame without scripts: the help center's sheet loads by its hashed, immutable address, and
+// the candidate brand is inline.
+func (s *Site) Preview(ctx context.Context, workspaceID, helpCenterID string, theme domain.HelpCenterTheme, which string) ([]byte, error) {
 	if which != PreviewHome && which != PreviewArticle {
 		return nil, errors.New("help center preview: unknown page " + which)
 	}
-	read, err := s.config.Store.HelpCenterPreview(ctx, workspaceID, theme, which == PreviewArticle, homeArticles, articleNeighbours)
+	read, err := s.config.Store.HelpCenterPreview(ctx, workspaceID, helpCenterID, theme, which == PreviewArticle, homeArticles, articleNeighbours)
 	if err != nil {
 		return nil, err
 	}

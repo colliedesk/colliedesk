@@ -217,6 +217,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_cancel` | Cancels an upload and throws its parts away (one you started; with kb_media:purge, any) | `kb_media:create` |
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `kb_media:create` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `kb_media:update` |
+| `colliedesk_help_centers_list` | Lists the workspace's help centers, the primary first, with each one's address | `help_center:read` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `help_center:read` |
 | `colliedesk_help_center_languages_get` | Lists the help center's languages, which are shown to customers, and how many articles are translated, outdated and missing in each | `help_center:read` |
 | `colliedesk_help_center_languages_set` | Sets the help center's languages besides the primary one, and which of them customers see | `help_center:update` |
@@ -278,7 +279,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_role_reset` | Puts the Agent role back to its first permissions | `team:manage_roles` |
 | `colliedesk_role_restore` | Brings back a deleted role | `team:manage_roles` |
 | `colliedesk_member_roles_set` | Sets which roles a team member holds, by name | `team:manage_roles`, `team:read` |
+| `colliedesk_help_center_create` | Adds a help center served below the primary's address at /<handle> | `help_center:update` |
 | `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `help_center:update` |
+| `colliedesk_help_center_delete` | Deletes a help center other than the primary and releases its custom domain. Cannot be undone | `help_center:update` |
 | `colliedesk_help_center_theme_update` | Replaces the public help center's brand after checking its color contrast and custom CSS | `help_center:update` |
 | `colliedesk_help_center_search_console_update` | Sets or removes the Google and Bing verification tokens served as meta tags on the help center's pages | `help_center:update` |
 | `colliedesk_help_center_analytics_set` | Sends the help center's page views from the server to the workspace's own GA4 or Plausible, or stops it | `help_center:update` |
@@ -395,6 +398,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_cursor_key_set` | Sets the Cursor key Autofix sends fixes with, after Cursor accepts it. The key passes through the conversation | `autofix_settings:manage_credentials` |
 | `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again. Cannot be undone | `autofix_settings:manage_credentials` |
 <!-- /generated -->
+
+With several help centers, the `colliedesk_help_center_*` settings tools (get and update, theme,
+domain, languages, search console, analytics) take an optional `help_center_id` from
+`colliedesk_help_centers_list`; without it they act on the primary. A read-only token is refused on
+every one that changes a setting, whichever help center it names.
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint: true` (every other tool states `false`), and their descriptions tell the
 model to show you what it will do and wait for your yes, unless you already asked for exactly that.

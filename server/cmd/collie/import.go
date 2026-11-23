@@ -26,7 +26,7 @@ var importRun = freshdesk.Run
 // progressOutput receives progress lines (stderr), so stdout keeps its stable summary format.
 var progressOutput io.Writer = os.Stderr
 
-const importUsage = "usage: collie import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--include-personal-canned-responses] [--help-center-portal ID] [--old-help-center-domain HOST] [--dry-run] [--report-dir DIR]"
+const importUsage = "usage: collie import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--include-personal-canned-responses] [--old-help-center-domain HOST] [--dry-run] [--report-dir DIR]"
 
 func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {
 	if len(args) > 0 && args[0] == "undo" {
@@ -127,7 +127,9 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	dryRun := flags.Bool("dry-run", false, "count what would be imported without writing anything")
 	reportDir := flags.String("report-dir", ".", "directory for the reconcile report")
 	lastTicket := flags.Int64("last-ticket-id", 0, "highest ticket number shown in Freshdesk; the id check covers at least this far")
-	portal := flags.Int64("help-center-portal", 0, "on a Freshdesk account with several portals, the portal whose published knowledge base articles stay published")
+	// --help-center-portal chose the one portal whose articles stayed published; every portal now becomes
+	// its own help center, so it is accepted for earlier scripts and ignored.
+	portal := flags.Int64("help-center-portal", 0, "no longer needed: every Freshdesk portal becomes its own help center")
 	oldHelpCenter := flags.String("old-help-center-domain", "", "the old Freshdesk help center's own custom domain, for example support.acme.com; its links are pointed at the new help center too")
 	includePersonal := flags.Bool("include-personal-canned-responses", false, "also import canned responses from personal folders; they become shared with the whole workspace")
 	if err := flags.Parse(args); err != nil {
@@ -135,6 +137,9 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	}
 	if flags.NArg() != 0 || *workspace == "" || *lastTicket < 0 || *portal < 0 {
 		return freshdesk.Options{}, "", errors.New(importUsage)
+	}
+	if *portal != 0 {
+		fmt.Fprintln(progressOutput, "--help-center-portal is no longer needed: every portal becomes its own help center. The flag is ignored.")
 	}
 	host, err := freshdesk.AccountHost(*domain)
 	if err != nil {
@@ -150,7 +155,7 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	if apiKey == "" {
 		return freshdesk.Options{}, "", fmt.Errorf("environment variable %s is empty; export your Freshdesk API key there", *keyEnv)
 	}
-	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket, Cloud: billingEnabled(), PlansOnSale: plansOnSale(), IncludePersonalCannedResponses: *includePersonal, HelpCenterPortal: *portal,
+	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket, Cloud: billingEnabled(), PlansOnSale: plansOnSale(), IncludePersonalCannedResponses: *includePersonal,
 		OldHelpCenterDomain: oldHelpCenterHost}
 	if *since != "" {
 		parsed, err := parseSince(*since)

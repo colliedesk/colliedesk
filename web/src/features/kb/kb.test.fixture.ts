@@ -13,8 +13,15 @@ export const ids = {
   image: '66666666-6666-4666-8666-666666666666',
 };
 
+// The workspace's help centers: the primary one, served at the workspace's address, and one below it.
+const center = { enabled: true, title: '', locale: 'en', require_approval: false, show_tags: false, feedback_conversations: false, content_version: 1, updated_at: null };
+export const primaryCenter = { ...center, id: '99999999-9999-4999-8999-999999999991', name: 'Acme help', handle: null as string | null, primary: true, url: 'https://desk.example.com/help/acme' };
+export const hardwareCenter = { ...center, id: '99999999-9999-4999-8999-999999999992', name: 'Hardware', handle: 'hardware' as string | null, primary: false, enabled: false,
+  url: 'https://desk.example.com/help/acme/hardware' };
+
 export const collection = (id: string, name: string, parent: string | null, count = 0, slug = name.toLowerCase()) => ({
   id, parent_id: parent, name, slug, description: '', position: 0, default_template_id: null as string | null, require_approval: 'inherit' as 'inherit' | 'on' | 'off', article_order: 'manual' as 'manual' | 'title' | 'newest' | 'updated', visibility: 'everyone' as Visibility, effective_visibility: 'everyone' as Visibility, article_count: count, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', translations: [] as never[],
+  help_center_ids: [primaryCenter.id],
 });
 
 export const collections = [

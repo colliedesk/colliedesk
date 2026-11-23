@@ -91,9 +91,11 @@ const (
 // internal article made public is a leak, a public one kept as a draft costs one click. A folder's
 // visibility does not make a draft: its collection gets that visibility (collectionVisibility).
 const (
-	draftInFreshdesk    = "draft_in_freshdesk"
-	draftNotInPortal    = "category_not_in_any_portal"
-	draftPortalUnknown  = "category_portal_unknown"
+	draftInFreshdesk   = "draft_in_freshdesk"
+	draftNotInPortal   = "category_not_in_any_portal"
+	draftPortalUnknown = "category_portal_unknown"
+	// draftSeveralPortals: earlier imports, which published one portal's articles, drafted the others'
+	// with it. No run sets it now; keptForAnotherPortal republishes those drafts.
 	draftSeveralPortals = "category_in_another_portal"
 	// kbCollectionLevelMax is how deep the import nests: category, folder, subfolder. Collections go
 	// deeper (domain.MaxKBDepth), but the import keeps the depth it always had so a re-run places each
@@ -146,6 +148,13 @@ type knowledgeBase struct {
 	languages    []string
 	products     *int
 	productsNote string
+	// portalNames are the portals' names by id, from the ticket forms; portalNamesNote says why
+	// they could not be read.
+	portalNames     map[int64]string
+	portalNamesNote string
+	// alsoOnPrimary are the categories Freshdesk shows only on other portals now whose collection an
+	// earlier run put on the primary: the collection is on those portals' help centers too.
+	alsoOnPrimary map[int64]bool
 	// failures are lists that could not be read (entity, Freshdesk id, error).
 	failures []Failure
 	// unverified explains why the counts could not all be compared.
@@ -328,6 +337,9 @@ func (r *run) listTranslations(ctx context.Context, kb *knowledgeBase) error {
 			}
 		}
 	}
+	if err := r.readPortalNames(ctx, kb); err != nil {
+		return err
+	}
 	return r.countProducts(ctx, kb)
 }
 
@@ -424,46 +436,25 @@ func (kb *knowledgeBase) category(id int64) *fdSolutionCategory {
 	return nil
 }
 
-// checkPortal refuses a --help-center-portal the account does not have.
-func (kb *knowledgeBase) checkPortal(chosen int64) error {
-	if chosen == 0 || len(kb.categories) == 0 {
-		return nil
-	}
-	portals := kb.portals()
-	if !slices.Contains(portals, chosen) {
-		names := make([]string, len(portals))
-		for index, id := range portals {
-			names[index] = strconv.FormatInt(id, 10)
-		}
-		return fmt.Errorf("--help-center-portal %d is not a portal of this Freshdesk account; the categories name the portals: %s", chosen, strings.Join(names, ", "))
-	}
-	return nil
-}
-
 // draftReason returns why an article is imported as a draft, or "" when it is published: published in
-// Freshdesk, in a category shown in the help center's portal.
-func (kb *knowledgeBase) draftReason(article kbArticle, chosenPortal int64) string {
+// Freshdesk, in a category shown on at least one portal. Each portal is a help center of its own.
+func (kb *knowledgeBase) draftReason(article kbArticle) string {
 	if article.Status != 2 {
 		return draftInFreshdesk
 	}
-	portals := kb.portals()
 	category := kb.category(article.folder.categoryID)
 	switch {
 	case category == nil:
 		return draftPortalUnknown
-	case portals == nil:
+	case kb.portals() == nil:
 		// No category names a portal: the account has one portal and every category is in it.
 		return ""
 	case category.VisibleInPortals == nil:
 		return draftPortalUnknown
 	case len(*category.VisibleInPortals) == 0:
 		return draftNotInPortal
-	case len(portals) == 1:
-		return ""
-	case chosenPortal != 0 && slices.Contains(*category.VisibleInPortals, chosenPortal):
-		return ""
 	}
-	return draftSeveralPortals
+	return ""
 }
 
 // collectionPlacement says where a folder's collection goes: under its category (parent nil) for a

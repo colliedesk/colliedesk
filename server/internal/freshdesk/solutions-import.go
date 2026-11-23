@@ -32,6 +32,11 @@ type kbState struct {
 	translationsChangedInBoth []string
 	// languagesAdded are the help center languages this run added.
 	languagesAdded []string
+	// portalHelpCenters maps a portal to the help center its categories are on; helpCenters is the
+	// mapping for the report.
+	primaryHelpCenter string
+	portalHelpCenters map[int64]string
+	helpCenters       []KBPortalHelpCenter
 }
 
 func (r *run) kbWriteState() *kbState {
@@ -53,17 +58,25 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 		if err := r.importKBLanguages(ctx); err != nil {
 			return err
 		}
+		if err := r.ensurePortalHelpCenters(ctx); err != nil {
+			return err
+		}
 	}
 	for _, category := range kb.categories {
 		key := strconv.FormatInt(category.ID, 10)
 		meta := map[string]any{"freshdesk_id": category.ID, "kind": "category", "visible_in_portals": category.VisibleInPortals}
+		helpCenters := state.categoryHelpCenters(category)
 		id, err := r.ensureCollection(ctx, entityKBCategory, key, nil, category.Name, deref(category.Description), domain.KBVisibleEveryone, meta,
-			category.CreatedAt, category.UpdatedAt)
+			category.CreatedAt, category.UpdatedAt, helpCenters)
 		if err != nil {
 			return err
 		}
-		if id != "" {
-			state.collections["c"+key] = id
+		if id == "" {
+			continue
+		}
+		state.collections["c"+key] = id
+		if err := r.noteStillOnPrimary(ctx, category.ID, id, helpCenters); err != nil {
+			return err
 		}
 	}
 	for _, folderID := range kb.order {
@@ -94,7 +107,7 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 			"visibility": folder.Visibility, "company_ids": folder.CompanyIDs, "contact_segment_ids": folder.ContactSegmentIDs, "company_segment_ids": folder.CompanySegmentIDs,
 			"name": folder.Name, "path": kb.pathNames(folder)}
 		id, err := r.ensureCollection(ctx, entityKBFolder, key, &parentID, name, deref(folder.Description), kb.collectionVisibility(folder), meta,
-			folder.CreatedAt, folder.UpdatedAt)
+			folder.CreatedAt, folder.UpdatedAt, nil)
 		if err != nil {
 			return err
 		}
@@ -139,14 +152,17 @@ func fitName(name string) string {
 // ensureCollection returns the collection of a category or folder, creating it on the first run with
 // visibility. An imported collection is never renamed again, so an agent's change survives a rerun; it is
 // only restricted when Freshdesk shows the folder to fewer people. It returns "" when the collection
-// could not be created (recorded in the ledger).
+// could not be created (recorded in the ledger). A top-level collection is shown on helpCenters (nil: the
+// primary); one an earlier run made is added to the portals' own help centers among them that no run
+// added it to yet, never to the primary, so a team that took it off a help center keeps that.
 func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID *string, name, description, visibility string, meta map[string]any,
-	created, updated time.Time) (string, error) {
-	target, done, err := r.ledger.done(ctx, entity, key)
+	created, updated time.Time, helpCenters []string) (string, error) {
+	entry, found, err := r.ledger.get(ctx, entity, key)
 	if err != nil {
 		return "", err
 	}
-	if done {
+	if found && entry.Status == ledgerDone && entry.TargetID != nil {
+		target := *entry.TargetID
 		var exists bool
 		if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
 			return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_collections WHERE workspace_id=$1 AND id=$2)`, r.workspaceID, target).Scan(&exists)
@@ -154,6 +170,9 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 			return "", fmt.Errorf("read knowledge base collection: %w", err)
 		}
 		if exists {
+			if err := r.addCollectionHelpCenters(ctx, entity, key, target, entry.Meta, r.kbWriteState().portalOwn(helpCenters)); err != nil {
+				return "", err
+			}
 			return target, r.restrictKBCollection(ctx, key, target, visibility)
 		}
 	}
@@ -170,19 +189,72 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	id, err := store.ImportKBCollection(ctx, tx, r.workspaceID, store.KBImportCollection{ParentID: parentID, Name: name, Description: description,
-		Visibility: visibility, SlugSuffix: key, SourceMeta: encoded, CreatedAt: created.UTC(), UpdatedAt: updated.UTC()})
+		Visibility: visibility, SlugSuffix: key, SourceMeta: encoded, CreatedAt: created.UTC(), UpdatedAt: updated.UTC(), HelpCenterIDs: helpCenters})
 	if err != nil {
 		_ = tx.Rollback(ctx)
 		r.itemFailed(ctx, entity, key, "", err)
 		return "", r.internalErr
 	}
-	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entity, sourceID: key, targetID: &id, status: ledgerDone}); err != nil {
+	// Always a new list, even an empty one: a row whose collection the trash purged keeps the list of the
+	// old collection otherwise, and the new one would never reach those help centers.
+	placed := &ticketMeta{HelpCenters: helpCenters}
+	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entity, sourceID: key, targetID: &id, status: ledgerDone, meta: placed}); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("commit collection import: %w", err)
 	}
 	return id, nil
+}
+
+// noteStillOnPrimary notes a category Freshdesk shows only on other portals whose collection is still on
+// the primary help center: an earlier run put it there, and taking it off is the team's call.
+func (r *run) noteStillOnPrimary(ctx context.Context, categoryID int64, collectionID string, helpCenters []string) error {
+	state := r.kbWriteState()
+	if helpCenters == nil || state.primaryHelpCenter == "" || slices.Contains(helpCenters, state.primaryHelpCenter) {
+		return nil
+	}
+	var onPrimary bool
+	if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_collection_help_centers WHERE workspace_id=$1 AND collection_id=$2 AND help_center_id=$3)`,
+			r.workspaceID, collectionID, state.primaryHelpCenter).Scan(&onPrimary)
+	}); err != nil {
+		return fmt.Errorf("read knowledge base collection placement: %w", err)
+	}
+	if onPrimary {
+		if r.kb.alsoOnPrimary == nil {
+			r.kb.alsoOnPrimary = map[int64]bool{}
+		}
+		r.kb.alsoOnPrimary[categoryID] = true
+	}
+	return nil
+}
+
+// addCollectionHelpCenters also shows an imported top-level collection on the help centers ids names that
+// its ledger row does not list yet, and lists them there in the same transaction.
+func (r *run) addCollectionHelpCenters(ctx context.Context, entity, key, collectionID string, placed ticketMeta, ids []string) error {
+	var pending []string
+	for _, id := range ids {
+		if !slices.Contains(placed.HelpCenters, id) {
+			pending = append(pending, id)
+		}
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin collection placement: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := store.AddImportedKBCollectionHelpCenters(ctx, tx, r.workspaceID, collectionID, pending); err != nil {
+		return fmt.Errorf("place collection: %w", err)
+	}
+	placed.HelpCenters = append(slices.Clone(placed.HelpCenters), pending...)
+	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entity, sourceID: key, targetID: &collectionID, status: ledgerDone, meta: &placed}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // kbPendingImage is an image stored in this run whose row is written with its article.
@@ -330,7 +402,7 @@ func (r *run) articleMeta(article kbArticle, draftReason string, dropped []strin
 func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 	state := r.kbWriteState()
 	key := strconv.FormatInt(article.ID, 10)
-	reason := r.kb.draftReason(article, r.opts.HelpCenterPortal)
+	reason := r.kb.draftReason(article)
 	entry, found, err := r.ledger.get(ctx, entityKBArticle, key)
 	if err != nil {
 		return err
@@ -341,7 +413,11 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 			// A category's portal can change without changing the article.
 			return r.unpublishKBArticle(ctx, key, *entry.TargetID, reason)
 		}
-		return nil
+		if republish, err := r.keptForAnotherPortal(ctx, entry.TargetID); err != nil || !republish {
+			return err
+		}
+		// An earlier import kept it a draft only because its category was in another portal: import it again,
+		// published, unless someone changed it in Colliedesk since.
 	}
 	collectionID, ok := state.collections["f"+strconv.FormatInt(article.folder.ID, 10)]
 	if !ok {
@@ -445,9 +521,26 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 	return nil
 }
 
+// keptForAnotherPortal reports whether an earlier import left the article a draft only because its
+// category was in a portal other than the one it published.
+func (r *run) keptForAnotherPortal(ctx context.Context, target *string) (bool, error) {
+	if target == nil {
+		return false, nil
+	}
+	var kept bool
+	if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_articles WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL AND status='draft'
+			AND source_meta->>'draft_reason'=$3)`, r.workspaceID, *target, draftSeveralPortals).Scan(&kept)
+	}); err != nil {
+		return false, fmt.Errorf("read knowledge base article: %w", err)
+	}
+	return kept, nil
+}
+
 // unpublishKBArticle makes an imported article a draft again when Freshdesk no longer shows it
-// publicly. Publishing is never done this way: an article that became public in Freshdesk stays a
-// draft until someone publishes it. An article changed in Colliedesk since is left alone, with a warning.
+// publicly. An article that became public in Freshdesk stays a draft until someone publishes it; the
+// one exception is a draft the importer made only because its category was in another portal
+// (keptForAnotherPortal). An article changed in Colliedesk since is left alone, with a warning.
 func (r *run) unpublishKBArticle(ctx context.Context, key, target, reason string) error {
 	state := r.kbWriteState()
 	var outcome string

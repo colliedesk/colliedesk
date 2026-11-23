@@ -26,6 +26,8 @@ type KBImportCollection struct {
 	SlugSuffix           string
 	SourceMeta           []byte
 	CreatedAt, UpdatedAt time.Time
+	// HelpCenterIDs are the help centers a top-level collection is shown on; empty is the primary.
+	HelpCenterIDs []string
 }
 
 // ImportKBCollection adds a collection with the source's timestamps, after its siblings once they were
@@ -60,6 +62,11 @@ func ImportKBCollection(ctx context.Context, tx pgx.Tx, workspaceID string, inpu
 	}
 	if err != nil {
 		return "", kbCollectionError("import", err)
+	}
+	if input.ParentID == nil && len(input.HelpCenterIDs) > 0 {
+		if err := placeKBCollection(ctx, tx, workspaceID, id, input.HelpCenterIDs); err != nil {
+			return "", err
+		}
 	}
 	return id, bumpKB(ctx, tx, workspaceID)
 }

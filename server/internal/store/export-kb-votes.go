@@ -33,14 +33,14 @@ func exportKBVotes(ctx context.Context, tx pgx.Tx, workspaceID string, sink expo
 		return err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT id::text,article_id::text,encode(voter,'hex'),helpful,missing,reset_id::text,created_at,updated_at
+	rows, err = tx.Query(ctx, `SELECT id::text,article_id::text,encode(voter,'hex'),helpful,missing,reset_id::text,conversation_id::text,created_at,updated_at
 		FROM kb_article_votes WHERE workspace_id=$1 ORDER BY created_at, id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base votes: %w", err)
 	}
 	for rows.Next() {
 		var record export.KBArticleVote
-		if err := rows.Scan(&record.ID, &record.ArticleID, &record.Voter, &record.Helpful, &record.Missing, &record.ResetID, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		if err := rows.Scan(&record.ID, &record.ArticleID, &record.Voter, &record.Helpful, &record.Missing, &record.ResetID, &record.ConversationID, &record.CreatedAt, &record.UpdatedAt); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base votes: %w", err)
 		}

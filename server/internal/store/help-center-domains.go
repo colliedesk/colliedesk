@@ -17,6 +17,10 @@ import (
 // takenMessage is the check_error of a claim whose host name another workspace holds and still proves.
 const takenMessage = "Another workspace's help center serves on this host name, and its DNS records still prove it."
 
+// inUseMessage is the check_error of a claim whose host name another help center of the same workspace
+// already serves on.
+const inUseMessage = "Another help center of this workspace serves on this host name; remove it there first."
+
 // takenOverMessage is the check_error of an active domain another workspace took over.
 const takenOverMessage = "Another workspace's DNS records proved this host name while this domain's records did not, so its help center serves there now."
 
@@ -31,26 +35,42 @@ func scanHelpCenterDomain(row pgx.Row) (domain.HelpCenterDomain, error) {
 	return d, err
 }
 
-// GetHelpCenterDomain returns the workspace's custom domain; found is false when it has none.
+// GetHelpCenterDomain returns the primary help center's custom domain (GetHelpCenterDomainIn).
 func (s *Store) GetHelpCenterDomain(ctx context.Context, workspaceID string) (domain.HelpCenterDomain, bool, error) {
+	return s.GetHelpCenterDomainIn(ctx, workspaceID, "")
+}
+
+// GetHelpCenterDomainIn returns the custom domain of help center helpCenterID ("" the primary one);
+// found is false when it has none.
+func (s *Store) GetHelpCenterDomainIn(ctx context.Context, workspaceID, helpCenterID string) (domain.HelpCenterDomain, bool, error) {
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
-		return scanHelpCenterDomain(tx.QueryRow(ctx, `SELECT `+helpCenterDomainColumns+` FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1)`, workspaceID))
+		target, err := resolveHelpCenter(ctx, tx, workspaceID, helpCenterID, false)
+		if err != nil {
+			return domain.HelpCenterDomain{}, err
+		}
+		return scanHelpCenterDomain(tx.QueryRow(ctx, `SELECT `+helpCenterDomainColumns+` FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=NULLIF($2,'')::uuid`, workspaceID, target))
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.HelpCenterDomain{}, false, nil
 	}
 	if err != nil {
-		return domain.HelpCenterDomain{}, false, fmt.Errorf("get help center domain: %w", err)
+		return domain.HelpCenterDomain{}, false, helpCenterStoreError("get help center domain", err)
 	}
 	return got, true, nil
 }
 
-// SetHelpCenterDomain sets the workspace's custom domain to host (already cleaned by
-// helpcenter.CustomHost). The same host name again changes nothing; another one replaces the old
-// with a new claim: a new token and a new CNAME target, pending until a check passes. Whether another
-// workspace serves on host is the caller's question (HelpCenterHost): pending claims of several
-// workspaces may coexist.
+// SetHelpCenterDomain sets the primary help center's custom domain (SetHelpCenterDomainIn).
 func (s *Store) SetHelpCenterDomain(ctx context.Context, workspaceID, host string, now time.Time) (domain.HelpCenterDomain, error) {
+	return s.SetHelpCenterDomainIn(ctx, workspaceID, "", host, now)
+}
+
+// SetHelpCenterDomainIn sets the custom domain of help center helpCenterID ("" the primary one) to host
+// (already cleaned by helpcenter.CustomHost). The same host name again changes nothing; another one
+// replaces the old with a new claim: a new token and a new CNAME target, pending until a check passes.
+// Whether another workspace serves on host is the caller's question (HelpCenterHost): pending claims of
+// several workspaces may coexist. Another help center of the same workspace on host is
+// ErrHelpCenterDomainInUse: one workspace never claims a host name twice.
+func (s *Store) SetHelpCenterDomainIn(ctx context.Context, workspaceID, helpCenterID, host string, now time.Time) (domain.HelpCenterDomain, error) {
 	token, err := randomHex(16)
 	if err != nil {
 		return domain.HelpCenterDomain{}, err
@@ -60,26 +80,35 @@ func (s *Store) SetHelpCenterDomain(ctx context.Context, workspaceID, host strin
 		return domain.HelpCenterDomain{}, err
 	}
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
-		current, err := scanHelpCenterDomain(tx.QueryRow(ctx, `SELECT `+helpCenterDomainColumns+` FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) FOR UPDATE`, workspaceID))
+		// The export writes the domain on the help center's line, so the line must exist.
+		target, err := resolveHelpCenter(ctx, tx, workspaceID, helpCenterID, true)
+		if err != nil {
+			return domain.HelpCenterDomain{}, err
+		}
+		current, err := scanHelpCenterDomain(tx.QueryRow(ctx, `SELECT `+helpCenterDomainColumns+` FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=$2 FOR UPDATE`, workspaceID, target))
 		if err == nil && current.Hostname == host {
 			return current, nil
 		}
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return domain.HelpCenterDomain{}, err
 		}
-		// The export writes the domain on the help center's line, so the line must exist.
-		if _, err := tx.Exec(ctx, `INSERT INTO help_centers (workspace_id) VALUES ($1) ON CONFLICT (workspace_id) WHERE primary_help_center DO NOTHING`, workspaceID); err != nil {
+		var inUse bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM help_center_domains
+			WHERE workspace_id=$1 AND help_center_id<>$2 AND lower(hostname)=lower($3))`, workspaceID, target, host).Scan(&inUse); err != nil {
 			return domain.HelpCenterDomain{}, err
 		}
-		return scanHelpCenterDomain(tx.QueryRow(ctx, `INSERT INTO help_center_domains (workspace_id, hostname, claim, token, status, created_at)
-			VALUES ($1, $2, $3, $4, 'pending', $5)
+		if inUse {
+			return domain.HelpCenterDomain{}, domain.ErrHelpCenterDomainInUse
+		}
+		return scanHelpCenterDomain(tx.QueryRow(ctx, `INSERT INTO help_center_domains (workspace_id, help_center_id, hostname, claim, token, status, created_at)
+			VALUES ($1, $6, $2, $3, $4, 'pending', $5)
 			ON CONFLICT (workspace_id, help_center_id) DO UPDATE SET hostname=EXCLUDED.hostname, claim=EXCLUDED.claim, token=EXCLUDED.token, status='pending', created_at=EXCLUDED.created_at,
 				verified_at=NULL, checked_at=NULL, check_error=NULL, certificate_requested_at=NULL, failing_since=NULL, pending_reason=NULL,
 				address_checked_at=NULL, address_error=NULL
-			RETURNING `+helpCenterDomainColumns, workspaceID, host, claim, token, now))
+			RETURNING `+helpCenterDomainColumns, workspaceID, host, claim, token, now, target))
 	})
 	if err != nil {
-		return domain.HelpCenterDomain{}, fmt.Errorf("set help center domain: %w", err)
+		return domain.HelpCenterDomain{}, helpCenterStoreError("set help center domain", err)
 	}
 	return got, nil
 }
@@ -117,8 +146,12 @@ func (s *Store) ActivateHelpCenterDomain(ctx context.Context, workspaceID, claim
 		}
 	}
 	switch {
-	case errors.Is(err, domain.ErrHelpCenterDomainTaken):
-		if _, failed := s.RecordHelpCenterDomainFailure(ctx, workspaceID, claim, now, takenMessage); failed != nil && !errors.Is(failed, domain.ErrHelpCenterDomainMissing) {
+	case errors.Is(err, domain.ErrHelpCenterDomainTaken), errors.Is(err, domain.ErrHelpCenterDomainInUse):
+		message := takenMessage
+		if errors.Is(err, domain.ErrHelpCenterDomainInUse) {
+			message = inUseMessage
+		}
+		if _, failed := s.RecordHelpCenterDomainFailure(ctx, workspaceID, claim, now, message); failed != nil && !errors.Is(failed, domain.ErrHelpCenterDomainMissing) {
 			return domain.HelpCenterDomain{}, "", fmt.Errorf("record help center domain check: %w", failed)
 		}
 		return domain.HelpCenterDomain{}, "", err
@@ -137,18 +170,25 @@ const activateColumns = `status='active', verified_at=COALESCE(verified_at, $3),
 
 // takeOverHelpCenterHost moves the host name of the workspace's claim from the workspace active on it
 // to this claim, in one transaction, when proof does not prove the holder's claim (its CNAME target or
-// its token). The holder's row is locked first, so two takeovers of one host run one after the other.
+// its token). Only the holder's domain on that host name goes back to pending; its other help centers
+// keep theirs. The holder's row is locked first, so two takeovers of one host run one after the other.
 // It crosses workspaces: the holder's claim and token are compared in the database and never leave it.
+// A holder in the same workspace (two of its help centers set the name at once) is never taken over:
+// ErrHelpCenterDomainInUse.
 func (s *Store) takeOverHelpCenterHost(ctx context.Context, workspaceID, claim string, now time.Time, proof domain.HelpCenterDomainProof, certificate bool) (domain.HelpCenterDomain, string, error) {
 	var got domain.HelpCenterDomain
 	var holder string
 	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterDomainTakeover, func(tx pgx.Tx) error {
 		var holderProves bool
-		err := tx.QueryRow(ctx, `SELECT d.workspace_id::text, (d.claim = $3 OR COALESCE(d.token = ANY($4::text[]), false))
+		var holderCenter string
+		err := tx.QueryRow(ctx, `SELECT d.workspace_id::text, d.help_center_id::text, (d.claim = $3 OR COALESCE(d.token = ANY($4::text[]), false))
 			FROM help_center_domains d JOIN help_center_domains mine ON lower(mine.hostname) = lower(d.hostname)
-			WHERE mine.workspace_id=$1 AND mine.claim=$2 AND d.status='active' AND d.workspace_id <> $1 FOR UPDATE OF d`,
-			workspaceID, claim, proof.Claim, proof.Tokens).Scan(&holder, &holderProves)
+			WHERE mine.workspace_id=$1 AND mine.claim=$2 AND d.status='active' AND d.claim <> $2 FOR UPDATE OF d`,
+			workspaceID, claim, proof.Claim, proof.Tokens).Scan(&holder, &holderCenter, &holderProves)
 		switch {
+		case err == nil && holder == workspaceID:
+			holder = ""
+			return domain.ErrHelpCenterDomainInUse
 		case errors.Is(err, pgx.ErrNoRows):
 			// The holder went back to pending meanwhile: activate as usual (a unique violation means
 			// another claim was faster, and the caller tries again).
@@ -159,7 +199,8 @@ func (s *Store) takeOverHelpCenterHost(ctx context.Context, workspaceID, claim s
 			return domain.ErrHelpCenterDomainTaken
 		default:
 			if _, err := tx.Exec(ctx, `UPDATE help_center_domains SET status='pending', pending_reason='taken_over', failing_since=NULL,
-				address_checked_at=NULL, address_error=NULL, checked_at=$2, check_error=$3 WHERE workspace_id=$1`, holder, now, takenOverMessage); err != nil {
+				address_checked_at=NULL, address_error=NULL, checked_at=$2, check_error=$3 WHERE workspace_id=$1 AND help_center_id=$4`,
+				holder, now, takenOverMessage, holderCenter); err != nil {
 				return err
 			}
 		}
@@ -245,17 +286,26 @@ func (s *Store) NoteHelpCenterCertificate(ctx context.Context, workspaceID, host
 	return nil
 }
 
-// DeleteHelpCenterDomain removes the workspace's custom domain and returns it; removing none changes
-// nothing (found is false).
+// DeleteHelpCenterDomain removes the primary help center's custom domain (DeleteHelpCenterDomainIn).
 func (s *Store) DeleteHelpCenterDomain(ctx context.Context, workspaceID string) (removed domain.HelpCenterDomain, found bool, err error) {
+	return s.DeleteHelpCenterDomainIn(ctx, workspaceID, "")
+}
+
+// DeleteHelpCenterDomainIn removes the custom domain of help center helpCenterID ("" the primary one)
+// and returns it; removing none changes nothing (found is false).
+func (s *Store) DeleteHelpCenterDomainIn(ctx context.Context, workspaceID, helpCenterID string) (removed domain.HelpCenterDomain, found bool, err error) {
 	removed, err = scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
-		return scanHelpCenterDomain(tx.QueryRow(ctx, `DELETE FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1) RETURNING `+helpCenterDomainColumns, workspaceID))
+		target, err := resolveHelpCenter(ctx, tx, workspaceID, helpCenterID, false)
+		if err != nil {
+			return domain.HelpCenterDomain{}, err
+		}
+		return scanHelpCenterDomain(tx.QueryRow(ctx, `DELETE FROM help_center_domains WHERE workspace_id=$1 AND help_center_id=NULLIF($2,'')::uuid RETURNING `+helpCenterDomainColumns, workspaceID, target))
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.HelpCenterDomain{}, false, nil
 	}
 	if err != nil {
-		return domain.HelpCenterDomain{}, false, fmt.Errorf("delete help center domain: %w", err)
+		return domain.HelpCenterDomain{}, false, helpCenterStoreError("delete help center domain", err)
 	}
 	return removed, true, nil
 }
@@ -326,20 +376,26 @@ func (s *Store) HelpCenterHostProvenClaims(ctx context.Context, host string, pro
 	return claims, nil
 }
 
-// ActiveHelpCenterDomainWorkspaces lists the workspaces with an active custom domain, for the daily
-// re-check. Only workspace ids leave the transaction.
-func (s *Store) ActiveHelpCenterDomainWorkspaces(ctx context.Context) ([]string, error) {
-	var workspaces []string
+// ActiveHelpCenterDomain names a help center with an active custom domain.
+type ActiveHelpCenterDomain struct {
+	WorkspaceID, HelpCenterID string
+}
+
+// ActiveHelpCenterDomains lists the help centers with an active custom domain, in every workspace, for
+// the daily re-check. Only workspace and help center ids leave the transaction.
+func (s *Store) ActiveHelpCenterDomains(ctx context.Context) ([]ActiveHelpCenterDomain, error) {
+	var active []ActiveHelpCenterDomain
 	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterDomainRecheck, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM help_center_domains WHERE status='active' ORDER BY workspace_id`)
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text, help_center_id::text FROM help_center_domains
+			WHERE status='active' ORDER BY workspace_id, help_center_id`)
 		if err != nil {
 			return err
 		}
-		workspaces, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		active, err = pgx.CollectRows(rows, pgx.RowToStructByPos[ActiveHelpCenterDomain])
 		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list active help center domains: %w", err)
 	}
-	return workspaces, nil
+	return active, nil
 }

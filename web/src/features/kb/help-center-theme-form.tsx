@@ -8,6 +8,7 @@ import { HelpCenterPreview, useThemePreview } from './help-center-preview';
 import { CustomCSSField, caretAt } from './help-center-custom-css-field';
 import { ThemeInvalidError, colorFields, fontKeys, themeApi } from './theme-api';
 import type { ColorField, HelpCenterTheme, PreviewPage, ThemeCheck, ThemeInput } from './theme-api';
+import { keyOf, useHelpCenterTarget } from './help-center-target';
 import './help-center-theme.css';
 
 // The theme as the form edits it: text fields hold '' for the default.
@@ -73,7 +74,9 @@ const fieldOrder = ['logo_media_id', 'favicon_media_id', 'logo_alt', 'linkback_u
 // anyone else sees the saved values and the preview.
 export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
   const client = useQueryClient();
-  const theme = useQuery({ queryKey: ['help-center-theme'], queryFn: themeApi.get });
+  const target = useHelpCenterTarget();
+  const themeKey = keyOf(['help-center-theme'], target);
+  const theme = useQuery({ queryKey: themeKey, queryFn: () => themeApi.get(target) });
   const [draft, setDraft] = useState<Draft>();
   const [page, setPage] = useState<PreviewPage>('home');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -82,10 +85,10 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
   // The form starts from the saved brand once; a refetch in the background never replaces what is being typed.
   useEffect(() => { if (theme.data) setDraft((editing) => editing ?? draftOf(theme.data)); }, [theme.data]);
   const save = useMutation({
-    mutationFn: themeApi.save,
+    mutationFn: (input: ThemeInput) => themeApi.save(input, target),
     onMutate: () => setErrors({}),
     onSuccess: (saved) => {
-      client.setQueryData(['help-center-theme'], saved);
+      client.setQueryData(themeKey, saved);
       setDraft(draftOf(saved));
     },
     onError: (error) => {

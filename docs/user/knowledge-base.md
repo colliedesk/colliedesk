@@ -21,10 +21,13 @@ one, for example "Getting started". An article can also be listed in more collec
 - **Add**: select **New collection**, type a **Name** (and a description if you like), choose where it
   goes under **Inside** (asked once there is a collection to put it in), then **Create collection**. To add one inside the collection you are looking
   at, select **Add a collection inside**. A collection on the sixth level cannot hold another one.
+  With [several help centers](#several-help-centers), a top-level collection also asks **Shown on**:
+  the help centers whose home page lists it. A new one starts on the primary help center.
 - **Choose**: select a collection on the left to list only the articles directly in it; **All
   articles** lists every one. The number next to a collection counts the articles directly in it, drafts included, not those of the collections inside it.
 - **Edit**: select the collection, then **Edit**. You can rename it, change its description, move it
-  under another collection (or to the top), and change its **Address name**, the part of its help
+  under another collection (or to the top), change the help centers it is **Shown on** (a top-level
+  collection only; at least one), and change its **Address name**, the part of its help
   center address. Changing the address name changes the help center addresses of the collection and
   of the collections inside it; old addresses are not redirected, so the page warns you before you
   save.
@@ -42,6 +45,10 @@ box's **Articles** list use.
   see only the published articles, in the same order.
 - **A collection**: select it, then **Move up** or **Move down** next to **Delete**. It moves among
   the collections beside it (in the same collection, or at the top).
+
+With several help centers, each one's home page can list its top-level collections in an order of
+its own; an AI agent or the API sets it (see [For developers and AI agents](#for-developers-and-ai-agents)).
+Until then a help center follows the order above, and so does the primary's home.
 
 The buttons are reached with `Tab` like any other, and a screen reader hears where the row went
 ("Moved Billing to place 2 of 5."). Once a collection is ordered by hand, an article that is new,
@@ -867,6 +874,34 @@ counting and leave the list; nothing is deleted. **Earlier counts** keeps the co
 and the [export](export.md) keeps every vote and reset. After a reset the Freshdesk votes no longer
 count. A reset cannot be undone.
 
+### Conversations from votes
+
+A "No" can become a conversation, so the team can write back to the reader. It is off by default.
+Turn it on in **Knowledge → Settings → Help center** with **Open a conversation from a "No" vote**.
+It applies to every help center of the workspace. Changing it needs the right to change the help
+center (`help_center:update`) and to change channels (`channels:update`), since it lets readers
+open conversations. A role without `channels:update` sees whether it is on.
+
+While it is on, the box under **What was missing?** also asks for an email address. It is optional.
+When a reader answers **No**, writes what was missing and leaves an address:
+
+- A conversation opens with the subject "Article feedback: " and the article's title, tagged
+  `article-feedback`, from that address. Its first message names the article, its public address and
+  the reader's line, with emails and long numbers already removed.
+- The article's author, while still on the team, is asked on it with a note and gets it in
+  **Mentions**.
+- The sender shows as **Unverified sender (help center)**: anyone can type any address, so check
+  the request before you share account details.
+- Sending the same vote again opens no second conversation. The vote keeps a link to its
+  conversation, and the [export](export.md) carries it.
+
+At most 5 conversations open from one visitor address and 50 in the workspace every 10 minutes.
+Past that the vote still counts, and no conversation opens. A "No" without an address only counts,
+as before.
+
+An AI agent turns it on or off with `colliedesk_help_center_update` and `feedback_conversations`,
+without `help_center_id`.
+
 ## Views and replies
 
 **Last 30 days** (on the right of the editor; on a phone, under the text) shows how many readers opened
@@ -1203,6 +1238,42 @@ of address names, `/c/billing/cards`; changing one is not redirected. Addresses 
 see [Old help center links](import-freshdesk.md#old-help-center-links). **Changing the workspace
 address name** (Settings → Channels → Email) changes every help center address, and old links stop working.
 
+### Several help centers
+
+A workspace can have up to 20 help centers, each with its own name, address, title, language and
+collections, for example one per product. The first one is the **primary** help center: the
+settings on **Knowledge base → Settings** below the list are its settings, and it cannot be deleted.
+
+**Knowledge base → Settings → Help centers** lists them, the primary first, each with its address and
+whether it is on. Everyone who opens Settings sees the list; an admin changes it.
+
+- **Add**: select **New help center**, type a **Name** (what your team calls it) and a **Handle**,
+  then **Create help center**. The handle is 1 to 40 lowercase letters, digits or hyphens, unique in
+  the workspace. A handle the help center's own pages use, such as `search` or `articles`, is refused.
+  The new help center is served below the primary's address, at `<primary address>/<handle>`, for
+  example `https://desk.example.com/help/acme/hardware`. At 20, the page says so and has no
+  **New help center**: delete one to add another.
+- **Fill it**: a new help center starts off and shows no collection. Edit a top-level collection and
+  check it under **Shown on**; the collections inside it come along. Then select **Turn on** on its
+  row. Turning one on or off needs `kb_articles:publish` as well, and a refusal says so on the row.
+- **Delete**: select **Delete** on its row, then **Delete help center**. Its pages go offline at once
+  and its custom domain is released, so another help center can use that host name. Its collections
+  and articles stay, and keep showing on the other help centers they are shown on. A deleted help
+  center cannot be restored: make a new one and show the collections on it again. Deleting one that
+  serves on a custom domain needs `kb_articles:publish` as well. The primary cannot be deleted.
+
+- **Settings**: select **Settings** on its row. The page has the same sections as the primary's, and
+  each one reads and saves this help center only: **Publish the help center** and **Title**, **Show
+  tags on article pages**, [custom domain](#custom-domain),
+  [Search Console](#search-console-and-bing-webmaster-tools), [analytics](#analytics),
+  [languages](#in-other-languages) and [brand](#brand). **All help centers** goes back to the list.
+  Approval before publishing and the Freshdesk redirect belong to the primary, so they are not on it.
+  A host name serves one help center on the whole server: a name another help center of the
+  workspace uses is refused, and it is free again once that help center removes it or is deleted.
+
+Its home order is set through the API or by an AI agent for now (see
+[For developers and AI agents](#for-developers-and-ai-agents)).
+
 ### In other languages
 
 Each language you show (see [Languages](#languages)) has the same pages below its code:
@@ -1353,6 +1424,20 @@ to serve on the domain again.
   ("12 out of 15 found this helpful", votes imported from Freshdesk included). After **No** the reader
   can say **What was missing?** in one line. Both are plain forms that work without script. The words
   are in the article's language (English for a language without them). See [Readers' votes](#votes-from-readers).
+- After the vote, **Still need help?** lists the ways to reach you that you set up, as plain links:
+  **Ask AI** while the [AI chat](ai-chat.md) is on, your **Contact link** and your **Phone number**
+  from the [brand](#brand). An article with none of them has no block. **Ask AI** opens the chat page
+  about the article (`/chat?article=12`): it shows "Asking about" with the article's title, which the
+  reader can remove, and **Talk to a person** from there starts the message with the article's title
+  and address. A `mailto:` contact link opens an email whose subject is "Question about: <title>" and
+  whose text starts with the article's address (a link that already has its own `?subject=` is left as
+  you wrote it). Another contact link opens as it is. An article that is not published or is
+  [kept away from AI](#keep-an-article-away-from-ai) is never named in the chat.
+- **Print** under an article's title opens its print page, at the article's address followed by
+  `/print` (`/a/12-reset-your-password/print`): the title, the date and the text, without the header,
+  the side list, the footer, the vote or the chat, so the reader prints it or saves it as a PDF with
+  the browser's own print command. **Back to the article** returns to it; neither link is printed.
+  Search engines do not index the print page and the sitemap leaves it out.
 
 Every page carries structured data for search engines (schema.org JSON-LD, which runs nothing): a
 breadcrumb trail, and on an article page an `Article` with its title, description and dates. An article
@@ -1566,13 +1651,30 @@ token. Without the permission the call is refused and names what is missing
 | Turn the help center on or off, add or order its languages | `help_center:update` |
 | Show or hide a language | `help_center:update` and `kb_articles:publish` |
 | Set its theme, search console tokens and custom domain | `help_center:update` and `kb_articles:publish` |
+| List the help centers | `help_center:read` |
+| Add a help center, rename it, change its handle, title or language, delete it | `help_center:update` (and `kb_articles:publish` to turn one on or off, or to delete one on a custom domain) |
+| Choose the help centers a collection is shown on | `kb_articles:publish` as well |
 
 Articles and collections:
 
 - Search and read articles with `colliedesk_kb_articles_search` and `colliedesk_kb_article_get`. Agents
   also write, publish, delete and restore articles, manage collections, and upload and read images.
 - Order: `colliedesk_kb_order_set` or `PUT /api/v1/kb/order` puts collections and articles in
-  [order](#order).
+  [order](#order). With `parent_id` null and a `help_center_id`, it sets the order of that help
+  center's home page, listing the top-level collections shown on it; the other help centers keep
+  theirs.
+- [Several help centers](#several-help-centers): `colliedesk_help_centers_list`
+  (`GET /api/v1/help-centers`) lists them with their ids, names, handles and addresses, and `limit`.
+  `colliedesk_help_center_create` (`POST /api/v1/help-centers`) adds one.
+  `PATCH /api/v1/help-centers/{id}`, or `colliedesk_help_center_update` with its `help_center_id`,
+  renames one, changes its handle, or turns it on or off. `DELETE /api/v1/help-centers/{id}`
+  (`colliedesk_help_center_delete`) deletes one. The help center
+  tools and routes (`colliedesk_help_center_get`, `colliedesk_help_center_update`, theme, domain,
+  languages, search console, analytics) take an optional `help_center_id`; without it they act on the
+  primary. An id of another workspace, or of a deleted help center, answers 404.
+  `help_center_ids` on `colliedesk_kb_collection_create` and `colliedesk_kb_collection_update`
+  (`POST` and `PATCH /api/v1/kb/collections`) chooses where a top-level collection is shown; a
+  collection inside another answers with its top-level collection's.
 - Article order: `article_order` (`manual`, `title`, `newest` or `updated`) on
   `colliedesk_kb_collection_update` or `PATCH /api/v1/kb/collections/{id}` sets a collection's
   [article order](#article-order).

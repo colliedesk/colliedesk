@@ -52,3 +52,38 @@ test('the chat page asks a question and shows the answer in the language of the 
   expect(new URL(turns.url, 'https://help.example').searchParams.get('lang')).toBe('fr');
   expect(JSON.parse(turns.body!)).toMatchObject({ question: 'Quand ma commande part-elle ?', surface: 'help_center' });
 });
+
+// The chat page opened from an article's "Still need help?" is about it: a message to the team names it,
+// until the end user stops asking about it.
+async function handOff(article?: { number: number; title: string }, stopAsking = false) {
+  const config = { surface: 'page', name: 'Acme', siteTitle: 'Acme help', home: '/', search: '/search', api: '/chat', channel: 'c1', page: '/chat?channel=c1',
+    trial: false, greeting: '', suggestions: [], text: {}, article };
+  const mount = document.createElement('div');
+  mount.id = 'chat';
+  mount.setAttribute('data-config', JSON.stringify(config));
+  document.body.appendChild(mount);
+  const asked: { url: string; body?: string }[] = [];
+  vi.stubGlobal('fetch', vi.fn((url: string, init: RequestInit) => {
+    asked.push({ url, body: init.body as string | undefined });
+    if (url.includes('/chat/session')) return Promise.resolve(new Response(JSON.stringify({ turns: [], idle_hours: 0 }), { status: 200 }));
+    return Promise.resolve(new Response(JSON.stringify({ reference: 'ABCD1234', trial: false }), { status: 201 }));
+  }));
+  new Function(script)();
+  await vi.waitFor(() => expect(asked.some((call) => call.url.includes('/chat/session'))).toBe(true));
+  if (stopAsking) (document.querySelector('.chip button') as HTMLButtonElement).click();
+  (document.querySelector('button.person') as HTMLButtonElement).click();
+  (document.querySelector('input[type=email]') as HTMLInputElement).value = 'reader@example.com';
+  document.querySelector('form.handoff')!.dispatchEvent(new Event('submit', { cancelable: true }));
+  await vi.waitFor(() => expect(asked.some((call) => call.url.includes('/chat/handoff'))).toBe(true));
+  return JSON.parse(asked.find((call) => call.url.includes('/chat/handoff'))!.body!);
+}
+
+test('a message to the team from a chat about an article names the article', async () => {
+  expect(await handOff({ number: 12, title: 'Reset your password' })).toEqual({ email: 'reader@example.com', article_number: 12 });
+});
+
+test('a message to the team names no article once the end user stops asking about it', async () => {
+  expect(await handOff({ number: 12, title: 'Reset your password' }, true)).toEqual({ email: 'reader@example.com' });
+  document.body.textContent = '';
+  expect(await handOff()).toEqual({ email: 'reader@example.com' });
+});

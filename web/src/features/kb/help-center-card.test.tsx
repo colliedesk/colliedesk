@@ -7,7 +7,7 @@ import { json, serve } from './kb.test.fixture';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const off = { enabled: false, title: '', locale: 'pt-BR', require_approval: false, content_version: 3, updated_at: null, show_tags: false, url: 'https://desk.example.com/help/acme' };
+const off = { enabled: false, title: '', locale: 'pt-BR', require_approval: false, content_version: 3, updated_at: null, show_tags: false, feedback_conversations: false, url: 'https://desk.example.com/help/acme' };
 
 function open(canManage: boolean) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><HelpCenterSettings canManage={canManage} workspaceName="Acme" /></QueryClientProvider>);
@@ -108,4 +108,23 @@ test('an agent reads whether readers see tags', async () => {
   serve({ 'GET /api/v1/help-center': () => json(200, { ...off, show_tags: true }) });
   open(false);
   expect(await screen.findByText('Article pages show their tags to readers.')).toBeInTheDocument();
+});
+
+test('an admin who may change channels turns a "No" vote with an address into a conversation; only feedback_conversations is sent with the settings as they are', async () => {
+  const calls = serve({ 'GET /api/v1/help-center': () => json(200, off), 'PUT /api/v1/help-center': (call) => json(200, { ...off, ...(call.body as object) }) });
+  open(true);
+  const box = await screen.findByRole('checkbox', { name: 'Open a conversation from a "No" vote' });
+  expect(box).not.toBeChecked();
+  expect(box).toHaveAccessibleDescription('A reader who answers No, writes what was missing and leaves an email address opens a conversation, and the article\'s author is asked on it. Replies go to that address.');
+  fireEvent.click(box);
+  await waitFor(() => expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ enabled: false, title: '', locale: 'pt-BR', feedback_conversations: true }));
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Open a conversation from a "No" vote' })).toBeChecked());
+});
+
+test('an admin who may not change channels reads whether a "No" vote opens a conversation but cannot change it', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, { ...off, feedback_conversations: true }) });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <PermissionsContext.Provider value={['help_center:read', 'help_center:update']}><HelpCenterSettings canManage workspaceName="Acme" /></PermissionsContext.Provider></QueryClientProvider>);
+  expect(await screen.findByText('A "No" vote that leaves an address opens a conversation.')).toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: 'Open a conversation from a "No" vote' })).not.toBeInTheDocument();
 });

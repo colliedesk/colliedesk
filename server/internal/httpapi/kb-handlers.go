@@ -121,16 +121,17 @@ func (a *API) listTrashedKBCollections(response http.ResponseWriter, request *ht
 
 func (a *API) createKBCollection(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Name        string  `json:"name"`
-		Slug        *string `json:"slug"`
-		Description string  `json:"description"`
-		ParentID    *string `json:"parent_id"`
-		Position    int     `json:"position"`
-		Template    *string `json:"default_template_id"`
-		Visibility  string  `json:"visibility"`
+		Name        string    `json:"name"`
+		Slug        *string   `json:"slug"`
+		Description string    `json:"description"`
+		ParentID    *string   `json:"parent_id"`
+		Position    int       `json:"position"`
+		Template    *string   `json:"default_template_id"`
+		Visibility  string    `json:"visibility"`
+		HelpCenters *[]string `json:"help_center_ids"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A collection needs a name; slug, description, parent_id, position, default_template_id and visibility are optional.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "A collection needs a name; slug, description, parent_id, position, default_template_id, visibility and help_center_ids are optional.")
 		return
 	}
 	if input.Slug != nil && *input.Slug == "" {
@@ -150,10 +151,14 @@ func (a *API) createKBCollection(response http.ResponseWriter, request *http.Req
 	if input.Template != nil {
 		template = *input.Template
 	}
-	a.createOnce(response, request, createKBCollectionOperation, []string{input.Name, slug, input.Description, parent, strconv.Itoa(input.Position), template, input.Visibility}, func(ctx context.Context) (any, error) {
+	helpCenters := "primary"
+	if input.HelpCenters != nil {
+		helpCenters = strings.Join(*input.HelpCenters, ",")
+	}
+	a.createOnce(response, request, createKBCollectionOperation, []string{input.Name, slug, input.Description, parent, strconv.Itoa(input.Position), template, input.Visibility, helpCenters}, func(ctx context.Context) (any, error) {
 		collection, err := a.store.CreateKBCollection(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
 			store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position,
-				DefaultTemplateID: input.Template, Visibility: input.Visibility})
+				DefaultTemplateID: input.Template, Visibility: input.Visibility, HelpCenterIDs: input.HelpCenters})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered
@@ -174,6 +179,7 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 		Approval    *string         `json:"require_approval"`
 		Order       *string         `json:"article_order"`
 		Visibility  *string         `json:"visibility"`
+		HelpCenters *[]string       `json:"help_center_ids"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and what to change.")
@@ -182,7 +188,7 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 	// A collection's name, slug and place are the help center's navigation, and showing it to more
 	// people publishes what is in it; keeping it from more people is an edit.
 	onlyRestricts := input.Name == nil && input.Slug == nil && input.Description == nil && input.Position == nil &&
-		input.ParentID == nil && input.Template == nil && input.Approval == nil && input.Order == nil && input.Visibility != nil
+		input.ParentID == nil && input.Template == nil && input.Approval == nil && input.Order == nil && input.HelpCenters == nil && input.Visibility != nil
 	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, func() (bool, error) {
 		if !onlyRestricts {
 			return true, nil
@@ -195,7 +201,8 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 	if input.Approval != nil && a.refuseUnlessHeld(response, request, principal(request), auth.PermHelpCenterUpdate, nil) {
 		return
 	}
-	change := store.KBCollectionChange{Name: input.Name, Slug: input.Slug, Description: input.Description, Position: input.Position, RequireApproval: input.Approval, ArticleOrder: input.Order, Visibility: input.Visibility}
+	change := store.KBCollectionChange{Name: input.Name, Slug: input.Slug, Description: input.Description, Position: input.Position, RequireApproval: input.Approval, ArticleOrder: input.Order, Visibility: input.Visibility,
+		HelpCenterIDs: input.HelpCenters}
 	if input.ParentID != nil {
 		change.MoveParent = true
 		if string(input.ParentID) != "null" {
@@ -272,6 +279,7 @@ func (a *API) setKBOrder(response http.ResponseWriter, request *http.Request) {
 	}
 	var input struct {
 		ParentID      json.RawMessage `json:"parent_id"`
+		HelpCenterID  *string         `json:"help_center_id"`
 		CollectionIDs *[]string       `json:"collection_ids"`
 		ArticleIDs    *[]string       `json:"article_ids"`
 	}
@@ -280,7 +288,7 @@ func (a *API) setKBOrder(response http.ResponseWriter, request *http.Request) {
 			"Send parent_id (null for the top), collection_ids and article_ids: everything directly under that parent, first to last.")
 		return
 	}
-	order := domain.KBOrder{CollectionIDs: *input.CollectionIDs, ArticleIDs: *input.ArticleIDs}
+	order := domain.KBOrder{HelpCenterID: input.HelpCenterID, CollectionIDs: *input.CollectionIDs, ArticleIDs: *input.ArticleIDs}
 	if string(input.ParentID) != "null" {
 		var parent string
 		if err := json.Unmarshal(input.ParentID, &parent); err != nil {
@@ -292,9 +300,13 @@ func (a *API) setKBOrder(response http.ResponseWriter, request *http.Request) {
 	order, err := a.store.SetKBOrder(request.Context(), principal(request).Workspace.ID, order)
 	var stale *domain.KBOrderStaleError
 	if errors.As(err, &stale) {
-		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "order_stale",
+		body := map[string]any{"code": "order_stale",
 			"message":        "Something was added, moved or deleted here since you read it. Nothing changed; read the order again and send it whole.",
-			"collection_ids": stale.Current.CollectionIDs, "article_ids": stale.Current.ArticleIDs})})
+			"collection_ids": stale.Current.CollectionIDs, "article_ids": stale.Current.ArticleIDs}
+		if stale.Current.HelpCenterID != nil {
+			body["help_center_id"] = *stale.Current.HelpCenterID
+		}
+		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, body)})
 		return
 	}
 	if errors.Is(err, domain.ErrKBCollectionNotFound) {
@@ -879,6 +891,8 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 		Locale          *string `json:"locale"`
 		RequireApproval *bool   `json:"require_approval"`
 		ShowTags        *bool   `json:"show_tags"`
+		// FeedbackConversations lets anyone reading an article open a conversation, as a channel does.
+		FeedbackConversations *bool `json:"feedback_conversations"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil || input.Title == nil || input.Locale == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send enabled, title and locale.")
@@ -889,8 +903,12 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 	if input.RequireApproval != nil && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID,
-		store.HelpCenterChange{Enabled: *input.Enabled, Title: *input.Title, Locale: *input.Locale, RequireApproval: input.RequireApproval, ShowTags: input.ShowTags})
+	// Conversations from votes are a way for anyone to write in, so they are a channel decision.
+	if input.FeedbackConversations != nil && a.refuseUnlessHeld(response, request, who, auth.PermChannelsUpdate, nil) {
+		return
+	}
+	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID, store.HelpCenterChange{Enabled: *input.Enabled, Title: *input.Title,
+		Locale: *input.Locale, RequireApproval: input.RequireApproval, ShowTags: input.ShowTags, FeedbackConversations: input.FeedbackConversations})
 	if err != nil {
 		writeKBError(response, err)
 		return

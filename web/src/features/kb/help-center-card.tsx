@@ -8,6 +8,7 @@ import { kbApi } from './kb-api';
 import { HelpCenterAnalyticsSection } from './help-center-analytics';
 import { HelpCenterApproval } from './help-center-approval';
 import { HelpCenterShowTags } from './help-center-show-tags';
+import { HelpCenterFeedbackConversations } from './help-center-feedback-conversations';
 import { HelpCenterDomainSection } from './help-center-domain';
 import { HelpCenterFreshdeskRedirectSection } from './help-center-freshdesk-redirect';
 import { HelpCenterSearchConsoleSection } from './help-center-search-console';
@@ -24,7 +25,7 @@ const loadThemeSection = () => (themeSection ??= import('./help-center-theme-for
   throw error;
 }));
 
-function Brand({ canManage }: { canManage: boolean }) {
+export function Brand({ canManage }: { canManage: boolean }) {
   const [Section, setSection] = useState<ThemeSection>();
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -76,6 +77,7 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
       : <p className="muted-copy">{kbMessages.helpCenterAdminsOnly}</p>}
     <HelpCenterApproval settings={settings.data} canManage={canManage} />
     <HelpCenterShowTags settings={settings.data} canManage={canManage} />
+    <HelpCenterFeedbackConversations settings={settings.data} canManage={canManage} />
     <HelpCenterDomainSection canManage={canManage} timezone={timezone} />
     <HelpCenterSearchConsoleSection canManage={canManage} />
     <HelpCenterAnalyticsSection canManage={canManage} timezone={timezone} />

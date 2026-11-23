@@ -27,6 +27,7 @@ type restKBCollection struct {
 	Translations      []kbCollectionName `json:"translations"`
 	RequireApproval   string             `json:"require_approval"`
 	ArticleOrder      string             `json:"article_order"`
+	HelpCenterIDs     []string           `json:"help_center_ids"`
 	kbVisibilityOut
 }
 
@@ -54,13 +55,14 @@ type kbCollectionOut struct {
 	Translations      []kbCollectionName `json:"translations"`
 	RequireApproval   string             `json:"require_approval"`
 	ArticleOrder      string             `json:"article_order"`
+	HelpCenterIDs     []string           `json:"help_center_ids,omitempty"`
 	kbVisibilityOut
 }
 
 func kbCollectionView(collection restKBCollection) kbCollectionOut {
 	out := kbCollectionOut{ID: collection.ID, ParentID: collection.ParentID, DefaultTemplateID: collection.DefaultTemplateID, Name: collection.Name, Slug: collection.Slug, Description: collection.Description,
 		Position: collection.Position, ArticleCount: collection.ArticleCount, UpdatedAt: collection.UpdatedAt, DeletedAt: collection.DeletedAt, PurgesAt: collection.PurgesAt,
-		Translations: collection.Translations, RequireApproval: collection.RequireApproval, ArticleOrder: collection.ArticleOrder, kbVisibilityOut: collection.kbVisibilityOut}
+		Translations: collection.Translations, RequireApproval: collection.RequireApproval, ArticleOrder: collection.ArticleOrder, HelpCenterIDs: collection.HelpCenterIDs, kbVisibilityOut: collection.kbVisibilityOut}
 	if out.Translations == nil {
 		out.Translations = []kbCollectionName{}
 	}
@@ -318,7 +320,7 @@ func kbCollectionUpdate(c *call, arguments map[string]any) (any, error) {
 		change["parent_id"] = nil
 	}
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: name, slug, description, position, parent_id, move_to_top, default_template_id, require_approval, article_order or visibility."}
+		return nil, &toolError{"Give something to change: name, slug, description, position, parent_id, move_to_top, default_template_id, require_approval, article_order, visibility or help_center_ids."}
 	}
 	c.forCollection(args.ID)
 	var updated restKBCollection
@@ -707,20 +709,4 @@ func kbImageGet(c *call, arguments map[string]any) (any, error) {
 	}
 	meta := restKBImage{ID: args.ID, ContentType: header.Get("Content-Type"), Size: int64(len(body)), SHA256: header.Get("X-Content-SHA256")}
 	return &imageResult{Data: body, MIMEType: meta.ContentType, Meta: map[string]any{"id": meta.ID, "content_type": meta.ContentType, "size": meta.Size, "sha256": meta.SHA256}}, nil
-}
-
-func helpCenterGet(c *call, _ map[string]any) (any, error) {
-	var center map[string]any
-	if err := c.get("/api/v1/help-center", nil, &center); err != nil {
-		return nil, err
-	}
-	return map[string]any{"help_center": center}, nil
-}
-
-func helpCenterUpdate(c *call, arguments map[string]any) (any, error) {
-	var center map[string]any
-	if err := c.send(http.MethodPut, "/api/v1/help-center", arguments, &center); err != nil {
-		return nil, err
-	}
-	return map[string]any{"help_center": center}, nil
 }

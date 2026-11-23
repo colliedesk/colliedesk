@@ -219,7 +219,7 @@ func (w *Worker) process(parent context.Context, item claimed) error {
 func (w *Worker) importOptions(job runRow, key string, onProgress func(freshdesk.ProgressEvent)) freshdesk.Options {
 	options := freshdesk.Options{WorkspaceSlug: job.slug, BaseURL: w.options.BaseURL(job.Domain), APIKey: key, Storage: w.options.Storage,
 		Cloud: w.options.Cloud, PlansOnSale: w.options.PlansOnSale, PaidStorageBytes: w.options.PaidStorageBytes, ReserveRateLimit: true,
-		IncludePersonalCannedResponses: job.Options.IncludePersonalCannedResponses, HelpCenterPortal: job.Options.HelpCenterPortal, OnProgress: onProgress,
+		IncludePersonalCannedResponses: job.Options.IncludePersonalCannedResponses, OnProgress: onProgress,
 		Origin: w.options.Origin, HelpCenterDomain: w.options.HelpCenterDomain, OldHelpCenterDomain: job.Options.OldHelpCenterDomain,
 		MilestoneByCaller: true}
 	if w.options.Configure != nil {

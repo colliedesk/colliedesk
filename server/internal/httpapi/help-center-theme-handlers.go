@@ -120,7 +120,11 @@ func writeThemeError(response http.ResponseWriter, err error) {
 }
 
 func (a *API) getHelpCenterTheme(response http.ResponseWriter, request *http.Request) {
-	view, err := a.store.GetHelpCenterTheme(request.Context(), principal(request).Workspace.ID)
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
+	view, err := a.store.GetHelpCenterThemeIn(request.Context(), principal(request).Workspace.ID, helpCenterID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -129,6 +133,10 @@ func (a *API) getHelpCenterTheme(response http.ResponseWriter, request *http.Req
 }
 
 func (a *API) putHelpCenterTheme(response http.ResponseWriter, request *http.Request) {
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
 	input, ok := decodeTheme(response, request)
 	if !ok {
 		return
@@ -146,7 +154,7 @@ func (a *API) putHelpCenterTheme(response http.ResponseWriter, request *http.Req
 	if a.refuseUnlessHeld(response, request, principal(request), auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	view, err := a.store.PutHelpCenterTheme(request.Context(), principal(request).Workspace.ID, cleaned)
+	view, err := a.store.PutHelpCenterThemeIn(request.Context(), principal(request).Workspace.ID, helpCenterID, cleaned)
 	if err != nil {
 		writeThemeError(response, err)
 		return
@@ -157,13 +165,17 @@ func (a *API) putHelpCenterTheme(response http.ResponseWriter, request *http.Req
 // checkHelpCenterTheme runs the checks of a save and stores nothing. Contrast is an answer here, not
 // an error, so an editor can show every pair while a person picks colors.
 func (a *API) checkHelpCenterTheme(response http.ResponseWriter, request *http.Request) {
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
 	input, ok := decodeTheme(response, request)
 	if !ok {
 		return
 	}
 	cleaned, err := cleanTheme(input.theme())
 	if err == nil {
-		err = a.store.CheckHelpCenterThemeMedia(request.Context(), principal(request).Workspace.ID, cleaned)
+		err = a.store.CheckHelpCenterThemeMedia(request.Context(), principal(request).Workspace.ID, helpCenterID, cleaned)
 	}
 	if err != nil {
 		writeThemeError(response, err)
@@ -177,6 +189,10 @@ func (a *API) checkHelpCenterTheme(response http.ResponseWriter, request *http.R
 // Each person's previews count against the help center's page budget, so an editor left typing cannot
 // load the server; a body the server cannot read counts too.
 func (a *API) previewHelpCenterTheme(response http.ResponseWriter, request *http.Request) {
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
 	who := principal(request)
 	if allowed, wait := a.helpCenterPages.allow("preview "+who.Workspace.ID+" "+who.Agent.ID, a.now()); !allowed {
 		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
@@ -201,7 +217,7 @@ func (a *API) previewHelpCenterTheme(response http.ResponseWriter, request *http
 		return
 	}
 	// The logo and favicon are checked in the preview's own transaction.
-	html, err := a.helpCenter.Preview(request.Context(), who.Workspace.ID, cleaned, input.Page)
+	html, err := a.helpCenter.Preview(request.Context(), who.Workspace.ID, helpCenterID, cleaned, input.Page)
 	if err != nil {
 		writeThemeError(response, err)
 		return
