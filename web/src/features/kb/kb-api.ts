@@ -5,6 +5,11 @@ import { kbListColumnSchema } from '../../api/schemas';
 import type { Generated, JsonResponse, KBListColumn } from '../../api/schemas';
 import { articleQuery } from './knowledge-search';
 import type { KBArticleFilters } from './knowledge-search';
+// The inbox reads help centers from the first bundle; the languages schema lives there so this module stays in the
+// knowledge base's chunk.
+import { helpCenterLanguagesSchema } from './help-centers-api';
+export { helpCenterLanguagesSchema } from './help-centers-api';
+export type { HelpCenterLanguages } from './help-centers-api';
 
 // The knowledge base pages load in their own chunk, so their schemas and calls are not in the first bundle.
 
@@ -123,13 +128,6 @@ const languageItemSchema = z.object({
   article_id: z.string().uuid(), number: z.number().int(), title: z.string(), status: statusSchema, collection_id: z.string().uuid(), collection_name: z.string(),
   updated_at: z.string().datetime(), translation: translationSummarySchema.nullable(),
 }) satisfies z.ZodType<Generated<'KBLanguageItem'>>;
-export const helpCenterLanguagesSchema = z.object({
-  primary: z.string(),
-  languages: z.array(z.object({
-    locale: z.string(), visible: z.boolean(), position: z.number().int(), published: z.number().int(), drafts: z.number().int(), outdated: z.number().int(), missing: z.number().int(),
-  })),
-  unlisted: z.array(z.string()),
-}) satisfies z.ZodType<Generated<'HelpCenterLanguages'>>;
 const languagePageSchema = z.object({ items: z.array(languageItemSchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<JsonResponse<'listKBLanguage', 200>>;
 const trashedTranslationPageSchema = z.object({ items: z.array(trashedTranslationSchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<JsonResponse<'listTrashedKBTranslations', 200>>;
 const translationVersionPageSchema = z.object({ items: z.array(translationVersionSchema), next_before_version: z.number().int().nullable() }) satisfies z.ZodType<JsonResponse<'listKBTranslationVersions', 200>>;
@@ -180,7 +178,6 @@ export type KBTranslationSummary = z.infer<typeof translationSummarySchema>;
 export type KBTranslation = z.infer<typeof kbTranslationSchema>;
 export type KBTranslationVersion = z.infer<typeof translationVersionSchema>;
 export type KBLanguageItem = z.infer<typeof languageItemSchema>;
-export type HelpCenterLanguages = z.infer<typeof helpCenterLanguagesSchema>;
 export type KBApprovalMode = z.infer<typeof approvalModeSchema>;
 export type KBVisibility = z.infer<typeof visibilitySchema>;
 export type KBLanguageState = 'missing' | 'outdated' | 'translated';

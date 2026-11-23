@@ -3,7 +3,6 @@ import { request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import { noContentSchema } from '../../api/schemas';
 import type { Generated, JsonResponse } from '../../api/schemas';
-import { helpCenterLanguagesSchema } from './kb-api';
 
 // The workspace's help centers: the primary one at the workspace's address and the others below it at
 // /<handle> (or on a custom domain of their own). Top-level collections choose the ones they show on.
@@ -14,6 +13,15 @@ const helpCenterSummarySchema = z.object({
 const helpCenterListSchema = z.object({ help_centers: z.array(helpCenterSummarySchema), limit: z.number().int() }) satisfies z.ZodType<JsonResponse<'listHelpCenters', 200>>;
 
 export type HelpCenterSummary = z.infer<typeof helpCenterSummarySchema>;
+
+export const helpCenterLanguagesSchema = z.object({
+  primary: z.string(),
+  languages: z.array(z.object({
+    locale: z.string(), visible: z.boolean(), position: z.number().int(), published: z.number().int(), drafts: z.number().int(), outdated: z.number().int(), missing: z.number().int(),
+  })),
+  unlisted: z.array(z.string()),
+}) satisfies z.ZodType<Generated<'HelpCenterLanguages'>>;
+export type HelpCenterLanguages = z.infer<typeof helpCenterLanguagesSchema>;
 
 export const helpCentersKey = ['help-centers'] as const;
 

@@ -81,7 +81,13 @@ const oauthConsentPart = lazyPart(() => import('./features/auth/oauth-consent'))
 // the screen never goes blank as a reload would (routes-never-blank.test.tsx holds every route to it). On the
 // first load there is no page to keep: it only starts the chunk, and the rail and the page's frame show at once.
 let pageOnScreen = false;
-const pageChunk = (part: LazyPart<unknown>) => () => (pageOnScreen ? part.ready() : part.preload());
+// The address lets a page whose chunk is gone after a deploy load the app again there (ui/lazy-part.tsx); a loader
+// run ahead of a click (the router's intent preload) passes ahead, so a failure there reloads nothing yet.
+interface PageNavigation { location: { href: string }; preload: boolean }
+const pageChunk = (part: LazyPart<unknown>) => ({ location, preload }: PageNavigation) => {
+  const ready = part.ready({ target: location.href, ahead: preload });
+  return pageOnScreen || preload ? ready : undefined;
+};
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -491,9 +497,9 @@ function billingReadable(me: Me | undefined, config: PublicConfig | undefined) {
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/billing',
-  loader: ({ context: { queryClient } }) => {
+  loader: ({ context: { queryClient }, ...navigation }) => {
     if (queryClient && billingReadable(queryClient.getQueryData<Me>(['me']), queryClient.getQueryData<PublicConfig>(['public-config']))) void queryClient.prefetchQuery({ queryKey: ['billing'], queryFn: api.billing });
-    return pageChunk(billingRoutePart)();
+    return pageChunk(billingRoutePart)(navigation);
   },
   // `buy=<plan>` is the link the website uses to send a visitor straight into that plan's checkout.
   validateSearch: (search: Record<string, unknown>): { checkout: 'success' | ''; buy?: string } => ({
@@ -588,7 +594,7 @@ function ChannelsSettings({ path, search }: { path: string; search: ChannelsSear
 const channelRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/settings/channels/$', validateSearch: channelsSearch,
   // The loader also asks for what the page reads, so a hover, a click or a typed address asks for everything at once.
-  loader: ({ context: { queryClient }, location }) => { if (queryClient) preloadChannelsPage(queryClient, location.pathname); return pageChunk(channelsRoutePart)(); },
+  loader: ({ context: { queryClient }, ...navigation }) => { if (queryClient) preloadChannelsPage(queryClient, navigation.location.pathname); return pageChunk(channelsRoutePart)(navigation); },
   component: function Channel() { return <ChannelsSettings path={channelRoute.useParams()._splat ?? ''} search={channelRoute.useSearch()} />; },
 });
 // The setup flow is its own chunk (setup-flow-part.ts); one component reads the step in the address.
@@ -598,13 +604,13 @@ function SetupFlow({ step }: { step?: string }) {
   return <Part part={setupFlowPart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ SetupFlowRoute }) => <SetupFlowRoute step={step} navigate={go} />} />;
 }
 // The loader asks for what a step reads with its chunk, so a hover, a click, a typed address or the sign-up asks for everything at once.
-function setupLoader(queryClient: QueryClient | undefined, step?: string) {
+function setupLoader(navigation: PageNavigation, queryClient: QueryClient | undefined, step?: string) {
   if (queryClient) preloadSetupStep(queryClient, step);
-  return pageChunk(setupFlowPart)();
+  return pageChunk(setupFlowPart)(navigation);
 }
-const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', loader: ({ context: { queryClient } }) => setupLoader(queryClient), component: () => <SetupFlow /> });
+const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', loader: ({ context: { queryClient }, ...navigation }) => setupLoader(navigation, queryClient), component: () => <SetupFlow /> });
 const setupStepRoute = createRoute({
-  getParentRoute: () => rootRoute, path: '/setup/$step', loader: ({ context: { queryClient }, params }) => setupLoader(queryClient, params.step),
+  getParentRoute: () => rootRoute, path: '/setup/$step', loader: ({ context: { queryClient }, params, ...navigation }) => setupLoader(navigation, queryClient, params.step),
   component: function SetupStep() { return <SetupFlow step={setupStepRoute.useParams().step} />; },
 });
 const resultsRoute = createRoute({
@@ -628,14 +634,14 @@ function AutofixScreen({ render }: { render: (chunk: typeof import('./features/a
 const fixesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/fixes',
-  loader: () => (autofixPreviewOn() ? pageChunk(autofixPart)() : undefined),
+  loader: (navigation) => (autofixPreviewOn() ? pageChunk(autofixPart)(navigation) : undefined),
   validateSearch: (search: Record<string, unknown>): { repo?: unknown; agent?: unknown } => search,
   component: () => <AutofixScreen render={({ FixesScreen }) => <FixesScreen />} />,
 });
 const autofixSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/autofix',
-  loader: () => (autofixPreviewOn() ? pageChunk(autofixPart)() : undefined),
+  loader: (navigation) => (autofixPreviewOn() ? pageChunk(autofixPart)(navigation) : undefined),
   component: () => <AutofixScreen render={({ AutofixSettingsRoute }) => <AutofixSettingsRoute />} />,
 });
 const resultsShareRoute = createRoute({
