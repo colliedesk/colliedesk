@@ -102,14 +102,12 @@
 .check-row span { min-width: 0; overflow-wrap: anywhere; }
 .check-row:has(input:disabled) { color: var(--text-3); cursor: not-allowed; }
 /* One menu recipe (Filter, Views, bulk menus, select pickers): 30 px rows, a trailing check, groups split by space.
-   The checkbox or radio stays in the row for keyboards and screen readers; the row draws the state. */
+   A radio stays in the row for keyboards and screen readers and the row draws its state; a checkbox shows itself. */
 .filter-popover .check-row { padding: 0 var(--space-2); border-radius: var(--radius); }
 .filter-popover .check-row:hover { background: var(--surface-2); }
-.filter-popover .check-row > input:is([type="checkbox"], [type="radio"]) { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.filter-popover .check-row:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
-/* A checkbox row starts with its box, empty until ticked, so each row reads as a choice; a radio row ends with a tick. */
-.filter-popover .check-row:has(> input[type="checkbox"])::before { content: "" / ""; width: 14px; height: 14px; flex: none; box-sizing: border-box; border: 1.5px solid var(--line-strong); border-radius: 4px; background: var(--surface-1) center / 10px no-repeat; }
-.filter-popover .check-row:has(> input[type="checkbox"]:checked)::before { border-color: var(--accent); background-color: var(--accent); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E"); }
+.filter-popover .check-row > input[type="radio"] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.filter-popover .check-row:has(> input[type="radio"]:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* A checkbox row starts with the app checkbox (base-plain.css), so each row reads as a choice; a radio row ends with a tick. */
 .filter-popover .check-row:has(> input[type="radio"]:checked)::after {
   content: "" / ""; margin-left: auto; width: 14px; height: 14px; flex: none; background: var(--text-1); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center / contain no-repeat;
 }
@@ -1310,9 +1308,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .details-panel .conversation-organization .link-button:hover:not(:disabled) { color: var(--accent-hover); }
 /* AI consent card: its strong edge came from the panel border; it is now a ring. */
 .panel.ai-consent { box-shadow: 0 0 0 1px var(--line-strong); }
-/* Forced colours: the menu rows show their native checkbox again, and selects use the native picker and arrow. */
+/* Forced colours: the menu rows show their native radio again, and selects use the native picker and arrow. */
 @media (forced-colors: active) {
-  .filter-popover .check-row > input:is([type="checkbox"], [type="radio"]) { position: static; width: auto; height: auto; opacity: 1; }
+  .filter-popover .check-row > input[type="radio"] { position: static; width: auto; height: auto; opacity: 1; }
   .filter-popover .check-row::before, .filter-popover .check-row::after { display: none; }
   .sort-field, .property-row select { appearance: auto; }
   .property-row::after { forced-color-adjust: auto; }

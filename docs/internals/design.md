@@ -260,10 +260,14 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
   list the ring is inset (`outline-offset: -2px`) so the next row does not clip it.
 - Form controls share the neutral surface and ink tokens. Every select draws the same chevron from
   `--select-chevron`, a per-theme token whose stroke equals `--text-3` (checked by
-  `web/scripts/form-controls.test.mjs`); it stays visible when disabled. Checkboxes and radios share
-  one rule in `base.css`: native controls with `accent-color: var(--accent)`, so checked and
-  indeterminate states are ink in both themes; their labels keep readable text when disabled.
-  Forced-colour mode keeps native checkbox and radio rendering and restores the native select arrow.
+  `web/scripts/form-controls.test.mjs`); it stays visible when disabled. The workspace app has one
+  checkbox (`styles/checkbox.css`, Paper "Checkbox — states"): the real input with `appearance: none`, a
+  16 px box with a 1.5 px `--line-strong` border (3:1, since the border is the only cue of an empty box),
+  `--accent` with a per-theme tick or dash (`--check-mark`, `--check-mixed`) when checked or mixed. Menus
+  show it as it is and never draw a second box. Switches (`.switch`, `role="switch"`) keep their track.
+  The operator console imports `base-plain.css` only and keeps the native checkbox with
+  `accent-color: var(--accent)`, inside its CSS budget; radios keep the native dot everywhere.
+  Forced-colour mode restores the native checkbox and radio and the native select arrow.
 - Settings saves show feedback inline, never a toast: the button is disabled and reads "Saving…" while the request runs (a second submit is refused), then a "Saved" line (`role="status"`) or the error (`role="alert"`) appears beside that form. "Saved" clears when the form is edited. `features/settings/save-feedback.tsx` holds the pattern.
 - A control offers only real choices. A select appears only with two or more of them (a placeholder is not
   one; with a single value there is nothing to ask, so the value is shown or used as it is), and no control
