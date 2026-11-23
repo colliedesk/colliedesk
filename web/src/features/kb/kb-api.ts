@@ -69,7 +69,9 @@ const summaryFields = {
 const listColumnsSchema = z.object({ columns: z.array(kbListColumnSchema), default: z.boolean() }) satisfies z.ZodType<JsonResponse<'setKBListColumns', 200>>;
 // Only the article list counts readers' answers to "Was this article helpful?" (imported ones included);
 // one article read alone, or in the trash, comes without them.
-const summarySchema = z.object({ ...summaryFields, votes: z.object({ helpful: z.number().int(), not_helpful: z.number().int() }) }) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
+// open_conflicts: sent replies the small model found to contradict it, not cleared; above 0 it may be out of date.
+const openConflicts = z.number().int().min(0);
+const summarySchema = z.object({ ...summaryFields, votes: z.object({ helpful: z.number().int(), not_helpful: z.number().int() }), open_conflicts: openConflicts }) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
 // A file listed under an article or translation, in the order the reader sees.
 export const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
 // The unpublished changes of a published article: what publishing them puts live. Its updated_at is the
@@ -86,7 +88,7 @@ const gapSourceSchema = z.object({
   conversations: z.array(z.object({ conversation_id: z.string().uuid(), display_ref: z.string(), subject: z.string() })),
 }) satisfies z.ZodType<Generated<'KBArticleGapSource'>>;
 export const kbArticleSchema = z.object({
-  ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
+  ...summaryFields, open_conflicts: openConflicts, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
   ai_exclusion: z.object({ at: z.string().datetime(), by: personSchema.nullable() }).nullable(),
   // Only when one article is read: the AI reply drafts this month that used it.
   ai_drafts_this_month: z.number().int().optional(),

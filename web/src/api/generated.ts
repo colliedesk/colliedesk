@@ -9051,6 +9051,8 @@ export interface components {
         KBArticle: {
             /** @description Its published tags, as in KBArticleSummary. */
             tags: components["schemas"]["KBArticleTags"];
+            /** @description As in KBArticleSummary: above 0 the article may be out of date (GET /api/v1/kb/articles/{id}/conflicts). */
+            open_conflicts: number;
             /** @description Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source. */
             ai_drafts_this_month?: number;
             /** @description Only when one article is read (GET): its help center views in the last 30 days, today included (GET /api/v1/kb/articles/{id}/stats has them per day). */
