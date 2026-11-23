@@ -218,4 +218,8 @@ const (
 	// review and agent ids leave the transaction; each email is then claimed, read, sent and settled in its
 	// own workspace.
 	PrivilegeKBReviewEmailClaim Privilege = "kb-review-email-claim"
+	// PrivilegeKBConflictQueue lists the workspaces that have sent replies queued to be checked against
+	// their knowledge base. Only workspace ids leave the transaction; each reply is then matched, sent to
+	// the workspace's model and flagged in its own workspace.
+	PrivilegeKBConflictQueue Privilege = "kb-conflict-queue"
 )
