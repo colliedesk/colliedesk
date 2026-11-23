@@ -1,18 +1,21 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import type { Me, WorkspaceChoice } from '../../api/schemas';
+import type { Me } from '../../api/schemas';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
+import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 
 // The dialog is a chunk of its own: nobody pays for it until they report a problem.
 const ReportProblemDialog = lazy(() => import('./report-problem-dialog').then((module) => ({ default: module.ReportProblemDialog })));
-// So is the identity provider's client, loaded only where a person may switch workspace.
-const OtherWorkspaces = lazy(() => import('./other-workspaces').then((module) => ({ default: module.OtherWorkspaces })));
+// So is Switch workspace's, fetched from this server as the menu opens, so it is there by the time it is chosen.
+const switchPart = lazyPart(() => import('./switch-workspace-dialog'));
 
 // WorkspaceSwitch is where the menu can offer the person's other workspaces: each desk on its own host,
 // with the identity provider (publishableKey) proving who the person is, and APP_ORIGIN signing them in.
+// signup is true where APP_ORIGIN lets a person create a workspace.
 export interface WorkspaceSwitch {
   publishableKey: string;
   appOrigin: string;
+  signup?: boolean;
 }
 
 interface AccountMenuProps {
@@ -25,20 +28,18 @@ interface AccountMenuProps {
 }
 
 // AccountMenu is the person at the foot of the sidebar (their name, and their address under it), which opens who is
-// signed in, as which role, and the way out. Folded into the rail or on a phone it is the avatar alone, and the
-// workspace and the address are in the top bar, so the menu does not repeat them. With workspaceSwitch it also
-// lists the person's other workspaces, each a link that signs them in there through APP_ORIGIN; the list is
-// asked for as soon as the pointer or the focus reaches the avatar, so it is there when the menu opens.
+// signed in, as which roles and with which address (Paper A6-a), and the way out. Folded into the rail or on a phone
+// it is the avatar alone; the workspace is in the top bar, so the menu does not repeat it. With workspaceSwitch it offers
+// Switch workspace… at once, whatever the person's workspaces are: the dialog reads them when it opens and says
+// when it cannot.
 export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, signingOut = false, workspaceSwitch }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
-  const [wanted, setWanted] = useState(false);
-  const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
-  const others = workspaceSwitch ? workspaces.filter((workspace) => workspace.slug !== me.workspace.slug) : [];
-  const want = () => setWanted(true);
+  const [switching, setSwitching] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const name = me.agent.display_name || me.agent.email;
+  const roles = me.agent.roles.map((role) => role.name).join(', ');
   useEffect(() => {
     if (!open) return;
     const closeOutside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
@@ -49,29 +50,40 @@ export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, 
   return (
     <div className="account-menu" ref={root} onKeyDown={(event) => { if (event.key === 'Escape' && open) close(); }}
       onBlur={(event) => { if (open && !root.current?.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
-      <button type="button" ref={button} className="rail-avatar" aria-expanded={open} onPointerEnter={want} onFocus={want}
-        onClick={() => { want(); setOpen(!open); }}>
+      <button type="button" ref={button} className="rail-avatar" aria-expanded={open} onClick={() => { if (workspaceSwitch) switchPart.preload(); setOpen(!open); }}>
         <Avatar name={name} size="sm" /><span className="sr-only">{messages.account}, </span>
         <span className="current-user"><span className="current-user-name">{name}</span>
           {me.agent.display_name && <> <span className="current-user-email">{me.agent.email}</span></>}</span>
       </button>
       {open && <div className="account-popover" role="group" aria-label={messages.account}>
-        <p><strong>{name}</strong><span>{me.agent.roles.map((role) => role.name).join(", ")}</span></p>
-        {others.length > 0 && workspaceSwitch && <div role="group" aria-label={messages.switchWorkspace} className="account-workspaces">
-          <span aria-hidden="true">{messages.switchWorkspace}</span>
-          {others.map((workspace) => <a key={workspace.slug} className="button"
-            href={`${workspaceSwitch.appOrigin}/sign-in?${new URLSearchParams({ workspace: workspace.slug }).toString()}`}>{workspace.name}</a>)}
-        </div>}
+        <p><strong>{name}</strong><span>{[roles, me.agent.email].filter(Boolean).join(' · ')}</span></p>
         {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
-        <button type="button" onClick={() => { setOpen(false); setReporting(true); }}>{messages.reportProblem}</button>
-        <button type="button" disabled={signingOut} onClick={onSignOut}>{messages.signOut}</button>
+        {workspaceSwitch && <button type="button" className="account-item" onClick={() => { setOpen(false); setSwitching(true); }}>
+          <SwitchIcon />{messages.switchWorkspace}</button>}
+        <button type="button" className="account-item" onClick={() => { setOpen(false); setReporting(true); }}><FlagIcon />{messages.reportProblem}</button>
+        <hr />
+        <button type="button" className="account-item" disabled={signingOut} onClick={onSignOut}><SignOutIcon />{messages.signOut}</button>
       </div>}
-      {workspaceSwitch && wanted && <Suspense fallback={null}>
-        <OtherWorkspaces publishableKey={workspaceSwitch.publishableKey} onLoaded={setWorkspaces} />
-      </Suspense>}
+      {switching && workspaceSwitch && <Part part={switchPart} failed={<PartUnavailable />} render={({ SwitchWorkspaceDialog }) =>
+        <SwitchWorkspaceDialog me={me} workspaceSwitch={workspaceSwitch} onClose={() => { setSwitching(false); button.current?.focus(); }} />} />}
       {reporting && <Suspense fallback={null}>
         <ReportProblemDialog appVersion={appVersion} onClose={() => { setReporting(false); button.current?.focus(); }} />
       </Suspense>}
     </div>
   );
+}
+
+const icon = { width: 16, height: 16, viewBox: '0 0 24 24', 'aria-hidden': true } as const;
+const stroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+
+function SwitchIcon() {
+  return <svg {...icon}><path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" {...stroke} /></svg>;
+}
+
+function FlagIcon() {
+  return <svg {...icon}><path d="M4 21V4h12l-2 4 2 4H4" {...stroke} /></svg>;
+}
+
+function SignOutIcon() {
+  return <svg {...icon}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" {...stroke} /></svg>;
 }

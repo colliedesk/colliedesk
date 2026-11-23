@@ -130,6 +130,80 @@ func TestOnlyAVerifiedIdentityTokenOfThisHostListsWorkspaces(t *testing.T) {
 	}
 }
 
+// workspaceChoice is one entry of the account menu's list or of the sign-in chooser.
+type workspaceChoice struct {
+	Slug  string   `json:"slug"`
+	Name  string   `json:"name"`
+	Host  *string  `json:"host"`
+	Roles []string `json:"roles"`
+}
+
+func (choice workspaceChoice) String() string {
+	host := "<null>"
+	if choice.Host != nil {
+		host = *choice.Host
+	}
+	return choice.Slug + "=" + choice.Name + "@" + host + "[" + strings.Join(choice.Roles, ",") + "]"
+}
+
+func choicesText(choices []workspaceChoice) string {
+	texts := make([]string, 0, len(choices))
+	for _, choice := range choices {
+		texts = append(texts, choice.String())
+	}
+	return strings.Join(texts, " ")
+}
+
+// A person tells two workspaces apart by more than a name: each choice carries the address its desk runs on
+// and the person's roles there, in the list the account menu reads and in the sign-in chooser alike. The
+// chooser also names the verified email it was found for, so the page can say who is signed in.
+func TestEachWorkspaceChoiceNamesItsAddressAndThePersonsRoles(t *testing.T) {
+	fixture, site := switchFixture(t)
+	// In beta the person holds the Agent role instead of Admin.
+	if _, err := fixture.pool.Exec(context.Background(), `UPDATE agent_roles ar SET role_id=(SELECT r.id FROM roles r WHERE r.workspace_id=ar.workspace_id AND r.system='agent')
+		FROM workspaces w WHERE w.id=ar.workspace_id AND w.slug='beta-switch'`); err != nil {
+		t.Fatal(err)
+	}
+	const want = "alpha-switch=Alpha Switch@alpha-switch.example.net[Admin] beta-switch=Beta Switch@beta-switch.example.net[Agent]"
+
+	var listed struct {
+		Workspaces []workspaceChoice `json:"workspaces"`
+	}
+	response := listCloudWorkspaces(t, site, testOriginHost, fixture.token(t, nil), nil)
+	decode(t, response, &listed)
+	if got := choicesText(listed.Workspaces); response.Code != http.StatusOK || got != want {
+		t.Fatalf("account menu list status=%d %q, want %q", response.Code, got, want)
+	}
+
+	var chooser struct {
+		Email      string            `json:"email"`
+		Workspaces []workspaceChoice `json:"workspaces"`
+	}
+	response = cloudExchangeOnAppHost(t, fixture, site, "", nil)
+	decode(t, response, &chooser)
+	if got := choicesText(chooser.Workspaces); response.Code != http.StatusConflict || got != want || chooser.Email != "admin@cloud.example.com" {
+		t.Fatalf("sign-in chooser status=%d email=%q %q, want admin@cloud.example.com %q", response.Code, chooser.Email, got, want)
+	}
+}
+
+// Without workspace hosts every desk runs on APP_ORIGIN: no choice names an address of its own.
+func TestWorkspaceChoicesHaveNoAddressWithoutWorkspaceHosts(t *testing.T) {
+	fixture := newCloudAuthFixtureWith(t, "", nil)
+	for _, name := range []string{"Alpha Plain", "Beta Plain"} {
+		if _, _, err := fixture.service.CreateWorkspace(context.Background(), name, "admin@cloud.example.com"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var listed struct {
+		Workspaces []workspaceChoice `json:"workspaces"`
+	}
+	response := listCloudWorkspaces(t, fixture.api, testOriginHost, fixture.token(t, nil), nil)
+	decode(t, response, &listed)
+	if got := choicesText(listed.Workspaces); response.Code != http.StatusOK || got != "alpha-plain=Alpha Plain@<null>[Admin] beta-plain=Beta Plain@<null>[Admin]" {
+		t.Fatalf("status=%d %q", response.Code, got)
+	}
+}
+
 // A server without cloud sign-in has no such route to answer.
 func TestListingCloudWorkspacesNeedsCloudSignIn(t *testing.T) {
 	selfHosted, _, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.HelpCenterDomain = "example.net" })

@@ -42,7 +42,8 @@ const (
 	PrivilegeSessionToken Privilege = "session-token"
 	// PrivilegeLinkToken resolves the workspace of a pairing or invite link from its token hash.
 	PrivilegeLinkToken Privilege = "link-token"
-	// PrivilegeCloudIdentity lists the workspaces where a verified cloud email is an agent.
+	// PrivilegeCloudIdentity lists the workspaces where a verified cloud email is an agent, with that
+	// agent's role names there; only slugs, names, ids and role names leave the transaction.
 	PrivilegeCloudIdentity Privilege = "cloud-identity"
 	// PrivilegeReplyToken resolves the workspace of inbound mail from the reply token in its address.
 	PrivilegeReplyToken Privilege = "reply-token"
