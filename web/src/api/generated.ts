@@ -18812,7 +18812,10 @@ export interface operations {
     };
     getResults: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Reads the help center section for one help center (`GET /help-centers` lists them): the conversations that came in through it, the articles it shows and their views. Without it the section reads the whole workspace. The other numbers stay the workspace's. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404. */
+                help_center_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -18828,7 +18831,9 @@ export interface operations {
                     "application/json": components["schemas"]["Results"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getResultsShareLink: {

@@ -5109,11 +5109,23 @@ paths:
         the newest a background worker stored (`computed_at`). Every count names, through its snapshot id,
         the conversations behind it (the `result` filter of `GET /conversations`). `results:read` reads it; the
         compute error is shown only to callers with `results:share`.
+      parameters:
+        - name: help_center_id
+          in: query
+          required: false
+          description: >-
+            Reads the help center section for one help center (`GET /help-centers` lists them): the
+            conversations that came in through it, the articles it shows and their views. Without it the
+            section reads the whole workspace. The other numbers stay the workspace's. Not a uuid is 400; a
+            help center that is not this workspace's, or was deleted, is 404.
+          schema: {type: string, format: uuid}
       responses:
         '200':
           description: The newest numbers
           content: {application/json: {schema: {$ref: '#/components/schemas/Results'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/results/share-link:
     get:
       operationId: getResultsShareLink
