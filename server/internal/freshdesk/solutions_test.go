@@ -281,28 +281,26 @@ func setPortals(fixture map[string]any, portals ...any) {
 	}
 }
 
-func TestSolutionsArePublishedOnlyInTheHelpCenterPortal(t *testing.T) {
+func TestSolutionsArePublishedWhenTheirCategoryIsInAPortal(t *testing.T) {
 	cases := []struct {
 		name      string
 		portals   []any
-		chosen    int64
 		published string
 		drafts    string
 	}{
 		// One portal: the docs give visible_in_portals only to accounts with several portals.
-		{"one portal, no field", []any{nil, nil}, 0, "101,103,104,105,106", "map[draft_in_freshdesk:[102]]"},
-		{"one portal named", []any{[]any{5.0}, []any{5.0}}, 0, "101,103,104,105,106", "map[draft_in_freshdesk:[102]]"},
-		{"several portals, none chosen", []any{[]any{5.0}, []any{6.0}}, 0, "",
-			"map[category_in_another_portal:[101 103 104 105 106] draft_in_freshdesk:[102]]"},
-		{"several portals, one chosen", []any{[]any{5.0}, []any{6.0}}, 5, "101,103,104,105", "map[category_in_another_portal:[106] draft_in_freshdesk:[102]]"},
-		{"a category in no portal", []any{[]any{5.0}, []any{}}, 0, "101,103,104,105", "map[category_not_in_any_portal:[106] draft_in_freshdesk:[102]]"},
-		{"a category without the field among others", []any{[]any{5.0}, nil}, 0, "101,103,104,105", "map[category_portal_unknown:[106] draft_in_freshdesk:[102]]"},
+		{"one portal, no field", []any{nil, nil}, "101,103,104,105,106", "map[draft_in_freshdesk:[102]]"},
+		{"one portal named", []any{[]any{5.0}, []any{5.0}}, "101,103,104,105,106", "map[draft_in_freshdesk:[102]]"},
+		// Each portal becomes a help center, so every portal's articles stay published.
+		{"several portals", []any{[]any{5.0}, []any{6.0}}, "101,103,104,105,106", "map[draft_in_freshdesk:[102]]"},
+		{"a category in no portal", []any{[]any{5.0}, []any{}}, "101,103,104,105", "map[category_not_in_any_portal:[106] draft_in_freshdesk:[102]]"},
+		{"a category without the field among others", []any{[]any{5.0}, nil}, "101,103,104,105", "map[category_portal_unknown:[106] draft_in_freshdesk:[102]]"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			env := newImportEnv(t).withSolutions()
 			env.editSolutions(func(fixture map[string]any) { setPortals(fixture, tc.portals...) })
-			report, err := env.run(t, context.Background(), func(o *freshdesk.Options) { o.HelpCenterPortal = tc.chosen; o.DryRun = true })
+			report, err := env.run(t, context.Background(), func(o *freshdesk.Options) { o.DryRun = true })
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -310,18 +308,6 @@ func TestSolutionsArePublishedOnlyInTheHelpCenterPortal(t *testing.T) {
 				t.Fatalf("published=%s drafts=%v", got, report.KnowledgeBase.Drafts)
 			}
 		})
-	}
-}
-
-func TestSolutionsAPortalTheAccountDoesNotHaveIsRefusedBeforeWriting(t *testing.T) {
-	env := newImportEnv(t).withSolutions()
-	env.editSolutions(func(fixture map[string]any) { setPortals(fixture, []any{5.0}, []any{6.0}) })
-	_, err := env.run(t, context.Background(), func(o *freshdesk.Options) { o.HelpCenterPortal = 9 })
-	if err == nil || !strings.Contains(err.Error(), "--help-center-portal 9 is not a portal") || !strings.Contains(err.Error(), "5, 6") {
-		t.Fatalf("err = %v", err)
-	}
-	if env.count(t, "contacts") != 0 || env.count(t, "kb_articles") != 0 {
-		t.Fatalf("written: %s", env.tableCounts(t))
 	}
 }
 

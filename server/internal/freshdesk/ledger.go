@@ -63,6 +63,9 @@ type ticketMeta struct {
 	// Previous is the help center's primary language before the import made the source's its own
 	// (entity kb_primary_language); undo gives it back.
 	Previous string `json:"previous,omitempty"`
+	// HelpCenters are the help centers the import showed a top-level collection on; a rerun adds each
+	// one once, so a help center the team took the collection off stays that way.
+	HelpCenters []string `json:"help_centers,omitempty"`
 }
 
 type ledgerEntry struct {

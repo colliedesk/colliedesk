@@ -3,6 +3,10 @@ package domain
 import (
 	"regexp"
 	"slices"
+	"strings"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // MaxHelpCenterHandle is the longest handle of a help center.
@@ -48,4 +52,38 @@ func CheckHelpCenterHandle(handle string) error {
 		return invalidKB("%q reads as a language tag (like vi or pt-br) in a help center address; choose a handle of 4 or more letters, such as %s-help.", handle, handle)
 	}
 	return nil
+}
+
+// HelpCenterHandleFrom makes a handle from a help center's name: accents dropped, every run of other
+// characters one hyphen, at most MaxHelpCenterHandle long. A name with no Latin letter or digit, such
+// as サポート, gives "". The result is not checked: it may be reserved or read as a language tag.
+func HelpCenterHandleFrom(name string) string {
+	var out strings.Builder
+	hyphen := false
+	for _, char := range norm.NFD.String(strings.ToLower(name)) {
+		if char == 'đ' {
+			char = 'd'
+		}
+		switch {
+		case unicode.Is(unicode.Mn, char):
+			continue
+		case char >= 'a' && char <= 'z', char >= '0' && char <= '9':
+			if hyphen && out.Len() > 0 {
+				out.WriteByte('-')
+			}
+			out.WriteRune(char)
+			hyphen = false
+		default:
+			hyphen = true
+		}
+	}
+	return TrimHelpCenterHandle(out.String(), MaxHelpCenterHandle)
+}
+
+// TrimHelpCenterHandle cuts handle to at most length characters, without a hyphen at the end.
+func TrimHelpCenterHandle(handle string, length int) string {
+	if len(handle) > length {
+		handle = handle[:length]
+	}
+	return strings.TrimRight(handle, "-")
 }

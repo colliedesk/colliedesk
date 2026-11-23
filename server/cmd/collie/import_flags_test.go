@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -18,19 +19,21 @@ func TestPersonalCannedResponsesAreImportedOnlyWithTheFlag(t *testing.T) {
 	}
 }
 
-func TestHelpCenterPortalPicksThePortalWhoseArticlesStayPublished(t *testing.T) {
+func TestHelpCenterPortalIsAcceptedAndNoLongerNeeded(t *testing.T) {
 	t.Setenv("FRESHDESK_API_KEY", "key")
+	var warnings bytes.Buffer
+	previous := progressOutput
+	progressOutput = &warnings
+	t.Cleanup(func() { progressOutput = previous })
 	base := []string{"--workspace", "acme", "--domain", "acme.freshdesk.com"}
-	off, _, err := parseImportFlags(base)
-	if err != nil || off.HelpCenterPortal != 0 {
-		t.Fatalf("default options = %+v, %v", off, err)
+	if _, _, err := parseImportFlags(base); err != nil || warnings.Len() != 0 {
+		t.Fatalf("without the flag: %v, warned %q", err, warnings.String())
 	}
-	on, _, err := parseImportFlags(append(base, "--help-center-portal", "5"))
-	if err != nil || on.HelpCenterPortal != 5 {
-		t.Fatalf("with the flag = %+v, %v", on, err)
+	if _, _, err := parseImportFlags(append(base, "--help-center-portal", "5")); err != nil {
+		t.Fatalf("an earlier script's --help-center-portal was refused: %v", err)
 	}
-	if _, _, err := parseImportFlags(append(base, "--help-center-portal", "-1")); err == nil {
-		t.Fatal("a negative portal id was accepted")
+	if got := warnings.String(); !strings.Contains(got, "--help-center-portal is no longer needed: every portal becomes its own help center") {
+		t.Fatalf("warning = %q", got)
 	}
 }
 

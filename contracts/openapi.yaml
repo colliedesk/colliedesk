@@ -4773,7 +4773,10 @@ paths:
         The reconcile report of the import (`status` OK, FAILED or UNVERIFIED), or while only the
         recent tickets are in, the interim report (`status` INTERIM, never OK; no Markdown yet). For an
         undo, what it removed. `format=markdown` answers the report as a Markdown file to download.
-        404 `report_not_ready` before there is one.
+        404 `report_not_ready` before there is one. `knowledge_base.help_centers` lists each Freshdesk
+        portal and the help center its categories went to (items as in ImportPortalHelpCenter). An undo
+        report counts the help centers it removed in `kb_help_centers` and names the ones it kept in
+        `kept_kb_help_centers` (they have a custom domain).
       responses:
         '200':
           description: The report
@@ -10615,7 +10618,8 @@ components:
         help_center_portal:
           type: integer
           minimum: 0
-          description: On an account with several portals, the portal whose published articles stay published.
+          deprecated: true
+          description: Ignored. Every Freshdesk portal becomes a help center of its own (see help_centers in the preview and the report).
         old_help_center_domain:
           type: string
           maxLength: 255
@@ -10672,9 +10676,39 @@ components:
         archive: {$ref: '#/components/schemas/ImportAccess'}
         canned_responses: {$ref: '#/components/schemas/ImportAccess'}
         knowledge_base: {$ref: '#/components/schemas/ImportAccess'}
+        help_centers:
+          type: array
+          description: >-
+            The help center each Freshdesk portal would become, the portal with the most categories on the
+            primary help center first; empty when the categories name no portal. Missing on a preview made
+            before portals became help centers. The preview cannot see an earlier import: the import keeps
+            the help centers an earlier run made.
+          items: {$ref: '#/components/schemas/ImportPortalHelpCenter'}
         rate_limit_per_minute: {type: integer, description: X-Ratelimit-Total; 0 when Freshdesk sent none}
         api_calls: {type: integer}
         checked_at: {type: string, format: date-time}
+    ImportPortalHelpCenter:
+      type: object
+      description: One Freshdesk portal and the help center its categories are on.
+      required: [portal_id, portal_name, name_from_freshdesk, categories, primary, status]
+      properties:
+        portal_id: {type: integer}
+        portal_name: {type: string, description: 'The name of the portal''s ticket form, or "Portal <id>" when Freshdesk gives none'}
+        name_from_freshdesk: {type: boolean}
+        categories: {type: integer, description: The categories the portal shows}
+        help_center_id: {type: string, format: uuid, description: Missing before the help center exists}
+        help_center_name: {type: string}
+        handle: {type: string, description: 'The help center''s path, /<handle>; missing for the primary'}
+        primary: {type: boolean, description: The portal's categories are on the primary help center}
+        status:
+          type: string
+          enum: [primary, created, existing, planned, over_limit, trashed, failed]
+          description: >-
+            primary: on the primary help center. created: this import made its help center. existing: an
+            earlier import made it. planned: the import would make it. over_limit: the workspace has the
+            most help centers it may have, so its categories are on the primary. trashed: the help center an
+            earlier import made was deleted in Colliedesk, so its categories are on the primary. failed: its
+            help center could not be made (see the failures); its categories are on the primary.
     ImportAccess:
       type: string
       enum: [readable, none, refused, unknown]

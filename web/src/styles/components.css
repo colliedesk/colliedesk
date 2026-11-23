@@ -1245,6 +1245,13 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .import-person .muted-copy { overflow-wrap: anywhere; }
 .import-person-state { color: var(--text-3); }
 .import-person-state[data-linked] { color: var(--ok); }
+/* Which help center each Freshdesk portal becomes: one bordered row per portal, notes below. */
+.import-help-centers { display: grid; gap: var(--space-3); }
+.import-help-centers h3, .import-help-centers p { margin: 0; }
+.import-help-centers p { color: var(--text-2); }
+.import-help-centers ul { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); }
+.import-help-centers li { padding: var(--space-3) var(--space-4); color: var(--text-1); overflow-wrap: anywhere; }
+.import-help-centers li + li { border-top: 1px solid var(--line); }
 /* Help under the import's fields and counts stays readable: at least the label size. */
 .import-page small { font-size: var(--fs-label); }
 /* A link that leads on (Open the inbox) looks like the button next to it. */

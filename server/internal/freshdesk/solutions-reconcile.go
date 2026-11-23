@@ -239,7 +239,7 @@ func (r *run) sizeKnowledgeBase(ctx context.Context) (int64, error) {
 // counts with the lists.
 func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []string) error {
 	kb := r.kb
-	count := KnowledgeBaseCount{Published: []string{}, Drafts: map[string][]string{}, Languages: []string{}, Portals: []int64{}, Notes: []string{},
+	count := KnowledgeBaseCount{Published: []string{}, Drafts: map[string][]string{}, Languages: []string{}, Portals: []int64{}, HelpCenters: []KBPortalHelpCenter{}, Notes: []string{},
 		ChangedInBoth: []string{}, TranslationsChangedInBoth: []string{}, LanguagesAdded: []string{}, Unpublished: []string{}, DeletedInColliedesk: []string{}, Refused: r.kbRefused}
 	if count.Refused == nil {
 		count.Refused = []string{}
@@ -273,6 +273,21 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	if portals := kb.portals(); portals != nil {
 		count.Portals = portals
 	}
+	plan := kb.portalPlan()
+	if state := r.kbState; state != nil && state.helpCenters != nil {
+		count.HelpCenters = state.helpCenters
+	} else if len(plan) > 0 {
+		count.HelpCenters = plannedPortalHelpCenters(plan)
+	}
+	if note := unnamedPortalsNote(plan); note != "" && kb.portalNamesNote == "" {
+		count.Notes = append(count.Notes, note)
+	}
+	if kb.portalNamesNote != "" {
+		count.Notes = append(count.Notes, kb.portalNamesNote)
+	}
+	if note := alsoOnPrimaryNote(kb); note != "" {
+		count.Notes = append(count.Notes, note)
+	}
 	count.Products = kb.products
 	if kb.productsNote != "" {
 		count.Notes = append(count.Notes, kb.productsNote)
@@ -302,7 +317,7 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	for _, article := range kb.articles {
 		key := strconv.FormatInt(article.ID, 10)
 		articleKeys = append(articleKeys, key)
-		if reason := kb.draftReason(article, r.opts.HelpCenterPortal); reason == "" {
+		if reason := kb.draftReason(article); reason == "" {
 			count.Published = append(count.Published, key)
 		} else {
 			count.Drafts[reason] = append(count.Drafts[reason], key)
@@ -352,10 +367,10 @@ func (r *run) countKBLedger(ctx context.Context, report *Report, count *Knowledg
 		rows, err := tx.Query(ctx, `SELECT entity,source_id,status,error FROM import_items WHERE workspace_id=$1 AND source=$2 AND (
 				(entity=$3 AND source_id=ANY($4)) OR (entity=$5 AND source_id=ANY($6)) OR (entity=$7 AND source_id=ANY($8))
 				OR (entity=$9 AND source_id=ANY($10)) OR (entity=$11 AND split_part(source_id,':',1)=ANY($8)) OR (entity=$12 AND source_id=ANY($13))
-				OR (entity=$14 AND split_part(source_id,':',1)=ANY($8)))
+				OR (entity=$14 AND split_part(source_id,':',1)=ANY($8)) OR (entity=$15 AND source_id=ANY($16)))
 			ORDER BY entity,length(source_id),source_id`, r.workspaceID, r.ledger.source,
 			entityKBCategory, collections[entityKBCategory], entityKBFolder, collections[entityKBFolder], entityKBArticle, articles,
-			entityKBTranslation, translations, entityKBImage, entityKBCollectionName, names, entityKBFile)
+			entityKBTranslation, translations, entityKBImage, entityKBCollectionName, names, entityKBFile, entityKBHelpCenter, r.kb.portalKeys())
 		if err != nil {
 			return fmt.Errorf("reconcile knowledge base: %w", err)
 		}
