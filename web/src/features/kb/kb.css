@@ -51,9 +51,10 @@
 .kb-list > .kb-collection-head { border-bottom: 1px solid var(--line); padding: var(--space-3); }
 .kb-list-tools { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--line); padding: var(--space-3); }
 /* Filters, Columns and Views open over the list from the toolbar; the export is a plain download link. */
-.kb-list-popover { width: min(100%, 18rem); gap: var(--space-1); padding: var(--space-2); }
-.kb-list-popover > .filter-hint { margin: 0; padding: var(--space-1) var(--space-2); color: var(--text-3); font-size: var(--fs-label); }
+.kb-list-popover { width: min(100%, 20rem); gap: var(--space-1); padding: var(--space-2); }
 .kb-filter-dates { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-2); }
+/* The group title is a grid item here (a floated legend is): it takes a row of its own above From and To. */
+.kb-filter-dates > legend { grid-column: 1 / -1; }
 .kb-filter-date { display: grid; gap: 2px; padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-label); }
 .kb-filter-date input { width: 100%; min-width: 0; }
 label.kb-filter-select { padding: var(--space-2) var(--space-2) var(--space-1); color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
