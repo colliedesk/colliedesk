@@ -72,6 +72,18 @@ func (s *Store) ListHelpCenters(ctx context.Context, workspaceID string) ([]doma
 	return list, nil
 }
 
+// PrimaryHelpCenterID is the id of the workspace's primary help center, made (off) when it has none.
+func (s *Store) PrimaryHelpCenterID(ctx context.Context, workspaceID string) (string, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (string, error) {
+		return PrimaryHelpCenterIDIn(ctx, tx, workspaceID)
+	})
+}
+
+// PrimaryHelpCenterIDIn is PrimaryHelpCenterID in the caller's workspace transaction.
+func PrimaryHelpCenterIDIn(ctx context.Context, tx pgx.Tx, workspaceID string) (string, error) {
+	return resolveHelpCenter(ctx, tx, workspaceID, "", true)
+}
+
 // GetHelpCenterByID returns one live help center of the workspace, else domain.ErrHelpCenterNotFound.
 func (s *Store) GetHelpCenterByID(ctx context.Context, workspaceID, id string) (domain.HelpCenterSummary, error) {
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterSummary, error) {

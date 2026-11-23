@@ -489,16 +489,18 @@ func ChatKBArticles(ctx context.Context, tx pgx.Tx, workspaceID string, withBodi
 	return ChatKBArticlesIn(ctx, tx, workspaceID, withBodies, "")
 }
 
-// chatKBSelect reads articles a for the help chat in language $2: an article with a published
-// translation in it that customers see is read in that language, with its collection's name in it;
-// the others in their own ("" is the primary language).
+// chatKBSelect reads articles a for the help chat in language $2, in a help chat transaction
+// (database.InHelpChat): an article with a published translation in it that the chat's help center
+// shows is read in that language, with its collection's name in it; the others in their own ("" is
+// the help center's primary language). An article listed on the help center from a collection
+// elsewhere has no collection the reader sees, so its folder is "".
 func chatKBSelect(body string) string {
-	return `SELECT a.id::text,a.number,COALESCE(v.version,1),COALESCE(t.title,a.title),COALESCE(ct.name,c.name),octet_length(COALESCE(t.body_md,a.body_md)),` + body + `,
+	return `SELECT a.id::text,a.number,COALESCE(v.version,1),COALESCE(t.title,a.title),COALESCE(ct.name,c.name,''),octet_length(COALESCE(t.body_md,a.body_md)),` + body + `,
 		COALESCE(t.locale,''),COALESCE(t.updated_at::text,''),` + publicKBArticleFlag + `
-		FROM kb_articles a JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
+		FROM kb_articles a LEFT JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
 		LEFT JOIN LATERAL (SELECT max(version) AS version FROM kb_article_versions WHERE workspace_id=a.workspace_id AND article_id=a.id AND ` + kbTextVersion("") + `) v ON true
 		LEFT JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$2 AND $2 <> '' AND ` + helpChatKBTranslation + `
-			AND EXISTS (SELECT 1 FROM help_center_languages hl WHERE hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT primary_help_center_id($1)) AND hl.locale=t.locale AND hl.visible)
+			AND EXISTS (SELECT 1 FROM help_center_languages hl WHERE hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT NULLIF(current_setting('app.help_center_id',true),'')::uuid) AND hl.locale=t.locale AND hl.visible)
 		LEFT JOIN kb_collection_translations ct ON ct.workspace_id=c.workspace_id AND ct.collection_id=c.id AND ct.locale=t.locale`
 }
 

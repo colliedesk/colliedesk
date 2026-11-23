@@ -55,7 +55,7 @@ type channelBody struct {
 	HelpCenterID   *string   `json:"help_center_id"`
 	HelpCenterName *string   `json:"help_center_name"`
 	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 	// DeletedAt is set on a removed channel, which only the list with include_removed shows.
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
@@ -602,22 +602,22 @@ func (k channelRouteKit) SiteVerificationHeld(ctx context.Context, code string) 
 	return k.api.store.ZaloSiteVerificationHeld(ctx, code)
 }
 
-func (k channelRouteKit) Channel(ctx context.Context, workspaceID, id string) (channels.Channel, bool, error) {
+func (k channelRouteKit) Channel(ctx context.Context, at channels.HelpCenter, id string) (channels.Channel, bool, error) {
 	if id == "" {
-		channel, found, err := k.api.store.DefaultChannelOfType(ctx, workspaceID, k.kind)
-		return channel, found && channel.Live(), err
+		return k.api.store.HelpCenterChannelOfType(ctx, at.WorkspaceID, k.kind, at.HelpCenterID, at.Primary)
 	}
 	if !uuidShape.MatchString(id) {
 		return channels.Channel{}, false, nil
 	}
-	channel, err := k.api.store.GetChannel(ctx, workspaceID, id)
+	channel, err := k.api.store.GetChannel(ctx, at.WorkspaceID, id)
 	if errors.Is(err, channels.ErrNotFound) {
 		return channels.Channel{}, false, nil
 	}
 	if err != nil {
 		return channels.Channel{}, false, err
 	}
-	return channel, channel.Type == k.kind && channel.Live(), nil
+	serves := channel.HelpCenterID == at.HelpCenterID || (channel.HelpCenterID == "" && at.Primary)
+	return channel, channel.Type == k.kind && channel.Live() && serves, nil
 }
 
 // channelHelpCenterRoutes are the help center routes the registered types declare, with their handlers;

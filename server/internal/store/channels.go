@@ -93,6 +93,29 @@ func (s *Store) DefaultChannelOfType(ctx context.Context, workspaceID string, ki
 	return got.channel, got.ok, err
 }
 
+// HelpCenterChannelOfType reads the live channel of a type that serves a help center, for a request
+// that names no channel: the type's default when it serves that help center, else the oldest one
+// that does. A channel with no help center serves the primary (primary true).
+func (s *Store) HelpCenterChannelOfType(ctx context.Context, workspaceID string, kind channels.Type, helpCenterID string, primary bool) (channels.Channel, bool, error) {
+	type found struct {
+		channel channels.Channel
+		ok      bool
+	}
+	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (found, error) {
+		channel, err := s.scanChannelRow(tx.QueryRow(ctx, `SELECT `+channelRowColumns+` FROM channels
+			WHERE workspace_id=$1 AND type=$2 AND deleted_at IS NULL AND (help_center_id=NULLIF($3,'')::uuid OR (help_center_id IS NULL AND $4))
+			ORDER BY is_default DESC, created_at, id LIMIT 1`, workspaceID, string(kind), helpCenterID, primary))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return found{}, nil
+		}
+		if err != nil {
+			return found{}, fmt.Errorf("load %s channel of the help center: %w", kind, err)
+		}
+		return found{channel, true}, nil
+	})
+	return got.channel, got.ok, err
+}
+
 // GetChannel reads a channel of the workspace, removed or not.
 func (s *Store) GetChannel(ctx context.Context, workspaceID, id string) (channels.Channel, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (channels.Channel, error) {

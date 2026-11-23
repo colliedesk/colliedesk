@@ -89,6 +89,9 @@ type ChatPromptInput struct {
 	// Locale is the help center language the end user reads, "" the primary one: an article with a
 	// published translation in it that customers see is given in that language, the others in their own.
 	Locale string
+	// HelpCenterID is the help center the chat answers on, "" the workspace's primary: only its
+	// articles are read (inHelpChat).
+	HelpCenterID string
 }
 
 // ChatPrompt is the request for one turn and what the answer may cite.
@@ -196,22 +199,47 @@ type chatSnapshot struct {
 	whole, found         bool
 }
 
+// inHelpChat runs fn as the reader of help center helpCenterID ("" the workspace's primary) in a help
+// chat transaction (database.InHelpChat): row security, not a filter here, keeps every article and
+// translation of another help center out, and nothing of the inbox is readable. Writes run on the
+// app role in their own transactions.
+func (s *Service) inHelpChat(ctx context.Context, workspaceID, helpCenterID string, fn func(pgx.Tx) error) error {
+	if helpCenterID == "" {
+		var err error
+		if helpCenterID, err = s.primaryHelpCenter(ctx, workspaceID); err != nil {
+			return err
+		}
+	}
+	return s.db.InHelpChat(ctx, workspaceID, helpCenterID, fn)
+}
+
+// primaryHelpCenter is the id of the workspace's primary help center, made (off) when it has none.
+func (s *Service) primaryHelpCenter(ctx context.Context, workspaceID string) (string, error) {
+	var id string
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		var err error
+		id, err = store.PrimaryHelpCenterIDIn(ctx, tx, workspaceID)
+		return err
+	})
+	return id, err
+}
+
 // ChatPrompt builds the request of one turn for the binding's provider and model. It reads the
-// workspace's articles in its own transactions and may ask the provider to count tokens (free, no
-// usage row) the first time a set of articles meets a model.
+// articles of the chat's help center in its own transactions and may ask the provider to count
+// tokens (free, no usage row) the first time a set of articles meets a model.
 func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID string, in ChatPromptInput) (ChatPrompt, error) {
+	if in.HelpCenterID == "" {
+		var err error
+		if in.HelpCenterID, err = s.primaryHelpCenter(ctx, workspaceID); err != nil {
+			return ChatPrompt{}, err
+		}
+	}
 	var articles []store.ChatKBArticle
 	var snapshot chatSnapshot
 	var viewing *store.ChatKBArticle
-	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+	err := s.inHelpChat(ctx, workspaceID, in.HelpCenterID, func(tx pgx.Tx) error {
 		var err error
 		if articles, err = store.ChatKBArticlesIn(ctx, tx, workspaceID, false, in.Locale); err != nil {
-			return err
-		}
-		err = tx.QueryRow(ctx, `SELECT kb_tokens,system_tokens,whole FROM ai_chat_kb_snapshots WHERE workspace_id=$1 AND fingerprint=$2 AND model=$3`,
-			workspaceID, chatFingerprint(articles), binding.Model).Scan(&snapshot.tokens, &snapshot.systemTokens, &snapshot.whole)
-		snapshot.found = err == nil
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
 		if in.ViewingArticleID != "" && isUUID(in.ViewingArticleID) {
@@ -226,12 +254,26 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 	if err != nil {
 		return ChatPrompt{}, err
 	}
+	// The size of a set of articles is kept by its fingerprint (the articles and their versions), on
+	// the app role.
+	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `SELECT kb_tokens,system_tokens,whole FROM ai_chat_kb_snapshots WHERE workspace_id=$1 AND fingerprint=$2 AND model=$3`,
+			workspaceID, chatFingerprint(articles), binding.Model).Scan(&snapshot.tokens, &snapshot.systemTokens, &snapshot.whole)
+		snapshot.found = err == nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	})
+	if err != nil {
+		return ChatPrompt{}, err
+	}
 	prompt := ChatPrompt{Fingerprint: chatFingerprint(articles), Articles: map[int64]ChatArticleRef{}}
 	rules := aiprovider.SystemPart{Text: chatRules}
 	workspace := aiprovider.SystemPart{Text: chatWorkspaceBlock(in.WorkspaceName, in.Instructions)}
 	systemTokens := aiprovider.EstimateTokens(aiprovider.Request{SystemParts: []aiprovider.SystemPart{rules, workspace}})
 	if !snapshot.found {
-		if snapshot, err = s.measureChatKB(ctx, binding, workspaceID, in.Locale, articles, prompt.Fingerprint, systemTokens); err != nil {
+		if snapshot, err = s.measureChatKB(ctx, binding, workspaceID, in.HelpCenterID, in.Locale, articles, prompt.Fingerprint, systemTokens); err != nil {
 			return ChatPrompt{}, err
 		}
 	}
@@ -239,7 +281,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 
 	var kbText string
 	if prompt.Whole {
-		err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		err = s.inHelpChat(ctx, workspaceID, in.HelpCenterID, func(tx pgx.Tx) error {
 			var err error
 			articles, err = store.ChatKBArticlesIn(ctx, tx, workspaceID, true, in.Locale)
 			return err
@@ -263,7 +305,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 	}
 	excerptTokens := int64(0)
 	if !prompt.Whole && len(articles) > 0 {
-		excerpts, sent, refs, err := s.chatExcerpts(ctx, workspaceID, in.Locale, in.Question, viewing, articles)
+		excerpts, sent, refs, err := s.chatExcerpts(ctx, workspaceID, in.HelpCenterID, in.Locale, in.Question, viewing, articles)
 		if err != nil {
 			return ChatPrompt{}, err
 		}
@@ -321,7 +363,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 // measureChatKB sizes a set of articles for a model the first time they meet: a set far too large is
 // never read; one that may fit is counted by the provider's tokenizer (or bytes ÷ 3), and the answer
 // is kept by fingerprint and model.
-func (s *Service) measureChatKB(ctx context.Context, binding Binding, workspaceID, locale string, articles []store.ChatKBArticle, fingerprint []byte, systemTokens int64) (chatSnapshot, error) {
+func (s *Service) measureChatKB(ctx context.Context, binding Binding, workspaceID, helpCenterID, locale string, articles []store.ChatKBArticle, fingerprint []byte, systemTokens int64) (chatSnapshot, error) {
 	bytes := 0
 	for _, a := range articles {
 		bytes += a.Size + len(a.Title) + len(a.Folder) + 60
@@ -330,7 +372,7 @@ func (s *Service) measureChatKB(ctx context.Context, binding Binding, workspaceI
 	limit := chatWholeLimit(binding.Model)
 	if bytes <= chatCountAbove {
 		var full []store.ChatKBArticle
-		err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		err := s.inHelpChat(ctx, workspaceID, helpCenterID, func(tx pgx.Tx) error {
 			var err error
 			full, err = store.ChatKBArticlesIn(ctx, tx, workspaceID, true, locale)
 			return err
@@ -360,14 +402,14 @@ func (s *Service) measureChatKB(ctx context.Context, binding Binding, workspaceI
 
 // chatExcerpts are the best matching articles of a knowledge base too large to send whole, the
 // article being read first, up to chatExcerptTokens.
-func (s *Service) chatExcerpts(ctx context.Context, workspaceID, locale, question string, viewing *store.ChatKBArticle, articles []store.ChatKBArticle) (string, string, map[int64]ChatArticleRef, error) {
+func (s *Service) chatExcerpts(ctx context.Context, workspaceID, helpCenterID, locale, question string, viewing *store.ChatKBArticle, articles []store.ChatKBArticle) (string, string, map[int64]ChatArticleRef, error) {
 	refs := map[int64]ChatArticleRef{}
 	known := make(map[string]store.ChatKBArticle, len(articles))
 	for _, a := range articles {
 		known[a.ID] = a
 	}
 	var docs []store.AIRetrievedDoc
-	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+	err := s.inHelpChat(ctx, workspaceID, helpCenterID, func(tx pgx.Tx) error {
 		text := question
 		if viewing != nil {
 			text = viewing.Title + " " + question

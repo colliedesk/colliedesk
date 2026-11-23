@@ -91,7 +91,9 @@ func (g *ChatGate) leave(workspaceID string) {
 
 // ChatSurface is what a chat needs of its help chat channel and help center.
 type ChatSurface struct {
-	ChannelID     string
+	ChannelID string
+	// HelpCenterID is the help center the chat answers on: it reads only that help center's articles.
+	HelpCenterID  string
 	WorkspaceName string
 	Instructions  string
 }
@@ -343,6 +345,17 @@ func (s *Service) ChatTurn(ctx context.Context, workspaceID string, in ChatTurnI
 func (s *Service) startChatTurn(ctx context.Context, workspaceID string, in ChatTurnInput, question string) (chatTurnStart, error) {
 	var start chatTurnStart
 	now := s.now().UTC()
+	// The article the end user reads, by its number on the chat's help center: read as that help
+	// center's reader, before the write below.
+	if in.ViewingArticle > 0 {
+		if err := s.inHelpChat(ctx, workspaceID, in.Surface.HelpCenterID, func(tx pgx.Tx) error {
+			var err error
+			start.viewing, err = store.ChatKBArticleIDOf(ctx, tx, workspaceID, in.ViewingArticle)
+			return err
+		}); err != nil {
+			return start, err
+		}
+	}
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		id, _, _, found, err := s.findChat(ctx, tx, workspaceID, in.Browser, true)
 		if err != nil {
@@ -387,11 +400,6 @@ func (s *Service) startChatTurn(ctx context.Context, workspaceID string, in Chat
 		if turns >= ChatTurnsPerSession {
 			return ErrChatFull
 		}
-		if in.ViewingArticle > 0 {
-			if start.viewing, err = store.ChatKBArticleIDOf(ctx, tx, workspaceID, in.ViewingArticle); err != nil {
-				return err
-			}
-		}
 		return tx.QueryRow(ctx, `INSERT INTO ai_chat_turns(workspace_id,session_id,seq,question,viewing_kb_article_id,status,created_at)
 			VALUES($1,$2,$3,$4,$5,'streaming',$6) RETURNING id::text`, workspaceID, id, turns+1, question, nullable(start.viewing), now).Scan(&start.turnID)
 	})
@@ -410,7 +418,7 @@ type chatOutcome struct {
 func (s *Service) answerChatTurn(ctx context.Context, workspaceID string, binding Binding, in ChatTurnInput, question string, start chatTurnStart, events ChatEvents) error {
 	outcome := chatOutcome{model: binding.Model}
 	prompt, err := s.ChatPrompt(ctx, binding, workspaceID, ChatPromptInput{WorkspaceName: in.Surface.WorkspaceName, Instructions: in.Surface.Instructions,
-		History: start.history, Question: question, ViewingArticleID: start.viewing, Locale: in.Locale})
+		History: start.history, Question: question, ViewingArticleID: start.viewing, Locale: in.Locale, HelpCenterID: in.Surface.HelpCenterID})
 	switch {
 	case err != nil:
 		outcome.status, outcome.errorCode = ChatFailed, "model_failed"
@@ -428,7 +436,7 @@ func (s *Service) answerChatTurn(ctx context.Context, workspaceID string, bindin
 	store, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatStoreTimeout)
 	defer cancel()
 	if outcome.status == ChatOverLimit {
-		related, err := s.chatRelated(store, workspaceID, question)
+		related, err := s.chatRelated(store, workspaceID, in.Surface.HelpCenterID, question)
 		if err != nil {
 			slog.Error("ai chat: related articles", "workspace_id", workspaceID, "error", err)
 		}
@@ -502,9 +510,9 @@ func (s *Service) streamChat(ctx context.Context, workspaceID string, binding Bi
 }
 
 // chatRelated are the articles that best match a question the chat could not answer (paused).
-func (s *Service) chatRelated(ctx context.Context, workspaceID, question string) ([]ChatArticleRef, error) {
+func (s *Service) chatRelated(ctx context.Context, workspaceID, helpCenterID, question string) ([]ChatArticleRef, error) {
 	var related []ChatArticleRef
-	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+	err := s.inHelpChat(ctx, workspaceID, helpCenterID, func(tx pgx.Tx) error {
 		docs, err := store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: question, KBLimit: chatRelated, HelpChat: true})
 		if err != nil {
 			return err
@@ -563,7 +571,7 @@ func (s *Service) ChatPrewarm(ctx context.Context, workspaceID string, surface C
 	if err != nil || !aiprovider.Caches(binding.Provider) {
 		return err
 	}
-	prompt, err := s.ChatPrompt(ctx, binding, workspaceID, ChatPromptInput{WorkspaceName: surface.WorkspaceName, Instructions: surface.Instructions, Question: "?"})
+	prompt, err := s.ChatPrompt(ctx, binding, workspaceID, ChatPromptInput{WorkspaceName: surface.WorkspaceName, Instructions: surface.Instructions, Question: "?", HelpCenterID: surface.HelpCenterID})
 	if err != nil || !prompt.Whole {
 		return err
 	}
@@ -650,7 +658,7 @@ func (s *Service) ChatPreview(ctx context.Context, workspaceID string, actor Act
 	defer s.chats.leave(workspaceID)
 	started := time.Now()
 	binding.call.Actor = actor
-	prompt, err := s.ChatPrompt(ctx, binding, workspaceID, ChatPromptInput{WorkspaceName: surface.WorkspaceName, Instructions: surface.Instructions, Question: question})
+	prompt, err := s.ChatPrompt(ctx, binding, workspaceID, ChatPromptInput{WorkspaceName: surface.WorkspaceName, Instructions: surface.Instructions, Question: question, HelpCenterID: surface.HelpCenterID})
 	if err != nil {
 		return ChatPreviewResult{}, err
 	}
@@ -660,7 +668,7 @@ func (s *Service) ChatPreview(ctx context.Context, workspaceID string, actor Act
 	} else {
 		outcome := s.streamChat(ctx, workspaceID, binding, prompt, collector)
 		if outcome.status == ChatOverLimit {
-			related, err := s.chatRelated(ctx, workspaceID, question)
+			related, err := s.chatRelated(ctx, workspaceID, surface.HelpCenterID, question)
 			if err != nil {
 				return ChatPreviewResult{}, err
 			}

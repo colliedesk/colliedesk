@@ -255,7 +255,9 @@ reader reads only its own `help_centers` row). A workspace without one is read a
 which no row has. The callback gets the resolved id, so its own `$H` filters never call
 `primary_help_center_id` as the reader.
 
-Staff, MCP and AI paths stay on the app role. They see every help center of the workspace.
+Staff, MCP and the AI's staff paths (reply drafts, triage) stay on the app role.
+They see every help center of the workspace. The help chat is the exception: it reads the knowledge
+base as the reader of its channel's help center (below).
 
 ### Reviewed cross-help-center routes
 
@@ -279,21 +281,67 @@ Other routes that touch more than one help center:
 - **An article link to another help center:** the article page answers 404 for an article this help
   center does not show (`helpcenter/pages.go`). The reader cannot read it, so a link never renders
   another help center's text.
-- **`primary_help_center_id()`:** called only as the app role (staff, import, export, help chat, and
-  `helpCenterScoped` itself). As the reader it would see only its own row.
+- **`primary_help_center_id()`:** called only as the app role (staff, import, export, the help chat's
+  `primaryHelpCenter`, and `helpCenterScoped` itself). As the reader it would see only its own row.
 - **Votes:** written as the reader; a vote through a help center that does not show the article is
   refused by row-level security (`TestAHelpCenterVisitorVotesOnlyOnItsOwnHelpCenter`).
 - **Article views:** counted in memory and written by `PrivilegeKBArticleViews` (privileged list
   below); no row is read back.
 - **Web form:** `store.OpenWebForm` runs through `PrivilegeWorkspaceBySlug`, then in the app role's
   scope; it writes a conversation, which the reader must never reach.
-- **Help chat (known exception):** `ChatKBArticlesIn` (`store/help-center.go`) runs as the app role
-  through `DB.InWorkspace` (`ai/chat-context.go`). It reads `helpChatKBArticle`
-  (`kb_help_chat_articles`), which has no help center filter: every published article of the
-  workspace that is public or kept for help chat, on whichever help center it sits, or on none. Translations are checked
-  against the primary help center's languages. The guard test scans only the `helpcenter` package,
-  so this path and the channel routes that read the knowledge base (`httpapi/help-chat-handlers.go`,
-  `helpChatAdditions`) are not covered by it.
+
+### Help chat
+
+A help chat or web form channel names the help center it serves (`channels.help_center_id`; NULL is
+the primary). The help chat reads articles and translations as the reader of that help center, so a
+chat on one help center never cites an article only another one shows.
+
+- `ai.Service.inHelpChat` (`internal/ai/chat-context.go`) resolves `""` to the primary as the app role
+  (`primaryHelpCenter`), then runs the read through `database.InHelpChat` / `BeginHelpChatTx`. These
+  are the reader's transaction of `helpCenterScoped` with `app.help_chat='on'` set.
+- `kb_help_center_chat_articles` and `kb_help_center_chat_translations` decide what help chat may
+  read: published articles that are public or kept for help chat, in collections the help center may
+  show. They return rows only while `app.help_chat` is on. The public pages never set it, so an
+  article kept for help chat never shows on a public page
+  (`TestHelpChatOfAHelpCenterReadsOnlyThatHelpCentersArticles`,
+  `TestHelpChatReadsOnlyItsHelpCenterAndKeepsChatArticlesOffPublicPages`). The reader's own policies
+  on `kb_articles` then keep the help center's articles.
+- An article on no help center is visible to no help chat
+  (`TestAnArticleOnNoHelpCenterReachesNoHelpChat`).
+- Translations are read in the languages the chat's help center shows (`help_center_languages`).
+- The reader has `SELECT` on the numbering columns of `kb_article_versions` (`workspace_id`,
+  `article_id`, `version`, `kind`; never an older text or its author) and on the knowledge base rows
+  of `ai_retrieval_docs`, each for the articles it sees.
+- A help chat route of another help center's channel is refused
+  (`TestHelpChatRefusesAChannelOfAnotherHelpCenter`).
+
+`TestHelpChatReadsTheKnowledgeBaseAsTheHelpCenterReader` (`internal/ai/chat_reader_guard_test.go`)
+parses the help chat files (`chat.go`, `chat-context.go`, `chat-filter.go`, `chat-limits.go`) and
+`httpapi/help-chat-handlers.go` with `helpChatAdditions`. It fails when a store read of an article
+(`AIRetrieve`, `ChatKBArticleByIDIn`, `ChatKBArticleIDOf`, `ChatKBArticles`, `ChatKBArticlesByIDIn`,
+`ChatKBArticlesIn`) runs outside `inHelpChat`, and when any other store call, app-role transaction or
+route call is not listed with its reason. The app-role functions read or write the chat, never an
+article:
+
+| Function | Reads or writes on the app role |
+|---|---|
+| `ChatSessionOf`, `ChatTurnOf` | The browser's own chat and the sources stored with a turn (`ai_chat_sessions`, `ai_chat_turns`). |
+| `startChatTurn` | Opens or continues the chat, writes the question and counts it against the limits. The article the end user reads is looked up in `inHelpChat` first. |
+| `finishChatTurn` | Writes the answer, its usage and its sources (`ai_chat_turns`, `ai_chat_sources`, `ai_chat_sessions`). |
+| `ChatHandedOff`, `EndChat` | Write the hand-off or the end on the session. |
+| `SetChatFeedback` | Writes the end user's rating of a turn. |
+| `CreateChatTransfer`, `RedeemChatTransfer` | The one-time code that moves a chat to the help center's page (`ai_chat_transfers`). |
+| `ChatPrompt`, `ChatPrewarm`, `measureChatKB`, `noteChatCache` | Token counts and cache times of a set of articles (`ai_chat_kb_snapshots`, keyed by the fingerprint of the articles and their versions: no article text). |
+| `primaryHelpCenter` | Names the primary help center for a chat that names none (`store.PrimaryHelpCenterIDIn`). |
+
+The routes also call `kit.Channel` (the channel row), `store.ChannelConfigOf` (the channel's
+instructions for the AI) and `kit.Receive` (the hand-off opens a conversation, which the reader must
+never reach). None reads an article. `helpChatAppRoleFuncs` and `helpChatRouteCalls` in the guard
+test hold the same lists.
+
+The staff's own preview of the help chat (`POST /api/v1/ai/chat/preview`) reads as the reader of the
+channel's help center too. Agent drafts and triage stay on the app role: they answer for the whole
+workspace.
 
 ## Workspace hosts
 

@@ -1203,8 +1203,9 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,priority,assignee_id,number_series,status,help_center_id)
 		VALUES($1,$2,$3,$4,$4,$5,$6,NULLIF($7,''),$8,(SELECT id FROM agents WHERE workspace_id=$1 AND id=NULLIF($9,'')::uuid),$10,$11,
 			(SELECT COALESCE(ch.help_center_id,primary_help_center_id(ch.workspace_id)) FROM channels ch
-				WHERE ch.workspace_id=$1 AND ch.id=$6 AND ch.type IN ('web_form','help_chat'))) RETURNING id::text`,
-		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID, series, status).Scan(&conversationID); err != nil {
+				WHERE ch.workspace_id=$1 AND ch.id=$6 AND $12)) RETURNING id::text`,
+		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID, series, status,
+		servesHelpCenter(channel.Type)).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	if err := tagConversation(ctx, tx, channel.WorkspaceID, conversationID, tags); err != nil {
