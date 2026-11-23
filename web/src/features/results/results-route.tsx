@@ -6,7 +6,7 @@ import { resultsApi } from '../../api/results';
 import type { WindowKey } from '../../api/results';
 import { resultsMessages as m } from './results-messages';
 import { ResultsAdmin } from './results-admin';
-import { ResultsHelpCenter } from './results-help-center';
+import { ResultsHelpCenterChoice } from './results-help-center-choice';
 import type { HelpCenterLinks } from './results-help-center';
 import { ResultsPage } from './results-page';
 import type { NumberLink } from './results-page';
@@ -17,7 +17,7 @@ import './results.css';
 const numberLink: NumberLink = ({ result, className, children }) => <Link to="/" search={{ status: 'all', result }} className={className}>{children}</Link>;
 // Requests opened are the conversations customers started in the period; an article and a reply open themselves.
 const helpLinks: HelpCenterLinks = {
-  requests: (range, children) => <Link to="/" search={{ status: 'all', source: 'native', created_after: range.from, created_before: range.to }}>{children}</Link>,
+  requests: (range, children, search) => <Link to="/" search={{ status: 'all', source: 'native', created_after: range.from, created_before: range.to, ...(search ? { search } : {}) }}>{children}</Link>,
   article: (articleId, children) => <Link to="/knowledge/articles/$articleId" params={{ articleId }}>{children}</Link>,
   conversation: (conversationId, children) => <Link to="/conversations/$conversationId" params={{ conversationId }}>{children}</Link>,
 };
@@ -29,7 +29,7 @@ export function ResultsRoute({ window = '30d', onWindow }: { window?: WindowKey;
   // or the baseline are being worked out, the page asks again every 3 seconds so it updates by itself.
   // The read is one stored row (20 ms budget), so this costs nothing that matters.
   const results = useQuery({
-    queryKey: ['results'], queryFn: resultsApi.get, enabled: Boolean(me.data),
+    queryKey: ['results'], queryFn: () => resultsApi.get(), enabled: Boolean(me.data),
     refetchInterval: (query) => (query.state.data && (query.state.data.current === null || query.state.data.baseline_state === 'computing') ? 3_000 : false),
   });
   // "Updated 40 min ago" moves with the clock.
@@ -62,7 +62,8 @@ export function ResultsRoute({ window = '30d', onWindow }: { window?: WindowKey;
   return <ResultsPage results={results.data} loading={results.isPending || me.isPending} failed={results.isError || me.isError}
     onRetry={() => void results.refetch()} window={window} onWindow={onWindow}
     timezone={timezone} isAdmin={isAdmin} now={now} link={numberLink}
-    helpCenter={results.data && <ResultsHelpCenter key={window} help={results.data.help_center.windows[window]} links={helpLinks} />}
+    helpCenter={results.data && <ResultsHelpCenterChoice workspace={results.data.help_center} window={window} links={helpLinks}
+      readsHelpCenters={can(me.data, 'help_center:read')} />}
     importLink={<Link to="/settings/data" className="button">{m.openImport}</Link>}
     admin={isAdmin ? <ResultsAdmin timezone={timezone} link={shareLink.data?.link} linkFailed={shareLink.isError} created={created} replacedOld={replacedOld}
       busy={share.isPending} shareFailed={share.isError} onCreate={() => share.mutate('create')} onTurnOff={() => share.mutate('off')}

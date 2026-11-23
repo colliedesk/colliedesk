@@ -121,6 +121,20 @@ says so ("Billing was removed; replies send from Support").
   channel: those that came through it and those whose replies leave from it. A removed channel still
   filters ("Careers (removed)"), and a saved view keeps the choice.
 
+## Help center of a channel
+
+With [several help centers](knowledge-base.md#several-help-centers), a help chat or a web form has a
+**Help center** field in its settings: the help center it serves, the primary to begin with. An admin
+changes it there.
+
+- A help chat answers on that help center's pages and only from its articles.
+- Every conversation the channel opens is marked with it ("via Hardware" above the thread). A conversation
+  keeps the help center it came through when the channel later serves another one.
+- A help center that a channel still serves cannot be deleted; see
+  [Several help centers](knowledge-base.md#several-help-centers).
+
+Email and Zalo OA channels serve no help center.
+
 ## History
 
 **Settings → Channels → History**, and the **History** tab of each channel, list who added, renamed,

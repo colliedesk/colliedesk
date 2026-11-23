@@ -23,6 +23,15 @@ var (
 	ErrHelpCenterHandleTaken = errors.New("another help center of this workspace has this handle")
 )
 
+// HelpCenterInUseError refuses deleting a help center that live channels serve; Channels names them.
+type HelpCenterInUseError struct {
+	Channels []ChannelName
+}
+
+func (e *HelpCenterInUseError) Error() string {
+	return "live channels serve this help center"
+}
+
 // HelpCenterSummary is one help center of a workspace as the list shows it. Handle is nil for the
 // primary, which is served at the root of the workspace's address.
 type HelpCenterSummary struct {

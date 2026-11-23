@@ -179,10 +179,11 @@ func AIRetrieve(ctx context.Context, tx pgx.Tx, workspaceID string, query AIRetr
 const aiRecheckSlack = `20`
 
 // aiKBViews names the views of the articles and translations a search may read: every published one,
-// or for help chat only those it may read.
+// or for help chat only those it may read on its help center (a help chat transaction,
+// database.InHelpChat).
 func aiKBViews(helpChat bool) (articles, translations string) {
 	if helpChat {
-		return "kb_help_chat_articles", "kb_help_chat_translations"
+		return "kb_help_center_chat_articles", "kb_help_center_chat_translations"
 	}
 	return "kb_published_articles", "kb_published_translations"
 }
@@ -234,7 +235,7 @@ func aiRetrieveKB(ctx context.Context, tx pgx.Tx, workspaceID string, terms []st
 	} else {
 		// Each article once, in its best language; the text is read for the few that are returned.
 		args := []any{workspaceID, terms, limit}
-		languages := ``
+		languages, readable := ``, ``
 		switch {
 		case reader != nil && *reader == "":
 			languages = ` AND kb_locale IS NULL`
@@ -242,13 +243,17 @@ func aiRetrieveKB(ctx context.Context, tx pgx.Tx, workspaceID string, terms []st
 			// The reader's text of each article, left out of the scoring otherwise (a row exists only
 			// for a published translation, the trigger removes it on unpublish or trash).
 			args = append(args, *reader)
-			languages = ` AND (kb_locale = $4 OR (kb_locale IS NULL AND NOT EXISTS (SELECT 1 FROM ai_retrieval_docs o
-				WHERE o.workspace_id=$1 AND o.kb_article_id=ai_retrieval_docs.kb_article_id AND o.kb_locale=$4 AND ` + aiPublishedTranslationOf("o", helpChat) + `)))`
+			readable = ` AND kt.locale=$4`
+			languages = ` AND (kb_locale = $4 OR (kb_locale IS NULL AND kb_article_id NOT IN (SELECT o.kb_article_id FROM ai_retrieval_docs o
+				WHERE o.workspace_id=$1 AND o.kb_article_id IS NOT NULL AND o.kb_locale=$4 INTERSECT SELECT article_id FROM readable)))`
 		}
-		kbSQL := `WITH ` + aiScored(`SELECT id, kb_article_id AS source, kb_locale AS locale, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL`+languages) + `,
+		// The readable translations are read once and matched by hash: checked row by row, the help chat
+		// views and the reader's policies would run again for every scored row. INTERSECT keeps the
+		// planner from looping over them for each indexed translation, which it estimates at one row.
+		kbSQL := `WITH readable AS MATERIALIZED (SELECT kt.article_id, kt.locale FROM ` + translations + ` kt WHERE kt.workspace_id=$1` + readable + `),
+			` + aiScored(`SELECT id, kb_article_id AS source, kb_locale AS locale, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL`+languages) + `,
 			best AS (SELECT DISTINCT ON (source) id, s FROM score
-				WHERE score.locale IS NULL OR EXISTS (SELECT 1 FROM ` + translations + ` kt WHERE kt.workspace_id=$1 AND kt.article_id=score.source::uuid
-					AND kt.locale=score.locale)
+				WHERE score.locale IS NULL OR (score.source::uuid, score.locale) IN (SELECT article_id, locale FROM readable)
 				ORDER BY source, s DESC, locale NULLS FIRST),
 			top AS (SELECT id, s FROM best ORDER BY s DESC LIMIT $3 + ` + aiRecheckSlack + `)
 			SELECT d.kb_article_id::text, COALESCE(d.kb_locale, ''), a.number, d.title, d.body, top.s

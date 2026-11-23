@@ -157,7 +157,7 @@ test('a sent reply that missed a copied address says which one, without offering
 });
 
 // Resolving never needs the details pane: the thread header has it, one press, and the way back.
-const thread = { latest_reply_number: 0, id: '11111111-1111-4111-8111-111111111111', contact_id: '22222222-2222-4222-8222-222222222222',
+const thread = { latest_reply_number: 0, help_center: null, id: '11111111-1111-4111-8111-111111111111', contact_id: '22222222-2222-4222-8222-222222222222',
   contact_name: 'Mai Linh', subject: 'Refund', status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [],
   channel: 'email' as const, origin: null, created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z' };
 

@@ -62,7 +62,8 @@ type UndoResult struct {
 	// in the media library or replaced their bytes.
 	KeptKBFiles int `json:"kept_kb_files"`
 	// KBHelpCenters counts the help centers the import made from Freshdesk portals and moved to the
-	// trash; KeptKBHelpCenters names those it left because the team gave them a custom domain.
+	// trash; KeptKBHelpCenters names those it left because the team gave them a custom domain or
+	// pointed a help chat or web form at them.
 	KBHelpCenters     int      `json:"kb_help_centers"`
 	KeptKBHelpCenters []string `json:"kept_kb_help_centers"`
 }
@@ -129,7 +130,7 @@ func (u UndoResult) Markdown() string {
 		fmt.Fprintf(&b, "- Help centers removed: %d (made from Freshdesk portals; they are in the trash)\n", u.KBHelpCenters)
 	}
 	if len(u.KeptKBHelpCenters) > 0 {
-		fmt.Fprintf(&b, "- Help centers kept because they have a custom domain: %s; delete them in Settings, Help centers\n", strings.Join(u.KeptKBHelpCenters, ", "))
+		fmt.Fprintf(&b, "- Help centers kept because they have a custom domain or a channel serves them: %s; delete them in Settings, Help centers\n", strings.Join(u.KeptKBHelpCenters, ", "))
 	}
 	if u.KBPrimaryLanguage != "" {
 		fmt.Fprintf(&b, "- Help center primary language given back: %s\n", u.KBPrimaryLanguage)

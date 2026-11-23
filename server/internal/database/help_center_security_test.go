@@ -34,6 +34,8 @@ var helpCenterPolicies = map[string]string{
 	"kb_article_vote_resets":   articleScope,
 	"kb_article_votes":         articleScope,
 	"kb_article_vote_versions": articleScope,
+	"kb_article_versions":      articleScope,
+	"ai_retrieval_docs":        "(kb_article_id IN ( SELECT kb_articles.id\n   FROM kb_articles))",
 	"kb_media": "((id IN ( SELECT kb_article_media.media_id\n   FROM kb_article_media)) OR " +
 		"(id IN ( SELECT kb_article_attachments.media_id\n   FROM kb_article_attachments)) OR " +
 		"(id IN ( SELECT help_centers.logo_media_id\n   FROM help_centers)) OR " +
@@ -53,12 +55,17 @@ var readerPrivileges = map[string]string{
 	"kb_article_vote_versions":           "SELECT,INSERT,UPDATE",
 	"kb_help_center_public_articles":     "SELECT",
 	"kb_help_center_public_translations": "SELECT",
+	"kb_help_center_chat_articles":       "SELECT",
+	"kb_help_center_chat_translations":   "SELECT",
 	"kb_collection_visibility":           "SELECT",
 	"kb_published_articles":              "SELECT",
 	"kb_published_translations":          "SELECT",
 	// An old helpdesk address is looked up in the import ledger by the columns readerColumns names;
 	// the reader reads them only, never the import's errors or source data.
 	"import_items": "",
+	// Help chat reads which version an article's text is at by the columns readerColumns names, never
+	// an older text or who wrote it.
+	"kb_article_versions": "",
 }
 
 func readerPrivilegesOn(name string) string {

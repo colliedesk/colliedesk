@@ -283,7 +283,8 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	}
 	// The one form the help center's own pages post: a vote on an article.
 	vote := request.Method == http.MethodPost && votePath.MatchString(inner)
-	if route == nil && !vote && request.Method != http.MethodGet && request.Method != http.MethodHead {
+	routed := route != nil || inner != sub && s.channelRoute(request, inner) != nil
+	if !routed && !vote && request.Method != http.MethodGet && request.Method != http.MethodHead {
 		notAllowed(response)
 		return
 	}
@@ -365,8 +366,9 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	}
 	view := s.newView(site, base, channels.HelpCenterAdditions{})
 	reached := s.helpCenterAt(view, base)
-	// The channel types (help chat) answer on the primary help center only.
-	if route != nil && !site.Primary {
+	// Another help center's channel routes are below its /<handle>.
+	route = s.channelRoute(request, sub)
+	if route == nil && !vote && request.Method != http.MethodGet && request.Method != http.MethodHead {
 		s.writeNotFound(response, base == "")
 		return
 	}
@@ -378,7 +380,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	if _, rest, _, ok := view.splitLanguage(sub); ok && languagePage(rest) {
 		pageSub = rest
 	}
-	if s.config.Additions != nil && site.Primary && !vote && (pageSub == "/" || pageSub == "" || pageSub == "/search" || strings.HasPrefix(pageSub, "/c/") || strings.HasPrefix(pageSub, "/a/")) {
+	if s.config.Additions != nil && !vote && (pageSub == "/" || pageSub == "" || pageSub == "/search" || strings.HasPrefix(pageSub, "/c/") || strings.HasPrefix(pageSub, "/a/")) {
 		additions, err := s.config.Additions(ctx, reached)
 		if err != nil {
 			s.writeError(response, err)
@@ -591,7 +593,7 @@ func (s *Site) helpCenterAt(v view, base string) channels.HelpCenter {
 		look.Accent, look.AccentInk = palette.Accent.Hex(), palette.AccentInk.Hex()
 	}
 	site := v.site
-	return channels.HelpCenter{WorkspaceID: site.WorkspaceID, Slug: site.Slug, Name: site.Name, Trial: site.Trial, Address: v.address, Base: base,
+	return channels.HelpCenter{WorkspaceID: site.WorkspaceID, Slug: site.Slug, Name: site.Name, HelpCenterID: site.HelpCenterID, Primary: site.Primary, Trial: site.Trial, Address: v.address, Base: base,
 		NotFound: func(response http.ResponseWriter) { s.writeNotFound(response, base == "") }, Look: look, Languages: site.Languages}
 }
 

@@ -25,7 +25,7 @@ const REPLY = '66666666-6666-4666-8666-666666666663';
 const MOVE = '77777777-7777-4777-8777-777777777777';
 
 const conversation = (overrides: Partial<Conversation> = {}): Conversation => ({
-  latest_reply_number: 0, id: HERE, contact_id: CONTACT, contact_name: 'Mai Linh', subject: 'Printer jams', status: 'open', priority: 'normal',
+  latest_reply_number: 0, help_center: null, id: HERE, contact_id: CONTACT, contact_name: 'Mai Linh', subject: 'Printer jams', status: 'open', priority: 'normal',
   assignee_id: null, tags: [], channel: 'email', origin: null, created_at: '2026-10-25T08:00:00Z', updated_at: '2026-10-25T09:00:00Z', ...overrides,
 });
 const message = (id: string, body: string, kind: Message['kind'] = 'incoming'): Message => ({

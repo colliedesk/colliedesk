@@ -496,7 +496,7 @@ type conversationPage struct {
 
 func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after string) (conversationPage, error) {
 	page := conversationPage{tags: map[string][]string{}, files: map[string][]export.Attachment{}, timeEntries: map[string][]domain.TimeEntry{}, statusChanges: map[string][]export.StatusChange{}}
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.channel_scope,c.reply_channel_id::text,c.merged_into_id::text,c.origin,c.created_at,c.updated_at,c.assigned_at,c.assigned_by_agent_id::text,c.held_at,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.channel_scope,c.reply_channel_id::text,c.merged_into_id::text,c.help_center_id::text,c.origin,c.created_at,c.updated_at,c.assigned_at,c.assigned_by_agent_id::text,c.held_at,
 		(SELECT count(*) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id),c.number_series,COALESCE(c.number,0),COALESCE(c.number_year,0),COALESCE(c.display_ref,''),COALESCE(c.number_format,''),COALESCE(c.sla_applies,false),
 		CASE WHEN c.sla_applies THEN json_build_object('first_response',json_build_object('state',c.sla_first_state,'due_at',c.sla_first_due_at,'warn_at',c.sla_first_warn_at,'met_at',c.sla_first_met_at),
 			'resolution',json_build_object('state',c.sla_resolution_state,'due_at',c.sla_resolution_due_at,'warn_at',c.sla_resolution_warn_at),
@@ -512,7 +512,7 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 		var head export.ConversationHead
 		var messages int
 		if err := rows.Scan(&head.ID, &head.ContactID, &head.Subject, &head.Status, &head.Priority, &head.AssigneeID,
-			&head.Channel, &head.ChannelID, &head.ChannelScope, &head.ReplyChannelID, &head.MergedIntoID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &head.AssignedAt, &head.AssignedByAgentID, &head.HeldAt, &messages,
+			&head.Channel, &head.ChannelID, &head.ChannelScope, &head.ReplyChannelID, &head.MergedIntoID, &head.HelpCenterID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &head.AssignedAt, &head.AssignedByAgentID, &head.HeldAt, &messages,
 			&head.NumberSeries, &head.Number, &head.NumberYear, &head.DisplayRef, &head.NumberFormat, &head.SLAApplies, &head.SLA); err != nil {
 			rows.Close()
 			return page, fmt.Errorf("export conversations: %w", err)
@@ -1291,7 +1291,7 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 		var kind, external string
 		if err := rows.Scan(&item.channel.ID, &item.channel.WorkspaceID, &kind, &item.channel.Name, &item.channel.Enabled, &item.settings, &external,
 			&item.channel.CreatedAt, &item.channel.UpdatedAt, &item.channel.DisabledAt, &item.channel.DeletedAt, &item.channel.IsDefault,
-			&item.channel.ProcessingPausedAt, &item.autoCloseSince); err != nil {
+			&item.channel.ProcessingPausedAt, &item.channel.HelpCenterID, &item.autoCloseSince); err != nil {
 			rows.Close()
 			return fmt.Errorf("export channels: %w", err)
 		}
@@ -1308,6 +1308,9 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 			CreatedAt: domain.UTC(channel.CreatedAt), UpdatedAt: domain.UTC(channel.UpdatedAt), DisabledAt: domain.UTCOptional(channel.DisabledAt),
 			DeletedAt: domain.UTCOptional(channel.DeletedAt), IsDefault: channel.IsDefault, ProcessingPausedAt: domain.UTCOptional(channel.ProcessingPausedAt),
 			AutoCloseSince: domain.UTCOptional(item.autoCloseSince)}
+		if channel.HelpCenterID != "" {
+			record.HelpCenterID = &channel.HelpCenterID
+		}
 		if channel.ExternalAccount != "" {
 			record.ExternalAccount = &channel.ExternalAccount
 		}

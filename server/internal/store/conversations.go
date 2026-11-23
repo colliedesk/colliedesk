@@ -51,6 +51,9 @@ type ConversationFilter struct {
 	// Sort is one of the ConversationSort* values; empty is ConversationSortUpdatedDesc.
 	Sort   string
 	Search string
+	// HelpCenters keep the conversations that came through one of the live help centers with these
+	// handles; "primary" is the primary help center.
+	HelpCenters []string
 	// ResultSnapshotID and ResultMetric keep the conversations one number of the results page counts
 	// (results_members); a snapshot no longer kept is ErrResultsRefreshed.
 	ResultSnapshotID string
@@ -258,13 +261,19 @@ const conversationChatChannel = `(SELECT i.channel_id::text FROM conversation_th
 		JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id
 		WHERE l.workspace_id=c.workspace_id AND l.conversation_id=c.id AND l.unlinked_at IS NULL ORDER BY l.linked_at DESC,l.id DESC LIMIT 1)`
 
+// conversationHelpCenter is the help center the conversation c came in through, as JSON; null for none.
+// A help center without a name is called what the app calls it: its title, its handle, else the workspace's name.
+const conversationHelpCenter = `(SELECT jsonb_build_object('id',h.id::text,'handle',COALESCE(h.handle,''),'primary',h.primary_help_center,
+		'name',COALESCE(NULLIF(h.name,''),NULLIF(h.title,''),h.handle,(SELECT w.name FROM workspaces w WHERE w.id=h.workspace_id)))
+		FROM help_centers h WHERE h.workspace_id=c.workspace_id AND h.id=c.help_center_id)`
+
 func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.Conversation, error) {
 	var item domain.Conversation
 	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,NULLIF(k.organization,''),c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),
-		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`
+		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`,`+conversationHelpCenter+`
 		FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, id).
 		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.ContactOrganization, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber,
-			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID)
+			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID, &item.HelpCenter)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("get conversation: %w", err)
 	}
@@ -437,6 +446,12 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 			q.and(`(` + strings.Join(either, " OR ") + `)`)
 		}
 	}
+	if len(filter.HelpCenters) > 0 {
+		// A deleted help center has given its handle up: a new one may hold it now.
+		handles := q.arg(filter.HelpCenters) + "::text[]"
+		q.and(`c.help_center_id IN (SELECT h.id FROM help_centers h WHERE h.workspace_id=c.workspace_id AND h.deleted_at IS NULL AND (h.handle=ANY(` +
+			handles + `) OR (h.primary_help_center AND ` + q.arg(domain.PrimaryHelpCenterHandle) + `::text=ANY(` + handles + `))))`)
+	}
 	if filter.ResultSnapshotID != "" {
 		q.and(`EXISTS(SELECT 1 FROM results_members rm WHERE rm.workspace_id=c.workspace_id AND rm.snapshot_id=` + q.arg(filter.ResultSnapshotID) +
 			`::uuid AND rm.metric=` + q.arg(filter.ResultMetric) + ` AND rm.conversation_id=c.id)`)
@@ -538,7 +553,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,NULLIF(k.organization,''),c.subject,c.status,c.priority,
 		c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb),
-		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`,
+		COALESCE(c.number,0),c.number_series,COALESCE(c.display_ref,''),`+conversationChatChannel+`,`+conversationHelpCenter+`,
 		left(regexp_replace(btrim(left(latest.body,`+strconv.Itoa(excerptReadRunes*4)+`)),'\s+',' ','g'),`+strconv.Itoa(excerptReadRunes)+`),latest.created_at
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS listed(id,position)
 		JOIN conversations c ON c.workspace_id=$1 AND c.id=listed.id
@@ -569,7 +584,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		var latestAt *time.Time
 		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.ContactOrganization, &item.Subject, &item.Status, &item.Priority,
 			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON,
-			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID, &latestText, &latestAt); err != nil {
+			&item.Number, &item.NumberSeries, &item.DisplayRef, &item.ChatChannelID, &item.HelpCenter, &latestText, &latestAt); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)
 		}
 		if err := json.Unmarshal(tagsJSON, &item.Tags); err != nil {

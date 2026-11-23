@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -77,4 +80,73 @@ func TestHelpChatQuotesItsOwnNotesWithoutLinkingThemAndNeverReadsTeamNotes(t *te
 		t.Fatalf("session = %+v", session)
 	}
 	wantSources("read back", session.Turns[0].Sources)
+}
+
+// Help chat links an article only when the help center shows it: not one kept for help chat, not one
+// under a parent collection kept for help chat, not one also in a collection kept for help chat. It
+// reads an article in a language only from a published translation outside the trash.
+func TestHelpChatLinksOnlyWhatTheHelpCenterShowsAndReadsOnlyPublishedTranslations(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Chat Links", "admin@chat-links.example.com")
+	workspace := workspaceID(t, api, admin)
+	shown := kbCollection(t, api, admin, map[string]any{"name": "Shown"})
+	chatTop := kbCollection(t, api, admin, map[string]any{"name": "Chat top", "visibility": "help_chat"})
+	chatChild := kbCollection(t, api, admin, map[string]any{"name": "Chat child", "parent_id": chatTop.ID})
+	chatShelf := kbCollection(t, api, admin, map[string]any{"name": "Chat shelf", "visibility": "help_chat"})
+	article := func(title string, body map[string]any) kbArticleView {
+		body["title"], body["status"], body["body_md"] = title, "published", title+" text."
+		return kbArticle(t, api, admin, body)
+	}
+	plain := article("Plain", map[string]any{"collection_id": shown.ID})
+	kept := article("Kept", map[string]any{"collection_id": shown.ID, "visibility": "help_chat"})
+	underChat := article("Under chat", map[string]any{"collection_id": chatChild.ID})
+	alsoChat := article("Also chat", map[string]any{"collection_ids": []string{shown.ID, chatShelf.ID}})
+
+	primary := queryString(t, pool, `SELECT primary_help_center_id($1)::text`, workspace)
+	ctx := context.Background()
+	for _, step := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO help_center_languages(workspace_id,help_center_id,locale,visible) VALUES($1,$2,'fr',true),($1,$2,'de',true),($1,$2,'es',true)`,
+			[]any{workspace, primary}},
+		{`INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md,slug,status,published_at,deleted_at) VALUES
+			($1,$2,'fr','Simple','Texte.','s','published',now(),NULL),
+			($1,$2,'de','Einfach','Text.','e','draft',NULL,NULL),
+			($1,$2,'es','Sencillo','Texto.','c','published',now(),now())`, []any{workspace, plain.ID}},
+	} {
+		if _, err := pool.Exec(ctx, step.sql, step.args...); err != nil {
+			t.Fatalf("%s: %v", step.sql, err)
+		}
+	}
+
+	read := func(locale string) map[string]store.ChatKBArticle {
+		t.Helper()
+		byTitle := map[string]store.ChatKBArticle{}
+		err := database.New(pool).InHelpChat(ctx, workspace, primary, func(tx pgx.Tx) error {
+			articles, err := store.ChatKBArticlesIn(ctx, tx, workspace, false, locale)
+			for _, a := range articles {
+				byTitle[a.Title] = a
+			}
+			return err
+		})
+		if err != nil {
+			t.Fatalf("chat articles in %q: %v", locale, err)
+		}
+		return byTitle
+	}
+	got := read("")
+	for title, public := range map[string]bool{plain.Title: true, kept.Title: false, underChat.Title: false, alsoChat.Title: false} {
+		if a, ok := got[title]; !ok || a.Public != public {
+			t.Errorf("help chat reads %q = %+v (found %v), want public %v", title, a, ok, public)
+		}
+	}
+	if len(got) != 4 {
+		t.Errorf("help chat reads %d articles, want 4: %+v", len(got), got)
+	}
+	for locale, title := range map[string]string{"fr": "Simple", "de": plain.Title, "es": plain.Title} {
+		if a, ok := read(locale)[title]; !ok || a.Number != plain.Number || a.Public != true {
+			t.Errorf("help chat in %s reads article %d as %q = %+v (found %v), want it public", locale, plain.Number, title, a, ok)
+		}
+	}
 }

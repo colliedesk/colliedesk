@@ -26,13 +26,15 @@ const (
 )
 
 // KBArticleFeedback is a reader's "No" that left an address: the article's number, the reader (voter) and
-// client address (address) as VoteKBArticle keeps them, the address typed (From) and the article's public
-// address for its slug (Page).
+// client address (address) as VoteKBArticle keeps them, the address typed (From), the article's public
+// address for its slug (Page) and the help center the vote came through (HelpCenterID, "" for the primary),
+// which the conversation opens on.
 type KBArticleFeedback struct {
 	Number         int64
 	Voter, Address []byte
 	From           string
 	Page           func(slug string) string
+	HelpCenterID   string
 }
 
 // OpenKBArticleFeedback opens one conversation in workspaceID from the reader's current "No" vote on the
@@ -86,8 +88,10 @@ func (s *Store) OpenKBArticleFeedback(ctx context.Context, workspaceID string, i
 		ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, workspaceID, ArticleFeedbackTag).Scan(&tagID); err != nil {
 		return fmt.Errorf("find or create tag: %w", err)
 	}
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel) VALUES($1,$2,$3,$4,$4,$5) RETURNING id::text`,
-		workspaceID, contactID, "Article feedback: "+title, now, domain.ChannelArticleFeedback).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,help_center_id)
+		VALUES($1,$2,$3,$4,$4,$5,(SELECT h.id FROM help_centers h
+			WHERE h.workspace_id=$1 AND h.id=COALESCE(NULLIF($6,'')::uuid, primary_help_center_id($1)))) RETURNING id::text`,
+		workspaceID, contactID, "Article feedback: "+title, now, domain.ChannelArticleFeedback, in.HelpCenterID).Scan(&conversationID); err != nil {
 		return fmt.Errorf("create conversation: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) VALUES($1,$2,$3)`, workspaceID, conversationID, tagID); err != nil {

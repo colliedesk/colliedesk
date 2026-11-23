@@ -25,7 +25,7 @@ func (s *Store) WithChannels(registry *channels.Registry) *Store {
 // Channels is the registry the store routes through; nil when none was given.
 func (s *Store) Channels() *channels.Registry { return s.channels }
 
-const channelRowColumns = `id::text,workspace_id::text,type,name,enabled,settings,COALESCE(external_account,''),created_at,updated_at,disabled_at,deleted_at,is_default,processing_paused_at`
+const channelRowColumns = `id::text,workspace_id::text,type,name,enabled,settings,COALESCE(external_account,''),created_at,updated_at,disabled_at,deleted_at,is_default,processing_paused_at,COALESCE(help_center_id::text,'')`
 
 // scanChannelRow reads a channel and resolves its settings over its type's defaults. A type this
 // server does not run keeps empty defaults.
@@ -34,7 +34,7 @@ func (s *Store) scanChannelRow(row rowScanner) (channels.Channel, error) {
 	var kind string
 	var settings []byte
 	if err := row.Scan(&channel.ID, &channel.WorkspaceID, &kind, &channel.Name, &channel.Enabled, &settings, &channel.ExternalAccount,
-		&channel.CreatedAt, &channel.UpdatedAt, &channel.DisabledAt, &channel.DeletedAt, &channel.IsDefault, &channel.ProcessingPausedAt); err != nil {
+		&channel.CreatedAt, &channel.UpdatedAt, &channel.DisabledAt, &channel.DeletedAt, &channel.IsDefault, &channel.ProcessingPausedAt, &channel.HelpCenterID); err != nil {
 		return channels.Channel{}, err
 	}
 	channel.Type = channels.Type(kind)
@@ -89,6 +89,29 @@ func (s *Store) DefaultChannelOfType(ctx context.Context, workspaceID string, ki
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (found, error) {
 		channel, ok, err := s.defaultChannelOfType(ctx, tx, workspaceID, kind)
 		return found{channel, ok}, err
+	})
+	return got.channel, got.ok, err
+}
+
+// HelpCenterChannelOfType reads the live channel of a type that serves a help center, for a request
+// that names no channel: the type's default when it serves that help center, else the oldest one
+// that does. A channel with no help center serves the primary (primary true).
+func (s *Store) HelpCenterChannelOfType(ctx context.Context, workspaceID string, kind channels.Type, helpCenterID string, primary bool) (channels.Channel, bool, error) {
+	type found struct {
+		channel channels.Channel
+		ok      bool
+	}
+	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (found, error) {
+		channel, err := s.scanChannelRow(tx.QueryRow(ctx, `SELECT `+channelRowColumns+` FROM channels
+			WHERE workspace_id=$1 AND type=$2 AND deleted_at IS NULL AND (help_center_id=NULLIF($3,'')::uuid OR (help_center_id IS NULL AND $4))
+			ORDER BY is_default DESC, created_at, id LIMIT 1`, workspaceID, string(kind), helpCenterID, primary))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return found{}, nil
+		}
+		if err != nil {
+			return found{}, fmt.Errorf("load %s channel of the help center: %w", kind, err)
+		}
+		return found{channel, true}, nil
 	})
 	return got.channel, got.ok, err
 }

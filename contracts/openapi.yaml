@@ -1585,7 +1585,12 @@ paths:
           schema: {type: boolean}
         - name: search
           in: query
-          description: Words to find in the subject, in any message text, or in the name or email of the contact.
+          description: >-
+            Words to find in the subject, in any message text, or in the name or email of the contact. A word
+            `help_center:<handle>` is not text to find: it keeps the conversations that came through that help
+            center (`help_center:primary` for the primary; several such words keep any of them), and the other
+            words still match. A handle no live help center has matches nothing; one that cannot be a handle
+            is 400.
           schema: {type: string, maxLength: 200}
         - name: result
           in: query
@@ -4771,7 +4776,7 @@ paths:
         404 `report_not_ready` before there is one. `knowledge_base.help_centers` lists each Freshdesk
         portal and the help center its categories went to (items as in ImportPortalHelpCenter). An undo
         report counts the help centers it removed in `kb_help_centers` and names the ones it kept in
-        `kept_kb_help_centers` (they have a custom domain).
+        `kept_kb_help_centers` (they have a custom domain, or a help chat or web form serves them).
       responses:
         '200':
           description: The report
@@ -5109,11 +5114,23 @@ paths:
         the newest a background worker stored (`computed_at`). Every count names, through its snapshot id,
         the conversations behind it (the `result` filter of `GET /conversations`). `results:read` reads it; the
         compute error is shown only to callers with `results:share`.
+      parameters:
+        - name: help_center_id
+          in: query
+          required: false
+          description: >-
+            Reads the help center section for one help center (`GET /help-centers` lists them): the
+            conversations that came in through it, the articles it shows and their views. Without it the
+            section reads the whole workspace. The other numbers stay the workspace's. Not a uuid is 400; a
+            help center that is not this workspace's, or was deleted, is 404.
+          schema: {type: string, format: uuid}
       responses:
         '200':
           description: The newest numbers
           content: {application/json: {schema: {$ref: '#/components/schemas/Results'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/results/share-link:
     get:
       operationId: getResultsShareLink
@@ -9855,8 +9872,10 @@ paths:
       operationId: deleteHelpCenter
       x-permission: help_center:update
       description: >
-        Delete a help center that is not the primary (409 `primary_help_center` for the primary). Its
-        pages go off line at once and its custom domain is released, so another help center can claim
+        Delete a help center that is not the primary (409 `primary_help_center` for the primary). While a
+        live help chat or web form serves it, the delete is refused with 409 `help_center_in_use`, whose
+        message and `error.channels` name those channels: move each to another help center or remove it
+        first. Its pages go off line at once and its custom domain is released, so another help center can claim
         the host name; its collections and articles stay, and keep showing on the other help centers
         they are placed on. It cannot be restored: make a new one and place the collections on it again.
         Needs `help_center:update`; one that serves on a custom domain needs `kb_articles:publish` too.
@@ -14295,7 +14314,7 @@ components:
       required: [name, handle, locale]
       properties:
         name: {type: string, minLength: 1, maxLength: 100}
-        handle: {type: string, minLength: 1, maxLength: 40, pattern: '^[a-z0-9][a-z0-9-]*$', description: 'Lowercase letters, digits and hyphens; its address is the primary''s followed by `/<handle>`.'}
+        handle: {type: string, minLength: 1, maxLength: 40, pattern: '^[a-z0-9][a-z0-9-]*$', description: 'Lowercase letters, digits and hyphens; its address is the primary''s followed by `/<handle>`. `primary` is refused: inbox search reads `help_center:primary` as the primary.'}
         title: {type: string, maxLength: 200, description: Shown at the top of every page; empty uses the workspace name.}
         locale: {type: string, minLength: 2, maxLength: 35}
         enabled: {type: boolean, description: 'Left out, off: nothing of it is public until it is turned on.'}
@@ -14752,7 +14771,7 @@ components:
         updated_at: {type: string, format: date-time}
     Conversation:
       type: object
-      required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, channel, origin, created_at, updated_at, latest_reply_number]
+      required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, channel, origin, help_center, created_at, updated_at, latest_reply_number]
       properties:
         latest_reply_number: {type: integer, minimum: 0, description: 'The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply.'}
         last_status_change:
@@ -14797,6 +14816,15 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/ConversationOrigin'}
+        help_center:
+          description: >-
+            The help center it came in through: the one its web form or help chat served when it opened (a help
+            chat's Talk to a person included). It stays when the channel later serves another one. Null for one
+            that came through none: email, a chat app, started by the team, imported. Find them with
+            help_center:<handle> in search (help_center:primary for the primary).
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/ConversationHelpCenter'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         latest_customer_message:
@@ -14805,6 +14833,14 @@ components:
             What its customer wrote last (never the team's replies or notes), on one line: what an inbox row shows
             under the subject. Only in GET /conversations; missing on a single conversation and when the customer
             never wrote (a conversation the team started and nobody answered yet).
+    ConversationHelpCenter:
+      type: object
+      required: [id, name, handle, primary]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, description: 'What the team calls it: its name (GET /api/v1/help-centers), else its title, its handle or the workspace name.'}
+        handle: {type: string, description: 'Its handle; "" for the primary, which has none and is searched as help_center:primary.'}
+        primary: {type: boolean}
     CustomerMessageExcerpt:
       type: object
       required: [excerpt, created_at]
@@ -15638,6 +15674,16 @@ components:
             When the channel's processing was paused (null while it runs): what arrives waits in its journal as it
             came, nothing is decided, opened or sent; once resumed it is processed in order by the channel's rules.
         paused_count: {type: integer, minimum: 0, description: 'Messages kept while the channel''s processing is paused, waiting to be processed (0 while it runs).'}
+        help_center_id:
+          type: [string, 'null']
+          format: uuid
+          description: >-
+            The help center a help chat or web form serves: its articles are the ones the chat answers from, and a
+            conversation it opens is marked with it. null serves the workspace's primary help center, and is always
+            null for another type.
+        help_center_name:
+          type: [string, 'null']
+          description: 'The name of the help center the channel serves (the primary''s when help_center_id is null); null for a type that serves none.'
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         deleted_at: {type: string, format: date-time, description: 'Only on a removed channel, which only `include_removed=true` lists.'}
@@ -15808,6 +15854,12 @@ components:
         is_default: {type: boolean, description: 'true makes the new channel its type''s default; false is refused (400).'}
         config: {$ref: '#/components/schemas/ChannelConfigInput'}
         settings: {$ref: '#/components/schemas/ChannelSettings'}
+        help_center_id:
+          type: [string, 'null']
+          description: >-
+            Only for a help chat or a web form: the help center it serves (GET /api/v1/help-centers lists them). Left
+            out or null serves the primary. Another type, or an id that is not a help center of this workspace, is
+            refused (400, fields.help_center_id).
     ChannelChange:
       type: object
       additionalProperties: false
@@ -15828,6 +15880,13 @@ components:
           description: >-
             true pauses the channel's processing (recorded as paused), false resumes it (resumed). Only a channel whose
             messages wait in a journal (Zalo) can be paused; another answers 400.
+        help_center_id:
+          type: [string, 'null']
+          description: >-
+            Only for a help chat or a web form: the help center it serves from now on (recorded as config_changed);
+            null, or the primary's id, serves the primary. Conversations it opened keep the help center they were
+            opened on. Another type, or an id that is not a help center of this workspace, is refused (400,
+            fields.help_center_id).
     ChannelCredentialInput:
       type: object
       additionalProperties: false
@@ -16742,6 +16801,15 @@ components:
               properties:
                 channel_id: {type: string, format: uuid}
                 channel_name: {type: string}
+            channels:
+              type: array
+              description: 'Only on help_center_in_use: the live channels that serve the help center; move each to another help center (PATCH /api/v1/channels/{id}, help_center_id) or remove it first.'
+              items:
+                type: object
+                required: [id, name]
+                properties:
+                  id: {type: string, format: uuid}
+                  name: {type: string}
             articles:
               type: array
               description: 'Only on media_in_use: the live articles whose current text names the item.'

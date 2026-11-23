@@ -173,8 +173,11 @@ type Conversation struct {
 	// ChannelRef is its channel and the one its replies leave through, nil when there is neither.
 	ChannelRef *ChannelRef         `json:"channel_ref"`
 	Origin     *ConversationOrigin `json:"origin"`
-	CreatedAt  time.Time           `json:"created_at"`
-	UpdatedAt  time.Time           `json:"updated_at"`
+	// HelpCenter is the help center it came in through (its web form's or help chat's when it opened);
+	// nil for one that came through none.
+	HelpCenter *ConversationHelpCenter `json:"help_center"`
+	CreatedAt  time.Time               `json:"created_at"`
+	UpdatedAt  time.Time               `json:"updated_at"`
 	// LatestReplyNumber is the number of the newest reply (0 before the first): a reply sent with an
 	// older seen_reply_number is refused with ReplyConflictError.
 	LatestReplyNumber int `json:"latest_reply_number"`
@@ -197,6 +200,14 @@ type Conversation struct {
 	// LatestCustomerMessage is what its customer wrote last, one line of it; read with the conversation
 	// list only (an inbox row shows it), nil there when the customer never wrote.
 	LatestCustomerMessage *CustomerMessageExcerpt `json:"latest_customer_message,omitempty"`
+}
+
+// ConversationHelpCenter names the help center a conversation came in through.
+type ConversationHelpCenter struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Handle  string `json:"handle"`
+	Primary bool   `json:"primary"`
 }
 
 // CustomerMessageExcerpt is the start of a customer's message on one line, and when it arrived.

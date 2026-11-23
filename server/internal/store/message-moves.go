@@ -308,9 +308,9 @@ func splitConversation(ctx context.Context, tx pgx.Tx, workspaceID string, sourc
 	}
 	created := moveConversation{contactID: contactID, status: "open", channel: source.channel, channelID: source.channelID, scope: source.scope,
 		replyChannelID: source.replyChannelID}
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,reply_channel_id)
-		VALUES($1,$2,$3,$4,$4,$5,$6,$7,$8) RETURNING id::text`, workspaceID, contactID, subject, now, source.channel, source.channelID, source.scope,
-		source.replyChannelID).Scan(&created.id); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel,channel_id,channel_scope,reply_channel_id,help_center_id)
+		VALUES($1,$2,$3,$4,$4,$5,$6,$7,$8,(SELECT help_center_id FROM conversations WHERE workspace_id=$1 AND id=$9::uuid)) RETURNING id::text`,
+		workspaceID, contactID, subject, now, source.channel, source.channelID, source.scope, source.replyChannelID, source.id).Scan(&created.id); err != nil {
 		return created, fmt.Errorf("open the split conversation: %w", err)
 	}
 	return created, nil

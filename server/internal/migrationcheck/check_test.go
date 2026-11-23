@@ -83,6 +83,20 @@ func TestCheckAcceptsHandWrittenRowSecurityInTheHelpCenterHelpers(t *testing.T) 
 	}
 }
 
+// The migration that defines release_help_center_table spells out what it undoes; a later down
+// migration calls it instead.
+func TestCheckAcceptsHandWrittenRowSecurityInTheHelpCenterReleaseHelper(t *testing.T) {
+	repo := migrationRepo(t, map[string]string{
+		"20261122220740-help-center-table-release.up.sql":   "-- Undo of secure_help_center_table.\nDROP POLICY help_center_isolation ON notes;\n",
+		"20261122220740-help-center-table-release.down.sql": "SELECT 1;\n",
+		"20261201000000-notes.up.sql":                       "-- Notes.\nSELECT secure_help_center_table('notes', 'true', 'SELECT');\n",
+		"20261201000000-notes.down.sql":                     "SELECT release_help_center_table('notes');\n",
+	})
+	if err := Check(repo, Options{}); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+}
+
 func TestCheckAcceptsTheHelpCenterHelperCall(t *testing.T) {
 	repo := migrationRepo(t, map[string]string{
 		"20261201000000-notes.up.sql": "-- Notes.\nCREATE TABLE notes (workspace_id uuid);\nSELECT secure_workspace_table('notes');\n" +

@@ -42,6 +42,9 @@ type Channel struct {
 	// ProcessingPausedAt is set while the channel's processing is paused: what arrives waits in its
 	// journal, nothing is decided or sent.
 	ProcessingPausedAt *time.Time
+	// HelpCenterID is the help center a help chat or web form serves; empty serves the primary (and
+	// is always empty for another type).
+	HelpCenterID string
 }
 
 // Live is whether the channel was not removed.
@@ -471,7 +474,11 @@ type HelpCenterHandler func(response http.ResponseWriter, request *http.Request,
 // HelpCenter is the open help center a request reached: on, and its workspace not locked.
 type HelpCenter struct {
 	WorkspaceID, Slug, Name string
-	Trial                   bool
+	// HelpCenterID is the help center of the workspace the request reached; Primary says it is the
+	// primary one, which a channel with no help center serves.
+	HelpCenterID string
+	Primary      bool
+	Trial        bool
 	// Address is the help center's public address, without a trailing slash; Base is the path its own
 	// links start with: "" on a host name of its own, /help/<slug> on the app's origin.
 	Address, Base string
@@ -513,9 +520,10 @@ type HelpCenterAdditions struct {
 // HelpCenterKit is what the API gives a type's help center route.
 type HelpCenterKit interface {
 	RouteKit
-	// Channel finds a live channel of the route's type in the workspace: the one with id, or the
-	// type's default when id is empty. A channel of another workspace or type is not found.
-	Channel(ctx context.Context, workspaceID, id string) (Channel, bool, error)
+	// Channel finds a live channel of the route's type that serves the help center at: the one with
+	// id, or when id is empty the type's default if it serves at, else its oldest channel that does. A
+	// channel of another workspace, type or help center is not found.
+	Channel(ctx context.Context, at HelpCenter, id string) (Channel, bool, error)
 }
 
 // ToolSpec is an MCP tool of a type's own action, in neutral terms the MCP server translates.

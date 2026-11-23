@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -197,15 +198,20 @@ func TestAHelpCenterReaderWithoutAHelpCenterSeesNothing(t *testing.T) {
 			t.Errorf("%s without a help center = %d (%v), want 0", table, count, err)
 		}
 	}
-	for _, table := range []string{"workspaces", "conversations", "messages", "contacts", "email_channels", "agents", "sessions",
-		"kb_article_drafts", "kb_article_versions", "kb_media_uploads", "help_center_domains"} {
+	// kb_article_versions: the reader reads which version a text is at, never an older text.
+	for _, read := range []string{"workspaces", "conversations", "messages", "contacts", "email_channels", "agents", "sessions",
+		"kb_article_drafts", "kb_media_uploads", "help_center_domains", "kb_article_versions.body_md"} {
+		table, column, _ := strings.Cut(read, ".")
+		if column == "" {
+			column = "1"
+		}
 		err := db.InHelpCenter(ctx, s.ids.a, s.primary, func(tx pgx.Tx) error {
-			_, err := tx.Exec(ctx, `SELECT 1 FROM `+table+` LIMIT 1`)
+			_, err := tx.Exec(ctx, `SELECT `+column+` FROM `+table+` LIMIT 1`)
 			return err
 		})
 		var pgErr *pgconn.PgError
 		if !errors.As(err, &pgErr) || pgErr.Code != "42501" {
-			t.Errorf("reader reading %s: %v, want permission denied", table, err)
+			t.Errorf("reader reading %s: %v, want permission denied", read, err)
 		}
 	}
 }

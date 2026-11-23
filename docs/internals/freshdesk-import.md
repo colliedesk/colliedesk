@@ -383,7 +383,8 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   again (`trashed`, its categories on the primary), and a portal past `domain.MaxHelpCenters` goes on
   the primary (`over_limit`). A dry run cannot read the ledger, so it reports `planned` for every
   non-primary portal. Undo moves the help centers with a `Created` row to the trash and keeps one
-  with a custom domain (`kept_kb_help_centers`): the domain claim would otherwise go with it.
+  with a custom domain or a live channel on it (`kept_kb_help_centers`): the domain claim would
+  otherwise go with it, and the channel would serve a help center in the trash.
   `help_center_portal` (CLI flag, import option) is accepted from earlier clients and ignored.
   The primary is the help center the ledger maps, not the portal with the most categories now: when
   no mapped portal is left on it, no portal is (`primaryIndex` stays -1 once anything is mapped).

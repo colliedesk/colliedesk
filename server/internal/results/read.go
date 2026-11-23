@@ -59,6 +59,8 @@ type Viewer struct {
 	// CanSend says the server has outgoing mail settings.
 	CanSend bool
 	Now     time.Time
+	// HelpCenterID narrows the help center section to one help center; "" reads the whole workspace.
+	HelpCenterID string
 }
 
 // Read returns the newest stored numbers; nothing is computed. The help center section is not here:

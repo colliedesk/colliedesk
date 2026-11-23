@@ -5,7 +5,7 @@ import { InboxPage } from './inbox-page';
 import { permissionsOf, rolesOf } from '../../test-roles';
 import { presenceViewPart } from './presence-part';
 
-const row = (id: string, subject: string): Conversation => ({ latest_reply_number: 0,
+const row = (id: string, subject: string): Conversation => ({ latest_reply_number: 0, help_center: null,
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject, status: 'open', priority: 'normal',
   assignee_id: null, tags: [], channel: 'email', origin: null, created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
 });

@@ -44,6 +44,11 @@ func (d *DB) BeginHelpCenter(ctx context.Context, workspaceID, helpCenterID stri
 
 // BeginHelpCenterTx is BeginHelpCenter with transaction options, for example a read-only snapshot.
 func (d *DB) BeginHelpCenterTx(ctx context.Context, workspaceID, helpCenterID string, options pgx.TxOptions) (pgx.Tx, error) {
+	return d.beginReader(ctx, workspaceID, helpCenterID, options, "off")
+}
+
+// beginReader starts a reader transaction with app.help_chat set to helpChat, in one statement.
+func (d *DB) beginReader(ctx context.Context, workspaceID, helpCenterID string, options pgx.TxOptions, helpChat string) (pgx.Tx, error) {
 	if !uuidPattern.MatchString(workspaceID) {
 		return nil, ErrNoWorkspace
 	}
@@ -59,7 +64,7 @@ func (d *DB) BeginHelpCenterTx(ctx context.Context, workspaceID, helpCenterID st
 		return nil, fmt.Errorf("begin help center transaction: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `SELECT set_config('role',$1,true),set_config('app.workspace_id',$2,true),
-		set_config('app.help_center_id',$3,true)`, role, workspaceID, helpCenterID); err != nil {
+		set_config('app.help_center_id',$3,true),set_config('app.help_chat',$4,true)`, role, workspaceID, helpCenterID, helpChat); err != nil {
 		_ = tx.Rollback(ctx)
 		return nil, fmt.Errorf("scope transaction to help center: %w", err)
 	}
@@ -69,6 +74,22 @@ func (d *DB) BeginHelpCenterTx(ctx context.Context, workspaceID, helpCenterID st
 // InHelpCenter runs fn in a help-center-scoped transaction and commits when fn returns nil.
 func (d *DB) InHelpCenter(ctx context.Context, workspaceID, helpCenterID string, fn func(pgx.Tx) error) error {
 	tx, err := d.BeginHelpCenter(ctx, workspaceID, helpCenterID)
+	if err != nil {
+		return err
+	}
+	return finish(ctx, tx, fn)
+}
+
+// BeginHelpChatTx is BeginHelpCenterTx for help chat: app.help_chat is on for this transaction, so
+// kb_help_center_chat_articles and kb_help_center_chat_translations return what help chat on that help
+// center may cite, the articles kept for help chat included. A public page never sets it.
+func (d *DB) BeginHelpChatTx(ctx context.Context, workspaceID, helpCenterID string, options pgx.TxOptions) (pgx.Tx, error) {
+	return d.beginReader(ctx, workspaceID, helpCenterID, options, "on")
+}
+
+// InHelpChat runs fn in a help chat transaction (BeginHelpChatTx) and commits when fn returns nil.
+func (d *DB) InHelpChat(ctx context.Context, workspaceID, helpCenterID string, fn func(pgx.Tx) error) error {
+	tx, err := d.BeginHelpChatTx(ctx, workspaceID, helpCenterID, pgx.TxOptions{})
 	if err != nil {
 		return err
 	}
@@ -118,7 +139,8 @@ func (d *DB) verifyReader(ctx context.Context, app string) error {
 
 // helpCenterViews decide which articles a help center shows. They are not security_invoker: they read
 // their tables as their owner, which must be the app role so workspace isolation still binds them.
-var helpCenterViews = []string{"kb_help_center_collection_ranks", "kb_help_center_public_articles", "kb_help_center_public_translations"}
+var helpCenterViews = []string{"kb_help_center_collection_ranks", "kb_help_center_public_articles", "kb_help_center_public_translations",
+	"kb_help_center_chat_articles", "kb_help_center_chat_translations"}
 
 // verifyHelpCenterViews refuses to serve when a help center view is missing or owned by another role,
 // as after a restore with --no-owner: owned by a superuser it would read every workspace's rows.

@@ -887,7 +887,8 @@ When a reader answers **No**, writes what was missing and leaves an address:
 
 - A conversation opens with the subject "Article feedback: " and the article's title, tagged
   `article-feedback`, from that address. Its first message names the article, its public address and
-  the reader's line, with emails and long numbers already removed.
+  the reader's line, with emails and long numbers already removed. With several help centers, it is
+  marked with the help center the reader voted on.
 - The article's author, while still on the team, is asked on it with a note and gets it in
   **Mentions**.
 - The sender shows as **Unverified sender (help center)**: anyone can type any address, so check
@@ -1256,11 +1257,20 @@ whether it is on. Everyone who opens Settings sees the list; an admin changes it
 - **Fill it**: a new help center starts off and shows no collection. Edit a top-level collection and
   check it under **Shown on**; the collections inside it come along. Then select **Turn on** on its
   row. Turning one on or off needs `kb_articles:publish` as well, and a refusal says so on the row.
+- **Give it a chat or a form**: a help chat or a web form serves one help center, the primary unless you
+  choose another under **Help center** in its settings (**Settings → Channels**). A help chat answers only
+  from the articles of the help center it serves, and cites only those. Every conversation the channel
+  opens is marked with that help center: the inbox shows "via Hardware" above the thread, the search
+  `help_center:hardware` lists them (see [Inbox overview](inbox.md)), and **Results** can read that help
+  center alone (see [Results](results.md#help-center)). A conversation keeps its help center when the
+  channel later serves another one.
 - **Delete**: select **Delete** on its row, then **Delete help center**. Its pages go offline at once
   and its custom domain is released, so another help center can use that host name. Its collections
   and articles stay, and keep showing on the other help centers they are shown on. A deleted help
   center cannot be restored: make a new one and show the collections on it again. Deleting one that
   serves on a custom domain needs `kb_articles:publish` as well. The primary cannot be deleted.
+  While a help chat or a web form that is not removed still serves it, nothing is deleted: the row
+  names each such channel with a link to its settings. Choose another help center there, then delete.
 
 - **Settings**: select **Settings** on its row. The page has the same sections as the primary's, and
   each one reads and saves this help center only: **Publish the help center** and **Title**, **Show

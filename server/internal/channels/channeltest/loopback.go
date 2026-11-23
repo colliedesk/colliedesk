@@ -210,7 +210,7 @@ type LoopbackHelpCenterAnswer struct {
 // center's 404.
 func (l *Loopback) helpCenter(kit channels.HelpCenterKit) channels.HelpCenterHandler {
 	return func(w http.ResponseWriter, r *http.Request, at channels.HelpCenter) {
-		channel, ok, err := kit.Channel(r.Context(), at.WorkspaceID, r.URL.Query().Get("channel"))
+		channel, ok, err := kit.Channel(r.Context(), at, r.URL.Query().Get("channel"))
 		if err != nil {
 			kit.WriteError(w, http.StatusInternalServerError, "internal_error", "Try again.")
 			return

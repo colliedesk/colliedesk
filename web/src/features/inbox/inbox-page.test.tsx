@@ -6,7 +6,7 @@ import { InboxPage } from './inbox-page';
 import { markdownPart } from './markdown-body';
 import { presenceViewPart } from './presence-part';
 
-const conversation = { latest_reply_number: 0,
+const conversation = { latest_reply_number: 0, help_center: null,
   id: '11111111-1111-4111-8111-111111111111',
   contact_id: '22222222-2222-4222-8222-222222222222',
   contact_name: 'Mai Linh',

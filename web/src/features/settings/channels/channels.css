@@ -114,6 +114,7 @@ a.ch-type::after, button.ch-type::after { content: ""; flex: none; width: 16px; 
 .ch-row-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 .ch-row-title strong { overflow-wrap: anywhere; }
 .ch-identity small { color: var(--text-2); font-size: var(--fs-small); }
+.ch-help-center { display: grid; gap: var(--space-1); max-width: 28rem; }
 /* Links in a channel's results (the test conversation) are fingertip-sized on a phone. */
 @media (pointer: coarse), (max-width: 30rem) { .ch-panel [role="status"] a { display: inline-flex; align-items: center; min-height: var(--touch); } }
 

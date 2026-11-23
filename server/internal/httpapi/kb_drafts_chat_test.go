@@ -23,8 +23,10 @@ func TestTheHelpChatCitesThePublishedVersionNotTheDraft(t *testing.T) {
 	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+live.ID, map[string]any{"updated_at": live.UpdatedAt,
 		"body_md": "Press the marigold button."}, admin, http.StatusOK, nil)
 
+	// The help chat reads the knowledge base as the reader of the help center its channel serves.
+	primary := queryString(t, pool, `SELECT primary_help_center_id($1)::text`, workspace)
 	var articles []store.ChatKBArticle
-	err := database.New(pool).InWorkspace(context.Background(), workspace, func(tx pgx.Tx) error {
+	err := database.New(pool).InHelpChat(context.Background(), workspace, primary, func(tx pgx.Tx) error {
 		var err error
 		articles, err = store.ChatKBArticles(context.Background(), tx, workspace, true)
 		return err
