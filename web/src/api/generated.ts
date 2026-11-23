@@ -4389,6 +4389,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/articles/{id}/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The replies the team sent that may show the article is out of date. After a team member sends a reply that closely matches a published article, the workspace's small model is asked whether the reply contradicts the article; each yes is listed here with the model's sentence quoting both sides. Open ones first, then cleared ones, newest first, 100 at most. The reply's conversation is named only for a caller who may read conversations (conversations:read). An article in the trash keeps its conflicts. */
+        get: operations["getKBArticleConflicts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/conflicts/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Clear the "May be out of date" flag once the article is right, or the replies were: every open conflict is marked cleared with who and when, and stays listed. A reply sent later that contradicts the article flags it again. With nothing open it changes nothing. Not for an article in the trash. A repeat with the same Idempotency-Key answers what the first one got; the key with another article is refused with 422, code `idempotency_key_reused`. */
+        post: operations["clearKBArticleConflicts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/{id}/stats": {
         parameters: {
             query?: never;
@@ -8747,6 +8785,8 @@ export interface components {
             article_ids: string[];
         };
         KBArticleSummary: {
+            /** @description Sent replies the workspace's small model found to contradict the article, not cleared yet. Above 0 the article may be out of date: GET /api/v1/kb/articles/{id}/conflicts lists them. */
+            open_conflicts: number;
             /** @description What readers answered to "Was this article helpful?", imported votes included, as GET /api/v1/kb/articles/{id}/votes counts them. */
             votes: components["schemas"]["KBVoteTally"];
             /**
@@ -9373,6 +9413,56 @@ export interface components {
              * @description When the reader last changed their vote.
              */
             updated_at: string;
+        };
+        KBArticleConflicts: {
+            /** Format: uuid */
+            article_id: string;
+            /** @description Conflicts not cleared; the article shows "May be out of date" while above 0. */
+            open: number;
+            /** @description Open ones first, then cleared ones, newest first. */
+            conflicts: components["schemas"]["KBArticleConflict"][];
+        };
+        KBArticleConflict: {
+            /** Format: uuid */
+            id: string;
+            /** @description The small model's sentence quoting the reply and the article where they disagree, masked: no email address, no run of 6 or more digits. Model output, not a person's finding. */
+            reason: string;
+            /**
+             * Format: date-time
+             * @description When the model found the conflict.
+             */
+            created_at: string;
+            reply: {
+                /** Format: uuid */
+                message_id: string;
+                /** @description The start of the reply on one line, masked like reason. */
+                excerpt: string;
+                /** @description The team member who sent it; null once they were removed. */
+                author: null | components["schemas"]["SavedReplyPerson"];
+                /** Format: date-time */
+                sent_at: string;
+                /** @description Where the reply was sent; null for a caller without conversations:read. */
+                conversation: null | {
+                    /** Format: uuid */
+                    id: string;
+                    /** @description The conversation's number as the inbox shows it; empty without one. */
+                    display_ref: string;
+                    subject: string;
+                };
+            };
+            /**
+             * Format: date-time
+             * @description When an editor cleared it; null while open.
+             */
+            cleared_at: string | null;
+            /** @description The person who cleared it, or whose agent token did; null while open or once they were removed. */
+            cleared_by: null | components["schemas"]["SavedReplyPerson"];
+            /** @description The agent token that cleared it; null when a person did it in the web app, or while open. */
+            cleared_with_token: null | {
+                /** Format: uuid */
+                id: string | null;
+                label: string;
+            };
         };
         KBArticleVoteReset: {
             /** Format: uuid */
@@ -22074,6 +22164,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KBArticleVotes"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    getKBArticleConflicts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article's conflicts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleConflicts"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    clearKBArticleConflicts: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article's conflicts after the clear */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticleConflicts"];
                 };
             };
             401: components["responses"]["Unauthorized"];

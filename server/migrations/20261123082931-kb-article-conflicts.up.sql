@@ -34,18 +34,25 @@ CREATE TABLE kb_article_conflicts (
     -- digits never reaches this column.
     reason text NOT NULL CHECK (char_length(reason) BETWEEN 1 AND 500),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    -- Who cleared the flag and when; the row stays so the article keeps its history.
+    -- Who cleared the flag and when, and the token an AI agent cleared it with; the row stays so
+    -- the article keeps its history.
     cleared_at timestamptz,
     cleared_by_agent_id uuid,
+    cleared_by_token_id uuid,
+    cleared_by_token_label text,
     UNIQUE (workspace_id, id),
     UNIQUE (workspace_id, article_id, message_id),
     CHECK (cleared_by_agent_id IS NULL OR cleared_at IS NOT NULL),
+    CHECK (cleared_by_token_label IS NULL OR cleared_at IS NOT NULL),
+    CHECK (cleared_by_token_id IS NULL OR cleared_by_token_label IS NOT NULL),
     FOREIGN KEY (workspace_id, article_id)
         REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE,
     FOREIGN KEY (workspace_id, message_id)
         REFERENCES messages(workspace_id, id) ON DELETE CASCADE,
     FOREIGN KEY (workspace_id, cleared_by_agent_id)
-        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (cleared_by_agent_id)
+        REFERENCES agents(workspace_id, id) ON DELETE SET NULL (cleared_by_agent_id),
+    FOREIGN KEY (workspace_id, cleared_by_token_id)
+        REFERENCES sessions(workspace_id, id) ON DELETE SET NULL (cleared_by_token_id)
 );
 -- The knowledge base list counts the open conflicts of each article.
 CREATE INDEX kb_article_conflicts_open_idx ON kb_article_conflicts(workspace_id, article_id)
