@@ -80,7 +80,7 @@ func (r *run) readPortalNames(ctx context.Context, kb *knowledgeBase) error {
 		return ctx.Err()
 	}
 	if err != nil {
-		kb.portalNamesNote = "The portals' names could not be read from the ticket forms (" + err.Error() + "); their help centers are named Portal <id>. Rename them in Settings."
+		kb.portalNamesNote = "The portals' names could not be read from the ticket forms (" + err.Error() + "); their help centers are named Portal <id>. Rename them in Knowledge base → Settings → Help centers."
 	}
 	kb.portalNames = names
 	return nil
