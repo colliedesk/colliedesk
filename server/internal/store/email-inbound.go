@@ -31,6 +31,8 @@ type InboundResult struct {
 	ConversationID *string `json:"conversation_id"`
 	MessageID      *string `json:"message_id"`
 	Authentication string  `json:"authentication"`
+	// ArticleID is the draft article mail to the knowledge base address made, or had made.
+	ArticleID *string `json:"article_id,omitempty"`
 }
 
 // EmailFile is a file of an inbound message already written to attachment storage.

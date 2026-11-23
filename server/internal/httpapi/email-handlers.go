@@ -36,6 +36,9 @@ type emailChannelSettings struct {
 	SendingFrom *string              `json:"sending_from"`
 	// HostedAddress is where to forward mail on the hosted cloud; nil when that feature is off.
 	HostedAddress *string `json:"hosted_address"`
+	// KBAddress is the workspace's knowledge base address, where a member forwards mail to make a draft
+	// article; nil when the server offers none or a mailbox already forwards to kb@.
+	KBAddress *string `json:"kb_address"`
 	// SendingPause is set while the workspace's email sending is paused after spam complaints.
 	SendingPause *domain.EmailPause `json:"sending_pause"`
 	// DomainVerification is "provider" when the email provider lists the DNS records to publish, else "txt".
@@ -184,10 +187,16 @@ func (a *API) writeEmailSettings(response http.ResponseWriter, request *http.Req
 	}
 	settings := a.emailSettings(workspace.Slug, channel, state.Pause, mailbox, serverRefused)
 	settings.MailSwitch = mailSwitchOf(state, a.config.Email.HostedMailDomain)
+	kbTaken := false
 	for _, item := range state.Channels {
 		if channel != nil && item.ChannelID == channel.ChannelID {
 			settings.MailThroughMailbox = item.Forwarded
 		}
+		kbTaken = kbTaken || item.HostedLocal == email.KBLocal
+	}
+	// A mailbox made before the knowledge base address that forwards to kb@ keeps it.
+	if address := email.HostedLocalAddress(email.KBLocal, workspace.Slug, a.config.Email.HostedMailDomain); address != "" && !kbTaken && a.offersKBAddress() {
+		settings.KBAddress = &address
 	}
 	writeJSON(response, http.StatusOK, settings)
 }

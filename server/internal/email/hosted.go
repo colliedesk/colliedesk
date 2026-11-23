@@ -55,6 +55,16 @@ func HostedAddress(slug, hostedDomain string) string {
 	return HostedLocalAddress("support", slug, hostedDomain)
 }
 
+// KBLocal is the local part of a workspace's knowledge base address on the hosted cloud: mail a member
+// forwards there becomes a draft article, never a conversation, so no mailbox is given it.
+const KBLocal = "kb"
+
+// IsKBAddress reports whether recipient is a knowledge base address, kb@<slug>.<hostedDomain> or
+// kb+tag@ of one.
+func IsKBAddress(recipient, hostedDomain string) bool {
+	return HostedSlug(recipient, hostedDomain) != "" && LocalPart(MailboxKey(recipient)) == KBLocal
+}
+
 // HostedLocalAddress is the forwarding address of one email channel of a workspace on the hosted cloud,
 // <local>@<slug>.<hostedDomain>, or "" when the feature is off.
 func HostedLocalAddress(local, slug, hostedDomain string) string {

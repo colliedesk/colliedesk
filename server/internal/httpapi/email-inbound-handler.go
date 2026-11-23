@@ -87,6 +87,10 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		writeInternalError(response, errors.New("attachment storage is not configured; inbound mail cannot be kept"))
 		return
 	}
+	if target.kb {
+		a.receiveKBEmail(response, request, target.workspaceID, parsed, raw)
+		return
+	}
 	channel, err := a.inboundChannel(request.Context(), target)
 	if err != nil {
 		writeInternalError(response, err)
@@ -125,8 +129,10 @@ func (a *API) isPlatformSecret(secret string) bool {
 }
 
 // inboundTarget is where inbound mail goes: a workspace and, when the route knows it, its email channel.
+// kb marks mail to the workspace's knowledge base address, which makes a draft article and no conversation.
 type inboundTarget struct {
 	workspaceID, channelID string
+	kb                     bool
 }
 
 // inboundChannel reads the email channel mail for the target arrives on: the one named, else the
@@ -187,7 +193,9 @@ func (a *API) replyTarget(ctx context.Context, recipients []string) (inboundTarg
 }
 
 // hostedTarget returns the workspace and the email channel that receive mail at a hosted address, or
-// an empty target when no workspace with a connected email channel owns it.
+// an empty target when no workspace with a connected email channel owns it. kb@ is the workspace's
+// knowledge base address, also without an email channel, unless a mailbox made before that address
+// forwards there.
 func (a *API) hostedTarget(ctx context.Context, recipient string) (inboundTarget, error) {
 	slug := email.HostedSlug(recipient, a.config.Email.HostedMailDomain)
 	if slug == "" {
@@ -196,6 +204,15 @@ func (a *API) hostedTarget(ctx context.Context, recipient string) (inboundTarget
 	workspaceID, ok, err := a.store.WorkspaceForMailSlug(ctx, slug)
 	if err != nil || !ok {
 		return inboundTarget{}, err
+	}
+	if email.IsKBAddress(recipient, a.config.Email.HostedMailDomain) && a.offersKBAddress() {
+		taken, err := a.store.HasMailboxAtHostedLocal(ctx, workspaceID, email.KBLocal)
+		if err != nil {
+			return inboundTarget{}, err
+		}
+		if !taken {
+			return inboundTarget{workspaceID: workspaceID, kb: true}, nil
+		}
 	}
 	// billing+invoice@ is billing@'s mailbox, as a +tag is for support addresses.
 	channelID, found, err := a.store.ChannelForHostedAddress(ctx, workspaceID, email.LocalPart(email.MailboxKey(recipient)))

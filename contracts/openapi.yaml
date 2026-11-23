@@ -15408,7 +15408,7 @@ components:
         authenticated: {type: boolean}
     EmailChannelSettings:
       type: object
-      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail, microsoft, mail_through_mailbox, answers_before_forwarding, mail_switch]
+      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, kb_address, domain_verification, sending_pause, gmail, microsoft, mail_through_mailbox, answers_before_forwarding, mail_switch]
       properties:
         mail_switch: {$ref: '#/components/schemas/EmailMailSwitch'}
         mail_through_mailbox:
@@ -15450,6 +15450,16 @@ components:
             `support@` for the workspace's first channel (and while none is connected), a local part of its own
             for a channel added beside it. Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail
             subdomain; change the slug with `PATCH /api/v1/workspace/slug`.
+        kb_address:
+          type: [string, 'null']
+          description: >-
+            The workspace's knowledge base address on the hosted cloud, `kb@<slug>.<HOSTED_MAIL_DOMAIN>`, the same on
+            every email channel's settings and present without one. Mail a member whose roles hold `kb_articles:create`
+            forwards or copies there becomes a draft article in the first collection: the subject (without Fwd:/Re:) is its
+            title, the body its Markdown, attachments its files. Only mail whose From domain the receiving server
+            vouched for (DMARC pass, or a DKIM pass signed by that domain) counts; anything else is dropped. Null on a
+            server without HOSTED_MAIL_DOMAIN or a trusted receiving server, when the slug cannot be a mail subdomain,
+            or while an email channel of the workspace still forwards to kb@.
         from_policy:
           type: string
           enum: [verified, any]
@@ -16011,8 +16021,18 @@ components:
           enum: [created, threaded, duplicate, dropped, held]
           description: >-
             `held`: the email channel is off. The message is kept in the channel (its original is stored)
-            until an admin opens it as a conversation or discards it; nothing is opened meanwhile.
-        reason: {type: [string, 'null'], description: 'Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, channel_removed, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient); why it was held: channel_off.'}
+            until an admin opens it as a conversation or discards it; nothing is opened meanwhile. For mail to the
+            knowledge base address, `created` made the draft `article_id` and `duplicate` means that Message-ID made it before.
+        reason:
+          type: [string, 'null']
+          description: >-
+            Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, channel_removed,
+            unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient); for the knowledge base
+            address: sender_not_verified (the trusted receiving server did not vouch for the From domain),
+            sender_not_member, sender_not_permitted (the member's roles lack kb_articles:create), no_collection,
+            invalid_content (the body is too long for an article), plan_limit (the plan's articles or storage are used up).
+            Why it was held: channel_off.
+        article_id: {type: [string, 'null'], format: uuid, description: 'The draft article mail to the knowledge base address made; absent otherwise.'}
         conversation_id: {type: [string, 'null'], format: uuid}
         message_id: {type: [string, 'null'], format: uuid}
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}

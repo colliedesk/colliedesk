@@ -498,80 +498,96 @@ type KBArticleInput struct {
 
 // CreateKBArticle adds an article with the next number of the workspace and its first version.
 func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor Actor, input KBArticleInput) (domain.KBArticle, error) {
-	title, err := domain.CleanKBText("title", input.Title, domain.MaxKBArticleTitle)
+	title, err := prepareKBArticle(&input)
 	if err != nil {
 		return domain.KBArticle{}, err
+	}
+	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
+		return insertKBArticle(ctx, tx, workspaceID, actor, title, input)
+	})
+	return article, kbError("create knowledge base article", err)
+}
+
+// prepareKBArticle checks and cleans a new article before anything is written, filling in the slug,
+// status and visibility it defaults to, and returns its clean title.
+func prepareKBArticle(input *KBArticleInput) (string, error) {
+	title, err := domain.CleanKBText("title", input.Title, domain.MaxKBArticleTitle)
+	if err != nil {
+		return "", err
 	}
 	if input.Slug == "" {
 		input.Slug = domain.Slugify(title, "article")
 	} else if err := domain.CheckKBSlug(input.Slug); err != nil {
-		return domain.KBArticle{}, err
+		return "", err
 	}
 	if err := cleanKBBody(&input.BodyMD); err != nil {
-		return domain.KBArticle{}, err
+		return "", err
 	}
 	if input.SEOTitle, err = domain.CleanKBSEO("search title", input.SEOTitle, domain.MaxKBSEOTitle); err != nil {
-		return domain.KBArticle{}, err
+		return "", err
 	}
 	if input.SEODescription, err = domain.CleanKBSEO("meta description", input.SEODescription, domain.MaxKBSEODescription); err != nil {
-		return domain.KBArticle{}, err
+		return "", err
 	}
 	if input.Status == "" {
 		input.Status = domain.KBDraft
 	}
 	if err := domain.CheckKBStatus(input.Status); err != nil {
-		return domain.KBArticle{}, err
+		return "", err
 	}
 	if input.Visibility == "" {
 		input.Visibility = domain.KBVisibleEveryone
 	}
 	if err := domain.CheckKBVisibility(input.Visibility); err != nil {
-		return domain.KBArticle{}, err
+		return "", err
 	}
 	if input.Tags, err = domain.CleanKBTags(input.Tags); err != nil {
+		return "", err
+	}
+	return title, nil
+}
+
+// insertKBArticle writes an article prepareKBArticle checked, with its collections, tags and first
+// version, inside tx.
+func insertKBArticle(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, title string, input KBArticleInput) (domain.KBArticle, error) {
+	number, err := admitKBArticle(ctx, tx, workspaceID)
+	if err != nil {
 		return domain.KBArticle{}, err
 	}
-	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
-		number, err := admitKBArticle(ctx, tx, workspaceID)
-		if err != nil {
-			return domain.KBArticle{}, err
-		}
-		if err := checkKBCollection(ctx, tx, workspaceID, input.CollectionID); err != nil {
-			return domain.KBArticle{}, err
-		}
-		extras, err := checkKBExtraCollections(ctx, tx, workspaceID, input.CollectionID, input.ExtraCollectionIDs)
-		if err != nil {
-			return domain.KBArticle{}, err
-		}
-		if input.BodyMD, err = kbArticleStartingBody(ctx, tx, workspaceID, input); err != nil {
-			return domain.KBArticle{}, err
-		}
-		var id string
-		if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,position,seo_title,seo_description,show_contents,visibility)
-			VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN clock_timestamp() END,$8,`+kbArticleEnd(`$2::uuid`)+`,$9,$10,COALESCE($11,true),$12) RETURNING id::text`,
-			workspaceID, input.CollectionID, number, title, input.Slug, input.BodyMD, input.Status, optionalID(actor.AgentID), input.SEOTitle, input.SEODescription, input.ShowContents,
-			input.Visibility).Scan(&id); err != nil {
-			return domain.KBArticle{}, err
-		}
-		if err := setKBArticleCollections(ctx, tx, workspaceID, id, extras); err != nil {
-			return domain.KBArticle{}, err
-		}
-		if err := replaceKBArticleTags(ctx, tx, workspaceID, id, input.Tags); err != nil {
-			return domain.KBArticle{}, err
-		}
-		if err := writeKBArticleGapSource(ctx, tx, workspaceID, id, input.GapID, input.GapConversationIDs); err != nil {
-			return domain.KBArticle{}, err
-		}
-		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleCreated, nil); err != nil {
-			return domain.KBArticle{}, err
-		}
-		article, err := readKBArticle(ctx, tx, workspaceID, id)
-		if err != nil {
-			return domain.KBArticle{}, err
-		}
-		return article, guardKBPublish(ctx, tx, workspaceID, id, nil, kbPublishState{}, articlePublishState(article))
-	})
-	return article, kbError("create knowledge base article", err)
+	if err := checkKBCollection(ctx, tx, workspaceID, input.CollectionID); err != nil {
+		return domain.KBArticle{}, err
+	}
+	extras, err := checkKBExtraCollections(ctx, tx, workspaceID, input.CollectionID, input.ExtraCollectionIDs)
+	if err != nil {
+		return domain.KBArticle{}, err
+	}
+	if input.BodyMD, err = kbArticleStartingBody(ctx, tx, workspaceID, input); err != nil {
+		return domain.KBArticle{}, err
+	}
+	var id string
+	if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,position,seo_title,seo_description,show_contents,visibility)
+		VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN clock_timestamp() END,$8,`+kbArticleEnd(`$2::uuid`)+`,$9,$10,COALESCE($11,true),$12) RETURNING id::text`,
+		workspaceID, input.CollectionID, number, title, input.Slug, input.BodyMD, input.Status, optionalID(actor.AgentID), input.SEOTitle, input.SEODescription, input.ShowContents,
+		input.Visibility).Scan(&id); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if err := setKBArticleCollections(ctx, tx, workspaceID, id, extras); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if err := replaceKBArticleTags(ctx, tx, workspaceID, id, input.Tags); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if err := writeKBArticleGapSource(ctx, tx, workspaceID, id, input.GapID, input.GapConversationIDs); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleCreated, nil); err != nil {
+		return domain.KBArticle{}, err
+	}
+	article, err := readKBArticle(ctx, tx, workspaceID, id)
+	if err != nil {
+		return domain.KBArticle{}, err
+	}
+	return article, guardKBPublish(ctx, tx, workspaceID, id, nil, kbPublishState{}, articlePublishState(article))
 }
 
 // KBArticleChange is a partial update of an article; a nil field stays as it is. ExtraCollectionIDs
