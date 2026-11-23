@@ -4,21 +4,13 @@ import type { Me, WorkspaceChoice } from '../../api/schemas';
 import { dialogKeys } from '../../ui/dialog-keys';
 import { lazyPart } from '../../ui/lazy-part';
 import { WorkspaceRow, WorkspaceRowSkeleton } from '../../ui/workspace-row';
+import type { WorkspaceSwitch } from './account-menu';
 import type { WorkspacesResult } from './other-workspaces';
 import { switchMessages as copy } from './switch-workspace-messages';
 import './switch-workspace.css';
 
 // The identity provider's client is a chunk of its own, loaded when the dialog opens, never on a page load.
 const loader = lazyPart(() => import('./other-workspaces'));
-
-// WorkspaceSwitch is where the menu can offer the person's other workspaces: each desk on its own host,
-// with the identity provider (publishableKey) proving who the person is, and APP_ORIGIN signing them in.
-// signup is true where APP_ORIGIN lets a person create a workspace.
-export interface WorkspaceSwitch {
-  publishableKey: string;
-  appOrigin: string;
-  signup?: boolean;
-}
 
 const rowCopy = { current: copy.current, opening: copy.opening };
 const byName = (a: WorkspaceChoice, b: WorkspaceChoice) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug);

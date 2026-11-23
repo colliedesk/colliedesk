@@ -2,14 +2,22 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { Me } from '../../api/schemas';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
-import { SwitchWorkspaceDialog } from './switch-workspace-dialog';
-import type { WorkspaceSwitch } from './switch-workspace-dialog';
+import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 import { switchMessages } from './switch-workspace-messages';
-
-export type { WorkspaceSwitch } from './switch-workspace-dialog';
 
 // The dialog is a chunk of its own: nobody pays for it until they report a problem.
 const ReportProblemDialog = lazy(() => import('./report-problem-dialog').then((module) => ({ default: module.ReportProblemDialog })));
+// So is Switch workspace's, fetched from this server as the menu opens, so it is there by the time it is chosen.
+const switchPart = lazyPart(() => import('./switch-workspace-dialog'));
+
+// WorkspaceSwitch is where the menu can offer the person's other workspaces: each desk on its own host,
+// with the identity provider (publishableKey) proving who the person is, and APP_ORIGIN signing them in.
+// signup is true where APP_ORIGIN lets a person create a workspace.
+export interface WorkspaceSwitch {
+  publishableKey: string;
+  appOrigin: string;
+  signup?: boolean;
+}
 
 interface AccountMenuProps {
   me: Me;
@@ -43,7 +51,7 @@ export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, 
   return (
     <div className="account-menu" ref={root} onKeyDown={(event) => { if (event.key === 'Escape' && open) close(); }}
       onBlur={(event) => { if (open && !root.current?.contains(event.relatedTarget as Node | null)) setOpen(false); }}>
-      <button type="button" ref={button} className="rail-avatar" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button type="button" ref={button} className="rail-avatar" aria-expanded={open} onClick={() => { if (workspaceSwitch) switchPart.preload(); setOpen(!open); }}>
         <Avatar name={name} size="sm" /><span className="sr-only">{messages.account}, </span>
         <span className="current-user"><span className="current-user-name">{name}</span>
           {me.agent.display_name && <> <span className="current-user-email">{me.agent.email}</span></>}</span>
@@ -57,8 +65,8 @@ export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, 
         <hr />
         <button type="button" className="account-item" disabled={signingOut} onClick={onSignOut}><SignOutIcon />{messages.signOut}</button>
       </div>}
-      {switching && workspaceSwitch && <SwitchWorkspaceDialog me={me} workspaceSwitch={workspaceSwitch}
-        onClose={() => { setSwitching(false); button.current?.focus(); }} />}
+      {switching && workspaceSwitch && <Part part={switchPart} failed={<PartUnavailable />} render={({ SwitchWorkspaceDialog }) =>
+        <SwitchWorkspaceDialog me={me} workspaceSwitch={workspaceSwitch} onClose={() => { setSwitching(false); button.current?.focus(); }} />} />}
       {reporting && <Suspense fallback={null}>
         <ReportProblemDialog appVersion={appVersion} onClose={() => { setReporting(false); button.current?.focus(); }} />
       </Suspense>}

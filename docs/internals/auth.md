@@ -277,9 +277,29 @@ browser; no Clerk Secret Key is required because Colliedesk never calls Clerk's 
 
 ### Switching workspace
 
-Decided 2026-11-13 (owner: "best practice"): inside a workspace, the account menu lists the person's other
-workspaces, and choosing one signs them in there without a new code. Code: `listCloudWorkspaces`
-(`httpapi/cloud-auth-handlers.go`), `auth.Service.CloudWorkspaces`, `web/src/features/shell/other-workspaces.tsx`.
+Decided 2026-11-13 (owner: "best practice"): inside a workspace, the person can open another of their
+workspaces signed in, without a new code. Changed 2026-11-23 (owner, Paper "05 Access" A6-a to A6-c): the
+account menu has a **Switch workspace…** button that opens a dialog, in place of an inline list of links.
+Code: `listCloudWorkspaces` (`httpapi/cloud-auth-handlers.go`), `auth.Service.CloudWorkspaces`,
+`web/src/features/shell/switch-workspace-dialog.tsx`, `other-workspaces.tsx`, `web/src/ui/workspace-row.tsx`.
+
+- **The button shows whenever the switch can work, before anything is read.** It is there wherever
+  `workspace_hosts` and cloud sign-in are on, also for a person with one workspace. The inline list it replaced
+  showed only after Clerk had loaded and the list had answered, and turned every failure into an empty list, so
+  a failure looked the same as having no other workspace (#773). On 2026-11-23 a fresh code sign-in on Cloud
+  (`edge-0348e3e27e5c`, the same switch code as `edge-8020193cec97`) listed the other workspace on both hosts,
+  1–2 s after the menu opened, so the report was not reproduced; the dialog now makes each state visible.
+- **The dialog says which state it is in.** Opening it shows the current workspace at once (from `me`) with two
+  placeholder rows, and only then loads Clerk (its own chunk, so no page load pays for it) and asks for the list.
+  It ends in the list, "This is your only workspace", or "Could not load your other workspaces" with Try again
+  and a link to `APP_ORIGIN/sign-in`, whose chooser needs no workspace host. Each failure is logged with its
+  reason (`not-loaded` after 10 s, `not-signed-in`, `no-token`, `request-failed`, `chunk-failed`). Tests:
+  `web/src/workspace-switch.test.tsx`, `other-workspaces.test.tsx`.
+- **Each choice says where it runs and who the person is there.** The list and the 409 chooser both carry each
+  workspace's `host` (null without workspace hosts) and the person's role names in it; the 409 also names the
+  verified `email`, which the sign-in chooser shows with "Use another email" (signs Clerk out and returns to the
+  email step). Both use the same `WorkspaceRow`. Tests: `TestEachWorkspaceChoiceNamesItsAddressAndThePersonsRoles`,
+  `TestWorkspaceChoicesHaveNoAddressWithoutWorkspaceHosts`.
 
 - **The proof is the identity token, never the session.** `GET /api/v1/auth/cloud/workspaces` takes the
   Clerk session token as bearer, verifies it like the exchange (its `azp` must be `APP_ORIGIN` or this
@@ -290,9 +310,8 @@ workspaces, and choosing one signs them in there without a new code. Code: `list
   Tests: `TestTheVerifiedEmailListsOnlyItsOwnWorkspaces`, `TestOnlyAVerifiedIdentityTokenOfThisHostListsWorkspaces`.
 - **A workspace host can get that token.** Cloud's Clerk is a production instance on the root domain (its
   publishable key names `clerk.colliedesk.com`), so one Clerk session serves `app.` and every
-  `<slug>.colliedesk.com`; the host's own sign-in page already exchanges it. The menu loads Clerk in its own
-  chunk when the pointer or the focus reaches the avatar, only where `workspace_hosts` and cloud sign-in are
-  both on.
+  `<slug>.colliedesk.com`; the host's own sign-in page already exchanges it. Checked 2026-11-23: Clerk's
+  Frontend API answers CORS for a workspace host, and the token minted there (`azp` = the host) is accepted.
 - **The switch is the existing chooser and hand-off.** Each entry links to `APP_ORIGIN/sign-in?workspace=<slug>`;
   that page exchanges the live Clerk session with `workspace_slug` and hands the browser off to the chosen
   host (one-minute `handoff` link). The session on the host it came from is untouched.
