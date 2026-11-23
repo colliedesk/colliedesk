@@ -153,15 +153,16 @@ func fitName(name string) string {
 // visibility. An imported collection is never renamed again, so an agent's change survives a rerun; it is
 // only restricted when Freshdesk shows the folder to fewer people. It returns "" when the collection
 // could not be created (recorded in the ledger). A top-level collection is shown on helpCenters (nil: the
-// primary); one an earlier run made is added to the portals' own help centers among them, never to the
-// primary, so a team that took it off the primary keeps that.
+// primary); one an earlier run made is added to the portals' own help centers among them that no run
+// added it to yet, never to the primary, so a team that took it off a help center keeps that.
 func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID *string, name, description, visibility string, meta map[string]any,
 	created, updated time.Time, helpCenters []string) (string, error) {
-	target, done, err := r.ledger.done(ctx, entity, key)
+	entry, found, err := r.ledger.get(ctx, entity, key)
 	if err != nil {
 		return "", err
 	}
-	if done {
+	if found && entry.Status == ledgerDone && entry.TargetID != nil {
+		target := *entry.TargetID
 		var exists bool
 		if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
 			return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_collections WHERE workspace_id=$1 AND id=$2)`, r.workspaceID, target).Scan(&exists)
@@ -169,7 +170,7 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 			return "", fmt.Errorf("read knowledge base collection: %w", err)
 		}
 		if exists {
-			if err := r.addCollectionHelpCenters(ctx, target, r.kbWriteState().portalOwn(helpCenters)); err != nil {
+			if err := r.addCollectionHelpCenters(ctx, entity, key, target, entry.Meta, r.kbWriteState().portalOwn(helpCenters)); err != nil {
 				return "", err
 			}
 			return target, r.restrictKBCollection(ctx, key, target, visibility)
@@ -194,7 +195,11 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 		r.itemFailed(ctx, entity, key, "", err)
 		return "", r.internalErr
 	}
-	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entity, sourceID: key, targetID: &id, status: ledgerDone}); err != nil {
+	var placed *ticketMeta
+	if len(helpCenters) > 0 {
+		placed = &ticketMeta{HelpCenters: helpCenters}
+	}
+	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entity, sourceID: key, targetID: &id, status: ledgerDone, meta: placed}); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -226,9 +231,16 @@ func (r *run) noteStillOnPrimary(ctx context.Context, categoryID int64, collecti
 	return nil
 }
 
-// addCollectionHelpCenters also shows an imported top-level collection on the help centers ids names.
-func (r *run) addCollectionHelpCenters(ctx context.Context, collectionID string, ids []string) error {
-	if len(ids) == 0 {
+// addCollectionHelpCenters also shows an imported top-level collection on the help centers ids names that
+// its ledger row does not list yet, and lists them there in the same transaction.
+func (r *run) addCollectionHelpCenters(ctx context.Context, entity, key, collectionID string, placed ticketMeta, ids []string) error {
+	var pending []string
+	for _, id := range ids {
+		if !slices.Contains(placed.HelpCenters, id) {
+			pending = append(pending, id)
+		}
+	}
+	if len(pending) == 0 {
 		return nil
 	}
 	tx, err := r.begin(ctx)
@@ -236,8 +248,12 @@ func (r *run) addCollectionHelpCenters(ctx context.Context, collectionID string,
 		return fmt.Errorf("begin collection placement: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	if err := store.AddImportedKBCollectionHelpCenters(ctx, tx, r.workspaceID, collectionID, ids); err != nil {
+	if err := store.AddImportedKBCollectionHelpCenters(ctx, tx, r.workspaceID, collectionID, pending); err != nil {
 		return fmt.Errorf("place collection: %w", err)
+	}
+	placed.HelpCenters = append(slices.Clone(placed.HelpCenters), pending...)
+	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entity, sourceID: key, targetID: &collectionID, status: ledgerDone, meta: &placed}); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }

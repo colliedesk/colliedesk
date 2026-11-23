@@ -286,6 +286,25 @@ func TestAPortalThatFailedOnceAndIsNowOverTheLimitNoLongerFailsTheReport(t *test
 	}
 }
 
+func TestARerunLeavesACollectionOffAPortalHelpCenterTheTeamTookItOff(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(twoPortals)
+	env.mustRun(t)
+	hardware := env.helpCenters(t)[1].ID
+	if got := env.topCollections(t, hardware); got != "Getting started, Hardware" {
+		t.Fatalf("hardware store shows %s", got)
+	}
+	// The team takes Getting started off the Hardware store in its "Shown on" setting.
+	if _, err := env.pool.Exec(context.Background(), `DELETE FROM kb_collection_help_centers WHERE workspace_id=$1 AND collection_id=$2 AND help_center_id=$3`,
+		env.workspaceID, env.target(t, "kb_category", "1"), hardware); err != nil {
+		t.Fatal(err)
+	}
+	env.mustRun(t)
+	if got := env.topCollections(t, hardware); got != "Hardware" {
+		t.Fatalf("after a rerun the hardware store shows %s", got)
+	}
+}
+
 func TestACategoryMovedToAnotherPortalIsShownOnThatPortalsHelpCenter(t *testing.T) {
 	env := newImportEnv(t).withSolutions()
 	env.editSolutions(func(fixture map[string]any) {

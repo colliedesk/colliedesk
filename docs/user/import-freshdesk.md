@@ -119,7 +119,8 @@ touches the primary or the help centers your team made.
 When Freshdesk moves a category to another portal after an import, the next run shows its collection
 on that portal's help center too. It stays on the primary help center, where the earlier import put
 it, because your team may have placed it there; the report names the category. To take it off the
-primary, change the collection's **Shown on** setting (#768). Articles that an import from before
+primary, change the collection's **Shown on** setting (#768). A help center your team takes a
+collection off stays that way when you import again. Articles that an import from before
 this change kept as drafts only because their category was in another portal are published by the
 next run, unless your team changed them since. A portal that failed to get its help center on an
 earlier run and is now past the limit no longer fails the report. Old portal links still lead to the
