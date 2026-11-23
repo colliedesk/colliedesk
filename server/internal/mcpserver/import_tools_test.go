@@ -23,6 +23,18 @@ func TestImportPreviewToolTakesTheOldHelpCenterAddress(t *testing.T) {
 	}
 }
 
+// An agent written for earlier releases still sends help_center_portal: the preview starts and the
+// value is ignored, since every Freshdesk portal now becomes a help center of its own.
+func TestImportPreviewToolStillTakesHelpCenterPortal(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Import Old Agent Desk", "admin@import-old-agent.example.com")
+	admin := e.connect(w.adminTier, "")
+	job := e.ok(admin, "colliedesk_import_preview", map[string]any{"domain": "acme.freshdesk.com", "api_key": "fd-key", "help_center_portal": 5})
+	if got := at(t, job, "import", "state"); got != "previewing" {
+		t.Fatalf("import preview = %v", job)
+	}
+}
+
 // An agent reads, without a second call, which help center each Freshdesk portal becomes and became.
 func TestImportToolsNameTheHelpCenterOfEachFreshdeskPortal(t *testing.T) {
 	e := newEnv(t)
