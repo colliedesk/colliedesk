@@ -551,6 +551,23 @@ During the trial a banner under the workspace name shows the days left. When the
 subscription ends, the inbox is replaced by a page that says so, with the ways forward for admins.
 See [Plan and billing](billing.md).
 
+## Request an article
+
+When a conversation asks something the help center does not answer, select **Request article** at
+the top of the conversation (with the rights to read conversations and articles,
+`conversations:read` and `kb_articles:read`). The question is filled in from the subject and the note
+from the customer's last message; change them or select **Request** at once. The request shows in
+[Knowledge gaps](knowledge-base.md#gaps) within a moment, counted with the other conversations that
+asked and linked back here. The customer is not told and nothing is sent.
+
+- When an open request with close words exists, the dialog names it and the button becomes **Add this
+  conversation to it**, so the conversation joins that request instead of opening a second one.
+- A conversation asks once. Asking again with the same words changes nothing; other words move its
+  request.
+- **Undo** in the confirmation takes the request back. A gap left with no signal goes away.
+- Email addresses, numbers of 6 digits or more and the customer's name and company are hidden before
+  the request is saved.
+
 ## Telling the customer
 
 - A conversation of a chat (a Zalo OA) tells its customer when its status is set to Pending, Resolved or
@@ -595,6 +612,10 @@ The routes are in `contracts/openapi.yaml`; the MCP tools are in [MCP](mcp.md).
   `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
 - Spam: AI agents use `colliedesk_conversations_spam` (permission `conversations:update`). The route is
   `PUT /api/v1/conversations/spam` with `{"ids": [...], "spam": true}` (or `false` for Not spam).
+- Request an article: AI agents use `colliedesk_kb_article_request` (one call; `gap_id` joins an open
+  request, `colliedesk_kb_gaps_list` with `similar` finds the close ones) and
+  `colliedesk_kb_article_request_withdraw`. The routes are `POST` and `DELETE
+  /api/v1/conversations/{id}/article-request`.
 - Move messages: AI agents use the MCP tools `colliedesk_messages_move`, `colliedesk_message_moves_list`
   and `colliedesk_message_move_undo`. The routes are `POST /api/v1/conversations/{id}/messages/move`
   (`message_ids`, `to: {conversation_id}`, `{new: {subject}}` or `{queue: true}`, `close_source` to close

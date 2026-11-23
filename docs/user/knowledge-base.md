@@ -941,7 +941,8 @@ Searches are kept for 180 days, then deleted; a server operator can change this 
 **Knowledge → Gaps** (with the right to read articles, `kb_articles:read`) lists what readers asked
 for and did not find, grouped by their words. The gaps with the most distinct askers in the last 30
 days come first. Each row shows the words, how many people asked in 30 days and in all, the kinds of
-signal and when someone last asked. A gap gathers:
+signal and when someone last asked. A gap that conversations asked for also says from how many
+conversations; open it to see each one, linked. A gap gathers:
 
 - **Searched, no result**: a help center search that listed nothing.
 - **Voted No**: a "No" vote on an article, with its "What was missing?" line when the reader wrote one.
@@ -950,6 +951,8 @@ signal and when someone last asked. A gap gathers:
 - **Recurring topic**: a conversation resolved in the last 30 days whose subject no published
   article title matches. It is looked for once a day, only in a workspace that resolved at least 20
   conversations in 30 days, and it uses no AI.
+- **Requested from a conversation**: someone on your team asked for an article from a conversation
+  ([Request an article](inbox.md#request-an-article)), with its note when they wrote one.
 
 A signal shows within a minute. Words that differ only in case or accents join the same gap, and so
 do close wordings ("how to export invoices" and "export invoices"). The gap's title is its most
@@ -986,10 +989,29 @@ The editor of such a draft shows **Sources**: the conversations it was written f
 A team member who may not read conversations sees that it was drafted from them, without the links.
 The gap stays open until you link it to the article or publish an article with a matching title.
 
+### Start a draft from a gap
+
+An open gap that conversations asked for also has **Start a draft** (`kb_articles:create`). It opens
+an empty draft titled as the gap, in your first collection, and no AI writes it. **Sources** beside
+the draft lists up to 8 conversations that asked for it, newest first, each linked, so you can write
+the answer with the questions in view. A team member who may not read conversations sees that it was
+requested, without the links.
+
+### Make an article from a reply
+
+A reply your team sent can become an article: open the menu on the reply (**Reply actions**) and
+choose **Make an article** (`kb_articles:create` and `conversations:read`). The reply becomes the body of
+a draft in your first collection, titled with the conversation's subject, and the editor opens it.
+**Sources** beside the draft shows the customer's question the reply answered and links the
+conversation. Before it is saved, email addresses, numbers of 6 digits or more and the names of the
+customer, their company and your team are hidden (for example "[email removed]" and "[customer]").
+Nothing is published until someone publishes it the usual way.
+
 A deleted help chat takes its signals with it. Gaps are not in the [export](export.md) yet; the
 searches, votes and chats they come from are. An AI agent works the same list with the MCP tools
-`colliedesk_kb_gaps_list`, `colliedesk_kb_gap_get` and `colliedesk_kb_gap_update`, and drafts an
-article with `colliedesk_kb_gap_draft`.
+`colliedesk_kb_gaps_list`, `colliedesk_kb_gap_get` and `colliedesk_kb_gap_update`, drafts an
+article with `colliedesk_kb_gap_draft`, starts an empty one with `colliedesk_kb_gap_article_start`, and
+makes one from a sent reply with `colliedesk_kb_article_from_reply`.
 
 ## Keep an article away from AI
 

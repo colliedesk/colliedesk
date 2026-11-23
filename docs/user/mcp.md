@@ -187,6 +187,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_gap_get` | Reads one knowledge gap with its newest signals: what each reader searched, wrote or asked | `kb_articles:read` |
 | `colliedesk_kb_gap_update` | Links a knowledge gap to the article that answers it, dismisses it or opens it again | `kb_articles:update` |
 | `colliedesk_kb_gap_draft` | Drafts the missing article for a knowledge gap from the resolved conversations that match it | `kb_articles:create` |
+| `colliedesk_kb_gap_article_start` | Starts an empty draft for a knowledge gap beside the conversations that asked for it | `kb_articles:create` |
+| `colliedesk_kb_article_request` | Asks for a help center article from a conversation, in Knowledge gaps | `conversations:read`, `kb_articles:read` |
+| `colliedesk_kb_article_request_withdraw` | Takes back a conversation's request for an article | `conversations:read`, `kb_articles:read` |
+| `colliedesk_kb_article_from_reply` | Keeps a sent reply as a draft article, with the customer question beside it | `kb_articles:create`, `conversations:read` |
 | `colliedesk_kb_article_send_for_review` | Saves an article's or translation's text and asks teammates who may publish to approve it | `kb_articles:update` |
 | `colliedesk_kb_reviews_list` | Lists the reviews waiting for you, or the reviews of one article | `kb_articles:read` |
 | `colliedesk_kb_review_get` | Reads a review with the text proposed, what is live and the line diff between them | `kb_articles:read` |
