@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { Me, WorkspaceChoice } from '../../api/schemas';
-import { dialogKeys } from '../../ui/dialog-keys';
+import { dialogKeys, tabbables } from '../../ui/dialog-keys';
 import { lazyPart } from '../../ui/lazy-part';
 import { WorkspaceRow, WorkspaceRowSkeleton } from '../../ui/workspace-row';
 import type { WorkspaceSwitch } from './account-menu';
@@ -40,6 +40,13 @@ export function SwitchWorkspaceDialog({ me, workspaceSwitch, onClose }: { me: Me
   const others = listed.filter((workspace) => workspace.slug !== me.workspace.slug).sort(byName);
   const keys = dialogKeys(root, onClose);
   const onKeyDown = (event: KeyboardEvent) => {
+    // The dialog itself holds the focus when it opens; Tab from there goes to its first or last control.
+    if (event.key === 'Tab' && document.activeElement === root.current) {
+      const items = tabbables(root);
+      event.preventDefault();
+      (event.shiftKey ? items[items.length - 1] : items[0])?.focus();
+      return;
+    }
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') { keys(event); return; }
     const rows = Array.from(root.current?.querySelectorAll<HTMLElement>('a.workspace-row') ?? []);
     if (rows.length === 0) return;

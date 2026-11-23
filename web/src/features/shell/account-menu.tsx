@@ -28,8 +28,8 @@ interface AccountMenuProps {
 }
 
 // AccountMenu is the person at the foot of the sidebar (their name, and their address under it), which opens who is
-// signed in, as which role, and the way out. Folded into the rail or on a phone it is the avatar alone, and the
-// workspace and the address are in the top bar, so the menu does not repeat them. With workspaceSwitch it offers
+// signed in, as which roles and with which address (Paper A6-a), and the way out. Folded into the rail or on a phone
+// it is the avatar alone; the workspace is in the top bar, so the menu does not repeat it. With workspaceSwitch it offers
 // Switch workspace… at once, whatever the person's workspaces are: the dialog reads them when it opens and says
 // when it cannot.
 export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, signingOut = false, workspaceSwitch }: AccountMenuProps) {

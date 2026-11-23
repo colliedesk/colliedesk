@@ -76,6 +76,8 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   // unknown) answers 401 and keeps the link page. The preview never uses the link up.
   const preview = useQuery({ queryKey: ['invite-preview', token], queryFn: () => api.previewInvite(token), enabled: token !== '', retry: false, staleTime: Infinity });
   const exchange = useCallback(async (sessionToken: string) => {
+    // A token means the sign-in for another email is done: a later remount (a workspace chosen) keeps it.
+    setAnotherEmail(false);
     setCloudPending(true);
     setCloudFailed(false);
     try {

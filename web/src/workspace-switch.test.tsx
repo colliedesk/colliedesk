@@ -10,17 +10,28 @@ import { permissionsOf, rolesOf } from './test-roles';
 
 // A person signed in to one workspace switches to another of theirs from the account menu. Clerk (the identity
 // provider) and leaving the page are external boundaries here.
-// Signing out of Clerk ends its session, as the real one does.
+// Signing out of Clerk ends its session, as the real one does, and signIn starts a new one; both re-render
+// whoever reads the session, as Clerk's hooks do.
 const clerk = vi.hoisted(() => {
-  const state = { signedIn: true, signOut: vi.fn(() => { state.signedIn = false; return Promise.resolve(); }) };
+  const listeners = new Set<() => void>();
+  const tell = () => { for (const listener of listeners) listener(); };
+  const state = {
+    signedIn: true, listeners,
+    signOut: vi.fn(() => { state.signedIn = false; tell(); return Promise.resolve(); }),
+    signIn: () => { state.signedIn = true; tell(); },
+  };
   return state;
 });
-vi.mock('@clerk/clerk-react', () => ({
-  ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
-  SignIn: () => <div>Clerk widget</div>,
-  useAuth: () => ({ getToken: () => Promise.resolve('clerk-session-token'), isLoaded: true, isSignedIn: clerk.signedIn }),
-  useClerk: () => ({ signOut: clerk.signOut }),
-}));
+vi.mock('@clerk/clerk-react', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const subscribe = (listener: () => void) => { clerk.listeners.add(listener); return () => { clerk.listeners.delete(listener); }; };
+  return {
+    ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
+    SignIn: () => <div>Clerk widget</div>,
+    useAuth: () => ({ getToken: () => Promise.resolve('clerk-session-token'), isLoaded: true, isSignedIn: useSyncExternalStore(subscribe, () => clerk.signedIn) }),
+    useClerk: () => ({ signOut: clerk.signOut }),
+  };
+});
 vi.mock('./lib/leave-to', () => ({ leaveTo: vi.fn() }));
 
 const fetchMock = vi.fn();
@@ -172,6 +183,22 @@ test('a list the server refuses is an error the person sees, never an empty list
   warn.mockRestore();
 });
 
+test('Tab stays inside the Switch workspace dialog, also from the dialog itself when it opens', async () => {
+  serve({ signedIn: true, onAppHost: false, workspaces: [beta, alpha] });
+  open('/');
+  const dialog = await openSwitch();
+  await waitFor(() => expect(rowNames(dialog)).toHaveLength(2));
+  const close = within(dialog).getByRole('button', { name: 'Close' });
+  const create = within(dialog).getByRole('link', { name: 'Create a workspace' });
+  expect(dialog).toHaveFocus();
+  fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+  expect(create).toHaveFocus();
+  fireEvent.keyDown(create, { key: 'Tab' });
+  expect(close).toHaveFocus();
+  fireEvent.keyDown(close, { key: 'Tab', shiftKey: true });
+  expect(create).toHaveFocus();
+});
+
 test('arrow keys move between the workspaces and Escape closes the dialog back to the account button', async () => {
   serve({ signedIn: true, onAppHost: false, workspaces: [zeta, beta, alpha] });
   open('/');
@@ -205,6 +232,19 @@ test('the sign-in chooser opens the chosen workspace from the live sign-in, or s
   fireEvent.click(screen.getByRole('button', { name: 'Use another email' }));
   await waitFor(() => expect(clerk.signOut).toHaveBeenCalled());
   expect(screen.queryByRole('heading', { name: 'Choose a workspace' })).not.toBeInTheDocument();
+});
+
+test('after Use another email, the new sign-in opens the chosen workspace without being signed out again', async () => {
+  serve({ signedIn: false, onAppHost: true, choose: true });
+  open('/sign-in');
+  fireEvent.click(await screen.findByRole('button', { name: 'Use another email' }));
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
+  expect(clerk.signOut).toHaveBeenCalledTimes(1);
+  // The person signs in with the other email; it belongs to two workspaces too.
+  clerk.signIn();
+  fireEvent.click(await screen.findByRole('button', { name: 'Alpha Desk' }));
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(continueURL));
+  expect(clerk.signOut).toHaveBeenCalledTimes(1);
 });
 
 test('choosing a workspace in the sign-in chooser shows it opening and hands the browser to it', async () => {
