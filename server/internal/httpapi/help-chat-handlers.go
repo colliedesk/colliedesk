@@ -102,6 +102,14 @@ type helpChat struct {
 	// lang is the help center language the end user reads (?lang=, one customers see), "" the primary
 	// one: answers come from that language's published translations and link its pages.
 	lang string
+	// article is the article the chat page was opened from (?article=), when the chat may read it.
+	article *helpChatArticle
+}
+
+// helpChatArticle is the article a chat is about, as chat.js shows it and sends it back.
+type helpChatArticle struct {
+	Number int64  `json:"number"`
+	Title  string `json:"title"`
 }
 
 // openHelpChat finds the request's channel and checks the chat may answer. A chat that is off (its
@@ -497,6 +505,9 @@ func (c *helpChat) config(surface string) string {
 	if surface != "article" {
 		config["text"] = json.RawMessage(helpcenter.ChatWordsJSON(c.locale()))
 	}
+	if c.article != nil {
+		config["article"] = c.article
+	}
 	if look.LogoURL != "" {
 		config["logo"] = map[string]any{"url": look.LogoURL, "alt": look.LogoAlt, "width": look.LogoWidth, "height": look.LogoHeight}
 	}
@@ -528,6 +539,17 @@ func (a *API) helpChatPage(c *helpChat) {
 		return
 	}
 	embed := query.Get("embed") == "1"
+	// Opened from an article's "Still need help?": the chat is about it, and a hand-off names it.
+	if number, err := strconv.ParseInt(query.Get("article"), 10, 64); err == nil && !embed {
+		article, found, err := a.ai.ChatArticleOf(c.request.Context(), c.at.WorkspaceID, number, c.lang)
+		if err != nil {
+			a.helpChatFailed(c, err)
+			return
+		}
+		if found {
+			c.article = &helpChatArticle{Number: article.Number, Title: article.Title}
+		}
+	}
 	surface, ancestors := "page", ""
 	if embed {
 		surface = "embed"
@@ -661,6 +683,8 @@ func (a *API) helpChatHandoff(c *helpChat) {
 		Email string `json:"email"`
 		Name  string `json:"name"`
 		Note  string `json:"note"`
+		// ArticleNumber is the article the chat is about; one the help center does not show is ignored.
+		ArticleNumber int64 `json:"article_number"`
 	}
 	if err := json.NewDecoder(io.LimitReader(c.request.Body, 16<<10)).Decode(&input); err != nil {
 		writeError(c.response, http.StatusBadRequest, "invalid_request", "The body must be a JSON object with an email.")
@@ -700,6 +724,17 @@ func (a *API) helpChatHandoff(c *helpChat) {
 	}
 	if handoff.Transcript == "" {
 		handoff.Transcript = "(No new questions.)"
+	}
+	if input.ArticleNumber > 0 {
+		article, found, err := a.ai.ChatArticleOf(ctx, c.at.WorkspaceID, input.ArticleNumber, c.lang)
+		if err != nil {
+			a.helpChatFailed(c, err)
+			return
+		}
+		if found {
+			source := c.source(article.Number, article.Title, article.Folder, true)
+			handoff.Transcript = "Article: " + source.Title + " " + source.URL + "\n\n" + handoff.Transcript
+		}
 	}
 	body, err := json.Marshal(handoff)
 	if err != nil {

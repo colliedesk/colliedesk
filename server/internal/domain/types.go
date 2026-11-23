@@ -290,11 +290,14 @@ const (
 	// ChannelAgent marks a conversation a team member started. An older image that does not know the column also writes it.
 	ChannelAgent         = "agent"
 	ChannelProblemReport = "problem_report"
+	// ChannelArticleFeedback marks a conversation a reader opened with a "No" on a help center article
+	// that left a line and an email address, when the workspace turns that on.
+	ChannelArticleFeedback = "article_feedback"
 )
 
 // ConversationOrigins are the ways a conversation starts through no channel. With the registered
 // channel types they are every value of conversations.channel (ConversationChannel in the contract).
-var ConversationOrigins = []string{ChannelImported, ChannelAgent, ChannelProblemReport}
+var ConversationOrigins = []string{ChannelImported, ChannelAgent, ChannelProblemReport, ChannelArticleFeedback}
 
 // ConversationOrigin records where an imported conversation came from.
 type ConversationOrigin struct {
@@ -472,6 +475,8 @@ const (
 	ViaWebForm = "web_form"
 	// ViaProblemReport marks a report an agent filed with "Report a problem": the sender is a signed-in agent.
 	ViaProblemReport = "problem_report"
+	// ViaHelpCenter marks a line a reader left under a help center article: the address was never verified.
+	ViaHelpCenter = "help_center"
 )
 
 // IncomingEmail is the envelope of a message that arrived by email.

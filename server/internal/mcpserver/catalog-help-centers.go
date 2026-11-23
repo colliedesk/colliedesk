@@ -129,12 +129,15 @@ func helpCenterUpdate(c *call, arguments map[string]any) (any, error) {
 	_, name := arguments["name"]
 	_, handle := arguments["handle"]
 	_, approval := arguments["require_approval"]
+	_, feedback := arguments["feedback_conversations"]
 	method, path, body := http.MethodPut, "/api/v1/help-center", arguments
 	switch {
 	case id == "" && (name || handle):
 		return nil, &toolError{"name and handle belong to one help center: give its help_center_id (colliedesk_help_centers_list). The primary has no handle."}
 	case id != "" && approval:
 		return nil, &toolError{"require_approval is workspace-wide, not per help center: leave help_center_id out to change it."}
+	case id != "" && feedback:
+		return nil, &toolError{"feedback_conversations is workspace-wide, not per help center: leave help_center_id out to change it."}
 	case id != "":
 		c.notFound = helpCenterNotFound(id)
 		method, path = http.MethodPatch, "/api/v1/help-centers/"+url.PathEscape(id)

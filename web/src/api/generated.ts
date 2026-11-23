@@ -69,6 +69,8 @@ export interface paths {
                 t?: string;
                 /** @description The language the reader reads: one the help center shows (any case) gives the page, its words and its home link in it; any other value, or none, is the primary language. Kept through the 303 of t. */
                 lang?: string;
+                /** @description The number of the article whose Still need help? opened the page: a published article the AI may read starts the chat about it (the end user can stop that), and a hand-off names it. Any other value, and embed=1, are ignored. */
+                article?: string;
             };
             header?: never;
             path?: never;
@@ -5176,7 +5178,7 @@ export interface paths {
         };
         /** @description Whether the public help center is on, its title and language. `content_version` grows with every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the knowledge base is public. */
         get: operations["getHelpCenter"];
-        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. `require_approval` makes publishing need an approved review in every collection that inherits it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes). `show_tags` shows each article's tags on its page; left out, it stays as it is. */
+        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Needs `help_center:update`. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. `require_approval` makes publishing need an approved review in every collection that inherits it; sending it needs `kb_articles:publish` too (403 `permission_missing`, nothing changes). `show_tags` shows each article's tags on its page; left out, it stays as it is. `feedback_conversations` makes a "No" vote ask for an email address and open a conversation when the reader leaves one with their line; sending it needs `channels:update` too (403 `permission_missing`, nothing changes), since it opens a way for anyone to write in. */
         put: operations["putHelpCenter"];
         post?: never;
         delete?: never;
@@ -7803,7 +7805,7 @@ export interface components {
         SettableConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
         Priority: "low" | "normal" | "high" | "urgent";
-        /** @description How the conversation started: a channel type this server runs, or an origin that comes through no channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report. A test build may run another type (the loopback chat stand-in), so a client names a value it does not know by itself. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem. */
+        /** @description How the conversation started: a channel type this server runs, or an origin that comes through no channel. Values: email, web_form, help_chat, zalo, imported, agent, problem_report, article_feedback. A test build may run another type (the loopback chat stand-in), so a client names a value it does not know by itself. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). zalo: a customer wrote to a Zalo Official Account, alone or in a group it is in. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem. article_feedback: a reader's "No" on a help center article that left a line and an email address (never verified), when the workspace turns on `feedback_conversations`. */
         ConversationChannel: string;
         /**
          * @default updated_desc
@@ -9541,6 +9543,8 @@ export interface components {
             require_approval?: boolean;
             /** @description Whether an article page shows the article's tags to readers. Left out, it stays as it is. */
             show_tags?: boolean;
+            /** @description Whether a "No" vote asks for an email address and opens a conversation when the reader leaves one with their line. Left out, it stays as it is. Sending it needs channels:update too. */
+            feedback_conversations?: boolean;
         };
         HelpCenter: {
             enabled: boolean;
@@ -9550,6 +9554,8 @@ export interface components {
             require_approval: boolean;
             /** @description Article pages show the article's published tags. Help center search finds an article by its tags either way. */
             show_tags: boolean;
+            /** @description A "No" vote asks for an email address (optional for the reader); a line left with an address opens a conversation (channel article_feedback, tag article-feedback) on which the article's author is mentioned. Off by default. */
+            feedback_conversations: boolean;
             content_version: number;
             /**
              * Format: date-time
@@ -10422,10 +10428,10 @@ export interface components {
             from: string;
             authentication: components["schemas"]["EmailAuthentication"];
             /**
-             * @description Door the message came through; absent on mail stored before this was recorded. `web_form` is text typed into the public web form: the address is unverified (authentication `none`). `gmail` was read from the channel's connected Gmail inbox; authentication is Gmail's verdict. Trial replies need `platform`.
+             * @description Door the message came through; absent on mail stored before this was recorded. `web_form` is text typed into the public web form: the address is unverified (authentication `none`). `help_center` is a line left with a "No" on a help center article, also unverified. `gmail` was read from the channel's connected Gmail inbox; authentication is Gmail's verdict. Trial replies need `platform`.
              * @enum {string}
              */
-            via?: "platform" | "workspace" | "gmail" | "web_form";
+            via?: "platform" | "workspace" | "gmail" | "web_form" | "help_center";
             /** @description Other addresses on the Cc line of the email (not the sender, not our own addresses), as the reply box offers them to copy. Absent on mail stored before Cc was kept. */
             cc?: string[];
             /**
@@ -12463,6 +12469,8 @@ export interface operations {
                 t?: string;
                 /** @description The language the reader reads: one the help center shows (any case) gives the page, its words and its home link in it; any other value, or none, is the primary language. Kept through the 303 of t. */
                 lang?: string;
+                /** @description The number of the article whose Still need help? opened the page: a published article the AI may read starts the chat about it (the end user can stop that), and a hand-off names it. Any other value, and embed=1, are ignored. */
+                article?: string;
             };
             header?: never;
             path?: never;
@@ -12690,6 +12698,11 @@ export interface operations {
                     email: string;
                     name?: string;
                     note?: string;
+                    /**
+                     * Format: int64
+                     * @description The article the chat is about (the chat page opened from its Still need help?): its title and address start the message. An article that is not published or is kept away from AI is not named.
+                     */
+                    article_number?: number;
                 };
             };
         };

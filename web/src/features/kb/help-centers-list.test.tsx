@@ -12,7 +12,7 @@ const me = (role: 'admin' | 'agent') => ({
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(role), timezone_override: null }, permissions: permissionsOf(role),
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'acme', name: 'Acme', timezone: 'UTC' }, timezone: 'UTC', token: null, plan: null,
 });
-const primarySettings = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, show_tags: false, url: primaryCenter.url };
+const primarySettings = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, show_tags: false, feedback_conversations: false, url: primaryCenter.url };
 
 function open(role: 'admin' | 'agent', routes: Parameters<typeof serve>[0]) {
   const calls = serve({ 'GET /api/v1/auth/me': () => json(200, me(role)), 'GET /api/v1/help-center': () => json(200, primarySettings), ...routes });

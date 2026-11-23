@@ -14,7 +14,7 @@ export const ids = {
 };
 
 // The workspace's help centers: the primary one, served at the workspace's address, and one below it.
-const center = { enabled: true, title: '', locale: 'en', require_approval: false, show_tags: false, content_version: 1, updated_at: null };
+const center = { enabled: true, title: '', locale: 'en', require_approval: false, show_tags: false, feedback_conversations: false, content_version: 1, updated_at: null };
 export const primaryCenter = { ...center, id: '99999999-9999-4999-8999-999999999991', name: 'Acme help', handle: null as string | null, primary: true, url: 'https://desk.example.com/help/acme' };
 export const hardwareCenter = { ...center, id: '99999999-9999-4999-8999-999999999992', name: 'Hardware', handle: 'hardware' as string | null, primary: false, enabled: false,
   url: 'https://desk.example.com/help/acme/hardware' };
