@@ -26,6 +26,7 @@ export function ImportHelpCenters({ portals }: { portals: PortalHelpCenter[] | n
     <h3 id={heading} className="settings-group-label">{m.portalsHeading}</h3>
     <ul>{portals.map((portal) => <li key={portal.portal_id}>{m.portalLine(portal.portal_name, portal.portal_id, portal.categories, outcome(portal))}</li>)}</ul>
     {unnamed.length > 0 && <p>{m.portalsUnnamed(unnamed)}</p>}
-    {portals.some((portal) => portal.status === 'created') && <p>{m.portalsStartOff}</p>}
+    {/* A retried run reports the help center its first attempt made as existing, still off. */}
+    {portals.some((portal) => portal.status === 'created' || portal.status === 'existing') && <p>{m.portalsStartOff}</p>}
   </section>;
 }
