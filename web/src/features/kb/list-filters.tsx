@@ -43,8 +43,8 @@ export function ListFilters({ search, onChange }: ListFiltersProps) {
     const before = key.endsWith('_before');
     const value = search[key];
     return (
-      <label className="kb-filter-date"><span>{label}</span>
-        <input type="date" value={value ? (before ? previousDay(value) : value) : ''}
+      <label className="kb-filter-date"><span aria-hidden="true">{before ? text.toShort : text.fromShort}</span>
+        <input type="date" aria-label={label} value={value ? (before ? previousDay(value) : value) : ''}
           onChange={(event) => { const day = event.currentTarget.value; onChange({ [key]: day ? (before ? nextDay(day) : day) : undefined }); }} />
       </label>
     );
