@@ -102,12 +102,15 @@ const (
 
 	helpCenterSchema = `{"type":"object","required":["enabled","title","locale","content_version","url"],"properties":{"id":{"type":"string"},"name":{"type":"string"},` +
 		`"handle":{"type":["string","null"]},"primary":{"type":"boolean"},"enabled":{"type":"boolean"},"title":{"type":"string"},` +
-		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"},` + kbHelpCenterApprovalProperty + `,` + kbHelpCenterShowTagsProperty + `}}`
+		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"},` + kbHelpCenterApprovalProperty + `,` + kbHelpCenterShowTagsProperty + `,` + kbHelpCenterFeedbackProperty + `}}`
 
 	kbHelpCenterApprovalProperty = `"require_approval":{"type":"boolean","description":"true: an article is published only once a teammate approved exactly its text ` +
 		`(colliedesk_kb_article_send_for_review); a collection's require_approval can override it."}`
 
 	kbHelpCenterShowTagsProperty = `"show_tags":{"type":"boolean","description":"true: an article's page shows its published tags to readers. Search finds articles by tag either way."}`
+
+	kbHelpCenterFeedbackProperty = `"feedback_conversations":{"type":"boolean","description":"true: a reader who answers No, writes what was missing and leaves an email address ` +
+		`opens a conversation, and the article's author is asked on it. Off by default; a few per network and per workspace every 10 minutes."}`
 )
 
 func kbCollectionsListSpec() Spec {
@@ -445,12 +448,13 @@ func helpCenterUpdateSpec() Spec {
 		Description: `Turn the public help center on or off and set its title (empty uses the workspace name) and language (a BCP 47 tag such as en or pt-BR). ` +
 			`Turning it on publishes every article marked published; turning it off takes every page off line at once. ` +
 			`require_approval (needs kb_articles:publish; left out, it stays as it is) makes every article need a teammate's approval before it is published. show_tags (left out, it stays as it is) shows each article's tags on its page. ` +
-			`With help_center_id it changes that help center, and name and handle rename it; require_approval is workspace-wide, so leave help_center_id out for it. ` + helpCenterHandleRule + `It is safe to repeat.`,
+			`feedback_conversations (needs channels:update; left out, it stays as it is) opens a conversation from a not-helpful vote that leaves an email address. ` +
+			`With help_center_id it changes that help center, and name and handle rename it; require_approval and feedback_conversations are workspace-wide, so leave help_center_id out for them. ` + helpCenterHandleRule + `It is safe to repeat.`,
 		Idempotent: true,
 		REST:       []string{"PUT /api/v1/help-center", "PATCH /api/v1/help-centers/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["enabled","title","locale"],"properties":{` + helpCenterIDProperty + `,"enabled":{"type":"boolean"},` +
 			`"title":{"type":"string","maxLength":200},"locale":{"type":"string","minLength":2,"maxLength":35},"name":{"type":"string","minLength":1,"maxLength":200},` +
-			`"handle":{"type":"string","minLength":1,"maxLength":40},` + kbHelpCenterApprovalProperty + `,` + kbHelpCenterShowTagsProperty + `}}`,
+			`"handle":{"type":"string","minLength":1,"maxLength":40},` + kbHelpCenterApprovalProperty + `,` + kbHelpCenterShowTagsProperty + `,` + kbHelpCenterFeedbackProperty + `}}`,
 		Output: helpCenterOutput,
 		run:    helpCenterUpdate,
 	}

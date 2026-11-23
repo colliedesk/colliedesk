@@ -655,14 +655,16 @@ type KBArticleVoteReset struct {
 // KBArticleVote is one reader's answer to "Was this article helpful?". Voter is the hex SHA-256 the
 // server keeps of the reader's cookie, never the cookie; ResetID names the reset that closed the vote.
 type KBArticleVote struct {
-	ID        string    `json:"id"`
-	ArticleID string    `json:"article_id"`
-	Voter     string    `json:"voter"`
-	Helpful   bool      `json:"helpful"`
-	Missing   *string   `json:"missing"`
-	ResetID   *string   `json:"reset_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        string  `json:"id"`
+	ArticleID string  `json:"article_id"`
+	Voter     string  `json:"voter"`
+	Helpful   bool    `json:"helpful"`
+	Missing   *string `json:"missing"`
+	ResetID   *string `json:"reset_id"`
+	// ConversationID is the conversation the vote opened (article feedback), null when none.
+	ConversationID *string   `json:"conversation_id"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // KBArticleView is how many times readers opened one language of an article on one day, the day in
@@ -696,26 +698,29 @@ type HelpCenter struct {
 	// collection it is in says otherwise (kb-collections.ndjson).
 	RequireApproval bool `json:"require_approval"`
 	// ShowTags: an article's page shows its published tags to readers.
-	ShowTags          bool      `json:"show_tags"`
-	ContentVersion    int64     `json:"content_version"`
-	LastArticleNumber int64     `json:"last_article_number"`
-	UpdatedAt         time.Time `json:"updated_at"`
-	LogoMediaID       *string   `json:"logo_media_id"`
-	FaviconMediaID    *string   `json:"favicon_media_id"`
-	LogoAlt           string    `json:"logo_alt"`
-	LinkbackURL       *string   `json:"linkback_url"`
-	ContactURL        *string   `json:"contact_url"`
-	ContactPhone      *string   `json:"contact_phone"`
-	ColorPrimary      *string   `json:"color_primary"`
-	ColorHeader       *string   `json:"color_header"`
-	ColorHeaderText   *string   `json:"color_header_text"`
-	ColorBackground   *string   `json:"color_background"`
-	ColorText         *string   `json:"color_text"`
-	ColorLink         *string   `json:"color_link"`
-	ColorFooter       *string   `json:"color_footer"`
-	BodyFont          *string   `json:"body_font"`
-	HeadingFont       *string   `json:"heading_font"`
-	CustomCSS         string    `json:"custom_css"`
+	ShowTags bool `json:"show_tags"`
+	// FeedbackConversations: a not-helpful vote that leaves a line and an email address opens a
+	// conversation (kb-article-votes.ndjson names it).
+	FeedbackConversations bool      `json:"feedback_conversations"`
+	ContentVersion        int64     `json:"content_version"`
+	LastArticleNumber     int64     `json:"last_article_number"`
+	UpdatedAt             time.Time `json:"updated_at"`
+	LogoMediaID           *string   `json:"logo_media_id"`
+	FaviconMediaID        *string   `json:"favicon_media_id"`
+	LogoAlt               string    `json:"logo_alt"`
+	LinkbackURL           *string   `json:"linkback_url"`
+	ContactURL            *string   `json:"contact_url"`
+	ContactPhone          *string   `json:"contact_phone"`
+	ColorPrimary          *string   `json:"color_primary"`
+	ColorHeader           *string   `json:"color_header"`
+	ColorHeaderText       *string   `json:"color_header_text"`
+	ColorBackground       *string   `json:"color_background"`
+	ColorText             *string   `json:"color_text"`
+	ColorLink             *string   `json:"color_link"`
+	ColorFooter           *string   `json:"color_footer"`
+	BodyFont              *string   `json:"body_font"`
+	HeadingFont           *string   `json:"heading_font"`
+	CustomCSS             string    `json:"custom_css"`
 	// GoogleSiteVerification and BingSiteVerification are the Search Console tokens (null when none).
 	GoogleSiteVerification *string `json:"google_site_verification"`
 	BingSiteVerification   *string `json:"bing_site_verification"`

@@ -891,6 +891,8 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 		Locale          *string `json:"locale"`
 		RequireApproval *bool   `json:"require_approval"`
 		ShowTags        *bool   `json:"show_tags"`
+		// FeedbackConversations lets anyone reading an article open a conversation, as a channel does.
+		FeedbackConversations *bool `json:"feedback_conversations"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil || input.Title == nil || input.Locale == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send enabled, title and locale.")
@@ -901,8 +903,12 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 	if input.RequireApproval != nil && a.refuseUnlessHeld(response, request, who, auth.PermKBArticlesPublish, nil) {
 		return
 	}
-	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID,
-		store.HelpCenterChange{Enabled: *input.Enabled, Title: *input.Title, Locale: *input.Locale, RequireApproval: input.RequireApproval, ShowTags: input.ShowTags})
+	// Conversations from votes are a way for anyone to write in, so they are a channel decision.
+	if input.FeedbackConversations != nil && a.refuseUnlessHeld(response, request, who, auth.PermChannelsUpdate, nil) {
+		return
+	}
+	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID, store.HelpCenterChange{Enabled: *input.Enabled, Title: *input.Title,
+		Locale: *input.Locale, RequireApproval: input.RequireApproval, ShowTags: input.ShowTags, FeedbackConversations: input.FeedbackConversations})
 	if err != nil {
 		writeKBError(response, err)
 		return

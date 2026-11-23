@@ -65,7 +65,7 @@ func (s *Store) OpenHelpCenterAt(ctx context.Context, workspaceID, helpCenterID 
 				logo.id::text, logo.width, logo.height, icon.id::text, COALESCE(h.logo_alt, ''), h.linkback_url, h.contact_url, h.contact_phone,
 				h.color_primary, h.color_header, h.color_header_text, h.color_background, h.color_text, h.color_link, h.color_footer, h.body_font, h.heading_font,
 				COALESCE(h.custom_css, ''), COALESCE(d.hostname, ''), COALESCE(pd.hostname, ''),
-				COALESCE(h.google_site_verification, ''), COALESCE(h.bing_site_verification, '')
+				COALESCE(h.google_site_verification, ''), COALESCE(h.bing_site_verification, ''), COALESCE(kb.feedback_conversations, false)
 			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id AND h.id=$H AND h.deleted_at IS NULL
 			LEFT JOIN help_centers kb ON kb.workspace_id=w.id AND kb.primary_help_center
 			LEFT JOIN help_center_domains d ON d.workspace_id=w.id AND d.help_center_id=h.id AND d.status='active'
@@ -77,7 +77,7 @@ func (s *Store) OpenHelpCenterAt(ctx context.Context, workspaceID, helpCenterID 
 			Scan(&site.Slug, &site.Name, &site.Timezone, &got.enabled, &site.Title, &site.Locale, &site.ContentVersion, &site.HelpCenterID, &site.Primary, &site.Handle,
 				&theme.LogoMediaID, &logoWidth, &logoHeight, &theme.FaviconMediaID, &theme.LogoAlt, &theme.LinkbackURL, &theme.ContactURL, &theme.ContactPhone,
 				&colors.Primary, &colors.Header, &colors.HeaderText, &colors.Background, &colors.Text, &colors.Link, &colors.Footer, &theme.BodyFont, &theme.HeadingFont,
-				&theme.CustomCSS, &site.CustomHost, &site.PrimaryHost, &site.SearchConsole.Google, &site.SearchConsole.Bing)
+				&theme.CustomCSS, &site.CustomHost, &site.PrimaryHost, &site.SearchConsole.Google, &site.SearchConsole.Bing, &site.FeedbackConversations)
 		if logoWidth != nil && logoHeight != nil {
 			site.LogoWidth, site.LogoHeight = *logoWidth, *logoHeight
 		}
