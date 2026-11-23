@@ -102,11 +102,22 @@ func AddImportedKBCollectionHelpCenters(ctx context.Context, tx pgx.Tx, workspac
 
 // TrashImportedHelpCenter moves help center id, made by an import, to the trash and takes its
 // collections off it; a top-level collection then shown on no help center goes back to the primary.
-// The primary and a help center with a custom domain are kept: trashed is false and nothing changes.
+// The primary, a help center with a custom domain and one a live channel serves are kept: trashed is
+// false and nothing changes.
 func TrashImportedHelpCenter(ctx context.Context, tx pgx.Tx, workspaceID, id string) (trashed bool, err error) {
+	// A channel that names the help center holds its row FOR SHARE until it commits, so this lock waits
+	// for it, and the next statement's snapshot sees the channel.
+	var live bool
+	if err := tx.QueryRow(ctx, `SELECT true FROM help_centers WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL AND NOT primary_help_center FOR UPDATE`,
+		workspaceID, id).Scan(&live); errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
 	tag, err := tx.Exec(ctx, `UPDATE help_centers h SET deleted_at=clock_timestamp(), updated_at=clock_timestamp()
-		WHERE h.workspace_id=$1 AND h.id=$2 AND h.deleted_at IS NULL AND NOT h.primary_help_center
-			AND NOT EXISTS(SELECT 1 FROM help_center_domains d WHERE d.workspace_id=h.workspace_id AND d.help_center_id=h.id)`, workspaceID, id)
+		WHERE h.workspace_id=$1 AND h.id=$2
+			AND NOT EXISTS(SELECT 1 FROM help_center_domains d WHERE d.workspace_id=h.workspace_id AND d.help_center_id=h.id)
+			AND NOT EXISTS(SELECT 1 FROM channels c WHERE c.workspace_id=h.workspace_id AND c.help_center_id=h.id AND c.deleted_at IS NULL)`, workspaceID, id)
 	if err != nil || tag.RowsAffected() == 0 {
 		return false, err
 	}

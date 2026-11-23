@@ -4776,7 +4776,7 @@ paths:
         404 `report_not_ready` before there is one. `knowledge_base.help_centers` lists each Freshdesk
         portal and the help center its categories went to (items as in ImportPortalHelpCenter). An undo
         report counts the help centers it removed in `kb_help_centers` and names the ones it kept in
-        `kept_kb_help_centers` (they have a custom domain).
+        `kept_kb_help_centers` (they have a custom domain, or a help chat or web form serves them).
       responses:
         '200':
           description: The report

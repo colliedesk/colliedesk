@@ -113,7 +113,8 @@ The preview lists the help center each portal will get, and the report lists the
 keeps each portal on its help center and makes no new ones; the preview does not read that, so it
 can list a portal as getting a help center that an earlier run already made. A help center your team
 deleted is not made again: that portal's categories go on the primary. `import undo` deletes the help
-centers the import made, unless your team gave one a custom domain (undo then names it), and never
+centers the import made, unless your team gave one a custom domain or pointed a help chat or web
+form at it (undo then names it), and never
 touches the primary or the help centers your team made.
 
 When Freshdesk moves a category to another portal after an import, the next run shows its collection

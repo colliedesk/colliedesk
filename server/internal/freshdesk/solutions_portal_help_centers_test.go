@@ -2,10 +2,13 @@ package freshdesk_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
+	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -99,6 +102,44 @@ func TestUndoTrashesTheHelpCentersTheImportMadeAndKeepsTheOthers(t *testing.T) {
 	env.mustRun(t)
 	if got := env.handlesByName(t); got != "Hardware store=hardware-store, Partners=partners" {
 		t.Fatalf("after importing again: %s", got)
+	}
+}
+
+func TestUndoKeepsAnImportedHelpCenterThatAChannelServes(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(twoPortals)
+	env.mustRun(t)
+	var hardware domain.HelpCenterSummary
+	for _, center := range env.helpCenters(t) {
+		if center.Name == "Hardware store" {
+			hardware = center
+		}
+	}
+	if hardware.ID == "" {
+		t.Fatalf("no Hardware store help center after the import: %+v", env.helpCenters(t))
+	}
+	var agentID string
+	if err := env.pool.QueryRow(context.Background(), `SELECT id::text FROM agents WHERE workspace_id=$1`, env.workspaceID).Scan(&agentID); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(env.pool).WithChannels(registry.New(registry.Config{}))
+	if _, err := st.CreateChannel(context.Background(), env.workspaceID, helpchat.Type, store.ChannelInput{
+		Config:       json.RawMessage(`{"greeting":"Hi","widget_origins":["https://hardware.example"]}`),
+		HelpCenterID: &hardware.ID}, store.ChannelActor{AgentID: agentID}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := freshdesk.Undo(context.Background(), env.pool, env.storage, freshdesk.UndoOptions{WorkspaceSlug: "acme-support"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.KBHelpCenters != 0 || strings.Join(result.KeptKBHelpCenters, ",") != "Hardware store" {
+		t.Fatalf("removed=%d kept=%v", result.KBHelpCenters, result.KeptKBHelpCenters)
+	}
+	if got := env.handlesByName(t); got != "Hardware store=hardware-store" {
+		t.Fatalf("after undo: %s", got)
+	}
+	if report := result.Markdown(); !strings.Contains(report, "Help centers kept because they have a custom domain or a channel serves them: Hardware store") {
+		t.Fatalf("undo report:\n%s", report)
 	}
 }
 

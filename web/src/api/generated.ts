@@ -2846,7 +2846,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description The reconcile report of the import (`status` OK, FAILED or UNVERIFIED), or while only the recent tickets are in, the interim report (`status` INTERIM, never OK; no Markdown yet). For an undo, what it removed. `format=markdown` answers the report as a Markdown file to download. 404 `report_not_ready` before there is one. `knowledge_base.help_centers` lists each Freshdesk portal and the help center its categories went to (items as in ImportPortalHelpCenter). An undo report counts the help centers it removed in `kb_help_centers` and names the ones it kept in `kept_kb_help_centers` (they have a custom domain). */
+        /** @description The reconcile report of the import (`status` OK, FAILED or UNVERIFIED), or while only the recent tickets are in, the interim report (`status` INTERIM, never OK; no Markdown yet). For an undo, what it removed. `format=markdown` answers the report as a Markdown file to download. 404 `report_not_ready` before there is one. `knowledge_base.help_centers` lists each Freshdesk portal and the help center its categories went to (items as in ImportPortalHelpCenter). An undo report counts the help centers it removed in `kb_help_centers` and names the ones it kept in `kept_kb_help_centers` (they have a custom domain, or a help chat or web form serves them). */
         get: operations["getImportReport"];
         put?: never;
         post?: never;
