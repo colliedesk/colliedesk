@@ -326,6 +326,24 @@ type KBArticle struct {
 	// replies that used it in the last KBArticleStatsDefaultDays days, today included.
 	Views30d *int64 `json:"views_30d,omitempty"`
 	Uses30d  *int64 `json:"uses_30d,omitempty"`
+	// GapSource is set on an article AI drafted from a knowledge gap: the gap and the resolved
+	// conversations it was written from.
+	GapSource *KBArticleGapSource `json:"gap_source,omitempty"`
+}
+
+// KBArticleGapSource is the knowledge gap an article was drafted from and the conversations the draft
+// used, in the order the draft read them. Conversations is empty for a reader who may not read
+// conversations, and leaves out one since deleted.
+type KBArticleGapSource struct {
+	GapID         string                     `json:"gap_id"`
+	Conversations []KBArticleGapConversation `json:"conversations"`
+}
+
+// KBArticleGapConversation is one conversation a gap draft was written from.
+type KBArticleGapConversation struct {
+	ConversationID string `json:"conversation_id"`
+	DisplayRef     string `json:"display_ref"`
+	Subject        string `json:"subject"`
 }
 
 // KBAIExclusion is since when, and by whom, an article is kept away from AI.

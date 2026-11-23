@@ -97,7 +97,9 @@ is accepted too.
 
 A feature that is on sends its provider the ticket's messages, the customer's name, matching published
 knowledge base articles, and short excerpts of similar solved tickets with other customers' names and
-emails removed. Private notes are never sent. Colliedesk does not keep what it sent the provider, nor the
+emails removed. Private notes are never sent. A [knowledge base draft from a gap](knowledge-base.md#draft-an-article-from-a-gap)
+sends the Reply drafts model what readers asked and up to 8 resolved conversations that match it, with
+emails and numbers of 6 digits or more removed. Colliedesk does not keep what it sent the provider, nor the
 provider's answers, apart from the draft or suggestion itself. A draft keeps its text and the request
 that asked for it until 90 days after it ended, and both are in the export (`ai-drafts.ndjson`). Each provider keeps data under its own
 policy; read it before you add one, for example [Anthropic's](https://www.anthropic.com/legal/privacy).

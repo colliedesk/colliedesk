@@ -385,7 +385,8 @@ func ImportHelpCenterLanguages(ctx context.Context, tx pgx.Tx, workspaceID strin
 
 // AdoptImportedPrimaryLanguage makes locale the help center's primary language when it is safe: the
 // help center lists no other language and the knowledge base holds no article an import did not
-// bring (articles are written in the source's primary language). It reports whether the primary
+// bring (articles are written in the source's primary language; one the AI drafted from a knowledge
+// gap was written here, though its source_meta is set). It reports whether the primary
 // language is locale afterwards and, when this call changed it, the language it replaced (previous ""
 // when it changed nothing), which undo gives back.
 func AdoptImportedPrimaryLanguage(ctx context.Context, tx pgx.Tx, workspaceID, locale string) (adopted bool, previous string, err error) {
@@ -401,7 +402,7 @@ func AdoptImportedPrimaryLanguage(ctx context.Context, tx pgx.Tx, workspaceID, l
 	}
 	var blocked bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM help_center_languages WHERE workspace_id=$1 AND help_center_id=primary_help_center_id($1))
-		OR EXISTS(SELECT 1 FROM kb_articles a WHERE a.workspace_id=$1 AND a.source_meta IS NULL)
+		OR EXISTS(SELECT 1 FROM kb_articles a WHERE a.workspace_id=$1 AND (a.source_meta IS NULL OR a.source_meta ? 'gap'))
 		OR EXISTS(SELECT 1 FROM kb_article_translations t WHERE t.workspace_id=$1 AND t.locale=$2)`, workspaceID, locale).Scan(&blocked); err != nil {
 		return false, "", err
 	}

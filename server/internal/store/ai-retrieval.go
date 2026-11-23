@@ -281,6 +281,17 @@ func aiRetrieveKB(ctx context.Context, tx pgx.Tx, workspaceID string, terms []st
 	return docs, nil
 }
 
+// AIRetrieveConversations returns at most limit resolved conversations of the workspace that best
+// match text, with their masked text, for an AI feature that writes from past answers alone. Run it
+// in the workspace's scoped transaction, like AIRetrieve.
+func AIRetrieveConversations(ctx context.Context, tx pgx.Tx, workspaceID, text string, limit int) ([]AIRetrievedDoc, error) {
+	terms, err := aiTerms(ctx, tx, text)
+	if err != nil {
+		return nil, fmt.Errorf("read AI retrieval terms: %w", err)
+	}
+	return aiRetrieveConversations(ctx, tx, workspaceID, terms, AIRetrievalQuery{Text: text, ConversationLimit: limit})
+}
+
 func aiRetrieveConversations(ctx context.Context, tx pgx.Tx, workspaceID string, terms []string, query AIRetrievalQuery) ([]AIRetrievedDoc, error) {
 	if query.ConversationLimit <= 0 || len(terms) == 0 {
 		return nil, nil

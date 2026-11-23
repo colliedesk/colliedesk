@@ -15,6 +15,7 @@ var errAnswered = errors.New("the create already answered")
 // The operations whose Idempotency-Key is remembered; one key names one request of each.
 const (
 	createKBArticleOperation             = "kb_article"
+	draftKBGapArticleOperation           = "kb_gap_draft"
 	createKBTranslationOperation         = "kb_translation"
 	restoreKBTranslationOperation        = "kb_translation_restore"
 	restoreKBTranslationVersionOperation = "kb_translation_version_restore"

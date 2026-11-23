@@ -39,8 +39,11 @@ func (a *API) shownLanguages(response http.ResponseWriter, request *http.Request
 	return shown, true
 }
 
-// addressKBArticleTranslations fills in the addresses of an article's translations.
+// addressKBArticleTranslations fills in the addresses of an article's translations. Every answer with a
+// whole article passes here, so it also leaves out the conversations an AI draft was written from for a
+// caller who may not read conversations.
 func (a *API) addressKBArticleTranslations(response http.ResponseWriter, request *http.Request, home string, article *domain.KBArticle) bool {
+	hideGapConversations(principal(request), article)
 	if len(article.Translations) == 0 {
 		return true
 	}

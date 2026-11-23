@@ -83,7 +83,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.publishKBTranslationDraft, a.discardKBTranslationDraft,
 		a.getKBSearchReport,
 		a.listHelpCenters, a.createHelpCenter, a.getHelpCenterByID, a.patchHelpCenter, a.deleteHelpCenter,
-		a.listKBGaps, a.getKBGap, a.updateKBGap,
+		a.listKBGaps, a.getKBGap, a.updateKBGap, a.draftKBGapArticle,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

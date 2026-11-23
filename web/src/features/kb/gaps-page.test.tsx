@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
+import { PermissionsContext } from '../../lib/permissions-context';
+import { permissionsOf } from '../../test-roles';
 import { GapsRoute } from './gaps-page';
-import { json, me, serve, summary } from './kb.test.fixture';
+import { article, ids, json, me, refusal, serve, summary } from './kb.test.fixture';
 
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
-afterEach(() => { vi.unstubAllGlobals(); });
+const navigate = vi.hoisted(() => vi.fn());
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }));
+afterEach(() => { navigate.mockReset(); vi.unstubAllGlobals(); });
 
 const invoicesID = '00000000-0000-4000-8000-000000000101';
 const shippingID = '00000000-0000-4000-8000-000000000102';
@@ -24,10 +28,60 @@ const answer = summary(9, 'Download your invoices', 'published');
 // rowsOf is the gaps of the list, not the kind labels and signals listed inside each one.
 const rowsOf = (list: HTMLElement) => within(list).getAllByRole('listitem').filter((row) => row.parentElement === list);
 
-function open() {
+function open(permissions?: string[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><GapsRoute /></QueryClientProvider>);
+  const wrap = (children: ReactNode) => permissions ? <PermissionsContext.Provider value={permissions}>{children}</PermissionsContext.Provider> : children;
+  render(<QueryClientProvider client={client}>{wrap(<GapsRoute />)}</QueryClientProvider>);
 }
+
+const shippingRoutes = {
+  'GET /api/v1/auth/me': () => json(200, me),
+  'GET /api/v1/kb/gaps': () => json(200, { items: [shipping] }),
+  [`GET /api/v1/kb/gaps/${shippingID}`]: () => json(200, { ...shipping, signal_count: 1, signals: [{ kind: 'chat_handoff', text: 'do you ship to canada', created_at: '2026-11-21T09:00:00Z' }] }),
+};
+const drafted = article({
+  title: 'Shipping to Canada', status: 'draft',
+  gap_source: { gap_id: shippingID, conversations: [{ conversation_id: '00000000-0000-4000-8000-000000000201', display_ref: '#41', subject: 'Do you ship to Canada?' }] },
+});
+
+test('"Draft an article" has the AI write a draft from the gap and opens it in the editor', async () => {
+  const calls = serve({ ...shippingRoutes, [`POST /api/v1/kb/gaps/${shippingID}/draft`]: () => json(201, drafted) });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'shipping to canada' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Draft an article' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/knowledge/articles/$articleId', params: { articleId: ids.article } }));
+  const posts = calls.filter((call) => call.method === 'POST');
+  expect(posts.map((call) => call.path)).toEqual([`/api/v1/kb/gaps/${shippingID}/draft`]);
+  expect(posts[0].headers['Idempotency-Key']).toMatch(/.{16,}/);
+});
+
+test('a draft the AI may not write says why in the server\'s words, and the button works again', async () => {
+  const answers = [
+    refusal(409, 'ai_feature_off', 'This AI feature is off in this workspace, or its provider is gone. An admin turns it on in Settings → Built-in AI.'),
+    refusal(402, 'ai_allowance_reached', 'This month\'s included AI is used up. Add your own provider in Settings → Built-in AI, or move to a larger plan.'),
+    json(502, { error: { code: 'ai_failed', message: 'The model gave no usable answer.' } }),
+  ];
+  serve({ ...shippingRoutes, [`POST /api/v1/kb/gaps/${shippingID}/draft`]: () => answers.shift() ?? json(500) });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'shipping to canada' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Draft an article' }));
+  expect(await screen.findByText('This AI feature is off in this workspace, or its provider is gone. An admin turns it on in Settings → Built-in AI.')).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Draft an article' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Draft an article' }));
+  expect(await screen.findByText('This month\'s included AI is used up. Add your own provider in Settings → Built-in AI, or move to a larger plan.')).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Draft an article' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Draft an article' }));
+  expect(await screen.findByText('The article could not be drafted. Try again in a moment.')).toBeInTheDocument();
+  expect(navigate).not.toHaveBeenCalled();
+});
+
+test('a role that may not create articles is not offered a draft, and still dismisses a gap', async () => {
+  serve(shippingRoutes);
+  open(permissionsOf('admin').filter((permission) => permission !== 'kb_articles:create'));
+  fireEvent.click(await screen.findByRole('button', { name: 'shipping to canada' }));
+  expect(await screen.findByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Draft an article' })).not.toBeInTheDocument();
+});
 
 test('the gaps page ranks what readers did not find, and a row opens its signals and links it to an article', async () => {
   let open_ = [invoices, shipping];

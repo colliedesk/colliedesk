@@ -39,7 +39,9 @@ class Shards(unittest.TestCase):
     def test_large_latency_fixtures_have_a_separate_runner(self):
         listing = self.listing + ('TestInboxListLatencyBudget\nTestPendingAgentRequestsLatencyBudget\n'
                                   'TestStorageUsageStaysFastWithAHugeAttachmentTable\n'
-                                  'TestTimelineReadWithHeavyHTMLMailStaysInBudget\n')
+                                  'TestTimelineReadWithHeavyHTMLMailStaysInBudget\n'
+                                  'TestAPageNeverWaitsOnAHangingAnalyticsServiceAndTheFailureIsShown\n'
+                                  'TestAnArticlePageNeverWaitsOnTheViewWrite\n')
         patterns = [run('go-test-shard.py', str(i), '3', stdin=listing).stdout.strip()
                     for i in range(1, 4)]
         # The job runs a line starting 'gates ' with go test -p 1: one package's gates at a time.
@@ -47,7 +49,9 @@ class Shards(unittest.TestCase):
         patterns = [pattern.removeprefix('gates ').split(' ')[0] for pattern in patterns]
         for name in ['TestInboxListLatencyBudget', 'TestPendingAgentRequestsLatencyBudget',
                      'TestStorageUsageStaysFastWithAHugeAttachmentTable',
-                     'TestTimelineReadWithHeavyHTMLMailStaysInBudget']:
+                     'TestTimelineReadWithHeavyHTMLMailStaysInBudget',
+                     'TestAPageNeverWaitsOnAHangingAnalyticsServiceAndTheFailureIsShown',
+                     'TestAnArticlePageNeverWaitsOnTheViewWrite']:
             self.assertFalse(any(re.search(p, name) for p in patterns[:-1]))
             self.assertRegex(name, patterns[-1])
         self.assertNotRegex('TestAlpha', patterns[-1])

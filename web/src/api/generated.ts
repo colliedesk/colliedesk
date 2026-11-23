@@ -4236,6 +4236,25 @@ export interface paths {
         patch: operations["updateKBGap"];
         trace?: never;
     };
+    "/api/v1/kb/gaps/{id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Has the reply-draft model write an article for the gap and keeps it as a draft, never published: publish it with the normal publish call (`kb_articles:publish`, review gate and approvals). The model reads the gap's masked signals and up to 8 resolved conversations of the workspace that match it best, masked (no email address, no run of 6 or more digits); the answer names them in `gap_source`. The article goes to `collection_id`, else to the first collection; 400 when the workspace has none. It counts against the workspace's AI limits like a reply draft: 409 `ai_feature_off` when no model writes reply drafts, 402 `ai_allowance_reached` when the server's provider spent this month's allowance, 429 `ai_drafts_rate_limited` past 30 drafts a minute, 502 `ai_failed` when the model gave no usable answer. */
+        post: operations["draftKBGapArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/trash": {
         parameters: {
             query?: never;
@@ -9057,6 +9076,19 @@ export interface components {
             ai_exclusion: null | components["schemas"]["KBArticleAIExclusion"];
             /** @description Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through. */
             missing_media?: string[];
+            gap_source?: components["schemas"]["KBArticleGapSource"];
+        };
+        /** @description Only on an article the AI drafted from a knowledge gap (POST /api/v1/kb/gaps/{id}/draft): the gap and the resolved conversations the draft was written from, at most 8. conversations is empty for a caller without conversations:read. */
+        KBArticleGapSource: {
+            /** Format: uuid */
+            gap_id: string;
+            conversations: {
+                /** Format: uuid */
+                conversation_id: string;
+                /** @description The conversation's number as the team sees it, such as #42. */
+                display_ref: string;
+                subject: string;
+            }[];
         };
         /** @description The unpublished changes of a published article: every field as it will be once published. */
         KBArticleDraft: {
@@ -21661,6 +21693,59 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    draftKBGapArticle: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description A live collection of the workspace; the first collection when left out.
+                     */
+                    collection_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The article an earlier request with the same Idempotency-Key wrote; the model was not called again */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            /** @description The draft article */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+            429: components["responses"]["AIChecksRateLimited"];
+            502: components["responses"]["BadGateway"];
         };
     };
     listTrashedKBArticles: {

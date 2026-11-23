@@ -399,6 +399,33 @@ reads), `store/kb-gaps-place.go` (filing a signal, the automatic fix), `store/kb
 - **Retention and export.** Signals stay after their search ages out or their article is purged
   (they are already masked). A deleted chat deletes its signals. Gaps are not in the export.
 
+### Drafting an article from a gap
+
+Code: `ai/kb_gap_draft.go` (`DraftFromKBGap`), `httpapi/kb-gap-draft-handlers.go`,
+`store/kb-article-gap-source.go`, `store.AIRetrieveConversations`, MCP `colliedesk_kb_gap_draft`, web
+`features/kb/article-sources.tsx`.
+
+- **Same plumbing as a reply draft.** The draft slot's model, the same allowance gate and usage row,
+  and the same refusals (`writeAIError`: 409 `ai_feature_off`, 402 `ai_allowance_reached`). The gate
+  runs before the gap is read, so with AI off an unknown gap answers 409, not 404.
+- **Only masked text reaches the model.** The gap's signals are masked when filed; conversations come
+  from `ai_retrieval_docs` (masked when indexed), resolved only, this workspace only, at most
+  `KBGapDraftConversations` (8). Customer text sits inside `<untrusted_customer_content>` and
+  `<past_conversation>`, framed as data in the system turn, like the inbox draft.
+- **One paid answer per press.** The route goes through `createOnce` keyed on the gap and the
+  collection; a refusal is never remembered (`errAnswered`), so the same key after a failure asks again.
+- **The source is on the article.** `source_meta.gap` holds `id` and `conversation_ids`, best match
+  first; answers carry `gap_source` (`gap_id`, each conversation's `display_ref` and subject). `addressKBArticleTranslations`,
+  which every whole-article answer passes, empties the list for a caller without `conversations:read`.
+  A conversation deleted later drops out of `gap_source`; its id stays in `source_meta`. In MCP,
+  `colliedesk_kb_gap_draft` and `colliedesk_kb_article_get` carry it (`kbGapSourceView`, each subject
+  under `untrusted_customer_content`); the other article tools leave it out.
+- **Trap: `source_meta` used to mean imported.** The primary-language check of a Freshdesk import
+  counted any article with `source_meta` as imported. It now counts one with a `gap` key as the
+  team's own; a new `source_meta` key that is not an import needs the same check.
+- **Never published by AI.** The article is always created as `draft`; publishing is the normal call
+  with `kb_articles:publish` and the review gate.
+
 ## Views and uses
 
 Migration `20261121091907-kb-article-views-and-uses`; code `pageview/` (who is a reader, the event),

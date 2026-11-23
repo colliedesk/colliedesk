@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { json, request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import type { Generated } from '../../api/schemas';
+import { kbArticleSchema } from './kb-api';
 
 // Knowledge gaps: what readers asked for and did not find, grouped by their words.
 
@@ -32,4 +33,7 @@ export const gapsApi = {
   get: (id: string) => request(`/api/v1/kb/gaps/${id}`, detailSchema),
   update: (id: string, value: RequestBody<'updateKBGap'>) =>
     request(`/api/v1/kb/gaps/${id}`, gapSchema, { method: 'PATCH', body: json<'updateKBGap'>(value) }),
+  // draft has the AI write the missing article as a draft in the first collection; key names the press.
+  draft: (id: string, key: string) =>
+    request(`/api/v1/kb/gaps/${id}/draft`, kbArticleSchema, { method: 'POST', headers: { 'Idempotency-Key': key } }),
 };

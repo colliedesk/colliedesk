@@ -209,6 +209,27 @@ func TestSolutionsTheAccountsPrimaryLanguageBecomesTheHelpCentersOnlyWhenSafe(t 
 	}
 }
 
+// An article the AI drafted from a knowledge gap was written here, not imported: the primary language stays.
+func TestSolutionsKeepThePrimaryLanguageOfAnArticleDraftedFromAGap(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	ctx := context.Background()
+	collection, err := store.New(env.pool).CreateKBCollection(ctx, env.workspaceID, store.Actor{}, store.KBCollectionInput{Name: "Ours"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.New(env.pool).CreateKBArticle(ctx, env.workspaceID, store.Actor{}, store.KBArticleInput{CollectionID: collection.ID,
+		Title: "Clear a paper jam", BodyMD: "Written here from a gap.", GapID: "00000000-0000-4000-8000-000000000001", GapConversationIDs: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	env.editSolutions(func(fixture map[string]any) {
+		fixture["settings"] = map[string]any{"primary_language": "de", "supported_languages": []any{"es"}, "portal_languages": []any{"es"}}
+	})
+	report := env.mustRun(t)
+	if got := env.kbLanguages(t); got != "en es:true" || warningIDs(report, "kb_primary_language_differs") != "de" {
+		t.Fatalf("languages = %s warnings = %+v, want English kept for the team's own article", got, report.Warnings)
+	}
+}
+
 // Undo gives the help center back the primary language it had before the import made Freshdesk's its own.
 func TestUndoGivesBackThePrimaryLanguageTheImportSet(t *testing.T) {
 	env := newImportEnv(t).withSolutions()

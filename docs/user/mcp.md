@@ -167,7 +167,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_articles_search` | Lists or searches the articles, without their text, a page at a time, each with its public address (`url`) to link in a reply | `kb_articles:read` |
 | `colliedesk_kb_articles_export` | Gives the article list, with the same filters, as the CSV the list page downloads, and the link to the whole file | `kb_articles:read` |
 | `colliedesk_kb_tags_list` | Lists the tags of the articles, by name, with how many articles have each | `kb_articles:read` |
-| `colliedesk_kb_article_get` | Reads one article with its whole Markdown text and its public address (`url`), also from the trash | `kb_articles:read` |
+| `colliedesk_kb_article_get` | Reads one article with its whole Markdown text and its public address (`url`), also from the trash, and for a draft from a gap the conversations it was written from | `kb_articles:read` |
 | `colliedesk_kb_article_create` | Writes an article, as a draft or published | `kb_articles:create` |
 | `colliedesk_kb_article_update` | Edits, moves, publishes or unpublishes an article; every change is a version | `kb_articles:update` |
 | `colliedesk_kb_article_delete` | Moves an article to the trash and off the help center. Restorable for 30 days, so not marked destructive | `kb_articles:delete` |
@@ -186,6 +186,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_gaps_list` | Lists what readers asked for and did not find, grouped by their words, most askers in 30 days first | `kb_articles:read` |
 | `colliedesk_kb_gap_get` | Reads one knowledge gap with its newest signals: what each reader searched, wrote or asked | `kb_articles:read` |
 | `colliedesk_kb_gap_update` | Links a knowledge gap to the article that answers it, dismisses it or opens it again | `kb_articles:update` |
+| `colliedesk_kb_gap_draft` | Drafts the missing article for a knowledge gap from the resolved conversations that match it | `kb_articles:create` |
 | `colliedesk_kb_article_send_for_review` | Saves an article's or translation's text and asks teammates who may publish to approve it | `kb_articles:update` |
 | `colliedesk_kb_reviews_list` | Lists the reviews waiting for you, or the reviews of one article | `kb_articles:read` |
 | `colliedesk_kb_review_get` | Reads a review with the text proposed, what is live and the line diff between them | `kb_articles:read` |

@@ -926,6 +926,8 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/kb/gaps", auth.PermissionSession},
 		{http.MethodGet, "/api/v1/kb/gaps/{id}", auth.PermissionSession},
 		{http.MethodPatch, "/api/v1/kb/gaps/{id}", auth.PermissionSession},
+		// A draft article written by the AI from a gap and the resolved conversations that match it.
+		{http.MethodPost, "/api/v1/kb/gaps/{id}/draft", auth.PermissionSession},
 	}
 }
 

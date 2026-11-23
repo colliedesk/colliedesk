@@ -143,6 +143,7 @@ var routesReachingOutside = map[string]string{
 	"POST /api/v1/ai/chat/preview":                               "AI provider",
 	"POST /api/v1/conversations/{id}/ai-drafts":                  "AI provider",
 	"POST /api/v1/conversations/{id}/ai-triage":                  "AI provider",
+	"POST /api/v1/kb/gaps/{id}/draft":                            "AI provider",
 	"POST /api/v1/intake/gatherings/{id}/requeue":                "AI provider",
 	"POST /api/v1/ai/models":                                     "AI provider",
 	"POST /api/v1/ai/providers":                                  "AI provider",
