@@ -32,12 +32,11 @@ type kbState struct {
 	translationsChangedInBoth []string
 	// languagesAdded are the help center languages this run added.
 	languagesAdded []string
-	// portalHelpCenters maps a portal to the help center its categories are on; createdHelpCenters are
-	// the help centers this run made; helpCenters is the mapping for the report.
-	primaryHelpCenter  string
-	portalHelpCenters  map[int64]string
-	createdHelpCenters map[string]bool
-	helpCenters        []KBPortalHelpCenter
+	// portalHelpCenters maps a portal to the help center its categories are on; helpCenters is the
+	// mapping for the report.
+	primaryHelpCenter string
+	portalHelpCenters map[int64]string
+	helpCenters       []KBPortalHelpCenter
 }
 
 func (r *run) kbWriteState() *kbState {
@@ -76,7 +75,7 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 			continue
 		}
 		state.collections["c"+key] = id
-		if err := r.holdOffPrimary(ctx, category.ID, id, helpCenters); err != nil {
+		if err := r.noteStillOnPrimary(ctx, category.ID, id, helpCenters); err != nil {
 			return err
 		}
 	}
@@ -154,7 +153,8 @@ func fitName(name string) string {
 // visibility. An imported collection is never renamed again, so an agent's change survives a rerun; it is
 // only restricted when Freshdesk shows the folder to fewer people. It returns "" when the collection
 // could not be created (recorded in the ledger). A top-level collection is shown on helpCenters (nil: the
-// primary); one an earlier run made is only added to the help centers this run made.
+// primary); one an earlier run made is added to the portals' own help centers among them, never to the
+// primary, so a team that took it off the primary keeps that.
 func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID *string, name, description, visibility string, meta map[string]any,
 	created, updated time.Time, helpCenters []string) (string, error) {
 	target, done, err := r.ledger.done(ctx, entity, key)
@@ -169,7 +169,7 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 			return "", fmt.Errorf("read knowledge base collection: %w", err)
 		}
 		if exists {
-			if err := r.addCollectionHelpCenters(ctx, target, r.kbWriteState().createdIn(helpCenters)); err != nil {
+			if err := r.addCollectionHelpCenters(ctx, target, r.kbWriteState().portalOwn(helpCenters)); err != nil {
 				return "", err
 			}
 			return target, r.restrictKBCollection(ctx, key, target, visibility)
@@ -203,9 +203,9 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 	return id, nil
 }
 
-// holdOffPrimary marks a category held when Freshdesk shows it only on other portals but its collection
-// is still on the primary help center: an earlier run put it there, and moving it is the team's call.
-func (r *run) holdOffPrimary(ctx context.Context, categoryID int64, collectionID string, helpCenters []string) error {
+// noteStillOnPrimary notes a category Freshdesk shows only on other portals whose collection is still on
+// the primary help center: an earlier run put it there, and taking it off is the team's call.
+func (r *run) noteStillOnPrimary(ctx context.Context, categoryID int64, collectionID string, helpCenters []string) error {
 	state := r.kbWriteState()
 	if helpCenters == nil || state.primaryHelpCenter == "" || slices.Contains(helpCenters, state.primaryHelpCenter) {
 		return nil
@@ -218,10 +218,10 @@ func (r *run) holdOffPrimary(ctx context.Context, categoryID int64, collectionID
 		return fmt.Errorf("read knowledge base collection placement: %w", err)
 	}
 	if onPrimary {
-		if r.kb.held == nil {
-			r.kb.held = map[int64]bool{}
+		if r.kb.alsoOnPrimary == nil {
+			r.kb.alsoOnPrimary = map[int64]bool{}
 		}
-		r.kb.held[categoryID] = true
+		r.kb.alsoOnPrimary[categoryID] = true
 	}
 	return nil
 }
@@ -537,14 +537,9 @@ func (r *run) unpublishKBArticle(ctx context.Context, key, target, reason string
 	case err != nil:
 		r.itemFailed(ctx, entityKBArticle, key, "", fmt.Errorf("make the article a draft again (%s): %w", reason, err))
 		return r.internalErr
-	case outcome == store.KBReimported && reason == draftSeveralPortals:
-		state.unpublished = append(state.unpublished, key)
-		r.warn("kb_article_unpublished", "Freshdesk now shows this article's category only on another portal, but its collection is still on the primary help center, so it is a draft again in Colliedesk.", key)
 	case outcome == store.KBReimported:
 		state.unpublished = append(state.unpublished, key)
 		r.warn("kb_article_unpublished", "This article is no longer public in Freshdesk (its category's portal changed), so it is a draft again in Colliedesk.", key)
-	case outcome == store.KBKept && reason == draftSeveralPortals:
-		r.warn("kb_article_published_but_not_public", "This article is published on the primary help center, but Freshdesk now shows its category only on another portal. Someone changed it in Colliedesk since the import, so it was left published; move its collection to the right help center.", key)
 	case outcome == store.KBKept:
 		r.warn("kb_article_published_but_not_public", "This article is published in Colliedesk, but Freshdesk no longer shows it to everyone (its category's portal changed). Someone changed it in Colliedesk since the import, so it was left published; check whether it should be public.", key)
 	case outcome == store.KBGone:

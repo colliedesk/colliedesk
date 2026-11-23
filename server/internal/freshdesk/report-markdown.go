@@ -173,7 +173,7 @@ var draftReasons = map[string]string{
 	draftInFreshdesk:    "a draft in Freshdesk",
 	draftNotInPortal:    "its category is in no portal",
 	draftPortalUnknown:  "its category names no portal while others do, so its portal is unknown",
-	draftSeveralPortals: "its category is now only in another Freshdesk portal, but its collection is still on the primary help center",
+	draftSeveralPortals: "its category was in another Freshdesk portal (an earlier import)",
 }
 
 func writeKnowledgeBase(b *strings.Builder, kb KnowledgeBaseCount) {

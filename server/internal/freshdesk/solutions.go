@@ -94,8 +94,8 @@ const (
 	draftInFreshdesk   = "draft_in_freshdesk"
 	draftNotInPortal   = "category_not_in_any_portal"
 	draftPortalUnknown = "category_portal_unknown"
-	// draftSeveralPortals: the category is shown only on other portals now, but its collection is still on
-	// the primary help center (kb.held). Imports that published one portal's articles used it too.
+	// draftSeveralPortals: earlier imports, which published one portal's articles, drafted the others'
+	// with it. No run sets it now; keptForAnotherPortal republishes those drafts.
 	draftSeveralPortals = "category_in_another_portal"
 	// kbCollectionLevelMax is how deep the import nests: category, folder, subfolder. Collections go
 	// deeper (domain.MaxKBDepth), but the import keeps the depth it always had so a re-run places each
@@ -152,9 +152,9 @@ type knowledgeBase struct {
 	// they could not be read.
 	portalNames     map[int64]string
 	portalNamesNote string
-	// held are the categories shown only on other portals' help centers now whose collection an earlier
-	// run put on the primary: their articles stay drafts until the team moves the collection.
-	held map[int64]bool
+	// alsoOnPrimary are the categories Freshdesk shows only on other portals now whose collection an
+	// earlier run put on the primary: the collection is on those portals' help centers too.
+	alsoOnPrimary map[int64]bool
 	// failures are lists that could not be read (entity, Freshdesk id, error).
 	failures []Failure
 	// unverified explains why the counts could not all be compared.
@@ -453,8 +453,6 @@ func (kb *knowledgeBase) draftReason(article kbArticle) string {
 		return draftPortalUnknown
 	case len(*category.VisibleInPortals) == 0:
 		return draftNotInPortal
-	case kb.held[category.ID]:
-		return draftSeveralPortals
 	}
 	return ""
 }

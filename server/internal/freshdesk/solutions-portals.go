@@ -137,19 +137,20 @@ func (kb *knowledgeBase) portalKeys() []string {
 	return keys
 }
 
-// heldCategoriesNote names the held categories, or "".
-func heldCategoriesNote(kb *knowledgeBase) string {
+// alsoOnPrimaryNote names the categories still on the primary help center though Freshdesk no longer shows
+// them on its portal, or "".
+func alsoOnPrimaryNote(kb *knowledgeBase) string {
 	var names []string
 	for _, category := range kb.categories {
-		if kb.held[category.ID] {
+		if kb.alsoOnPrimary[category.ID] {
 			names = append(names, fmt.Sprintf("%s (Freshdesk %d)", category.Name, category.ID))
 		}
 	}
 	if len(names) == 0 {
 		return ""
 	}
-	return "Freshdesk now shows " + strings.Join(names, ", ") + " only on another portal, but an earlier import put its collection on the primary help center, so its articles are drafts. " +
-		"Choose the help centers in the collection's \"Shown on\" setting, then publish the articles."
+	return "Freshdesk now shows these categories only on another portal: " + strings.Join(names, ", ") + ". Each collection is now on its portal's help center and still on the primary help center, where an earlier import put it. " +
+		"To take one off the primary, change that collection's \"Shown on\" setting."
 }
 
 // unnamedPortalsNote says which portals Freshdesk gave no name, or "".
@@ -228,7 +229,6 @@ func (r *run) ensurePortalHelpCenters(ctx context.Context) error {
 	}
 	state.primaryHelpCenter = primaryID
 	state.portalHelpCenters = map[int64]string{}
-	state.createdHelpCenters = map[string]bool{}
 	for index, portal := range plan {
 		key := strconv.FormatInt(portal.id, 10)
 		entry := portalEntry(portal)
@@ -265,6 +265,10 @@ func (r *run) ensurePortalHelpCenters(ctx context.Context) error {
 			entry.Status, entry.HelpCenterID, entry.HelpCenterName = portalOverLimit, primaryID, primaryName
 			state.portalHelpCenters[portal.id] = primaryID
 			r.warn("kb_portal_over_help_center_limit", fmt.Sprintf("A workspace has at most %d help centers, so this Freshdesk portal's categories were put on the primary help center.", domain.MaxHelpCenters), key)
+			// Over the limit is not a failure: a failure an earlier run left for this portal no longer fails the report.
+			if err := r.ledger.mark(ctx, nil, ledgerMark{entity: entityKBHelpCenter, sourceID: key, status: ledgerSkipped, errText: portalOverLimit}); err != nil {
+				return err
+			}
 		case err != nil:
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -278,7 +282,6 @@ func (r *run) ensurePortalHelpCenters(ctx context.Context) error {
 		default:
 			entry.Status, entry.HelpCenterID, entry.HelpCenterName, entry.Handle = portalCreated, id, name, handle
 			state.portalHelpCenters[portal.id] = id
-			state.createdHelpCenters[id] = true
 		}
 		state.helpCenters = append(state.helpCenters, entry)
 	}
@@ -364,11 +367,11 @@ func (state *kbState) categoryHelpCenters(category fdSolutionCategory) []string 
 	return ids
 }
 
-// createdIn keeps the help centers of ids this run made.
-func (state *kbState) createdIn(ids []string) []string {
+// portalOwn keeps the help centers of ids the import made for a portal: every one but the primary.
+func (state *kbState) portalOwn(ids []string) []string {
 	var out []string
 	for _, id := range ids {
-		if state.createdHelpCenters[id] {
+		if id != state.primaryHelpCenter {
 			out = append(out, id)
 		}
 	}

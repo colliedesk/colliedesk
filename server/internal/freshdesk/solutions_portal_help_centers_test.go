@@ -262,7 +262,31 @@ func TestAPortalKeepsItsOwnHelpCenterWhenThePrimaryPortalHasNoCategoryLeft(t *te
 	}
 }
 
-func TestACategoryMovedToAnotherPortalKeepsItsArticlesOffThePrimaryHelpCenter(t *testing.T) {
+func TestAPortalThatFailedOnceAndIsNowOverTheLimitNoLongerFailsTheReport(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	if _, err := env.pool.Exec(context.Background(), `ALTER TABLE help_centers ADD CONSTRAINT refuse_hardware_store CHECK (name <> 'Hardware store')`); err != nil {
+		t.Fatal(err)
+	}
+	env.editSolutions(twoPortals)
+	if report := env.mustRun(t); reportedPortals(report) != "6:primary, 5:failed" {
+		t.Fatalf("first run portals = %s", reportedPortals(report))
+	}
+	if _, err := env.pool.Exec(context.Background(), `ALTER TABLE help_centers DROP CONSTRAINT refuse_hardware_store`); err != nil {
+		t.Fatal(err)
+	}
+	for n := range domain.MaxHelpCenters - 1 {
+		env.addWorkspaceHelpCenter(t, fmt.Sprintf("Team %d", n+1), fmt.Sprintf("team-%d", n+1))
+	}
+	report := env.mustRun(t)
+	if got := reportedPortals(report); got != "6:primary, 5:over_limit" {
+		t.Fatalf("report portals = %s", got)
+	}
+	if report.Status != freshdesk.StatusOK {
+		t.Fatalf("status=%s failures=%+v", report.Status, report.Failures)
+	}
+}
+
+func TestACategoryMovedToAnotherPortalIsShownOnThatPortalsHelpCenter(t *testing.T) {
 	env := newImportEnv(t).withSolutions()
 	env.editSolutions(func(fixture map[string]any) {
 		twoPortals(fixture)
@@ -286,12 +310,14 @@ func TestACategoryMovedToAnotherPortalKeepsItsArticlesOffThePrimaryHelpCenter(t 
 		fixture["category_folders"].(map[string]any)["3"].([]any)[0].(map[string]any)["articles_count"] = 2.0
 	})
 	report := env.mustRun(t)
-	if got := strings.Join(report.KnowledgeBase.Drafts["category_in_another_portal"], ","); got != "301,302" {
+	if drafts := report.KnowledgeBase.Drafts["category_in_another_portal"]; len(drafts) != 0 {
 		t.Fatalf("drafts = %v, published = %v", report.KnowledgeBase.Drafts, report.KnowledgeBase.Published)
 	}
-	if got := env.shownTitles(t, ""); strings.Contains(got, "printer") {
-		t.Fatalf("primary publishes %s", got)
+	hardware := env.helpCenters(t)[1].ID
+	if got := env.shownTitles(t, hardware); !strings.Contains(got, "Pair the printer") || !strings.Contains(got, "Clean the printer") {
+		t.Fatalf("hardware store publishes %s", got)
 	}
+	// The earlier import put the collection on the primary; taking it off is the team's call, and the note says so.
 	if notes := strings.Join(report.KnowledgeBase.Notes, "\n"); !strings.Contains(notes, "Hardware") {
 		t.Fatalf("notes = %s", notes)
 	}

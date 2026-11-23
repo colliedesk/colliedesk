@@ -285,7 +285,7 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	if kb.portalNamesNote != "" {
 		count.Notes = append(count.Notes, kb.portalNamesNote)
 	}
-	if note := heldCategoriesNote(kb); note != "" {
+	if note := alsoOnPrimaryNote(kb); note != "" {
 		count.Notes = append(count.Notes, note)
 	}
 	count.Products = kb.products

@@ -387,11 +387,15 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   `help_center_portal` (CLI flag, import option) is accepted from earlier clients and ignored.
   The primary is the help center the ledger maps, not the portal with the most categories now: when
   no mapped portal is left on it, no portal is (`primaryIndex` stays -1 once anything is mapped).
-  A category whose portals no longer include the primary while its collection is still on it is
-  held (`kb.held`): its articles are drafts (`category_in_another_portal`) and a note names it;
-  moving the collection is the team's call (#768). A draft an earlier import made for that reason
-  alone is imported again, published, on the unchanged-article path (`keptForAnotherPortal`).
-  A `kb_help_center` row that failed fails the report. Links still resolve against the primary (#769).
+  A collection an earlier run made is added to the non-primary help centers its category is on now
+  (`portalOwn`, `AddImportedKBCollectionHelpCenters`), never to the primary, so a team that took it
+  off the primary keeps that. A category whose portals no longer include the primary while its
+  collection is still on it stays there too (`kb.alsoOnPrimary`) and a note names it; taking it off
+  is the team's call (#768). No run makes `category_in_another_portal` drafts now; one an earlier
+  import made for that reason alone is imported again, published, on the unchanged-article path
+  (`keptForAnotherPortal`). A `kb_help_center` row that failed fails the report; a portal now over
+  the limit marks its row `skipped`, so an earlier failure stops counting. Links still resolve
+  against the primary (#769).
 - **Images** go through the same host allowlist, type sniffing, 5 MiB limit and SHA-256 as message
   images, into `kb_media` with `counted` false (an imported file, like imported attachments), and
   the `src` becomes `/api/v1/kb/images/<id>` before converting. 404/410 is gone (ledger `skipped`,
