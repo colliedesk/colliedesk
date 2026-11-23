@@ -101,8 +101,10 @@ func TestSavingAPublishedTranslationKeepsTheHelpCenterOnThePublishedText(t *test
 				t.Errorf("%s: AI reads the draft: %+v", step, doc)
 			}
 		}
+		// The help chat reads the knowledge base as the reader of the help center its channel serves.
+		primary := queryString(t, f.pool, `SELECT primary_help_center_id($1)::text`, workspace)
 		var chat []store.ChatKBArticle
-		if err := database.New(f.pool).InWorkspace(context.Background(), workspace, func(tx pgx.Tx) error {
+		if err := database.New(f.pool).InHelpChat(context.Background(), workspace, primary, func(tx pgx.Tx) error {
 			var err error
 			chat, err = store.ChatKBArticlesIn(context.Background(), tx, workspace, true, "fr")
 			return err
