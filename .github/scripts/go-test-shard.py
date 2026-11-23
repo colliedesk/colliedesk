@@ -65,7 +65,9 @@ longest_first = lambda chosen: sorted(chosen, key=lambda name: (-weight[name], n
 # They are named ...LatencyBudget, ...StaysInBudget, ...StayInBudget, ...StaysFast... or ...CostsLinearTime;
 # beside other packages' tests one measured 389 ms against 200 ms, another a 266 ms p95 against 100 ms,
 # and TestKnowledgeBaseSearchVectorCostsLinearTime 203 ms against 200 ms (run 40098866967).
-TIMED = ('LatencyBudget', 'StaysInBudget', 'StayInBudget', 'StaysFast', 'CostsLinearTime')
+# The ...NeverWaitsOn... page tests time 20 visits against 100 ms each; beside other packages the first
+# page measured 366 ms and 344 ms (run 45129421310, attempts 1 and 2).
+TIMED = ('LatencyBudget', 'StaysInBudget', 'StayInBudget', 'StaysFast', 'CostsLinearTime', 'NeverWaitsOn')
 latency = [name for name in names if any(marker in name for marker in TIMED)]
 regular = [name for name in names if name not in latency]
 regular_total = args.total - args.latency_shards
