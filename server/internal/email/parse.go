@@ -46,6 +46,9 @@ type Inbound struct {
 	Body           string
 	Attachments    []domain.EmailAttachment
 	Authentication string
+	// SenderAligned is true when the trusted server's stamp vouches for the From domain itself: DMARC
+	// passed for it, or a DKIM signature of exactly that domain passed. From alone proves nothing.
+	SenderAligned bool
 	// Platform is true when the message arrived through the platform forwarder (the hosted MX), not
 	// through a workspace inbound secret whose holder writes the raw message.
 	Platform bool
@@ -116,6 +119,7 @@ func Parse(raw []byte, trustedAuthServID string) (Inbound, error) {
 		parsed.BodyHTML = strings.ToValidUTF8(strings.ReplaceAll(inlineImages(content.html, content.files), "\x00", ""), "")
 	}
 	parsed.Authentication = authentication(header["Authentication-Results"], trustedAuthServID)
+	parsed.SenderAligned = senderAligned(trustedStamp(header["Authentication-Results"], trustedAuthServID), Domain(parsed.FromAddress))
 	parsed.DropReason = dropReason(header, parsed.FromAddress)
 	return parsed, nil
 }
