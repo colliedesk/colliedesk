@@ -991,6 +991,43 @@ searches, votes and chats they come from are. An AI agent works the same list wi
 `colliedesk_kb_gaps_list`, `colliedesk_kb_gap_get` and `colliedesk_kb_gap_update`, and drafts an
 article with `colliedesk_kb_gap_draft`.
 
+## Out of date articles
+
+When a teammate sends a reply that says something an article says differently, the article may no
+longer be true. Colliedesk checks every reply your team sends and marks such an article
+**May be out of date**: in the list of articles, next to its title, and in the editor (on the right;
+on a phone, under the text).
+
+It needs [Triage suggestions](ai.md#triage-suggestions) on. It uses the same small model, and only
+on channels where triage is not Off. How it works:
+
+1. A reply is sent. Imported replies, notices and the replies intake sends on its own are not checked.
+2. Colliedesk looks for the one published article the reply is about, the way AI drafts find
+   articles. Most replies match none closely, and then no model is asked.
+3. For a close match the model reads that article and the reply, nothing the customer wrote, and
+   answers one question: does the reply contradict the article? A yes comes with one sentence that
+   quotes both sides.
+
+The editor's box lists the replies that disagree, open first: the start of each reply, who sent it
+and when, the model's sentence and its conversation. A teammate who may not read conversations
+(`conversations:read`) sees the reply without the link. Fix the article if the reply is right.
+
+**Clear the flag** (with the right to edit articles, `kb_articles:update`) marks the article up to
+date again. The box then says who cleared it and when; the next time the article opens, the box is
+gone. The cleared replies stay on record, with who cleared them and when, for an AI agent
+(`colliedesk_kb_article_conflicts_list`). A clear cannot be undone; a new reply that contradicts the
+article marks it again.
+
+At most 50 replies of a workspace are checked a day (UTC); past that, the day's other replies are
+not checked. Each check counts in **Settings → AI & agents → Usage** as triage, like a suggestion.
+A check does not count toward the automatic runs of [Limits](ai.md#limits). With no provider for
+triage, or with the month's included AI used up, nothing is checked and nothing fails. The flags are
+not in the [export](export.md) yet.
+
+An AI agent reads the replies with `colliedesk_kb_article_conflicts_list` and clears the flag with
+`colliedesk_kb_article_conflicts_clear`. `colliedesk_kb_article_get` and the article lists carry
+`open_conflicts`: above 0, the article may be out of date.
+
 ## Keep an article away from AI
 
 AI features (reply drafts and triage suggestions, once an admin turns them on) find the published

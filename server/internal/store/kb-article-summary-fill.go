@@ -9,10 +9,10 @@ import (
 )
 
 // fillKBSummaries sets what scanKBSummary leaves out of articles: their collections, tags, translations,
-// author and review state. One query each for the whole page.
+// author, review state and open conflicts. One query each for the whole page.
 func fillKBSummaries(ctx context.Context, tx pgx.Tx, workspaceID string, items ...*domain.KBArticleSummary) error {
 	for _, fill := range []func(context.Context, pgx.Tx, string, ...*domain.KBArticleSummary) error{
-		fillKBCollectionIDs, fillKBTags, fillKBLanguages, fillKBAuthors, fillKBReviewStates,
+		fillKBCollectionIDs, fillKBTags, fillKBLanguages, fillKBAuthors, fillKBReviewStates, fillKBOpenConflicts,
 	} {
 		if err := fill(ctx, tx, workspaceID, items...); err != nil {
 			return err

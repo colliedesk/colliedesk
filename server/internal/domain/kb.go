@@ -142,6 +142,9 @@ type KBArticleSummary struct {
 	ReviewState *string `json:"review_state"`
 	// Votes are its readers' answers, imported ones included; only the article list fills them in.
 	Votes *KBVoteTally `json:"votes,omitempty"`
+	// OpenConflicts counts the sent replies the small model found to contradict it that no editor
+	// cleared yet (KBArticleConflicts); above 0 the article may be out of date.
+	OpenConflicts int `json:"open_conflicts"`
 }
 
 // KBArticleLanguage is one translation of an article as lists show it.

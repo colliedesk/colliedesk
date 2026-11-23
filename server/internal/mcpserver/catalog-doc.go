@@ -124,6 +124,8 @@ var toolDocs = map[string]string{
 	"colliedesk_kb_article_draft_publish":            "Puts the unpublished changes of a published article or translation on the help center",
 	"colliedesk_kb_article_votes_get":                "Reads an article's \"Was this article helpful?\" counts, each reader's vote and what they said was missing",
 	"colliedesk_kb_article_votes_reset":              "Starts an article's helpful count again from 0; the earlier counts stay under resets",
+	"colliedesk_kb_article_conflicts_list":           "Lists the sent replies the small model found to contradict an article, with the reason and who sent each",
+	"colliedesk_kb_article_conflicts_clear":          "Clears an article's \"May be out of date\" flag; the cleared replies stay listed with who cleared them",
 	"colliedesk_kb_article_stats":                    "Counts an article's help center views and the sent replies that used it, per day, with those replies' conversations",
 	"colliedesk_kb_search_report":                    "Lists what readers searched for on the help center in 7 days: top words, words with no result, words whose results nobody opened",
 	"colliedesk_kb_gaps_list":                        "Lists what readers asked for and did not find, grouped by their words, most askers in 30 days first",
