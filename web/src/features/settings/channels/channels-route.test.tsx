@@ -21,12 +21,14 @@ const mocks = vi.hoisted(() => {
     email: vi.fn(), emailSecret: vi.fn(), emailVerifyDomain: vi.fn(), emailConnectGmail: vi.fn(), emailDisconnectGmail: vi.fn(),
     emailConnectMicrosoft: vi.fn(), emailDisconnectMicrosoft: vi.fn(), emailTestMessage: vi.fn() };
   const aiApi = { channel: vi.fn(), setChannel: vi.fn(), settings: vi.fn() };
-  return { api, channelsApi, aiApi, InvalidRequestError, ConflictError, PlanLimitError, UnauthorizedError };
+  const helpCentersApi = { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() };
+  return { api, channelsApi, aiApi, helpCentersApi, InvalidRequestError, ConflictError, PlanLimitError, UnauthorizedError };
 });
 vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError, PlanLimitError: mocks.PlanLimitError, UnauthorizedError: mocks.UnauthorizedError }));
 vi.mock('../../../api/channels', () => ({ channelsApi: mocks.channelsApi }));
 vi.mock('../../../api/ai', () => ({ aiApi: mocks.aiApi }));
-const { api, channelsApi, aiApi } = mocks;
+vi.mock('../../kb/help-centers-api', async (importOriginal) => ({ ...(await importOriginal<object>()), helpCentersApi: mocks.helpCentersApi }));
+const { api, channelsApi, aiApi, helpCentersApi } = mocks;
 
 const EMAIL = '44444444-4444-4444-8444-444444444444';
 const FORM = '55555555-5555-4555-8555-555555555555';
@@ -1055,4 +1057,43 @@ test('text typed on one channel never reaches another: going to channel B shows 
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledTimes(1));
   expect(channelsApi.update).toHaveBeenCalledWith(B, { config: expect.objectContaining({ greeting: 'Typed for B' }) });
   expect(JSON.stringify(channelsApi.update.mock.calls)).not.toContain('Typed for A');
+});
+
+
+const PRIMARY_CENTER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const HARDWARE_CENTER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const helpCenter = (id: string, name: string, primary: boolean) => ({
+  id, name, handle: primary ? null : 'hardware', primary, enabled: true, title: name, locale: 'en', require_approval: false, show_tags: false,
+  content_version: 1, updated_at: null, url: primary ? 'https://desk.example.com/help/beta-desk' : 'https://desk.example.com/help/beta-desk/hardware',
+});
+
+test('a web form of a workspace with two help centers chooses the one it serves; the primary is sent as null', async () => {
+  helpCentersApi.list.mockResolvedValue({ help_centers: [helpCenter(PRIMARY_CENTER, 'Main answers', true), helpCenter(HARDWARE_CENTER, 'Hardware', false)], limit: 20 });
+  channelsApi.get.mockResolvedValue({ ...channel('web_form', { help_center_id: null, help_center_name: 'Main answers' }), config: webFormConfig });
+  channelsApi.update.mockResolvedValue({ ...channel('web_form', { help_center_id: HARDWARE_CENTER, help_center_name: 'Hardware' }), config: webFormConfig });
+  show(FORM);
+  const select = await screen.findByRole('combobox', { name: 'Help center' });
+  expect(select).toHaveDisplayValue('Main answers');
+  expect(select).toHaveAccessibleDescription('Conversations this channel opens are marked with this help center. A help chat answers from its articles.');
+  expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual(['Main answers', 'Hardware']);
+  fireEvent.change(select, { target: { value: HARDWARE_CENTER } });
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(FORM, { help_center_id: HARDWARE_CENTER }));
+  fireEvent.change(select, { target: { value: PRIMARY_CENTER } });
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(FORM, { help_center_id: null }));
+});
+
+test('a workspace with one help center, and a channel that serves none, have no help center to choose', async () => {
+  helpCentersApi.list.mockResolvedValue({ help_centers: [helpCenter(PRIMARY_CENTER, 'Main answers', true)], limit: 20 });
+  channelsApi.get.mockResolvedValue({ ...channel('web_form', { help_center_id: null, help_center_name: 'Main answers' }), config: webFormConfig });
+  show(FORM);
+  await screen.findByRole('textbox', { name: 'Name' });
+  await waitFor(() => expect(helpCentersApi.list).toHaveBeenCalled());
+  expect(screen.queryByRole('combobox', { name: 'Help center' })).toBeNull();
+  cleanup();
+  helpCentersApi.list.mockClear();
+  channelsApi.get.mockResolvedValue({ ...channel('email', { help_center_id: null, help_center_name: null }), config: withChannel.channel });
+  show(EMAIL);
+  await screen.findByRole('textbox', { name: 'Name' });
+  expect(screen.queryByRole('combobox', { name: 'Help center' })).toBeNull();
+  expect(helpCentersApi.list).not.toHaveBeenCalled();
 });

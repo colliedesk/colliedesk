@@ -19,6 +19,7 @@ import { SettingsNav } from '../settings-nav';
 import type { SettingsPath } from '../settings-nav-link';
 import type { Shown } from '../settings-nav';
 import { ChannelAITab } from './channel-ai-tab';
+import { ChannelHelpCenterField } from './channel-help-center-field';
 import { channelsMessages as m } from './channels-messages';
 import './channels.css';
 import { useCreateAction } from '../../../api/use-create';
@@ -429,6 +430,7 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
       {channel.status.state === 'waiting' && <p className="notice notice-plain" role="status"><span>{ui?.waitingHelp ?? m.waitingHelp}</span></p>}
       {ui && <ChannelIdentity channel={channel} label={ui.label} defaultHelp={ui.defaultHelp} defaultBadge={ui.defaultBadge} isAdmin={isAdmin} />}
+      {isAdmin && <ChannelHelpCenterField channel={channel} />}
       {capabilities.length > 0 && <p className="muted-copy ch-carries">{m.capabilities}: {capabilities.join(' · ')}</p>}
       {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} onDone={setHeldDone} />}
       {heldDone && <p className="notice notice-plain" role="status" tabIndex={-1} ref={heldNote}><span>{heldDone.kind === 'opened' ? m.heldOpened(heldDone.count, heldDone.skipped ?? 0) : m.heldDiscarded(heldDone.count)}</span>

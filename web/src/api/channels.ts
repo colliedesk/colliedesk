@@ -16,7 +16,10 @@ const channelStateSchema = z.object({
 export const channelSchema = z.object({
   id: z.string().uuid(), type: channelTypeSchema, name: z.string(), enabled: z.boolean(), status: channelStateSchema, summary: z.string(),
   capabilities: z.array(z.string()), held_count: z.number().int().nonnegative(), unsent_count: z.number().int().nonnegative(),
-  last_inbound_at: nullableDate, is_default: z.boolean().optional(), processing_paused_at: nullableDate.optional(), paused_count: z.number().int().nonnegative().optional(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  last_inbound_at: nullableDate, is_default: z.boolean().optional(), processing_paused_at: nullableDate.optional(), paused_count: z.number().int().nonnegative().optional(),
+  // The help center a help chat or web form serves (null: the primary); help_center_name is null for a type that serves none.
+  help_center_id: z.string().uuid().nullable().optional(), help_center_name: z.string().nullable().optional(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime(),
   deleted_at: z.string().datetime().optional(),
 }) satisfies z.ZodType<Generated<'Channel'>>;
 // The configuration is the type's own schema; the type's panels read it, the shared pages never do. A type

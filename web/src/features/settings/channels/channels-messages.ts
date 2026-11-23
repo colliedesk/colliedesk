@@ -141,6 +141,8 @@ export const channelsMessages = {
   makeDefault: 'Make default',
   madeDefault: (name: string) => `${name} is now the default. A new conversation that names no channel, and the older links and addresses, use it.`,
   nameHint: 'Shown in the inbox and in Settings.',
+  helpCenterLabel: 'Help center',
+  helpCenterHelp: 'Conversations this channel opens are marked with this help center. A help chat answers from its articles.',
   defaultHelp: 'A channel is an email address or web form where conversations come in and go out. New conversations you start go out from the default channel.',
   nameLabel: 'Name',
   nameSaved: 'Name saved.',
