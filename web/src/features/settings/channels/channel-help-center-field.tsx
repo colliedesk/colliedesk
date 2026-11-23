@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { InvalidRequestError } from '../../../api/client';
+import { HelpTip } from '../../../ui/help-tip';
 import { channelsApi } from '../../../api/channels';
 import type { ChannelDetail } from '../../../api/channels';
 import { helpCenterName, helpCentersApi, helpCentersKey } from '../../kb/help-centers-api';
@@ -29,7 +30,7 @@ export function ChannelHelpCenterField({ channel }: { channel: ChannelDetail }) 
         onChange={(event) => move.mutate(event.target.value === primary?.id ? null : event.target.value)}>
         {centers.map((center) => <option key={center.id} value={center.id}>{helpCenterName(center, helpCentersMessages.primaryName)}</option>)}
       </select></label>
-    <small id={`${id}-help`} className="muted-copy">{m.helpCenterHelp}</small>
+    <small id={`${id}-help`} className="muted-copy">{m.helpCenterHelp} <HelpTip label={m.helpCenterLabel} text={m.helpCenterWhy} /></small>
     {move.isError && <p role="alert" className="error-copy">{move.error instanceof InvalidRequestError ? move.error.message : m.actionFailed}</p>}
   </div>;
 }
