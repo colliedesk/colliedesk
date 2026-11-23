@@ -130,17 +130,20 @@ const (
 // helpCenterCollectionsSQL lists the live collections of workspace $1 with their name and description
 // in language $2 ("" the primary one; a missing name falls back to it), the published articles each
 // lists itself (its own and those listed in it too), and how many of those are published in each shown
-// language, by position and name. byc is computed once: left to the planner, the low row counts it
-// expects under row security make it count again for every collection.
-const helpCenterCollectionsSQL = `WITH shown AS (SELECT a.listed AS collection_id, t.locale, count(*) AS n
-		FROM ` + listedKBArticles + ` JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND ` + shownArticleKBTranslation + `
+// language, by position and name. The published articles are listed once (listed) and both counts
+// read that list: reading kb_articles again would make Postgres plan its row security again. byc is
+// computed once: left to the planner, the low row counts it expects under row security make it count
+// again for every collection.
+const helpCenterCollectionsSQL = `WITH listed AS MATERIALIZED (SELECT a.id, a.listed FROM ` + listedKBArticles + ` WHERE ` + publicKBArticle + `),
+	shown AS (SELECT a.listed AS collection_id, t.locale, count(*) AS n
+		FROM listed a JOIN kb_article_translations t ON t.workspace_id=$1 AND t.article_id=a.id AND ` + shownArticleKBTranslation + `
 		JOIN help_center_languages hl ON hl.workspace_id=t.workspace_id AND hl.help_center_id=$H AND hl.locale=t.locale AND hl.visible
-		WHERE ` + publicKBArticle + ` GROUP BY a.listed, t.locale),
+		GROUP BY a.listed, t.locale),
 	byc AS MATERIALIZED (SELECT collection_id, jsonb_object_agg(locale, n) AS counts FROM shown GROUP BY collection_id)
 	SELECT c.id::text, COALESCE(c.parent_id::text, ''), COALESCE(ct.name, c.name), CASE WHEN ct.collection_id IS NULL THEN c.description ELSE ct.description END,
 		c.slug, COALESCE(n.published, 0), COALESCE(byc.counts, '{}'::jsonb)
 	FROM kb_collections c
-	LEFT JOIN (SELECT a.listed AS collection_id, count(*) AS published FROM ` + listedKBArticles + ` WHERE ` + publicKBArticle + ` GROUP BY a.listed) n
+	LEFT JOIN (SELECT listed AS collection_id, count(*) AS published FROM listed GROUP BY listed) n
 		ON n.collection_id=c.id
 	LEFT JOIN byc ON byc.collection_id=c.id
 	LEFT JOIN kb_collection_translations ct ON ct.workspace_id=c.workspace_id AND ct.collection_id=c.id AND ct.locale=$2 AND $2 <> ''
@@ -173,6 +176,9 @@ func (s *Store) HelpCenterCollections(ctx context.Context, workspaceID string) (
 func (s *Store) HelpCenterCollectionsIn(ctx context.Context, workspaceID, helpCenterID, locale string) ([]domain.PublicKBCollection, error) {
 	collections, err := helpCenterScoped(ctx, s, workspaceID, helpCenterID, func(tx pgx.Tx, helpCenterID string) ([]domain.PublicKBCollection, error) {
 		query, args := onHelpCenter(helpCenterID, helpCenterCollectionsSQL, workspaceID, locale)
+		if err := genericPlan(ctx, tx); err != nil {
+			return nil, err
+		}
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return nil, err
