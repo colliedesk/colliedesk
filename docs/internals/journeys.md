@@ -45,6 +45,8 @@ work together, keep the knowledge base. Tag `@journey`; CI job `e2e`.
 - `a private note asks a teammate with @: Mentions counts it, opening it marks it read, the writer sees it was seen` (`web/e2e/mentions.spec.ts`)
 - `review: the rail counts the cards, a person opens one as a conversation, sets one aside and puts it back` (`web/e2e/review.spec.ts`)
 - `search palette: from an open conversation, ⌘K and choosing another conversation (Recent or typed) opens it` (`web/e2e/frame-search-quick-start.spec.ts`)
+- `a tab from before a deploy opens Mentions: the app loads again by itself at Mentions and shows it, with no error` (`web/e2e/stale-chunk-recovery.spec.ts`)
+- `a chunk that still fails after that one reload is shown with Reload the page, and the app never reloads in a loop` (`web/e2e/stale-chunk-recovery.spec.ts`)
 - `knowledge base: a collection, an article written in the Markdown editor with a pasted image, published, edited, restored from history, deleted and restored from the trash` (`web/e2e/knowledge-base.spec.ts`)
 - `knowledge base list: tags set in the editor, a hidden column stays hidden after a reload, and a saved view opens its filters again` (`web/e2e/knowledge-base-list.spec.ts`)
 - `knowledge base Filters: a date group's title spans the menu and From and To share a row (1440 px)` (`web/e2e/knowledge-base-filters-layout.spec.ts`)
