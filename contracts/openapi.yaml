@@ -9963,6 +9963,7 @@ paths:
     get:
       operationId: getHelpCenterAnalytics
       x-permission: help_center:read
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Where the help center sends its page views: the workspace's own Google Analytics 4 property
         (`ga4`) or Plausible site (`plausible`), or nowhere (`provider` null until first saved). The
@@ -9982,6 +9983,7 @@ paths:
     put:
       operationId: putHelpCenterAnalytics
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Save where the page views go. Every field replaces the stored one except `ga4_api_secret`: left
         out or null keeps the stored secret, an empty string removes it. The other service's fields are
@@ -10010,6 +10012,7 @@ paths:
     post:
       operationId: testHelpCenterAnalytics
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Send one test page view of `/colliedesk-analytics-test` to the saved service now, on or off, with
         the caller's browser and address, and say what it answered. GA4 first checks the event at its
@@ -10085,6 +10088,7 @@ paths:
     post:
       operationId: previewHelpCenterTheme
       x-permission: help_center:read
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Render a page of the help center with a candidate theme, saving nothing: the real page templates,
         the workspace's live collections and published articles (never drafts), also while the help center

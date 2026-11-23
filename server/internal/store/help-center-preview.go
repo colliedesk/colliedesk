@@ -20,29 +20,36 @@ type HelpCenterPreview struct {
 	Article     *domain.PublicKBArticle
 }
 
-// HelpCenterPreview reads everything a preview of the home page (article false) or of an article page
-// needs, whether the help center is on or off, in one transaction whose statements go out together.
-// homeArticles and neighbours bound the article lists as the public pages do. The logo and favicon
-// are checked like a save (checkThemeMedia): one that is not an image of this workspace's library, or
-// is in its trash without being the one the field already names, is a domain.ThemeError
-// media_not_found; one accepted in the trash is left out, as on the public pages. It changes nothing.
-func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme domain.HelpCenterTheme, article bool, homeArticles, neighbours int) (HelpCenterPreview, error) {
+// HelpCenterPreview reads everything a preview of help center helpCenterID ("" the primary) needs, for
+// its home page (article false) or an article page, whether the help center is on or off, in one
+// transaction whose statements go out together. homeArticles and neighbours bound the article lists as
+// the public pages do. The logo and favicon are checked like a save (checkThemeMedia): one that is not
+// an image of this workspace's library, or is in its trash without being the one the field already
+// names, is a domain.ThemeError media_not_found; one accepted in the trash is left out, as on the public
+// pages. An id that is not a live help center of the workspace is domain.ErrHelpCenterNotFound. It
+// changes nothing.
+func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID, helpCenterID string, theme domain.HelpCenterTheme, article bool, homeArticles, neighbours int) (HelpCenterPreview, error) {
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (HelpCenterPreview, error) {
-		got := HelpCenterPreview{Site: domain.HelpCenterSite{WorkspaceID: workspaceID, Primary: true, Theme: theme}}
+		center, err := resolveHelpCenter(ctx, tx, workspaceID, helpCenterID, false)
+		if err != nil {
+			return HelpCenterPreview{}, err
+		}
+		got := HelpCenterPreview{Site: domain.HelpCenterSite{WorkspaceID: workspaceID, HelpCenterID: center, Theme: theme}}
 		site := &got.Site
 		var logo, icon previewImage
 		var logoWidth, logoHeight *int
 		var media error
 		batch := &pgx.Batch{}
 		batch.Queue(`SELECT w.slug, w.name, COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0),
+				COALESCE(h.primary_help_center, true), COALESCE(h.handle, ''),
 				h.logo_media_id::text, logo.kind, logo.deleted_at IS NOT NULL, logo.width, logo.height,
 				h.favicon_media_id::text, icon.kind, icon.deleted_at IS NOT NULL
-			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id AND h.primary_help_center
+			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id AND h.id=NULLIF($4, '')::uuid
 			LEFT JOIN kb_media logo ON logo.workspace_id=w.id AND logo.id=$2::uuid
 			LEFT JOIN kb_media icon ON icon.workspace_id=w.id AND icon.id=$3::uuid
-			WHERE w.id=$1`, workspaceID, theme.LogoMediaID, theme.FaviconMediaID).QueryRow(func(row pgx.Row) error {
+			WHERE w.id=$1`, workspaceID, theme.LogoMediaID, theme.FaviconMediaID, center).QueryRow(func(row pgx.Row) error {
 			err := row.Scan(&site.Slug, &site.Name, &site.Title, &site.Locale, &site.ContentVersion,
-				&logo.stored, &logo.kind, &logo.trashed, &logoWidth, &logoHeight, &icon.stored, &icon.kind, &icon.trashed)
+				&site.Primary, &site.Handle, &logo.stored, &logo.kind, &logo.trashed, &logoWidth, &logoHeight, &icon.stored, &icon.kind, &icon.trashed)
 			if err != nil {
 				return err
 			}
@@ -57,12 +64,12 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 			}
 			return nil
 		})
-		// The theme is the primary help center's, and so is what its preview shows.
-		onPrimary := func(query string, args ...any) *pgx.QueuedQuery {
-			query, args = onHelpCenter("", query, args...)
+		// The preview shows what the help center's own pages show: its collections and articles.
+		onCenter := func(query string, args ...any) *pgx.QueuedQuery {
+			query, args = onHelpCenter(center, query, args...)
 			return batch.Queue(query, args...)
 		}
-		onPrimary(helpCenterCollectionsSQL, workspaceID, "").Query(func(rows pgx.Rows) error {
+		onCenter(helpCenterCollectionsSQL, workspaceID, "").Query(func(rows pgx.Rows) error {
 			var err error
 			got.Collections, err = pgx.CollectRows(rows, scanPublicKBCollection(""))
 			return err
@@ -75,11 +82,11 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 		if !article {
 			// The top collections' first articles; one with nothing published in or below it is hidden
 			// by the caller, and has no published article of its own either.
-			onPrimary(helpCenterArticlesSQL(`ARRAY(SELECT c.id FROM kb_collections c WHERE c.workspace_id=$1 AND c.parent_id IS NULL AND c.deleted_at IS NULL)`),
+			onCenter(helpCenterArticlesSQL(`ARRAY(SELECT c.id FROM kb_collections c WHERE c.workspace_id=$1 AND c.parent_id IS NULL AND c.deleted_at IS NULL)`),
 				workspaceID, 0, homeArticles).Query(collectArticles)
 		} else {
-			const first = `(SELECT min(a.number) FROM kb_articles a WHERE ` + publicKBArticle + `)`
-			batch.Queue(`SELECT `+publicKBArticleColumns+`, a.body_md, a.show_contents FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=`+first, workspaceID).
+			const first = `(SELECT min(a.number) FROM kb_articles a WHERE ` + shownKBArticle + `)`
+			onCenter(`SELECT `+publicKBArticleColumns+`, a.body_md, a.show_contents FROM kb_articles a WHERE `+shownKBArticle+` AND a.number=`+first, workspaceID).
 				QueryRow(func(row pgx.Row) error {
 					var body string
 					var showContents bool
@@ -91,7 +98,7 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 					got.Article = &found
 					return err
 				})
-			batch.Queue(articleVideosSQL(`(SELECT a.id FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=`+first+`)`), workspaceID).
+			onCenter(articleVideosSQL(`(SELECT a.id FROM kb_articles a WHERE `+shownKBArticle+` AND a.number=`+first+`)`), workspaceID).
 				Query(func(rows pgx.Rows) error {
 					videos, err := pgx.CollectRows(rows, scanPublicKBVideo)
 					if got.Article != nil {
@@ -99,7 +106,7 @@ func (s *Store) HelpCenterPreview(ctx context.Context, workspaceID string, theme
 					}
 					return err
 				})
-			onPrimary(helpCenterArticlesSQL(`ARRAY(SELECT a.collection_id FROM kb_articles a WHERE `+publicKBArticle+` AND a.number=`+first+`)`),
+			onCenter(helpCenterArticlesSQL(`ARRAY(SELECT a.collection_id FROM kb_articles a WHERE `+shownKBArticle+` AND a.number=`+first+`)`),
 				workspaceID, 0, neighbours).Query(collectArticles)
 		}
 		if err := tx.SendBatch(ctx, batch).Close(); err != nil {
