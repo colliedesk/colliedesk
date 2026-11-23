@@ -1,6 +1,7 @@
-import { useId, useState } from 'react';
+import { Fragment, useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ConflictError } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import { useCreateMutation } from '../../api/use-create';
 import { messages } from '../../messages';
@@ -45,7 +46,9 @@ function HelpCenterRow({ center, canManage }: { center: HelpCenterSummary; canMa
     <span className="hc-list-name"><strong>{name}</strong>{center.primary && <span className="hc-list-primary">{text.primary}</span>}
       <span className="saved-state" data-on={center.enabled ? 'true' : 'false'}>{center.enabled ? text.on : text.off}</span></span>
     <a className="muted-copy" href={center.url} target="_blank" rel="noopener noreferrer">{center.url}</a>
-    {failed && <p role="alert" className="error-copy">{reason(failed, text.actionFailed)}</p>}
+    {failed && (servingChannels(failed)
+      ? <ServedBy channels={servingChannels(failed)!} />
+      : <p role="alert" className="error-copy">{reason(failed, text.actionFailed)}</p>)}
     {canManage && !center.primary && (confirming
       ? <div role="group" aria-label={text.deleteName(name)} className="kb-confirm">
           <span>{text.confirmDelete(name)}</span>
@@ -60,6 +63,27 @@ function HelpCenterRow({ center, canManage }: { center: HelpCenterSummary; canMa
           <button type="button" className="danger-action" aria-label={text.deleteName(name)} onClick={() => { toggle.reset(); setConfirming(true); }}>{text.delete}</button>
         </span>)}
   </li>;
+}
+
+interface ServingChannel { id: string; name: string }
+
+// servingChannels reads the channels that still serve a help center from a refused delete (409
+// help_center_in_use); undefined for any other error.
+function servingChannels(error: unknown): ServingChannel[] | undefined {
+  if (!(error instanceof ConflictError) || error.detail?.code !== 'help_center_in_use' || !Array.isArray(error.detail.channels)) return undefined;
+  return (error.detail.channels as unknown[]).filter((item): item is ServingChannel =>
+    typeof item === 'object' && item !== null && typeof (item as ServingChannel).id === 'string' && typeof (item as ServingChannel).name === 'string');
+}
+
+// ServedBy names each channel a delete was refused for, linked to its settings, where its help center is chosen.
+function ServedBy({ channels }: { channels: ServingChannel[] }) {
+  return <p role="alert" className="error-copy">
+    {channels.map((channel, index) => <Fragment key={channel.id}>
+      {index > 0 && (index === channels.length - 1 ? text.and : ', ')}
+      <a href={`/settings/channels/${channel.id}`}>{channel.name}</a>
+    </Fragment>)}
+    {text.servedBy(channels.length)}
+  </p>;
 }
 
 function NewHelpCenterForm({ home, locale, onDone }: { home: string; locale: string; onDone: (made: boolean) => void }) {
