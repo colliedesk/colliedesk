@@ -178,6 +178,13 @@ func (r *run) ensurePortalHelpCenters(ctx context.Context) error {
 			primaryIndex = index
 		}
 	}
+	// The portal an earlier run put on the primary stays there, listed first, even when another portal
+	// has more categories now.
+	if primaryIndex > 0 {
+		plan = slices.Concat(plan[primaryIndex:primaryIndex+1], plan[:primaryIndex], plan[primaryIndex+1:])
+		earlier = slices.Concat(earlier[primaryIndex:primaryIndex+1], earlier[:primaryIndex], earlier[primaryIndex+1:])
+		primaryIndex = 0
+	}
 	state.portalHelpCenters = map[int64]string{}
 	state.createdHelpCenters = map[string]bool{}
 	for index, portal := range plan {
