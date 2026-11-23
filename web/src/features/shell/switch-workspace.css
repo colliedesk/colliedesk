@@ -1,0 +1,35 @@
+/* Switch workspace (Paper 05 Access, A6-b and A6-c): 480 wide over a 10% scrim. */
+.dialog-backdrop.switch-workspace-backdrop { background: color-mix(in srgb, var(--surface-inverse) 10%, transparent); }
+:root[data-theme="dark"] .dialog-backdrop.switch-workspace-backdrop { background: rgb(0 0 0 / 0.4); }
+.switch-workspace {
+  display: flex; flex-direction: column; width: min(480px, 100%); overflow: hidden auto; border-radius: var(--radius-lg);
+  background: var(--surface-1); box-shadow: var(--shadow-2);
+}
+.switch-workspace:focus { outline: none; }
+.switch-workspace h2, .switch-workspace p { margin: 0; }
+.switch-workspace-head { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-5) var(--space-4) var(--space-3) var(--space-6); }
+.switch-workspace-head > div { display: flex; flex: 1; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.switch-workspace-head h2 { color: var(--text-1); font-size: var(--fs-body); font-weight: 600; line-height: 24px; }
+.switch-workspace-head p { overflow: hidden; color: var(--text-3); font-size: var(--fs-small); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.switch-workspace-head .icon-button { flex: none; color: var(--text-3); }
+.switch-workspace-list { display: flex; flex-direction: column; padding: 0 var(--space-2) var(--space-2); }
+.switch-workspace-note { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-2) var(--space-2); }
+.switch-workspace-note strong, .switch-workspace-failed strong { color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+.switch-workspace-note p, .switch-workspace-failed p { color: var(--text-2); font-size: var(--fs-ui); line-height: 20px; }
+.switch-workspace-failed { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-2) var(--space-2); }
+.switch-workspace-failed > div { display: flex; flex: 1 1 0; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.switch-workspace-failed-icon { display: flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: var(--radius); background: var(--warn-soft); color: var(--warn); }
+.switch-workspace-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+.switch-workspace-actions a, .switch-workspace-create { color: var(--accent-text); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; }
+.switch-workspace-foot { display: flex; align-items: center; gap: var(--space-4); min-height: 44px; box-shadow: inset 0 1px 0 var(--line); padding: 0 var(--space-4); }
+.switch-workspace-create { display: inline-flex; flex: 1; align-items: center; gap: var(--space-2); text-decoration: none; }
+.switch-workspace-create:hover { text-decoration: underline; }
+.switch-workspace-keys { display: inline-flex; align-items: center; gap: var(--space-1); margin-left: auto; color: var(--text-3); font-size: var(--fs-label); line-height: 16px; white-space: nowrap; }
+.switch-workspace-keys kbd { border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--line); padding: 0 var(--space-1); font: inherit; line-height: 20px; }
+.switch-workspace-keys kbd:not(:first-child) { margin-left: var(--space-2); }
+/* A phone has no arrow keys to hint, and the dialog takes the width of the screen. */
+@media (max-width: 44rem) {
+  .switch-workspace-backdrop { padding-inline: 0; }
+  .switch-workspace { width: 100%; }
+  .switch-workspace-keys { display: none; }
+}

@@ -7732,8 +7732,14 @@ export interface components {
         WorkspaceChoice: {
             slug: string;
             name: string;
+            /** @description The host name the workspace's desk runs on (`<slug>.<domain>`); null on a server without workspace hosts, where every desk runs on APP_ORIGIN. */
+            host: string | null;
+            /** @description The names of the person's roles in that workspace, Admin first, then Agent, then by name. */
+            roles: string[];
         };
         CloudWorkspaceChoices: {
+            /** @description The verified email the workspaces were found for, so the chooser can say who is signed in. */
+            email: string;
             workspaces: components["schemas"]["WorkspaceChoice"][];
         };
         CloudWorkspaces: {

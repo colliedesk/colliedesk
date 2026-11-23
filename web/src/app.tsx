@@ -188,10 +188,10 @@ function AppLayout() {
   // Starting one picks a contact and the channel it leaves through, so it needs those reads as well.
   const mayStart = (['messages:send', 'channels:read', 'contacts:read'] as const).every(shows);
   // Where each desk runs on its own host and the identity provider proves who the person is, the account menu
-  // offers their other workspaces.
+  // offers Switch workspace…, and Create a workspace where APP_ORIGIN signs new teams up.
   const cloud = config.data?.cloud_sign_in;
   const workspaceSwitch = config.data?.workspace_hosts && cloud?.enabled && cloud.publishable_key
-    ? { publishableKey: cloud.publishable_key, appOrigin: config.data.app_origin } : undefined;
+    ? { publishableKey: cloud.publishable_key, appOrigin: config.data.app_origin, signup: config.data.signup.enabled } : undefined;
   const onNewConversation = locked || !mayStart || !shows('conversations:read') ? undefined : () => askTheInbox('new-conversation');
   // The top bar's search: the same places and actions as the sidebar, and the inbox's own searches.
   const palette = me.data && !locked ? { ...paletteEntries(me.data, { inboxOpen, mentionsUnread, onNewConversation }), onNavigate: (href: string) => router.history.push(href) } : undefined;

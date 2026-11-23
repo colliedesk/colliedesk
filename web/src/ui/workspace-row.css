@@ -1,0 +1,31 @@
+/* WorkspaceRow (Paper "WorkspaceRow — states"): 52 tall, tile 32, role slot 80 and chevron 16 fixed so rows line up. */
+.workspace-row {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%; height: 52px; min-height: var(--touch); flex-shrink: 0;
+  border: 0; border-radius: var(--radius); background: transparent; box-shadow: none; padding: 0 var(--space-2);
+  color: var(--text-1); font: inherit; text-align: left; text-decoration: none; cursor: pointer;
+}
+.workspace-row[data-current] { cursor: default; }
+a.workspace-row:hover, button.workspace-row:hover:not(:disabled), .workspace-row:focus-visible, .workspace-row[aria-busy="true"] { background: var(--surface-2); }
+.workspace-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+button.workspace-row:disabled:not([aria-busy="true"]) { cursor: default; opacity: 0.6; }
+.workspace-row-tile {
+  display: flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: var(--radius);
+  background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-2); font-size: var(--fs-ui); font-weight: 600; line-height: 20px;
+}
+.workspace-row-text { display: flex; flex: 1 1 0; flex-direction: column; min-width: 0; }
+.workspace-row-name { overflow: hidden; color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-row-current { color: var(--text-3); font-weight: 400; white-space: pre; }
+.workspace-row-host, .workspace-row-role { overflow: hidden; color: var(--text-3); font-size: var(--fs-small); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-row-role { flex: none; width: 80px; text-align: right; }
+.workspace-row-trailing { display: flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; color: var(--text-3); }
+.workspace-row[data-current] .workspace-row-trailing { color: var(--text-2); }
+a.workspace-row:hover .workspace-row-trailing, button.workspace-row:hover:not(:disabled) .workspace-row-trailing, .workspace-row:focus-visible .workspace-row-trailing { color: var(--text-1); }
+.workspace-row-spinner { animation: workspace-row-spin 0.8s linear infinite; }
+@keyframes workspace-row-spin { to { rotate: 360deg; } }
+.workspace-row-skeleton { cursor: default; }
+.workspace-row-skeleton .workspace-row-tile { background: var(--surface-2); box-shadow: none; }
+.workspace-row-skeleton .workspace-row-text { gap: var(--space-2); }
+.workspace-row-skeleton i { display: block; height: 8px; border-radius: var(--radius-full); background: var(--surface-2); }
+.workspace-row-skeleton i:first-child { width: 160px; max-width: 70%; background: var(--surface-3); }
+.workspace-row-skeleton i:last-child { width: 200px; max-width: 85%; }
+@media (prefers-reduced-motion: reduce) { .workspace-row-spinner { animation: none; } }
