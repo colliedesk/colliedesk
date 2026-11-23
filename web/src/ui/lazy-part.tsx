@@ -37,21 +37,33 @@ export function lazyPart<T>(load: () => Promise<T>): LazyPart<T> {
     for (const listener of listeners) listener();
   };
   let settled: Promise<void> | undefined;
+  // target: the address of the page this part draws, from route loaders. opening: a loader is opening it now (the
+  // address is not on screen yet). wanted: someone needs the part now, not only ahead of a click.
   let target: string | undefined;
+  let opening = false;
   let wanted = false;
-  // Most often a failed chunk means the tab runs the build before a deploy and the chunk is gone: a page being
-  // opened (it has an address) loads the app again there once, and keeps its placeholder until it is replaced. A
-  // part inside a page (a picker, a dialog) has no address and never reloads by itself: the person may be typing.
+  // Most often a failed chunk means the tab runs the build before a deploy and the chunk is gone: the page being
+  // opened, or the page on screen when it is this part's own, loads the app again once and keeps its placeholder
+  // until it is replaced. A part drawn inside another page (a picker, a dialog, a block in a conversation) never
+  // reloads by itself: the person may be typing. A reload the person cancels on the leave prompt shows the error.
   const recover = () => {
-    if (!target || !reloadForNewBuild(target)) return false;
+    const here = `${window.location.pathname}${window.location.search}`;
+    if (!target || (!opening && target.split('#')[0] !== here) || !reloadForNewBuild(target)) return false;
     set({ status: 'loading' });
+    setTimeout(() => { if (state?.status === 'loading') set({ status: 'error' }); }, cancelledReloadMs);
     return true;
   };
   const ready = ({ target: address, ahead = false }: ReadyOptions = {}) => {
     if (address) target = address;
-    if (!ahead) wanted = true;
+    if (!ahead) {
+      wanted = true;
+      if (address) opening = true;
+    }
     if (settled) {
-      if (!ahead && state?.status === 'error') recover();
+      if (!ahead && state?.status === 'error') {
+        recover();
+        opening = false;
+      }
       return settled;
     }
     set({ status: 'loading' });
@@ -59,8 +71,10 @@ export function lazyPart<T>(load: () => Promise<T>): LazyPart<T> {
       // Not swallowed: the console shows it, and "Report a problem" can attach it.
       console.warn('A part of the page could not be loaded', error);
       recordClientError('lazy-part', error);
-      if (wanted && recover()) return;
-      set({ status: 'error' });
+      const reloading = wanted && recover();
+      // The opening is over: a later use of this part reloads only while its own page is on screen.
+      opening = false;
+      if (!reloading) set({ status: 'error' });
     });
     return settled;
   };
@@ -78,6 +92,8 @@ export function lazyPart<T>(load: () => Promise<T>): LazyPart<T> {
 }
 
 const loading = { status: 'loading' } as const;
+// A page still here this long after it asked to load again stayed (the person chose Stay on the leave prompt).
+const cancelledReloadMs = 5000;
 
 // Part renders a piece of a lazy part once its chunk is there: nothing until then, and failed (nothing by
 // default) when it cannot load.

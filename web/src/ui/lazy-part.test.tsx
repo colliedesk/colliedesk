@@ -192,8 +192,40 @@ test('a page loaded ahead of a click that failed reloads at its address once the
   const part = lazyPart(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')));
   await part.ready({ target: '/mentions', ahead: true });
   expect(assign).not.toHaveBeenCalled();
-  // The router keeps the match it loaded ahead and only renders the page: the page's own use() asks again.
+  // The router keeps the match it loaded ahead, moves to its address and only renders the page: the page's own
+  // use() asks again.
+  window.history.replaceState(null, '', '/mentions');
   await act(async () => { render(<Host part={part} />); });
   expect(assign).toHaveBeenCalledWith('/mentions');
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  window.history.replaceState(null, '', '/');
+});
+
+test('a part loaded ahead of a click for another page never reloads the page shown now when it is used here', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const assign = vi.spyOn(navigation, 'assign').mockImplementation(() => {});
+  window.history.replaceState(null, '', '/conversations/42');
+  const part = lazyPart(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')));
+  await part.ready({ target: '/fixes', ahead: true });
+  // The same part draws a block inside the open conversation: the person may be typing a reply there.
+  await act(async () => { render(<Host part={part} />); });
+  expect(assign).not.toHaveBeenCalled();
+  expect(screen.getByRole('alert')).toHaveTextContent('This part of the page could not be loaded.');
+  window.history.replaceState(null, '', '/');
+});
+
+test('a reload the person cancels (Stay on the leave prompt) shows the error with its Reload link a moment later', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(navigation, 'assign').mockImplementation(() => {});
+    const part = lazyPart(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module')));
+    render(<Host part={part} />);
+    await act(async () => part.ready({ target: '/mentions' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await act(async () => { vi.advanceTimersByTime(6000); });
+    expect(screen.getByRole('alert')).toHaveTextContent('This part of the page could not be loaded.');
+  } finally {
+    vi.useRealTimers();
+  }
 });
