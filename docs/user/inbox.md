@@ -612,9 +612,9 @@ The routes are in `contracts/openapi.yaml`; the MCP tools are in [MCP](mcp.md).
   `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
 - Spam: AI agents use `colliedesk_conversations_spam` (permission `conversations:update`). The route is
   `PUT /api/v1/conversations/spam` with `{"ids": [...], "spam": true}` (or `false` for Not spam).
-- Request an article: AI agents use `colliedesk_kb_article_request` (one call; `gap_id` joins an open
+- Request an article: AI agents use `colliedesk_kb_article_ask` (one call; `gap_id` joins an open
   request, `colliedesk_kb_gaps_list` with `similar` finds the close ones) and
-  `colliedesk_kb_article_request_withdraw`. The routes are `POST` and `DELETE
+  `colliedesk_kb_article_ask_withdraw`. The routes are `POST` and `DELETE
   /api/v1/conversations/{id}/article-request`.
 - Move messages: AI agents use the MCP tools `colliedesk_messages_move`, `colliedesk_message_moves_list`
   and `colliedesk_message_move_undo`. The routes are `POST /api/v1/conversations/{id}/messages/move`

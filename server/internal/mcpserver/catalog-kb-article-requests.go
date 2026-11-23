@@ -24,14 +24,14 @@ const kbDraftCollectionProperty = `"collection_id":{"type":"string",` + uuid + `
 
 func kbArticleRequestSpec() Spec {
 	return Spec{
-		Name:  "colliedesk_kb_article_request",
+		Name:  "colliedesk_kb_article_ask",
 		Title: "Ask for a help center article from a conversation",
 		Description: `File the conversation's request for a help center article in Knowledge gaps, as a signal of kind requested linked to the conversation. ` +
 			`It joins the open gap gap_id names, else an open gap whose title is close to title (added_to_existing), else it opens a gap; ` +
 			`find the close ones first with colliedesk_kb_gaps_list and similar. title defaults to the conversation subject. ` +
 			`The customer's names and company, email addresses and runs of 6 or more digits are masked before they reach the gap. ` +
 			`A conversation asks once: the same words again change nothing (created false), other words move its request. Nobody is told and nothing is sent. ` +
-			`Take it back with colliedesk_kb_article_request_withdraw. Also needs kb_articles:read.` + "\n\n" + untrustedNotice,
+			`Take it back with colliedesk_kb_article_ask_withdraw. Also needs kb_articles:read.` + "\n\n" + untrustedNotice,
 		REST: []string{"POST /api/v1/conversations/{id}/article-request"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + kbConversationIDProperty + `,` +
 			`"title":{"type":"string","minLength":1,"maxLength":300,"description":"What the article should answer. Default: the conversation subject."},` +
@@ -44,10 +44,10 @@ func kbArticleRequestSpec() Spec {
 
 func kbArticleRequestWithdrawSpec() Spec {
 	return Spec{
-		Name:  "colliedesk_kb_article_request_withdraw",
+		Name:  "colliedesk_kb_article_ask_withdraw",
 		Title: "Take back a conversation's request for an article",
 		Description: `Take back the conversation's request for a help center article: its signal leaves the gap, and a gap with no signal left goes away. ` +
-			`File it again with colliedesk_kb_article_request. Also needs kb_articles:read.`,
+			`File it again with colliedesk_kb_article_ask. Also needs kb_articles:read.`,
 		REST:   []string{"DELETE /api/v1/conversations/{id}/article-request"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + kbConversationIDProperty + `}}`,
 		Output: `{"type":"object","required":["conversation_id","withdrawn"],"properties":{"conversation_id":{"type":"string"},"withdrawn":{"type":"boolean"}}}`,

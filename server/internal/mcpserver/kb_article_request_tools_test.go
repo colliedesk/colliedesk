@@ -14,14 +14,14 @@ func TestAnAgentRequestsAnArticleFromAConversationInOneCall(t *testing.T) {
 	f := seedInbox(t, e)
 	read := e.connect(f.w.read, "")
 
-	filed := e.ok(read, "colliedesk_kb_article_request", map[string]any{"conversation_id": f.c2, "title": "Refund a payment", "note": "Asked twice"})
-	e.requireMatchesOutputSchema(read, "colliedesk_kb_article_request", filed)
+	filed := e.ok(read, "colliedesk_kb_article_ask", map[string]any{"conversation_id": f.c2, "title": "Refund a payment", "note": "Asked twice"})
+	e.requireMatchesOutputSchema(read, "colliedesk_kb_article_ask", filed)
 	gap, _ := at(t, filed, "gap", "id").(string)
 	if filed["created"] != true || filed["added_to_existing"] != false || at(t, filed, "gap", "conversation_count") != float64(1) ||
 		at(t, filed, "gap", "untrusted_customer_content", "title") != "Refund a payment" {
 		t.Fatalf("request = %v, want a new gap titled Refund a payment from one conversation", filed)
 	}
-	joined := e.ok(read, "colliedesk_kb_article_request", map[string]any{"conversation_id": f.c1, "title": "How to refund a payment"})
+	joined := e.ok(read, "colliedesk_kb_article_ask", map[string]any{"conversation_id": f.c1, "title": "How to refund a payment"})
 	if at(t, joined, "gap", "id") != gap || joined["added_to_existing"] != true || at(t, joined, "gap", "conversation_count") != float64(2) {
 		t.Fatalf("joined = %v, want gap %s from two conversations", joined, gap)
 	}
@@ -36,11 +36,11 @@ func TestAnAgentRequestsAnArticleFromAConversationInOneCall(t *testing.T) {
 		t.Fatalf("conversations = %v, want the two that asked, newest first", conversations)
 	}
 
-	withdrawn := e.ok(read, "colliedesk_kb_article_request_withdraw", map[string]any{"conversation_id": f.c1})
+	withdrawn := e.ok(read, "colliedesk_kb_article_ask_withdraw", map[string]any{"conversation_id": f.c1})
 	if withdrawn["withdrawn"] != true {
 		t.Fatalf("withdraw = %v", withdrawn)
 	}
-	if message := e.fails(read, "colliedesk_kb_article_request", map[string]any{"conversation_id": f.otherConvID}); !strings.Contains(message, "not found") {
+	if message := e.fails(read, "colliedesk_kb_article_ask", map[string]any{"conversation_id": f.otherConvID}); !strings.Contains(message, "not found") {
 		t.Fatalf("another workspace's conversation: %q, want not found", message)
 	}
 
