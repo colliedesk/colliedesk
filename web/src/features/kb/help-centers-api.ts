@@ -3,6 +3,7 @@ import { request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import { noContentSchema } from '../../api/schemas';
 import type { Generated, JsonResponse } from '../../api/schemas';
+import { helpCenterLanguagesSchema } from './kb-api';
 
 // The workspace's help centers: the primary one at the workspace's address and the others below it at
 // /<handle> (or on a custom domain of their own). Top-level collections choose the ones they show on.
@@ -22,6 +23,10 @@ export const helpCentersApi = {
     request('/api/v1/help-centers', helpCenterSummarySchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(value) }),
   update: (id: string, value: RequestBody<'updateHelpCenter'>) => request(`/api/v1/help-centers/${id}`, helpCenterSummarySchema, { method: 'PATCH', body: JSON.stringify(value) }),
   remove: (id: string) => request(`/api/v1/help-centers/${id}`, noContentSchema, { method: 'DELETE' }),
+  // The languages of one help center, which the singular route answers for when named by id.
+  languages: (id: string) => request(`/api/v1/help-center/languages?help_center_id=${encodeURIComponent(id)}`, helpCenterLanguagesSchema),
+  saveLanguages: (id: string, value: RequestBody<'putHelpCenterLanguages'>) => request(`/api/v1/help-center/languages?help_center_id=${encodeURIComponent(id)}`,
+    helpCenterLanguagesSchema, { method: 'PUT', body: JSON.stringify(value) }),
 };
 
 // helpCenterName is what the app calls a help center: its name, else its title, else its handle.

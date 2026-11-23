@@ -18,3 +18,4 @@ export { MediaRoute } from './media-page';
 export { MediaPicker } from './media-picker';
 // Knowledge base → Settings: the help center's own settings.
 export { HelpCenterSettingsRoute } from './help-center-settings-page';
+export { HelpCenterSettingsByIdRoute } from './help-center-settings-by-id-page';

@@ -115,11 +115,11 @@ func (m *memoryStore) recorded() []hcanalytics.Result {
 	return append([]hcanalytics.Result(nil), m.results...)
 }
 
-func (m *memoryStore) HelpCenterAnalyticsTarget(_ context.Context, workspaceID string) (*hcanalytics.Target, error) {
+func (m *memoryStore) HelpCenterAnalyticsTargetIn(_ context.Context, workspaceID, helpCenterID string) (*hcanalytics.Target, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, target := range m.targets {
-		if target.WorkspaceID == workspaceID {
+		if target.WorkspaceID == workspaceID && target.HelpCenterID == helpCenterID {
 			return &target, nil
 		}
 	}

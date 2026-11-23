@@ -5,6 +5,7 @@ import type { Generated } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { analyticsMessages as text } from './help-center-analytics-messages';
+import { onHelpCenter, useHelpCenterTarget } from './help-center-target';
 
 export const analyticsSchema = z.object({
   provider: z.enum(['ga4', 'plausible']).nullable(), enabled: z.boolean(),
@@ -17,7 +18,7 @@ export type Analytics = z.infer<typeof analyticsSchema>;
 export type Provider = 'ga4' | 'plausible';
 
 const testSchema = z.object({ ok: z.boolean(), message: z.string() }) satisfies z.ZodType<Generated<'HelpCenterAnalyticsTest'>>;
-const sendTest = () => request('/api/v1/help-center/analytics/test', testSchema, { method: 'POST', body: '{}' });
+const sendTest = (helpCenterId?: string) => request(`/api/v1/help-center/analytics/test${onHelpCenter(helpCenterId)}`, testSchema, { method: 'POST', body: '{}' });
 
 // AnalyticsStatus is the status line: off, or the last page view the service accepted, or the last error when it
 // is newer.
@@ -39,7 +40,8 @@ export function WhatIsSent({ provider }: { provider: Provider }) {
 
 // TestEvent sends one test page view to the saved service and shows its answer.
 export function TestEvent() {
-  const test = useMutation({ mutationFn: sendTest });
+  const target = useHelpCenterTarget();
+  const test = useMutation({ mutationFn: () => sendTest(target) });
   const failed = test.isError ? (test.error instanceof InvalidRequestError ? test.error.message : messages.settingsActionFailed) : undefined;
   return <>
     <span className="button-row"><button type="button" className="secondary-action" disabled={test.isPending} onClick={() => test.mutate()}>

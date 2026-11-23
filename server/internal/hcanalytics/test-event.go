@@ -24,7 +24,7 @@ type TestResult struct {
 // sends it for real so it shows in the Realtime report. Plausible answers 202 to everything and says
 // only whether its bot filter dropped the event.
 func (s *Sender) Test(ctx context.Context, target Target, userAgent, client string) TestResult {
-	event := pageview.Event{WorkspaceID: target.WorkspaceID, Kind: pageview.Home, Title: "Colliedesk analytics test",
+	event := pageview.Event{WorkspaceID: target.WorkspaceID, HelpCenterID: target.HelpCenterID, Kind: pageview.Home, Title: "Colliedesk analytics test",
 		Address: strings.TrimSuffix(s.options.Origin, "/") + TestPath, Locale: "en", Client: client, UserAgent: userAgent,
 		At: s.options.Now()}
 	item := &delivery{target: target, event: event}

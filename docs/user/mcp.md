@@ -398,6 +398,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again. Cannot be undone | `autofix_settings:manage_credentials` |
 <!-- /generated -->
 
+With several help centers, the `colliedesk_help_center_*` settings tools (get and update, theme,
+domain, languages, search console, analytics) take an optional `help_center_id` from
+`colliedesk_help_centers_list`; without it they act on the primary. A read-only token is refused on
+every one that changes a setting, whichever help center it names.
+
 Tools marked "Cannot be undone" carry the MCP `destructiveHint: true` (every other tool states `false`), and their descriptions tell the
 model to show you what it will do and wait for your yes, unless you already asked for exactly that.
 Many clients also ask you before such a call.
