@@ -58,8 +58,9 @@ export const importMessages = {
   portalOverLimit: 'on the primary help center: a workspace has at most 20 help centers',
   portalTrashed: 'on the primary help center: the help center an earlier import made for it was deleted in Colliedesk',
   portalFailed: 'on the primary help center: its help center could not be made (see the report)',
+  portalsStartOff: 'A help center the import makes starts off: turn it on in Knowledge base → Settings → Help centers.',
   portalsUnnamed: (ids: number[]) =>
-    `Freshdesk gave no name for portal ${ids.join(', ')}, so its help center is named Portal <id>. Rename it in Settings → Help center.`,
+    `Freshdesk gave no name for portal ${ids.join(', ')}, so its help center is named Portal <id>. Rename it in Knowledge base → Settings → Help centers.`,
   atLeast: (n: number) => `at least ${n.toLocaleString('en')}`,
   unknownCount: 'not counted',
   ticketsNote: 'Archived tickets are counted in the report.',

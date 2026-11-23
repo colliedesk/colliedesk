@@ -98,10 +98,12 @@ If your Freshdesk account has several portals, each portal becomes a
 [help center](knowledge-base.md#several-help-centers) of its own:
 
 - The portal with the most categories goes on your primary help center, which keeps its name.
-- Every other portal gets a new help center, named after the portal in Freshdesk, at `/<handle>`. The
-  handle comes from that name (`portal-<id>` when the name gives none, `-2`, `-3` when it is taken).
-  When Freshdesk gives no name, the help center is called `Portal <id>` and the report says so: rename
-  it in Settings → Help center.
+- Every other portal gets a new help center, named after the portal in Freshdesk, at
+  `<primary address>/<handle>`. The handle comes from that name (`portal-<id>` when the name gives
+  none, `-2`, `-3` when it is taken). When Freshdesk gives no name, the help center is called
+  `Portal <id>` and the report says so: rename it in Knowledge base → Settings → Help centers.
+- A new help center starts **off**, so nothing new is public before you look at it: select **Turn on**
+  on its row in Knowledge base → Settings → Help centers.
 - A category shown in several portals is shown in each of their help centers.
 - A workspace has at most 20 help centers. A portal past that goes on the primary help center, and
   the report says so.

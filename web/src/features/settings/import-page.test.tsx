@@ -270,6 +270,7 @@ test('a finished import names the help center each Freshdesk portal became', () 
     'Portal 9 (Freshdesk portal 9, 1 category): on the primary help center: a workspace has at most 20 help centers',
   ]);
   expect(section).toHaveTextContent('Freshdesk gave no name for portal 9');
+  expect(section).toHaveTextContent('A help center the import makes starts off: turn it on in Knowledge base → Settings → Help centers.');
 });
 
 test('the preview says which Freshdesk portals get a help center of their own', () => {

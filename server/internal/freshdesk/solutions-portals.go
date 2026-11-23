@@ -127,7 +127,7 @@ func unnamedPortalsNote(plan []kbPortal) string {
 	if len(ids) == 0 {
 		return ""
 	}
-	return "Freshdesk gave no name for portal " + strings.Join(ids, ", ") + ", so its help center is named Portal <id>. Rename it in Settings."
+	return "Freshdesk gave no name for portal " + strings.Join(ids, ", ") + ", so its help center is named Portal <id>. Rename it in Knowledge base → Settings → Help centers."
 }
 
 // plannedPortalHelpCenters is the mapping a dry run reports: the first portal on the primary, every
