@@ -638,7 +638,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {(!base || status !== 'published' || raw?.has_draft || dirty) && <ArticleReviewBox articleId={base?.id} approval={approval} dirty={dirty} saved={base !== undefined}
         headingId={`${id}-review`} reasonId={reasonId} />}
-      {raw && <ArticleSourcesBox source={raw.gap_source} headingId={`${id}-sources`} />}
+      {raw && <ArticleSourcesBox source={raw.gap_source} reply={raw.reply_source} headingId={`${id}-sources`} />}
       {base && <ArticleTranslationsBox article={base} headingId={`${id}-translations`} />}
       {base && <ArticleStatsBox articleId={base.id} headingId={`${id}-stats`} />}
       {base && <ArticleVotesBox articleId={base.id} title={base.title} timezone={timezone} headingId={`${id}-votes`} />}

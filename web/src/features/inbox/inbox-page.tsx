@@ -23,6 +23,7 @@ import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
 import { askableTeammates } from './mention-match';
 import { messageMovesPart } from './message-moves-part';
+import { articleRequestPart } from './article-request-part';
 import { Part } from '../../ui/lazy-part';
 import { messages } from '../../messages';
 import { XIcon } from '../../ui/icons';
@@ -358,7 +359,9 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
             timezone={timezone} currentAgentId={currentAgentId} agentNames={agentNames} />} />}
           messageLabel={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageIntakeLabel conversation={selected} message={item} />} />)}
           messageNote={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageIntakeWhy conversation={selected} message={item} timezone={timezone} />} />)}
-          messageMenu={selected && ((item) => item.kind === 'incoming' && <Part part={messageMovesPart} render={(part) => <part.MessageMoveMenu conversation={selected} message={item} timeline={timeline} timezone={timezone} />} />)}
+          messageMenu={selected && ((item) => item.kind === 'incoming' ? <Part part={messageMovesPart} render={(part) => <part.MessageMoveMenu conversation={selected} message={item} timeline={timeline} timezone={timezone} />} />
+            : item.kind === 'outgoing' && !item.notice_kind && <Part part={articleRequestPart} render={(part) => <part.MakeArticleMenu conversation={selected} message={item} />} />)}
+          headerActions={selected && <Part part={articleRequestPart} render={(part) => <part.RequestArticleButton key={selected.id} conversation={selected} timeline={timeline} />} />}
           viewers={openViewers} onSetStatus={selected && onSetStatus ? (status, options) => onSetStatus(selected.id, status, options) : undefined}
           onSpam={selected && onSpam ? (spam) => applySpam([selected.id], spam) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
         {selected && <>
