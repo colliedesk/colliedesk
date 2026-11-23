@@ -327,12 +327,15 @@ function messageForm(kind: string, body: string, files: File[], cc: string[], se
   return form;
 }
 
+// CloudWorkspaceChoiceError carries the verified email's workspaces when it has more than one and none was named.
 export class CloudWorkspaceChoiceError extends Error {
+  readonly email: string;
   readonly workspaces: WorkspaceChoice[];
 
-  constructor(workspaces: WorkspaceChoice[]) {
+  constructor(email: string, workspaces: WorkspaceChoice[]) {
     super('Choose a workspace');
     this.name = 'CloudWorkspaceChoiceError';
+    this.email = email;
     this.workspaces = workspaces;
   }
 }
@@ -347,7 +350,8 @@ async function exchangeCloudSession(token: string, workspaceSlug?: string, next?
     body: JSON.stringify(body),
   });
   if (response.status === 409) {
-    throw new CloudWorkspaceChoiceError(cloudWorkspaceChoicesSchema.parse(await response.json()).workspaces);
+    const choices = cloudWorkspaceChoicesSchema.parse(await response.json());
+    throw new CloudWorkspaceChoiceError(choices.email, choices.workspaces);
   }
   if (response.status === 403 && (await errorCode(response)) === 'forbidden') throw new NotAnAgentError();
   if (!response.ok) throw new Error(`API ${response.status}`);

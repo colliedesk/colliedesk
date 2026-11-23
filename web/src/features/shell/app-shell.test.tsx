@@ -74,13 +74,12 @@ test('the avatar opens an account menu with who is signed in and Sign out', () =
   expect(signOut).toHaveBeenCalledTimes(1);
 });
 
-test('the account menu names the person and their role, and leaves the workspace and address to the bar above', () => {
+test('the account menu names the person, their role and their address, and leaves the workspace to the bar above', () => {
   render(<AppShell me={{ ...me, agent: { ...me.agent, display_name: 'Sam Lee', roles: rolesOf('admin') } }} onSignOut={() => {}}><p>inbox</p></AppShell>);
   fireEvent.click(screen.getByRole('button', { name: /^Account/ }));
   const menu = screen.getByRole('group', { name: 'Account' });
   expect(menu).toHaveTextContent('Sam Lee');
-  expect(menu).toHaveTextContent('Admin');
-  expect(menu).not.toHaveTextContent('sam@example.com');
+  expect(menu).toHaveTextContent('Admin · sam@example.com');
   expect(menu).not.toHaveTextContent('Beta Desk');
   expect(screen.getAllByRole('button').filter((button) => menu.contains(button)).map((button) => button.textContent)).toEqual(['Report a problem', 'Sign out']);
 });

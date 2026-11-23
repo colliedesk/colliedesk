@@ -31,21 +31,29 @@ not receive or manage that Colliedesk session.
 
 Where each workspace has its own address (`<workspace>.colliedesk.com` on Colliedesk Cloud), the main
 address (`app.colliedesk.com`) takes a person with one workspace straight to it. A person with several
-workspaces is asked which one to open every time.
+workspaces is asked which one to open every time, on a page titled **Choose a workspace**. It names the
+email you signed in with and lists your workspaces by name, each with its address and your role there.
+Select one to open it. To sign in with a different email, select **Use another email**.
 
 ### Switch workspace
 
-When your email belongs to more than one workspace, the account menu (your name at the foot of the
-sidebar, or your avatar on a phone) lists your other workspaces under **Switch workspace**.
+Inside a workspace on Colliedesk Cloud, the account menu (your name at the foot of the sidebar, or your
+avatar on a phone) has **Switch workspace…**.
 
 1. Open the account menu.
-2. Select the workspace to open.
+2. Select **Switch workspace…**.
+3. Select the workspace to open. With the keyboard, use the up and down arrows, then Enter. Escape closes
+   the list.
 
 It opens signed in, without a new code, while your cloud sign-in in this browser is still valid. You
-stay signed in to the workspace you came from. The list comes from the email you verified with the
-sign-in provider. It leaves out a workspace where you were deactivated. If you signed in with a link
-and not with cloud sign-in, the menu has no list. In that case, open `app.colliedesk.com/sign-in` to
-choose a workspace.
+stay signed in to the workspace you came from. The current workspace is first in the list, marked
+**Current**. The list comes from the email you verified with the sign-in provider. It leaves out a
+workspace where you were deactivated. If it is your only workspace, the list says so and offers
+**Create a workspace**.
+
+If the list cannot be read, it says **Could not load your other workspaces**. This happens when you
+signed in with a link and not with cloud sign-in, or when the sign-in provider cannot be reached. Select
+**Try again**, or select **Choose on app.colliedesk.com** to pick the workspace on the main address.
 
 ## Create a workspace (hosted cloud)
 
