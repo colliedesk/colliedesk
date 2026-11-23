@@ -172,6 +172,10 @@ offers this address only when both are set:
 - `email.trusted_authserv_id`, because a sender is proven only by your receiving server's
   `Authentication-Results` result. Without a trusted server no sender is proven, so the address is off.
 
+Colliedesk reads only the topmost `Authentication-Results` header with that name. Make sure your
+receiving server removes any `Authentication-Results` header that arrives with its own name before it
+adds its result. Otherwise a sender can write one and pass as a teammate.
+
 The `kb` name is reserved: a new mailbox never gets `kb@` as its forwarding address. A mailbox that
 already has it keeps its mail, and that workspace has no knowledge base address.
 
