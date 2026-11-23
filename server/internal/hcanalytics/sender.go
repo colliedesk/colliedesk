@@ -28,13 +28,13 @@ type Sender struct {
 	dropped atomic.Int64
 
 	mu      sync.Mutex
-	targets map[string]Target
-	results map[string]Result
-	failing map[string]failing
-	// generation counts single-workspace reloads; changed holds the generation of each one that a
+	targets map[centerKey]Target
+	results map[centerKey]Result
+	failing map[centerKey]failing
+	// generation counts single help center reloads; changed holds the generation of each one that a
 	// full reload in progress may not have seen.
 	generation uint64
-	changed    map[string]uint64
+	changed    map[centerKey]uint64
 	keyDay     string
 	key        []byte
 }
@@ -52,16 +52,17 @@ type delivery struct {
 func New(store Store, options Options) *Sender {
 	options = options.withDefaults()
 	return &Sender{store: store, options: options, client: guardedClient(options.AllowDial, options.Timeout),
-		queue: make(chan *delivery, options.QueueSize), targets: map[string]Target{}, results: map[string]Result{},
-		failing: map[string]failing{}, changed: map[string]uint64{}}
+		queue: make(chan *delivery, options.QueueSize), targets: map[centerKey]Target{}, results: map[centerKey]Result{},
+		failing: map[centerKey]failing{}, changed: map[centerKey]uint64{}}
 }
 
-// PageViewed implements pageview.Consumer: it queues the view for the workspace's target, if any
-// and not paused.
+// PageViewed implements pageview.Consumer: it queues the view for the target of the help center that
+// served it, if any and not paused.
 func (s *Sender) PageViewed(event pageview.Event) {
+	center := centerKey{event.WorkspaceID, event.HelpCenterID}
 	s.mu.Lock()
-	target, ok := s.targets[event.WorkspaceID]
-	ok = ok && !s.pausedLocked(event.WorkspaceID)
+	target, ok := s.targets[center]
+	ok = ok && !s.pausedLocked(center)
 	var clientID, session string
 	if ok && target.Provider == GA4 {
 		clientID, session = s.readerIDs(event)
@@ -196,13 +197,13 @@ func (s *Sender) Flush(ctx context.Context) error {
 	for _, result := range s.results {
 		results = append(results, result)
 	}
-	s.results = map[string]Result{}
+	s.results = map[centerKey]Result{}
 	s.mu.Unlock()
 	err := s.store.RecordHelpCenterAnalyticsResults(ctx, results)
 	if err != nil {
 		s.mu.Lock()
 		for _, result := range results {
-			s.results[result.WorkspaceID] = mergeOlder(s.results[result.WorkspaceID], result)
+			s.results[result.key()] = mergeOlder(s.results[result.key()], result)
 		}
 		s.mu.Unlock()
 	}

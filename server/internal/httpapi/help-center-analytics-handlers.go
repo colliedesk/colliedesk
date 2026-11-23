@@ -10,7 +10,11 @@ import (
 )
 
 func (a *API) getHelpCenterAnalytics(response http.ResponseWriter, request *http.Request) {
-	settings, err := a.store.GetHelpCenterAnalytics(request.Context(), principal(request).Workspace.ID)
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
+	settings, err := a.store.GetHelpCenterAnalyticsIn(request.Context(), principal(request).Workspace.ID, helpCenterID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -19,9 +23,13 @@ func (a *API) getHelpCenterAnalytics(response http.ResponseWriter, request *http
 }
 
 // putHelpCenterAnalytics saves where the page views go. ga4_api_secret left out or null keeps the
-// stored secret, "" removes it; it is never answered. The sender reloads the workspace's target, so
-// the next page view goes to the new place.
+// stored secret, "" removes it; it is never answered. The sender reloads the help center's target,
+// so the next page view goes to the new place.
 func (a *API) putHelpCenterAnalytics(response http.ResponseWriter, request *http.Request) {
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
 	var input struct {
 		Provider      string  `json:"provider"`
 		Enabled       bool    `json:"enabled"`
@@ -48,7 +56,7 @@ func (a *API) putHelpCenterAnalytics(response http.ResponseWriter, request *http
 		return
 	}
 	workspaceID := principal(request).Workspace.ID
-	settings, err := a.store.PutHelpCenterAnalytics(request.Context(), workspaceID, principal(request).Agent.ID, change)
+	settings, center, err := a.store.PutHelpCenterAnalyticsIn(request.Context(), workspaceID, helpCenterID, principal(request).Agent.ID, change)
 	if errors.Is(err, store.ErrSealKeysMissing) {
 		writeError(response, http.StatusConflict, "secret_keys_missing",
 			"This server has no MAILBOX_TOKEN_KEYS, so it cannot keep a GA4 API secret. Ask whoever runs it to set them, or use Plausible, which needs no secret. Nothing was saved.")
@@ -59,8 +67,9 @@ func (a *API) putHelpCenterAnalytics(response http.ResponseWriter, request *http
 		return
 	}
 	if a.config.Analytics != nil {
-		if err := a.config.Analytics.Reload(request.Context(), workspaceID); err != nil {
-			slog.Warn("help center analytics: reloading the saved target failed; the next reload applies it", "workspace", workspaceID, "error", err)
+		if err := a.config.Analytics.ReloadIn(request.Context(), workspaceID, center); err != nil {
+			slog.Warn("help center analytics: reloading the saved target failed; the next reload applies it",
+				"workspace", workspaceID, "help_center", center, "error", err)
 		}
 	}
 	writeJSON(response, http.StatusOK, settings)
@@ -69,14 +78,19 @@ func (a *API) putHelpCenterAnalytics(response http.ResponseWriter, request *http
 // testHelpCenterAnalytics sends one test page view to the saved service, on or off, as the person
 // asking (their browser and address), and answers what the service said.
 func (a *API) testHelpCenterAnalytics(response http.ResponseWriter, request *http.Request) {
-	if a.config.Analytics == nil {
-		writeError(response, http.StatusServiceUnavailable, "analytics_unavailable", "This server does not send help center page views, so it cannot send a test.")
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
 		return
 	}
-	workspaceID := principal(request).Workspace.ID
-	target, err := a.store.HelpCenterAnalyticsTarget(request.Context(), workspaceID)
+	// The help center is resolved first: an id of another workspace or a deleted one is not found on
+	// every server, with or without the sender.
+	target, err := a.store.HelpCenterAnalyticsTargetIn(request.Context(), principal(request).Workspace.ID, helpCenterID)
 	if err != nil {
 		writeStoreError(response, err)
+		return
+	}
+	if a.config.Analytics == nil {
+		writeError(response, http.StatusServiceUnavailable, "analytics_unavailable", "This server does not send help center page views, so it cannot send a test.")
 		return
 	}
 	if target == nil {

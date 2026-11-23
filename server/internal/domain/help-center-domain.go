@@ -64,6 +64,8 @@ type HelpCenterDomainProof struct {
 var (
 	// ErrHelpCenterDomainTaken: another workspace's help center already serves on the host name.
 	ErrHelpCenterDomainTaken = errors.New("another workspace's help center already serves on this host name")
+	// ErrHelpCenterDomainInUse: another help center of the same workspace uses the host name.
+	ErrHelpCenterDomainInUse = errors.New("another help center of this workspace uses this host name")
 	// ErrHelpCenterDomainMissing: the workspace has no custom domain, or it changed during a check.
 	ErrHelpCenterDomainMissing = errors.New("no custom domain is set")
 )

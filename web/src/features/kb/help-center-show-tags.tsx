@@ -15,11 +15,14 @@ const showTagsMessages = {
   off: 'Article pages do not show their tags to readers.',
 };
 
-export function HelpCenterShowTags({ settings, canManage }: { settings: HelpCenter; canManage: boolean }) {
+// The primary's switch saves its settings; another help center's passes saveOn, which saves that one's by id.
+export function HelpCenterShowTags({ settings, canManage, saveOn }: {
+  settings: Pick<HelpCenter, 'enabled' | 'title' | 'locale' | 'show_tags'>; canManage: boolean; saveOn?: (on: boolean) => Promise<unknown>;
+}) {
   const client = useQueryClient();
   const save = useMutation({
-    mutationFn: (on: boolean) => kbApi.saveHelpCenter({ enabled: settings.enabled, title: settings.title, locale: settings.locale || 'en', show_tags: on }),
-    onSuccess: (saved) => client.setQueryData(['help-center'], saved),
+    mutationFn: (on: boolean) => saveOn ? saveOn(on) : kbApi.saveHelpCenter({ enabled: settings.enabled, title: settings.title, locale: settings.locale || 'en', show_tags: on }),
+    onSuccess: (saved) => { if (!saveOn) client.setQueryData(['help-center'], saved); },
   });
   if (!canManage) return <p className="muted-copy">{settings.show_tags ? showTagsMessages.on : showTagsMessages.off}</p>;
   const on = save.isPending ? save.variables : settings.show_tags;

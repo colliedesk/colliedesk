@@ -8,6 +8,7 @@ import type { Generated } from '../../api/schemas';
 import { messages } from '../../messages';
 import { HelpTip } from '../../ui/help-tip';
 import { searchConsoleMessages as text } from './help-center-search-console-messages';
+import { keyOf, onHelpCenter, useHelpCenterTarget } from './help-center-target';
 
 const path = '/api/v1/help-center/search-console';
 const schema = z.object({
@@ -19,9 +20,10 @@ const refusalFields = z.object({ fields: z.object({}).catchall(z.string()) });
 
 type Tokens = RequestBody<'putHelpCenterSearchConsole'>;
 
+// Each call acts on the primary help center, or on the one helpCenterId names.
 const searchConsoleApi = {
-  get: () => request(path, schema),
-  save: (tokens: Tokens) => request(path, schema, { method: 'PUT', body: JSON.stringify(tokens) }),
+  get: (helpCenterId?: string) => request(`${path}${onHelpCenter(helpCenterId)}`, schema),
+  save: (tokens: Tokens, helpCenterId?: string) => request(`${path}${onHelpCenter(helpCenterId)}`, schema, { method: 'PUT', body: JSON.stringify(tokens) }),
 };
 
 function fieldMessages(error: unknown): Record<string, string> {
@@ -34,8 +36,10 @@ function fieldMessages(error: unknown): Record<string, string> {
 // Admins paste and save them; every agent sees whether each is set.
 export function HelpCenterSearchConsoleSection({ canManage }: { canManage: boolean }) {
   const client = useQueryClient();
-  const current = useQuery({ queryKey: ['help-center-search-console'], queryFn: searchConsoleApi.get });
-  const save = useMutation({ mutationFn: searchConsoleApi.save, onSuccess: (saved) => client.setQueryData(['help-center-search-console'], saved) });
+  const target = useHelpCenterTarget();
+  const tokensKey = keyOf(['help-center-search-console'], target);
+  const current = useQuery({ queryKey: tokensKey, queryFn: () => searchConsoleApi.get(target) });
+  const save = useMutation({ mutationFn: (tokens: Tokens) => searchConsoleApi.save(tokens, target), onSuccess: (saved) => client.setQueryData(tokensKey, saved) });
   const [google, setGoogle] = useState('');
   const [bing, setBing] = useState('');
   useEffect(() => {

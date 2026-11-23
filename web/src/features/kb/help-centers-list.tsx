@@ -62,6 +62,7 @@ function HelpCenterRow({ center, canManage }: { center: HelpCenterSummary; canMa
             onClick={() => { remove.reset(); toggle.mutate(); }}>{center.enabled ? text.turnOff : text.turnOn}</button>
           <button type="button" className="danger-action" aria-label={text.deleteName(name)} onClick={() => { toggle.reset(); setConfirming(true); }}>{text.delete}</button>
         </span>)}
+    {!center.primary && <a className="button-link" href={`/knowledge/settings/help-centers/${center.id}`} aria-label={text.settingsOf(name)}>{text.settings}</a>}
   </li>;
 }
 

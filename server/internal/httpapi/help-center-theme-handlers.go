@@ -189,6 +189,10 @@ func (a *API) checkHelpCenterTheme(response http.ResponseWriter, request *http.R
 // Each person's previews count against the help center's page budget, so an editor left typing cannot
 // load the server; a body the server cannot read counts too.
 func (a *API) previewHelpCenterTheme(response http.ResponseWriter, request *http.Request) {
+	helpCenterID, ok := helpCenterIDOf(response, request)
+	if !ok {
+		return
+	}
 	who := principal(request)
 	if allowed, wait := a.helpCenterPages.allow("preview "+who.Workspace.ID+" "+who.Agent.ID, a.now()); !allowed {
 		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
@@ -213,7 +217,7 @@ func (a *API) previewHelpCenterTheme(response http.ResponseWriter, request *http
 		return
 	}
 	// The logo and favicon are checked in the preview's own transaction.
-	html, err := a.helpCenter.Preview(request.Context(), who.Workspace.ID, cleaned, input.Page)
+	html, err := a.helpCenter.Preview(request.Context(), who.Workspace.ID, helpCenterID, cleaned, input.Page)
 	if err != nil {
 		writeThemeError(response, err)
 		return
