@@ -220,6 +220,10 @@ used up.
 Imported tickets get no suggestion. A suggestion nobody used for 7 days expires; its reason is erased
 90 days after it ended. Colliedesk keeps whether each one was accepted, in part, or dismissed.
 
+The same model also checks the replies your team sends against the published article each is about,
+and marks an article a reply contradicts as **May be out of date**, at most 50 checks a day
+([Out of date articles](knowledge-base.md#out-of-date-articles)).
+
 ### Apply suggestions automatically
 
 Admins can let suggestions apply by themselves: **Settings → AI & agents**, under **Triage suggestions**, set
