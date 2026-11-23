@@ -5766,7 +5766,7 @@ export interface paths {
         };
         /** @description The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the last check. `records` lists one record that sends the host name to Colliedesk and one that proves the workspace owns it: on a server with `HELP_CENTER_DOMAIN`, a CNAME to the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>` does both, and the TXT record is the alternative; without it, the TXT record proves ownership and the CNAME (or A/AAAA) record only routes. The CNAME target and the token are random, made when the host name is set, and kept until it is removed or replaced; the workspace's slug proves nothing, since another workspace may take it after a rename. The token is in the TXT record's value; it is public in DNS once set, so `help_center:read` reads it, and it is never exported. On a server with billing, a workspace on its trial may set and verify a domain, but the help center serves on it only once the workspace is paid (`awaiting_payment`). */
         get: operations["getHelpCenterDomain"];
-        /** @description Set or replace the help center's custom domain. Needs `help_center:update` and `kb_articles:publish`. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check) with a new token and CNAME target; sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it. A host name another workspace's help center serves on can be claimed too: the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim and no longer proves the other workspace's. */
+        /** @description Set or replace the help center's custom domain. Needs `help_center:update` and `kb_articles:publish`. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check) with a new token and CNAME target; sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it. A host name another workspace's help center serves on can be claimed too: the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim and no longer proves the other workspace's. A host name another help center of the same workspace uses is refused with 409 `domain_taken`: remove it there first. */
         put: operations["putHelpCenterDomain"];
         post?: never;
         /** @description Remove the custom domain. The help center stops serving on it with the next request to this server (other server processes within 30 seconds) and its other addresses stop redirecting there. Setting the same host name again needs a new check, with a new CNAME target and TXT token. Needs `help_center:update` and `kb_articles:publish`; removing when there is none changes nothing. */
@@ -5785,7 +5785,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and answers 409 `domain_taken` if it does. 404 when no domain is set. Needs `help_center:update` and `kb_articles:publish`. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429 with `Retry-After`): each makes the server ask DNS. */
+        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (only that help center of the other workspace goes back to `pending` with `taken_over`; its other help centers keep their names), and answers 409 `domain_taken` if it does, or when another help center of the same workspace serves on the name. 404 when no domain is set. Needs `help_center:update` and `kb_articles:publish`. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429 with `Retry-After`): each makes the server ask DNS. */
         post: operations["checkHelpCenterDomain"];
         delete?: never;
         options?: never;
@@ -25083,7 +25083,10 @@ export interface operations {
     };
     getHelpCenterAnalytics: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -25104,7 +25107,10 @@ export interface operations {
     };
     putHelpCenterAnalytics: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -25133,7 +25139,10 @@ export interface operations {
     };
     testHelpCenterAnalytics: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -25222,7 +25231,10 @@ export interface operations {
     };
     previewHelpCenterTheme: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The help center to act on (GET /api/v1/help-centers). Left out, the primary help center, as before a workspace could have several. Not a uuid is 400; a help center that is not this workspace's, or was deleted, is 404 and nothing changes. */
+                help_center_id?: components["parameters"]["HelpCenterIDQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
