@@ -47,6 +47,8 @@ interface TimelinePanelProps {
   // An AI triage suggestion waits in the details, which a narrow screen hides behind the toggle.
   suggestionWaiting?: boolean;
   onToggleDetails?: () => void;
+  // Shown first among the header's actions: Request article.
+  headerActions?: ReactNode;
   detailsToggleRef?: RefObject<HTMLButtonElement | null>;
   // Team member names by id, to name the person who approved a reply an AI agent drafted.
   agentNames?: ReadonlyMap<string, string>;
@@ -125,7 +127,7 @@ function SpamButton({ spam, onSpam }: { spam: boolean; onSpam: (spam: boolean) =
     {spam ? <BanIcon /> : <RotateCcwIcon />}<span className={spam ? 'spam-button-label' : undefined}>{spam ? messages.spam : messages.notSpam}</span></button>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, helpCenterLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, onRetryTimeline, emptyText, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, helpCenterLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, onRetryTimeline, emptyText, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, headerActions, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
   // A role that reads conversations but not their messages is told so instead of waiting for them.
   const readsMessages = useHolds()('messages:read');
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
@@ -169,7 +171,8 @@ export function TimelinePanel({ conversation, channelLabel, helpCenterLabel, ite
               {conversation.contact_name}</a></div>}
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
-        {conversation && (onSetStatus || onSpam || onToggleDetails) && <div className="timeline-actions">
+        {conversation && (headerActions || onSetStatus || onSpam || onToggleDetails) && <div className="timeline-actions">
+          {headerActions}
           {onSpam && conversation.status === 'spam' ? <SpamButton spam={false} onSpam={onSpam} />
             : <>
               {onSetStatus && <StatusButton key={conversation.id} conversation={conversation} onSetStatus={onSetStatus} noticesFailed={noticesFailed} />}

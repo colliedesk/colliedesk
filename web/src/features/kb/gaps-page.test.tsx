@@ -14,14 +14,14 @@ afterEach(() => { navigate.mockReset(); vi.unstubAllGlobals(); });
 const invoicesID = '00000000-0000-4000-8000-000000000101';
 const shippingID = '00000000-0000-4000-8000-000000000102';
 const gap = (id: string, title: string, recent: number, kinds: string[], status: 'open' | 'fixed' | 'dismissed' = 'open') => ({
-  id, title, status, kinds, askers: recent + 1, recent_askers: recent, first_seen: '2026-11-01T09:00:00Z', last_seen: '2026-11-21T09:00:00Z',
+  id, title, status, kinds, askers: recent + 1, recent_askers: recent, conversation_count: 0, first_seen: '2026-11-01T09:00:00Z', last_seen: '2026-11-21T09:00:00Z',
   fixed_by_article: null as { id: string; title: string } | null, fixed_automatically: false, status_changed_by: null, status_changed_at: null,
 });
 const invoices = gap(invoicesID, 'Where are my invoices', 2, ['search_no_result', 'vote_no']);
 const shipping = gap(shippingID, 'shipping to canada', 1, ['chat_handoff']);
 const signals = [
-  { kind: 'vote_no', text: 'I could not find the invoices', created_at: '2026-11-21T09:00:00Z' },
-  { kind: 'search_no_result', text: 'where are my invoices', created_at: '2026-11-20T09:00:00Z' },
+  { kind: 'vote_no', text: 'I could not find the invoices', note: null, created_at: '2026-11-21T09:00:00Z' },
+  { kind: 'search_no_result', text: 'where are my invoices', note: null, created_at: '2026-11-20T09:00:00Z' },
 ];
 const center = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, show_tags: false, feedback_conversations: false, url: 'https://desk.example.com/help/acme' };
 const answer = summary(9, 'Download your invoices', 'published');
@@ -37,11 +37,11 @@ function open(permissions?: string[]) {
 const shippingRoutes = {
   'GET /api/v1/auth/me': () => json(200, me),
   'GET /api/v1/kb/gaps': () => json(200, { items: [shipping] }),
-  [`GET /api/v1/kb/gaps/${shippingID}`]: () => json(200, { ...shipping, signal_count: 1, signals: [{ kind: 'chat_handoff', text: 'do you ship to canada', created_at: '2026-11-21T09:00:00Z' }] }),
+  [`GET /api/v1/kb/gaps/${shippingID}`]: () => json(200, { ...shipping, signal_count: 1, conversations: [], signals: [{ kind: 'chat_handoff', text: 'do you ship to canada', note: null, created_at: '2026-11-21T09:00:00Z' }] }),
 };
 const drafted = article({
   title: 'Shipping to Canada', status: 'draft',
-  gap_source: { gap_id: shippingID, conversations: [{ conversation_id: '00000000-0000-4000-8000-000000000201', display_ref: '#41', subject: 'Do you ship to Canada?' }] },
+  gap_source: { gap_id: shippingID, requested: false, conversations: [{ conversation_id: '00000000-0000-4000-8000-000000000201', display_ref: '#41', subject: 'Do you ship to Canada?' }] },
 });
 
 test('"Draft an article" has the AI write a draft from the gap and opens it in the editor', async () => {
@@ -88,7 +88,7 @@ test('the gaps page ranks what readers did not find, and a row opens its signals
   const calls = serve({
     'GET /api/v1/auth/me': () => json(200, me),
     'GET /api/v1/kb/gaps': (call) => json(200, { items: call.search.get('kind') === 'chat_handoff' ? [shipping] : open_ }),
-    [`GET /api/v1/kb/gaps/${invoicesID}`]: () => json(200, { ...invoices, signal_count: 2, signals }),
+    [`GET /api/v1/kb/gaps/${invoicesID}`]: () => json(200, { ...invoices, signal_count: 2, conversations: [], signals }),
     [`PATCH /api/v1/kb/gaps/${invoicesID}`]: () => {
       open_ = [shipping];
       return json(200, { ...invoices, status: 'fixed', fixed_by_article: { id: answer.id, title: answer.title }, status_changed_by: { agent_id: me.agent.id, name: 'Ada' }, status_changed_at: '2026-11-22T09:00:00Z' });
@@ -126,7 +126,7 @@ test('dismissing a gap sends its status and can be undone', async () => {
   serve({
     'GET /api/v1/auth/me': () => json(200, me),
     'GET /api/v1/kb/gaps': () => json(200, { items: [shipping] }),
-    [`GET /api/v1/kb/gaps/${shippingID}`]: () => json(200, { ...shipping, signal_count: 1, signals: [{ kind: 'chat_handoff', text: 'do you ship to canada', created_at: '2026-11-21T09:00:00Z' }] }),
+    [`GET /api/v1/kb/gaps/${shippingID}`]: () => json(200, { ...shipping, signal_count: 1, conversations: [], signals: [{ kind: 'chat_handoff', text: 'do you ship to canada', note: null, created_at: '2026-11-21T09:00:00Z' }] }),
     [`PATCH /api/v1/kb/gaps/${shippingID}`]: (call) => {
       bodies.push(call.body);
       return json(200, { ...shipping, status: (call.body as { status: 'open' | 'dismissed' }).status });
@@ -144,4 +144,59 @@ test('a workspace with no open gap says where gaps come from', async () => {
   serve({ 'GET /api/v1/auth/me': () => json(200, me), 'GET /api/v1/kb/gaps': () => json(200, { items: [] }) });
   open();
   expect(await screen.findByText('No open gaps. A help center search with no result, a "No" vote or a help chat handed to a person shows here within a minute.')).toBeInTheDocument();
+});
+
+const passwordID = '00000000-0000-4000-8000-000000000103';
+const locked = '00000000-0000-4000-8000-000000000211';
+const forgot = '00000000-0000-4000-8000-000000000212';
+const password = { ...gap(passwordID, 'Reset a password', 2, ['requested']), conversation_count: 2 };
+const passwordRoutes = {
+  'GET /api/v1/auth/me': () => json(200, me),
+  'GET /api/v1/kb/gaps': () => json(200, { items: [password] }),
+  [`GET /api/v1/kb/gaps/${passwordID}`]: () => json(200, {
+    ...password, signal_count: 2,
+    conversations: [
+      { conversation_id: locked, display_ref: '#58', subject: 'Locked out' },
+      { conversation_id: forgot, display_ref: '#41', subject: 'Forgot my password' },
+    ],
+    signals: [
+      { kind: 'requested', text: 'Reset a password', note: 'Asked twice this week', created_at: '2026-11-21T09:00:00Z' },
+      { kind: 'requested', text: 'Reset a password', note: null, created_at: '2026-11-20T09:00:00Z' },
+    ],
+  }),
+};
+
+test('a request from conversations counts them, links back to each, and shows the line its asker wrote', async () => {
+  serve(passwordRoutes);
+  open();
+  const row = rowsOf(await screen.findByRole('list', { name: 'Open gaps' }))[0];
+  expect(within(row).getByText('Asked from 2 conversations')).toBeInTheDocument();
+  expect(within(within(row).getByRole('list', { name: 'Kinds' })).getByRole('listitem')).toHaveTextContent('Requested from a conversation');
+  fireEvent.click(within(row).getByRole('button', { name: 'Reset a password' }));
+  const asked = await screen.findByRole('list', { name: 'Conversations that asked for it' });
+  expect(within(asked).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+    ['#58 Locked out', `/conversations/${locked}`],
+    ['#41 Forgot my password', `/conversations/${forgot}`],
+  ]);
+  expect(screen.getByText('Asked twice this week')).toBeInTheDocument();
+});
+
+test('"Start a draft" opens an empty draft of the request in the editor, beside the conversations that asked, without AI', async () => {
+  const started = article({ title: 'Reset a password', status: 'draft', gap_source: { gap_id: passwordID, requested: true, conversations: [] } });
+  const calls = serve({ ...passwordRoutes, [`POST /api/v1/kb/gaps/${passwordID}/article`]: () => json(201, started) });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Reset a password' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Start a draft' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/knowledge/articles/$articleId', params: { articleId: ids.article } }));
+  const posts = calls.filter((call) => call.method === 'POST');
+  expect(posts.map((call) => call.path)).toEqual([`/api/v1/kb/gaps/${passwordID}/article`]);
+  expect(posts[0].headers['Idempotency-Key']).toMatch(/.{16,}/);
+});
+
+test('a role that may not read conversations sees how many asked, never which ones', async () => {
+  serve({ ...passwordRoutes, [`GET /api/v1/kb/gaps/${passwordID}`]: () => json(200, { ...password, signal_count: 0, conversations: [], signals: [] }) });
+  open(permissionsOf('admin').filter((permission) => permission !== 'conversations:read'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Reset a password' }));
+  expect(await screen.findByText('Asked from 2 conversations')).toBeInTheDocument();
+  expect(screen.queryByRole('list', { name: 'Conversations that asked for it' })).not.toBeInTheDocument();
 });

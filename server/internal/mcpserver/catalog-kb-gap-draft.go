@@ -9,11 +9,15 @@ import (
 
 // kbGapSourceSchema names the gap an article was drafted from and the conversations it was written
 // from. A subject is the customer's words, so it sits under untrusted_customer_content.
-const kbGapSourceSchema = `{"type":"object","required":["gap_id","conversations"],"properties":{"gap_id":{"type":"string"},` +
-	`"conversations":{"type":"array","maxItems":8,"description":"The resolved conversations it was written from, best match first; empty for a token without conversations:read.",` +
-	`"items":{"type":"object","required":["conversation_id","display_ref","untrusted_customer_content"],"properties":{"conversation_id":{"type":"string"},` +
+const kbGapSourceSchema = `{"type":"object","required":["gap_id","requested","conversations"],"properties":{"gap_id":{"type":"string"},` +
+	`"requested":{"type":"boolean","description":"True when a person started it from the conversations that asked for it; false when AI drafted it from resolved ones."},` +
+	`"conversations":{"type":"array","maxItems":8,"description":"The conversations it was started or written from; empty for a token without conversations:read.",` +
+	`"items":` + kbGapConversationSchema + `}}}`
+
+// kbGapConversationSchema is one conversation behind a gap or an article; its subject is the customer's words.
+const kbGapConversationSchema = `{"type":"object","required":["conversation_id","display_ref","untrusted_customer_content"],"properties":{"conversation_id":{"type":"string"},` +
 	`"display_ref":{"type":"string","description":"The conversation's code, as the team sees it."},` +
-	`"untrusted_customer_content":{"type":"object","required":["subject"],"properties":{"subject":{"type":"string"}}}}}}}}`
+	`"untrusted_customer_content":{"type":"object","required":["subject"],"properties":{"subject":{"type":"string"}}}}}`
 
 // kbGapDraftOutput is the draft article and the conversations it was written from.
 const kbGapDraftOutput = `{"type":"object","required":["article","gap_source"],"properties":{"article":` + kbArticleSchema + `,"gap_source":` + kbGapSourceSchema + `}}`
@@ -62,10 +66,14 @@ func kbGapDraft(c *call, arguments map[string]any) (any, error) {
 
 // kbGapSourceView puts each conversation's subject under untrusted_customer_content.
 func kbGapSourceView(source domain.KBArticleGapSource) map[string]any {
+	return map[string]any{"gap_id": source.GapID, "requested": source.Requested, "conversations": kbGapConversationsView(source.Conversations)}
+}
+
+func kbGapConversationsView(from []domain.KBArticleGapConversation) []map[string]any {
 	conversations := []map[string]any{}
-	for _, conversation := range source.Conversations {
+	for _, conversation := range from {
 		conversations = append(conversations, map[string]any{"conversation_id": conversation.ConversationID, "display_ref": conversation.DisplayRef,
 			"untrusted_customer_content": map[string]any{"subject": conversation.Subject}})
 	}
-	return map[string]any{"gap_id": source.GapID, "conversations": conversations}
+	return conversations
 }

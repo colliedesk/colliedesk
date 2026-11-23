@@ -87,10 +87,14 @@ func (a *API) gapDraftCollection(response http.ResponseWriter, request *http.Req
 	return "", false
 }
 
-// hideGapConversations leaves out the conversations an article was drafted from for a caller who may
-// not read conversations; the gap stays named.
+// hideGapConversations leaves out the conversations an article was drafted or made from for a caller
+// who may not read conversations; the gap stays named.
 func hideGapConversations(who auth.Principal, article *domain.KBArticle) {
-	if article.GapSource != nil && !who.Can(auth.PermConversationsRead) {
+	if who.Can(auth.PermConversationsRead) {
+		return
+	}
+	if article.GapSource != nil {
 		article.GapSource.Conversations = []domain.KBArticleGapConversation{}
 	}
+	article.ReplySource = nil
 }

@@ -79,7 +79,7 @@ const (
 	kbArticleGetOutput = `{"type":"object","required":["article"],"properties":{"article":` + kbArticleSchemaOpen + `,` +
 		`"views_30d":{"type":"integer","description":"Help center views in the last 30 days; per day with colliedesk_kb_article_stats."},` +
 		`"uses_30d":{"type":"integer","description":"Sent replies that linked it or were an AI draft quoting it, last 30 days."}}},` +
-		`"gap_source":` + kbGapSourceSchema + `}}`
+		`"gap_source":` + kbGapSourceSchema + `,"reply_source":` + kbReplySourceSchema + `}}`
 
 	kbCollectionSchema = `{"type":"object","required":["id","parent_id","name","slug","description","position","article_count","updated_at","default_template_id","visibility","effective_visibility"],"properties":{` +
 		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"default_template_id":{"type":["string","null"],"description":"The template every new article in it starts from (colliedesk_kb_templates_list); null: they start empty."},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
@@ -226,7 +226,7 @@ func kbArticleGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_get",
 		Title: "Read a knowledge base article",
-		Description: `Read one article with its whole Markdown text and its public address (url), and its unpublished changes (draft) if it has any. It also finds an article in the trash, and says so with in_trash. An article drafted from a knowledge gap names the gap and the conversations it was written from (gap_source). Use its updated_at when you change it.` +
+		Description: `Read one article with its whole Markdown text and its public address (url), and its unpublished changes (draft) if it has any. It also finds an article in the trash, and says so with in_trash. An article drafted from a knowledge gap names the gap and the conversations it was written from (gap_source); one made from a sent reply names the conversation and the question (reply_source). Use its updated_at when you change it.` +
 			"\n\n" + kbTextNotice,
 		REST:   []string{"GET /api/v1/kb/articles/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["article_id"],"properties":{` + kbArticleIDProperty + `}}`,

@@ -930,6 +930,12 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/kb/gaps/{id}", auth.PermissionSession},
 		// A draft article written by the AI from a gap and the resolved conversations that match it.
 		{http.MethodPost, "/api/v1/kb/gaps/{id}/draft", auth.PermissionSession},
+		// A conversation's request for an article, filed as a knowledge gap, and taking it back.
+		{http.MethodPost, "/api/v1/conversations/{id}/article-request", auth.PermissionSession},
+		{http.MethodDelete, "/api/v1/conversations/{id}/article-request", auth.PermissionSession},
+		// A draft started from a gap beside the conversations that asked for it, and one made from a sent reply.
+		{http.MethodPost, "/api/v1/kb/gaps/{id}/article", auth.PermissionSession},
+		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/article", auth.PermissionSession},
 	}
 }
 

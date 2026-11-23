@@ -12,13 +12,15 @@ import (
 )
 
 // kbGapSelect reads gaps with their kinds, their rank (distinct askers of the last
-// domain.KBGapRankDays days), the article that fixes them and who changed their status last.
+// domain.KBGapRankDays days), the conversations that asked or keep asking, the article that fixes
+// them and who changed their status last.
 // %s is the rest of the query after FROM; it names the gap g.
-var kbGapSelect = `SELECT g.id::text, g.title, g.status, s.kinds, g.askers, s.recent, g.first_seen, g.last_seen,
+var kbGapSelect = `SELECT g.id::text, g.title, g.status, s.kinds, g.askers, s.recent, s.conversations, g.first_seen, g.last_seen,
 		a.id::text, a.title, g.fixed_automatically, p.id::text, COALESCE(NULLIF(p.display_name, ''), p.email), g.status_changed_at
 	FROM kb_gaps g
 	CROSS JOIN LATERAL (SELECT COALESCE(array_agg(DISTINCT k.kind ORDER BY k.kind), '{}') AS kinds,
-			count(DISTINCT k.asker_key) FILTER (WHERE k.created_at > now() - interval '` + kbGapRankWindow + `') AS recent
+			count(DISTINCT k.asker_key) FILTER (WHERE k.created_at > now() - interval '` + kbGapRankWindow + `') AS recent,
+			count(DISTINCT k.source_id) FILTER (WHERE k.kind IN ` + kbGapConversationKinds + `) AS conversations
 		FROM kb_gap_signals k WHERE k.workspace_id=g.workspace_id AND k.gap_id=g.id) s
 	LEFT JOIN kb_articles a ON a.workspace_id=g.workspace_id AND a.id=g.fixed_by_article_id
 	LEFT JOIN agents p ON p.workspace_id=g.workspace_id AND p.id=g.status_changed_by_agent_id
@@ -26,26 +28,41 @@ var kbGapSelect = `SELECT g.id::text, g.title, g.status, s.kinds, g.askers, s.re
 
 var kbGapRankWindow = strconv.Itoa(domain.KBGapRankDays) + " days"
 
+// kbGapConversationKinds are the signal kinds whose source is a conversation.
+const kbGapConversationKinds = `('requested', 'recurring_topic')`
+
+// maxKBGapConversationsShown bounds the conversations a gap's detail lists.
+const maxKBGapConversationsShown = 100
+
 func scanKBGap(row pgx.Row) (domain.KBGap, error) {
 	var g domain.KBGap
 	var articleID, articleTitle, agentID, agentName *string
-	err := row.Scan(&g.ID, &g.Title, &g.Status, &g.Kinds, &g.Askers, &g.RecentAskers, &g.FirstSeen, &g.LastSeen,
+	err := row.Scan(&g.ID, &g.Title, &g.Status, &g.Kinds, &g.Askers, &g.RecentAskers, &g.ConversationCount, &g.FirstSeen, &g.LastSeen,
 		&articleID, &articleTitle, &g.FixedAutomatically, &agentID, &agentName, &g.StatusChangedAt)
 	if articleID != nil && articleTitle != nil {
 		g.FixedByArticle = &domain.KBGapArticle{ID: *articleID, Title: *articleTitle}
 	}
 	g.StatusChangedBy = savedReplyPerson(agentID, agentName)
+	g.FirstSeen, g.LastSeen = g.FirstSeen.UTC(), g.LastSeen.UTC()
+	if g.StatusChangedAt != nil {
+		changed := g.StatusChangedAt.UTC()
+		g.StatusChangedAt = &changed
+	}
 	return g, err
 }
 
 // ListKBGaps lists the workspace's gaps with filter's status, and a signal of its kind when it has
-// one: most distinct askers in the last 30 days first, then the gap seen last.
+// one: most distinct askers in the last 30 days first, then the gap seen last. With Similar it lists
+// the open gaps whose title is close to those words, closest first.
 func (s *Store) ListKBGaps(ctx context.Context, workspaceID string, filter domain.KBGapFilter) ([]domain.KBGap, error) {
 	filter, err := filter.Clean()
 	if err != nil {
 		return nil, err
 	}
 	gaps, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.KBGap, error) {
+		if filter.Similar != "" {
+			return listSimilarKBGaps(ctx, tx, workspaceID, filter)
+		}
 		rows, err := tx.Query(ctx, fmt.Sprintf(kbGapSelect, `WHERE g.workspace_id=$1 AND g.status=$2
 			AND ($3 = '' OR EXISTS (SELECT 1 FROM kb_gap_signals k WHERE k.workspace_id=g.workspace_id AND k.gap_id=g.id AND k.kind=$3))
 			ORDER BY s.recent DESC, g.last_seen DESC, g.id LIMIT $4`), workspaceID, filter.Status, filter.Kind, filter.Limit)
@@ -95,16 +112,38 @@ func readKBGap(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.K
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM kb_gap_signals WHERE workspace_id=$1 AND gap_id=$2`, workspaceID, id).Scan(&detail.SignalCount); err != nil {
 		return detail, err
 	}
-	rows, err := tx.Query(ctx, `SELECT kind, text, created_at FROM kb_gap_signals WHERE workspace_id=$1 AND gap_id=$2
+	rows, err := tx.Query(ctx, `SELECT kind, text, note, created_at FROM kb_gap_signals WHERE workspace_id=$1 AND gap_id=$2
 		ORDER BY created_at DESC, id DESC LIMIT $3`, workspaceID, id, domain.MaxKBGapSignalsShown)
 	if err != nil {
 		return detail, err
 	}
 	detail.Signals, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.KBGapSignal, error) {
 		var signal domain.KBGapSignal
-		return signal, row.Scan(&signal.Kind, &signal.Text, &signal.CreatedAt)
+		err := row.Scan(&signal.Kind, &signal.Text, &signal.Note, &signal.CreatedAt)
+		signal.CreatedAt = signal.CreatedAt.UTC()
+		return signal, err
 	})
+	if err != nil {
+		return detail, err
+	}
+	detail.Conversations, err = kbGapConversations(ctx, tx, workspaceID, id, maxKBGapConversationsShown)
 	return detail, err
+}
+
+// kbGapConversations are the conversations that asked for the gap's article or keep asking its
+// question, the one that asked last first.
+func kbGapConversations(ctx context.Context, tx pgx.Tx, workspaceID, gapID string, limit int) ([]domain.KBArticleGapConversation, error) {
+	rows, err := tx.Query(ctx, `SELECT c.id::text, COALESCE(c.display_ref,''), c.subject
+		FROM kb_gap_signals s JOIN conversations c ON c.workspace_id=s.workspace_id AND c.id::text=s.source_id
+		WHERE s.workspace_id=$1 AND s.gap_id=$2 AND s.kind IN `+kbGapConversationKinds+`
+		GROUP BY c.id, c.display_ref, c.subject ORDER BY max(s.created_at) DESC, c.id LIMIT $3`, workspaceID, gapID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.KBArticleGapConversation, error) {
+		var c domain.KBArticleGapConversation
+		return c, row.Scan(&c.ConversationID, &c.DisplayRef, &c.Subject)
+	})
 }
 
 // UpdateKBGap sets the gap's status as actor: fixed by an article of the workspace outside the trash,

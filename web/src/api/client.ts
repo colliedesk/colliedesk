@@ -306,9 +306,9 @@ export type BulkConversationChanges = RequestBody<'bulkUpdateConversations'>['ch
 export const json = <Operation extends keyof operations>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
 // The JSON body of an operation whose body is optional.
-type OptionalBody<Operation extends keyof operations> =
+export type OptionalBody<Operation extends keyof operations> =
   NonNullable<operations[Operation]['requestBody']> extends { content: { 'application/json': infer Body } } ? Body : never;
-const optionalJson = <Operation extends keyof operations>(value: OptionalBody<Operation>): string => JSON.stringify(value);
+export const optionalJson = <Operation extends keyof operations>(value: OptionalBody<Operation>): string => JSON.stringify(value);
 
 function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number, aiDraft?: string, draftFiles?: string[], mentions: string[] = []): FormData {
   const form = new FormData();

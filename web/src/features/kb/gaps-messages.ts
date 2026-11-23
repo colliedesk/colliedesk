@@ -15,9 +15,15 @@ export const gapsMessages = {
   listLabel: (status: KBGapStatus) => `${gapsMessages.statuses[status]} gaps`,
   kinds: {
     search_no_result: 'Searched, no result', vote_no: 'Voted No', chat_handoff: 'Chat handed to a person',
-    chat_unanswered: 'Chat not answered', recurring_topic: 'Recurring topic',
+    chat_unanswered: 'Chat not answered', recurring_topic: 'Recurring topic', requested: 'Requested from a conversation',
   } satisfies Record<KBGapKind, string>,
   kindsLabel: 'Kinds',
+  conversations: (n: number) => `Asked from ${count(n, 'conversation', 'conversations')}`,
+  conversationsLabel: 'Conversations that asked for it',
+  start: 'Start a draft',
+  starting: 'Starting…',
+  startTitle: 'Opens an empty draft titled as the gap, with the conversations that asked for it beside it. No AI writes it.',
+  startFailed: 'The draft could not be started. Try again.',
   stats: (recent: number, all: number, lastSeen: string) => `${count(recent, 'asker', 'askers')} in 30 days · ${all.toLocaleString('en')} in all · last seen ${lastSeen}`,
   empty: {
     open: 'No open gaps. A help center search with no result, a "No" vote or a help chat handed to a person shows here within a minute.',
@@ -47,4 +53,8 @@ export const gapsMessages = {
   sourcesHidden: 'AI drafted it from conversations you may not open.',
   sourcesNone: 'AI drafted it from readers\' questions only.',
   sourcesLabel: 'Conversations it was written from',
+  sourcesRequested: 'Requested from these conversations.',
+  sourcesRequestedHidden: 'Requested from conversations you may not open.',
+  replyLead: 'Made from a reply in',
+  replyQuestion: 'The customer asked',
 };

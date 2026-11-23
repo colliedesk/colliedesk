@@ -332,13 +332,18 @@ type KBArticle struct {
 	// GapSource is set on an article AI drafted from a knowledge gap: the gap and the resolved
 	// conversations it was written from.
 	GapSource *KBArticleGapSource `json:"gap_source,omitempty"`
+	// ReplySource is set on an article made from a reply the team sent: the conversation and the
+	// customer question the reply answered, masked.
+	ReplySource *KBArticleReplySource `json:"reply_source,omitempty"`
 }
 
 // KBArticleGapSource is the knowledge gap an article was drafted from and the conversations the draft
 // used, in the order the draft read them. Conversations is empty for a reader who may not read
 // conversations, and leaves out one since deleted.
 type KBArticleGapSource struct {
-	GapID         string                     `json:"gap_id"`
+	GapID string `json:"gap_id"`
+	// Requested is true when a person started the draft from conversations that asked for it.
+	Requested     bool                       `json:"requested"`
 	Conversations []KBArticleGapConversation `json:"conversations"`
 }
 

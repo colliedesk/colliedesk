@@ -16,6 +16,8 @@ var errAnswered = errors.New("the create already answered")
 const (
 	createKBArticleOperation             = "kb_article"
 	draftKBGapArticleOperation           = "kb_gap_draft"
+	startKBGapArticleOperation           = "kb_gap_article"
+	makeKBReplyArticleOperation          = "kb_reply_article"
 	createKBTranslationOperation         = "kb_translation"
 	restoreKBTranslationOperation        = "kb_translation_restore"
 	restoreKBTranslationVersionOperation = "kb_translation_version_restore"

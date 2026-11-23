@@ -45,6 +45,12 @@ func writeKBError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "not_found", "The article was not found.")
 	case errors.Is(err, domain.ErrKBGapNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The knowledge gap was not found. GET /api/v1/kb/gaps lists them.")
+	case errors.Is(err, domain.ErrKBArticleRequestNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "This conversation has not asked for an article: there is nothing to take back.")
+	case errors.Is(err, domain.ErrKBSourceConversationNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "The conversation was not found. GET /api/v1/conversations lists them.")
+	case errors.Is(err, domain.ErrKBSourceMessageNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "The message is not one of this conversation's. GET /api/v1/conversations/{id} lists its messages.")
 	case errors.Is(err, domain.ErrKBArticleVersionNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The article has no version with that number.")
 	case errors.Is(err, domain.ErrKBCollectionNotFound):
@@ -428,6 +434,7 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	article.Views30d, article.Uses30d = &stats.Views, &stats.Uses
+	hideGapConversations(principal(request), &article)
 	writeJSON(response, http.StatusOK, article)
 }
 

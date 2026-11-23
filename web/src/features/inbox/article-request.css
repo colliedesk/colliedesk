@@ -1,0 +1,9 @@
+.article-request-similar { margin: 0; padding: var(--space-3); border-radius: var(--radius); background: var(--surface-2); font-size: var(--fs-small); }
+
+/* The confirmation stays at the bottom of the window while the conversation scrolls. */
+.article-request-toast { position: fixed; left: 50%; bottom: var(--space-4); transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: var(--space-3);
+  max-width: calc(100vw - 2 * var(--space-4)); padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: var(--surface-inverse); color: var(--text-inverse);
+  font-size: var(--fs-small); box-shadow: var(--shadow-2); }
+.article-request-toast span { flex: 1; }
+.article-request-toast button { min-height: var(--touch); color: var(--text-inverse); background: transparent; border: 0; box-shadow: none; }
+.article-request-toast .link-action { font-weight: 600; text-decoration: underline; }

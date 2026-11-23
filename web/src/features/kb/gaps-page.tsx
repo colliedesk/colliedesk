@@ -56,6 +56,16 @@ export function GapsRoute() {
       );
     },
   } : undefined;
+  const starting = useCreateAction((gapId: string, key: string) => gapsApi.start(gapId, key));
+  const start = (gap: KBGap) => holds('kb_articles:create') ? {
+    busy: starting.pending,
+    run: () => {
+      starting.run(gap.id).then(
+        (article) => navigate({ to: '/knowledge/articles/$articleId', params: { articleId: article.id } }),
+        (error: unknown) => setToast({ text: error instanceof InvalidRequestError || error instanceof PlanLimitError ? error.message : g.startFailed }),
+      );
+    },
+  } : undefined;
   const items = gaps.data?.items;
   return (
     <main className="kb-frame kb-languages-page kb-templates-page" aria-labelledby="kb-heading">
@@ -85,8 +95,9 @@ export function GapsRoute() {
                 <button type="button" className="link-action kb-gap-title" aria-expanded={opened === gap.id}
                   onClick={() => setOpened(opened === gap.id ? undefined : gap.id)}>{gap.title}</button>
                 <small className="muted-copy">{g.stats(gap.recent_askers, gap.askers, formatDate(gap.last_seen, timeZone))}</small>
+                {gap.conversation_count > 0 && <small className="muted-copy">{g.conversations(gap.conversation_count)}</small>}
                 <ul className="kb-gap-kinds" aria-label={g.kindsLabel}>{gap.kinds.map((value) => <li key={value}>{g.kinds[value]}</li>)}</ul>
-                {opened === gap.id && <GapSignals gap={gap} timeZone={timeZone} change={change(gap)} draft={draft(gap)} />}
+                {opened === gap.id && <GapSignals gap={gap} timeZone={timeZone} change={change(gap)} draft={draft(gap)} start={start(gap)} />}
               </div>
             </li>
           ))}</ul>}
