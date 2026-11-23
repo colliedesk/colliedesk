@@ -40,6 +40,9 @@ reply.
 The older address belongs to the form that had it, whichever form is the default; removing that
 form makes the older address refuse every submission.
 
+With several help centers, each form serves one, the primary unless you choose another (see
+[Help center of a channel](channels.md#help-center-of-a-channel)). Its conversations are marked with it.
+
 ## Try it
 
 The **Embed** tab explains the form in plain words and has a small **Try the form**: enter an email

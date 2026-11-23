@@ -20,6 +20,10 @@ says it needs attention because the help center shows no chat.
   server without a help center domain).
 - **The chat box of an article**: an **Ask AI** button on every article page opens the chat beside
   the article, asking about it.
+- **Another help center** of the workspace has its own chat page, `<its address>/chat` (for example
+  `https://desk.example.com/help/acme/hardware/chat`), shown when a help chat serves that help center.
+  It answers only from that help center's articles. Choose the help center in the help chat's settings
+  (see [Help center of a channel](channels.md#help-center-of-a-channel)).
 - **Your own site**, with the code from the channel's **Your site** tab:
 
   ```html

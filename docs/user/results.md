@@ -98,7 +98,12 @@ It assumes each of those conversations would have taken as long as it did in Fre
 
 ## Help center
 
-For the same window, in the workspace's timezone, today included:
+For the same window, in the workspace's timezone, today included. With
+[several help centers](knowledge-base.md#several-help-centers), the list at the top of the section reads
+one help center (**All help centers** to begin with). For one help center, **Requests opened** counts the
+conversations that came through it (its web forms and help chats), and the requests link opens the inbox
+on the same help center (`help_center:hardware`). A help center's views are the views of the articles it
+shows: Colliedesk does not record which help center a view came through.
 
 - **Article views**: readers who opened an article of your [help center](knowledge-base.md#public-help-center)
   in a browser. The same reader on the same article counts once per 30 minutes. Bots, link previews,
