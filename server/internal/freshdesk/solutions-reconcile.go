@@ -285,6 +285,9 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	if kb.portalNamesNote != "" {
 		count.Notes = append(count.Notes, kb.portalNamesNote)
 	}
+	if note := heldCategoriesNote(kb); note != "" {
+		count.Notes = append(count.Notes, note)
+	}
 	count.Products = kb.products
 	if kb.productsNote != "" {
 		count.Notes = append(count.Notes, kb.productsNote)
@@ -364,10 +367,10 @@ func (r *run) countKBLedger(ctx context.Context, report *Report, count *Knowledg
 		rows, err := tx.Query(ctx, `SELECT entity,source_id,status,error FROM import_items WHERE workspace_id=$1 AND source=$2 AND (
 				(entity=$3 AND source_id=ANY($4)) OR (entity=$5 AND source_id=ANY($6)) OR (entity=$7 AND source_id=ANY($8))
 				OR (entity=$9 AND source_id=ANY($10)) OR (entity=$11 AND split_part(source_id,':',1)=ANY($8)) OR (entity=$12 AND source_id=ANY($13))
-				OR (entity=$14 AND split_part(source_id,':',1)=ANY($8)))
+				OR (entity=$14 AND split_part(source_id,':',1)=ANY($8)) OR (entity=$15 AND source_id=ANY($16)))
 			ORDER BY entity,length(source_id),source_id`, r.workspaceID, r.ledger.source,
 			entityKBCategory, collections[entityKBCategory], entityKBFolder, collections[entityKBFolder], entityKBArticle, articles,
-			entityKBTranslation, translations, entityKBImage, entityKBCollectionName, names, entityKBFile)
+			entityKBTranslation, translations, entityKBImage, entityKBCollectionName, names, entityKBFile, entityKBHelpCenter, r.kb.portalKeys())
 		if err != nil {
 			return fmt.Errorf("reconcile knowledge base: %w", err)
 		}

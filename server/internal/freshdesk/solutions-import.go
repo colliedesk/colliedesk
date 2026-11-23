@@ -34,6 +34,7 @@ type kbState struct {
 	languagesAdded []string
 	// portalHelpCenters maps a portal to the help center its categories are on; createdHelpCenters are
 	// the help centers this run made; helpCenters is the mapping for the report.
+	primaryHelpCenter  string
 	portalHelpCenters  map[int64]string
 	createdHelpCenters map[string]bool
 	helpCenters        []KBPortalHelpCenter
@@ -65,13 +66,18 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 	for _, category := range kb.categories {
 		key := strconv.FormatInt(category.ID, 10)
 		meta := map[string]any{"freshdesk_id": category.ID, "kind": "category", "visible_in_portals": category.VisibleInPortals}
+		helpCenters := state.categoryHelpCenters(category)
 		id, err := r.ensureCollection(ctx, entityKBCategory, key, nil, category.Name, deref(category.Description), domain.KBVisibleEveryone, meta,
-			category.CreatedAt, category.UpdatedAt, state.categoryHelpCenters(category))
+			category.CreatedAt, category.UpdatedAt, helpCenters)
 		if err != nil {
 			return err
 		}
-		if id != "" {
-			state.collections["c"+key] = id
+		if id == "" {
+			continue
+		}
+		state.collections["c"+key] = id
+		if err := r.holdOffPrimary(ctx, category.ID, id, helpCenters); err != nil {
+			return err
 		}
 	}
 	for _, folderID := range kb.order {
@@ -195,6 +201,29 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 		return "", fmt.Errorf("commit collection import: %w", err)
 	}
 	return id, nil
+}
+
+// holdOffPrimary marks a category held when Freshdesk shows it only on other portals but its collection
+// is still on the primary help center: an earlier run put it there, and moving it is the team's call.
+func (r *run) holdOffPrimary(ctx context.Context, categoryID int64, collectionID string, helpCenters []string) error {
+	state := r.kbWriteState()
+	if helpCenters == nil || state.primaryHelpCenter == "" || slices.Contains(helpCenters, state.primaryHelpCenter) {
+		return nil
+	}
+	var onPrimary bool
+	if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_collection_help_centers WHERE workspace_id=$1 AND collection_id=$2 AND help_center_id=$3)`,
+			r.workspaceID, collectionID, state.primaryHelpCenter).Scan(&onPrimary)
+	}); err != nil {
+		return fmt.Errorf("read knowledge base collection placement: %w", err)
+	}
+	if onPrimary {
+		if r.kb.held == nil {
+			r.kb.held = map[int64]bool{}
+		}
+		r.kb.held[categoryID] = true
+	}
+	return nil
 }
 
 // addCollectionHelpCenters also shows an imported top-level collection on the help centers ids names.
@@ -369,7 +398,11 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 			// A category's portal can change without changing the article.
 			return r.unpublishKBArticle(ctx, key, *entry.TargetID, reason)
 		}
-		return nil
+		if republish, err := r.keptForAnotherPortal(ctx, entry.TargetID); err != nil || !republish {
+			return err
+		}
+		// An earlier import kept it a draft only because its category was in another portal: import it again,
+		// published, unless someone changed it in Colliedesk since.
 	}
 	collectionID, ok := state.collections["f"+strconv.FormatInt(article.folder.ID, 10)]
 	if !ok {
@@ -473,9 +506,26 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 	return nil
 }
 
+// keptForAnotherPortal reports whether an earlier import left the article a draft only because its
+// category was in a portal other than the one it published.
+func (r *run) keptForAnotherPortal(ctx context.Context, target *string) (bool, error) {
+	if target == nil {
+		return false, nil
+	}
+	var kept bool
+	if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM kb_articles WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL AND status='draft'
+			AND source_meta->>'draft_reason'=$3)`, r.workspaceID, *target, draftSeveralPortals).Scan(&kept)
+	}); err != nil {
+		return false, fmt.Errorf("read knowledge base article: %w", err)
+	}
+	return kept, nil
+}
+
 // unpublishKBArticle makes an imported article a draft again when Freshdesk no longer shows it
-// publicly. Publishing is never done this way: an article that became public in Freshdesk stays a
-// draft until someone publishes it. An article changed in Colliedesk since is left alone, with a warning.
+// publicly. An article that became public in Freshdesk stays a draft until someone publishes it; the
+// one exception is a draft the importer made only because its category was in another portal
+// (keptForAnotherPortal). An article changed in Colliedesk since is left alone, with a warning.
 func (r *run) unpublishKBArticle(ctx context.Context, key, target, reason string) error {
 	state := r.kbWriteState()
 	var outcome string
@@ -487,9 +537,14 @@ func (r *run) unpublishKBArticle(ctx context.Context, key, target, reason string
 	case err != nil:
 		r.itemFailed(ctx, entityKBArticle, key, "", fmt.Errorf("make the article a draft again (%s): %w", reason, err))
 		return r.internalErr
+	case outcome == store.KBReimported && reason == draftSeveralPortals:
+		state.unpublished = append(state.unpublished, key)
+		r.warn("kb_article_unpublished", "Freshdesk now shows this article's category only on another portal, but its collection is still on the primary help center, so it is a draft again in Colliedesk.", key)
 	case outcome == store.KBReimported:
 		state.unpublished = append(state.unpublished, key)
 		r.warn("kb_article_unpublished", "This article is no longer public in Freshdesk (its category's portal changed), so it is a draft again in Colliedesk.", key)
+	case outcome == store.KBKept && reason == draftSeveralPortals:
+		r.warn("kb_article_published_but_not_public", "This article is published on the primary help center, but Freshdesk now shows its category only on another portal. Someone changed it in Colliedesk since the import, so it was left published; move its collection to the right help center.", key)
 	case outcome == store.KBKept:
 		r.warn("kb_article_published_but_not_public", "This article is published in Colliedesk, but Freshdesk no longer shows it to everyone (its category's portal changed). Someone changed it in Colliedesk since the import, so it was left published; check whether it should be public.", key)
 	case outcome == store.KBGone:

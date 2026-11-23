@@ -202,3 +202,118 @@ func TestTheReportSaysWhichHelpCenterEachPortalBecame(t *testing.T) {
 		t.Fatalf("second report:\n%s", again)
 	}
 }
+
+func TestAPortalNameWithAControlCharacterStillNamesItsHelpCenter(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(func(fixture map[string]any) {
+		twoPortals(fixture)
+		fixture["ticket_forms"] = portalForms(map[float64]string{5: "Hardware\u0000 store\t", 6: "Help desk"})
+	})
+	report := env.mustRun(t)
+	if report.Status != freshdesk.StatusOK {
+		t.Fatalf("status=%s failures=%+v", report.Status, report.Failures)
+	}
+	if got := env.handlesByName(t); got != "Hardware store=hardware-store" {
+		t.Fatalf("help centers = %s", got)
+	}
+}
+
+func TestAPortalHelpCenterThatCannotBeMadeFailsTheReport(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	if _, err := env.pool.Exec(context.Background(), `ALTER TABLE help_centers ADD CONSTRAINT refuse_hardware_store CHECK (name <> 'Hardware store')`); err != nil {
+		t.Fatal(err)
+	}
+	env.editSolutions(twoPortals)
+	report := env.mustRun(t)
+	if report.Status == freshdesk.StatusOK {
+		t.Fatalf("status=%s failures=%+v", report.Status, report.Failures)
+	}
+	if got := fmt.Sprint(report.Failures); !strings.Contains(got, "kb_help_center 5 ") {
+		t.Fatalf("failures = %s", got)
+	}
+	if got := reportedPortals(report); got != "6:primary, 5:failed" {
+		t.Fatalf("report portals = %s", got)
+	}
+}
+
+func TestAPortalKeepsItsOwnHelpCenterWhenThePrimaryPortalHasNoCategoryLeft(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(twoPortals)
+	env.mustRun(t)
+	// Freshdesk now shows every category on the Hardware store only, and a new one there.
+	env.editSolutions(func(fixture map[string]any) {
+		twoPortals(fixture)
+		addCategory(fixture, 7, "Returns", 71, "Returns", 701, "Return a printer")
+		setPortals(fixture, []any{5.0}, []any{5.0}, []any{5.0}, []any{5.0}, []any{5.0})
+	})
+	report := env.mustRun(t)
+	if got := reportedPortals(report); got != "5:existing" {
+		t.Fatalf("report portals = %s", got)
+	}
+	if got := env.handlesByName(t); got != "Hardware store=hardware-store" {
+		t.Fatalf("help centers = %s", got)
+	}
+	hardware := env.helpCenters(t)[1].ID
+	if got := env.topCollections(t, hardware); !strings.Contains(got, "Returns") {
+		t.Fatalf("hardware store shows %s", got)
+	}
+	if got := env.topCollections(t, ""); strings.Contains(got, "Returns") {
+		t.Fatalf("primary shows %s", got)
+	}
+}
+
+func TestACategoryMovedToAnotherPortalKeepsItsArticlesOffThePrimaryHelpCenter(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(func(fixture map[string]any) {
+		twoPortals(fixture)
+		setPortals(fixture, []any{5.0, 6.0}, []any{6.0}, []any{6.0}, []any{6.0})
+	})
+	env.mustRun(t)
+	if got := env.shownTitles(t, ""); !strings.Contains(got, "Pair the printer") {
+		t.Fatalf("primary publishes %s", got)
+	}
+	// Freshdesk now shows Hardware on the Hardware store only; one article changed and one is new.
+	env.editSolutions(func(fixture map[string]any) {
+		twoPortals(fixture)
+		article := fixtureArticle(fixture, "31", 301)
+		article["description"], article["updated_at"] = "<p>Pair the printer again.</p>", "2024-01-01T08:00:00Z"
+		added := map[string]any{}
+		for field, value := range article {
+			added[field] = value
+		}
+		added["id"], added["title"], added["description"] = 302.0, "Clean the printer", "<p>Clean the printer.</p>"
+		fixture["articles"].(map[string]any)["31"] = append(fixture["articles"].(map[string]any)["31"].([]any), added)
+		fixture["category_folders"].(map[string]any)["3"].([]any)[0].(map[string]any)["articles_count"] = 2.0
+	})
+	report := env.mustRun(t)
+	if got := strings.Join(report.KnowledgeBase.Drafts["category_in_another_portal"], ","); got != "301,302" {
+		t.Fatalf("drafts = %v, published = %v", report.KnowledgeBase.Drafts, report.KnowledgeBase.Published)
+	}
+	if got := env.shownTitles(t, ""); strings.Contains(got, "printer") {
+		t.Fatalf("primary publishes %s", got)
+	}
+	if notes := strings.Join(report.KnowledgeBase.Notes, "\n"); !strings.Contains(notes, "Hardware") {
+		t.Fatalf("notes = %s", notes)
+	}
+}
+
+func TestArticlesAnEarlierImportKeptAsDraftsForAnotherPortalArePublishedOnTheirHelpCenter(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(twoPortals)
+	env.mustRun(t)
+	// An import from before each portal had a help center left the Hardware store's articles drafts.
+	if _, err := env.pool.Exec(context.Background(), `UPDATE kb_articles SET status='draft', published_at=NULL,
+		source_meta=source_meta||'{"draft_reason":"category_in_another_portal"}' WHERE workspace_id=$1 AND title='Pair the printer'`, env.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	report := env.mustRun(t)
+	if report.Status != freshdesk.StatusOK {
+		t.Fatalf("status=%s failures=%+v", report.Status, report.Failures)
+	}
+	if got := strings.Join(report.KnowledgeBase.Published, ","); got != "101,103,104,105,106,301" {
+		t.Fatalf("published = %s, drafts = %v", got, report.KnowledgeBase.Drafts)
+	}
+	if got := env.shownTitles(t, env.helpCenters(t)[1].ID); !strings.Contains(got, "Pair the printer") {
+		t.Fatalf("hardware store publishes %s", got)
+	}
+}

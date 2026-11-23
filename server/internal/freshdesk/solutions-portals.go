@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -70,7 +71,7 @@ func (r *run) readPortalNames(ctx context.Context, kb *knowledgeBase) error {
 	names := map[int64]string{}
 	err := listAll(ctx, r.client, r.endpoint("/api/v2/ticket-forms", pageQuery()), func(form fdTicketForm) error {
 		for _, portal := range form.Portals {
-			if name := strings.TrimSpace(portal.Name); name != "" && names[portal.ID] == "" {
+			if name := portalName(portal.Name); name != "" && names[portal.ID] == "" {
 				names[portal.ID] = name
 			}
 		}
@@ -84,6 +85,17 @@ func (r *run) readPortalNames(ctx context.Context, kb *knowledgeBase) error {
 	}
 	kb.portalNames = names
 	return nil
+}
+
+// portalName drops the control characters of a portal's name (PostgreSQL refuses a NUL in text) and
+// trims it; "" means the portal has no usable name.
+func portalName(name string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, name))
 }
 
 // portalPlan lists the portals the categories name, the one with the most categories first (the
@@ -114,6 +126,30 @@ func (kb *knowledgeBase) portalPlan() []kbPortal {
 		return int(a.id - b.id)
 	})
 	return plan
+}
+
+// portalKeys are the ledger keys of the portals the categories name.
+func (kb *knowledgeBase) portalKeys() []string {
+	keys := []string{}
+	for _, id := range kb.portals() {
+		keys = append(keys, strconv.FormatInt(id, 10))
+	}
+	return keys
+}
+
+// heldCategoriesNote names the held categories, or "".
+func heldCategoriesNote(kb *knowledgeBase) string {
+	var names []string
+	for _, category := range kb.categories {
+		if kb.held[category.ID] {
+			names = append(names, fmt.Sprintf("%s (Freshdesk %d)", category.Name, category.ID))
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return "Freshdesk now shows " + strings.Join(names, ", ") + " only on another portal, but an earlier import put its collection on the primary help center, so its articles are drafts. " +
+		"Choose the help centers in the collection's \"Shown on\" setting, then publish the articles."
 }
 
 // unnamedPortalsNote says which portals Freshdesk gave no name, or "".
@@ -167,24 +203,30 @@ func (r *run) ensurePortalHelpCenters(ctx context.Context) error {
 		found  bool
 	}
 	earlier := make([]known, len(plan))
-	primaryIndex := 0
+	primaryIndex, mappedBefore := -1, false
 	for index, portal := range plan {
 		target, done, err := r.ledger.done(ctx, entityKBHelpCenter, strconv.FormatInt(portal.id, 10))
 		if err != nil {
 			return err
 		}
 		earlier[index] = known{target, done}
+		mappedBefore = mappedBefore || done
 		if done && target == primaryID {
 			primaryIndex = index
 		}
 	}
-	// The portal an earlier run put on the primary stays there, listed first, even when another portal
-	// has more categories now.
+	// The first run puts the portal with the most categories on the primary. After that the portal an
+	// earlier run put there stays, listed first, even when another portal has more categories now; when
+	// Freshdesk no longer names it, no portal is on the primary and a new portal gets a help center of its own.
+	if primaryIndex < 0 && !mappedBefore {
+		primaryIndex = 0
+	}
 	if primaryIndex > 0 {
 		plan = slices.Concat(plan[primaryIndex:primaryIndex+1], plan[:primaryIndex], plan[primaryIndex+1:])
 		earlier = slices.Concat(earlier[primaryIndex:primaryIndex+1], earlier[:primaryIndex], earlier[primaryIndex+1:])
 		primaryIndex = 0
 	}
+	state.primaryHelpCenter = primaryID
 	state.portalHelpCenters = map[int64]string{}
 	state.createdHelpCenters = map[string]bool{}
 	for index, portal := range plan {
@@ -312,7 +354,7 @@ func (state *kbState) categoryHelpCenters(category fdSolutionCategory) []string 
 			continue
 		}
 		ids = append(ids, id)
-		if state.createdHelpCenters[id] || !state.isPrimary(id) {
+		if id != state.primaryHelpCenter {
 			primaryOnly = false
 		}
 	}
@@ -320,15 +362,6 @@ func (state *kbState) categoryHelpCenters(category fdSolutionCategory) []string 
 		return nil
 	}
 	return ids
-}
-
-func (state *kbState) isPrimary(id string) bool {
-	for _, entry := range state.helpCenters {
-		if entry.Primary {
-			return entry.HelpCenterID == id
-		}
-	}
-	return false
 }
 
 // createdIn keeps the help centers of ids this run made.
