@@ -14,7 +14,7 @@ const (
 		`"plausible_domain":` + analyticsText + `,"plausible_base_url":{"type":"string"},` +
 		`"last_sent_at":` + analyticsTime + `,"last_error":` + analyticsText + `,"last_error_at":` + analyticsTime + `,` +
 		`"updated_at":` + analyticsTime + `,"updated_by_name":` + analyticsText + `}}`
-	analyticsInput = `{"type":"object","additionalProperties":false,"required":["provider","enabled"],"properties":{` +
+	analyticsInput = `{"type":"object","additionalProperties":false,"required":["provider","enabled"],"properties":{` + helpCenterIDProperty + `,` +
 		`"provider":{"type":"string","enum":["ga4","plausible"],"description":"ga4 (Google Analytics 4) or plausible."},` +
 		`"enabled":{"type":"boolean","description":"true sends every reader's page view from now on; false keeps the settings and sends nothing."},` +
 		`"ga4_measurement_id":{"type":["string","null"],"maxLength":20,"description":"The measurement ID of the GA4 web stream, for example G-ABC123XYZ9. Needed when provider is ga4 and enabled is true."},` +
@@ -35,7 +35,7 @@ func helpCenterAnalyticsGetSpec() Spec {
 			`when a page view was last accepted and the last error. The server sends each reader's page view itself; no script is put on the pages. ` +
 			`The GA4 API secret is never returned, only whether one is stored.`,
 		REST:   []string{"GET /api/v1/help-center/analytics"},
-		Input:  noArguments,
+		Input:  helpCenterOnlyInput,
 		Output: analyticsOutput,
 		run:    helpCenterAnalyticsGet,
 	}
@@ -66,31 +66,34 @@ func helpCenterAnalyticsTestSpec() Spec {
 			`GA4 names a wrong measurement ID; it never checks the API secret, so look for the event in its Realtime report. ` +
 			`Before the first save it is refused and says to call colliedesk_help_center_analytics_set.`,
 		REST:   []string{"POST /api/v1/help-center/analytics/test"},
-		Input:  noArguments,
+		Input:  helpCenterOnlyInput,
 		Output: analyticsTestOutput,
 		run:    helpCenterAnalyticsTest,
 	}
 }
 
-func helpCenterAnalyticsGet(c *call, _ map[string]any) (any, error) {
+func helpCenterAnalyticsGet(c *call, arguments map[string]any) (any, error) {
+	path, _ := c.atHelpCenter("/api/v1/help-center/analytics", arguments)
 	var settings map[string]any
-	if err := c.get("/api/v1/help-center/analytics", nil, &settings); err != nil {
+	if err := c.get(path, nil, &settings); err != nil {
 		return nil, err
 	}
 	return map[string]any{"analytics": settings}, nil
 }
 
 func helpCenterAnalyticsSet(c *call, arguments map[string]any) (any, error) {
+	path, body := c.atHelpCenter("/api/v1/help-center/analytics", arguments)
 	var settings map[string]any
-	if err := c.send(http.MethodPut, "/api/v1/help-center/analytics", arguments, &settings); err != nil {
+	if err := c.send(http.MethodPut, path, body, &settings); err != nil {
 		return nil, err
 	}
 	return map[string]any{"analytics": settings}, nil
 }
 
-func helpCenterAnalyticsTest(c *call, _ map[string]any) (any, error) {
+func helpCenterAnalyticsTest(c *call, arguments map[string]any) (any, error) {
+	path, _ := c.atHelpCenter("/api/v1/help-center/analytics/test", arguments)
 	var result map[string]any
-	if err := c.send(http.MethodPost, "/api/v1/help-center/analytics/test", map[string]any{}, &result); err != nil {
+	if err := c.send(http.MethodPost, path, map[string]any{}, &result); err != nil {
 		return nil, err
 	}
 	return map[string]any{"test": result}, nil
