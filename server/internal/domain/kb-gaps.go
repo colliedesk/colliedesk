@@ -19,7 +19,7 @@ const (
 // KBGapStatuses are the states of a gap; KBGapKinds the kinds of its signals.
 var (
 	KBGapStatuses = []string{"open", "fixed", "dismissed"}
-	KBGapKinds    = []string{"search_no_result", "vote_no", "chat_handoff", "chat_unanswered", "recurring_topic"}
+	KBGapKinds    = []string{"search_no_result", "vote_no", "chat_handoff", "chat_unanswered", "recurring_topic", "requested"}
 )
 
 // ErrKBGapNotFound means the gap is not one of the workspace's.
@@ -39,6 +39,7 @@ type KBGap struct {
 	Kinds              []string          `json:"kinds"`
 	Askers             int               `json:"askers"`
 	RecentAskers       int               `json:"recent_askers"`
+	ConversationCount  int               `json:"conversation_count"`
 	FirstSeen          time.Time         `json:"first_seen"`
 	LastSeen           time.Time         `json:"last_seen"`
 	FixedByArticle     *KBGapArticle     `json:"fixed_by_article"`
@@ -51,20 +52,23 @@ type KBGap struct {
 type KBGapSignal struct {
 	Kind      string    `json:"kind"`
 	Text      string    `json:"text"`
+	Note      *string   `json:"note"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
 // KBGapDetail is a gap with its newest signals.
 type KBGapDetail struct {
 	KBGap
-	SignalCount int           `json:"signal_count"`
-	Signals     []KBGapSignal `json:"signals"`
+	SignalCount   int                        `json:"signal_count"`
+	Signals       []KBGapSignal              `json:"signals"`
+	Conversations []KBArticleGapConversation `json:"conversations"`
 }
 
-// KBGapFilter picks the gaps listed: Status (default open), Kind (any when empty) and Limit.
+// KBGapFilter picks the gaps listed: Status (default open), Kind (any when empty) and Limit. Similar
+// lists only the open gaps whose title is close to its words, closest first.
 type KBGapFilter struct {
-	Status, Kind string
-	Limit        int
+	Status, Kind, Similar string
+	Limit                 int
 }
 
 // Clean fills the defaults and refuses an unknown status, kind or limit.
@@ -75,8 +79,11 @@ func (f KBGapFilter) Clean() (KBGapFilter, error) {
 	if !slices.Contains(KBGapStatuses, f.Status) {
 		return f, invalidKB("status must be open, fixed or dismissed")
 	}
+	if f.Similar != "" && f.Status != "open" {
+		return f, invalidKB("similar finds open gaps only: leave out status or send status=open")
+	}
 	if f.Kind != "" && !slices.Contains(KBGapKinds, f.Kind) {
-		return f, invalidKB("kind must be search_no_result, vote_no, chat_handoff, chat_unanswered or recurring_topic")
+		return f, invalidKB("kind must be search_no_result, vote_no, chat_handoff, chat_unanswered, recurring_topic or requested")
 	}
 	if f.Limit == 0 {
 		f.Limit = DefaultKBGapsListed

@@ -142,6 +142,9 @@ type KBArticleSummary struct {
 	ReviewState *string `json:"review_state"`
 	// Votes are its readers' answers, imported ones included; only the article list fills them in.
 	Votes *KBVoteTally `json:"votes,omitempty"`
+	// OpenConflicts counts the sent replies the small model found to contradict it that no editor
+	// cleared yet (KBArticleConflicts); above 0 the article may be out of date.
+	OpenConflicts int `json:"open_conflicts"`
 }
 
 // KBArticleLanguage is one translation of an article as lists show it.
@@ -329,13 +332,18 @@ type KBArticle struct {
 	// GapSource is set on an article AI drafted from a knowledge gap: the gap and the resolved
 	// conversations it was written from.
 	GapSource *KBArticleGapSource `json:"gap_source,omitempty"`
+	// ReplySource is set on an article made from a reply the team sent: the conversation and the
+	// customer question the reply answered, masked.
+	ReplySource *KBArticleReplySource `json:"reply_source,omitempty"`
 }
 
 // KBArticleGapSource is the knowledge gap an article was drafted from and the conversations the draft
 // used, in the order the draft read them. Conversations is empty for a reader who may not read
 // conversations, and leaves out one since deleted.
 type KBArticleGapSource struct {
-	GapID         string                     `json:"gap_id"`
+	GapID string `json:"gap_id"`
+	// Requested is true when a person started the draft from conversations that asked for it.
+	Requested     bool                       `json:"requested"`
 	Conversations []KBArticleGapConversation `json:"conversations"`
 }
 

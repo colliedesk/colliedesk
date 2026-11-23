@@ -181,12 +181,18 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_article_draft_discard` | Drops the unpublished changes of a published article or translation | `kb_articles:update` |
 | `colliedesk_kb_article_votes_get` | Reads an article's "Was this article helpful?" counts, each reader's vote and what they said was missing | `kb_articles:read` |
 | `colliedesk_kb_article_votes_reset` | Starts an article's helpful count again from 0; the earlier counts stay under resets. Cannot be undone | `kb_articles:update` |
+| `colliedesk_kb_article_conflicts_list` | Lists the sent replies the small model found to contradict an article, with the reason and who sent each | `kb_articles:read` |
+| `colliedesk_kb_article_conflicts_clear` | Clears an article's "May be out of date" flag; the cleared replies stay listed with who cleared them. Cannot be undone | `kb_articles:update` |
 | `colliedesk_kb_article_stats` | Counts an article's help center views and the sent replies that used it, per day, with those replies' conversations | `kb_articles:read` |
 | `colliedesk_kb_search_report` | Lists what readers searched for on the help center in 7 days: top words, words with no result, words whose results nobody opened | `kb_articles:read` |
 | `colliedesk_kb_gaps_list` | Lists what readers asked for and did not find, grouped by their words, most askers in 30 days first | `kb_articles:read` |
 | `colliedesk_kb_gap_get` | Reads one knowledge gap with its newest signals: what each reader searched, wrote or asked | `kb_articles:read` |
 | `colliedesk_kb_gap_update` | Links a knowledge gap to the article that answers it, dismisses it or opens it again | `kb_articles:update` |
 | `colliedesk_kb_gap_draft` | Drafts the missing article for a knowledge gap from the resolved conversations that match it | `kb_articles:create` |
+| `colliedesk_kb_gap_article_start` | Starts an empty draft for a knowledge gap beside the conversations that asked for it | `kb_articles:create` |
+| `colliedesk_kb_article_ask` | Asks for a help center article from a conversation, in Knowledge gaps | `conversations:read` |
+| `colliedesk_kb_article_ask_withdraw` | Takes back a conversation's request for an article | `conversations:read` |
+| `colliedesk_kb_article_from_reply` | Keeps a sent reply as a draft article, with the customer question beside it | `kb_articles:create` |
 | `colliedesk_kb_article_send_for_review` | Saves an article's or translation's text and asks teammates who may publish to approve it | `kb_articles:update` |
 | `colliedesk_kb_reviews_list` | Lists the reviews waiting for you, or the reviews of one article | `kb_articles:read` |
 | `colliedesk_kb_review_get` | Reads a review with the text proposed, what is live and the line diff between them | `kb_articles:read` |

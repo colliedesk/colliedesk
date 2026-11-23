@@ -77,10 +77,10 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 	var article domain.KBArticle
 	var excludedAt *time.Time
 	var excludedBy, excludedByName *string
-	var gap []byte
-	summary, err := scanKBSummary(tx.QueryRow(ctx, kbArticleSelect(`,a.body_md,a.seo_title,a.seo_description,a.show_contents,a.source_html IS NOT NULL,a.deleted_at,a.ai_excluded_at,a.ai_excluded_by_agent_id::text,COALESCE(NULLIF(x.display_name,''),x.email),a.source_meta->'gap'`,
+	var gap, reply []byte
+	summary, err := scanKBSummary(tx.QueryRow(ctx, kbArticleSelect(`,a.body_md,a.seo_title,a.seo_description,a.show_contents,a.source_html IS NOT NULL,a.deleted_at,a.ai_excluded_at,a.ai_excluded_by_agent_id::text,COALESCE(NULLIF(x.display_name,''),x.email),a.source_meta->'gap',a.source_meta->'reply'`,
 		` LEFT JOIN agents x ON x.workspace_id=a.workspace_id AND x.id=a.ai_excluded_by_agent_id`)+` WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, id),
-		&article.BodyMD, &article.SEOTitle, &article.SEODescription, &article.ShowContents, &article.HasSourceHTML, &article.DeletedAt, &excludedAt, &excludedBy, &excludedByName, &gap)
+		&article.BodyMD, &article.SEOTitle, &article.SEODescription, &article.ShowContents, &article.HasSourceHTML, &article.DeletedAt, &excludedAt, &excludedBy, &excludedByName, &gap, &reply)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return article, domain.ErrKBArticleNotFound
 	}
@@ -98,6 +98,9 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 		return article, err
 	}
 	if article.GapSource, err = readKBArticleGapSource(ctx, tx, workspaceID, gap); err != nil {
+		return article, err
+	}
+	if article.ReplySource, err = readKBArticleReplySource(ctx, tx, workspaceID, reply); err != nil {
 		return article, err
 	}
 	if err := readKBVisibilityFrom(ctx, tx, workspaceID, &article); err != nil {
@@ -490,10 +493,14 @@ type KBArticleInput struct {
 	BodyFromCollection bool
 	// Tags are the article's tags; domain.CleanKBTags cleans them.
 	Tags []string
-	// GapID and GapConversationIDs record, in source_meta, the knowledge gap an AI draft was written
-	// for and the conversations it was written from.
+	// GapID and GapConversationIDs record, in source_meta, the knowledge gap a draft was written
+	// for and the conversations it was written from; GapRequested that a person started it from the
+	// conversations that asked for it.
 	GapID              string
 	GapConversationIDs []string
+	GapRequested       bool
+	// Reply records, in source_meta, the sent reply the article was made from, already masked.
+	Reply *domain.KBArticleReplySource
 }
 
 // CreateKBArticle adds an article with the next number of the workspace and its first version.
@@ -577,7 +584,7 @@ func insertKBArticle(ctx context.Context, tx pgx.Tx, workspaceID string, actor A
 	if err := replaceKBArticleTags(ctx, tx, workspaceID, id, input.Tags); err != nil {
 		return domain.KBArticle{}, err
 	}
-	if err := writeKBArticleGapSource(ctx, tx, workspaceID, id, input.GapID, input.GapConversationIDs); err != nil {
+	if err := writeKBArticleSource(ctx, tx, workspaceID, id, input); err != nil {
 		return domain.KBArticle{}, err
 	}
 	if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleCreated, nil); err != nil {

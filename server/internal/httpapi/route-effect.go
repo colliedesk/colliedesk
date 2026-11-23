@@ -69,6 +69,7 @@ var routeEffects = map[string]Effect{
 	"POST /api/v1/imports/{id}/undo":                             Final, // deletes what the import made
 	"POST /api/v1/channels/{id}/held/discard":                    Final, // held messages are dropped
 	"POST /api/v1/kb/articles/{id}/votes/reset":                  Final, // the earlier votes stay readable, never count again
+	"POST /api/v1/kb/articles/{id}/conflicts/clear":              Final, // no undo: the cleared replies stay readable, and a new contradiction flags the article again
 
 	// A DELETE that cannot be undone: gone for good, or a revocation.
 	"DELETE /api/v1/auth/sessions/{id}":                Final,
@@ -92,6 +93,7 @@ var routeEffects = map[string]Effect{
 	// A DELETE that another call reverses: a trash with undelete, an unlink, a switch turned off.
 	"DELETE /api/v1/conversations/{id}/tags/{tagId}":              Changes,
 	"DELETE /api/v1/conversations/{id}/presence/{clientId}":       Changes,
+	"DELETE /api/v1/conversations/{id}/article-request":           Changes,
 	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":               Changes,
 	"DELETE /api/v1/saved-replies/{id}":                           Changes,
 	"DELETE /api/v1/kb/templates/{id}":                            Changes,

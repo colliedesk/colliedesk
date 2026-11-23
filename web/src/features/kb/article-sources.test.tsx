@@ -14,7 +14,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 const jam = '00000000-0000-4000-8000-000000000201';
 const again = '00000000-0000-4000-8000-000000000202';
 const source = {
-  gap_id: '00000000-0000-4000-8000-000000000101',
+  gap_id: '00000000-0000-4000-8000-000000000101', requested: false,
   conversations: [
     { conversation_id: jam, display_ref: '#41', subject: 'Printer jam in tray two' },
     { conversation_id: again, display_ref: '#57', subject: 'Paper jams in tray two again' },
@@ -56,4 +56,20 @@ test('a draft no resolved conversation matched says it was written from what rea
   const box = screen.getByRole('region', { name: 'Sources' });
   expect(within(box).queryByRole('link')).not.toBeInTheDocument();
   expect(within(box).getByText('AI drafted it from readers\' questions only.')).toBeInTheDocument();
+});
+
+test('a draft started from a request says the conversations asked for it, each a link to it', () => {
+  render(<ArticleSourcesBox source={{ ...source, requested: true }} headingId="sources" />);
+  const box = screen.getByRole('region', { name: 'Sources' });
+  expect(within(box).getByText('Requested from these conversations.')).toBeInTheDocument();
+  expect(within(box).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([`/conversations/${jam}`, `/conversations/${again}`]);
+});
+
+test('an article made from a sent reply shows the customer question beside it and links to its conversation', () => {
+  const reply = { conversation_id: jam, display_ref: '#41', subject: 'Printer jam in tray two', message_id: '00000000-0000-4000-8000-000000000301', question: 'The printer stops with a jam in tray two.' };
+  render(<ArticleSourcesBox reply={reply} headingId="sources" />);
+  const box = screen.getByRole('region', { name: 'Sources' });
+  expect(within(box).getByText('Made from a reply in')).toBeInTheDocument();
+  expect(within(box).getByRole('link', { name: '#41 Printer jam in tray two' })).toHaveAttribute('href', `/conversations/${jam}`);
+  expect(within(box).getByRole('blockquote')).toHaveTextContent('The printer stops with a jam in tray two.');
 });

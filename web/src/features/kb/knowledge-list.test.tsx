@@ -54,6 +54,13 @@ test('the list shows the columns the person chose, and a change is saved for the
   await waitFor(() => expect(screen.getByRole('link', { name: /Refund rules/ })).not.toHaveTextContent('billing'));
 });
 
+test('an article a sent reply contradicts says in the list that it may be out of date', async () => {
+  serve({ ...base, 'GET /api/v1/kb/articles': () => json(200, { items: [{ ...tagged, open_conflicts: 2 }, summary(2, 'Shipping times', 'published')], next_cursor: null }) });
+  open();
+  expect(await screen.findByRole('link', { name: /Refund rules/ })).toHaveTextContent('May be out of date');
+  expect(screen.getByRole('link', { name: /Shipping times/ })).not.toHaveTextContent('May be out of date');
+});
+
 test('a list menu closes when the pointer presses outside it, even after its focused button went away', async () => {
   serve({ ...base,
     'GET /api/v1/auth/me': () => json(200, { ...me, kb_list_columns: { columns: ['status', 'author', 'updated'], default: false } }),

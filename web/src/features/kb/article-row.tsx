@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { KBListColumn } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
+import { conflictsMessages } from './conflicts-messages';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { Icon } from './editor/icons';
 import type { KBArticleSummary } from './kb-api';
@@ -39,6 +40,7 @@ export function ArticleRow({ article, columns, collection, timezone, isPublic, o
       <a className="kb-article-row" href={`/knowledge/articles/${article.id}`}>
         <span className="kb-article-main">
           <span className="kb-article-title">{article.title}</span>
+          {article.open_conflicts > 0 && <small className="kb-outdated-mark">{conflictsMessages.open}</small>}
           <span className="kb-article-meta">{meta.filter(Boolean).join(' · ')}</span>
         </span>
         {columns.map((column, index) => <Cell key={column} column={column} article={article} collection={collection} timezone={timezone}

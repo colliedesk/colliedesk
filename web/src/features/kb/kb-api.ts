@@ -74,7 +74,9 @@ const summaryFields = {
 const listColumnsSchema = z.object({ columns: z.array(kbListColumnSchema), default: z.boolean() }) satisfies z.ZodType<JsonResponse<'setKBListColumns', 200>>;
 // Only the article list counts readers' answers to "Was this article helpful?" (imported ones included);
 // one article read alone, or in the trash, comes without them.
-const summarySchema = z.object({ ...summaryFields, votes: z.object({ helpful: z.number().int(), not_helpful: z.number().int() }) }) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
+// open_conflicts: sent replies the small model found to contradict it, not cleared; above 0 it may be out of date.
+const openConflicts = z.number().int().min(0);
+const summarySchema = z.object({ ...summaryFields, votes: z.object({ helpful: z.number().int(), not_helpful: z.number().int() }), open_conflicts: openConflicts }) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
 // A file listed under an article or translation, in the order the reader sees.
 export const attachmentSchema = z.object({ id: z.string().uuid(), name: z.string(), content_type: z.string(), size: z.number().int(), url: z.string() }) satisfies z.ZodType<Generated<'KBAttachment'>>;
 // The unpublished changes of a published article: what publishing them puts live. Its updated_at is the
@@ -84,14 +86,18 @@ const draftSchema = z.object({
   collection_ids: z.array(z.string().uuid()).min(1), show_contents: z.boolean(), attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
   updated_at: z.string().datetime(), updated_by: personSchema.nullable(), tags: z.array(z.string()),
 }) satisfies z.ZodType<Generated<'KBArticleDraft'>>;
-// The knowledge gap an AI draft was written from, and the resolved conversations it read (none for a member
-// who may not read conversations).
+// The knowledge gap a draft was started from: the conversations that asked for it (requested), or the resolved
+// ones an AI draft read. None for a member who may not read conversations.
 const gapSourceSchema = z.object({
-  gap_id: z.string().uuid(),
+  gap_id: z.string().uuid(), requested: z.boolean(),
   conversations: z.array(z.object({ conversation_id: z.string().uuid(), display_ref: z.string(), subject: z.string() })),
 }) satisfies z.ZodType<Generated<'KBArticleGapSource'>>;
+// The sent reply an article was made from, and the customer question it answered, masked.
+const replySourceSchema = z.object({
+  conversation_id: z.string().uuid(), display_ref: z.string(), subject: z.string(), message_id: z.string().uuid(), question: z.string(),
+}) satisfies z.ZodType<Generated<'KBArticleReplySource'>>;
 export const kbArticleSchema = z.object({
-  ...summaryFields, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
+  ...summaryFields, open_conflicts: openConflicts, body_md: z.string(), seo_title: z.string(), seo_description: z.string(), show_contents: z.boolean(), has_source_html: z.boolean(), deleted_at: nullableDate,
   ai_exclusion: z.object({ at: z.string().datetime(), by: personSchema.nullable() }).nullable(),
   // Only when one article is read: the AI reply drafts this month that used it.
   ai_drafts_this_month: z.number().int().optional(),
@@ -100,6 +106,7 @@ export const kbArticleSchema = z.object({
   // The collection that keeps the article more restricted than its own visibility; null when its own decides.
   visibility_from: z.object({ id: z.string().uuid(), name: z.string(), visibility: visibilitySchema }).nullable(),
   gap_source: gapSourceSchema.optional(),
+  reply_source: replySourceSchema.optional(),
 }) satisfies z.ZodType<Generated<'KBArticle'>>;
 // The unpublished changes of a published translation: what publishing them puts live.
 const translationDraftSchema = z.object({
@@ -162,6 +169,7 @@ export type TrashedKBCollection = z.infer<typeof trashedCollectionSchema>;
 export type KBArticleSummary = z.infer<typeof summarySchema>;
 export type KBArticle = z.infer<typeof kbArticleSchema>;
 export type KBArticleGapSource = z.infer<typeof gapSourceSchema>;
+export type KBArticleReplySource = z.infer<typeof replySourceSchema>;
 export type KBArticleDraft = z.infer<typeof draftSchema>;
 export type KBAttachment = z.infer<typeof attachmentSchema>;
 export type TrashedKBArticle = z.infer<typeof trashedArticleSchema>;

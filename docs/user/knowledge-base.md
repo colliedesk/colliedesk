@@ -991,7 +991,8 @@ Searches are kept for 180 days, then deleted; a server operator can change this 
 **Knowledge → Gaps** (with the right to read articles, `kb_articles:read`) lists what readers asked
 for and did not find, grouped by their words. The gaps with the most distinct askers in the last 30
 days come first. Each row shows the words, how many people asked in 30 days and in all, the kinds of
-signal and when someone last asked. A gap gathers:
+signal and when someone last asked. A gap that conversations asked for also says from how many
+conversations; open it to see each one, linked. A gap gathers:
 
 - **Searched, no result**: a help center search that listed nothing.
 - **Voted No**: a "No" vote on an article, with its "What was missing?" line when the reader wrote one.
@@ -1000,6 +1001,8 @@ signal and when someone last asked. A gap gathers:
 - **Recurring topic**: a conversation resolved in the last 30 days whose subject no published
   article title matches. It is looked for once a day, only in a workspace that resolved at least 20
   conversations in 30 days, and it uses no AI.
+- **Requested from a conversation**: someone on your team asked for an article from a conversation
+  ([Request an article](inbox.md#request-an-article)), with its note when they wrote one.
 
 A signal shows within a minute. Words that differ only in case or accents join the same gap, and so
 do close wordings ("how to export invoices" and "export invoices"). The gap's title is its most
@@ -1036,10 +1039,66 @@ The editor of such a draft shows **Sources**: the conversations it was written f
 A team member who may not read conversations sees that it was drafted from them, without the links.
 The gap stays open until you link it to the article or publish an article with a matching title.
 
+### Start a draft from a gap
+
+An open gap that conversations asked for also has **Start a draft** (`kb_articles:create`). It opens
+an empty draft titled as the gap, in your first collection, and no AI writes it. **Sources** beside
+the draft lists up to 8 conversations that asked for it, newest first, each linked, so you can write
+the answer with the questions in view. A team member who may not read conversations sees that it was
+requested, without the links.
+
+### Make an article from a reply
+
+A reply your team sent can become an article: open the menu on the reply (**Reply actions**) and
+choose **Make an article** (`kb_articles:create` and `conversations:read`). The reply becomes the body of
+a draft in your first collection, titled with the conversation's subject, and the editor opens it.
+**Sources** beside the draft shows the customer's question the reply answered and links the
+conversation. Before it is saved, email addresses, numbers of 6 digits or more and the names of the
+customer, their company and your team are hidden (for example "[email removed]" and "[customer]").
+Nothing is published until someone publishes it the usual way.
+
 A deleted help chat takes its signals with it. Gaps are not in the [export](export.md) yet; the
 searches, votes and chats they come from are. An AI agent works the same list with the MCP tools
-`colliedesk_kb_gaps_list`, `colliedesk_kb_gap_get` and `colliedesk_kb_gap_update`, and drafts an
-article with `colliedesk_kb_gap_draft`.
+`colliedesk_kb_gaps_list`, `colliedesk_kb_gap_get` and `colliedesk_kb_gap_update`, drafts an
+article with `colliedesk_kb_gap_draft`, starts an empty one with `colliedesk_kb_gap_article_start`, and
+makes one from a sent reply with `colliedesk_kb_article_from_reply`.
+
+## Out of date articles
+
+When a teammate sends a reply that says something an article says differently, the article may no
+longer be true. Colliedesk checks every reply your team sends and marks such an article
+**May be out of date**: in the list of articles, next to its title, and in the editor (on the right;
+on a phone, under the text).
+
+It needs [Triage suggestions](ai.md#triage-suggestions) on. It uses the same small model, and only
+on channels where triage is not Off. How it works:
+
+1. A reply is sent. Imported replies, notices and the replies intake sends on its own are not checked.
+2. Colliedesk looks for the one published article the reply is about, the way AI drafts find
+   articles. Most replies match none closely, and then no model is asked.
+3. For a close match the model reads that article and the reply, nothing the customer wrote, and
+   answers one question: does the reply contradict the article? A yes comes with one sentence that
+   quotes both sides.
+
+The editor's box lists the replies that disagree, open first: the start of each reply, who sent it
+and when, the model's sentence and its conversation. A teammate who may not read conversations
+(`conversations:read`) sees the reply without the link. Fix the article if the reply is right.
+
+**Clear the flag** (with the right to edit articles, `kb_articles:update`) marks the article up to
+date again. The box then says who cleared it and when; the next time the article opens, the box is
+gone. The cleared replies stay on record, with who cleared them and when, for an AI agent
+(`colliedesk_kb_article_conflicts_list`). A clear cannot be undone; a new reply that contradicts the
+article marks it again.
+
+At most 50 replies of a workspace are checked a day (UTC); past that, the day's other replies are
+not checked. Each check counts in **Settings → AI & agents → Usage** as triage, like a suggestion.
+A check does not count toward the automatic runs of [Limits](ai.md#limits). With no provider for
+triage, or with the month's included AI used up, nothing is checked and nothing fails. The flags are
+not in the [export](export.md) yet.
+
+An AI agent reads the replies with `colliedesk_kb_article_conflicts_list` and clears the flag with
+`colliedesk_kb_article_conflicts_clear`. `colliedesk_kb_article_get` and the article lists carry
+`open_conflicts`: above 0, the article may be out of date.
 
 ## Keep an article away from AI
 

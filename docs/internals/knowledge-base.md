@@ -426,6 +426,57 @@ Code: `ai/kb_gap_draft.go` (`DraftFromKBGap`), `httpapi/kb-gap-draft-handlers.go
 - **Never published by AI.** The article is always created as `draft`; publishing is the normal call
   with `kb_articles:publish` and the review gate.
 
+## Out of date
+
+Migration `20261123082931-kb-article-conflicts`; code `store/kb-conflicts-match.go`
+(`KBConflictScore`, `KBConflictArticleFor`), `ai/kb_conflicts.go` (`CheckKBConflicts`,
+`RunKBConflictChecks`), `store/kb-conflicts.go` (list, clear, `open_conflicts`),
+`httpapi/kb-conflict-handlers.go`, MCP `catalog-kb-conflicts.go`, web `features/kb/article-conflicts.tsx`.
+
+- **A trigger queues, a worker checks.** `kb_conflict_reply_sent` on `messages` queues every
+  `outgoing` reply with an author, no `origin`, no `notice_kind` and no `intake_reply_kind` in
+  `kb_conflict_checks`. A new place that sends a reply needs no conflict code. `serve` runs
+  `RunKBConflictChecks` every 30 s; the queue is listed under `PrivilegeKBConflictQueue` (workspace
+  ids only), each workspace is checked in its own scope, at most 20 replies a pass.
+- **Most replies never reach a model.** `KBConflictArticleFor` takes the best 3 matches of AI
+  retrieval (published, not excluded from AI, every language) and scores each with
+  `KBConflictScore`: per paragraph of the reply, the length of its distinct words found in the
+  article over the length of all of them, best paragraph wins. A paragraph that shares fewer than
+  `KBConflictMinWords` (4) long words scores 0, so greetings and sign-offs never decide. Only a score
+  of `KBConflictMatchThreshold` (0.5) or more is asked about; a reply on another topic sharing a few
+  common words scores about 0.3. A reply that matches nothing is deleted from the queue unasked.
+- **The prompt.** The triage slot's binding, one user turn: the matching part of the article in
+  `<kb_article>` and the masked reply in `<untrusted_reply>`, both escaped and framed as data in
+  the system turn. No customer message is in it. The answer is a JSON schema
+  (`contradicts`, `reason`); anything but a clear yes with a reason flags nothing. The reason is
+  masked again and cut to 499 characters plus the ellipsis (the column holds 500).
+- **The cap.** `KBConflictChecksPerDay` (50) per workspace per UTC day counts the rows the worker
+  claimed (`checked_at`), under a transaction advisory lock per workspace so two processes never
+  pass it together. Past it, the day's queue is dropped, not kept for tomorrow. Checked rows stay
+  48 h to count the day, then go.
+- **Same usage path as inbox AI.** The call goes through `Metered` as `FeatureTriage`,
+  `Automatic`: one `ai_usage` row, the included allowance gate. `ErrAllowanceReached` drops the
+  queue; `ErrAllowanceHeld` puts the claimed reply back unclaimed for the next pass. These checks
+  are not `ai_tasks`, so the automatic runs limit of a workspace does not count them; the daily cap
+  is their own bound.
+- **Off means nothing queued is kept.** With triage off or no provider (`ErrFeatureOff`) the
+  workspace's queue is dropped without a call or an error. A channel whose triage level is Off keeps
+  its replies from AI: each is dropped unasked. A locked workspace (plan limits) drops its queue.
+- **One row per article and reply.** `kb_article_conflicts` is unique on
+  `(workspace_id, article_id, message_id)`; the insert checks that the article and the message still
+  exist. Clearing sets `cleared_at` with the person, or the token's id and label, on every open
+  row; the rows stay and a new contradicting reply opens a new row. Clear goes through `runOnce`
+  (`kb_conflicts_clear`), so one Idempotency-Key clears once.
+- **`open_conflicts` on every article answer.** `fillKBSummaries` calls `fillKBOpenConflicts`, so
+  the list, the single read and every write that answers an article carry the count (partial index
+  `kb_article_conflicts_open_idx`). The web editor fetches the replies only while it is above 0.
+- **Conversations stay behind `conversations:read`.** The list answers each reply's excerpt
+  (`KBConflictExcerptRunes`, masked before the cut), author and sent time; `hideConflictConversations`
+  removes its conversation for a caller without `conversations:read`. MCP puts the subject under
+  `untrusted_customer_content`.
+- **Agent-side tables.** Both tables use `secure_workspace_table`; the help center never reads
+  them. Rolling back drops them with the trigger. They are not in the export yet.
+
 ## Views and uses
 
 Migration `20261121091907-kb-article-views-and-uses`; code `pageview/` (who is a reader, the event),

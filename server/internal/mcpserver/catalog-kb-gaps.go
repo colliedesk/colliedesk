@@ -8,18 +8,19 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
-const kbGapKinds = `["search_no_result","vote_no","chat_handoff","chat_unanswered","recurring_topic"]`
+const kbGapKinds = `["search_no_result","vote_no","chat_handoff","chat_unanswered","recurring_topic","requested"]`
 
 // kbGapOutput is one knowledge gap. Its title is the words of a reader, so it sits under
 // untrusted_customer_content.
 const kbGapOutput = `{"type":"object","required":[` + kbGapRequired + `],"properties":{` + kbGapProperties + `}}`
 
-const kbGapRequired = `"id","status","kinds","askers","recent_askers","first_seen","last_seen","fixed_by_article","fixed_automatically","status_changed_by","status_changed_at","untrusted_customer_content"`
+const kbGapRequired = `"id","status","kinds","askers","recent_askers","conversation_count","first_seen","last_seen","fixed_by_article","fixed_automatically","status_changed_by","status_changed_at","untrusted_customer_content"`
 
 const kbGapProperties = `"id":{"type":"string"},"status":{"type":"string","enum":["open","fixed","dismissed"]},` +
 	`"kinds":{"type":"array","description":"The kinds of its signals.","items":{"type":"string","enum":` + kbGapKinds + `}},` +
 	`"askers":{"type":"integer","description":"Distinct askers since the first signal."},` +
 	`"recent_askers":{"type":"integer","description":"Distinct askers in the last 30 days: the rank."},` +
+	`"conversation_count":{"type":"integer","description":"Conversations that asked for its article (kind requested)."},` +
 	`"first_seen":{"type":"string"},"last_seen":{"type":"string"},` +
 	`"fixed_by_article":{"type":["object","null"],"description":"The article that answers it; null unless it is fixed by one.","properties":{"id":{"type":"string"},"title":{"type":"string"}}},` +
 	`"fixed_automatically":{"type":"boolean","description":"True when a matching article was published and no person changed the gap since."},` +
@@ -36,11 +37,13 @@ func kbGapsListSpec() Spec {
 		Title: "List what readers asked for and did not find",
 		Description: `List the knowledge gaps: what readers asked for and found no answer to, grouped by their words, most distinct askers in 30 days first. ` +
 			`A gap gathers help center searches with no result, "No" votes with their "What was missing?" line, help chats handed to a person or not answered from an article, ` +
-			`and resolved conversations no article title matches. Open gaps unless status says otherwise; kind keeps the gaps with a signal of that kind. ` +
+			`resolved conversations no article title matches, and conversations a team member asked an article for. Open gaps unless status says otherwise; kind keeps the gaps with a signal of that kind; ` +
+			`similar lists instead the open gaps close to those words, closest first, which a request for an article with them would join. ` +
 			`Read one's signals with colliedesk_kb_gap_get; write the missing article with colliedesk_kb_article_create, then link it with colliedesk_kb_gap_update.` + "\n\n" + untrustedNotice,
 		REST: []string{"GET /api/v1/kb/gaps"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"status":{"type":"string","enum":["open","fixed","dismissed"],"description":"Default open."},` +
-			`"kind":{"type":"string","enum":` + kbGapKinds + `},"limit":{"type":"integer","minimum":1,"maximum":200,"description":"Default 50."}}}`,
+			`"kind":{"type":"string","enum":` + kbGapKinds + `},"similar":{"type":"string","minLength":1,"maxLength":300,"description":"Words of a request for an article."},` +
+			`"limit":{"type":"integer","minimum":1,"maximum":200,"description":"Default 50."}}}`,
 		Output: `{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":` + kbGapOutput + `}}}`,
 		run:    kbGapsList,
 	}
@@ -50,15 +53,17 @@ func kbGapGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_gap_get",
 		Title: "Read what readers asked for in one knowledge gap",
-		Description: `Read one knowledge gap with its newest 100 signals, newest first: what each reader searched, wrote or asked, masked. ` +
-			`Nothing tells the askers apart. Link the gap to the article that answers it, or dismiss it, with colliedesk_kb_gap_update.` + "\n\n" + untrustedNotice,
+		Description: `Read one knowledge gap with its newest 100 signals, newest first: what each reader searched, wrote or asked, masked, ` +
+			`and the conversations that asked for its article (empty for a token without conversations:read). ` +
+			`Nothing tells the askers apart. Start its article with colliedesk_kb_gap_article_start. Link the gap to the article that answers it, or dismiss it, with colliedesk_kb_gap_update.` + "\n\n" + untrustedNotice,
 		REST:  []string{"GET /api/v1/kb/gaps/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["gap_id"],"properties":{` + kbGapIDProperty + `}}`,
 		Output: `{"type":"object","required":[` + kbGapRequired + `,"signal_count","signals"],"properties":{` + kbGapProperties + `,` +
 			`"signal_count":{"type":"integer","description":"Every signal of the gap; signals lists the newest 100."},` +
 			`"signals":{"type":"array","items":{"type":"object","required":["kind","created_at","untrusted_customer_content"],"properties":{` +
 			`"kind":{"type":"string","enum":` + kbGapKinds + `},"created_at":{"type":"string"},` +
-			`"untrusted_customer_content":{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}}}}}}`,
+			`"untrusted_customer_content":{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}}}},` +
+			`"conversations":{"type":"array","description":"The conversations that asked for its article, the one that asked last first.","items":` + kbGapConversationSchema + `}}}`,
 		run: kbGapGet,
 	}
 }
@@ -81,15 +86,16 @@ func kbGapUpdateSpec() Spec {
 
 func kbGapsList(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		Status string `json:"status"`
-		Kind   string `json:"kind"`
-		Limit  int    `json:"limit"`
+		Status  string `json:"status"`
+		Kind    string `json:"kind"`
+		Similar string `json:"similar"`
+		Limit   int    `json:"limit"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
 	query := url.Values{}
-	for name, value := range map[string]string{"status": args.Status, "kind": args.Kind} {
+	for name, value := range map[string]string{"status": args.Status, "kind": args.Kind, "similar": args.Similar} {
 		if value != "" {
 			query.Set(name, value)
 		}
@@ -126,6 +132,7 @@ func kbGapGet(c *call, arguments map[string]any) (any, error) {
 	}
 	answer := kbGapAnswer(detail.KBGap)
 	answer["signal_count"], answer["signals"] = detail.SignalCount, signals
+	answer["conversations"] = kbGapConversationsView(detail.Conversations)
 	return answer, nil
 }
 
@@ -171,7 +178,7 @@ func kbGapAnswer(gap domain.KBGap) map[string]any {
 		kinds = []string{}
 	}
 	return map[string]any{
-		"id": gap.ID, "status": gap.Status, "kinds": kinds, "askers": gap.Askers, "recent_askers": gap.RecentAskers,
+		"id": gap.ID, "status": gap.Status, "kinds": kinds, "askers": gap.Askers, "recent_askers": gap.RecentAskers, "conversation_count": gap.ConversationCount,
 		"first_seen": gap.FirstSeen, "last_seen": gap.LastSeen, "fixed_by_article": gap.FixedByArticle,
 		"fixed_automatically": gap.FixedAutomatically, "status_changed_by": gap.StatusChangedBy, "status_changed_at": gap.StatusChangedAt,
 		"untrusted_customer_content": map[string]any{"title": gap.Title},

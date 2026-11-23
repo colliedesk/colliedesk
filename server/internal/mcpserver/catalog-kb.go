@@ -53,7 +53,10 @@ const (
 		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made it; null when a person made it in the web app."},` +
 		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
 
-	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility","tags","author","languages"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` + kbLanguagesOutput + `,` +
+	// kbOpenConflictsOutput is how many sent replies contradict an article and no editor cleared yet.
+	kbOpenConflictsOutput = `"open_conflicts":{"type":"integer","description":"Sent replies found to contradict it, not cleared: above 0 it may be out of date (colliedesk_kb_article_conflicts_list)."}`
+
+	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility","tags","author","languages","open_conflicts"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` + kbLanguagesOutput + `,` + kbOpenConflictsOutput + `,` +
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,` +
 		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
@@ -62,7 +65,7 @@ const (
 		`"votes":{"type":"object","description":"Readers' answers to \"Was this article helpful?\", imported ones included; only search rows have it.","properties":{"helpful":{"type":"integer"},"not_helpful":{"type":"integer"}}}}}`
 
 	// kbArticleSchemaOpen is an article without its closing braces, so one read alone can add its numbers.
-	kbArticleSchemaOpen = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from","tags","author"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` +
+	kbArticleSchemaOpen = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from","tags","author","open_conflicts"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` + kbOpenConflictsOutput + `,` +
 		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
 		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"has_draft":{"type":"boolean"},"draft":` + kbArticleDraftSchema + `,"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
@@ -76,7 +79,7 @@ const (
 	kbArticleGetOutput = `{"type":"object","required":["article"],"properties":{"article":` + kbArticleSchemaOpen + `,` +
 		`"views_30d":{"type":"integer","description":"Help center views in the last 30 days; per day with colliedesk_kb_article_stats."},` +
 		`"uses_30d":{"type":"integer","description":"Sent replies that linked it or were an AI draft quoting it, last 30 days."}}},` +
-		`"gap_source":` + kbGapSourceSchema + `}}`
+		`"gap_source":` + kbGapSourceSchema + `,"reply_source":` + kbReplySourceSchema + `}}`
 
 	kbCollectionSchema = `{"type":"object","required":["id","parent_id","name","slug","description","position","article_count","updated_at","default_template_id","visibility","effective_visibility"],"properties":{` +
 		`"id":{"type":"string"},"parent_id":{"type":["string","null"]},"default_template_id":{"type":["string","null"],"description":"The template every new article in it starts from (colliedesk_kb_templates_list); null: they start empty."},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},` +
@@ -223,7 +226,7 @@ func kbArticleGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_get",
 		Title: "Read a knowledge base article",
-		Description: `Read one article with its whole Markdown text and its public address (url), and its unpublished changes (draft) if it has any. It also finds an article in the trash, and says so with in_trash. An article drafted from a knowledge gap names the gap and the conversations it was written from (gap_source). Use its updated_at when you change it.` +
+		Description: `Read one article with its whole Markdown text and its public address (url), and its unpublished changes (draft) if it has any. It also finds an article in the trash, and says so with in_trash. An article drafted from a knowledge gap names the gap and the conversations it was written from (gap_source); one made from a sent reply names the conversation and the question (reply_source). Use its updated_at when you change it.` +
 			"\n\n" + kbTextNotice,
 		REST:   []string{"GET /api/v1/kb/articles/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["article_id"],"properties":{` + kbArticleIDProperty + `}}`,
