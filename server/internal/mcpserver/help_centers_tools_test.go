@@ -54,8 +54,12 @@ func TestHelpCenterToolsAddOneWorkOnItByIDAndDeleteIt(t *testing.T) {
 	for _, tool := range []string{"colliedesk_help_center_theme_get", "colliedesk_help_center_domain_get", "colliedesk_help_center_languages_get"} {
 		e.ok(admin, tool, map[string]any{"help_center_id": hardware})
 	}
-	if message := e.fails(admin, "colliedesk_help_center_theme_check", map[string]any{"help_center_id": hardware, "preview": "home"}); !strings.Contains(message, "preview") {
-		t.Errorf("a preview of one help center's theme: %q", message)
+	previewed := e.ok(admin, "colliedesk_help_center_theme_check", map[string]any{"help_center_id": hardware, "preview": "home"})
+	if html, _ := previewed["html"].(string); !strings.Contains(html, "Device answers") {
+		t.Errorf("a preview of the second help center does not show its title: %v", previewed)
+	}
+	if html, _ := e.ok(admin, "colliedesk_help_center_theme_check", map[string]any{"preview": "home"})["html"].(string); strings.Contains(html, "Device answers") {
+		t.Errorf("the primary's preview shows the second help center's title")
 	}
 
 	stranger := e.connect(other.adminTier, "")

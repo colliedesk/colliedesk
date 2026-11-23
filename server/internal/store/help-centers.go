@@ -184,7 +184,7 @@ func helpCenterStoreError(what string, err error) error {
 	case errors.As(err, &violation) && violation.Code == uniqueViolation && violation.ConstraintName == "help_centers_handle":
 		return domain.ErrHelpCenterHandleTaken
 	case errors.Is(err, domain.ErrHelpCenterNotFound), errors.Is(err, domain.ErrHelpCenterLimit), errors.Is(err, domain.ErrPrimaryHelpCenter),
-		errors.Is(err, domain.ErrHelpCenterHandleTaken), errors.As(err, &invalid):
+		errors.Is(err, domain.ErrHelpCenterHandleTaken), errors.Is(err, domain.ErrHelpCenterDomainInUse), errors.As(err, &invalid):
 		return err
 	}
 	return fmt.Errorf("%s: %w", what, err)

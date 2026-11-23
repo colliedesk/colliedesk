@@ -22,8 +22,12 @@ func (s *Site) viewed(request *http.Request, v view, kind pageview.Kind, data pa
 	if address == "" {
 		address = v.rootAddress + strings.TrimPrefix(request.URL.Path, v.root)
 	}
+	helpCenterID := ""
+	if !v.site.Primary {
+		helpCenterID = v.site.HelpCenterID
+	}
 	s.config.PageViews.PageViewed(pageview.Event{
-		WorkspaceID: v.site.WorkspaceID, Timezone: v.site.Timezone, Kind: kind,
+		WorkspaceID: v.site.WorkspaceID, HelpCenterID: helpCenterID, Timezone: v.site.Timezone, Kind: kind,
 		Address: address, Title: data.Title, Referrer: request.Referer(), Search: search, Locale: v.locale(),
 		ArticleID: articleID, Client: s.client(request), UserAgent: request.UserAgent(), At: time.Now(),
 	})

@@ -87,3 +87,51 @@ func TestHelpCenterAnalyticsToolsSaveTestAndNeverAnswerTheSecret(t *testing.T) {
 		t.Fatalf("read after the save = %v", got)
 	}
 }
+
+// The analytics tools work on the help center help_center_id names; the primary keeps its own.
+func TestHelpCenterAnalyticsToolsWorkOnOneHelpCenterByID(t *testing.T) {
+	plausible := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(plausible.Close)
+	keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
+	late := &lateStore{}
+	sender := hcanalytics.New(late, hcanalytics.Options{Origin: testOrigin,
+		AllowDial: map[string]bool{strings.TrimPrefix(plausible.URL, "http://"): true}})
+	e := newEnvWith(t, func(config *httpapi.Config) {
+		config.Google = google.Config{Keys: keys}
+		config.Analytics = sender
+	})
+	late.Store = store.New(e.pool).WithSealKeys(keys)
+	w := e.newWorkspace("Analytics By Center", "admin@analytics-by-center.example.com")
+	other := e.newWorkspace("Analytics Elsewhere", "admin@analytics-elsewhere.example.com")
+	admin, send := e.connect(w.adminTier, ""), e.connect(w.send, "")
+	hardware, _ := at(t, e.ok(admin, "colliedesk_help_center_create", map[string]any{"name": "Hardware", "handle": "hardware", "locale": "en"}), "help_center", "id").(string)
+
+	e.refused(send, "colliedesk_help_center_analytics_set", map[string]any{"help_center_id": hardware, "provider": "plausible", "enabled": false})
+	saved := e.ok(admin, "colliedesk_help_center_analytics_set", map[string]any{"help_center_id": hardware, "provider": "plausible", "enabled": true,
+		"plausible_domain": "hardware.example.com", "plausible_base_url": plausible.URL})
+	if at(t, saved, "analytics", "plausible_domain") != "hardware.example.com" {
+		t.Fatalf("set on the second help center = %v", saved)
+	}
+	if got := e.ok(admin, "colliedesk_help_center_analytics_get", map[string]any{"help_center_id": hardware}); at(t, got, "analytics", "provider") != "plausible" {
+		t.Fatalf("get on the second help center = %v", got)
+	}
+	if got := e.ok(admin, "colliedesk_help_center_analytics_get", nil); at(t, got, "analytics", "provider") != nil {
+		t.Fatalf("the primary's analytics = %v, want untouched", got)
+	}
+	tested := e.ok(admin, "colliedesk_help_center_analytics_test", map[string]any{"help_center_id": hardware})
+	if at(t, tested, "test", "ok") != true {
+		t.Fatalf("test on the second help center = %v", tested)
+	}
+	if message := e.fails(admin, "colliedesk_help_center_analytics_test", nil); !strings.Contains(message, "PUT /api/v1/help-center/analytics") {
+		t.Fatalf("a test of the primary, which saved nothing, does not say to save first: %q", message)
+	}
+	stranger := e.connect(other.adminTier, "")
+	for _, tool := range []string{"colliedesk_help_center_analytics_get", "colliedesk_help_center_analytics_test"} {
+		if message := e.fails(stranger, tool, map[string]any{"help_center_id": hardware}); !strings.Contains(message, "colliedesk_help_centers_list") {
+			t.Errorf("%s with another workspace's help center: %q", tool, message)
+		}
+	}
+}

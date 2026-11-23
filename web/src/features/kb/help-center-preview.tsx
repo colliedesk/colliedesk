@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useHelpCenterTarget } from './help-center-target';
 import { themeMessages } from './help-center-theme-messages';
 import { ThemeInvalidError, themeApi } from './theme-api';
 import type { PreviewPage, PreviewTheme, ThemePreview } from './theme-api';
@@ -26,6 +27,7 @@ export const previewDelay = 300;
 // can say why it is not in the preview yet. Nothing is asked while enabled is false (the saved theme is
 // still loading) or after the caller goes away.
 export function useThemePreview(page: PreviewPage, theme: PreviewTheme, enabled = true) {
+  const target = useHelpCenterTarget();
   const key = JSON.stringify({ page, theme });
   const [shown, setShown] = useState<{ key?: string; preview?: ThemePreview; error?: string; refused?: Record<string, string> }>({});
   const queue = useRef({ latest: key, due: undefined as string | undefined, busy: false, timer: 0, alive: true });
@@ -36,7 +38,7 @@ export function useThemePreview(page: PreviewPage, theme: PreviewTheme, enabled 
     state.due = undefined;
     state.busy = true;
     const sent = JSON.parse(body) as { page: PreviewPage; theme: PreviewTheme };
-    themeApi.preview(sent.page, sent.theme).then(
+    themeApi.preview(sent.page, sent.theme, target).then(
       (preview) => { if (state.alive && body === state.latest) setShown({ key: body, preview }); },
       (error: unknown) => {
         if (!state.alive || body !== state.latest) return;

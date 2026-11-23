@@ -9968,6 +9968,7 @@ paths:
     get:
       operationId: getHelpCenterAnalytics
       x-permission: help_center:read
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Where the help center sends its page views: the workspace's own Google Analytics 4 property
         (`ga4`) or Plausible site (`plausible`), or nowhere (`provider` null until first saved). The
@@ -9987,6 +9988,7 @@ paths:
     put:
       operationId: putHelpCenterAnalytics
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Save where the page views go. Every field replaces the stored one except `ga4_api_secret`: left
         out or null keeps the stored secret, an empty string removes it. The other service's fields are
@@ -10015,6 +10017,7 @@ paths:
     post:
       operationId: testHelpCenterAnalytics
       x-permission: help_center:update
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Send one test page view of `/colliedesk-analytics-test` to the saved service now, on or off, with
         the caller's browser and address, and say what it answered. GA4 first checks the event at its
@@ -10090,6 +10093,7 @@ paths:
     post:
       operationId: previewHelpCenterTheme
       x-permission: help_center:read
+      parameters: [{$ref: '#/components/parameters/HelpCenterIDQuery'}]
       description: >
         Render a page of the help center with a candidate theme, saving nothing: the real page templates,
         the workspace's live collections and published articles (never drafts), also while the help center
@@ -10159,7 +10163,8 @@ paths:
         address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN`
         and the names below it. A host name another workspace's help center serves on can be claimed too:
         the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim
-        and no longer proves the other workspace's.
+        and no longer proves the other workspace's. A host name another help center of the same
+        workspace uses is refused with 409 `domain_taken`: remove it there first.
       requestBody:
         required: true
         content:
@@ -10208,8 +10213,9 @@ paths:
         serving, with `check_error` and `failing_since`; the first failed check 7 days after
         `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's
         help center serves on the host name, a passing check takes it over if the same DNS answer does not
-        prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and
-        answers 409 `domain_taken` if it does. 404 when no domain is set. Needs `help_center:update` and `kb_articles:publish`.
+        prove the other workspace's claim (only that help center of the other workspace goes back to
+        `pending` with `taken_over`; its other help centers keep their names), and answers 409
+        `domain_taken` if it does, or when another help center of the same workspace serves on the name. 404 when no domain is set. Needs `help_center:update` and `kb_articles:publish`.
         One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429
         with `Retry-After`): each makes the server ask DNS.
       responses:

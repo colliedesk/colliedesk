@@ -25,6 +25,8 @@ const (
 // memory; a consumer must not store them.
 type Event struct {
 	WorkspaceID string
+	// HelpCenterID is the help center that served the page, "" for the workspace's primary.
+	HelpCenterID string
 	// Timezone is the workspace's IANA timezone, which names the day a view belongs to.
 	Timezone string
 	Kind     Kind

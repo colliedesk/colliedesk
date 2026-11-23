@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ConflictError, InvalidRequestError, request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import type { Generated, JsonResponse } from '../../api/schemas';
+import { onHelpCenter } from './help-center-target';
 
 // The help center's brand: read, save, and a preview of a page with a theme not saved yet. These calls
 // live in the help center card's chunk, so the first bundle does not carry them.
@@ -66,9 +67,10 @@ async function send<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): 
 
 const themePath = '/api/v1/help-center/theme';
 
+// Each call acts on the primary help center, or on the one helpCenterId names.
 export const themeApi = {
-  get: () => send(themePath, themeSchema),
-  save: (theme: ThemeInput) => send(themePath, themeSchema, { method: 'PUT', body: JSON.stringify(theme) }),
-  preview: (page: PreviewPage, theme: PreviewTheme) => send('/api/v1/help-center/theme/preview', previewSchema,
+  get: (helpCenterId?: string) => send(`${themePath}${onHelpCenter(helpCenterId)}`, themeSchema),
+  save: (theme: ThemeInput, helpCenterId?: string) => send(`${themePath}${onHelpCenter(helpCenterId)}`, themeSchema, { method: 'PUT', body: JSON.stringify(theme) }),
+  preview: (page: PreviewPage, theme: PreviewTheme, helpCenterId?: string) => send(`/api/v1/help-center/theme/preview${onHelpCenter(helpCenterId)}`, previewSchema,
     { method: 'POST', body: JSON.stringify({ page, theme } satisfies RequestBody<'previewHelpCenterTheme'>) }),
 };

@@ -60,8 +60,7 @@ func helpCenterThemeCheckSpec() Spec {
 		Title: "Check a help center brand without saving it",
 		Description: `Check a candidate brand the way colliedesk_help_center_theme_update would, and save nothing. ` + themeContrastRule +
 			`ok is false when a pair fails; fields then says, per color, its ratio and the nearest color that passes. A field of the wrong shape or a logo that is not a library image is an error. ` +
-			`With preview (home or article), html also holds that page rendered with the theme from the workspace's published articles, the way the settings card shows it; ` +
-			`preview renders the primary help center only.`,
+			`With preview (home or article), html also holds that page of the help center rendered with the theme from its published articles, the way the settings card shows it.`,
 		REST:   []string{"POST /api/v1/help-center/theme/check", "POST /api/v1/help-center/theme/preview"},
 		Input:  themeCheckInputSchema,
 		Output: `{"type":"object","required":["ok","checks","fields"],"properties":{"ok":{"type":"boolean"},"checks":{"type":"array","items":` + themeCheckSchema + `},"fields":{"type":"object","additionalProperties":{"type":"string"}},"html":{"type":"string"}}}`,
@@ -98,17 +97,15 @@ func helpCenterThemeGet(c *call, arguments map[string]any) (any, error) {
 
 func helpCenterThemeCheck(c *call, arguments map[string]any) (any, error) {
 	var checked map[string]any
-	_, onOne := arguments["help_center_id"]
-	if page, ok := arguments["preview"]; ok && onOne {
-		return nil, &toolError{"preview renders the primary help center only: leave help_center_id out to preview, or leave preview out to check this help center's theme."}
-	} else if ok {
-		theme := make(map[string]any, len(arguments))
-		for field, value := range arguments {
+	if page, ok := arguments["preview"]; ok {
+		path, candidate := c.atHelpCenter("/api/v1/help-center/theme/preview", arguments)
+		theme := make(map[string]any, len(candidate))
+		for field, value := range candidate {
 			if field != "preview" {
 				theme[field] = value
 			}
 		}
-		if err := c.send(http.MethodPost, "/api/v1/help-center/theme/preview", map[string]any{"page": page, "theme": theme}, &checked); err != nil {
+		if err := c.send(http.MethodPost, path, map[string]any{"page": page, "theme": theme}, &checked); err != nil {
 			return nil, err
 		}
 		return checked, nil
