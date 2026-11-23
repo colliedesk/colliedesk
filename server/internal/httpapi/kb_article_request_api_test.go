@@ -2,11 +2,13 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 type kbRequestedGap struct {
@@ -201,5 +203,47 @@ func TestADeletedConversationTakesItsRequestWithIt(t *testing.T) {
 	}
 	if n := queryString(t, d.pool, `SELECT count(*)::text FROM kb_gaps WHERE id=$1`, filed.Gap.ID); n != "0" {
 		t.Fatalf("gaps left = %s, want the gap gone with its only request", n)
+	}
+}
+
+// Every time a request for an article and the gaps around it return is UTC, whatever the server's own
+// timezone: the web app refuses a time with another offset, so the gaps page would not load.
+func TestArticleRequestAndGapTimesAreUTC(t *testing.T) {
+	local := time.Local
+	time.Local = time.FixedZone("UTC+7", 7*3600)
+	t.Cleanup(func() { time.Local = local })
+	d := newDraftDesk(t)
+	filed := request(t, d.api, http.MethodPost, requestPath(d.conversationA), map[string]any{"title": "Export invoices"}, d.adminA, nil)
+	if filed.Code != http.StatusCreated {
+		t.Fatalf("request: %d %s", filed.Code, filed.Body.String())
+	}
+	var answer kbArticleRequestView
+	if err := json.Unmarshal(filed.Body.Bytes(), &answer); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"", "/api/v1/kb/gaps", "/api/v1/kb/gaps?similar=" + url.QueryEscape("export invoices"),
+		"/api/v1/kb/gaps?kind=requested", "/api/v1/kb/gaps/" + answer.Gap.ID} {
+		body := filed.Body.Bytes()
+		if path != "" {
+			response := request(t, d.api, http.MethodGet, path, nil, d.adminA, nil)
+			if response.Code != http.StatusOK {
+				t.Fatalf("GET %s: %d %s", path, response.Code, response.Body.String())
+			}
+			body = response.Body.Bytes()
+		}
+		var decoded any
+		if err := json.Unmarshal(body, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		times := 0
+		walkTimes(decoded, func(value string) {
+			times++
+			if parsed, _ := time.Parse(time.RFC3339Nano, value); parsed.Location() != time.UTC {
+				t.Errorf("%q: %q is not UTC", path, value)
+			}
+		})
+		if times == 0 {
+			t.Errorf("%q returned no time to check", path)
+		}
 	}
 }

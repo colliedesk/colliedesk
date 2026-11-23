@@ -43,6 +43,11 @@ func scanKBGap(row pgx.Row) (domain.KBGap, error) {
 		g.FixedByArticle = &domain.KBGapArticle{ID: *articleID, Title: *articleTitle}
 	}
 	g.StatusChangedBy = savedReplyPerson(agentID, agentName)
+	g.FirstSeen, g.LastSeen = g.FirstSeen.UTC(), g.LastSeen.UTC()
+	if g.StatusChangedAt != nil {
+		changed := g.StatusChangedAt.UTC()
+		g.StatusChangedAt = &changed
+	}
 	return g, err
 }
 
@@ -114,7 +119,9 @@ func readKBGap(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.K
 	}
 	detail.Signals, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.KBGapSignal, error) {
 		var signal domain.KBGapSignal
-		return signal, row.Scan(&signal.Kind, &signal.Text, &signal.Note, &signal.CreatedAt)
+		err := row.Scan(&signal.Kind, &signal.Text, &signal.Note, &signal.CreatedAt)
+		signal.CreatedAt = signal.CreatedAt.UTC()
+		return signal, err
 	})
 	if err != nil {
 		return detail, err
