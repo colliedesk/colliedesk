@@ -1215,9 +1215,17 @@ whether it is on. Everyone who opens Settings sees the list; an admin changes it
   center cannot be restored: make a new one and show the collections on it again. Deleting one that
   serves on a custom domain needs `kb_articles:publish` as well. The primary cannot be deleted.
 
-Its title, language, theme, custom domain and home order are set through the API or by an AI agent
-for now (see [For developers and AI agents](#for-developers-and-ai-agents)); the page sets them for
-the primary only.
+- **Settings**: select **Settings** on its row. The page has the same sections as the primary's, and
+  each one reads and saves this help center only: **Publish the help center** and **Title**, **Show
+  tags on article pages**, [custom domain](#custom-domain),
+  [Search Console](#search-console-and-bing-webmaster-tools), [analytics](#analytics),
+  [languages](#in-other-languages) and [brand](#brand). **All help centers** goes back to the list.
+  Approval before publishing and the Freshdesk redirect belong to the primary, so they are not on it.
+  A host name serves one help center on the whole server: a name another help center of the
+  workspace uses is refused, and it is free again once that help center removes it or is deleted.
+
+Its home order is set through the API or by an AI agent for now (see
+[For developers and AI agents](#for-developers-and-ai-agents)).
 
 ### In other languages
 
@@ -1601,7 +1609,8 @@ Articles and collections:
   renames one, changes its handle, or turns it on or off. `DELETE /api/v1/help-centers/{id}`
   (`colliedesk_help_center_delete`) deletes one. The help center
   tools and routes (`colliedesk_help_center_get`, `colliedesk_help_center_update`, theme, domain,
-  languages, search console) take an optional `help_center_id`; without it they act on the primary.
+  languages, search console, analytics) take an optional `help_center_id`; without it they act on the
+  primary. An id of another workspace, or of a deleted help center, answers 404.
   `help_center_ids` on `colliedesk_kb_collection_create` and `colliedesk_kb_collection_update`
   (`POST` and `PATCH /api/v1/kb/collections`) chooses where a top-level collection is shown; a
   collection inside another answers with its top-level collection's.
