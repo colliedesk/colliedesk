@@ -11,7 +11,8 @@ import { helpCenterMessages as m } from './results-help-center-messages';
 // the inbox, an article's uses the replies that used it.
 
 export interface HelpCenterLinks {
-  requests: (range: { from: string; to: string }, children: ReactNode) => ReactNode;
+  // search, when set, keeps the inbox on one help center (help_center:hardware).
+  requests: (range: { from: string; to: string }, children: ReactNode, search?: string) => ReactNode;
   article: (id: string, children: ReactNode) => ReactNode;
   conversation: (id: string, children: ReactNode) => ReactNode;
 }
@@ -40,7 +41,8 @@ function ArticleReplies({ article, range, links }: { article: Article; range: Ra
   </>;
 }
 
-export function ResultsHelpCenter({ help, links }: { help: HelpCenterWindow; links: HelpCenterLinks }) {
+// choice, where the workspace has two help centers, picks the one the section reads.
+export function ResultsHelpCenter({ help, links, choice }: { help: HelpCenterWindow; links: HelpCenterLinks; choice?: ReactNode }) {
   const [daysOpen, setDaysOpen] = useState(false);
   const [usesOf, setUsesOf] = useState<string>();
   const first = help.days[0]?.day;
@@ -50,6 +52,7 @@ export function ResultsHelpCenter({ help, links }: { help: HelpCenterWindow; lin
     <header>
       <div className="heading-with-tip"><h2 id="results-helpcenter">{m.heading}</h2><HelpTip label={m.heading} text={m.how} /></div>
       {first && last && <p className="results-muted">{dayRange(first, last)}</p>}
+      {choice}
     </header>
     <div className="results-helpcenter-grid">
       <div><p className="results-cell-title">{m.views}</p>

@@ -1,6 +1,8 @@
 // Strings of the Help center section of the results page.
 export const helpCenterMessages = {
   heading: 'Help center',
+  allHelpCenters: 'All help centers',
+  oneFailed: 'Could not load this help center. Try again.',
   how: 'A view is one reader opening an article in a browser, counted once per 30 minutes. Bots, link previews, prefetches and your team’s own previews are not counted. The self-service score is article views divided by the conversations customers opened: the higher, the more answers people found without writing in.',
   views: 'Article views',
   viewsPerDay: 'Article views per day',
