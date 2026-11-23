@@ -493,13 +493,16 @@ func ChatKBArticles(ctx context.Context, tx pgx.Tx, workspaceID string, withBodi
 // (database.InHelpChat): an article with a published translation in it that the chat's help center
 // shows is read in that language, with its collection's name in it; the others in their own ("" is
 // the help center's primary language). An article listed on the help center from a collection
-// elsewhere has no collection the reader sees, so its folder is "".
+// elsewhere has no collection the reader sees, so its folder is "". It joins
+// kb_help_center_chat_articles once, for what help chat may read (helpChatKBArticle) and whether it
+// may link it (public): each further visibility view computes every collection's rank again.
 func chatKBSelect(body string) string {
 	return `SELECT a.id::text,a.number,COALESCE(v.version,1),COALESCE(t.title,a.title),COALESCE(ct.name,c.name,''),octet_length(COALESCE(t.body_md,a.body_md)),` + body + `,
-		COALESCE(t.locale,''),COALESCE(t.updated_at::text,''),` + publicKBArticleFlag + `
-		FROM kb_articles a LEFT JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
+		COALESCE(t.locale,''),COALESCE(t.updated_at::text,''),kv.public
+		FROM kb_articles a JOIN kb_help_center_chat_articles kv ON kv.workspace_id=a.workspace_id AND kv.id=a.id
+		LEFT JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
 		LEFT JOIN LATERAL (SELECT max(version) AS version FROM kb_article_versions WHERE workspace_id=a.workspace_id AND article_id=a.id AND ` + kbTextVersion("") + `) v ON true
-		LEFT JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$2 AND $2 <> '' AND ` + helpChatKBTranslation + `
+		LEFT JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id AND t.locale=$2 AND $2 <> '' AND ` + chatArticleKBTranslation + `
 			AND EXISTS (SELECT 1 FROM help_center_languages hl WHERE hl.workspace_id=t.workspace_id AND hl.help_center_id=(SELECT NULLIF(current_setting('app.help_center_id',true),'')::uuid) AND hl.locale=t.locale AND hl.visible)
 		LEFT JOIN kb_collection_translations ct ON ct.workspace_id=c.workspace_id AND ct.collection_id=c.id AND ct.locale=t.locale`
 }
@@ -510,7 +513,7 @@ func ChatKBArticlesIn(ctx context.Context, tx pgx.Tx, workspaceID string, withBo
 	if withBodies {
 		body = `COALESCE(t.body_md,a.body_md)`
 	}
-	rows, err := tx.Query(ctx, chatKBSelect(body)+` WHERE `+helpChatKBArticle+` AND NOT a.ai_excluded ORDER BY a.number`, workspaceID, locale)
+	rows, err := tx.Query(ctx, chatKBSelect(body)+` WHERE a.workspace_id=$1 AND NOT a.ai_excluded ORDER BY a.number`, workspaceID, locale)
 	if err != nil {
 		return nil, fmt.Errorf("read the help center for AI chat: %w", err)
 	}
@@ -549,7 +552,7 @@ func ChatKBArticlesByIDIn(ctx context.Context, tx pgx.Tx, workspaceID string, id
 	if len(ids) == 0 {
 		return found, nil
 	}
-	rows, err := tx.Query(ctx, chatKBSelect(`COALESCE(t.body_md,a.body_md)`)+` WHERE `+helpChatKBArticle+` AND NOT a.ai_excluded AND a.id = ANY($3::uuid[])`, workspaceID, locale, ids)
+	rows, err := tx.Query(ctx, chatKBSelect(`COALESCE(t.body_md,a.body_md)`)+` WHERE a.workspace_id=$1 AND NOT a.ai_excluded AND a.id = ANY($3::uuid[])`, workspaceID, locale, ids)
 	if err != nil {
 		return nil, fmt.Errorf("read help center articles for AI chat: %w", err)
 	}
@@ -573,7 +576,7 @@ func ChatKBArticlesByIDIn(ctx context.Context, tx pgx.Tx, workspaceID string, id
 // ChatKBArticleByIDIn is ChatKBArticleByID in language locale (chatKBSelect).
 func ChatKBArticleByIDIn(ctx context.Context, tx pgx.Tx, workspaceID, id, locale string) (ChatKBArticle, bool, error) {
 	var a ChatKBArticle
-	err := tx.QueryRow(ctx, chatKBSelect(`COALESCE(t.body_md,a.body_md)`)+` WHERE `+helpChatKBArticle+` AND NOT a.ai_excluded AND a.id::text=$3`, workspaceID, locale, id).
+	err := tx.QueryRow(ctx, chatKBSelect(`COALESCE(t.body_md,a.body_md)`)+` WHERE a.workspace_id=$1 AND NOT a.ai_excluded AND a.id::text=$3`, workspaceID, locale, id).
 		Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body, &a.Locale, &a.TextKey, &a.Public)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ChatKBArticle{}, false, nil

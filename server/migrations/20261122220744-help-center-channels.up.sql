@@ -42,16 +42,28 @@ $$;
 
 -- What help chat may read on a help center: kb_help_chat_articles decided for the whole workspace
 -- by the app role, as kb_help_center_public_articles is (help-center-row-security). The reader's
--- own policies on kb_articles then keep the help center's articles.
+-- own policies on kb_articles then keep the help center's articles. public says the help center
+-- shows the article too (kb_help_center_public_articles), so help chat may link it. It tests the
+-- ranks as sets the planner hashes once per statement: h.visibility_rank in the output list makes
+-- the planner compute that collection's rank again for every row.
 CREATE VIEW kb_help_center_chat_articles AS
-SELECT a.workspace_id, a.id FROM kb_articles a
+SELECT a.workspace_id, a.id,
+    a.visibility = 'everyone'
+        AND NOT EXISTS (SELECT 1 FROM kb_help_center_collection_ranks p
+            WHERE p.workspace_id = a.workspace_id AND p.id = a.collection_id
+                AND p.visibility_rank > 0)
+        AND NOT EXISTS (SELECT 1 FROM kb_article_collections x
+            JOIN kb_help_center_collection_ranks v
+                ON v.workspace_id = x.workspace_id AND v.id = x.collection_id
+            WHERE x.workspace_id = a.workspace_id AND x.article_id = a.id
+                AND v.visibility_rank > 0) AS public
+FROM kb_articles a
+JOIN kb_help_center_collection_ranks h ON h.workspace_id = a.workspace_id AND h.id = a.collection_id
 WHERE (SELECT current_setting('app.help_chat', true)) = 'on'
     AND a.workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid)
     AND a.status = 'published' AND a.deleted_at IS NULL
     AND a.visibility IN ('everyone', 'help_chat')
-    AND EXISTS (SELECT 1 FROM kb_help_center_collection_ranks h
-        WHERE h.workspace_id = a.workspace_id AND h.id = a.collection_id
-            AND h.visibility_rank <= 1)
+    AND h.visibility_rank <= 1
     AND NOT EXISTS (SELECT 1 FROM kb_article_collections x
         JOIN kb_help_center_collection_ranks v
             ON v.workspace_id = x.workspace_id AND v.id = x.collection_id

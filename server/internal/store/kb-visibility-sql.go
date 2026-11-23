@@ -24,9 +24,11 @@ const shownArticleKBTranslation = `EXISTS (SELECT 1 FROM kb_published_translatio
 // it: what the team counts and its AI drafts read.
 const publishedKBTranslation = `EXISTS (SELECT 1 FROM kb_published_translations kt WHERE kt.workspace_id=t.workspace_id AND kt.article_id=t.article_id AND kt.locale=t.locale)`
 
-// helpChatKBTranslation holds for a translation t help chat may read (its language aside), in a help
-// chat transaction like helpChatKBArticle.
-const helpChatKBTranslation = `EXISTS (SELECT 1 FROM kb_help_center_chat_translations kt WHERE kt.workspace_id=t.workspace_id AND kt.article_id=t.article_id AND kt.locale=t.locale)`
+// chatArticleKBTranslation holds for a translation t (its language aside) of an article a once the
+// same statement joins kb_help_center_chat_articles for a: a published translation outside the trash
+// is all kb_help_center_chat_translations adds to its article. That view decides the article again
+// and computes every collection's rank once more; kb_published_translations does not.
+const chatArticleKBTranslation = `EXISTS (SELECT 1 FROM kb_published_translations kt WHERE kt.workspace_id=t.workspace_id AND kt.article_id=t.article_id AND kt.locale=t.locale)`
 
 // publicKBArticleFlag is true for an article a the help center shows, so a reader that may read more
 // (help chat) knows which ones it may link.
