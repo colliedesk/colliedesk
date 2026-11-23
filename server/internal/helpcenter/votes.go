@@ -164,7 +164,7 @@ func (s *Site) vote(response http.ResponseWriter, request *http.Request, v view,
 	}
 	if from != "" && strings.TrimSpace(missing) != "" {
 		feedback := store.KBArticleFeedback{Number: number, Voter: voter[:], Address: client, From: from,
-			Page: func(slug string) string { return v.rootAddress + ArticlePath(number, slug) }}
+			Page: func(slug string) string { return v.rootAddress + ArticlePath(number, slug) }, HelpCenterID: v.site.HelpCenterID}
 		// The vote is kept even when this fails; it has no conversation yet, so sending again retries.
 		if err := s.config.Store.OpenKBArticleFeedback(request.Context(), v.site.WorkspaceID, feedback); err != nil {
 			s.writeError(response, err)
