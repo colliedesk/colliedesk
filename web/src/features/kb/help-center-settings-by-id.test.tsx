@@ -37,7 +37,7 @@ const noTokens = { google_site_verification: null, bing_site_verification: null,
 const noAnalytics = { provider: null, enabled: false, ga4_measurement_id: null, ga4_api_secret_set: false, plausible_domain: null, plausible_base_url: 'https://plausible.io',
   last_sent_at: null, last_error: null, last_error_at: null, updated_at: null, updated_by_name: null };
 const noLanguages = { primary: 'en', languages: [], unlisted: [] };
-const primarySettings = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, show_tags: false, url: primaryCenter.url };
+const primarySettings = { enabled: true, title: '', locale: 'en', require_approval: false, content_version: 3, updated_at: null, show_tags: false, feedback_conversations: false, url: primaryCenter.url };
 
 const onHardware = (call: Call) => call.search.get('help_center_id') === hardwareCenter.id;
 
