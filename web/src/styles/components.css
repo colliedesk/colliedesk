@@ -156,6 +156,8 @@
 }
 .filter-match { margin-top: var(--space-1); color: var(--text-2); }
 .filter-hint { color: var(--text-3); font-size: var(--fs-small); }
+/* In a menu the hint lines up with the group title and rows above and below it. */
+.filter-popover .filter-hint { margin: 0; padding: var(--space-1) var(--space-2); font-size: var(--fs-label); }
 .date-range { grid-template-columns: 1fr 1fr; column-gap: var(--space-2); }
 .date-range legend { grid-column: 1 / -1; }
 .date-range input { width: 100%; min-width: 0; padding-inline: var(--space-2); }

@@ -26,6 +26,9 @@ export const listMessages = {
   updated: 'Updated',
   from: (what: string) => `${what} from`,
   to: (what: string) => `${what} to`,
+  // Under a group title (Created, Updated) a date field shows only From or To; its accessible name stays whole.
+  fromShort: 'From',
+  toShort: 'To',
   translation: 'Translation',
   anyTranslation: 'Any',
   missing: 'Missing a translation',
