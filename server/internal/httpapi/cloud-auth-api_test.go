@@ -105,7 +105,7 @@ func TestCloudAuthRequiresWorkspaceChoice(t *testing.T) {
 		}
 	}
 	choices := exchange(t, fixture.api, fixture.token(t, nil), "", testOrigin)
-	if choices.Code != http.StatusConflict || choices.Body.String() != "{\"workspaces\":[{\"slug\":\"alpha\",\"name\":\"Alpha\"},{\"slug\":\"beta\",\"name\":\"Beta\"}]}\n" {
+	if choices.Code != http.StatusConflict || choices.Body.String() != `{"email":"admin@cloud.example.com","workspaces":[{"slug":"alpha","name":"Alpha","host":null,"roles":["Admin"]},{"slug":"beta","name":"Beta","host":null,"roles":["Admin"]}]}`+"\n" {
 		t.Fatalf("choices status=%d body=%s", choices.Code, choices.Body.String())
 	}
 	selected := exchange(t, fixture.api, fixture.token(t, nil), "beta", testOrigin)

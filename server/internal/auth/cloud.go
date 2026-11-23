@@ -12,9 +12,13 @@ import (
 
 var ErrCloudAgentNotFound = errors.New("cloud identity is not an existing agent")
 
+// WorkspaceChoice is one workspace a verified email can open. Host is filled in by the HTTP layer, which
+// knows where each desk runs; Roles are the person's role names there, Admin first.
 type WorkspaceChoice struct {
-	Slug string `json:"slug"`
-	Name string `json:"name"`
+	Slug  string   `json:"slug"`
+	Name  string   `json:"name"`
+	Host  *string  `json:"host"`
+	Roles []string `json:"roles"`
 }
 
 type cloudAgent struct {
@@ -23,6 +27,7 @@ type cloudAgent struct {
 	WorkspaceName string
 	AgentID       string
 	Email         string
+	Roles         []string
 }
 
 func (s *Service) ExchangeCloud(ctx context.Context, email, workspaceSlug, label string) (Redeemed, []WorkspaceChoice, error) {
@@ -77,7 +82,7 @@ func (s *Service) CloudWorkspaces(ctx context.Context, email string) ([]Workspac
 func workspaceChoices(agents []cloudAgent) []WorkspaceChoice {
 	choices := make([]WorkspaceChoice, 0, len(agents))
 	for _, agent := range agents {
-		choices = append(choices, WorkspaceChoice{Slug: agent.WorkspaceSlug, Name: agent.WorkspaceName})
+		choices = append(choices, WorkspaceChoice{Slug: agent.WorkspaceSlug, Name: agent.WorkspaceName, Roles: agent.Roles})
 	}
 	return choices
 }
@@ -95,7 +100,10 @@ func (s *Service) cloudAgents(ctx context.Context, email string) ([]cloudAgent, 
 }
 
 func listCloudAgents(ctx context.Context, tx pgx.Tx, email string) ([]cloudAgent, error) {
-	rows, err := tx.Query(ctx, `SELECT w.id::text,w.slug,w.name,a.id::text,a.email
+	rows, err := tx.Query(ctx, `SELECT w.id::text,w.slug,w.name,a.id::text,a.email,
+		COALESCE((SELECT array_agg(r.name ORDER BY CASE r.system WHEN 'admin' THEN 0 WHEN 'agent' THEN 1 ELSE 2 END, lower(r.name), r.id)
+			FROM agent_roles ar JOIN roles r ON r.workspace_id=ar.workspace_id AND r.id=ar.role_id
+			WHERE ar.workspace_id=a.workspace_id AND ar.agent_id=a.id AND r.deleted_at IS NULL),'{}')
 		FROM agents a JOIN workspaces w ON w.id=a.workspace_id
 		WHERE lower(a.email)=lower($1) AND a.deactivated_at IS NULL ORDER BY w.slug`, strings.TrimSpace(email))
 	if err != nil {
@@ -105,7 +113,7 @@ func listCloudAgents(ctx context.Context, tx pgx.Tx, email string) ([]cloudAgent
 	agents := make([]cloudAgent, 0)
 	for rows.Next() {
 		var agent cloudAgent
-		if err := rows.Scan(&agent.WorkspaceID, &agent.WorkspaceSlug, &agent.WorkspaceName, &agent.AgentID, &agent.Email); err != nil {
+		if err := rows.Scan(&agent.WorkspaceID, &agent.WorkspaceSlug, &agent.WorkspaceName, &agent.AgentID, &agent.Email, &agent.Roles); err != nil {
 			return nil, fmt.Errorf("scan cloud agent: %w", err)
 		}
 		agents = append(agents, agent)

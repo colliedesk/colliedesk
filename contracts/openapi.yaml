@@ -12346,14 +12346,24 @@ components:
               description: Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`.
     WorkspaceChoice:
       type: object
-      required: [slug, name]
+      required: [slug, name, host, roles]
       properties:
         slug: {type: string}
         name: {type: string}
+        host:
+          type: [string, 'null']
+          description: The host name the workspace's desk runs on (`<slug>.<domain>`); null on a server without workspace hosts, where every desk runs on APP_ORIGIN.
+        roles:
+          type: array
+          description: The names of the person's roles in that workspace, Admin first, then Agent, then by name.
+          items: {type: string}
     CloudWorkspaceChoices:
       type: object
-      required: [workspaces]
+      required: [email, workspaces]
       properties:
+        email:
+          type: string
+          description: The verified email the workspaces were found for, so the chooser can say who is signed in.
         workspaces:
           type: array
           minItems: 2

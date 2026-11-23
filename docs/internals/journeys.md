@@ -49,6 +49,8 @@ work together, keep the knowledge base. Tag `@journey`; CI job `e2e`.
 - `a chunk that still fails after that one reload is shown with Reload the page, and the app never reloads in a loop` (`web/e2e/stale-chunk-recovery.spec.ts`)
 - `knowledge base: a collection, an article written in the Markdown editor with a pasted image, published, edited, restored from history, deleted and restored from the trash` (`web/e2e/knowledge-base.spec.ts`)
 - `knowledge base list: tags set in the editor, a hidden column stays hidden after a reload, and a saved view opens its filters again` (`web/e2e/knowledge-base-list.spec.ts`)
+- `knowledge base Filters: a date group's title spans the menu and From and To share a row (1440 px)` (`web/e2e/knowledge-base-filters-layout.spec.ts`)
+- `knowledge base Filters: a date group's title spans the menu and From and To share a row (390 px)` (`web/e2e/knowledge-base-filters-layout.spec.ts`)
 - `kb article list: at desktop width with 1, 4 and 8 columns, with bulk select and in a collection's order view, the head lines up with the cells, the title keeps the free width, the open button stays on its row` (`web/e2e/knowledge-base-list-grid.spec.ts`)
 - `kb article list: on a narrow window the head still lines up with the cells and the chosen columns give way in order` (`web/e2e/knowledge-base-list-grid.spec.ts`)
 - `kb article list: on a phone the status shows beside the title whichever column the person put first` (`web/e2e/knowledge-base-list-grid.spec.ts`)

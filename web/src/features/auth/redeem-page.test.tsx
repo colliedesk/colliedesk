@@ -35,16 +35,46 @@ test('uses a cloud-specific failure message', () => {
 	expect(screen.getByRole('alert')).toHaveTextContent(/cloud sign-in failed/i);
 });
 
-test('lets a cloud identity choose one of its workspaces', () => {
+test('lets a cloud identity choose one of its workspaces', async () => {
 	const onSelectWorkspace = vi.fn();
 	render(<RedeemPage token="" cloudEnabled failed workspaces={[
-		{ slug: 'alpha', name: 'Alpha Support' },
-		{ slug: 'beta', name: 'Beta Support' },
+		{ slug: 'alpha', name: 'Alpha Support', host: null, roles: ['Admin'] },
+		{ slug: 'beta', name: 'Beta Support', host: null, roles: ['Agent'] },
 	]} onSelectWorkspace={onSelectWorkspace} />);
 
-	fireEvent.click(screen.getByRole('button', { name: /beta support/i }));
+	fireEvent.click(await screen.findByRole('button', { name: /beta support/i }));
 	expect(onSelectWorkspace).toHaveBeenCalledWith('beta');
 	expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+const lotus = { slug: 'lotus-spa', name: 'Lotus Spa Care', host: 'lotus-spa.colliedesk.com', roles: ['Admin'] };
+const kumo = { slug: 'kumo-travel', name: 'Kumo Travel Support', host: 'kumo-travel.colliedesk.com', roles: ['Agent'] };
+
+test('the workspace chooser says who is signed in, tells each workspace apart, and asks for no email', async () => {
+	const onUseAnotherEmail = vi.fn();
+	render(<RedeemPage token="" cloudEnabled signedInEmail="linh@northwind.help" workspaces={[lotus, kumo]} onUseAnotherEmail={onUseAnotherEmail}
+		cloudSignIn={<input aria-label="Email address" />} />);
+	expect(screen.getByRole('heading', { level: 1, name: 'Choose a workspace' })).toBeInTheDocument();
+	expect(screen.getByText(/Signed in as linh@northwind\.help\./)).toBeInTheDocument();
+	// Sorted by name, each with its address and the person's role there.
+	await screen.findByRole('button', { name: 'Lotus Spa Care' });
+	const rows = screen.getAllByRole('button').filter((button) => button.classList.contains('workspace-row'));
+	expect(rows.map((row) => document.getElementById(row.getAttribute('aria-labelledby') ?? '')?.textContent)).toEqual(['Kumo Travel Support', 'Lotus Spa Care']);
+	expect(screen.getByRole('button', { name: 'Kumo Travel Support' })).toHaveAccessibleDescription('kumo-travel.colliedesk.com, Agent');
+	// The person is already identified: no email field, no code wording, no Continue.
+	expect(screen.queryByRole('textbox', { name: 'Email address' })).not.toBeInTheDocument();
+	expect(screen.queryByText(/Enter your work email/)).not.toBeInTheDocument();
+	expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
+	fireEvent.click(screen.getByRole('button', { name: 'Use another email' }));
+	expect(onUseAnotherEmail).toHaveBeenCalled();
+});
+
+test('the workspace being opened says so and holds the others', async () => {
+	render(<RedeemPage token="" cloudEnabled signedInEmail="linh@northwind.help" workspaces={[lotus, kumo]} openingWorkspace="kumo-travel" />);
+	const opening = await screen.findByRole('button', { name: 'Kumo Travel Support' });
+	expect(opening).toHaveAttribute('aria-busy', 'true');
+	expect(opening).toHaveTextContent('Opening…');
+	expect(screen.getByRole('button', { name: 'Lotus Spa Care' })).toBeDisabled();
 });
 
 test('a refused link says what happened and what to do next', () => {
@@ -84,10 +114,10 @@ test('a buy link for another plan names no Founding price but still tells an exi
 	expect(screen.getByText('Already have a workspace? The same form signs you in.')).toBeInTheDocument();
 });
 
-test('a buyer who already has a workspace and must pick one is not shown the sign-in hint', () => {
-	render(<RedeemPage token="" cloudEnabled signupEnabled buying="founding" workspaces={[{ slug: 'alpha', name: 'Alpha Support' }]} />);
+test('a buyer who already has a workspace and must pick one is not shown the sign-in hint', async () => {
+	render(<RedeemPage token="" cloudEnabled signupEnabled buying="founding" workspaces={[{ slug: 'alpha', name: 'Alpha Support', host: null, roles: ['Admin'] }]} />);
 	expect(screen.queryByText('Already have a workspace? The same form signs you in.')).not.toBeInTheDocument();
-	expect(screen.getByRole('button', { name: 'Alpha Support' })).toBeInTheDocument();
+	expect(await screen.findByRole('button', { name: 'Alpha Support' })).toBeInTheDocument();
 });
 
 test('the sign-in brand side shows the Colliedesk wordmark as one named image', () => {

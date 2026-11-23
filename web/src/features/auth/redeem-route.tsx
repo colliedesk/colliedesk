@@ -13,7 +13,7 @@ import { readPlanIntent } from '../settings/plan-intent';
 import { preconnectClerk } from './clerk-appearance';
 import { InvitePage, LinkPageLoading } from './invite-page';
 import { SignInLoading } from './sign-in-loading';
-import { RedeemPage } from './redeem-page';
+import { chooserPart, RedeemPage } from './redeem-page';
 
 const loadCloudSignIn = () => import('./cloud-sign-in');
 const CloudSignIn = lazy(() => loadCloudSignIn().then((module) => ({ default: module.CloudSignIn })));
@@ -63,6 +63,12 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   useEffect(() => { if (!token && (trial || buy)) void loadCloudSignIn().catch(() => undefined); }, [token, trial, buy]);
   const [workspaceSlug, setWorkspaceSlug] = useState<string | undefined>(workspace);
   const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
+  // The chooser's email, the workspace being opened from it, and a sign-in begun again for another email
+  // (round remounts the form, which ends the identity provider session first).
+  const [chooserEmail, setChooserEmail] = useState<string | undefined>(undefined);
+  const [opening, setOpening] = useState<string | undefined>(undefined);
+  const [round, setRound] = useState(0);
+  const [anotherEmail, setAnotherEmail] = useState(false);
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);
   const redeem = useMutation({ mutationFn: () => api.redeem(token, navigator.userAgent, next), onSuccess: (result) => goAfterSignIn(result) });
@@ -70,13 +76,22 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   // unknown) answers 401 and keeps the link page. The preview never uses the link up.
   const preview = useQuery({ queryKey: ['invite-preview', token], queryFn: () => api.previewInvite(token), enabled: token !== '', retry: false, staleTime: Infinity });
   const exchange = useCallback(async (sessionToken: string) => {
+    // A token means the sign-in for another email is done: a later remount (a workspace chosen) keeps it.
+    setAnotherEmail(false);
     setCloudPending(true);
     setCloudFailed(false);
     try {
       await goAfterSignIn(await api.exchangeCloudSession(sessionToken, workspaceSlug, next));
     } catch (error) {
-      if (error instanceof CloudWorkspaceChoiceError) setWorkspaces(error.workspaces);
-      else if (!(error instanceof NotAnAgentError)) setCloudFailed(true);
+      if (error instanceof CloudWorkspaceChoiceError) {
+        setWorkspaces(error.workspaces);
+        setChooserEmail(error.email);
+      } else {
+        // A workspace that could not be opened from the chooser leaves it for the sign-in's own failure.
+        setOpening(undefined);
+        setWorkspaces([]);
+        if (!(error instanceof NotAnAgentError)) setCloudFailed(true);
+      }
       throw error;
     } finally {
       setCloudPending(false);
@@ -89,7 +104,7 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   const cloudConfig = config.data?.cloud_sign_in;
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;
   useEffect(() => { if (config.data && !cloudEnabled) markSignInFormReady(); }, [config.data, cloudEnabled]);
-  useEffect(() => { if (cloudEnabled && cloudConfig?.publishable_key) preconnectClerk(cloudConfig.publishable_key); }, [cloudEnabled, cloudConfig?.publishable_key]);
+  useEffect(() => { if (cloudEnabled && cloudConfig?.publishable_key) { preconnectClerk(cloudConfig.publishable_key); chooserPart.preload(); } }, [cloudEnabled, cloudConfig?.publishable_key]);
   const buying = buy ?? readCheckoutIntent();
   const appOrigin = config.data?.app_origin ?? '';
   // On a workspace's own host a new team cannot start here: sign-up and finding a workspace are on APP_ORIGIN.
@@ -103,9 +118,11 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   }
   return <RedeemPage token={token} cloudEnabled={cloudEnabled} hostedCloud={hostedCloud} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
     buying={buying} trial={trial} signedOut={signedOut && cloudEnabled} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
-    onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}
+    onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setOpening(slug); setWorkspaceSlug(slug); }}
+    signedInEmail={chooserEmail} openingWorkspace={opening}
+    onUseAnotherEmail={() => { setWorkspaces([]); setChooserEmail(undefined); setWorkspaceSlug(undefined); setAnotherEmail(true); setRound((count) => count + 1); }}
     cloudSignIn={cloudEnabled && <Suspense fallback={<SignInLoading />}>
-      <CloudSignIn key={workspaceSlug ?? 'default'} publishableKey={cloudConfig.publishable_key ?? ''} onSessionToken={exchange}
-        onSignUp={config.data?.signup.enabled && !findWorkspaceAt ? signUp : undefined} findWorkspaceAt={findWorkspaceAt} buying={buying !== undefined} optionalQuestions={buying !== undefined || planIntent !== undefined} endSession={signedOut} />
+      <CloudSignIn key={`${workspaceSlug ?? 'default'}-${round}`} publishableKey={cloudConfig.publishable_key ?? ''} onSessionToken={exchange}
+        onSignUp={config.data?.signup.enabled && !findWorkspaceAt ? signUp : undefined} findWorkspaceAt={findWorkspaceAt} buying={buying !== undefined} optionalQuestions={buying !== undefined || planIntent !== undefined} endSession={signedOut || anotherEmail} />
     </Suspense>} />;
 }

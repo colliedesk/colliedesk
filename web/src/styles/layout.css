@@ -155,15 +155,25 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .current-user-name { color: var(--text-1); font-size: var(--fs-ui); font-weight: 500; line-height: 18px; }
 .current-user-email { color: var(--text-3); font-size: var(--fs-label); font-weight: 400; line-height: 16px; }
 .account-popover {
-  position: absolute; z-index: 20; left: 0; right: 0; bottom: calc(100% + var(--space-1)); display: grid; gap: var(--space-3);
-  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-3);
+  position: absolute; z-index: 20; left: 0; right: 0; bottom: calc(100% + var(--space-1)); display: grid;
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-1);
 }
-.account-popover p { display: grid; gap: 2px; margin: 0; min-width: 0; }
-.account-popover strong, .account-popover span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.account-popover span { color: var(--text-3); font-size: var(--fs-small); }
-.account-popover button { width: 100%; }
-.account-workspaces { display: grid; gap: var(--space-1); min-width: 0; }
-.account-workspaces a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Who is signed in (Paper A6-a): the name, then the roles and the address on one line. */
+.account-popover p { display: grid; margin: 0; min-width: 0; padding: var(--space-2); }
+.account-popover strong { color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; line-height: 20px; }
+.account-popover strong, .account-popover p span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-popover p span { color: var(--text-3); font-size: var(--fs-small); line-height: 16px; }
+.account-popover .error-copy { padding-block: 0; }
+.account-item {
+  display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2); width: 100%; height: var(--control); border: 0; border-radius: var(--radius);
+  background: transparent; box-shadow: none; padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-ui); font-weight: 500; line-height: 20px; text-align: left;
+}
+.account-item svg { flex: none; color: var(--text-3); }
+.account-item:hover:not(:disabled), .account-item:focus-visible { background: var(--surface-2); color: var(--text-1); }
+.account-item:hover:not(:disabled) svg, .account-item:focus-visible svg { color: var(--text-2); }
+.account-popover hr { height: 1px; margin: var(--space-1) 0; border: 0; background: var(--line); }
+/* A fingertip needs a taller row than a pointer. */
+@media (pointer: coarse) { .account-item { height: var(--touch); } }
 
 /* A panel is the white working surface: list, thread, details, settings. */
 .panel { border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
@@ -272,8 +282,8 @@ html[data-sidebar-resizing] iframe { pointer-events: none; }
 .brand-lockup { display: flex; align-items: center; gap: var(--space-3); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .cloud-sign-in { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
 .cloud-sign-in h2 { font-size: 14px; font-weight: 600; }
-.workspace-choices { display: grid; gap: var(--space-2); }
-.workspace-choices button { justify-content: flex-start; --control: 44px; }
+/* The sign-in chooser (Paper A1-d): WorkspaceRows flush with the text, their hover reaching past it. */
+.workspace-choices { display: flex; flex-direction: column; margin-inline: calc(-1 * var(--space-2)); }
 
 /* Below 80 rem (1280 px, the most common laptop width keeps three columns) the sidebar leaves the thread too little room: Details opens as a drawer
    (inbox-page.tsx asks the same width). */
