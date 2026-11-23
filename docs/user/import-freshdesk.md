@@ -116,6 +116,13 @@ deleted is not made again: that portal's categories go on the primary. `import u
 centers the import made, unless your team gave one a custom domain (undo then names it), and never
 touches the primary or the help centers your team made.
 
+When Freshdesk moves a category to another portal after an import, the import does not move its
+collection off the primary help center. Its articles stay drafts, and the report names the category:
+choose its help centers in the collection's **Shown on** setting, then publish the articles (#768).
+Articles that an import from before this change kept as drafts only because their category was in
+another portal are published on their portal's help center by the next run, unless your team changed
+them since. Old portal links still lead to the primary help center's address (#769).
+
 A Freshdesk callout card becomes a [callout](knowledge-base.md#callouts): Note and Info as Note, Tip
 and Idea as Tip, Warning as Warning. A card of another type becomes a plain quote.
 
