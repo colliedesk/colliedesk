@@ -113,6 +113,10 @@ func writeDomainTaken(response http.ResponseWriter) {
 	writeError(response, http.StatusConflict, "domain_taken", "Another workspace's help center already serves on this host name.")
 }
 
+func writeDomainInUse(response http.ResponseWriter) {
+	writeError(response, http.StatusConflict, "domain_taken", "Another help center of this workspace uses this host name; remove it there first.")
+}
+
 func (a *API) getHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
 	helpCenterID, ok := helpCenterIDOf(response, request)
 	if !ok {
@@ -152,6 +156,10 @@ func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Re
 		return
 	}
 	set, err := a.store.SetHelpCenterDomainIn(ctx, workspaceID, helpCenterID, host, a.now())
+	if errors.Is(err, domain.ErrHelpCenterDomainInUse) {
+		writeDomainInUse(response)
+		return
+	}
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -217,6 +225,9 @@ func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.
 	switch {
 	case errors.Is(err, domain.ErrHelpCenterDomainTaken):
 		writeDomainTaken(response)
+		return
+	case errors.Is(err, domain.ErrHelpCenterDomainInUse):
+		writeDomainInUse(response)
 		return
 	case errors.Is(err, domain.ErrHelpCenterDomainMissing):
 		writeError(response, http.StatusConflict, "domain_changed", "The custom domain changed during the check; check it again.")
@@ -347,7 +358,7 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (open, claimed
 		}
 		serves := open && !site.Trial
 		after, err := a.recordCheck(ctx, workspaceID, claim, evidence, serves)
-		if errors.Is(err, domain.ErrHelpCenterDomainTaken) || errors.Is(err, domain.ErrHelpCenterDomainMissing) {
+		if errors.Is(err, domain.ErrHelpCenterDomainTaken) || errors.Is(err, domain.ErrHelpCenterDomainInUse) || errors.Is(err, domain.ErrHelpCenterDomainMissing) {
 			continue
 		}
 		if err != nil {
