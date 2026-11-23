@@ -6,6 +6,7 @@ import { lazyPart } from '../../ui/lazy-part';
 import { WorkspaceRow, WorkspaceRowSkeleton } from '../../ui/workspace-row';
 import type { WorkspaceSwitch } from './account-menu';
 import type { WorkspacesResult } from './other-workspaces';
+import { messages } from '../../messages';
 import { switchMessages as copy } from './switch-workspace-messages';
 import './switch-workspace.css';
 
@@ -52,7 +53,7 @@ export function SwitchWorkspaceDialog({ me, workspaceSwitch, onClose }: { me: Me
     <div className="dialog-backdrop switch-workspace-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="switch-workspace" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} tabIndex={-1} onKeyDown={onKeyDown}>
         <header className="switch-workspace-head">
-          <div><h2 id={titleId}>{copy.title}</h2><p>{copy.signedInAs(me.agent.email)}</p></div>
+          <div><h2 id={titleId}>{copy.title}</h2><p>{messages.signedInWith(me.agent.email)}</p></div>
           <button type="button" className="icon-button" aria-label={copy.close} onClick={onClose}><CloseIcon /></button>
         </header>
         <div className="switch-workspace-list">

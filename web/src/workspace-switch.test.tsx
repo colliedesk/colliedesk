@@ -52,8 +52,9 @@ const thisDevice = { id: '44444444-4444-4444-8444-444444444444', agent_id: me.ag
   created_at: '2026-11-13T00:00:00Z', last_seen_at: '2026-11-13T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null };
 
 // ended is why a missing session answers 401: revoked by someone, or expired (plain unauthorized).
-// choose makes an exchange without a workspace answer 409 with the chooser.
-function serve(options: { signedIn: boolean; onAppHost: boolean; workspaces?: Choice[]; listStatus?: number; choose?: boolean; ended?: 'session_revoked' | 'unauthorized' }) {
+// choose makes an exchange without a workspace answer 409 with the chooser; listHeld holds the list's answer
+// until it settles.
+function serve(options: { signedIn: boolean; onAppHost: boolean; workspaces?: Choice[]; listStatus?: number; listHeld?: Promise<void>; choose?: boolean; ended?: 'session_revoked' | 'unauthorized' }) {
   let signedIn = options.signedIn;
   let ended = options.ended ?? 'unauthorized';
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
@@ -68,7 +69,7 @@ function serve(options: { signedIn: boolean; onAppHost: boolean; workspaces?: Ch
     }
     if (path === '/api/v1/auth/cloud/workspaces') {
       if (options.listStatus) return Promise.resolve(json(options.listStatus, { error: { code: 'unauthorized', message: 'A valid cloud session is required.' } }));
-      return Promise.resolve(json(200, { workspaces: options.workspaces ?? [alpha, beta] }));
+      return (options.listHeld ?? Promise.resolve()).then(() => json(200, { workspaces: options.workspaces ?? [alpha, beta] }));
     }
     if (path === '/api/v1/auth/cloud/exchange' && options.choose && !String(init?.body ?? '').includes('workspace_slug')) {
       return Promise.resolve(json(409, { email: 'sam@example.com', workspaces: [beta, alpha] }));
@@ -112,13 +113,15 @@ test('the account menu offers Switch workspace before any list is read, also to 
 });
 
 test('Switch workspace opens a dialog that shows the current workspace at once and loads the others', async () => {
-  serve({ signedIn: true, onAppHost: false, workspaces: [zeta, beta, alpha] });
+  let release = () => undefined as void;
+  serve({ signedIn: true, onAppHost: false, workspaces: [zeta, beta, alpha], listHeld: new Promise<void>((resolve) => { release = resolve; }) });
   open('/');
   const dialog = await openSwitch();
   expect(within(dialog).getByText('Signed in as sam@example.com')).toBeInTheDocument();
   // Loading: the current workspace and two placeholder rows, never a blank dialog.
   expect(within(dialog).getByRole('status', { name: 'Loading your workspaces' })).toBeInTheDocument();
   expect(rowNames(dialog)).toEqual(['Beta Desk']);
+  release();
   await waitFor(() => expect(rowNames(dialog)).toEqual(['Beta Desk', 'Alpha Desk', 'Zeta Desk']));
   // The current workspace is marked and opens nothing; the others link to the existing hand-off.
   expect(within(dialog).getByText('· Current')).toBeInTheDocument();

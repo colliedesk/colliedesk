@@ -3,7 +3,6 @@ import type { Me } from '../../api/schemas';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
 import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
-import { switchMessages } from './switch-workspace-messages';
 
 // The dialog is a chunk of its own: nobody pays for it until they report a problem.
 const ReportProblemDialog = lazy(() => import('./report-problem-dialog').then((module) => ({ default: module.ReportProblemDialog })));
@@ -60,7 +59,7 @@ export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, 
         <p><strong>{name}</strong><span>{[roles, me.agent.email].filter(Boolean).join(' · ')}</span></p>
         {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
         {workspaceSwitch && <button type="button" className="account-item" onClick={() => { setOpen(false); setSwitching(true); }}>
-          <SwitchIcon />{switchMessages.menuItem}</button>}
+          <SwitchIcon />{messages.switchWorkspace}</button>}
         <button type="button" className="account-item" onClick={() => { setOpen(false); setReporting(true); }}><FlagIcon />{messages.reportProblem}</button>
         <hr />
         <button type="button" className="account-item" disabled={signingOut} onClick={onSignOut}><SignOutIcon />{messages.signOut}</button>

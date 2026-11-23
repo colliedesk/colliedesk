@@ -13,7 +13,7 @@ import { readPlanIntent } from '../settings/plan-intent';
 import { preconnectClerk } from './clerk-appearance';
 import { InvitePage, LinkPageLoading } from './invite-page';
 import { SignInLoading } from './sign-in-loading';
-import { RedeemPage } from './redeem-page';
+import { chooserPart, RedeemPage } from './redeem-page';
 
 const loadCloudSignIn = () => import('./cloud-sign-in');
 const CloudSignIn = lazy(() => loadCloudSignIn().then((module) => ({ default: module.CloudSignIn })));
@@ -102,7 +102,7 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false, next
   const cloudConfig = config.data?.cloud_sign_in;
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;
   useEffect(() => { if (config.data && !cloudEnabled) markSignInFormReady(); }, [config.data, cloudEnabled]);
-  useEffect(() => { if (cloudEnabled && cloudConfig?.publishable_key) preconnectClerk(cloudConfig.publishable_key); }, [cloudEnabled, cloudConfig?.publishable_key]);
+  useEffect(() => { if (cloudEnabled && cloudConfig?.publishable_key) { preconnectClerk(cloudConfig.publishable_key); chooserPart.preload(); } }, [cloudEnabled, cloudConfig?.publishable_key]);
   const buying = buy ?? readCheckoutIntent();
   const appOrigin = config.data?.app_origin ?? '';
   // On a workspace's own host a new team cannot start here: sign-up and finding a workspace are on APP_ORIGIN.

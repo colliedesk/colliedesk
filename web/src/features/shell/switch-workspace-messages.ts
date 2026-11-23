@@ -1,8 +1,7 @@
-// The words of Switch workspace (account menu and its dialog) and of the sign-in chooser's rows.
+// The words of the Switch workspace dialog and of the workspace rows, in the chunks that show them. The menu
+// item and the chooser's lede are in messages.ts, which the page loads anyway.
 export const switchMessages = {
-  menuItem: 'Switch workspace…',
   title: 'Switch workspace',
-  signedInAs: (email: string) => `Signed in as ${email}`,
   close: 'Close',
   loading: 'Loading your workspaces',
   current: 'Current',
@@ -17,5 +16,4 @@ export const switchMessages = {
   keyMove: 'Move',
   keyOpen: 'Open',
   keyClose: 'Close',
-  useAnotherEmail: 'Use another email',
 } as const;

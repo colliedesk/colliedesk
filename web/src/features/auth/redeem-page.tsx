@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
+import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 import { LogoMark, LogoWordmark } from '../../ui/logo';
-import { WorkspaceRow } from '../../ui/workspace-row';
-import { switchMessages } from '../shell/switch-workspace-messages';
 import './auth.css';
 
-const rowCopy = { current: switchMessages.current, opening: switchMessages.opening };
-const byName = (a: WorkspaceChoice, b: WorkspaceChoice) => a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug);
+// The workspace chooser's rows are a chunk of their own, asked for as soon as cloud sign-in is on.
+export const chooserPart = lazyPart(() => import('./workspace-chooser'));
 
 interface RedeemPageProps {
   token: string;
@@ -63,8 +62,8 @@ export function RedeemPage({
         {choosing ? <>
           {/* The person is already identified: the page names the email and offers another, and asks for nothing. */}
           <h1>{messages.chooseWorkspace}</h1>
-          {signedInEmail && <p>{`${switchMessages.signedInAs(signedInEmail)}. `}
-            <button type="button" className="link-action" onClick={onUseAnotherEmail} disabled={pending}>{switchMessages.useAnotherEmail}</button></p>}
+          {signedInEmail && <p>{`${messages.signedInWith(signedInEmail)}. `}
+            <button type="button" className="link-action" onClick={onUseAnotherEmail} disabled={pending}>{messages.useAnotherEmail}</button></p>}
         </> : <>
           {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
           <h1>{buyer ? messages.buyingTitle(buying) : newTeam ? messages.cloudTrialTitle : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
@@ -75,11 +74,8 @@ export function RedeemPage({
         {!token && !cloudEnabled && <p className="muted-copy">{messages.requestLink}</p>}
         {!token && cloudEnabled && <div className="cloud-sign-in">
           {choosing ? <>
-            <div className="workspace-choices">
-              {[...workspaces].sort(byName).map((workspace) => <WorkspaceRow key={workspace.slug} workspace={workspace} copy={rowCopy}
-                opening={openingWorkspace === workspace.slug} disabled={pending || openingWorkspace !== undefined}
-                onOpen={() => onSelectWorkspace?.(workspace.slug)} />)}
-            </div>
+            <Part part={chooserPart} failed={<PartUnavailable />} render={({ WorkspaceChooser }) =>
+              <WorkspaceChooser workspaces={workspaces} opening={openingWorkspace} pending={pending} onSelect={onSelectWorkspace} />} />
             {/* The sign-in that opens the chosen workspace runs out of sight under the list. */}
             {openingWorkspace && <div hidden>{cloudSignIn}</div>}
           </> : cloudSignIn}
