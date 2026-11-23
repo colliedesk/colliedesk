@@ -62,6 +62,7 @@ type restEmailSettings struct {
 	} `json:"smtp"`
 	SendingFrom   *string `json:"sending_from"`
 	HostedAddress *string `json:"hosted_address"`
+	KBAddress     *string `json:"kb_address"`
 	Gmail         struct {
 		Available  bool `json:"available"`
 		ReadsInbox bool `json:"reads_inbox"`
@@ -368,7 +369,7 @@ func webFormUpdate(c *call, arguments map[string]any) (any, error) {
 // no room for one either.
 func emailChannelView(settings restEmailSettings) map[string]any {
 	view := map[string]any{"connected": settings.Channel != nil, "inbound_url": settings.InboundURL, "hosted_address": settings.HostedAddress,
-		"smtp_configured": settings.SMTP.Configured, "sending_from": settings.SendingFrom,
+		"kb_address": settings.KBAddress, "smtp_configured": settings.SMTP.Configured, "sending_from": settings.SendingFrom,
 		"mail_through_mailbox": settings.MailThroughMailbox, "answers_before_forwarding": settings.AnswersBeforeForwarding}
 	mailboxes := make([]map[string]any, 0, len(settings.MailSwitch.Mailboxes))
 	for _, mailbox := range settings.MailSwitch.Mailboxes {

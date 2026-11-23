@@ -371,6 +371,14 @@ a chosen mailbox and filtering by one. A conversation imported from Freshdesk or
 mailbox it was sent to (`origin.mailboxes`), and its replies leave from the channel with that support
 address when there is one.
 
+## Save a mail as an article
+
+On Colliedesk Cloud every workspace also has a knowledge base address, `kb@<workspace>.colliedesk.com`.
+It shows below the forwarding address, as **Knowledge base address**. Forward a mail to it, or add it
+in Bcc, and the mail becomes a draft article in your knowledge base. No conversation is opened.
+[Knowledge base](knowledge-base.md#save-a-mail-as-a-draft-article) says what the draft holds and which
+mail is dropped.
+
 ## Send from your own domain
 
 Until your domain is verified, replies are sent as **"<sender name> via Colliedesk"** from a
@@ -545,6 +553,9 @@ Setup and forwarding:
   `answers_before_forwarding` is `colliedesk` or `support_mailbox`. `mail_switch` lists every mailbox of
   the workspace still to move, each with `old_help_desk` (added before a finished import, so its mail
   still arrives in the old help desk).
+- `kb_address` in the same answer is the workspace's knowledge base address, or `null` where the
+  server does not offer one. Mail to it becomes a draft article (see
+  [knowledge base](knowledge-base.md#save-a-mail-as-a-draft-article)).
 - `GET /api/v1/channels/{id}/email/forwarding-confirmation` reads Gmail's forwarding confirmation code
   and link, as the step shows them. MCP: `colliedesk_email_forwarding_confirmation_get`. It answers for
   the last 24 hours.

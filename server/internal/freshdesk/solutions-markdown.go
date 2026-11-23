@@ -31,6 +31,10 @@ var droppedElements = map[atom.Atom]bool{
 var markdownConverter = converter.NewConverter(converter.WithPlugins(base.NewBasePlugin(), commonmark.NewCommonmarkPlugin(),
 	table.NewTablePlugin(table.WithSpanCellBehavior(table.SpanBehaviorMirror)), strikethrough.NewStrikethroughPlugin()))
 
+// ArticleMarkdown turns HTML written for an article, such as the body of mail a member forwards to the
+// knowledge base, into Markdown, as an imported article's body is; see articleMarkdown.
+func ArticleMarkdown(markup string) (string, []string, error) { return articleMarkdown(markup) }
+
 // articleMarkdown turns an article's HTML into Markdown. It returns what Markdown could not hold
 // (element names, "table cell spanning rows or columns", "link with an unsafe address"); a link whose
 // address is not http, https, mailto, relative or a fragment keeps only its text. A YouTube or Vimeo

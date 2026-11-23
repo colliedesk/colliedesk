@@ -32,18 +32,7 @@ var (
 const GmailAuthServID = "mx.google.com"
 
 func authentication(headers []string, trustedAuthServID string) string {
-	if trustedAuthServID == "" {
-		return AuthNone
-	}
-	var stamp string
-	for _, header := range headers {
-		authServ, _, _ := strings.Cut(header, ";")
-		fields := strings.Fields(authServ)
-		if len(fields) > 0 && strings.EqualFold(fields[0], trustedAuthServID) {
-			stamp = header
-			break
-		}
-	}
+	stamp := trustedStamp(headers, trustedAuthServID)
 	if stamp == "" {
 		return AuthNone
 	}

@@ -10805,6 +10805,8 @@ export interface components {
             domain_verification: "txt" | "provider";
             /** @description Forwarding address of this email channel on the hosted cloud, `<local>@<slug>.<HOSTED_MAIL_DOMAIN>`: `support@` for the workspace's first channel (and while none is connected), a local part of its own for a channel added beside it. Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail subdomain; change the slug with `PATCH /api/v1/workspace/slug`. */
             hosted_address: string | null;
+            /** @description The workspace's knowledge base address on the hosted cloud, `kb@<slug>.<HOSTED_MAIL_DOMAIN>`, the same on every email channel's settings and present without one. Mail a member whose roles hold `kb_articles:create` forwards or copies there becomes a draft article in the first collection: the subject (without Fwd:/Re:) is its title, the body its Markdown, attachments its files. Only mail whose From domain the receiving server vouched for (DMARC pass, or a DKIM pass signed by that domain) counts; anything else is dropped. Null on a server without HOSTED_MAIL_DOMAIN or a trusted receiving server, when the slug cannot be a mail subdomain, or while an email channel of the workspace still forwards to kb@. */
+            kb_address: string | null;
             /**
              * @description `verified`: send as the support address only after domain verification. `any`: always (operator owns the relay).
              * @enum {string}
@@ -11203,12 +11205,17 @@ export interface components {
         };
         InboundEmailResult: {
             /**
-             * @description `held`: the email channel is off. The message is kept in the channel (its original is stored) until an admin opens it as a conversation or discards it; nothing is opened meanwhile.
+             * @description `held`: the email channel is off. The message is kept in the channel (its original is stored) until an admin opens it as a conversation or discards it; nothing is opened meanwhile. For mail to the knowledge base address, `created` made the draft `article_id` and `duplicate` means that Message-ID made it before.
              * @enum {string}
              */
             status: "created" | "threaded" | "duplicate" | "dropped" | "held";
-            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, channel_removed, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient); why it was held: channel_off. */
+            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, channel_removed, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient); for the knowledge base address: sender_not_verified (the trusted receiving server did not vouch for the From domain), sender_not_member, sender_not_permitted (the member's roles lack kb_articles:create), no_collection, invalid_content (the body is too long for an article), plan_limit (the plan's articles or storage are used up). Why it was held: channel_off. */
             reason: string | null;
+            /**
+             * Format: uuid
+             * @description The draft article mail to the knowledge base address made; absent otherwise.
+             */
+            article_id?: string | null;
             /** Format: uuid */
             conversation_id: string | null;
             /** Format: uuid */

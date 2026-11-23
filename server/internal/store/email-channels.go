@@ -162,7 +162,8 @@ var hostedLocalCleanup = regexp.MustCompile(`[^a-z0-9-]+`)
 // newHostedLocal is the local part of a new channel's hosted forwarding address: support for the
 // workspace's first email channel, the local part of its own address for the next ones (billing@acme.com
 // gets billing@<slug>.<hosted domain>, then billing-2...). Every local part reaches the workspace, so
-// the address is not a secret; it never changes, as a customer forwards to it.
+// the address is not a secret; it never changes, as a customer forwards to it. kb@ is the knowledge
+// base's, so a kb@ mailbox gets kb-2@.
 func newHostedLocal(ctx context.Context, tx pgx.Tx, workspaceID, supportAddress string) (string, error) {
 	var first bool
 	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM email_channels WHERE workspace_id=$1)`, workspaceID).Scan(&first); err != nil {
@@ -183,6 +184,9 @@ func newHostedLocal(ctx context.Context, tx pgx.Tx, workspaceID, supportAddress 
 		local := base
 		if n > 1 {
 			local = fmt.Sprintf("%s-%d", base, n)
+		}
+		if local == email.KBLocal {
+			continue
 		}
 		var taken bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM email_channels WHERE workspace_id=$1 AND hosted_local=$2)`, workspaceID, local).Scan(&taken); err != nil {
@@ -564,6 +568,21 @@ func (s *Store) ChannelForHostedAddress(ctx context.Context, workspaceID, local 
 		return "", false, nil
 	}
 	return *id, true, nil
+}
+
+// HasMailboxAtHostedLocal reports whether a live email channel of the workspace forwards to exactly
+// that hosted local part, with no fallback to the default channel.
+func (s *Store) HasMailboxAtHostedLocal(ctx context.Context, workspaceID, local string) (bool, error) {
+	found, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		var found bool
+		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM email_channels e JOIN channels c ON c.workspace_id=e.workspace_id AND c.id=e.channel_id
+			WHERE e.workspace_id=$1 AND e.hosted_local=lower($2) AND c.deleted_at IS NULL)`, workspaceID, local).Scan(&found)
+		return found, err
+	})
+	if err != nil {
+		return false, fmt.Errorf("find mailbox at hosted address: %w", err)
+	}
+	return found, nil
 }
 
 // OwnEmailAddressesTx is every address mail of the workspace leaves from, its mailboxes and Gmail

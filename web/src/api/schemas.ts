@@ -274,6 +274,8 @@ const mailboxToMoveSchema = z.object({ channel_id: z.string().uuid(), name: z.st
 export const emailChannelSettingsSchema = z.object({
   channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema, microsoft: microsoftSettingsSchema,
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),
+  // An older server has no knowledge base address: nothing is shown.
+  kb_address: z.string().nullable().catch(null),
   domain_verification: z.enum(['txt', 'provider']),
   sending_pause: z.object({ paused_at: z.string().datetime(), reason: z.string() }).nullable(),
   smtp: z.object({ configured: z.boolean(), host: z.string(), port: z.number().int(), starttls: z.boolean(), authenticated: z.boolean() }),

@@ -712,6 +712,56 @@ the status filter **Unpublished changes** keeps only those.
 - A published [translation](#translations) has unpublished changes of its own, in the same bar on its
   page: see [Change a published translation](#change-a-published-translation).
 
+### Save a mail as a draft article
+
+A good answer often starts as a mail: a customer's question with the reply that solved it, or a note
+from a teammate. Forward that mail to the workspace's knowledge base address, or add the address in Bcc,
+and it becomes a draft article.
+
+1. Find the address on **Settings → Channels → Email**, below the forwarding address:
+   **Knowledge base address**, `kb@<workspace>.colliedesk.com` on Colliedesk Cloud.
+2. Forward the mail to it from the address you sign in to Colliedesk with.
+3. Open the knowledge base. The draft is in your first collection, the one listed first.
+4. Edit the draft, then publish it as any other article.
+
+What the draft holds:
+
+- **Title:** the subject without `Fwd:`, `Fw:` and `Re:`. A mail without a subject is called
+  **Forwarded mail**.
+- **Text:** the mail's text as Markdown, with its headings, lists, links and tables. Images inside the
+  text are left out. A forward keeps the lines your mail program adds (the original sender, date and
+  subject): remove them before you publish.
+- **Files:** each attachment of a type an article accepts ([Attach files](#attach-files)) is listed under
+  the article and added to the [media library](#media-library). Other attachments are left out.
+- **Author:** you. The draft is never published until someone publishes it.
+
+The same mail sent twice (the same `Message-ID`) makes one draft.
+
+Only mail that is proven to come from a teammate counts. Anyone can type any address in a mail's
+**From** line, so that line alone proves nothing. The receiving mail server checks the signature of
+the sender's mail provider (DMARC, or DKIM for the From domain), and Colliedesk reads only that
+server's result. A mail that carries its own "pass" result, written by the sender, does not count.
+Gmail and Outlook.com addresses pass. A company domain passes when its mail provider signs with DKIM
+for that domain, or when the domain publishes a DMARC record that its mail passes.
+
+The mail is dropped, and no draft is made, when:
+
+- the receiving server did not prove the From domain;
+- From is not an active member of the workspace;
+- that member's roles do not hold `kb_articles:create` (Admin and Agent hold it);
+- the knowledge base has no collection (add one first);
+- the text is longer than an article holds;
+- the workspace is at its plan's limit of articles or storage, or locked.
+
+Nothing is sent back to the sender. The server's log records each dropped mail with the reason and the
+sender's domain, never the address.
+
+On your own server the address exists only with a hosted mail domain and a trusted receiving server:
+see [configuring email](../self-host/email.md#knowledge-base-address). Without them, write the draft in
+the app.
+A workspace whose forwarding address is already `kb@…` keeps that mailbox, and it has no knowledge base
+address.
+
 ## Review before publishing
 
 A team can ask that a teammate approves each new or changed article before it goes on the help center.
@@ -1726,6 +1776,10 @@ token. Without the permission the call is refused and names what is missing
 
 Articles and collections:
 
+- Mail to the knowledge base address (`kb_address` from `colliedesk_email_channel_get` or
+  `GET /api/v1/channels/email`) becomes a draft article; see
+  [Save a mail as a draft article](#save-a-mail-as-a-draft-article). An agent can also write the draft
+  itself with `colliedesk_kb_article_create`.
 - Search and read articles with `colliedesk_kb_articles_search` and `colliedesk_kb_article_get`. Agents
   also write, publish, delete and restore articles, manage collections, and upload and read images.
 - Order: `colliedesk_kb_order_set` or `PUT /api/v1/kb/order` puts collections and articles in

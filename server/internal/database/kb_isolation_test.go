@@ -32,7 +32,8 @@ func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name stri
 		fa AS (INSERT INTO kb_article_attachments(workspace_id,article_id,media_id,position) SELECT $1,a.id,f.id,0 FROM a,f RETURNING 1),
 		vr AS (INSERT INTO kb_article_vote_resets(workspace_id,article_id,helpful,not_helpful) SELECT $1,id,1,0 FROM a RETURNING id,article_id),
 		vo AS (INSERT INTO kb_article_votes(workspace_id,article_id,voter,address,helpful,reset_id) SELECT $1,article_id,sha256($2::bytea),sha256($3::bytea),true,id FROM vr RETURNING 1),
-		vv AS (INSERT INTO kb_article_vote_versions(workspace_id,article_id,version) SELECT $1,id,1 FROM a RETURNING 1)
+		vv AS (INSERT INTO kb_article_vote_versions(workspace_id,article_id,version) SELECT $1,id,1 FROM a RETURNING 1),
+		em AS (INSERT INTO kb_email_articles(workspace_id,message_id,article_id) SELECT $1,'forward@example.com',id FROM a RETURNING 1)
 		INSERT INTO help_centers(workspace_id,title) VALUES($1,$2)`, workspaceID, name, sha, fmt.Sprintf("f%063x", len(name)))
 	if err != nil {
 		t.Fatalf("seed knowledge base of %s: %v", name, err)
@@ -40,7 +41,7 @@ func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name stri
 }
 
 var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_article_collections", "kb_article_drafts", "kb_media", "kb_article_media", "kb_article_attachments", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "kb_article_vote_resets", "kb_article_votes", "kb_article_vote_versions", "help_centers",
-	"kb_collection_help_centers"}
+	"kb_collection_help_centers", "kb_email_articles"}
 
 func TestKnowledgeBaseTablesAreScopedByRowLevelSecurity(t *testing.T) {
 	pool := testPool(t)
