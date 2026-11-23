@@ -358,6 +358,41 @@ unchanged; the workspace's Support address stays the identity customers see.
   - A wildcard MX does not apply to names that already have records (`app`, `www`, `send`, `rsend`, `mx`),
     which is why those slugs are reserved.
 
+## Knowledge base address (`kb@`)
+
+`kb@<slug>.<HOSTED_MAIL_DOMAIN>` turns a forward or Bcc into a draft article. It shares the hosted
+routing above and branches off before the conversation pipeline, so no conversation, contact or
+channel event is made.
+
+- **Routed by the envelope recipient only**, like every hosted address (`hostedTarget`). The recipient
+  check (`/inbound/recipient`) accepts it from the same lookup, so Postfix and routing agree.
+- **The sender is proven by the trusted stamp alone.** `email.Inbound.SenderAligned` is true only when
+  the topmost `Authentication-Results` with the trusted authserv-id says DMARC passed with
+  `header.from` the From domain, or DKIM passed with `header.d` (or the domain of `header.i`) exactly
+  that domain, and no DMARC check failed. SPF never counts: it checks the envelope sender. From is
+  written by the sender, and so is any `Authentication-Results` inside the message. Then From must be an
+  active member whose roles hold `kb_articles:create`; store cannot import `auth`, so httpapi passes
+  the permission to `KBEmailSenderOf`.
+- **No trusted server, no address.** Without `EMAIL_TRUSTED_AUTHSERV_ID` nothing can be proven, so
+  `offersKBAddress` is false and `kb_address` is null. The address also needs `HOSTED_MAIL_DOMAIN`
+  and the hosted mail feature switched on.
+- **`kb` is a reserved local part.** `newHostedLocal` skips it. A channel that took `hosted_local='kb'`
+  before this keeps its mail: routing prefers the live mailbox, and `kb_address` is null for that
+  workspace (`TestAnOlderMailboxAtKBKeepsItsMail`).
+- **Drops answer 200, never 4xx.** The forwarder must not retry or bounce: a bounce goes to the envelope
+  sender, who may be forged. The reason (`sender_not_verified`, `sender_not_member`,
+  `sender_not_permitted`, `no_collection`, `invalid_content`, `plan_limit`) is in the answer and in
+  the `knowledge base email dropped` warning, with the From domain and never an address.
+- **Dedupe by Message-ID** (a SHA-256 of the raw message when there is none), in `kb_email_articles`
+  keyed by workspace and message id. A second copy answers `duplicate` with the first article's id.
+  Deleting the article for good drops the row, so the same mail makes a new draft.
+- **The first live collection** is the one the knowledge base lists first (top level, then position,
+  then name). With none the mail is dropped; nothing creates a collection.
+- **Files are stored before the transaction**, as the media upload paths do, and discarded with
+  `DiscardObject` when the draft fails, is a duplicate, or leaves a file out. `DiscardObject` keeps an
+  object that any row of the workspace uses, under the object's lock. Inline and embedded parts are not
+  files of the article and are left out with the `<img>` tags of the HTML body.
+
 ## Cc on replies
 
 - `messages.cc text[]` (NULL = none, 1 to 10 entries) holds the list of an outgoing reply; the outbox
