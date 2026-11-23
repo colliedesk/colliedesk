@@ -391,7 +391,8 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   (`portalOwn`, `AddImportedKBCollectionHelpCenters`), never to the primary, so a team that took it
   off the primary keeps that. The category's ledger meta lists every help center a run linked it to
   (`help_centers`), and a run adds only the ones not listed, so taking it off a portal's help center
-  lasts too. A row from before that list gets its portal links once. A category whose portals no longer include the primary while its
+  lasts too. A row from before that list gets its portal links once. A collection made again, after
+  the trash purged the old one, always writes a new list, even an empty one. A category whose portals no longer include the primary while its
   collection is still on it stays there too (`kb.alsoOnPrimary`) and a note names it; taking it off
   is the team's call (#768). No run makes `category_in_another_portal` drafts now; one an earlier
   import made for that reason alone is imported again, published, on the unchanged-article path

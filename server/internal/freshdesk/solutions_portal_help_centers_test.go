@@ -305,6 +305,42 @@ func TestARerunLeavesACollectionOffAPortalHelpCenterTheTeamTookItOff(t *testing.
 	}
 }
 
+func TestACollectionMadeAgainAfterTheTrashPurgedItReachesItsPortalHelpCenterAgain(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(twoPortals)
+	env.mustRun(t)
+	hardware := env.helpCenters(t)[1].ID
+	// The team trashes Getting started, and the trash purge removes it for good.
+	ctx := context.Background()
+	tree := `WITH RECURSIVE tree AS (SELECT id FROM kb_collections WHERE workspace_id=$1 AND id=$2
+		UNION ALL SELECT c.id FROM kb_collections c JOIN tree ON c.parent_id=tree.id WHERE c.workspace_id=$1)`
+	for _, statement := range []string{
+		tree + ` UPDATE kb_articles SET deleted_at=now()-interval '10 years' WHERE workspace_id=$1 AND collection_id IN (SELECT id FROM tree)`,
+		tree + ` UPDATE kb_collections SET deleted_at=now()-interval '10 years' WHERE workspace_id=$1 AND id IN (SELECT id FROM tree)`,
+	} {
+		if _, err := env.pool.Exec(ctx, statement, env.workspaceID, env.target(t, "kb_category", "1")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.New(env.pool).PurgeKBTrash(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Freshdesk shows Getting started on the Help desk only, then on both portals again.
+	env.editSolutions(func(fixture map[string]any) {
+		twoPortals(fixture)
+		setPortals(fixture, []any{6.0}, []any{6.0}, []any{5.0}, []any{6.0})
+	})
+	env.mustRun(t)
+	if got := env.topCollections(t, hardware); got != "Hardware" {
+		t.Fatalf("with Getting started on the Help desk only, the hardware store shows %s", got)
+	}
+	env.editSolutions(twoPortals)
+	env.mustRun(t)
+	if got := env.topCollections(t, hardware); got != "Getting started, Hardware" {
+		t.Fatalf("with Getting started on both portals again, the hardware store shows %s", got)
+	}
+}
+
 func TestACategoryMovedToAnotherPortalIsShownOnThatPortalsHelpCenter(t *testing.T) {
 	env := newImportEnv(t).withSolutions()
 	env.editSolutions(func(fixture map[string]any) {

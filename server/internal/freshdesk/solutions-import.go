@@ -195,10 +195,9 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 		r.itemFailed(ctx, entity, key, "", err)
 		return "", r.internalErr
 	}
-	var placed *ticketMeta
-	if len(helpCenters) > 0 {
-		placed = &ticketMeta{HelpCenters: helpCenters}
-	}
+	// Always a new list, even an empty one: a row whose collection the trash purged keeps the list of the
+	// old collection otherwise, and the new one would never reach those help centers.
+	placed := &ticketMeta{HelpCenters: helpCenters}
 	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entity, sourceID: key, targetID: &id, status: ledgerDone, meta: placed}); err != nil {
 		return "", err
 	}
