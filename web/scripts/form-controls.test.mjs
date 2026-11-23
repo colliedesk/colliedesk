@@ -45,6 +45,53 @@ test('checkboxes and radios share one ink rule in base.css', () => {
   expect(components).not.toMatch(/accent-color/);
 });
 
+// One checkbox for the whole app (Paper "Checkbox — states"): the input stays a real checkbox and is drawn from
+// tokens, so it looks the same on every browser and system and follows the theme. Switches draw their own track.
+// checkbox.css is imported by base.css only: the operator console keeps the browser's checkbox within its CSS budget.
+const checkbox = read('checkbox.css');
+const box = 'input:where([type="checkbox"]:not([role="switch"], .switch input))';
+test('every checkbox is drawn by the app: an empty box with a strong border, the accent once ticked or mixed', () => {
+  const empty = rule(checkbox, box);
+  expect(empty).toMatch(/appearance:\s*none/);
+  expect(empty).toMatch(/border:\s*1\.5px solid var\(--line-strong\)/);
+  expect(empty).toMatch(/border-radius:\s*var\(--radius-sm\)/);
+  expect(empty).toMatch(/background-color:\s*var\(--surface-1\)/);
+  expect(empty).not.toMatch(/url\(|#[0-9a-f]{3,6}\b/i);
+  const ticked = rule(checkbox, `${box}:checked`);
+  expect(ticked).toMatch(/background-color:\s*var\(--accent\)/);
+  expect(ticked).toMatch(/background-image:\s*var\(--check-mark\)/);
+  expect(rule(checkbox, `${box}:indeterminate`)).toMatch(/background-image:\s*var\(--check-mixed\)/);
+  expect(rule(checkbox, `${box}:hover:not(:disabled)`)).toMatch(/border-color:\s*var\(--text-3\)/);
+  expect(rule(checkbox, `${box}:is(:checked, :indeterminate):hover:not(:disabled)`)).toMatch(/var\(--accent-hover\)/);
+  const off = rule(checkbox, `${box}:disabled`);
+  expect(off).toMatch(/border-color:\s*var\(--line-control\)/);
+  expect(off).toMatch(/background-color:\s*var\(--surface-2\)/);
+  const offTicked = rule(checkbox, `${box}:disabled:is(:checked, :indeterminate)`);
+  expect(offTicked).toMatch(/background-color:\s*var\(--surface-3\)/);
+});
+
+test('the tick and the mixed mark are drawn in each theme, so they never keep the light colour in dark mode', () => {
+  for (const theme of ['light', 'dark']) {
+    const block = checkbox.match(new RegExp(`:root\\[data-theme="${theme}"\\]\\s*\\{([^}]*)\\}`))[1];
+    const values = themeTokens(tokens, theme);
+    const stroke = (name) => `#${block.match(new RegExp(`${name}:[^;]*stroke='%23([0-9a-f]{6})'`, 'i'))?.[1]}`.toLowerCase();
+    expect(stroke('--check-mark'), theme).toBe(values['--on-accent']);
+    expect(stroke('--check-mixed'), theme).toBe(values['--on-accent']);
+    expect(stroke('--check-mark-disabled'), theme).toBe(values['--text-3']);
+    expect(stroke('--check-mixed-disabled'), theme).toBe(values['--text-3']);
+  }
+});
+
+test('the workspace app imports the drawn checkbox; the operator console does not', () => {
+  expect(read('base.css')).toMatch(/@import "\.\/base-plain\.css";\s*@import "\.\/checkbox\.css";/);
+  expect(readFileSync(new URL('../src/operator/operator.css', import.meta.url), 'utf8')).not.toMatch(/checkbox\.css/);
+});
+
+test('in forced colours (Windows high contrast) a checkbox is the system one again, check and mixed mark included', () => {
+  const forced = block(checkbox, '@media (forced-colors: active)');
+  expect(rule(forced, `  ${box}`)).toMatch(/appearance:\s*auto/);
+});
+
 test('text-input sizing does not reach checkboxes and radios', () => {
   expect(base).toMatch(/input:where\(:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)\), select, textarea \{/);
 });

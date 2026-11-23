@@ -591,7 +591,6 @@ span.kb-article-open { opacity: 0.35; }
 .media-thumbs img, .media-thumbs .media-picture-empty { width: 96px; height: 64px; border-radius: var(--radius-sm); background: var(--surface-2); object-fit: cover; }
 .media-thumbs span { overflow: hidden; color: var(--text-2); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .media-thumbs-more { align-self: center; color: var(--text-3); font-size: var(--fs-label); }
-.media-page input[type="checkbox"] { accent-color: var(--accent); }
 
 @media (max-width: 80rem) {
   .media-work { grid-template-columns: minmax(0, 1fr) 340px; }
