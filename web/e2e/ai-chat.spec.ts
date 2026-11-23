@@ -176,3 +176,72 @@ test('the chat shows on a site the channel lists, and a chat cookie of one works
     model.close();
   }
 });
+
+test('a second help center: its web form and its help chat open conversations marked with it, the chat cites only its articles, and Results reads it alone', async ({ page }) => {
+  test.setTimeout(240_000);
+  const model = await chatModel();
+  try {
+    const desk = await aDeskWithChat(page, 'E2E Two Centers', model.url);
+    const post = async (path: string, data: unknown) => {
+      const response = await page.request.post(`${baseURL}${path}`, { headers, data });
+      expect(response.status(), `post ${path}: ${await response.text()}`).toBe(201);
+      return response.json() as Promise<{ id: string; config?: { submit_path: string } }>;
+    };
+    const hardware = await post('/api/v1/help-centers', { name: 'Hardware', handle: 'hardware', locale: 'en', enabled: true });
+    const printers = await post('/api/v1/kb/collections', { name: 'Printers', help_center_ids: [hardware.id] });
+    await post('/api/v1/kb/articles', { collection_id: printers.id, title: 'Load paper', status: 'published', body_md: 'Open the tray and load the paper.' });
+    await post('/api/v1/channels', { type: 'help_chat', name: 'Hardware chat', help_center_id: hardware.id,
+      config: { greeting: 'Hi! Ask about your printer.', suggestions: ['How do I load paper?'], widget_origins: [] } });
+
+    // A web form on each help center: one submission each.
+    const site = 'https://shop.example';
+    for (const [name, center, source] of [['Hardware form', hardware.id, 'hardware-site'], ['Contact form', null, 'contact-site']] as const) {
+      const form = await post('/api/v1/channels', { type: 'web_form', name, help_center_id: center, config: { allowed_origins: [site] } });
+      const sent = await page.request.post(`${baseURL}${form.config!.submit_path}`, {
+        headers: { Origin: site, 'Content-Type': 'application/json' }, data: { email: `${source}@customer.example`, message: 'My printer jams.', source } });
+      expect(sent.status()).toBe(202);
+    }
+
+    // The Hardware help chat answers from the Hardware articles only, then hands the chat to the team.
+    await page.goto(`${desk.help}/hardware/chat`);
+    await expect(page.getByText('Hi! Ask about your printer.')).toBeVisible();
+    await page.getByRole('button', { name: 'How do I load paper?' }).click();
+    const answer = page.locator('.turn').last();
+    await expect(answer.locator('.sources a.tab')).toHaveAttribute('title', 'Load paper');
+    await page.getByRole('button', { name: 'Talk to a person' }).first().click();
+    await page.getByLabel('Email').fill('reader@customer.example');
+    await page.getByRole('button', { name: /^Send to / }).click();
+    await expect(page.locator('.note-ok')).toContainText('Reference #');
+
+    type Listed = { items: Array<{ id: string; subject: string }> };
+    let listed: Listed = { items: [] };
+    await expect.poll(async () => {
+      listed = await (await page.request.get(`${baseURL}/api/v1/conversations`)).json() as Listed;
+      return listed.items.map((item) => item.subject).sort();
+    }).toEqual(['Help chat: How do I load paper?', 'Web form: contact-site', 'Web form: hardware-site']);
+    const bySubject = (subject: string) => listed.items.find((item) => item.subject === subject)!.id;
+
+    // The inbox says which help center each one came through.
+    const meta = page.locator('.timeline-meta');
+    for (const subject of ['Help chat: How do I load paper?', 'Web form: hardware-site']) {
+      await page.goto(`${baseURL}/conversations/${bySubject(subject)}`);
+      await expect(meta.getByText('via Hardware', { exact: true })).toBeVisible();
+    }
+    await page.goto(`${baseURL}/conversations/${bySubject('Web form: contact-site')}`);
+    await expect(meta.getByText(/^via /)).toBeVisible();
+    await expect(meta.getByText('via Hardware', { exact: true })).toHaveCount(0);
+
+    // Results reads the whole workspace, then the Hardware help center alone; its requests open that inbox.
+    await page.goto(`${baseURL}/results`);
+    const help = page.getByRole('region', { name: 'Help center' });
+    await expect(help.getByRole('link', { name: '3', exact: true })).toBeVisible();
+    await help.getByRole('combobox', { name: 'Help center' }).selectOption({ label: 'Hardware' });
+    await help.getByRole('link', { name: '2', exact: true }).click();
+    await expect(page.getByRole('searchbox', { name: 'Search conversations' })).toHaveValue('help_center:hardware');
+    await expect(page.getByRole('button', { name: /Help chat: How do I load paper\?/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Web form: hardware-site/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Web form: contact-site/ })).toHaveCount(0);
+  } finally {
+    model.close();
+  }
+});
