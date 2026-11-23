@@ -23,7 +23,7 @@ import (
 // match and a link need, so only their vectors are read, each once: there is no index on them,
 // row-level security keeps Postgres from using one. A vector is mostly stored out of line, and each
 // match would fetch it again; a row built around it (OFFSET 0 keeps Postgres from unwrapping it)
-// fetches it once without the copy a `|| ''` costs. Reading kb_articles and its
+// fetches it once without the copy that appending an empty string costs. Reading kb_articles and its
 // translations again after that would make Postgres plan their row security again for every read,
 // which costs more than the rows on a page opened right after an edit.
 func relatedArticlesSQL(translation, page string) string {
