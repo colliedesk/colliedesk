@@ -9,17 +9,18 @@ import { HelpTip } from '../../ui/help-tip';
 import { analyticsMessages as text } from './help-center-analytics-messages';
 import { AnalyticsStatus, TestEvent, WhatIsSent, analyticsSchema } from './help-center-analytics-status';
 import type { Analytics, Provider } from './help-center-analytics-status';
+import { keyOf, onHelpCenter, useHelpCenterTarget } from './help-center-target';
 
 const path = '/api/v1/help-center/analytics';
-const queryKey = ['help-center-analytics'];
 // A refused field is named, so its message shows next to the control.
 const refusalFields = z.object({ fields: z.object({}).catchall(z.string()) });
 
 type Change = RequestBody<'putHelpCenterAnalytics'>;
 
+// Each call acts on the primary help center, or on the one helpCenterId names.
 const analyticsApi = {
-  get: () => request(path, analyticsSchema),
-  save: (change: Change) => request(path, analyticsSchema, { method: 'PUT', body: JSON.stringify(change) }),
+  get: (helpCenterId?: string) => request(`${path}${onHelpCenter(helpCenterId)}`, analyticsSchema),
+  save: (change: Change, helpCenterId?: string) => request(`${path}${onHelpCenter(helpCenterId)}`, analyticsSchema, { method: 'PUT', body: JSON.stringify(change) }),
 };
 
 function fieldMessages(error: unknown): Record<string, string> {
@@ -33,7 +34,9 @@ const serviceName = (provider: Provider) => provider === 'ga4' ? text.ga4 : text
 // HelpCenterAnalyticsSection is the Analytics part of the help center's card: the workspace's own GA4 or
 // Plausible gets each reader's page view from the server. Admins choose and test it; every agent sees its state.
 export function HelpCenterAnalyticsSection({ canManage, timezone }: { canManage: boolean; timezone: string }) {
-  const current = useQuery({ queryKey, queryFn: analyticsApi.get });
+  const target = useHelpCenterTarget();
+  const queryKey = keyOf(['help-center-analytics'], target);
+  const current = useQuery({ queryKey, queryFn: () => analyticsApi.get(target) });
   if (current.isError) return <p role="alert" className="error-copy">{text.loadFailed}</p>;
   if (!current.data) return null;
   const settings = current.data;
@@ -53,13 +56,15 @@ export function HelpCenterAnalyticsSection({ canManage, timezone }: { canManage:
 
 function AnalyticsForm({ settings, timezone }: { settings: Analytics; timezone: string }) {
   const client = useQueryClient();
+  const target = useHelpCenterTarget();
+  const queryKey = keyOf(['help-center-analytics'], target);
   const [provider, setProvider] = useState<Provider | null>(settings.provider);
   const [enabled, setEnabled] = useState(settings.enabled);
   const [measurementId, setMeasurementId] = useState(settings.ga4_measurement_id ?? '');
   const [secret, setSecret] = useState('');
   const [domain, setDomain] = useState(settings.plausible_domain ?? '');
   const [baseUrl, setBaseUrl] = useState(settings.plausible_base_url);
-  const save = useMutation({ mutationFn: analyticsApi.save, onSuccess: (saved) => { client.setQueryData(queryKey, saved); setSecret(''); } });
+  const save = useMutation({ mutationFn: (change: Change) => analyticsApi.save(change, target), onSuccess: (saved) => { client.setQueryData(queryKey, saved); setSecret(''); } });
   useEffect(() => {
     setProvider(settings.provider);
     setEnabled(settings.enabled);

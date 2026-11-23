@@ -24,7 +24,7 @@ const loadThemeSection = () => (themeSection ??= import('./help-center-theme-for
   throw error;
 }));
 
-function Brand({ canManage }: { canManage: boolean }) {
+export function Brand({ canManage }: { canManage: boolean }) {
   const [Section, setSection] = useState<ThemeSection>();
   const [failed, setFailed] = useState(false);
   useEffect(() => {

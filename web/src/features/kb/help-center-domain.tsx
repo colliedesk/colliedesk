@@ -8,6 +8,8 @@ import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { HelpTip } from '../../ui/help-tip';
 import { domainMessages } from './help-center-domain-messages';
+import { keyOf, onHelpCenter, useHelpCenterTarget } from './help-center-target';
+import { helpCentersKey } from './help-centers-api';
 
 const domainPath = '/api/v1/help-center/domain';
 const date = z.string().datetime().nullable();
@@ -24,11 +26,13 @@ const domainSchema = z.object({
 export type HelpCenterDomain = z.infer<typeof domainSchema>;
 type DomainRecord = z.infer<typeof recordSchema>;
 
+// Each call acts on the primary help center, or on the one helpCenterId names.
 export const domainApi = {
-  get: () => request(domainPath, domainSchema),
-  set: (hostname: string) => request(domainPath, domainSchema, { method: 'PUT', body: JSON.stringify({ hostname } satisfies RequestBody<'putHelpCenterDomain'>) }),
-  check: () => request(`${domainPath}/check`, domainSchema, { method: 'POST' }),
-  remove: () => request(domainPath, domainSchema, { method: 'DELETE' }),
+  get: (helpCenterId?: string) => request(`${domainPath}${onHelpCenter(helpCenterId)}`, domainSchema),
+  set: (hostname: string, helpCenterId?: string) => request(`${domainPath}${onHelpCenter(helpCenterId)}`, domainSchema,
+    { method: 'PUT', body: JSON.stringify({ hostname } satisfies RequestBody<'putHelpCenterDomain'>) }),
+  check: (helpCenterId?: string) => request(`${domainPath}/check${onHelpCenter(helpCenterId)}`, domainSchema, { method: 'POST' }),
+  remove: (helpCenterId?: string) => request(`${domainPath}${onHelpCenter(helpCenterId)}`, domainSchema, { method: 'DELETE' }),
 };
 
 const failure = (error: unknown) => error instanceof InvalidRequestError ? error.message : messages.settingsActionFailed;
@@ -40,15 +44,18 @@ const releaseAfterMs = 7 * 24 * 60 * 60 * 1000;
 // what it found. Admins set, check and remove it; every agent sees it.
 export function HelpCenterDomainSection({ canManage, timezone }: { canManage: boolean; timezone: string }) {
   const client = useQueryClient();
-  const current = useQuery({ queryKey: ['help-center-domain'], queryFn: domainApi.get });
-  // The help center's address follows the domain, so its card reads it again after every change.
+  const target = useHelpCenterTarget();
+  const domainKey = keyOf(['help-center-domain'], target);
+  const current = useQuery({ queryKey: domainKey, queryFn: () => domainApi.get(target) });
+  // The help center's address follows the domain, so its card (or, for another help center, the list
+  // that shows its address) reads it again after every change.
   const applied = (saved: HelpCenterDomain) => {
-    client.setQueryData(['help-center-domain'], saved);
-    void client.invalidateQueries({ queryKey: ['help-center'], exact: true });
+    client.setQueryData(domainKey, saved);
+    void (target ? client.invalidateQueries({ queryKey: helpCentersKey }) : client.invalidateQueries({ queryKey: ['help-center'], exact: true }));
   };
-  const set = useMutation({ mutationFn: domainApi.set, onSuccess: applied });
-  const check = useMutation({ mutationFn: domainApi.check, onSuccess: applied, onError: () => void current.refetch() });
-  const remove = useMutation({ mutationFn: domainApi.remove, onSuccess: applied });
+  const set = useMutation({ mutationFn: (name: string) => domainApi.set(name, target), onSuccess: applied });
+  const check = useMutation({ mutationFn: () => domainApi.check(target), onSuccess: applied, onError: () => void current.refetch() });
+  const remove = useMutation({ mutationFn: () => domainApi.remove(target), onSuccess: applied });
   const [hostname, setHostname] = useState('');
   useEffect(() => setHostname(current.data?.hostname ?? ''), [current.data?.hostname]);
   // Removing takes the help center off the domain at once, so it asks first; Cancel is the focused default.

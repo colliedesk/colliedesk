@@ -4,6 +4,8 @@ import { useNavigate } from '@tanstack/react-router';
 import { messages } from '../../messages';
 import { useHolds } from '../../lib/permissions-context';
 import { kbApi } from './kb-api';
+import { keyOf, useHelpCenterTarget } from './help-center-target';
+import { helpCentersApi } from './help-centers-api';
 import type { HelpCenterLanguages, KBLanguageItem, KBLanguageState } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { KBHead } from './kb-ui';
@@ -24,10 +26,27 @@ export const translationHref = (articleId: string, locale: string) => `/knowledg
 // LanguagesRoute is the help center's languages: which are shown, how far each is translated, and the
 // articles to translate next in one of them.
 export function LanguagesRoute({ search }: { search: LanguagesSearch }) {
+  const navigate = useNavigate();
+  const choose = (locale: string, state: KBLanguageState) => void navigate({ to: '/knowledge/languages', search: { locale, state } });
+  return (
+    <main className="kb-frame kb-languages-page" aria-labelledby="kb-heading">
+      <KBHead current="languages" heading={kbMessages.heading} />
+      <div className="kb-languages-scroll">
+        <LanguagesSection search={search} choose={choose} />
+        {search.locale && search.state && <LanguageArticles locale={search.locale} state={search.state} />}
+      </div>
+    </main>
+  );
+}
+
+// LanguagesSection lists the languages of the primary help center, or of the one in HelpCenterTarget. With
+// choose, each language's missing and outdated counts open its articles; without it they are plain text.
+export function LanguagesSection({ search = {}, choose }: { search?: LanguagesSearch; choose?: (locale: string, state: KBLanguageState) => void }) {
   const holds = useHolds();
   const client = useQueryClient();
-  const navigate = useNavigate();
-  const languages = useQuery({ queryKey: ['kb-languages'], queryFn: kbApi.languages });
+  const target = useHelpCenterTarget();
+  const languagesKey = keyOf(['kb-languages'], target);
+  const languages = useQuery({ queryKey: languagesKey, queryFn: () => (target ? helpCentersApi.languages(target) : kbApi.languages()) });
   const [adding, setAdding] = useState('');
   const [problem, setProblem] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -37,8 +56,9 @@ export function LanguagesRoute({ search }: { search: LanguagesSearch }) {
     setBusy(true);
     setProblem(undefined);
     try {
-      const saved = await kbApi.saveLanguages({ languages: next.map(({ locale, visible }) => ({ locale, visible })) });
-      client.setQueryData(['kb-languages'], saved);
+      const value = { languages: next.map(({ locale, visible }) => ({ locale, visible })) };
+      const saved = await (target ? helpCentersApi.saveLanguages(target, value) : kbApi.saveLanguages(value));
+      client.setQueryData(languagesKey, saved);
       await client.invalidateQueries({ queryKey: ['kb-language'] });
       return true;
     } catch (error) {
@@ -64,11 +84,7 @@ export function LanguagesRoute({ search }: { search: LanguagesSearch }) {
     next.splice(index + by, 0, item);
     void save(next);
   };
-  const choose = (locale: string, state: KBLanguageState) => void navigate({ to: '/knowledge/languages', search: { locale, state } });
   return (
-    <main className="kb-frame kb-languages-page" aria-labelledby="kb-heading">
-      <KBHead current="languages" heading={kbMessages.heading} />
-      <div className="kb-languages-scroll">
         <section className="kb-languages" aria-labelledby="kb-languages-heading">
           <h2 id="kb-languages-heading">{t.languagesHeading}</h2>
           <p className="muted-copy">{t.languagesDescription} <HelpTip label={t.languagesHeading} text={t.languagesTip} /></p>
@@ -91,12 +107,15 @@ export function LanguagesRoute({ search }: { search: LanguagesSearch }) {
                   <li key={language.locale} className="kb-language-row">
                     <span className="kb-language-name"><strong>{name}</strong>
                       <small>{[t.published(language.published), t.drafts(language.drafts)].join(' · ')}</small></span>
-                    <span className="kb-language-counts">
+                    <span className="kb-language-counts">{choose ? <>
                       <button type="button" className="link-action" aria-pressed={search.locale === language.locale && search.state === 'missing'}
                         onClick={() => choose(language.locale, 'missing')}>{t.missingCount(language.missing)}</button>
                       <button type="button" className="link-action" aria-pressed={search.locale === language.locale && search.state === 'outdated'}
                         data-warn={language.outdated > 0 ? 'true' : undefined} onClick={() => choose(language.locale, 'outdated')}>{t.outdatedCount(language.outdated)}</button>
-                    </span>
+                    </> : <>
+                      <span>{t.missingCount(language.missing)}</span>
+                      <span data-warn={language.outdated > 0 ? 'true' : undefined}>{t.outdatedCount(language.outdated)}</span>
+                    </>}</span>
                     <label className="kb-language-visible">
                       <input type="checkbox" checked={language.visible} disabled={!canSet || busy} aria-label={t.showLanguage(name)}
                         onChange={(event) => void save(list.map((each) => (each.locale === language.locale ? { ...each, visible: event.target.checked } : each)))} />
@@ -126,9 +145,6 @@ export function LanguagesRoute({ search }: { search: LanguagesSearch }) {
             </div>}
           </>}
         </section>
-        {search.locale && search.state && <LanguageArticles locale={search.locale} state={search.state} />}
-      </div>
-    </main>
   );
 }
 
