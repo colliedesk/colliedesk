@@ -52,6 +52,9 @@ type PreviewResult struct {
 	Archive         Access `json:"archive"`
 	CannedResponses Access `json:"canned_responses"`
 	KnowledgeBase   Access `json:"knowledge_base"`
+	// HelpCenters is the help center each Freshdesk portal would become, the primary one first; empty
+	// when the categories name no portal or the knowledge base cannot be read.
+	HelpCenters []KBPortalHelpCenter `json:"help_centers"`
 	// RateLimitPerMinute is the X-Ratelimit-Total Freshdesk sent; 0 when it sent none.
 	RateLimitPerMinute int       `json:"rate_limit_per_minute"`
 	APICalls           int       `json:"api_calls"`
@@ -115,7 +118,9 @@ func Preview(ctx context.Context, options Options) (*PreviewResult, error) {
 	var ignored any
 	result.Archive = r.access(ctx, r.endpoint("/api/v2/tickets/archived/"+strconv.FormatInt(probe, 10), nil), &ignored, true)
 	result.CannedResponses = r.access(ctx, r.endpoint("/api/v2/canned_response_folders", pageQuery()), &[]fdCannedFolder{}, false)
-	result.KnowledgeBase = r.access(ctx, r.solutionsPath("categories"), &[]fdSolutionCategory{}, false)
+	if result.KnowledgeBase, result.HelpCenters, err = r.previewKnowledgeBase(ctx); err != nil {
+		return nil, err
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -129,6 +134,31 @@ func Preview(ctx context.Context, options Options) (*PreviewResult, error) {
 // the endpoint answers.
 func (r *run) access(ctx context.Context, target string, out any, notFoundReadable bool) Access {
 	_, err := r.client.getJSON(ctx, target, out)
+	return accessOf(err, notFoundReadable)
+}
+
+// previewKnowledgeBase reads the categories and the portals' names: the help center each portal would
+// become, the one with the most categories on the primary. A preview has no workspace, so it cannot see
+// that an earlier import put another portal there; the import keeps that one.
+func (r *run) previewKnowledgeBase(ctx context.Context) (Access, []KBPortalHelpCenter, error) {
+	kb := &knowledgeBase{}
+	err := listAll(ctx, r.client, r.solutionsPath("categories"), func(category fdSolutionCategory) error {
+		kb.categories = append(kb.categories, category)
+		return nil
+	})
+	if ctx.Err() != nil {
+		return "", nil, ctx.Err()
+	}
+	if access := accessOf(err, false); access != AccessReadable {
+		return access, []KBPortalHelpCenter{}, nil
+	}
+	if err := r.readPortalNames(ctx, kb); err != nil {
+		return "", nil, err
+	}
+	return AccessReadable, plannedPortalHelpCenters(kb.portalPlan()), nil
+}
+
+func accessOf(err error, notFoundReadable bool) Access {
 	switch {
 	case err == nil:
 		return AccessReadable

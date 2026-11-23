@@ -151,3 +151,54 @@ func TestAPortalOverTheHelpCenterLimitIsReportedAndItsCategoriesGoToThePrimary(t
 		t.Fatalf("warnings = %+v", report.Warnings)
 	}
 }
+
+func TestPreviewNamesTheHelpCenterEachPortalWouldBecome(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(twoPortals)
+	preview, err := freshdesk.Preview(t.Context(), env.options())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, portal := range preview.HelpCenters {
+		got = append(got, fmt.Sprintf("%d %s %d %s", portal.PortalID, portal.PortalName, portal.Categories, portal.Status))
+	}
+	if strings.Join(got, "; ") != "6 Help desk 3 primary; 5 Hardware store 2 planned" || !preview.HelpCenters[0].Primary || preview.HelpCenters[1].Primary {
+		t.Fatalf("preview help centers = %+v", preview.HelpCenters)
+	}
+	if n := len(env.helpCenters(t)); n != 1 {
+		t.Fatalf("the preview made help centers: %d", n)
+	}
+}
+
+// Freshdesk names no portal on the categories of an account with one portal.
+func TestPreviewOfAnAccountWhoseCategoriesNameNoPortalListsNoHelpCenter(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	preview, err := freshdesk.Preview(t.Context(), env.options())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.HelpCenters == nil || len(preview.HelpCenters) != 0 {
+		t.Fatalf("preview help centers = %#v", preview.HelpCenters)
+	}
+}
+
+func TestTheReportSaysWhichHelpCenterEachPortalBecame(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(twoPortals)
+	report := env.mustRun(t)
+	primary := env.helpCenters(t)[0].Name
+	markdown := report.Markdown()
+	for _, line := range []string{
+		"\n## Help centers made from Freshdesk portals\n",
+		"\n- Help desk (Freshdesk portal 6, 3 categories): on the primary help center, " + primary + "\n",
+		"\n- Hardware store (Freshdesk portal 5, 2 categories): made the help center Hardware store at /hardware-store\n",
+	} {
+		if !strings.Contains(markdown, line) {
+			t.Fatalf("report lacks %q:\n%s", line, markdown)
+		}
+	}
+	if again := env.mustRun(t).Markdown(); !strings.Contains(again, "\n- Hardware store (Freshdesk portal 5, 2 categories): on the help center Hardware store at /hardware-store, made by an earlier run\n") {
+		t.Fatalf("second report:\n%s", again)
+	}
+}

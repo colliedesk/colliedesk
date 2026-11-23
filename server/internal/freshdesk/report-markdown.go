@@ -101,6 +101,7 @@ func (r *Report) Markdown() string {
 	writeList(&b, "Canned responses whose files were not imported (Freshdesk ids)", r.SavedReplies.ResponsesWithAttachments)
 	writeList(&b, "Freshdesk placeholders left as written in saved replies (canned response ids)", placeholderLines(r.SavedReplies.UnmappedPlaceholders))
 	writeList(&b, "Knowledge base limits this import would pass (nothing is imported until they fit)", r.KnowledgeBase.Refused)
+	writeList(&b, "Help centers made from Freshdesk portals", helpCenterLines(r.KnowledgeBase.HelpCenters))
 	writeList(&b, "Knowledge base articles imported as drafts, by reason (Freshdesk ids)", draftLines(r.KnowledgeBase.Drafts))
 	writeList(&b, "Knowledge base articles changed in Freshdesk and in Colliedesk; the Colliedesk version was kept (Freshdesk ids)", r.KnowledgeBase.ChangedInBoth)
 	writeList(&b, "Knowledge base translations changed in Freshdesk and in Colliedesk; the Colliedesk version was kept (Freshdesk article id:language)", r.KnowledgeBase.TranslationsChangedInBoth)
@@ -172,7 +173,7 @@ var draftReasons = map[string]string{
 	draftInFreshdesk:    "a draft in Freshdesk",
 	draftNotInPortal:    "its category is in no portal",
 	draftPortalUnknown:  "its category names no portal while others do, so its portal is unknown",
-	draftSeveralPortals: "its category is not in the help center's portal (choose one with --help-center-portal)",
+	draftSeveralPortals: "its category is not in the help center's portal (a report from before each portal got its own help center)",
 }
 
 func writeKnowledgeBase(b *strings.Builder, kb KnowledgeBaseCount) {
