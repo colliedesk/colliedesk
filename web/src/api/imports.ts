@@ -10,14 +10,21 @@ const accessSchema = z.enum(['readable', 'none', 'refused', 'unknown']) satisfie
 export const importOptionsSchema = z.object({
   recent_days: z.number().int().optional(),
   include_personal_canned_responses: z.boolean().optional(),
-  help_center_portal: z.number().int().optional(),
   old_help_center_domain: z.string().optional(),
 }) satisfies z.ZodType<Generated<'ImportOptions'>>;
+// A Freshdesk portal and the help center its categories go to (server/internal/freshdesk/solutions-portals.go).
+export const portalHelpCenterSchema = z.object({
+  portal_id: z.number().int(), portal_name: z.string(), name_from_freshdesk: z.boolean(), categories: z.number().int(),
+  help_center_id: z.string().uuid().optional(), help_center_name: z.string().optional(), handle: z.string().optional(), primary: z.boolean(),
+  status: z.enum(['primary', 'created', 'existing', 'planned', 'over_limit', 'trashed', 'failed']),
+}) satisfies z.ZodType<Generated<'ImportPortalHelpCenter'>>;
+export type PortalHelpCenter = z.infer<typeof portalHelpCenterSchema>;
 export const importPreviewSchema = z.object({
   domain: z.string(), account_id: z.number().int(), source: z.string(),
   agents: z.array(z.object({ id: z.number().int(), name: z.string(), email: z.string(), active: z.boolean() })),
   companies: z.number().int(), contacts: z.number().int().nullable(), tickets_outside_archive: z.number().int().nullable(),
   highest_listed_ticket_id: z.number().int(), archive: accessSchema, canned_responses: accessSchema, knowledge_base: accessSchema,
+  help_centers: z.array(portalHelpCenterSchema).optional(),
   rate_limit_per_minute: z.number().int(), api_calls: z.number().int(), checked_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'ImportPreview'>>;
 export const importProgressSchema = z.object({
@@ -64,7 +71,7 @@ export const importReportSchema = z.object({
   interim: z.boolean().optional(),
   contacts: countSchema.optional(), tickets: countSchema.extend({ unresolved_ids: z.array(z.string()).nullable().optional() }).optional(),
   messages: countSchema.optional(), attachments: countSchema.optional(), time_entries: countSchema.optional(), saved_replies: countSchema.optional(),
-  knowledge_base: z.object({ articles: countSchema.optional() }).partial().optional(),
+  knowledge_base: z.object({ articles: countSchema.optional(), help_centers: z.array(portalHelpCenterSchema).nullable().optional() }).partial().optional(),
   missing: z.array(z.string()).nullable().optional(),
   failures: z.array(z.object({ entity: z.string(), freshdesk_id: z.string(), error: z.string() })).nullable().optional(),
   links: linksSchema.optional(),

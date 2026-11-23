@@ -6,6 +6,7 @@ import { formatDate } from '../../lib/format-date';
 import { formatWait } from '../../lib/format-wait';
 import { HelpTip } from '../../ui/help-tip';
 import { estimateRange } from './import-estimate';
+import { ImportHelpCenters } from './import-help-centers';
 import { ImportLinksSummary } from './import-links';
 import { importMessages as m } from './import-messages';
 import { ImportSteps } from './import-steps';
@@ -175,6 +176,7 @@ function Found({ job, preview, onStart, onCancel, busy }: ImportPageProps & { jo
     {preview.archive === 'refused' && <p className="info-note">{m.archiveRefused}</p>}
     {preview.canned_responses === 'refused' && <p className="warning-note">{m.cannedRefused}</p>}
     {preview.knowledge_base === 'refused' && <p className="warning-note">{m.knowledgeBaseRefused}</p>}
+    <ImportHelpCenters portals={preview.help_centers} />
     {recentDays(job) > 0 && <p>{m.recentFirst(recentDays(job))}</p>}
     {time && <p>{m.estimate(time)}</p>}
     <p>{m.whileItRuns}</p>
@@ -254,6 +256,7 @@ function Finished({ job, report, onUndo, onNewImport, busy }: ImportPageProps & 
     {note ? <p className="import-status info-note" data-status="OK">{note.before}<a href={reportDownloadPath(job.id)} download>{note.link}</a>{note.after}</p>
       : <p className="import-status" data-status={status}>{m[`explain${status}`]}</p>}
     {report && <ReportLedger report={report} />}
+    <ImportHelpCenters portals={report?.knowledge_base?.help_centers} />
     {report?.links && <ImportLinksSummary links={report.links} />}
     {report?.search_console !== undefined && <Suspense fallback={null}><ImportSearchConsoleSummary section={report.search_console} /></Suspense>}
     <div className="button-row">
