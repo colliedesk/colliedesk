@@ -103,10 +103,11 @@ type restKBArticle struct {
 	Languages     []kbLanguageOut       `json:"languages"`
 	Votes         *domain.KBVoteTally   `json:"votes"`
 	kbVisibilityOut
-	VisibilityFrom *kbVisibilityFromOut       `json:"visibility_from"`
-	Views30d       *int64                     `json:"views_30d"`
-	Uses30d        *int64                     `json:"uses_30d"`
-	GapSource      *domain.KBArticleGapSource `json:"gap_source"`
+	VisibilityFrom *kbVisibilityFromOut         `json:"visibility_from"`
+	Views30d       *int64                       `json:"views_30d"`
+	Uses30d        *int64                       `json:"uses_30d"`
+	GapSource      *domain.KBArticleGapSource   `json:"gap_source"`
+	ReplySource    *domain.KBArticleReplySource `json:"reply_source"`
 	AIExclusion    *struct {
 		At string      `json:"at"`
 		By *restPerson `json:"by"`
@@ -430,6 +431,9 @@ func kbArticleGet(c *call, arguments map[string]any) (any, error) {
 	answer := kbArticleView(article)
 	if article.GapSource != nil {
 		answer["gap_source"] = kbGapSourceView(*article.GapSource)
+	}
+	if article.ReplySource != nil {
+		answer["reply_source"] = kbReplySourceView(*article.ReplySource)
 	}
 	return answer, nil
 }
