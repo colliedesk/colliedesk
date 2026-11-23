@@ -536,7 +536,7 @@ const mailbox = (change: { mail_through_mailbox?: boolean; answers_before_forwar
     domain_verified_at: null, dns_record_name: '_colliedesk.acme.com', dns_record_value: 'colliedesk-verification=abc', dns_records: [], dns_records_expired_at: null,
     created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
   },
-  inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', from_policy: 'verified' as const, sending_from: null, hosted_address: change.hosted_address ?? 'support@acme.colliedesk.test',
+  inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', from_policy: 'verified' as const, sending_from: null, hosted_address: change.hosted_address ?? 'support@acme.colliedesk.test', kb_address: null,
   domain_verification: 'txt' as const, sending_pause: null, smtp: { configured: true, host: 'smtp.example.net', port: 587, starttls: true, authenticated: true },
   gmail: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/gmail', connection: null, reads_inbox: false, inbox: null },
   microsoft: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/ms', admin_consent_redirect_uri: 'https://desk.example.com/ms-admin',

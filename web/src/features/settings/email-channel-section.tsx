@@ -119,6 +119,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           <QuietNote note={settingsMessages.forwardingHelp} label={settingsMessages.forwardingAddress} tip={settingsMessages.forwardingWhy} />
           <QuietNote note={settingsMessages.forwardingSteps} label={settingsMessages.forwardingStepsLabel} tip={settingsMessages.forwardingStepsWhy}
             link={{ href: settingsMessages.emailGuideURL, label: settingsMessages.learnMore }} />
+          {settings?.kb_address && <QuietNote note={settingsMessages.kbAddressHelp(settings.kb_address)} label={settingsMessages.kbAddressLabel} tip={settingsMessages.kbAddressWhy} />}
           {canManage && onSaveSlug && <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!slugFeedback.pending) onSaveSlug(slug.trim()); }}>
             <label className="field"><span>{settingsMessages.workspaceAddressName}</span><input value={slug} onChange={(event) => { slugFeedback.touch(); setSlug(event.target.value); }} required /></label>
             <button type="submit" disabled={slugFeedback.pending}>{slugFeedback.saveLabel(settingsMessages.saveAddressName)}</button>

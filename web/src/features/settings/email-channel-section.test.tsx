@@ -13,6 +13,7 @@ const disconnected: EmailChannelSettings = {
   from_policy: 'verified',
   sending_from: null,
   hosted_address: null,
+  kb_address: null,
   domain_verification: 'txt',
   sending_pause: null,
   gmail: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null, reads_inbox: false, inbox: null },
@@ -153,6 +154,18 @@ test('shows the hosted forwarding address with a copy button and the Gmail and O
   expect(screen.getByRole('button', { name: 'About Forwarding steps' })).toHaveAccessibleDescription('Step-by-step for Gmail, Google Workspace and Microsoft 365.');
   expect(screen.queryByRole('textbox', { name: /inbound url/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /rotate inbound secret/i })).not.toBeInTheDocument();
+});
+
+test('names the knowledge base address in a quiet line below the forwarding address', () => {
+  render(<EmailChannelSection settings={{ ...hosted, kb_address: 'kb@acme.colliedesk.com' }} timezone="UTC" canManage workspaceSlug="acme" />);
+  expect(screen.getByText('Forward or BCC a mail to kb@acme.colliedesk.com to save it as a draft article.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'About Knowledge base address' }))
+    .toHaveAccessibleDescription('Only mail from a teammate who can write articles, sent from an address their mail provider signs, becomes a draft. Other mail is dropped.');
+});
+
+test('shows no knowledge base address when the server offers none', () => {
+  render(<EmailChannelSection settings={{ ...hosted, kb_address: null }} timezone="UTC" canManage workspaceSlug="acme" />);
+  expect(screen.queryByText(/draft article/i)).not.toBeInTheDocument();
 });
 
 test('offers no forwarding address when the server does not host mail', () => {

@@ -20,6 +20,7 @@ const connected: EmailChannelSettings = {
   from_policy: 'verified',
   sending_from: 'reply+…@mail.colliedesk.example',
   hosted_address: null,
+  kb_address: null,
   domain_verification: 'txt',
   sending_pause: null,
   gmail: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null, reads_inbox: false, inbox: null },
