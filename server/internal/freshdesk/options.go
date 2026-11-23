@@ -39,9 +39,6 @@ type Options struct {
 	// IncludePersonalCannedResponses also imports canned responses from personal folders. They become
 	// shared with the whole workspace, so the default leaves them out and lists their ids.
 	IncludePersonalCannedResponses bool
-	// HelpCenterPortal is the Freshdesk portal whose published articles stay published, on an account
-	// with several portals (CLI --help-center-portal). Zero publishes none of them there.
-	HelpCenterPortal int64
 	// Origin (APP_ORIGIN) and HelpCenterDomain (HELP_CENTER_DOMAIN) give the help center's address
 	// (helpcenter.SiteURL), which old Freshdesk help center links in imported articles and saved replies
 	// are pointed at. Without Origin no link is rewritten and the links report is UNVERIFIED.

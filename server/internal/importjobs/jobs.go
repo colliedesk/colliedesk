@@ -81,9 +81,11 @@ var (
 // Options are what a person chooses for an import.
 type Options struct {
 	// RecentDays is the window of the recent pass; nil means DefaultRecentDays, 0 skips the pass.
-	RecentDays                     *int  `json:"recent_days,omitempty"`
-	IncludePersonalCannedResponses bool  `json:"include_personal_canned_responses"`
-	HelpCenterPortal               int64 `json:"help_center_portal,omitempty"`
+	RecentDays                     *int `json:"recent_days,omitempty"`
+	IncludePersonalCannedResponses bool `json:"include_personal_canned_responses"`
+	// HelpCenterPortal is accepted from earlier clients and ignored: every Freshdesk portal becomes its
+	// own help center.
+	HelpCenterPortal int64 `json:"help_center_portal,omitempty"`
 	// OldHelpCenterDomain is the old Freshdesk help center's own custom domain, stored as its host
 	// (freshdesk.OldHelpCenterHost); its links are pointed at the new help center too.
 	OldHelpCenterDomain string `json:"old_help_center_domain,omitempty"`

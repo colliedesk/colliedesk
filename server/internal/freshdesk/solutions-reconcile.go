@@ -239,7 +239,7 @@ func (r *run) sizeKnowledgeBase(ctx context.Context) (int64, error) {
 // counts with the lists.
 func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []string) error {
 	kb := r.kb
-	count := KnowledgeBaseCount{Published: []string{}, Drafts: map[string][]string{}, Languages: []string{}, Portals: []int64{}, Notes: []string{},
+	count := KnowledgeBaseCount{Published: []string{}, Drafts: map[string][]string{}, Languages: []string{}, Portals: []int64{}, HelpCenters: []KBPortalHelpCenter{}, Notes: []string{},
 		ChangedInBoth: []string{}, TranslationsChangedInBoth: []string{}, LanguagesAdded: []string{}, Unpublished: []string{}, DeletedInColliedesk: []string{}, Refused: r.kbRefused}
 	if count.Refused == nil {
 		count.Refused = []string{}
@@ -273,6 +273,18 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	if portals := kb.portals(); portals != nil {
 		count.Portals = portals
 	}
+	plan := kb.portalPlan()
+	if state := r.kbState; state != nil && state.helpCenters != nil {
+		count.HelpCenters = state.helpCenters
+	} else if len(plan) > 0 {
+		count.HelpCenters = plannedPortalHelpCenters(plan)
+	}
+	if note := unnamedPortalsNote(plan); note != "" && kb.portalNamesNote == "" {
+		count.Notes = append(count.Notes, note)
+	}
+	if kb.portalNamesNote != "" {
+		count.Notes = append(count.Notes, kb.portalNamesNote)
+	}
 	count.Products = kb.products
 	if kb.productsNote != "" {
 		count.Notes = append(count.Notes, kb.productsNote)
@@ -302,7 +314,7 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	for _, article := range kb.articles {
 		key := strconv.FormatInt(article.ID, 10)
 		articleKeys = append(articleKeys, key)
-		if reason := kb.draftReason(article, r.opts.HelpCenterPortal); reason == "" {
+		if reason := kb.draftReason(article); reason == "" {
 			count.Published = append(count.Published, key)
 		} else {
 			count.Drafts[reason] = append(count.Drafts[reason], key)

@@ -32,6 +32,11 @@ type kbState struct {
 	translationsChangedInBoth []string
 	// languagesAdded are the help center languages this run added.
 	languagesAdded []string
+	// portalHelpCenters maps a portal to the help center its categories are on; createdHelpCenters are
+	// the help centers this run made; helpCenters is the mapping for the report.
+	portalHelpCenters  map[int64]string
+	createdHelpCenters map[string]bool
+	helpCenters        []KBPortalHelpCenter
 }
 
 func (r *run) kbWriteState() *kbState {
@@ -53,12 +58,15 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 		if err := r.importKBLanguages(ctx); err != nil {
 			return err
 		}
+		if err := r.ensurePortalHelpCenters(ctx); err != nil {
+			return err
+		}
 	}
 	for _, category := range kb.categories {
 		key := strconv.FormatInt(category.ID, 10)
 		meta := map[string]any{"freshdesk_id": category.ID, "kind": "category", "visible_in_portals": category.VisibleInPortals}
 		id, err := r.ensureCollection(ctx, entityKBCategory, key, nil, category.Name, deref(category.Description), domain.KBVisibleEveryone, meta,
-			category.CreatedAt, category.UpdatedAt)
+			category.CreatedAt, category.UpdatedAt, state.categoryHelpCenters(category))
 		if err != nil {
 			return err
 		}
@@ -94,7 +102,7 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 			"visibility": folder.Visibility, "company_ids": folder.CompanyIDs, "contact_segment_ids": folder.ContactSegmentIDs, "company_segment_ids": folder.CompanySegmentIDs,
 			"name": folder.Name, "path": kb.pathNames(folder)}
 		id, err := r.ensureCollection(ctx, entityKBFolder, key, &parentID, name, deref(folder.Description), kb.collectionVisibility(folder), meta,
-			folder.CreatedAt, folder.UpdatedAt)
+			folder.CreatedAt, folder.UpdatedAt, nil)
 		if err != nil {
 			return err
 		}
@@ -139,9 +147,10 @@ func fitName(name string) string {
 // ensureCollection returns the collection of a category or folder, creating it on the first run with
 // visibility. An imported collection is never renamed again, so an agent's change survives a rerun; it is
 // only restricted when Freshdesk shows the folder to fewer people. It returns "" when the collection
-// could not be created (recorded in the ledger).
+// could not be created (recorded in the ledger). A top-level collection is shown on helpCenters (nil: the
+// primary); one an earlier run made is only added to the help centers this run made.
 func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID *string, name, description, visibility string, meta map[string]any,
-	created, updated time.Time) (string, error) {
+	created, updated time.Time, helpCenters []string) (string, error) {
 	target, done, err := r.ledger.done(ctx, entity, key)
 	if err != nil {
 		return "", err
@@ -154,6 +163,9 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 			return "", fmt.Errorf("read knowledge base collection: %w", err)
 		}
 		if exists {
+			if err := r.addCollectionHelpCenters(ctx, target, r.kbWriteState().createdIn(helpCenters)); err != nil {
+				return "", err
+			}
 			return target, r.restrictKBCollection(ctx, key, target, visibility)
 		}
 	}
@@ -170,7 +182,7 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	id, err := store.ImportKBCollection(ctx, tx, r.workspaceID, store.KBImportCollection{ParentID: parentID, Name: name, Description: description,
-		Visibility: visibility, SlugSuffix: key, SourceMeta: encoded, CreatedAt: created.UTC(), UpdatedAt: updated.UTC()})
+		Visibility: visibility, SlugSuffix: key, SourceMeta: encoded, CreatedAt: created.UTC(), UpdatedAt: updated.UTC(), HelpCenterIDs: helpCenters})
 	if err != nil {
 		_ = tx.Rollback(ctx)
 		r.itemFailed(ctx, entity, key, "", err)
@@ -183,6 +195,22 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 		return "", fmt.Errorf("commit collection import: %w", err)
 	}
 	return id, nil
+}
+
+// addCollectionHelpCenters also shows an imported top-level collection on the help centers ids names.
+func (r *run) addCollectionHelpCenters(ctx context.Context, collectionID string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin collection placement: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := store.AddImportedKBCollectionHelpCenters(ctx, tx, r.workspaceID, collectionID, ids); err != nil {
+		return fmt.Errorf("place collection: %w", err)
+	}
+	return tx.Commit(ctx)
 }
 
 // kbPendingImage is an image stored in this run whose row is written with its article.
@@ -330,7 +358,7 @@ func (r *run) articleMeta(article kbArticle, draftReason string, dropped []strin
 func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 	state := r.kbWriteState()
 	key := strconv.FormatInt(article.ID, 10)
-	reason := r.kb.draftReason(article, r.opts.HelpCenterPortal)
+	reason := r.kb.draftReason(article)
 	entry, found, err := r.ledger.get(ctx, entityKBArticle, key)
 	if err != nil {
 		return err
