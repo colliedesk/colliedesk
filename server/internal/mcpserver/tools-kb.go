@@ -108,6 +108,7 @@ type restKBArticle struct {
 	Uses30d        *int64                       `json:"uses_30d"`
 	GapSource      *domain.KBArticleGapSource   `json:"gap_source"`
 	ReplySource    *domain.KBArticleReplySource `json:"reply_source"`
+	OpenConflicts  int                          `json:"open_conflicts"`
 	AIExclusion    *struct {
 		At string      `json:"at"`
 		By *restPerson `json:"by"`
@@ -152,6 +153,7 @@ type kbArticleRowOut struct {
 	Author        *kbAuthorOut         `json:"author"`
 	Languages     []kbLanguageOut      `json:"languages"`
 	Votes         *domain.KBVoteTally  `json:"votes,omitempty"`
+	OpenConflicts int                  `json:"open_conflicts"`
 	kbVisibilityOut
 }
 
@@ -180,7 +182,7 @@ func kbCollectionIDs(article restKBArticle) []string {
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
 	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Position: article.Position, Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, HasDraft: article.HasDraft, PurgesAt: article.PurgesAt,
-		Tags: kbTags(article.Tags), Author: article.Author, Languages: article.Languages, Votes: article.Votes, kbVisibilityOut: article.kbVisibilityOut}
+		Tags: kbTags(article.Tags), Author: article.Author, Languages: article.Languages, Votes: article.Votes, OpenConflicts: article.OpenConflicts, kbVisibilityOut: article.kbVisibilityOut}
 	if out.Languages == nil {
 		out.Languages = []kbLanguageOut{}
 	}
@@ -215,6 +217,7 @@ type kbArticleOut struct {
 	Attachments   []kbAttachmentOut     `json:"attachments"`
 	Tags          []string              `json:"tags"`
 	Author        *kbAuthorOut          `json:"author"`
+	OpenConflicts int                   `json:"open_conflicts"`
 	kbVisibilityOut
 	VisibilityFrom *kbVisibilityFromOut `json:"visibility_from"`
 	// Views30d and Uses30d come with one article read on its own, not with a change.
@@ -240,7 +243,7 @@ func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, CollectionIDs: kbCollectionIDs(article), Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
 		ShowContents: article.ShowContents, InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []kbTranslationRowOut{}, Attachments: kbAttachmentsView(article.Attachments),
-		Tags: kbTags(article.Tags), Author: article.Author, kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom, Views30d: article.Views30d, Uses30d: article.Uses30d}
+		Tags: kbTags(article.Tags), Author: article.Author, OpenConflicts: article.OpenConflicts, kbVisibilityOut: article.kbVisibilityOut, VisibilityFrom: article.VisibilityFrom, Views30d: article.Views30d, Uses30d: article.Uses30d}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, kbTranslationRow(translation))
 	}

@@ -355,6 +355,12 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	aiWorker.Handle(ai.SlotTriage, api.AI().TriageHandler())
 	aiWorker.Handle(ai.SlotIntake, api.IntakeHandler(nil))
 	g.Go(aiWorker.Run)
+	// Sent replies are checked against the published articles they are about, a capped number a day.
+	g.Go(func(ctx context.Context) {
+		api.AI().RunKBConflictChecks(ctx, 30*time.Second, func(err error) {
+			slog.Error("check sent replies against the knowledge base", "error", err)
+		})
+	})
 	// Autofix follows GitHub every ten minutes too, for a server the App's webhook cannot reach. Switched off,
 	// nothing new is sent (the API refuses it) but the fixes already sent are still followed to their end.
 	if sync := api.GitHubSync(); sync != nil {

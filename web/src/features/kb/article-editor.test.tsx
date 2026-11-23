@@ -47,6 +47,25 @@ test('a new article is saved as a draft in the collection it was started from, t
   expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ collection_id: ids.setup, title: 'Reset your password', body_md: '# Steps', status: 'draft' });
 });
 
+test('an article a sent reply contradicts says it may be out of date and lists the reply', async () => {
+  const conflicts = { article_id: ids.article, open: 1, conflicts: [{ id: '11111111-1111-4111-8111-111111111111', reason: 'The reply says 48 hours, the article 24.',
+    created_at: '2026-11-20T09:00:00Z', reply: { message_id: '11111111-1111-4111-8111-111111111119', excerpt: 'The link works for 48 hours.', author: { agent_id: null, name: 'Bea' },
+      sent_at: '2026-11-20T08:59:00Z', conversation: null }, cleared_at: null, cleared_by: null, cleared_with_token: null }] };
+  serve({ ...base, [`GET /api/v1/kb/articles/${ids.article}`]: () => json(200, article({ open_conflicts: 1 })),
+    [`GET /api/v1/kb/articles/${ids.article}/conflicts`]: () => json(200, conflicts) });
+  open({ articleId: ids.article });
+  const box = await screen.findByRole('region', { name: 'May be out of date' });
+  expect(await within(box).findByText('The link works for 48 hours.')).toBeInTheDocument();
+});
+
+test('an article no reply contradicts loads no conflicts', async () => {
+  const calls = serve({ ...base, [`GET /api/v1/kb/articles/${ids.article}`]: () => json(200, article()) });
+  open({ articleId: ids.article });
+  await screen.findByRole('region', { name: 'Readers\' votes' });
+  expect(screen.queryByRole('region', { name: 'May be out of date' })).not.toBeInTheDocument();
+  expect(calls.some((call) => call.path.endsWith('/conflicts'))).toBe(false);
+});
+
 test('an edit sends only what changed with the version it was made on, and the next save uses the answer\'s version', async () => {
   const first = article({ updated_at: '2026-10-02T00:00:00Z' });
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, first),

@@ -48,6 +48,7 @@ const (
 	intakeEvaluationOperation            = "intake_evaluation"
 	allowOAuthOperation                  = "oauth_allow"
 	resetKBVotesOperation                = "kb_votes_reset"
+	clearKBConflictsOperation            = "kb_conflicts_clear"
 	createKBReviewOperation              = "kb_review"
 	approveKBReviewOperation             = "kb_review_approve"
 	requestKBReviewChangesOperation      = "kb_review_changes"

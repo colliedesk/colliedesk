@@ -220,6 +220,8 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"DELETE /api/v1/kb/articles/{id}/draft":                       {"/api/v1/kb/articles/" + kb.discardDraftID + "/draft?updated_at=" + url.QueryEscape(kb.discardDraftSeen), nil, admin, 200, ""},
 		"GET /api/v1/kb/articles/{id}/votes":                          {path: "/api/v1/kb/articles/" + kb.articleID + "/votes", token: admin, status: 200},
 		"POST /api/v1/kb/articles/{id}/votes/reset":                   {path: "/api/v1/kb/articles/" + kb.articleID + "/votes/reset", token: admin, status: 200},
+		"GET /api/v1/kb/articles/{id}/conflicts":                      {path: "/api/v1/kb/articles/" + kb.articleID + "/conflicts", token: admin, status: 200},
+		"POST /api/v1/kb/articles/{id}/conflicts/clear":               {path: "/api/v1/kb/articles/" + kb.articleID + "/conflicts/clear", token: admin, status: 200},
 		"GET /api/v1/kb/articles/{id}/stats":                          {path: "/api/v1/kb/articles/" + kb.articleID + "/stats", token: admin, status: 200},
 		"POST /api/v1/kb/images":                                      {path: kbImagesPath, token: admin, status: 201},
 		"GET /api/v1/kb/images/{id}":                                  {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},

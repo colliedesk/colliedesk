@@ -7782,6 +7782,46 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/kb/articles/{id}/conflicts:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBArticleConflicts
+      x-permission: kb_articles:read
+      description: >
+        The replies the team sent that may show the article is out of date. After a team member sends a
+        reply that closely matches a published article, the workspace's small model is asked whether the
+        reply contradicts the article; each yes is listed here with the model's sentence quoting both
+        sides. Open ones first, then cleared ones, newest first, 100 at most. The reply's conversation is
+        named only for a caller who may read conversations (conversations:read). An article in the trash
+        keeps its conflicts.
+      responses:
+        '200':
+          description: The article's conflicts
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleConflicts'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/articles/{id}/conflicts/clear:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: clearKBArticleConflicts
+      x-permission: kb_articles:update
+      description: >
+        Clear the "May be out of date" flag once the article is right, or the replies were: every open
+        conflict is marked cleared with who and when, and stays listed. A reply sent later that
+        contradicts the article flags it again. With nothing open it changes nothing. Not for an article
+        in the trash. A repeat with the same Idempotency-Key answers what the first one got; the key with
+        another article is refused with 422, code `idempotency_key_reused`.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: The article's conflicts after the clear
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticleConflicts'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles/{id}/stats:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -13612,8 +13652,9 @@ components:
           items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags, languages, review_state, votes]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, tags, languages, review_state, votes, open_conflicts]
       properties:
+        open_conflicts: {type: integer, minimum: 0, description: 'Sent replies the workspace''s small model found to contradict the article, not cleared yet. Above 0 the article may be out of date: GET /api/v1/kb/articles/{id}/conflicts lists them.'}
         votes: {allOf: [{$ref: '#/components/schemas/KBVoteTally'}], description: 'What readers answered to "Was this article helpful?", imported votes included, as GET /api/v1/kb/articles/{id}/votes counts them.'}
         review_state:
           type: [string, 'null']
@@ -13886,9 +13927,10 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, visibility_from, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments, tags]
+      required: [id, number, collection_id, collection_ids, position, title, slug, status, published_at, author_agent_id, author, created_at, updated_at, last_change, url, has_draft, visibility, effective_visibility, visibility_from, draft, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description, show_contents, attachments, tags, open_conflicts]
       properties:
         tags: {allOf: [{$ref: '#/components/schemas/KBArticleTags'}], description: 'Its published tags, as in KBArticleSummary.'}
+        open_conflicts: {type: integer, minimum: 0, description: 'As in KBArticleSummary: above 0 the article may be out of date (GET /api/v1/kb/articles/{id}/conflicts).'}
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
         views_30d: {type: integer, minimum: 0, description: 'Only when one article is read (GET): its help center views in the last 30 days, today included (GET /api/v1/kb/articles/{id}/stats has them per day).'}
         uses_30d: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the sent replies in the last 30 days that linked it or were an AI draft quoting it.'}
@@ -14284,6 +14326,61 @@ components:
         missing: {type: [string, 'null'], maxLength: 500, description: 'The reader''s "What was missing?" line after a No, masked; null when they left none.'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time, description: When the reader last changed their vote.}
+    KBArticleConflicts:
+      type: object
+      required: [article_id, open, conflicts]
+      properties:
+        article_id: {type: string, format: uuid}
+        open: {type: integer, minimum: 0, description: 'Conflicts not cleared; the article shows "May be out of date" while above 0.'}
+        conflicts:
+          type: array
+          maxItems: 100
+          description: Open ones first, then cleared ones, newest first.
+          items: {$ref: '#/components/schemas/KBArticleConflict'}
+    KBArticleConflict:
+      type: object
+      required: [id, reason, created_at, reply, cleared_at, cleared_by, cleared_with_token]
+      properties:
+        id: {type: string, format: uuid}
+        reason: {type: string, maxLength: 500, description: 'The small model''s sentence quoting the reply and the article where they disagree, masked: no email address, no run of 6 or more digits. Model output, not a person''s finding.'}
+        created_at: {type: string, format: date-time, description: When the model found the conflict.}
+        reply:
+          type: object
+          required: [message_id, excerpt, author, sent_at, conversation]
+          properties:
+            message_id: {type: string, format: uuid}
+            excerpt: {type: string, maxLength: 600, description: 'The start of the reply on one line, masked like reason.'}
+            author:
+              description: The team member who sent it; null once they were removed.
+              oneOf:
+                - {type: 'null'}
+                - {$ref: '#/components/schemas/SavedReplyPerson'}
+            sent_at: {type: string, format: date-time}
+            conversation:
+              description: 'Where the reply was sent; null for a caller without conversations:read.'
+              oneOf:
+                - {type: 'null'}
+                - type: object
+                  required: [id, display_ref, subject]
+                  properties:
+                    id: {type: string, format: uuid}
+                    display_ref: {type: string, description: 'The conversation''s number as the inbox shows it; empty without one.'}
+                    subject: {type: string}
+        cleared_at: {type: [string, 'null'], format: date-time, description: When an editor cleared it; null while open.}
+        cleared_by:
+          description: The person who cleared it, or whose agent token did; null while open or once they were removed.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        cleared_with_token:
+          description: The agent token that cleared it; null when a person did it in the web app, or while open.
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, label]
+              properties:
+                id: {type: [string, 'null'], format: uuid}
+                label: {type: string}
     KBArticleVoteReset:
       type: object
       required: [id, helpful, not_helpful, reset_by, token, created_at]

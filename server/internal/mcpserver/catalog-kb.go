@@ -53,7 +53,10 @@ const (
 		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made it; null when a person made it in the web app."},` +
 		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
 
-	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility","tags","author","languages"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` + kbLanguagesOutput + `,` +
+	// kbOpenConflictsOutput is how many sent replies contradict an article and no editor cleared yet.
+	kbOpenConflictsOutput = `"open_conflicts":{"type":"integer","description":"Sent replies found to contradict it, not cleared: above 0 it may be out of date (colliedesk_kb_article_conflicts_list)."}`
+
+	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","collection_ids","position","status","slug","published_at","updated_at","last_change","url","team_text","visibility","effective_visibility","tags","author","languages","open_conflicts"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` + kbLanguagesOutput + `,` + kbOpenConflictsOutput + `,` +
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,` +
 		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
@@ -62,7 +65,7 @@ const (
 		`"votes":{"type":"object","description":"Readers' answers to \"Was this article helpful?\", imported ones included; only search rows have it.","properties":{"helpful":{"type":"integer"},"not_helpful":{"type":"integer"}}}}}`
 
 	// kbArticleSchemaOpen is an article without its closing braces, so one read alone can add its numbers.
-	kbArticleSchemaOpen = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from","tags","author"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` +
+	kbArticleSchemaOpen = `{"type":"object","required":["id","number","collection_id","collection_ids","status","slug","published_at","updated_at","last_change","url","team_text","show_contents","in_trash","ai_exclusion","translations","attachments","visibility","effective_visibility","visibility_from","tags","author","open_conflicts"],"properties":{` + kbTagsOutput + `,` + kbAuthorOutput + `,` + kbOpenConflictsOutput + `,` +
 		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},` + kbCollectionIDsOutput + `,"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
 		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"has_draft":{"type":"boolean"},"draft":` + kbArticleDraftSchema + `,"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + kbTeamTextSchema + `,` +
