@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"strings"
 	"testing"
@@ -120,5 +121,40 @@ func TestAnArticleOnNoHelpCenterReachesNoHelpChat(t *testing.T) {
 	requests := d.fake.Requests()
 	if system := requestSystem(requests[len(requests)-1]); strings.Contains(system, "axolotlword") || !strings.Contains(system, "Orders ship in 2 days") {
 		t.Fatalf("prompt = %.3000q", system)
+	}
+}
+
+// A chat opened from an article, and a hand-off naming one, carry only an article of the chat's own help
+// center: a number of the primary's article on the Hardware chat names nothing.
+func TestHelpChatNamesOnlyAnArticleOfItsOwnHelpCenter(t *testing.T) {
+	s := newShelvedChat(t, "Chat Named")
+	hardware := s.onHardware()
+	if body := html.UnescapeString(hardware.call(t, http.MethodGet, "/chat?article="+num(s.swap.Number), nil).Body.String()); !strings.Contains(body, `"article":{"number":`+num(s.swap.Number)+`,"title":"Swap a cable"}`) {
+		t.Fatalf("hardware chat about its own article:\n%.600s", body)
+	}
+	if body := html.UnescapeString(hardware.call(t, http.MethodGet, "/chat?article="+num(s.article.Number), nil).Body.String()); strings.Contains(body, `"article":`) || strings.Contains(body, "Shipping times") {
+		t.Fatalf("hardware chat names the primary's article:\n%.600s", body)
+	}
+
+	if response := hardware.call(t, http.MethodPost, "/chat/handoff", map[string]any{"email": "reader@example.com", "article_number": s.article.Number}); response.Code != http.StatusCreated {
+		t.Fatalf("handoff status=%d body=%s", response.Code, response.Body.String())
+	}
+	var conversations struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	kbCall(t, s.api, http.MethodGet, "/api/v1/conversations", nil, s.admin, http.StatusOK, &conversations)
+	if len(conversations.Items) != 1 {
+		t.Fatalf("%d conversations, want 1", len(conversations.Items))
+	}
+	var timeline struct {
+		Items []struct {
+			Body string `json:"body"`
+		} `json:"items"`
+	}
+	kbCall(t, s.api, http.MethodGet, "/api/v1/conversations/"+conversations.Items[0].ID+"/messages", nil, s.admin, http.StatusOK, &timeline)
+	if body := timeline.Items[0].Body; strings.Contains(body, "Article:") || strings.Contains(body, "Shipping times") {
+		t.Fatalf("hardware hand-off names the primary's article:\n%s", body)
 	}
 }

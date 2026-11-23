@@ -541,7 +541,7 @@ func (a *API) helpChatPage(c *helpChat) {
 	embed := query.Get("embed") == "1"
 	// Opened from an article's "Still need help?": the chat is about it, and a hand-off names it.
 	if number, err := strconv.ParseInt(query.Get("article"), 10, 64); err == nil && !embed {
-		article, found, err := a.ai.ChatArticleOf(c.request.Context(), c.at.WorkspaceID, number, c.lang)
+		article, found, err := a.ai.ChatArticleOf(c.request.Context(), c.at.WorkspaceID, c.at.HelpCenterID, number, c.lang)
 		if err != nil {
 			a.helpChatFailed(c, err)
 			return
@@ -726,7 +726,7 @@ func (a *API) helpChatHandoff(c *helpChat) {
 		handoff.Transcript = "(No new questions.)"
 	}
 	if input.ArticleNumber > 0 {
-		article, found, err := a.ai.ChatArticleOf(ctx, c.at.WorkspaceID, input.ArticleNumber, c.lang)
+		article, found, err := a.ai.ChatArticleOf(ctx, c.at.WorkspaceID, c.at.HelpCenterID, input.ArticleNumber, c.lang)
 		if err != nil {
 			a.helpChatFailed(c, err)
 			return

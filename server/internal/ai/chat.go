@@ -177,16 +177,16 @@ func (s *Service) findChat(ctx context.Context, tx pgx.Tx, workspaceID string, b
 	return id, status, last, err == nil, err
 }
 
-// ChatArticleOf is the article the help center shows under number, in language locale, when the chat
-// may read it; found is false for a draft, a number of no article, one the help center does not show
-// and one kept away from AI.
-func (s *Service) ChatArticleOf(ctx context.Context, workspaceID string, number int64, locale string) (ChatArticleRef, bool, error) {
+// ChatArticleOf is the article help center helpCenterID ("" the primary) shows under number, in
+// language locale, when its chat may read it; found is false for a draft, a number of no article, one
+// that help center does not show and one kept away from AI. It reads as that help center's reader.
+func (s *Service) ChatArticleOf(ctx context.Context, workspaceID, helpCenterID string, number int64, locale string) (ChatArticleRef, bool, error) {
 	var ref ChatArticleRef
 	var found bool
 	if number <= 0 {
 		return ref, false, nil
 	}
-	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+	err := s.inHelpChat(ctx, workspaceID, helpCenterID, func(tx pgx.Tx) error {
 		id, err := store.ChatKBArticleIDOf(ctx, tx, workspaceID, number)
 		if err != nil || id == "" {
 			return err
