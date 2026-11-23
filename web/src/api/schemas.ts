@@ -166,6 +166,9 @@ export const conversationSchema = z.object({
       instead_of: z.object({ id: z.string(), name: z.string() }).nullable().optional() }).nullable() }).nullable().optional(),
   // What the customer wrote last, one line: lists only, and missing when the customer never wrote.
   latest_customer_message: z.object({ excerpt: z.string(), created_at: z.string().datetime() }).optional(),
+  // The help center it came in through (a web form or help chat); null for one that came through none. An
+  // older server sends none.
+  help_center: z.object({ id: z.string().uuid(), name: z.string(), handle: z.string(), primary: z.boolean() }).nullable().default(null),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
 export const messageDeliverySchema = z.object({

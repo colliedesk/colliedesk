@@ -27,6 +27,8 @@ interface TimelinePanelProps {
   conversation?: Conversation;
   // The conversation's channel, named where the workspace has two of its type.
   channelLabel?: string;
+  // The help center it came through ("via Hardware"), where the workspace has two.
+  helpCenterLabel?: string;
   items: Message[];
   // Shown after the first customer message: what AI suggested or applied for it.
   afterFirstCustomerMessage?: ReactNode;
@@ -123,7 +125,7 @@ function SpamButton({ spam, onSpam }: { spam: boolean; onSpam: (spam: boolean) =
     {spam ? <BanIcon /> : <RotateCcwIcon />}<span className={spam ? 'spam-button-label' : undefined}>{spam ? messages.spam : messages.notSpam}</span></button>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, onRetryTimeline, emptyText, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, helpCenterLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, onRetryTimeline, emptyText, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onSpam, noticesFailed = false, canManageChannels = false, onBack, autofix = false, before, messageLabel, messageMenu, messageNote, currentAgentId }: TimelinePanelProps) {
   // A role that reads conversations but not their messages is told so instead of waiting for them.
   const readsMessages = useHolds()('messages:read');
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
@@ -160,6 +162,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
             {/* Status and priority are in the details; the line says what is pressing and who wrote (I1-a). */}
             <HeaderMark conversation={conversation} timezone={timezone} />
             {channelLabel && <span className="channel-pill">{channelLabel}</span>}
+            {helpCenterLabel && <span className="channel-pill">{helpCenterLabel}</span>}
             {/* Anyone can type any address into the help chat: say so, and link the chat it came from. */}
             {conversation.channel === 'help_chat' && <Part part={presenceViewPart} render={(view) => <view.HelpChatLine conversationId={conversation.id} />} />}
             <a className="timeline-contact" href={`/contacts/${conversation.contact_id}`} aria-label={messages.openContact(conversation.contact_name)}>

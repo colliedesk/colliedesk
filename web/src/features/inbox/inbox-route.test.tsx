@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { ReplyConflictError } from '../../api/client';
@@ -37,6 +37,10 @@ const views = vi.hoisted(() => ({
   create: vi.fn(), update: vi.fn(), remove: vi.fn(), restore: vi.fn(),
 }));
 vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
+// The workspace's help centers: one, the primary, unless a test says otherwise.
+const helpCenters = vi.hoisted(() => ({ list: vi.fn(async (): Promise<unknown> => ({ help_centers: [], limit: 20 })) }));
+vi.mock('../kb/help-centers-api', async (original) => ({ ...(await original<typeof import('../kb/help-centers-api')>()),
+  helpCentersApi: { list: helpCenters.list } }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
 // The drafts of the open conversation; a test sets what the server holds.
 const drafts = vi.hoisted(() => ({ list: vi.fn(async (_conversation: string, _before?: string): Promise<unknown> => ({ items: [], next_before: null })) }));
@@ -46,7 +50,7 @@ beforeEach(() => testRouter.reset());
 
 const conversation = (id: string, subject: string) => ({ latest_reply_number: 0,
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject,
-  status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], channel: 'email' as const, origin: null,
+  status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], channel: 'email' as const, origin: null, help_center: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
 });
 
@@ -1752,4 +1756,61 @@ test('a channel list whose channel names could not be read still has a title: ne
   testRouter.search = { channel_id: zalo, status: 'all' };
   renderRoute();
   expect(await screen.findByRole('heading', { level: 2, name: 'A channel' })).toBeInTheDocument();
+});
+
+const MAIN_CENTER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const HARDWARE_CENTER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const helpCenter = (id: string, name: string, primary: boolean) => ({
+  id, name, handle: primary ? null : 'hardware', primary, enabled: true, title: name, locale: 'en', require_approval: false, show_tags: false,
+  content_version: 1, updated_at: null, url: primary ? 'https://desk.example.com/help/acme' : 'https://desk.example.com/help/acme/hardware',
+});
+const formConversation = (id: string, subject: string, center: string, name: string, primary: boolean) => ({
+  ...conversation(id, subject), channel: 'web_form' as const, help_center: { id: center, name, handle: primary ? '' : 'hardware', primary },
+});
+
+test('the open conversation says which help center it came through once the workspace has two', async () => {
+  quietApis();
+  helpCenters.list.mockResolvedValue({ help_centers: [helpCenter(MAIN_CENTER, 'Main answers', true), helpCenter(HARDWARE_CENTER, 'Hardware', false)], limit: 20 });
+  const main = formConversation('11111111-1111-4111-8111-111111111111', 'Main question', MAIN_CENTER, 'Main answers', true);
+  const hardware = formConversation('33333333-3333-4333-8333-333333333333', 'Hardware question', HARDWARE_CENTER, 'Hardware', false);
+  const email = conversation('44444444-4444-4444-8444-444444444444', 'Email question');
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [main, hardware, email], page: 1, page_size: 50 });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /main question/i }));
+  await screen.findByRole('heading', { name: 'Main question' });
+  expect(await screen.findByText('via Main answers')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /hardware question/i }));
+  await screen.findByRole('heading', { name: 'Hardware question' });
+  expect(screen.getByText('via Hardware')).toBeInTheDocument();
+  expect(screen.queryByText('via Main answers')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /email question/i }));
+  await screen.findByRole('heading', { name: 'Email question' });
+  expect(screen.queryByText(/^via (Main answers|Hardware)$/)).toBeNull();
+});
+
+test('with one help center the header names none; a role that cannot read help centers still sees one that is not the primary', async () => {
+  quietApis();
+  helpCenters.list.mockClear();
+  helpCenters.list.mockResolvedValue({ help_centers: [helpCenter(MAIN_CENTER, 'Main answers', true)], limit: 20 });
+  const main = formConversation('11111111-1111-4111-8111-111111111111', 'Main question', MAIN_CENTER, 'Main answers', true);
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [main], page: 1, page_size: 50 });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /main question/i }));
+  await screen.findByRole('heading', { name: 'Main question' });
+  await waitFor(() => expect(helpCenters.list).toHaveBeenCalled());
+  expect(screen.queryByText('via Main answers')).toBeNull();
+  cleanup();
+
+  api.me.mockResolvedValue({ timezone: 'UTC', permissions: permissionsOf('agent').filter((permission) => permission !== 'help_center:read') });
+  helpCenters.list.mockClear();
+  const hardware = formConversation('33333333-3333-4333-8333-333333333333', 'Hardware question', HARDWARE_CENTER, 'Hardware', false);
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [hardware], page: 1, page_size: 50 });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /hardware question/i }));
+  await screen.findByRole('heading', { name: 'Hardware question' });
+  expect(await screen.findByText('via Hardware')).toBeInTheDocument();
+  expect(helpCenters.list).not.toHaveBeenCalled();
 });
