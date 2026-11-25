@@ -10,6 +10,7 @@ import { createQueryClient } from './query-client';
 import { resetProductAnalytics } from './lib/product-analytics';
 import { presenceViewPart } from './features/inbox/presence-part';
 import { permissionsOf, rolesOf } from './test-roles';
+import { settingsOf } from './features/autofix/autofix.test.fixture';
 import { autofixPart } from './features/autofix/autofix-part';
 
 // Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
@@ -756,6 +757,24 @@ test('Autofix is in preview: without the browser\'s key there is no Fixes link, 
   await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(true));
   expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/autofix/status'))).toBe(false);
   expect(screen.queryByRole('link', { name: /^Fixes/ })).not.toBeInTheDocument();
+});
+
+test('coming back from installing the GitHub App opens Settings → Autofix without the browser\'s key, and turns the key on', async () => {
+  localStorage.removeItem('colliedesk.autofix');
+  try {
+    serve({
+      '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+      '/api/v1/config': () => json(200, { ...config, autofix: { available: true, missing_settings: [] } }),
+      '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+      '/api/v1/autofix/settings': () => json(200, settingsOf({ repos: [] })),
+    });
+    open('/settings/autofix?github=connected');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Autofix' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Page not found' })).not.toBeInTheDocument();
+    expect(localStorage.getItem('colliedesk.autofix')).toBe('on');
+  } finally {
+    localStorage.removeItem('colliedesk.autofix');
+  }
 });
 
 test('with the browser\'s key on, Autofix shows: the Fixes link with its badge', async () => {
