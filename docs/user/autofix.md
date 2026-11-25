@@ -17,6 +17,8 @@ Autofix is in preview. Its screens (Fixes, Settings → Autofix and the block on
 only in a browser that turned it on: open the browser console on Colliedesk and run
 `localStorage.setItem('colliedesk.autofix', 'on')`, then reload. `localStorage.removeItem('colliedesk.autofix')`
 hides them again. This changes only what that browser shows: AI agents reach Autofix either way.
+Coming back from GitHub after installing the App turns it on in that browser, so an admin who
+installed from a link an AI agent gave them lands on Settings → Autofix and sees the outcome.
 
 ## Set up: Settings → Autofix
 

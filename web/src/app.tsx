@@ -42,7 +42,7 @@ import { mentionMessages } from './features/inbox/mention-messages';
 import { mentionsListPart } from './features/inbox/mentions-list-part';
 import { customersPageName } from './features/contacts/contact-page-name';
 import { autofixPart } from './features/autofix/autofix-part';
-import { autofixPreviewOn } from './features/autofix/autofix-preview';
+import { autofixPreviewOn, turnAutofixPreviewOnAfterGitHub } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
 import { knowledgeSearchFrom } from './features/kb/knowledge-search';
 import { channelsRoutePart, preloadChannelsPage } from './features/settings/channels/channels-preload';
@@ -641,7 +641,10 @@ const fixesRoute = createRoute({
 const autofixSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/autofix',
-  loader: (navigation) => (autofixPreviewOn() ? pageChunk(autofixPart)(navigation) : undefined),
+  loader: (navigation) => {
+    turnAutofixPreviewOnAfterGitHub(navigation.location.search as Record<string, unknown>);
+    return autofixPreviewOn() ? pageChunk(autofixPart)(navigation) : undefined;
+  },
   component: () => <AutofixScreen render={({ AutofixSettingsRoute }) => <AutofixSettingsRoute />} />,
 });
 const resultsShareRoute = createRoute({
