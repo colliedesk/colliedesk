@@ -25,7 +25,8 @@ uptime and self-hosted installs.
   inline images, tags and customers, with a reconcile report and undo.
 - **Knowledge base and public help center**: Markdown articles in collections with history and a
   trash, a media library with images and videos, a public help center without scripts,
-  your Freshdesk solution articles imported, and article links in replies.
+  your Freshdesk solution articles imported, and article links in replies. Articles end with a
+  helpful vote, a still-need-help step and related articles.
 - Team settings: invite, deactivate and reactivate agents.
 - **MCP server** so your AI agent (Claude, Codex, Cursor) can work the queue: search, read and
   triage conversations and add private notes, with read, draft-only, send and admin agent tokens; an
@@ -73,7 +74,6 @@ uptime and self-hosted installs.
 - Live chat widget into the same inbox ([#124](https://github.com/colliedesk/colliedesk/issues/124)).
 - A sandbox workspace for testing an AI agent safely ([#116](https://github.com/colliedesk/colliedesk/issues/116)).
 - No Colliedesk branding on anything your customers see ([#125](https://github.com/colliedesk/colliedesk/issues/125)).
-- Help center articles end with a helpful vote, a still-need-help step and related articles ([#338](https://github.com/colliedesk/colliedesk/issues/338)).
 
 How items get here: ideas start in [Discussions → Ideas](https://github.com/colliedesk/colliedesk/discussions/categories/ideas),
 where upvotes show how many teams need them. An idea we agree with becomes an issue labelled
