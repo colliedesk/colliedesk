@@ -154,6 +154,8 @@ type page struct {
 
 	Searched bool
 	Results  []searchResult
+	// SearchContact is the team's contact link under a search that found nothing (search-contact.go).
+	SearchContact *searchContact
 
 	// StructuredData are the page's JSON-LD blocks (structured-data.go).
 	StructuredData []template.JS
@@ -771,6 +773,7 @@ func (s *Site) search(response http.ResponseWriter, request *http.Request, v vie
 		switch len(data.Results) {
 		case 0:
 			data.ResultsLabel = fmt.Sprintf(v.text.NoResults, query)
+			data.SearchContact = searchContactOf(data, v.site.Name, query, v.locale())
 		case 1:
 			data.ResultsLabel = fmt.Sprintf(v.text.ResultOne, 1, query)
 		default:
