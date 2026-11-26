@@ -70,8 +70,8 @@ func TestTheSolutionsPageListsEveryPublishedCollectionAndItsArticles(t *testing.
 		`<title>Solutions · Solutions help</title>`,
 		`<h1>Solutions</h1>`,
 		fmt.Sprintf(`<link rel="canonical" href="https://desk.example.com%s/c/">`, base),
-		fmt.Sprintf(`<a href="%s/c/guides">Guides</a>`, base),
-		fmt.Sprintf(`<a href="%s/c/guides/billing">Billing</a>`, base),
+		fmt.Sprintf(`<a href="%s/c/guides" data-count="1">Guides</a>`, base),
+		fmt.Sprintf(`<a href="%s/c/guides/billing" data-count="1">Billing</a>`, base),
 		fmt.Sprintf(`<a href="%s/a/1-reset-your-password">Reset your password</a>`, base),
 		fmt.Sprintf(`<a href="%s/a/2-change-your-card">Change your card</a>`, base),
 	}, []string{"Secret roadmap", "Refund rules for agents", "Staff handbook", "Holiday rota"})
