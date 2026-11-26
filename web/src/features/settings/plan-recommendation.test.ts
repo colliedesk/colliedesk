@@ -6,28 +6,28 @@ const foundingOffer: PlanId[] = ['founding', 'team25'];
 const ladder: PlanId[] = ['solo', 'small', 'team', 'team25'];
 
 test('with no intent and no Freshdesk count, the smallest plan that holds the workspace seats leads', () => {
-  expect(recommendPlan({ offer: foundingOffer, seats: 3 })).toEqual({ plan: 'founding', pick: 'size', size: { count: 3, source: 'seats' } });
+  expect(recommendPlan({ offer: foundingOffer, seats: 3 })).toEqual({ plan: 'founding', pick: 'size', size: { count: 3, source: 'seats' }, seats: 3 });
   expect(recommendPlan({ offer: foundingOffer, seats: 10 }).plan).toBe('founding');
   expect(recommendPlan({ offer: foundingOffer, seats: 11 }).plan).toBe('team25');
   expect(recommendPlan({ offer: foundingOffer, seats: 25 }).plan).toBe('team25');
 });
 
 test('a team larger than every offered plan still leads with the largest one', () => {
-  expect(recommendPlan({ offer: foundingOffer, seats: 40 })).toEqual({ plan: 'team25', pick: 'size', size: { count: 40, source: 'seats' } });
+  expect(recommendPlan({ offer: foundingOffer, seats: 40 })).toEqual({ plan: 'team25', pick: 'size', size: { count: 40, source: 'seats' }, seats: 40 });
 });
 
 test('the agent count of a Freshdesk import beats the workspace seats', () => {
-  expect(recommendPlan({ offer: foundingOffer, freshdeskAgents: 14, seats: 3 })).toEqual({ plan: 'team25', pick: 'size', size: { count: 14, source: 'freshdesk' } });
-  expect(recommendPlan({ offer: foundingOffer, freshdeskAgents: 3, seats: 14 })).toEqual({ plan: 'founding', pick: 'size', size: { count: 3, source: 'freshdesk' } });
+  expect(recommendPlan({ offer: foundingOffer, freshdeskAgents: 14, seats: 3 })).toEqual({ plan: 'team25', pick: 'size', size: { count: 14, source: 'freshdesk' }, seats: 3 });
+  expect(recommendPlan({ offer: foundingOffer, freshdeskAgents: 3, seats: 14 })).toEqual({ plan: 'founding', pick: 'size', size: { count: 3, source: 'freshdesk' }, seats: 14 });
 });
 
 test('an import with no active agents is no count: the workspace seats decide', () => {
-  expect(recommendPlan({ offer: foundingOffer, freshdeskAgents: 0, seats: 12 })).toEqual({ plan: 'team25', pick: 'size', size: { count: 12, source: 'seats' } });
+  expect(recommendPlan({ offer: foundingOffer, freshdeskAgents: 0, seats: 12 })).toEqual({ plan: 'team25', pick: 'size', size: { count: 12, source: 'seats' }, seats: 12 });
 });
 
 test('the plan a visitor chose on the website leads whatever the size, and says it was their pick', () => {
-  expect(recommendPlan({ offer: foundingOffer, intent: 'team25', seats: 3 })).toEqual({ plan: 'team25', pick: 'intent', size: { count: 3, source: 'seats' } });
-  expect(recommendPlan({ offer: foundingOffer, intent: 'team25', freshdeskAgents: 14, seats: 3 })).toEqual({ plan: 'team25', pick: 'intent', size: { count: 14, source: 'freshdesk' } });
+  expect(recommendPlan({ offer: foundingOffer, intent: 'team25', seats: 3 })).toEqual({ plan: 'team25', pick: 'intent', size: { count: 3, source: 'seats' }, seats: 3 });
+  expect(recommendPlan({ offer: foundingOffer, intent: 'team25', freshdeskAgents: 14, seats: 3 })).toEqual({ plan: 'team25', pick: 'intent', size: { count: 14, source: 'freshdesk' }, seats: 3 });
 });
 
 test('a plan fits when the team is no larger than its agents', () => {

@@ -1,6 +1,6 @@
 import { billingMessages } from './billing-messages';
 import type { PlanCard } from './plan-options';
-import { fitsPlan } from './plan-recommendation';
+import { fitsTeam } from './plan-recommendation';
 import type { Recommendation } from './plan-recommendation';
 
 // fitLine is the sentence above a plan's button: why it fits this team, or why it does not. The reason of the
@@ -10,7 +10,7 @@ export function fitLine(card: PlanCard, recommendation: Recommendation | undefin
   if (!recommendation) return refusal ?? '';
   const { size, plan, pick } = recommendation;
   const team = size.source === 'freshdesk' ? billingMessages.fitFreshdesk(size.count) : billingMessages.fitSeats(size.count);
-  if (!fitsPlan(card.id, size.count)) return billingMessages.fitTooSmall(card.agents, size.count);
+  if (!fitsTeam(card.id, recommendation)) return billingMessages.fitTooSmall(card.agents, card.id === 'solo' ? recommendation.seats : size.count);
   if (refusal) return refusal;
   if (card.id === plan) {
     if (pick === 'intent') return billingMessages.fitChose(card.name);
@@ -21,5 +21,5 @@ export function fitLine(card: PlanCard, recommendation: Recommendation | undefin
 
 // isGreyed is true for a plan this team cannot buy: too small, or refused by the server.
 export function isGreyed(card: PlanCard, recommendation: Recommendation | undefined, refusal: string | undefined): boolean {
-  return refusal !== undefined || (recommendation !== undefined && !fitsPlan(card.id, recommendation.size.count));
+  return refusal !== undefined || (recommendation !== undefined && !fitsTeam(card.id, recommendation));
 }

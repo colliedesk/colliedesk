@@ -7,7 +7,7 @@ import { fitLine, isGreyed } from './plan-fit-line';
 import { isFoundingOffer, planCardsFor, priceFor } from './plan-options';
 import type { Interval, PlanCard, PlanId } from './plan-options';
 import type { PlanIntent } from './plan-intent';
-import { recommendPlan, teamSize } from './plan-recommendation';
+import { recommendPlan } from './plan-recommendation';
 
 interface PlanPickerProps {
   sellable: readonly CheckoutPlan[];
@@ -61,14 +61,14 @@ function Card({ card, interval, lead, fit, greyed, starting, anyStarting, places
 // and the only ink button; the others are plain buttons. Monthly or yearly is chosen once for all cards.
 export function PlanPicker({ sellable, refusals = [], seats, freshdeskAgents, placesLeft, starting, preferredPlan, compact = false, error, onRetry, onChoose }: PlanPickerProps) {
   const [interval, setInterval] = useState<Interval>('monthly');
-  const team = teamSize(freshdeskAgents, seats).count;
-  const unordered = planCardsFor(sellable, refusals, undefined, team);
+  // Solo is offered by workspace seats, the count the server bills and refuses on, not by the Freshdesk team.
+  const unordered = planCardsFor(sellable, refusals, undefined, seats);
   const foundingOffer = isFoundingOffer(unordered);
   // Team 25 is the only card with two periods in the offer, unless Solo is there too.
   const team25Only = foundingOffer && !unordered.some((card) => card.id === 'solo');
   const recommendation = unordered.length === 0 ? undefined : recommendPlan({ offer: unordered.map((card): PlanId => card.id), intent: preferredPlan, freshdeskAgents, seats });
   // The Founding offer puts the plan that fits first; the ladder keeps its order, except that a plan the visitor chose goes first.
-  const cards = planCardsFor(sellable, refusals, foundingOffer ? recommendation?.plan : preferredPlan, team);
+  const cards = planCardsFor(sellable, refusals, foundingOffer ? recommendation?.plan : preferredPlan, seats);
   const bothIntervals = cards.some((card) => card.prices.some((price) => price.interval === 'monthly') && card.prices.some((price) => price.interval === 'yearly'));
   const anyStarting = starting !== undefined;
   return (

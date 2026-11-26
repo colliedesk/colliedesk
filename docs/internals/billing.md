@@ -176,9 +176,10 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
   `/auth/cloud/signup` with a token fetched at that moment (Clerk tokens live about a minute).
 - Plan picker (`plan-options.ts`, `plan-picker.tsx`): while `checkout_plans` holds `founding` the cards are Founding
   (greyed with the server's reason when the workspace does not fit) and Team 25 (only when the server sells it);
-  Small and Team wait, as on colliedesk.com. Solo waits too, except for a team of one (the Freshdesk account's
-  agents, else the workspace seats, as for the recommendation): Founding is for 3 to 10 agents, so one person
-  gets Solo first (owner, 26/11/2026). The Monthly or Yearly choice above them is Team 25's, and Solo's when Solo
+  Small and Team wait, as on colliedesk.com. Solo waits too, except for a workspace of one seat (agents plus pending
+  invites, the count the server refuses Solo on): Founding is for 3 to 10 agents, so one person gets Solo
+  (owner, 26/11/2026). A larger Freshdesk account does not hide or grey Solo, since only the person who moves
+  needs a seat; it still decides which card leads. The Monthly or Yearly choice above them is Team 25's, and Solo's when Solo
   is shown. If the workspace can buy none of the cards (Founding refused, no Team 25 or Solo products) the whole ladder is shown, so the buyer
   is never left with nothing. Once Founding closes the ladder is back on its own.
 - Plan intent: the website's Team 25 link is `/sign-in?intent=trial&plan=team25`. `plan` is not `buy`: it starts no

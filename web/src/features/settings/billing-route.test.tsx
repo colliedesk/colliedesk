@@ -184,7 +184,7 @@ test('the agents of the Freshdesk account the workspace read decide which plan f
     preview: { agents: Array.from({ length: 14 }, (_, index) => agent(index + 1)) } }] });
   api.foundingSlots.mockResolvedValue({ slots: 10, taken: 3, open: true });
   api.me.mockResolvedValue(me('admin'));
-  api.billing.mockResolvedValue(free);
+  api.billing.mockResolvedValue(teamOfThree);
   renderRoute();
   await waitFor(() => expect(screen.getAllByRole('article').map((card) => card.getAttribute('aria-label'))).toEqual(['Team 25', 'Founding']));
   expect(screen.getByText('Your Freshdesk has 14 agents.')).toBeInTheDocument();
