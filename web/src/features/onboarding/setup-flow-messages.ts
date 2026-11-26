@@ -62,8 +62,9 @@ export const agentStepMessages = {
   tokenRoute: 'Use an agent token instead',
   tokenText: 'For an app that cannot sign in with OAuth.',
   guide: 'Read the AI agent guide',
-  connected: 'An AI agent is connected.',
-  manageBefore: 'See or disconnect it in ',
+  // The step is the workspace's: a teammate's AI app connects it too, so the links are to this person's own.
+  connected: 'An AI agent is connected to this workspace.',
+  manageBefore: 'See or disconnect yours in ',
   apps: 'Connected AI apps',
   manageBetween: ' or ',
   tokens: 'agent tokens',

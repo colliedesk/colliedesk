@@ -34,13 +34,20 @@ function progress(states: Partial<Record<Key, string>> = {}, recommended: Key | 
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status }));
 const config = { cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
   limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 }, product_analytics: { enabled: false, key: null, host: null, realm: null }, ai: { server_provider: false } };
+// A token of this person's, as the sessions list returns it.
+const agentToken = { id: '66666666-6666-4666-8666-666666666666', agent_id: '11111111-1111-4111-8111-111111111111', agent_email: 'sam@example.com', agent_name: 'Sam',
+  label: 'Nightly tagging', token: { kind: 'custom', role: null, role_held: true, permissions: ['conversations:read'], legacy_tier: null }, role: null, permissions: ['conversations:read'],
+  current: false, created_at: '2026-11-01T00:00:00Z', last_seen_at: '2026-11-01T00:00:00Z', expires_at: '2099-12-01T00:00:00Z', revoked_at: null, app: null };
 const invite = { id: '33333333-3333-4333-8333-333333333333', email: 'kim@example.com', roles: rolesOf('agent'), created_by_email: 'sam@example.com',
   created_at: '2026-10-30T04:00:00Z', expires_at: '2026-11-06T04:00:00Z', used_at: null, revoked_at: null };
 
 // world is what the server holds; creating an invite moves the invite step on, as the server does.
 // permissions replaces what the role holds, for a custom role.
-// appOrigin is the server's APP_ORIGIN: Colliedesk Cloud's is https://app.colliedesk.com.
-function serve(world: { role?: 'admin' | 'agent'; permissions?: string[]; setup: Progress; signedOut?: boolean; setupDown?: boolean; invites?: unknown[]; appOrigin?: string }) {
+// appOrigin is the server's APP_ORIGIN: Colliedesk Cloud's is https://app.colliedesk.com. cloud is the config
+// Colliedesk Cloud sends (cloud sign-in with billing); configDown answers the public config with an error.
+// sessions are the person's sessions and tokens; creating a token connects the AI agent step, as the server does.
+function serve(world: { role?: 'admin' | 'agent'; permissions?: string[]; setup: Progress; signedOut?: boolean; setupDown?: boolean; invites?: unknown[]; appOrigin?: string;
+  cloud?: boolean; configDown?: boolean; sessions?: unknown[]; token?: unknown }) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     const path = url.split('?')[0];
     const method = init?.method ?? 'GET';
@@ -49,8 +56,13 @@ function serve(world: { role?: 'admin' | 'agent'; permissions?: string[]; setup:
       agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', roles: rolesOf(world.role ?? 'admin'), timezone_override: null },
       workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' }, timezone: 'UTC', token: null, permissions: world.permissions ?? permissionsOf(world.role ?? 'admin'), plan: null,
     });
-    if (path === '/api/v1/config') return json(200, { ...config, app_origin: world.appOrigin ?? '' });
-    if (path === '/api/v1/auth/sessions') return json(200, { items: [] });
+    if (path === '/api/v1/config') return world.configDown ? json(503, { error: { code: 'unavailable', message: 'down' } })
+      : json(200, { ...config, app_origin: world.appOrigin ?? '', ...(world.cloud ? { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true } } : {}) });
+    if (path === '/api/v1/auth/tokens' && method === 'POST') {
+      world.setup = { ...world.setup, steps: world.setup.steps.map((step) => (step.key === 'agent' ? { ...step, state: 'connected' } : step)) };
+      return json(201, { token: 'cdk_agent_7Qm2vK9xT4pLw8RzN1cY5bH3sJ6dF0aE', session: { ...agentToken, label: 'Claude Code' } });
+    }
+    if (path === '/api/v1/auth/sessions') return json(200, { items: world.sessions ?? [] });
     if (path === '/api/v1/workspace/setup') return world.setupDown ? json(503, { error: { code: 'unavailable', message: 'down' } }) : json(200, world.setup);
     if (path === '/api/v1/channels') return json(200, { items: [], types: [{ type: 'email', available: true, count: 0, default_channel_id: null }] });
     if (path === '/api/v1/imports') return json(200, { items: [] });
@@ -296,7 +308,8 @@ test('an address under /setup that names no screen is the not-found page of ever
 const agentFirst: Key[] = ['agent', 'email', 'import', 'invite', 'first_reply'];
 
 test('on Colliedesk Cloud the AI agent step leads with Add to Claude, then the address for any app with OAuth, then a token', async () => {
-  serve({ setup: progress({}, 'agent', agentFirst), appOrigin: 'https://app.colliedesk.com' });
+  // The page runs on the workspace's own host; the address is APP_ORIGIN's, written with a trailing slash.
+  serve({ setup: progress({}, 'agent', agentFirst), appOrigin: 'https://app.colliedesk.com/', cloud: true });
   open('/setup/agent');
   expect(await title('Connect your AI agent')).toBeInTheDocument();
   expect(screen.getByText('Recommended')).toBeInTheDocument();
@@ -328,13 +341,79 @@ test('on a server of its own the AI agent step has no Add to Claude: the app is 
 });
 
 test('with an AI agent connected the step says so, where to disconnect it, and Continue opens the next step', async () => {
-  serve({ setup: progress({ agent: 'connected' }, null, agentFirst), appOrigin: 'https://app.colliedesk.com' });
+  serve({ setup: progress({ agent: 'connected' }, null, agentFirst), appOrigin: 'https://app.colliedesk.com', cloud: true });
   const router = open('/setup/agent');
   await title('Connect your AI agent');
-  expect(screen.getByRole('status')).toHaveTextContent('An AI agent is connected.');
+  expect(screen.getByRole('status')).toHaveTextContent('An AI agent is connected to this workspace.');
   expect(screen.getByRole('link', { name: 'Connected AI apps' })).toHaveAttribute('href', '/settings/account');
-  expect(screen.getByRole('link', { name: 'agent tokens' })).toHaveAttribute('href', '/settings/ai');
+  expect(screen.getByRole('link', { name: 'agent tokens' })).toHaveAttribute('href', '/settings/ai?tab=external#agent-tokens-heading');
   expect(continueButton()).toHaveAccessibleName('Next: Receive customer email');
   fireEvent.click(continueButton());
   await waitFor(() => expect(router.state.location.pathname).toBe('/setup/email'));
+});
+
+test('a server of its own at app.colliedesk.com is still not Colliedesk Cloud: no Add to Claude', async () => {
+  serve({ setup: progress({}, null, agentFirst), appOrigin: 'https://app.colliedesk.com' });
+  open('/setup/agent');
+  await title('Connect your AI agent');
+  expect(await screen.findByText('https://app.colliedesk.com/mcp')).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /Add to Claude/ })).not.toBeInTheDocument();
+});
+
+test('while the server\'s address is unknown the AI agent step shows no address to copy and no Add to Claude', async () => {
+  serve({ setup: progress({}, 'agent', agentFirst), configDown: true });
+  open('/setup/agent');
+  await title('Connect your AI agent');
+  expect(await screen.findByText('Use an agent token instead')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Read the AI agent guide' })).toBeInTheDocument();
+  expect(screen.queryByText(/\/mcp$/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Copy MCP address' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /Add to Claude/ })).not.toBeInTheDocument();
+});
+
+test('the token card loads only once its route is opened', async () => {
+  serve({ setup: progress({}, 'agent', agentFirst), appOrigin: 'https://desk.example.com' });
+  open('/setup/agent');
+  await title('Connect your AI agent');
+  expect(await screen.findByText('https://desk.example.com/mcp')).toBeInTheDocument();
+  const asked = (path: string) => fetchMock.mock.calls.filter(([url]) => String(url).split('?')[0] === path).length;
+  expect(asked('/api/v1/auth/sessions')).toBe(0);
+  expect(asked('/api/v1/roles')).toBe(0);
+  fireEvent.click(screen.getByText('Use an agent token instead'));
+  expect(await screen.findByRole('radiogroup', { name: 'Agent app' })).toBeInTheDocument();
+  await waitFor(() => expect(asked('/api/v1/auth/sessions')).toBeGreaterThan(0));
+});
+
+test('a token created on the AI agent step connects it at once: Continue does not wait for the next check', async () => {
+  serve({ setup: progress({}, 'agent', agentFirst), appOrigin: 'https://desk.example.com' });
+  open('/setup/agent');
+  await title('Connect your AI agent');
+  fireEvent.click(await screen.findByText('Use an agent token instead'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Create token' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Create a token' });
+  fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Claude Code' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Create token' }));
+  await waitFor(() => expect(continueButton()).toBeEnabled());
+  expect(screen.getByRole('status')).toHaveTextContent('An AI agent is connected to this workspace.');
+});
+
+test('someone who holds a token but may neither create nor revoke tokens still finds the token route, and the link to their tokens', async () => {
+  const permissions = permissionsOf('agent').filter((name) => name !== 'team:create_tokens');
+  serve({ permissions, setup: progress({ agent: 'connected' }, null, agentFirst), appOrigin: 'https://desk.example.com', sessions: [agentToken] });
+  open('/setup/agent');
+  await title('Connect your AI agent');
+  expect(await screen.findByText('Use an agent token instead')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'agent tokens' })).toBeInTheDocument();
+});
+
+test('someone with no token route sees only their own connected apps linked from the connected step', async () => {
+  const permissions = permissionsOf('agent').filter((name) => name !== 'team:create_tokens');
+  serve({ permissions, setup: progress({ agent: 'connected' }, null, agentFirst), appOrigin: 'https://desk.example.com' });
+  open('/setup/agent');
+  await title('Connect your AI agent');
+  expect(screen.getByRole('status')).toHaveTextContent('An AI agent is connected to this workspace.');
+  expect(screen.getByRole('link', { name: 'Connected AI apps' })).toHaveAttribute('href', '/settings/account');
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/auth/sessions'))).toBe(true));
+  expect(screen.queryByRole('link', { name: 'agent tokens' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Use an agent token instead')).not.toBeInTheDocument();
 });

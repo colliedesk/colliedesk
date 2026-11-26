@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { channelListSchema } from './channels';
-import { contactListSchema, conversationPageSchema, emailChannelSettingsSchema } from './schemas';
+import { contactListSchema, conversationPageSchema, emailChannelSettingsSchema, setupProgressSchema } from './schemas';
 import { channelLabel } from '../features/inbox/filter-messages';
 import { contactAddress } from '../features/contacts/contact-messages';
 
@@ -57,5 +57,24 @@ describe('the mail switch of the email settings', () => {
 
   it('reads an older server without a mail switch as nothing to move', () => {
     expect(emailChannelSettingsSchema.parse(settings(undefined)).mail_switch).toEqual({ imported: false, mailboxes: [] });
+  });
+});
+
+describe('the setup steps of a newer server', () => {
+  // A tab still running the previous web app reads the setup of a server that has a step, a state or a
+  // recommendation it does not know: the guide still loads.
+  const setup = {
+    steps: [{ key: 'email', name: 'Receive customer email', state: 'working', detail: null },
+      { key: 'calendar', name: 'Connect your calendar', state: 'none', detail: null },
+      { key: 'import', name: 'Import from Freshdesk', state: 'paused', detail: null },
+      { key: 'first_reply', name: 'Answer your first email', state: 'none', detail: null }],
+    complete: false, recommended: 'calendar',
+    reply_target_presets: [], reply_target_hours: { kept: false, day_minutes: 540, hours: [] }, reply_target_suggestion: null,
+  };
+  it('drops a step it does not know, keeps a known step in a state it does not know, and recommends nothing it cannot show', () => {
+    const parsed = setupProgressSchema.parse(setup);
+    expect(parsed.steps.map((step) => step.key)).toEqual(['email', 'import', 'first_reply']);
+    expect(parsed.steps[1].state).toBe('paused');
+    expect(parsed.recommended).toBeNull();
   });
 });

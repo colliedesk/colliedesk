@@ -12,6 +12,7 @@ import { gmailMessages } from './gmail-messages';
 import type { MailboxProvider, MailboxReturn } from './gmail-return';
 import { microsoftMessages } from './microsoft-messages';
 import { selfHostGuide } from '../../lib/self-host-guide';
+import { serverRealm } from './use-mcp-address';
 
 const messages = { ...shared, ...gmailMessages, ...microsoftMessages };
 
@@ -83,8 +84,7 @@ function returnText(returned: MailboxReturn): string {
   return Object.hasOwn(text.returnErrors, reason) ? text.returnErrors[reason] : text.connectFailed;
 }
 
-// useCloud tells Colliedesk Cloud the way the server tells it (realm in problem-report-text.go): the realm
-// analytics name, else cloud sign-in with billing. Read here, in this chunk, so the main bundle does not grow.
+// useCloud tells Colliedesk Cloud the way the server tells it (serverRealm).
 function useCloud() {
   return useRealm() === 'cloud';
 }
@@ -92,8 +92,7 @@ function useCloud() {
 // useRealm is 'cloud', 'self-hosted', or undefined while the public config is on its way.
 function useRealm(): 'cloud' | 'self-hosted' | undefined {
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
-  if (!config) return undefined;
-  return (config.product_analytics.realm ?? (config.cloud_sign_in.enabled && config.billing.enabled ? 'cloud' : null)) === 'cloud' ? 'cloud' : 'self-hosted';
+  return config ? serverRealm(config) : undefined;
 }
 
 // GmailDataDisclosure says, before an admin goes to Google's consent page, how Colliedesk Cloud handles Google

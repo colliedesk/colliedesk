@@ -102,10 +102,12 @@ Each screen shows:
     address with **Copy**: add it in the app as a custom connector (a remote MCP server) and leave any
     token field empty; the app opens a Colliedesk page where you sign in and choose **Allow**. **Use an
     agent token instead** opens the same card as Settings → AI & agents → External AI agents, with a
-    token and the steps for each app, for an app that cannot sign in with OAuth. Once an AI agent is
-    connected, the step says so and links to **Connected AI apps** (Settings → Account) and the agent
-    tokens (Settings → AI & agents), where you disconnect or revoke it. The step reads the connection
-    again every 5 seconds, so it follows what you allow in the other tab.
+    token and the steps for each app, for an app that cannot sign in with OAuth. On Colliedesk Cloud the
+    step shows **Add to Claude** and the address once it has read the server's settings. Once an AI agent
+    is connected to the workspace (by you or a teammate), the step says so and links to your
+    **Connected AI apps** (Settings → Account) and, if you can see them, the agent tokens (Settings → AI &
+    agents), where you disconnect or revoke yours. A token you create here counts at once; otherwise the
+    step reads the connection again every 5 seconds, so it follows what you allow in the other tab.
   - **Invite your team**: create an invite. Its one-time link stays on screen until you leave the step.
   - **Answer your first email**: **Send yourself a test message** opens a conversation from your own
     address. Answer it, and the reply is emailed to you. **Open the inbox** is there too: conversations
@@ -136,7 +138,7 @@ and reply targets steps the buttons stay pinned at the bottom of the screen, and
   Settings. **Revoke** on a pending invite needs `team:revoke`.
   Answering the first email and connecting an AI agent are everyone's steps: an app connected with OAuth
   acts as you, with what your roles allow. **Use an agent token instead** shows only to someone who may
-  create tokens (`team:create_tokens`) or revoke them (`team:revoke`).
+  create tokens (`team:create_tokens`) or revoke them (`team:revoke`), or who holds a token already.
 - To hide Quick start for you only, open **Settings → Account → Preferences** and turn off **Show the setup guide**; turn
   it on to bring it back (with **Try more**, if this browser skipped it). Other team members keep their own choice.
 

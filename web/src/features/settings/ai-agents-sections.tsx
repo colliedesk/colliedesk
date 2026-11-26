@@ -6,6 +6,7 @@ import { can } from '../../lib/can';
 import { messages } from '../../messages';
 import { AgentTokensSection, followableRoles } from './agent-tokens-section';
 import type { TokenChoice } from './agent-tokens-section';
+import { useMCPAddress } from './use-mcp-address';
 
 // agentTokensShown says whether the agent tokens have anything to show this session: a person who may make tokens
 // (not through a token of their own) or revoke a teammate's, or who holds a token already.
@@ -18,9 +19,7 @@ export function agentTokensShown(me: { permissions: string[]; token?: unknown },
 export function AIAgentsSections() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-  // Where an AI app signs in with OAuth: APP_ORIGIN's /mcp (on Cloud, one address for every workspace).
-  const mcpAddress = `${config.data?.app_origin || window.location.origin}/mcp`;
+  const mcpAddress = useMCPAddress()?.address;
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
   const creates = can(me.data, 'team:create_tokens') && !me.data?.token;
   // team:revoke stops a teammate's token: the list shows for it, even while no token is in use.
