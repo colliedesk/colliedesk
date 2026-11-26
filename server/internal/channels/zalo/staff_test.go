@@ -89,3 +89,85 @@ func TestAddingATeamMemberLeavesAConversationACustomerWroteInOpen(t *testing.T) 
 		t.Fatalf("conversation = %s, want open: a customer wrote in it", got)
 	}
 }
+
+// status is a conversation's status, by the external id of one of its messages.
+func (a at) status(t *testing.T, messageExternalID string) string {
+	t.Helper()
+	return a.one(t, `SELECT c.status FROM conversations c JOIN messages m ON m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+		WHERE c.workspace_id=$1 AND m.external_id=$2`, "zalo:"+messageExternalID)
+}
+
+// Adding someone by mistake must not close their own requests: what they wrote to the OA alone, and
+// a group conversation the team already took on (assigned or answered), stay open.
+func TestAddingAPersonLeavesTheirOneToOneChatsAndConversationsTheTeamTookOnOpen(t *testing.T) {
+	a := newAt(t)
+	a.listenToGroups(t)
+	oa := a.channel.ExternalAccount
+	a.receive(t, event("user_send_text", oa, "1110007", oa, "m-direct", "my order is late"))
+	a.receive(t, event("user_send_group_text", oa, "1110007", "g-1", "m-assigned", "the invoice is wrong"))
+	assigned := a.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-assigned'`)
+	me := a.agentID
+	if _, err := a.store.UpdateConversation(context.Background(), a.workspaceID, assigned, store.ConversationUpdate{AssigneeID: func() **string { p := &me; return &p }(), ActorID: a.agentID}); err != nil {
+		t.Fatal(err)
+	}
+
+	a.addStaff(t, `{"staff_user_ids":["5550001","1110007"]}`)
+
+	for _, id := range []string{"m-direct", "m-assigned"} {
+		if got := a.status(t, id); got != "open" {
+			t.Fatalf("%s conversation = %s, want open", id, got)
+		}
+	}
+}
+
+// Two team members who wrote in one conversation: adding the second closes it, as both are on the list.
+func TestAddingTheSecondTeamMemberClosesTheConversationBothWroteIn(t *testing.T) {
+	a := newAt(t)
+	a.listenToGroups(t)
+	oa := a.channel.ExternalAccount
+	a.receive(t, event("user_send_group_text", oa, "1110005", "g-1", "m-one", "let me look"),
+		event("user_send_group_text", oa, "1110006", "g-1", "m-two", "I'll check too"))
+	one := a.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-one'`)
+	from := a.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-two'`)
+	if from != one {
+		message := a.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-two'`)
+		if _, err := a.store.MoveMessages(context.Background(), a.workspaceID, from, store.MoveInput{MessageIDs: []string{message},
+			To: store.MoveTarget{ConversationID: one}, CloseSource: true}, store.Actor{AgentID: a.agentID}, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	a.addStaff(t, `{"staff_user_ids":["5550001","1110005"]}`)
+	if got := a.status(t, "m-one"); got != "open" {
+		t.Fatalf("after the first = %s, want open: the second is not on the list yet", got)
+	}
+	a.addStaff(t, `{"staff_user_ids":["5550001","1110005","1110006"]}`)
+	if got := a.status(t, "m-one"); got != "closed" {
+		t.Fatalf("after the second = %s, want closed", got)
+	}
+}
+
+// A customer message whose sender is unknown (an imported one) is still a customer's: the conversation stays open.
+func TestAConversationWithAnUnknownSendersMessageStaysOpen(t *testing.T) {
+	a := newAt(t)
+	a.listenToGroups(t)
+	oa := a.channel.ExternalAccount
+	a.receive(t, event("user_send_group_text", oa, "1110005", "g-1", "m-team", "let me look"),
+		event("user_send_group_text", oa, "1110001", "g-1", "m-customer", "the scale prints nothing"))
+	team := a.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-team'`)
+	from := a.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-customer'`)
+	message := a.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND external_id='zalo:m-customer'`)
+	if _, err := a.store.MoveMessages(context.Background(), a.workspaceID, from, store.MoveInput{MessageIDs: []string{message},
+		To: store.MoveTarget{ConversationID: team}, CloseSource: true}, store.Actor{AgentID: a.agentID}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.pool.Exec(context.Background(), `UPDATE channel_thread_items SET sender_kind=NULL,sender_value=NULL WHERE workspace_id=$1 AND message_id=$2`, a.workspaceID, message); err != nil {
+		t.Fatal(err)
+	}
+
+	a.addStaff(t, `{"staff_user_ids":["5550001","1110005"]}`)
+
+	if got := a.status(t, "m-team"); got != "open" {
+		t.Fatalf("conversation = %s, want open: an unknown customer wrote in it", got)
+	}
+}

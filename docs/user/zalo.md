@@ -68,9 +68,11 @@ The channel's page then has four tabs of its own, before AI and History:
    request. **Add staff account** picks one of the people who wrote to the OA lately, or takes a pasted
    Zalo user id; **Remove** asks first, then their new messages count as a customer's.
    A team member who wrote in a group before you added them opened conversations that are nobody's
-   request. Adding them closes each open or pending conversation only they wrote in, without a word to
-   the group; a conversation a customer also wrote in stays open. The channel's history counts how many
-   closed, and each can be reopened.
+   request. Adding them closes each open or pending group conversation that only your team wrote in and
+   nobody took on yet, without a word to the group. A conversation stays open when a customer also
+   wrote in it, when it is assigned or answered, or when it is a one-to-one chat with the OA, so adding
+   someone by mistake closes none of their requests. The channel's history (`GET
+   /api/v1/channels/events`, `colliedesk_channels_events`) counts how many closed, and each can be reopened.
 4. **Messages**: the commands customers type and what the OA says by itself; see
    [The Messages tab](#the-messages-tab).
 
@@ -253,7 +255,7 @@ Connect an OA with the API:
 3. `config` also takes `staff_user_ids`, `groups` (a group's id to its organization) and
    `site_verification` (Zalo's verification code; the TXT value, the meta tag or the file's name may be
    sent instead, and `""` clears it). `PATCH /api/v1/channels/{id}` changes them; a field left out is kept.
-   Adding ids to `staff_user_ids` closes, quietly, the conversations only those people wrote in (see **Staff** above).
+   Adding ids to `staff_user_ids` quietly closes the group conversations only the team wrote in (see **Staff** above).
 
 Addresses:
 
