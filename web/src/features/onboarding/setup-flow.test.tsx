@@ -333,11 +333,22 @@ test('on Colliedesk Cloud the AI agent step leads with Add to Claude, then the a
 });
 
 test('on a server of its own the AI agent step has no Add to Claude: the app is added with this server\'s address', async () => {
-  serve({ setup: progress({}, null, ['email', 'import', 'agent', 'invite', 'first_reply']) });
+  serve({ setup: progress({}, null, ['email', 'import', 'agent', 'invite', 'first_reply']), appOrigin: 'https://desk.example.com' });
   open('/setup/agent');
   await title('Connect your AI agent');
+  expect(await screen.findByText('https://desk.example.com/mcp')).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: /Add to Claude/ })).not.toBeInTheDocument();
-  expect(await screen.findByText(`${window.location.origin}/mcp`)).toBeInTheDocument();
+});
+
+test('a server that names no APP_ORIGIN gets no address made up from the page\'s own host', async () => {
+  serve({ setup: progress({}, null, agentFirst) });
+  open('/setup/agent');
+  await title('Connect your AI agent');
+  expect(await screen.findByText('Use an agent token instead')).toBeInTheDocument();
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/config'))).toBe(true));
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.queryByText(`${window.location.origin}/mcp`)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Copy MCP address' })).not.toBeInTheDocument();
 });
 
 test('with an AI agent connected the step says so, where to disconnect it, and Continue opens the next step', async () => {

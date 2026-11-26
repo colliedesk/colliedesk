@@ -102,8 +102,8 @@ Each screen shows:
     address with **Copy**: add it in the app as a custom connector (a remote MCP server) and leave any
     token field empty; the app opens a Colliedesk page where you sign in and choose **Allow**. **Use an
     agent token instead** opens the same card as Settings → AI & agents → External AI agents, with a
-    token and the steps for each app, for an app that cannot sign in with OAuth. On Colliedesk Cloud the
-    step shows **Add to Claude** and the address once it has read the server's settings. Once an AI agent
+    token and the steps for each app, for an app that cannot sign in with OAuth. **Add to Claude** and the
+    address appear once the step has read the server's settings. Once an AI agent
     is connected to the workspace (by you or a teammate), the step says so and links to your
     **Connected AI apps** (Settings → Account) and, if you can see them, the agent tokens (Settings → AI &
     agents), where you disconnect or revoke yours. A token you create here counts at once; otherwise the

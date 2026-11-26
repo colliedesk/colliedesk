@@ -9,15 +9,16 @@ export function serverRealm(config: PublicConfig): 'cloud' | 'self-hosted' {
 }
 
 // mcpAddressOf is where an AI app signs in: APP_ORIGIN's /mcp, one address for every workspace on Cloud, where the
-// page itself runs on the workspace's own host. A server from before workspace hosts sends no APP_ORIGIN and runs
-// everything on the page's origin.
-export function mcpAddressOf(config: PublicConfig): string {
-  return `${(config.app_origin || window.location.origin).replace(/\/+$/, '')}/mcp`;
+// page itself runs on the workspace's own host, so the page's origin is never a stand-in for it.
+export function mcpAddressOf(config: PublicConfig): string | undefined {
+  const origin = (config.app_origin || '').replace(/\/+$/, '');
+  return origin ? `${origin}/mcp` : undefined;
 }
 
 // useMCPAddress is this server's MCP address and whether it is Colliedesk Cloud, or undefined while the public
-// config is on its way or could not be read: no address is better than a wrong one.
+// config is on its way, could not be read or names no APP_ORIGIN: no address is better than a wrong one.
 export function useMCPAddress(): { address: string; cloud: boolean } | undefined {
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
-  return config ? { address: mcpAddressOf(config), cloud: serverRealm(config) === 'cloud' } : undefined;
+  const address = config && mcpAddressOf(config);
+  return config && address ? { address, cloud: serverRealm(config) === 'cloud' } : undefined;
 }
