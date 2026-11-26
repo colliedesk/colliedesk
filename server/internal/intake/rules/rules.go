@@ -5,6 +5,8 @@
 // Nothing here names a channel type.
 package rules
 
+import "time"
+
 // Actions a decision takes.
 const (
 	// Ignore throws the message away with what was being collected with it (a cancel command).
@@ -49,6 +51,12 @@ const (
 	UnmatchedKept     = "unmatched_kept"
 	UnmatchedNotice   = "unmatched_notice"
 )
+
+// IdleGap is how long a conversation of a chat's place (a one-to-one chat, a group) stays the one its
+// thread key continues: a customer message sent this long after the conversation's last customer
+// message or reply is another request, and a new conversation opens (rule JoinPolicy). Fixed, not a
+// setting; a reply quoting its message and a reopen command still join it, and AI intake is not bound by it.
+const IdleGap = 2 * time.Hour
 
 // Thread is what looking up the conversation a message continues found.
 type Thread struct {

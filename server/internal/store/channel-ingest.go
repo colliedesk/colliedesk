@@ -697,7 +697,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 		// A gathering decided to be a new request opens one, whatever conversation its thread found since.
 		if facts.RefConversation == "" && (request.Intake == nil || !request.Intake.ForceNew) {
-			if facts.Thread, err = findChannelThread(ctx, tx, channel, in.Thread, shared, senderKey, now); err != nil {
+			if facts.Thread, err = findChannelThread(ctx, tx, channel, in.Thread, shared, in.Scope != "", senderKey, in.SentAt, now); err != nil {
 				return result, err
 			}
 		}
@@ -1070,11 +1070,12 @@ func (s *Store) contactForIdentity(ctx context.Context, tx pgx.Tx, channel chann
 	return contactID, nil
 }
 
-// findChannelThread finds the conversation a message continues: an earlier message it references,
-// then a thread key, as the channel's join policy allows. In a scope several customers share (shared),
-// a reference to another sender's message (senderKey of its journal row) is no evidence of which
+// findChannelThread finds the conversation a message sent at sent continues: an earlier message it
+// references, then a thread key, as the channel's join policy allows; in a chat's place (a message with
+// a scope: a one-to-one chat, a group) a key no longer continues a conversation idle for rules.IdleGap.
+// In a scope several customers share (shared), a reference to another sender's message (senderKey of its journal row) is no evidence of which
 // request the message belongs to, and says so instead of matching.
-func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel, thread channels.Thread, shared bool, senderKey string, now time.Time) (rules.Thread, error) {
+func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel, thread channels.Thread, shared, chat bool, senderKey string, sent, now time.Time) (rules.Thread, error) {
 	var found rules.Thread
 	policy := channel.Settings.JoinPolicy
 	if policy.Kind == channels.JoinNever {
@@ -1135,25 +1136,34 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 			}
 		}
 	}
+	// The idle gap is counted from when the message was sent (a batch's first), not when it was decided:
+	// a collected batch is decided minutes later.
+	sentAt := now
+	if !sent.IsZero() && sent.Before(now) {
+		sentAt = sent
+	}
 	for _, key := range thread.Keys {
 		var conversationID, status string
-		var updatedAt time.Time
+		var updatedAt, lastMessageAt time.Time
 		// Where several customers write, the place's key is everyone's: it continues only a
-		// conversation this sender wrote in.
-		err := tx.QueryRow(ctx, `SELECT c.id::text,c.status,c.updated_at FROM conversation_thread_keys k
+		// conversation this sender wrote in. Its last message is a customer's or a reply, never a note.
+		err := tx.QueryRow(ctx, `SELECT c.id::text,c.status,c.updated_at,COALESCE((SELECT max(m.created_at) FROM messages m
+				WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind IN ('incoming','outgoing') AND m.detached_at IS NULL),c.created_at)
+			FROM conversation_thread_keys k
 			JOIN conversations c ON c.workspace_id=k.workspace_id AND c.id=k.conversation_id
 			WHERE k.workspace_id=$1 AND k.channel_type=$2 AND k.key=$3 AND (NOT $4 OR EXISTS(SELECT 1 FROM messages m
 				JOIN channel_inbound_events e ON e.workspace_id=m.workspace_id AND e.message_id=m.id
 				WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' AND m.detached_at IS NULL AND e.sender_key=$5))
 			ORDER BY k.created_at DESC LIMIT 1`,
-			channel.WorkspaceID, string(channel.Type), key, shared, senderKey).Scan(&conversationID, &status, &updatedAt)
+			channel.WorkspaceID, string(channel.Type), key, shared, senderKey).Scan(&conversationID, &status, &updatedAt, &lastMessageAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			continue
 		}
 		if err != nil {
 			return found, fmt.Errorf("match thread key: %w", err)
 		}
-		if joins(status, updatedAt) {
+		idle := chat && !lastMessageAt.After(sentAt.Add(-rules.IdleGap))
+		if joins(status, updatedAt) && !idle {
 			return rules.Thread{ConversationID: conversationID}, nil
 		}
 		return rules.Thread{Refused: true}, nil
@@ -1374,7 +1384,7 @@ func (s *Store) joinsWithoutCommand(ctx context.Context, tx pgx.Tx, channel chan
 	if joinOpen {
 		return false, nil
 	}
-	found, err := findChannelThread(ctx, tx, channel, in.Thread, shared, senderKey, now)
+	found, err := findChannelThread(ctx, tx, channel, in.Thread, shared, in.Scope != "", senderKey, in.SentAt, now)
 	if err != nil || found.ConversationID == "" {
 		return false, err
 	}

@@ -202,6 +202,12 @@ The names in code type below are the names of the settings.
   only a missing or doubled space between the phrase's words ("báolỗi" is "Báo lỗi", "báo lỗix" is not);
   `exact` is the whole message, accents kept, in any case ("Hủy" matches "hủy", never "huy" or "Hủy đi").
   A phrase that starts with `#` or `/` keeps it: `/loi` matches "/loi …", not a message starting "lỗi".
+- In a chat (one-to-one or a group), a customer's message joins the conversation it continues only while that conversation had
+  a customer message or a reply less than **2 hours** before the message was sent; later it starts a new
+  request. Notes do not count, nor what the team writes in the group from their own Zalo. A reply quoting a
+  message of the older conversation still joins it, and so does the reopen command. This is fixed, not a
+  setting, and binds the rules only: with intake on, AI decides these messages. Email and web forms are
+  not split this way.
 - `unmatched: join_open`, on a scope that opens conversations only on a command (`mode: commands`): a
   message that names no command joins the customer's open or pending conversation on the channel when
   they have exactly one. With none or several it is kept, unresolved, in the chat place: it shows in the
