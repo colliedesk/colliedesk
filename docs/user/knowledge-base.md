@@ -1520,6 +1520,11 @@ to serve on the domain again.
 - Only published articles outside the trash that are for [everyone](#visibility). Drafts, the trash,
   articles for help chat or agents only, and collections with nothing of these in or below them never
   appear: not in a page, a count, a search or an address.
+- The header of every page links **Home** and **Solutions**, like the tabs of a Freshdesk portal, and
+  marks the one the reader is in: Home on the home page, Solutions on the Solutions page and on every
+  collection and article. The words are in the page's language. **Solutions** (`/c/`) lists every
+  collection, the ones inside another set in under it, each with its first 50 articles and a link to
+  the rest. On a phone both links stay in the header row.
 - The home page lists the top-level collections, each with its first articles and the collections
   inside it. A collection page lists those collections, each with its first articles, and its own
   articles in their [order](#order), 50 a page. An article page lists the other articles of its

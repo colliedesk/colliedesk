@@ -63,6 +63,7 @@
 <header class="masthead">
 <div class="wrap masthead-row">
 <a class="brand" href="{{.Home}}">{{with .Logo}}<img class="brand-logo" src="{{.URL}}" alt="{{.Alt}}"{{if and .Width .Height}} width="{{.Width}}" height="{{.Height}}"{{end}}>{{else}}{{.SiteTitle}}{{end}}</a>
+<nav class="site-nav" aria-label="{{.T.HelpCenterMenu}}"><ul><li><a href="{{.Home}}"{{if eq .Tab "home"}} aria-current="page"{{end}}>{{.T.Home}}</a></li><li><a href="{{.SolutionsURL}}"{{if eq .Tab "solutions"}} aria-current="page"{{end}}>{{.T.Solutions}}</a></li></ul></nav>
 {{- with .Website}}
 <a class="site-link" href="{{.URL}}" title="{{.Name}}">{{.Name}}</a>
 {{- end}}
