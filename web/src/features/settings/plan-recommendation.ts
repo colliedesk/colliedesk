@@ -39,6 +39,7 @@ export function recommendPlan({ offer, intent, freshdeskAgents, seats }: { offer
   const size = teamSize(freshdeskAgents, seats);
   if (intent && offer.includes(intent)) return { plan: intent, pick: 'intent', size, seats };
   const bySize = [...offer].sort((a, b) => agentsOf(a) - agentsOf(b));
-  const plan = bySize.find((candidate) => fitsPlan(candidate, size.count)) ?? bySize[bySize.length - 1];
+  // Solo leads only when it holds both the team that is moving and the workspace seats the server bills.
+  const plan = bySize.find((candidate) => fitsPlan(candidate, size.count) && (candidate !== 'solo' || fitsPlan(candidate, seats))) ?? bySize[bySize.length - 1];
   return { plan, pick: 'size', size, seats };
 }

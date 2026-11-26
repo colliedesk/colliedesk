@@ -77,6 +77,17 @@ test('a team of one the server refuses Solo for (too much stored) sees it greyed
   expect(within(card('Founding')).getByRole('button')).toBeEnabled();
 });
 
+test('a visitor who chose Team 25 for a one-seat workspace with a larger Freshdesk sees Solo described by the seats', () => {
+  render(<PlanPicker sellable={foundingOpen} seats={1} freshdeskAgents={3} preferredPlan="team25" onChoose={vi.fn()} />);
+  expect(within(card('Solo')).getByText('You have 1 agent. Solo also fits.')).toBeInTheDocument();
+});
+
+test('on the ladder a workspace of three seats whose Freshdesk lists one agent is not led to Solo, which it cannot buy', () => {
+  render(<PlanPicker sellable={ladder} seats={3} freshdeskAgents={1} onChoose={vi.fn()} />);
+  expect(within(card('Small')).getByText('Fits your team')).toBeInTheDocument();
+  expect(primaries()[0]).toBe(within(card('Small')).getByRole('button'));
+});
+
 test('a small Freshdesk account says so beside what Founding covers', () => {
   render(<PlanPicker sellable={foundingOpen} seats={1} freshdeskAgents={2} onChoose={vi.fn()} />);
   expect(within(card('Founding')).getByText('Your Freshdesk has 2 agents. Founding covers up to 10.')).toBeInTheDocument();

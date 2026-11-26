@@ -9,7 +9,9 @@ import type { Recommendation } from './plan-recommendation';
 export function fitLine(card: PlanCard, recommendation: Recommendation | undefined, refusal: string | undefined): string {
   if (!recommendation) return refusal ?? '';
   const { size, plan, pick } = recommendation;
-  const team = size.source === 'freshdesk' ? billingMessages.fitFreshdesk(size.count) : billingMessages.fitSeats(size.count);
+  // Solo is judged on the workspace seats, so its line names them, not the Freshdesk team.
+  const team = card.id === 'solo' ? billingMessages.fitSeats(recommendation.seats)
+    : size.source === 'freshdesk' ? billingMessages.fitFreshdesk(size.count) : billingMessages.fitSeats(size.count);
   if (!fitsTeam(card.id, recommendation)) return billingMessages.fitTooSmall(card.agents, card.id === 'solo' ? recommendation.seats : size.count);
   if (refusal) return refusal;
   if (card.id === plan) {
