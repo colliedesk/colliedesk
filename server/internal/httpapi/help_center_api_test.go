@@ -525,8 +525,8 @@ func TestEveryArticleAnswerCarriesTheAddressTheHelpCenterServesItAt(t *testing.T
 	}
 }
 
-// A topic's name carries how many published articles it holds, in data-count, so custom CSS can show
-// the number beside it (as a Freshdesk portal does) without changing the default pages. The home
+// A topic's name and its home card link carry how many published articles it holds, in data-count, so
+// custom CSS can show the number (as a Freshdesk portal does) without changing the default pages. The home
 // card counts its sections too; the Solutions page lists each section apart, so it counts its own.
 func TestHelpCenterTopicNamesCarryTheirArticleCount(t *testing.T) {
 	api, service, _, _ := testAPIWithStorage(t)
@@ -543,7 +543,8 @@ func TestHelpCenterTopicNamesCarryTheirArticleCount(t *testing.T) {
 
 	base := "/help/" + slug
 	wantPage(t, visit(site, base, "192.0.2.11"), http.StatusOK,
-		[]string{`<h3 class="card-tab"><a href="` + base + `/c/billing" data-count="3">Billing</a></h3>`}, nil)
+		[]string{`<h3 class="card-tab"><a href="` + base + `/c/billing" data-count="3">Billing</a></h3>`,
+			`<a class="card-more" href="` + base + `/c/billing" data-count="3">All 3 articles<span aria-hidden="true"> →</span></a>`}, nil)
 	wantPage(t, visit(site, base+"/c/", "192.0.2.11"), http.StatusOK, []string{
 		`<h2 class="solutions-name"><a href="` + base + `/c/billing" data-count="1">Billing</a></h2>`,
 		`<h3 class="solutions-name"><a href="` + base + `/c/billing/cards" data-count="2">Cards</a></h3>`,

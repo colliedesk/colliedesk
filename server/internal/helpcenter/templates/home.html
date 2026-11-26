@@ -21,7 +21,7 @@
 {{- if .Children}}
 <ul class="chips" aria-label="{{.SectionsLabel}}">{{range .Children}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ul>
 {{- end}}
-<a class="card-more" href="{{.URL}}">{{.MoreLabel}}<span aria-hidden="true"> →</span></a>
+<a class="card-more" href="{{.URL}}" data-count="{{.Count}}">{{.MoreLabel}}<span aria-hidden="true"> →</span></a>
 </div>
 </li>
 {{- end}}

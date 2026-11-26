@@ -1300,7 +1300,8 @@ both `help_center:update` and `kb_articles:publish`, for a person and an agent t
 either it is refused and the public pages stay unchanged.
 
 Each topic name on the home page and on the Solutions page carries its number of published articles
-in `data-count`, which the default pages do not show. On the home page it counts the topic's sections
+in `data-count`, which the default pages do not show; so does the link under each home page card. On
+the home page it counts the topic's sections
 too; on the Solutions page, which lists each section apart, it counts the topic's own articles. To show
 it beside the name, as a Freshdesk portal does:
 
