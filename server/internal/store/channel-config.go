@@ -524,6 +524,7 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 	}
 	// Save runs on every change, with no value when the configuration itself did not change, so a
 	// type that keeps the channel's state in its own table (for older images) stays in step.
+	change.ActorAgentID, change.ActorTokenID = actor.AgentID, actor.TokenID
 	event, err := adapter.Config().Save(ctx, tx, updated, change)
 	if err != nil {
 		return channels.Channel{}, err
