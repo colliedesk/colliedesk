@@ -71,7 +71,11 @@ gate closed, error, past its time) waits for a person; the rules never decide in
 
 1. The code is the table, not the design's: an open command whose thread key finds a conversation
    joins it; a reference the join policy refuses lets the next reference try, while a refused thread key
-   ends the search (`join_policy`).
+   ends the search (`join_policy`). In a chat's scope (a message with a scope: one-to-one and groups;
+   not email, web forms or the help chat), a thread key whose conversation's last incoming or
+   outgoing message (never a note) is `rules.IdleGap` (2 h, fixed) before the message's `SentAt` (a batch's
+   first, not the flush time) is refused too; references are never refused by it, since a quote is
+   evidence of its own. AI intake is not bound by it (owner's decision, 26 Nov 2026).
 2. **Shared scopes** (`Definition.SharedScopes`, a chat's groups): a reference to another sender's
    message (its journal row's `sender_key`) is no match there (`reference_other_customer`, default), so
    a reply to someone else never files the message in their request. Only a shared scope reads the
