@@ -16,7 +16,7 @@ const (
 	channelSettings = `"settings":{"type":"object","description":"The channel's rules over its type's defaults: join_policy {kind: always_reopen, within_days with days, never}, ` +
 		`default_tags, default_priority, default_assignee_id, rate_limits {window_seconds, per_sender, new_conversations, scope}, commands (name to {action, phrases, tags, priority}), review, scopes, notices {received}. Never a secret."}`
 	channelConfig = `"config":{"type":"object","description":"The type's configuration: email {support_address, sender_name}; web_form {allowed_origins}; help_chat {greeting, suggestions (at most 4), instructions, widget_origins}; ` +
-		`zalo {oa_id, app_id (both to add one), staff_user_ids, groups (group id to organization), site_verification (the code Zalo gives the app's URL prefix with the HTML file method; the meta tag or file name may be given; empty clears it)}. ` +
+		`zalo {oa_id, app_id (both to add one), staff_user_ids (adding one quietly closes the open conversations only that person wrote in), groups (group id to organization), site_verification (the code Zalo gives the app's URL prefix with the HTML file method; the meta tag or file name may be given; empty clears it)}. ` +
 		`Setting up Zalo: Zalo takes the webhook only on a verified address, so give the person the channel's verification_prefix_url to verify in the Zalo app (URL prefix, HTML file method), ` +
 		`set the code Zalo shows as site_verification with colliedesk_channels_update, then give them webhook_url for the app's webhook settings."}`
 	channelDefault    = `"is_default":{"type":"boolean","enum":[true],"description":"true makes the channel its type's default; the one that was loses it."}`

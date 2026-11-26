@@ -240,6 +240,14 @@ func (config) Validate(_ context.Context, _ pgx.Tx, _ string, current *channels.
 	return change, nil
 }
 
+// staffList is the team list a change sets, or nil when it leaves the list alone.
+func staffList(value ConfigValue) []string {
+	if value.StaffUserIDs == nil {
+		return nil
+	}
+	return *value.StaffUserIDs
+}
+
 func contains(list []string, value string) bool {
 	for _, item := range list {
 		if item == value {
@@ -256,6 +264,14 @@ func (config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, cha
 	if value.Groups != nil {
 		groups, _ = json.Marshal(*value.Groups)
 	}
+	var added []string
+	if value.StaffUserIDs != nil {
+		current, err := readSettings(ctx, tx, channel.WorkspaceID, channel.ID)
+		if err != nil {
+			return channels.Event{}, err
+		}
+		added = addedStaff(current.Staff, *value.StaffUserIDs)
+	}
 	if value.AppID == nil {
 		// A change of the rest of the channel (its name, its settings) leaves its row as it is.
 		if _, err := tx.Exec(ctx, `UPDATE zalo_channels SET staff_user_ids=COALESCE($3,staff_user_ids),groups=COALESCE($4::jsonb,groups),
@@ -263,7 +279,7 @@ func (config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, cha
 			WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID, value.StaffUserIDs, groups, value.SiteVerification); err != nil {
 			return channels.Event{}, fmt.Errorf("save zalo channel: %w", err)
 		}
-		return channels.Event{Kind: "config_changed", Detail: change.Detail}, nil
+		return closeTeamOnly(ctx, tx, channel, added, staffList(value), change)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO zalo_channels(workspace_id,channel_id,app_id,staff_user_ids,groups,site_verification)
 		VALUES($1,$2,$3,COALESCE($4,'{}'::text[]),COALESCE($5::jsonb,'{}'),NULLIF($6,''))
@@ -273,7 +289,7 @@ func (config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, cha
 		channel.WorkspaceID, channel.ID, value.AppID, value.StaffUserIDs, groups, value.SiteVerification); err != nil {
 		return channels.Event{}, fmt.Errorf("save zalo channel: %w", err)
 	}
-	return channels.Event{Kind: "config_changed", Detail: change.Detail}, nil
+	return closeTeamOnly(ctx, tx, channel, added, staffList(value), change)
 }
 
 // settings is the channel's row of zalo_channels.

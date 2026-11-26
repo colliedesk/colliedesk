@@ -537,7 +537,15 @@ func eventFacts(event store.ChannelEvent) ([]string, *int) {
 	var count *int
 	switch event.Kind {
 	case "config_changed":
-		for name := range detail {
+		for name, value := range detail {
+			// How many conversations a change closed (a Zalo channel's newly added staff) is its count, not a setting.
+			if name == "closed_conversations" {
+				if n, ok := value.(float64); ok {
+					closed := int(n)
+					count = &closed
+				}
+				continue
+			}
 			fields = append(fields, name)
 		}
 		slices.Sort(fields)

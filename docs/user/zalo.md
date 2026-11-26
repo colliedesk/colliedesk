@@ -67,6 +67,13 @@ The channel's page then has four tabs of its own, before AI and History:
 3. **Staff**: the Zalo accounts of your team. What they write in a group is the team's, never a customer's
    request. **Add staff account** picks one of the people who wrote to the OA lately, or takes a pasted
    Zalo user id; **Remove** asks first, then their new messages count as a customer's.
+   A team member who wrote in a group before you added them opened conversations that are nobody's
+   request. Adding them closes each open or pending group conversation that only your team wrote in and
+   nobody took on yet, without a word to the group. A conversation stays open when a customer also
+   wrote in it, when it is assigned or answered, or when it is a one-to-one chat with the OA. Add only
+   your team: a customer added by mistake loses their unanswered group conversations to Closed (reopen
+   them from the inbox, then remove them from Staff). The channel's history counts how
+   many closed, and each can be reopened.
 4. **Messages**: the commands customers type and what the OA says by itself; see
    [The Messages tab](#the-messages-tab).
 
@@ -249,6 +256,8 @@ Connect an OA with the API:
 3. `config` also takes `staff_user_ids`, `groups` (a group's id to its organization) and
    `site_verification` (Zalo's verification code; the TXT value, the meta tag or the file's name may be
    sent instead, and `""` clears it). `PATCH /api/v1/channels/{id}` changes them; a field left out is kept.
+   Adding ids to `staff_user_ids` quietly closes the group conversations only the team wrote in (see **Staff** above);
+   `GET /api/v1/channels/events` gives how many as the `count` of that `config_changed` entry.
 
 Addresses:
 

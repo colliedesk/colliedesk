@@ -582,6 +582,8 @@ type ConfigChange struct {
 	ExternalAccount *string
 	// Detail is recorded in the channel's history; never a secret.
 	Detail map[string]any
+	// ActorAgentID and ActorTokenID are who saves the change, for what Save changes beyond the channel.
+	ActorAgentID, ActorTokenID string
 }
 
 // Event is what a saved change adds to the channel's history.
