@@ -325,15 +325,21 @@ export const invitePreviewSchema = z.object({
 export type InvitePreview = z.infer<typeof invitePreviewSchema>;
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema, continue_url: z.string().url().optional() }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const onboardingGoalSchema = z.enum(['leave_helpdesk', 'shared_inbox', 'lower_cost', 'ai_agents', 'other']) satisfies z.ZodType<Generated<'OnboardingGoal'>>;
-const setupStepKeys = ['email', 'import', 'ai_drafts', 'reply_targets', 'invite', 'first_reply'] as const;
+const setupStepKeys = ['email', 'import', 'ai_drafts', 'reply_targets', 'agent', 'invite', 'first_reply'] as const;
 export type SetupStepKey = (typeof setupStepKeys)[number];
 const presetTargetSchema = z.object({ first_response_minutes: z.number().int().nullable().optional(), resolution_minutes: z.number().int().nullable().optional() });
 const replyTargetPresetKeySchema = z.enum(['within_the_hour', 'same_day', 'next_business_day']);
+// A step a newer server adds is left out, and a state it adds reads as not done, so a tab still running an
+// earlier web app keeps its setup guide through a deploy.
+const setupStepSchema = z.object({ key: z.enum(setupStepKeys), name: z.string(), state: z.string(), detail: z.string().nullable() });
+type SetupProgressRead = Omit<Generated<'SetupProgress'>, 'steps'> & { steps: (Omit<Generated<'SetupStep'>, 'state'> & { state: string })[] };
 export const setupProgressSchema = z.object({
-  steps: z.array(z.object({ key: z.enum(setupStepKeys), name: z.string(),
-    state: z.enum(['none', 'waiting', 'working', 'needs_attention', 'running', 'done', 'on', 'nothing_to_read', 'unavailable', 'alone', 'invited', 'joined', 'sent']), detail: z.string().nullable() })),
+  steps: z.array(z.unknown()).transform((items) => items.flatMap((item) => {
+    const parsed = setupStepSchema.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  })),
   complete: z.boolean(),
-  recommended: z.enum(['email', 'import', 'invite']).nullable(),
+  recommended: z.enum(['email', 'import', 'invite', 'agent']).nullable().catch(null),
   reply_target_presets: z.array(z.object({ key: replyTargetPresetKeySchema, name: z.string(),
     targets: z.object({ urgent: presetTargetSchema, high: presetTargetSchema, normal: presetTargetSchema, low: presetTargetSchema }) })),
   // The hours a preset applies with, and one business day of them in minutes.
@@ -341,7 +347,7 @@ export const setupProgressSchema = z.object({
     hours: z.array(z.object({ day: z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']), open: z.boolean(), from: z.string().optional(), to: z.string().optional() })) }),
   // Null once targets are on, or for someone who may not change them.
   reply_target_suggestion: z.object({ preset: replyTargetPresetKeySchema, basis: z.enum(['history', 'no_history', 'import_running']), median_first_reply_minutes: z.number().int().nullable() }).nullable(),
-}) satisfies z.ZodType<Generated<'SetupProgress'>>;
+}) satisfies z.ZodType<SetupProgressRead>;
 export type SetupProgress = z.infer<typeof setupProgressSchema>;
 export type ReplyTargetPreset = SetupProgress['reply_target_presets'][number];
 export type ReplyTargetPresetKey = ReplyTargetPreset['key'];

@@ -16,6 +16,7 @@ const (
 	SetupImport       = "import"
 	SetupAIDrafts     = "ai_drafts"
 	SetupReplyTargets = "reply_targets"
+	SetupAgent        = "agent"
 	SetupInvite       = "invite"
 	SetupFirstReply   = "first_reply"
 )
@@ -23,7 +24,8 @@ const (
 // setupNames are the steps as the setup guide names them.
 var setupNames = map[string]string{
 	SetupEmail: "Receive customer email", SetupImport: "Import from Freshdesk", SetupAIDrafts: "Turn on AI drafts",
-	SetupReplyTargets: "Set reply targets", SetupInvite: "Invite your team", SetupFirstReply: "Answer your first email",
+	SetupReplyTargets: "Set reply targets", SetupAgent: "Connect your AI agent", SetupInvite: "Invite your team",
+	SetupFirstReply: "Answer your first email",
 }
 
 // SetupStep is one step of getting started. Detail is a reason code for a step that needs attention.
@@ -35,7 +37,7 @@ type SetupStep struct {
 }
 
 // SetupProgress is where a workspace stands on getting started, the goal's step first. Complete counts the
-// four core steps only: AI drafts and reply targets are offers that never hold the setup back.
+// four core steps only: AI drafts, reply targets and an AI agent are offers that never hold the setup back.
 type SetupProgress struct {
 	Steps       []SetupStep `json:"steps"`
 	Complete    bool        `json:"complete"`
@@ -55,10 +57,15 @@ type SetupOptions struct {
 }
 
 // setupOffers are the steps offered on the way, which complete does not wait for.
-var setupOffers = map[string]bool{SetupAIDrafts: true, SetupReplyTargets: true}
+var setupOffers = map[string]bool{SetupAIDrafts: true, SetupReplyTargets: true, SetupAgent: true}
 
 // setupFirstStep is the step each sign-up goal starts with; any other goal keeps the usual order.
-var setupFirstStep = map[string]string{"leave_helpdesk": SetupImport, "shared_inbox": SetupEmail, "lower_cost": SetupInvite}
+var setupFirstStep = map[string]string{"leave_helpdesk": SetupImport, "shared_inbox": SetupEmail, "lower_cost": SetupInvite, "ai_agents": SetupAgent}
+
+// agentConnected is true for a workspace ($1) with an AI agent that can work at $2: a live agent token, or an app
+// connected with OAuth (a grant whose code an app exchanged; one still waiting for its code is no connection).
+const agentConnected = `EXISTS (SELECT 1 FROM sessions WHERE workspace_id=$1 AND scope IS NOT NULL AND revoked_at IS NULL AND expires_at>$2
+	AND (scope<>'oauth' OR oauth_connected_at IS NOT NULL))`
 
 // importFinished is true for a workspace ($1) with an import that finished and was not undone.
 var importFinished = importFinishedAfter("")
@@ -85,7 +92,7 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 	if err != nil {
 		return SetupProgress{}, err
 	}
-	var importState, invite, firstReply, aiDrafts, replyTargets string
+	var importState, invite, firstReply, aiDrafts, replyTargets, agent string
 	var hours ReplyTargetHours
 	var suggestion *ReplyTargetSuggestion
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
@@ -99,8 +106,9 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 				WHEN EXISTS (SELECT 1 FROM pairing_links WHERE workspace_id=$1 AND kind='invite' AND used_at IS NULL AND revoked_at IS NULL AND expires_at>$2) THEN 'invited'
 				ELSE 'alone' END,
 			CASE WHEN EXISTS (SELECT 1 FROM messages m JOIN channel_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
-				WHERE m.workspace_id=$1 AND m.kind='outgoing' AND m.notice_kind IS NULL AND o.status='sent') THEN 'sent' ELSE 'none' END`,
-			workspaceID, now).Scan(&importState, &invite, &firstReply)
+				WHERE m.workspace_id=$1 AND m.kind='outgoing' AND m.notice_kind IS NULL AND o.status='sent') THEN 'sent' ELSE 'none' END,
+			CASE WHEN `+agentConnected+` THEN 'connected' ELSE 'none' END`,
+			workspaceID, now).Scan(&importState, &invite, &firstReply, &agent)
 		if err != nil {
 			return err
 		}
@@ -115,12 +123,13 @@ func (s *Store) SetupProgress(ctx context.Context, workspaceID string, now time.
 		SetupImport:       {Key: SetupImport, State: importState},
 		SetupAIDrafts:     {Key: SetupAIDrafts, State: aiDrafts},
 		SetupReplyTargets: {Key: SetupReplyTargets, State: replyTargets},
+		SetupAgent:        {Key: SetupAgent, State: agent},
 		SetupInvite:       {Key: SetupInvite, State: invite},
 		SetupFirstReply:   {Key: SetupFirstReply, State: firstReply},
 	}
 	// AI drafts read what the import brought; reply targets come before the invites, so teammates see due
-	// times from their first day.
-	base := []string{SetupEmail, SetupImport, SetupAIDrafts, SetupReplyTargets, SetupInvite}
+	// times from their first day. An AI agent comes after the offers that shape the inbox it will work.
+	base := []string{SetupEmail, SetupImport, SetupAIDrafts, SetupReplyTargets, SetupAgent, SetupInvite}
 	order := base
 	progress := SetupProgress{Steps: make([]SetupStep, 0, len(base)+1), ReplyTargetPresets: ReplyTargetPresets(hours.DayMinutes),
 		ReplyTargetHours: hours, ReplyTargetSuggestion: suggestion}
@@ -157,6 +166,8 @@ func setupDone(step SetupStep) bool {
 		return step.State == "joined"
 	case SetupAIDrafts, SetupReplyTargets:
 		return step.State == "on"
+	case SetupAgent:
+		return step.State == "connected"
 	}
 	return step.State == "sent"
 }

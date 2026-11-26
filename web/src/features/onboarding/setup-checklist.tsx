@@ -1,10 +1,9 @@
 import { useEffect, useId, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { OnboardingGoal, SetupProgress, SetupStepKey } from '../../api/schemas';
+import type { SetupProgress, SetupStepKey } from '../../api/schemas';
 import { preloadSetupStep } from './setup-flow-part';
 import { track } from '../../lib/product-analytics';
-import { messages } from '../../messages';
 import { setupMessages } from './setup-messages';
 import { highlightedStep, nothingToDo, quickStartCount, setUpKeys, stepIsDone, visibleSteps } from './setup-steps';
 import type { Permissions } from '../../lib/can';
@@ -18,7 +17,6 @@ interface SetupChecklistProps {
   progress: SetupProgress;
   // me holds the permissions that decide which steps this person takes.
   me: Permissions;
-  goal?: OnboardingGoal | null;
   workspaceName: string;
   // skipped leaves Try more out; onSkip asks for it (true) or brings it back (false).
   skipped?: boolean;
@@ -39,11 +37,11 @@ function Group({ title, action, children }: { title: string; action?: ReactNode;
   </section>;
 }
 
-// SetupChecklist is what Quick start opens: how far the workspace is ("2 of 6" and a bar of one segment per step),
-// then Set up (what it takes to receive and answer customer email) and Try more (the invites, the two offers and an
-// AI agent), which the person may skip. The server orders the steps by the sign-up goal; this only drops the ones
+// SetupChecklist is what Quick start opens: how far the workspace is ("2 of 7" and a bar of one segment per step),
+// then Set up (what it takes to receive and answer customer email) and Try more (the two offers, an AI agent and the
+// invites), which the person may skip. The server orders the steps by the sign-up goal; this only drops the ones
 // the person's roles cannot take. Done steps are ticked and struck through; the next one to do is highlighted.
-export function SetupChecklist({ progress, me, goal, workspaceName, skipped = false, onSkip }: SetupChecklistProps) {
+export function SetupChecklist({ progress, me, workspaceName, skipped = false, onSkip }: SetupChecklistProps) {
   const client = useQueryClient();
   const steps = visibleSteps(progress, me);
   const setUp = steps.filter((step) => setUpKeys.has(step.key));
@@ -81,15 +79,6 @@ export function SetupChecklist({ progress, me, goal, workspaceName, skipped = fa
       </li>
     );
   };
-  // The AI agent guide is a page of the docs: never counted, first in Try more for a team that signed up for it.
-  const mcp = <li key="mcp" className="checklist-step" data-state="todo" data-step="mcp">
-    <span className="setup-mark" aria-hidden="true" />
-    <a href={messages.mcpURL} target="_blank" rel="noreferrer">
-      <span className="setup-title">{setupMessages.mcp.title}</span>
-      <span className="setup-state">{setupMessages.mcp.state}</span>
-    </a>
-    <span className="setup-time">{setupMessages.mcp.time}</span>
-  </li>;
   const offered = tryMore.some((step) => !nothingToDo(step));
   return <>
     <header className="quick-start-head">
@@ -102,7 +91,7 @@ export function SetupChecklist({ progress, me, goal, workspaceName, skipped = fa
       {setUp.length > 0 && <Group title={setupMessages.setUp}>{setUp.map(row)}</Group>}
       <Group title={setupMessages.tryMore} action={offered && <button type="button" className="link-action quick-start-skip" onClick={() => onSkip(!skipped)}>
         {skipped ? setupMessages.unskip : setupMessages.skip}</button>}>
-        {!skipped && (goal === 'ai_agents' ? [mcp, ...tryMore.map(row)] : [...tryMore.map(row), mcp])}
+        {!skipped && tryMore.map(row)}
       </Group>
     </div>
   </>;

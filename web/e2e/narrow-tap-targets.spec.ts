@@ -155,7 +155,7 @@ test('on a 375 px screen the links inside a sentence on Members and on a web for
   await page.screenshot({ path: test.info().outputPath('web-form-375.png'), fullPage: true });
 });
 
-test('on a 375 px screen the setup flow\'s AI drafts and reply targets steps are tap-sized, each preset row included', async ({ page }) => {
+test('on a 375 px screen the setup flow\'s AI drafts, reply targets and AI agent steps are tap-sized, each preset row included', async ({ page }) => {
   await newDesk(page, 'Narrow Offers');
   // This server has no built-in AI: the drafts step offers to add a provider.
   await page.goto(`${servers.main}/setup/ai_drafts`);
@@ -168,4 +168,11 @@ test('on a 375 px screen the setup flow\'s AI drafts and reply targets steps are
   await expectTapSized(page.locator('.setup-flow'), 'setup flow, reply targets step');
   // A preset is chosen by its row, the radio's label.
   await expectTapSized(page.getByRole('group', { name: 'Reply targets' }), 'reply targets presets', 'label');
+
+  // The AI agent step: the address with Copy, and the token route opened with its host tabs.
+  await page.goto(`${servers.main}/setup/agent`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Connect your AI agent' })).toBeVisible();
+  await page.getByText('Use an agent token instead').click();
+  await expect(page.getByRole('radiogroup', { name: 'Agent app' })).toBeVisible();
+  await expectTapSized(page.locator('.setup-flow'), 'setup flow, AI agent step');
 });

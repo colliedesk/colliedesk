@@ -1,0 +1,10 @@
+/* The setup flow's AI agent step: each way to connect is a short block, the no-key ways first. */
+.setup-agent { display: grid; gap: var(--space-6); }
+.setup-agent p { margin: 0; }
+.setup-agent-way { display: grid; gap: var(--space-2); }
+.setup-agent-way h2 { margin: 0; font-size: var(--fs-body); font-weight: 600; }
+.setup-agent-way .button svg { width: 14px; height: 14px; }
+.setup-agent-address { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.setup-agent-address code { overflow-wrap: anywhere; }
+.setup-agent-token { display: grid; gap: var(--space-3); }
+.setup-agent-token > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 500; }

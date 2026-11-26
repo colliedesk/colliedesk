@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { channelsApi } from '../../api/channels';
 import type { ChannelCreate, ChannelType } from '../../api/channels';
-import type { SetupStepKey } from '../../api/schemas';
+import type { Me, SetupStepKey } from '../../api/schemas';
 import { useCreateAction } from '../../api/use-create';
 import { emailChannel } from '../../channels/email';
 import type { SetupProps } from '../../channels/registry';
@@ -12,11 +12,16 @@ import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 import { InvitesSection } from '../settings/invites-section';
 import { useInvites } from '../settings/use-invites';
 import { flowMessages as m } from './setup-flow-messages';
+import { AgentStep } from './setup-agent-step';
+import { useSetupFollows } from './use-setup-follows';
 
 // The import page is a chunk of its own, shared with Settings → Import.
 const importPart = lazyPart(() => import('../settings/import-route'));
 
 interface StepProps {
+  me: Me;
+  // ready: the person's own part of the step is done, as the server reports it.
+  ready: boolean;
   admin: boolean;
   // canInvite: the person may list and create invites (team:read and team:invite), not managing channels.
   canInvite: boolean;
@@ -32,20 +37,9 @@ export function StepBody({ step, ...props }: StepProps & { step: SetupStepKey })
     case 'email': return <EmailStep {...props} />;
     case 'import': return <Part part={importPart} failed={<PartUnavailable />} render={({ ImportRoute }) => <ImportRoute />} />;
     case 'invite': return <InviteStep {...props} />;
+    case 'agent': return <AgentStep me={props.me} connected={props.ready} />;
     default: return <FirstReplyStep {...props} />;
   }
-}
-
-// useSetupFollows reloads the setup progress whenever data a step changes reloads (not on its first load), so
-// Continue follows a save at once instead of at the next poll.
-function useSetupFollows(updatedAt: number) {
-  const client = useQueryClient();
-  const seen = useRef(updatedAt);
-  useEffect(() => {
-    const before = seen.current;
-    seen.current = updatedAt;
-    if (before !== 0 && before !== updatedAt) void client.invalidateQueries({ queryKey: ['setup'] });
-  }, [client, updatedAt]);
 }
 
 function LoadFailed({ onRetry }: { onRetry: () => void }) {

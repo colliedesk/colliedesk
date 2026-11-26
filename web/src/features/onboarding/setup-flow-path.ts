@@ -10,6 +10,7 @@ const ownPartDone: Record<SetupStepKey, ReadonlySet<string>> = {
   import: new Set(['running', 'done']),
   ai_drafts: new Set(['on']),
   reply_targets: new Set(['on']),
+  agent: new Set(['connected']),
   invite: new Set(['invited', 'joined']),
   first_reply: new Set(['sent']),
 };

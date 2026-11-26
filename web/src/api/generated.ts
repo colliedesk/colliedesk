@@ -8084,13 +8084,13 @@ export interface components {
         };
         SetupProgress: {
             steps: components["schemas"]["SetupStep"][];
-            /** @description True when the four core steps are done: email working, import done, invite joined and first_reply sent. ai_drafts and reply_targets are offers: they never hold setup back. */
+            /** @description True when the four core steps are done: email working, import done, invite joined and first_reply sent. ai_drafts, reply_targets and agent are offers: they never hold setup back. */
             complete: boolean;
             /**
              * @description The step the sign-up goal puts first while it is not done; null for a goal without one.
              * @enum {string|null}
              */
-            recommended: "email" | "import" | "invite" | null;
+            recommended: "email" | "import" | "invite" | "agent" | null;
             /** @description The reply targets the reply_targets step offers, fastest first. Targets are business minutes; a day is reply_target_hours.day_minutes, the open hours of one business day of the hours a preset applies with. Apply one with PUT /api/v1/response-targets and those hours. */
             reply_target_presets: components["schemas"]["ReplyTargetPreset"][];
             reply_target_hours: components["schemas"]["ReplyTargetHours"];
@@ -8099,14 +8099,14 @@ export interface components {
         };
         SetupStep: {
             /** @enum {string} */
-            key: "email" | "import" | "ai_drafts" | "reply_targets" | "invite" | "first_reply";
+            key: "email" | "import" | "ai_drafts" | "reply_targets" | "agent" | "invite" | "first_reply";
             /** @description The step as the setup guide names it, for example "Turn on AI drafts". */
             name: string;
             /**
-             * @description email none, waiting, working or needs_attention; import none, running or done; ai_drafts none, on (reply drafts on, writing a draft for each new customer message), nothing_to_read (off, with no import done and no published help center article to draft from) or unavailable (off, with no built-in AI on this server and no provider of the workspace's own); reply_targets none or on; invite alone, invited or joined; first_reply none or sent.
+             * @description email none, waiting, working or needs_attention; import none, running or done; ai_drafts none, on (reply drafts on, writing a draft for each new customer message), nothing_to_read (off, with no import done and no published help center article to draft from) or unavailable (off, with no built-in AI on this server and no provider of the workspace's own); reply_targets none or on; agent none or connected (a live agent token, or an AI app connected with OAuth); invite alone, invited or joined; first_reply none or sent.
              * @enum {string}
              */
-            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "on" | "nothing_to_read" | "unavailable" | "alone" | "invited" | "joined" | "sent";
+            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "on" | "nothing_to_read" | "unavailable" | "connected" | "alone" | "invited" | "joined" | "sent";
             /** @description A reason code for needs_attention; null otherwise. */
             detail: string | null;
         };
