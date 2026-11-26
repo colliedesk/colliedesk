@@ -55,8 +55,22 @@ test('the agent count of the Freshdesk account is named as its source and beats 
 });
 
 test('a small Freshdesk account says so beside what Founding covers', () => {
-  render(<PlanPicker sellable={foundingOpen} seats={1} freshdeskAgents={1} onChoose={vi.fn()} />);
-  expect(within(card('Founding')).getByText('Your Freshdesk has 1 agent. Founding covers up to 10.')).toBeInTheDocument();
+  render(<PlanPicker sellable={foundingOpen} seats={1} freshdeskAgents={2} onChoose={vi.fn()} />);
+  expect(within(card('Founding')).getByText('Your Freshdesk has 2 agents. Founding covers up to 10.')).toBeInTheDocument();
+});
+
+test('a team of one is offered Solo first, marked as fitting, and its billing period is chosen above the cards', () => {
+  const onChoose = vi.fn();
+  render(<PlanPicker sellable={foundingOpen} seats={1} placesLeft={10} onChoose={onChoose} />);
+  expect(cardNames()).toEqual(['Solo', 'Founding', 'Team 25']);
+  expect(within(card('Solo')).getByText('Fits your team')).toBeInTheDocument();
+  expect(primaries()).toHaveLength(1);
+  expect(primaries()[0]).toBe(within(card('Solo')).getByRole('button'));
+  expect(within(card('Founding')).getByRole('button')).toBeEnabled();
+  expect(screen.queryByText('Team 25 billed')).not.toBeInTheDocument();
+  fireEvent.click(within(screen.getByRole('group', { name: 'Billing interval' })).getByRole('radio', { name: 'Yearly, 2 months free' }));
+  fireEvent.click(within(card('Solo')).getByRole('button', { name: 'Choose Solo, $190 per year' }));
+  expect(onChoose).toHaveBeenCalledWith('solo_yearly');
 });
 
 test('a visitor who chose Team 25 on the website sees it first as their pick, and Founding still says that it also fits', () => {

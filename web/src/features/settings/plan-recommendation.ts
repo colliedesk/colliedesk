@@ -19,7 +19,7 @@ export function fitsPlan(plan: PlanId, count: number): boolean {
 }
 
 // teamSize prefers the Freshdesk account's agent count (the team that is moving) to the workspace seats.
-function teamSize(freshdeskAgents: number | undefined, seats: number): TeamSize {
+export function teamSize(freshdeskAgents: number | undefined, seats: number): TeamSize {
   return freshdeskAgents !== undefined && freshdeskAgents > 0 ? { count: freshdeskAgents, source: 'freshdesk' } : { count: seats, source: 'seats' };
 }
 

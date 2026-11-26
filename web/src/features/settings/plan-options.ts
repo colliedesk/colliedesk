@@ -31,29 +31,33 @@ const allPlans: { id: PlanId; name: string; agents: number; audience: string; in
 ];
 
 // While a Founding slot is free the website sells two plans, Founding and Team 25 (for 11 to 25 agents),
-// and the app offers the same two, in that order.
-const foundingOfferIds: readonly PlanId[] = ['founding', 'team25'];
+// and the app offers the same two, in that order. A team of one also gets Solo: Founding is for 3 to 10
+// agents, and one person should not have to pay for ten seats to keep working.
+const foundingOfferIds: readonly PlanId[] = ['solo', 'founding', 'team25'];
+const offerFor = (teamSize: number | undefined): readonly PlanId[] =>
+  teamSize !== undefined && teamSize <= agentsOf('solo') ? foundingOfferIds : foundingOfferIds.filter((id) => id !== 'solo');
 const buyable = (card: PlanCard) => card.prices.some((price) => price.refusal === undefined);
 
 // The plans a workspace can buy, in the order they are offered: only the prices the server says it
 // can sell, and only plans with at least one of them. While Founding is open (the server offers it
 // only until its slots are taken) the offer is Founding, greyed with its reason when this workspace
-// does not fit it, and Team 25 when the server sells it; Solo, Small and Team wait. When this workspace
-// can buy neither, it gets the whole ladder, which also comes back on its own once Founding closes.
+// does not fit it, and Team 25 when the server sells it; Small and Team wait, and Solo too unless the
+// team (teamSize agents) is one person. When this workspace can buy none of them, it gets the whole
+// ladder, which also comes back on its own once Founding closes.
 // The plan that leads (the one a visitor came for, or the one that fits the team) comes first.
-export function planCardsFor(sellable: readonly CheckoutPlan[], refusals: readonly { plan: CheckoutPlan; reason: string }[] = [], leading?: PlanId): PlanCard[] {
+export function planCardsFor(sellable: readonly CheckoutPlan[], refusals: readonly { plan: CheckoutPlan; reason: string }[] = [], leading?: PlanId, teamSize?: number): PlanCard[] {
   const cards = allPlans
     .map((card) => ({ ...card, prices: card.prices.filter((price) => sellable.includes(price.plan))
       .map(({ charge, ...price }) => ({ ...price, label: billingMessages.choosePlanPrice(card.name, charge),
         refusal: refusals.find((refusal) => refusal.plan === price.plan)?.reason })) }))
     .filter((card) => card.prices.length > 0);
-  const offer = cards.some((card) => card.id === 'founding') ? foundingOfferIds.flatMap((id) => cards.filter((card) => card.id === id)) : [];
+  const offer = cards.some((card) => card.id === 'founding') ? offerFor(teamSize).flatMap((id) => cards.filter((card) => card.id === id)) : [];
   const shown = offer.some(buyable) ? offer : cards;
   const asked = shown.find((card) => card.id === leading);
   return asked ? [asked, ...shown.filter((card) => card !== asked)] : shown;
 }
 
-// isFoundingOffer is true when the cards are the Founding offer (Founding, with or without Team 25) and not the ladder.
+// isFoundingOffer is true when the cards are the Founding offer (Founding, with or without Team 25 and Solo) and not the ladder.
 export function isFoundingOffer(cards: readonly PlanCard[]): boolean {
   return cards.some((card) => card.id === 'founding') && cards.every((card) => foundingOfferIds.includes(card.id));
 }

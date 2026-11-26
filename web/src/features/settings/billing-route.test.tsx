@@ -154,10 +154,13 @@ test('a stored founding intent starts the founding checkout once and clears the 
   expect(readCheckoutIntent()).toBeUndefined();
 });
 
+// A team of three: a team of one is offered Solo as well, which these tests are not about.
+const teamOfThree = { ...free, usage: { ...free.usage, agents: 3 } };
+
 test('a remembered Team 25 plan puts its card first and marked, starts no checkout and stays remembered', async () => {
   rememberPlanIntent('team25');
   api.me.mockResolvedValue(me('admin'));
-  api.billing.mockResolvedValue(free);
+  api.billing.mockResolvedValue(teamOfThree);
   renderRoute();
   const team25 = await screen.findByRole('article', { name: 'Team 25' });
   expect(screen.getAllByRole('article').map((card) => card.getAttribute('aria-label'))).toEqual(['Team 25', 'Founding']);
@@ -168,7 +171,7 @@ test('a remembered Team 25 plan puts its card first and marked, starts no checko
 
 test('without a remembered plan no card is called the visitor\'s pick; the one that fits the team is marked', async () => {
   api.me.mockResolvedValue(me('admin'));
-  api.billing.mockResolvedValue(free);
+  api.billing.mockResolvedValue(teamOfThree);
   renderRoute();
   await screen.findByRole('article', { name: 'Team 25' });
   expect(screen.queryByText('Your pick')).not.toBeInTheDocument();
