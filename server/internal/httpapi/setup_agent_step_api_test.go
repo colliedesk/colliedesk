@@ -52,7 +52,7 @@ func TestSetupAgentStepFollowsAnOAuthGrant(t *testing.T) {
 	}
 	var sessions struct {
 		Items []struct {
-			ID  string `json:"id"`
+			ID  string    `json:"id"`
 			App *struct{} `json:"app"`
 		} `json:"items"`
 	}

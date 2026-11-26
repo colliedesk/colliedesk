@@ -60,7 +60,7 @@ export const agentStepMessages = {
   copy: 'Copy',
   copyAddress: 'Copy MCP address',
   tokenRoute: 'Use an agent token instead',
-  tokenText: 'For an app that cannot sign in with OAuth, or an agent that runs without you. A token holds only the permissions you give it.',
+  tokenText: 'For an app that cannot sign in with OAuth.',
   guide: 'Read the AI agent guide',
   connected: 'An AI agent is connected.',
   manageBefore: 'See or disconnect it in ',
