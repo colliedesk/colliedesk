@@ -70,8 +70,9 @@ The channel's page then has four tabs of its own, before AI and History:
    A team member who wrote in a group before you added them opened conversations that are nobody's
    request. Adding them closes each open or pending group conversation that only your team wrote in and
    nobody took on yet, without a word to the group. A conversation stays open when a customer also
-   wrote in it, when it is assigned or answered, or when it is a one-to-one chat with the OA, so adding
-   someone by mistake closes none of their requests. The channel's history (`GET
+   wrote in it, when it is assigned or answered, or when it is a one-to-one chat with the OA. Add only
+   your team: a customer added by mistake loses their unanswered group conversations to Closed (reopen
+   them from the inbox, then remove them from Staff). The channel's history (`GET
    /api/v1/channels/events`, `colliedesk_channels_events`) counts how many closed, and each can be reopened.
 4. **Messages**: the commands customers type and what the OA says by itself; see
    [The Messages tab](#the-messages-tab).
