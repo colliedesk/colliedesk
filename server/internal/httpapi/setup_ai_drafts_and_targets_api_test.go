@@ -94,10 +94,10 @@ func TestSetupHasAIDraftsAndReplyTargetsBetweenTheImportAndTheInvites(t *testing
 	for _, step := range view.Steps {
 		keys, names = append(keys, step.Key), append(names, step.Name)
 	}
-	if want := []string{"email", "import", "ai_drafts", "reply_targets", "invite", "first_reply"}; !slices.Equal(keys, want) {
+	if want := []string{"email", "import", "ai_drafts", "reply_targets", "agent", "invite", "first_reply"}; !slices.Equal(keys, want) {
 		t.Fatalf("order = %v, want %v", keys, want)
 	}
-	if want := []string{"Receive customer email", "Import from Freshdesk", "Turn on AI drafts", "Set reply targets", "Invite your team", "Answer your first email"}; !slices.Equal(names, want) {
+	if want := []string{"Receive customer email", "Import from Freshdesk", "Turn on AI drafts", "Set reply targets", "Connect your AI agent", "Invite your team", "Answer your first email"}; !slices.Equal(names, want) {
 		t.Fatalf("names = %v, want %v", names, want)
 	}
 }

@@ -20,11 +20,15 @@ func TestSetupProgressToolNamesEveryStepAndOffersTheReplyTargetsPresets(t *testi
 		keys = append(keys, at(t, step, "key").(string))
 		names = append(names, at(t, step, "name").(string))
 	}
-	if want := []string{"email", "import", "ai_drafts", "reply_targets", "invite", "first_reply"}; !slices.Equal(keys, want) {
+	if want := []string{"email", "import", "ai_drafts", "reply_targets", "agent", "invite", "first_reply"}; !slices.Equal(keys, want) {
 		t.Fatalf("keys = %v, want %v", keys, want)
 	}
-	if want := []string{"Receive customer email", "Import from Freshdesk", "Turn on AI drafts", "Set reply targets", "Invite your team", "Answer your first email"}; !slices.Equal(names, want) {
+	if want := []string{"Receive customer email", "Import from Freshdesk", "Turn on AI drafts", "Set reply targets", "Connect your AI agent", "Invite your team", "Answer your first email"}; !slices.Equal(names, want) {
 		t.Fatalf("names = %v, want %v", names, want)
+	}
+	// The agent asking holds a token: the workspace has an AI agent connected.
+	if state := at(t, out, "steps", 4, "state"); state != "connected" {
+		t.Fatalf("agent step state = %v, want connected", state)
 	}
 	// A read token may not change the targets: no suggestion is read for it. The Admin tier gets one, with the
 	// hours a preset applies with.
@@ -50,7 +54,7 @@ func TestSetupProgressToolSaysHowToTurnOnDraftsAndWhichHoursToKeep(t *testing.T)
 		if spec.Name != "colliedesk_setup_progress_get" {
 			continue
 		}
-		for _, want := range []string{"source server", "source provider with provider_id", "reply_target_hours", "kept"} {
+		for _, want := range []string{"source server", "source provider with provider_id", "reply_target_hours", "kept", "agent (none, connected)"} {
 			if !strings.Contains(spec.Description, want) {
 				t.Errorf("description lacks %q: %s", want, spec.Description)
 			}

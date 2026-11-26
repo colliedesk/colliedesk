@@ -86,8 +86,8 @@ func TestSetupProgressFollowsTheWorkspaceThroughEveryStep(t *testing.T) {
 	if fresh.Complete {
 		t.Fatal("a fresh workspace must not be complete")
 	}
-	if got := fresh.keys(); len(got) != 6 || got[0] != "email" || got[5] != "first_reply" {
-		t.Fatalf("default order = %v, want email, import, ai_drafts, reply_targets, invite, first_reply", got)
+	if got := fresh.keys(); len(got) != 7 || got[0] != "email" || got[6] != "first_reply" {
+		t.Fatalf("default order = %v, want email, import, ai_drafts, reply_targets, agent, invite, first_reply", got)
 	}
 
 	secret := connectEmail(t, api, admin, "support@setup.example.com")
@@ -118,12 +118,12 @@ func TestSetupProgressFollowsTheWorkspaceThroughEveryStep(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='sent',sent_at=now(),attempts=1 WHERE message_id=$1`, reply); err != nil {
 		t.Fatal(err)
 	}
-	// AI drafts and reply targets are offers: the four core steps alone complete the setup, so the guide of a
-	// workspace that finished them before these steps existed stays hidden while they stay done.
+	// AI drafts, reply targets and an AI agent are offers: the four core steps alone complete the setup, so the
+	// guide of a workspace that finished them before these steps existed stays hidden while they stay done.
 	answered := readSetup(t, api, admin)
 	wantSetup(t, answered, "working", "done", "joined", "sent")
-	if got := []string{answered.state(t, "ai_drafts"), answered.state(t, "reply_targets")}; got[0] != "none" || got[1] != "none" {
-		t.Fatalf("ai_drafts, reply_targets = %v, want none, none", got)
+	if got := []string{answered.state(t, "ai_drafts"), answered.state(t, "reply_targets"), answered.state(t, "agent")}; got[0] != "none" || got[1] != "none" || got[2] != "none" {
+		t.Fatalf("ai_drafts, reply_targets, agent = %v, want none, none, none", got)
 	}
 	if !answered.Complete {
 		t.Fatalf("the four core steps are done, setup = %+v", answered)
@@ -146,16 +146,16 @@ func TestSetupProgressIsOrderedByTheSignUpGoal(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	admin := createSession(t, api, service, "Goal Desk", "admin@goal.example.com")
 	slug := workspaceSlug(t, api, admin)
-	for goal, first := range map[string]string{"leave_helpdesk": "import", "shared_inbox": "email", "lower_cost": "invite", "ai_agents": "email", "other": "email"} {
+	for goal, first := range map[string]string{"leave_helpdesk": "import", "shared_inbox": "email", "lower_cost": "invite", "ai_agents": "agent", "other": "email"} {
 		if _, err := pool.Exec(t.Context(), `INSERT INTO workspace_onboarding(workspace_id,goal) SELECT id,$2 FROM workspaces WHERE slug=$1
 			ON CONFLICT (workspace_id) DO UPDATE SET goal=EXCLUDED.goal`, slug, goal); err != nil {
 			t.Fatal(err)
 		}
 		view := readSetup(t, api, admin)
-		if got := view.keys(); got[0] != first || got[len(got)-1] != "first_reply" || len(got) != 6 {
+		if got := view.keys(); got[0] != first || got[len(got)-1] != "first_reply" || len(got) != 7 {
 			t.Fatalf("goal %s: order = %v, want %s first and first_reply last", goal, got, first)
 		}
-		if goal == "ai_agents" || goal == "other" {
+		if goal == "other" {
 			if view.Recommended != nil {
 				t.Fatalf("goal %s recommends %q, want nothing", goal, *view.Recommended)
 			}
