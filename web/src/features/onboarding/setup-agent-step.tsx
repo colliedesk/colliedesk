@@ -27,7 +27,7 @@ export function AgentStep({ me, connected }: { me: Me; connected: boolean }) {
     {cloud && <section className="setup-agent-way" aria-label={m.claudeTitle}>
       <h2>{m.claudeTitle}</h2>
       <p>{m.claudeText}</p>
-      <p><a className="button primary-action" href={claudeDirectoryURL} target="_blank" rel="noopener noreferrer">{m.addToClaude} <ExternalLinkIcon /><span className="sr-only">{m.newTab}</span></a></p>
+      <p><a className="button" href={claudeDirectoryURL} target="_blank" rel="noopener noreferrer">{m.addToClaude} <ExternalLinkIcon /><span className="sr-only">{m.newTab}</span></a></p>
     </section>}
     <section className="setup-agent-way" aria-label={m.anyAppTitle}>
       <h2>{m.anyAppTitle}</h2>
