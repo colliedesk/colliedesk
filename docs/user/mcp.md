@@ -27,6 +27,9 @@ token that holds `messages:send` only when you want it to write to customers.
 
 ### Connect an app with OAuth
 
+The setup flow's **Connect your AI agent** step (`/setup/agent`, see [Setup guide](setup-guide.md)) shows
+these same ways to connect, and reads Done once an app is connected.
+
 On Colliedesk Cloud, Claude (web, desktop and mobile) lists Colliedesk in its connectors directory:
 open [Colliedesk in the Claude directory](https://claude.ai/directory/connectors/colliedesk), choose
 **Connect**, and go on at step 2. Every other app, and a self-hosted Colliedesk, starts at step 1.
