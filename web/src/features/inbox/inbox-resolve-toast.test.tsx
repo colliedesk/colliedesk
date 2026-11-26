@@ -91,3 +91,13 @@ test('the toast leaves by itself after 8 seconds, so it never covers the reply b
     vi.useRealTimers();
   }
 });
+
+test('Resolve answers the press at once: the button reads Resolving… until the server agrees', async () => {
+  let agree: () => void = () => undefined;
+  const onSetStatus = vi.fn(() => new Promise<void>((done) => { agree = done; }));
+  render(<InboxPage conversations={[refund]} selected={refund} onSetStatus={onSetStatus} />);
+  fireEvent.click(header().getByRole('button', { name: 'Resolve' }));
+  expect(header().getByRole('button', { name: 'Resolving…' })).toHaveAttribute('aria-disabled', 'true');
+  await act(async () => agree());
+  expect(await screen.findByRole('status', { name: 'Resolved' })).toBeInTheDocument();
+});

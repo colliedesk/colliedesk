@@ -151,6 +151,8 @@ export const messages = {
   anotherTeammate: 'Another teammate',
   messagesClosed: 'Your roles do not let you read the messages of a conversation (messages:read).',
   resolve: 'Resolve',
+  resolving: 'Resolving…',
+  reopening: 'Reopening…',
   noTagsToPick: 'No tags yet. Create one in the conversation details.',
   clearSelection: 'Clear selection',
   bulkUpdated: (count: number) => `Updated ${count} conversation${count === 1 ? '' : 's'}`,

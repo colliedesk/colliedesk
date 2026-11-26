@@ -78,7 +78,7 @@ interface TimelinePanelProps {
 }
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
-// closed one offers the way back. A failure says so beside the button.
+// closed one offers the way back. The press is answered at once (Resolving…) and a failure says so beside the button.
 type SetStatus = (status: SettableStatus, options?: { notify?: boolean }) => Promise<unknown>;
 
 function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversation: Conversation; onSetStatus: SetStatus; noticesFailed: boolean }) {
@@ -103,8 +103,8 @@ function StatusButton({ conversation, onSetStatus, noticesFailed }: { conversati
   };
   // aria-disabled, not disabled: a disabled button drops the keyboard focus, and Reopen takes its place.
   const button = <button type="button" className="status-button" aria-disabled={busy || waiting || undefined} aria-busy={waiting || undefined} onClick={() => change(false)}
-    aria-label={tells ? (done ? messages.reopenAndTellName(channel) : messages.resolveAndTellName(channel)) : undefined}>
-    {done ? <RotateCcwIcon /> : <CheckCircleIcon />}{tells ? (done ? messages.reopenAndTell : messages.resolveAndTell) : done ? messages.reopen : messages.resolve}</button>;
+    aria-label={tells && !busy ? (done ? messages.reopenAndTellName(channel) : messages.resolveAndTellName(channel)) : undefined}>
+    {done ? <RotateCcwIcon /> : <CheckCircleIcon />}{busy ? (done ? messages.reopening : messages.resolving) : tells ? (done ? messages.reopenAndTell : messages.resolveAndTell) : done ? messages.reopen : messages.resolve}</button>;
   return <>
     {quietOffered ? <span className="status-split">{button}
       <ActionMenu label={done ? messages.moreWaysToReopen : messages.moreWaysToResolve} icon={null} disabled={busy} onApply={() => change(true)}>

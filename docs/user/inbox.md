@@ -477,7 +477,9 @@ the list's title names the view on screen.
   resolved (here or with **Send and resolve**), a note at the foot of the screen says **Conversation
   resolved.** with **Undo**, which puts it back to Open or Pending, as it was, without telling the
   customer. When a chat already told the customer, the note names that chat: Undo cannot take that
-  message back. Opening another conversation clears the note. When the
+  message back. The note leaves after 8 seconds (it stays while the pointer is on it); **Reopen**
+  above the thread stays the way back. Opening another conversation clears the note. While the change is
+  on its way, the button reads **Resolving…**. When the
   change would tell the customer (below), the button reads **Resolve and tell** or **Reopen and tell**,
   and the arrow beside it offers **Resolve without telling the customer** or **Reopen without telling
   the customer** (to add a note or fix a detail).
