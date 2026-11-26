@@ -69,8 +69,8 @@ The channel's page then has four tabs of its own, before AI and History:
    Zalo user id; **Remove** asks first, then their new messages count as a customer's.
    A team member who wrote in a group before you added them opened conversations that are nobody's
    request. Adding them closes each open or pending conversation only they wrote in, without a word to
-   the group; a conversation a customer also wrote in stays open. The channel's history says how many
-   closed (`closed_conversations`), and each can be reopened.
+   the group; a conversation a customer also wrote in stays open. The channel's history counts how many
+   closed, and each can be reopened.
 4. **Messages**: the commands customers type and what the OA says by itself; see
    [The Messages tab](#the-messages-tab).
 

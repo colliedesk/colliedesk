@@ -11146,7 +11146,7 @@ export interface components {
             };
             /** @description config_changed: the names of the settings that changed (email support_address, sender_name; web_form allowed_origins; settings for its rules). credential_changed: the name of the secret replaced (email inbound_secret). ai_changed: the AI feature whose level changed (triage, draft, intake); the levels are in the AI history. Never a value. Empty for other kinds. */
             fields?: string[];
-            /** @description held_replayed and held_discarded: how many messages were opened or discarded. */
+            /** @description held_replayed and held_discarded: how many messages were opened or discarded. config_changed of a Zalo channel that added staff_user_ids: how many conversations only those people wrote in were closed. */
             count?: number | null;
         };
         ChannelEventPage: {

@@ -20,6 +20,19 @@ func addedStaff(current, staff []string) []string {
 	return added
 }
 
+// closeTeamOnly is the event of a saved change after the conversations only the newly added staff wrote
+// in were closed; how many is in its detail as closed_conversations.
+func closeTeamOnly(ctx context.Context, tx pgx.Tx, channel channels.Channel, added []string, change channels.ConfigChange) (channels.Event, error) {
+	if len(added) > 0 {
+		closed, err := closeTeamOnlyConversations(ctx, tx, channel, added, change)
+		if err != nil {
+			return channels.Event{}, err
+		}
+		change.Detail["closed_conversations"] = closed
+	}
+	return channels.Event{Kind: "config_changed", Detail: change.Detail}, nil
+}
+
 // closeTeamOnlyConversations closes, without a word to the chat, the open and pending conversations of
 // the channel that only the team members added wrote in: before they were on the list, their messages
 // in a group were taken for a customer's and opened conversations that are nobody's request. A
