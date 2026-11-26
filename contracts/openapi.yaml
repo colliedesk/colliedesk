@@ -12787,11 +12787,11 @@ components:
           type: boolean
           description: >-
             True when the four core steps are done: email working, import done, invite joined and
-            first_reply sent. ai_drafts and reply_targets are offers: they never hold setup back.
+            first_reply sent. ai_drafts, reply_targets and agent are offers: they never hold setup back.
         recommended:
           description: The step the sign-up goal puts first while it is not done; null for a goal without one.
           type: [string, 'null']
-          enum: [email, import, invite, null]
+          enum: [email, import, invite, agent, null]
         reply_target_presets:
           type: array
           description: >-
@@ -12811,7 +12811,7 @@ components:
       type: object
       required: [key, name, state, detail]
       properties:
-        key: {type: string, enum: [email, import, ai_drafts, reply_targets, invite, first_reply]}
+        key: {type: string, enum: [email, import, ai_drafts, reply_targets, agent, invite, first_reply]}
         name: {type: string, description: 'The step as the setup guide names it, for example "Turn on AI drafts".'}
         state:
           type: string
@@ -12820,8 +12820,9 @@ components:
             on (reply drafts on, writing a draft for each new customer message), nothing_to_read (off, with
             no import done and no published help center article to draft from) or unavailable (off, with no
             built-in AI on this server and no provider of the workspace's own); reply_targets none or on;
-            invite alone, invited or joined; first_reply none or sent.
-          enum: [none, waiting, working, needs_attention, running, done, 'on', nothing_to_read, unavailable, alone, invited, joined, sent]
+            agent none or connected (a live agent token, or an AI app connected with OAuth); invite alone,
+            invited or joined; first_reply none or sent.
+          enum: [none, waiting, working, needs_attention, running, done, 'on', nothing_to_read, unavailable, connected, alone, invited, joined, sent]
         detail:
           description: A reason code for needs_attention; null otherwise.
           type: [string, 'null']

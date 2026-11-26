@@ -56,7 +56,7 @@ export function QuickStart({ progress, me }: { progress?: SetupProgress; me: Me 
       {/* A chosen step opens its page: the checklist steps aside for it. */}
       {open && <div className="quick-start-popover" role="dialog" aria-label={frameMessages.getReady(me.workspace.name)} style={at}
         onClick={(event) => { if ((event.target as Element).closest('a')) setOpen(false); }}>
-        {part.status === 'ready' ? <part.module.SetupChecklist progress={progress} me={me} goal={me.onboarding_goal} workspaceName={me.workspace.name}
+        {part.status === 'ready' ? <part.module.SetupChecklist progress={progress} me={me} workspaceName={me.workspace.name}
           skipped={skipped} onSkip={skip} /> : part.status === 'error' ? <PartUnavailable /> : null}
       </div>}
     </div>

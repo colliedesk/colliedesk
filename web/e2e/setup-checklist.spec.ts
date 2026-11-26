@@ -23,12 +23,12 @@ test('Quick start: a workspace with one conversation and no email channel still 
   await expect(page.getByRole('button', { name: new RegExp(`Made by hand ${suffix}`) })).toBeVisible();
   // With a conversation in the inbox Quick start waits beside the workspace name; one press opens its checklist.
   const quickStart = page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: /^Quick start/ });
-  await expect(quickStart).toHaveAccessibleName('Quick start, 5 steps left');
+  await expect(quickStart).toHaveAccessibleName('Quick start, 6 steps left');
   let guide = await openQuickStart(page);
   const email = () => guide.getByRole('listitem').filter({ hasText: 'Receive customer email' });
   await expect(email()).toBeVisible();
   await expect(email()).toHaveAttribute('data-state', 'todo');
-  await expect(guide).toContainText('0 of 5');
+  await expect(guide).toContainText('0 of 6');
 
   // The email channel is set up and a customer email is forwarded to it.
   const saved = await page.request.put(`${baseURL}/api/v1/channels/email`, { headers, data: { support_address: support } });
@@ -52,8 +52,8 @@ test('Quick start: a workspace with one conversation and no email channel still 
   guide = await openQuickStart(page);
   await expect(email()).toHaveAttribute('data-state', 'done');
   await expect(email()).toContainText('Done');
-  await expect(guide).toContainText('1 of 5');
-  await expect(quickStart).toHaveAccessibleName('Quick start, 4 steps left');
+  await expect(guide).toContainText('1 of 6');
+  await expect(quickStart).toHaveAccessibleName('Quick start, 5 steps left');
 
   // Skip these leaves Try more out of the count, and the browser keeps it; Show these brings it back.
   await guide.getByRole('button', { name: 'Skip these' }).click();
@@ -62,7 +62,7 @@ test('Quick start: a workspace with one conversation and no email channel still 
   await expect(quickStart).toHaveAccessibleName('Quick start, 2 steps left');
   guide = await openQuickStart(page);
   await guide.getByRole('button', { name: 'Show these' }).click();
-  await expect(quickStart).toHaveAccessibleName('Quick start, 4 steps left');
+  await expect(quickStart).toHaveAccessibleName('Quick start, 5 steps left');
 
   // Hiding the setup guide in Preferences hides Quick start; turning it back on brings it back.
   await page.goto(`${baseURL}/settings`);

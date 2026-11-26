@@ -9,11 +9,10 @@ only teammate deactivated) brings it back.
 Press it to open the checklist under it; press it again, press **Esc** or click elsewhere to close it.
 Nothing floats over the conversation list: the checklist opens only when you ask.
 
-- The head: **Get *your workspace* ready**, how many steps are done (for example "2 of 6"), and a bar with one
+- The head: **Get *your workspace* ready**, how many steps are done (for example "2 of 7"), and a bar with one
   segment per step, the done ones in green.
 - **Set up**: **Receive customer email**, **Import from Freshdesk** and **Answer your first email**.
-- **Try more**: **Turn on AI drafts**, **Set reply targets**, **Invite your team**, and **Connect an AI agent**
-  (a page of the docs; it is not counted).
+- **Try more**: **Turn on AI drafts**, **Set reply targets**, **Connect your AI agent** and **Invite your team**.
 - A done step is ticked and struck through. The next step to do is highlighted. A step still to do shows the
   minutes it takes.
 - **Skip these** beside **Try more** leaves those steps out of the list and the count; **Show these** brings them
@@ -29,11 +28,14 @@ Each step opens its screen of the [setup flow](#setup-flow).
 | **Import from Freshdesk** | An import finished and was not undone. While one runs, the step reads "Importing". | `/setup/import` | [Import from Freshdesk](import-freshdesk.md) |
 | **Turn on AI drafts** | Reply drafts are on and write a draft for each new customer message (Default for channels: Suggest). Without built-in AI on the server and no provider of your own, the step reads "Nothing to do: no built-in AI on this server" and is not counted. | `/setup/ai_drafts` | [Built-in AI](ai.md) |
 | **Set reply targets** | Response targets are on. | `/setup/reply_targets` | [Response targets](response-targets.md) |
+| **Connect your AI agent** | An AI app is connected with OAuth, or an agent token is live (not revoked, not expired). An app that started to connect but never finished does not count. | `/setup/agent` | [AI agents (MCP)](mcp.md) |
 | **Invite your team** | A teammate joined. An invite that was sent but not used yet reads "Invite sent". | `/setup/invite` | [Invites](invites.md) |
 | **Answer your first email** | A reply was delivered to a customer. A note does not count, and neither does a reply marked "Delivery failed". The reply to your own test message counts. | `/setup/first_reply` | The inbox |
 
 The step that fits your sign-up goal comes first in its group and is marked as the recommended one.
-The row you should do next is highlighted.
+The row you should do next is highlighted. A team that signed up to let AI agents draft or send replies
+starts with **Connect your AI agent**: it is first, recommended and highlighted until an AI agent is
+connected, and then the next step to do is highlighted.
 
 ## Setup flow
 
@@ -45,7 +47,7 @@ Each screen shows:
 
 - At the top: your workspace name and the address you are signed in with, and **Exit setup** (the
   cross on the right), which opens the inbox.
-- Where you are ("Step 3 of 6 · AI drafts") and the step's title. The step your sign-up goal recommends is marked
+- Where you are ("Step 3 of 7 · AI drafts") and the step's title. The step your sign-up goal recommends is marked
   **Recommended**.
 - The step itself, the same form as in Settings:
   - **Receive customer email**: your support address and how its mail reaches Colliedesk. After you
@@ -93,6 +95,19 @@ Each screen shows:
     between, the save is refused, the step reads them again, and the next press saves. Targets start with
     the next new conversation.
     Change any of it later in Settings → [Response targets](response-targets.md).
+  - **Connect your AI agent**: the ways to let Claude, ChatGPT, Cursor or another AI app work the inbox
+    as you, the ones without a key first. On Colliedesk Cloud, **Add to Claude** opens Colliedesk in
+    Claude's connectors directory in a new tab: choose **Connect** there, then **Allow** on the Colliedesk
+    page that opens. For any other app, and on a server of your own, the step shows this server's MCP
+    address with **Copy**: add it in the app as a custom connector (a remote MCP server) and leave any
+    token field empty; the app opens a Colliedesk page where you sign in and choose **Allow**. **Use an
+    agent token instead** opens the same card as Settings → AI & agents → External AI agents, with a
+    token and the steps for each app, for an app that cannot sign in with OAuth. **Add to Claude** and the
+    address appear once the step has read the server's settings. Once an AI agent
+    is connected to the workspace (by you or a teammate), the step says so and links to your
+    **Connected AI apps** (Settings → Account) and, if you can see them, the agent tokens (Settings → AI &
+    agents), where you disconnect or revoke yours. A token you create here counts at once; otherwise the
+    step reads the connection again every 5 seconds, so it follows what you allow in the other tab.
   - **Invite your team**: create an invite. Its one-time link stays on screen until you leave the step.
   - **Answer your first email**: **Send yourself a test message** opens a conversation from your own
     address. Answer it, and the reply is emailed to you. **Open the inbox** is there too: conversations
@@ -103,8 +118,8 @@ Each screen shows:
   **Continue** of its own: it moves between the parts of that setup only.
 
 The main button works once your own part of the step is done, as the server reports it: the address saved
-and able to receive ("Waiting for the first email"), an import read or running, an invite sent, a reply
-sent. Until then, a line under the step says what is missing. What others do next (the first customer
+and able to receive ("Waiting for the first email"), an import read or running, an AI agent connected, an
+invite sent, a reply sent. Until then, a line under the step says what is missing. What others do next (the first customer
 email, a teammate joining) does not hold you back. The screen checks again every 5 seconds.
 
 **I'll do this later** goes to the next step without waiting. After the last step, a summary lists every
@@ -116,12 +131,14 @@ and reply targets steps the buttons stay pinned at the bottom of the screen, and
 
 ## Who sees it
 
-- **Admins** see all six steps.
+- **Admins** see all seven steps.
 - **Everyone else** sees only the steps their roles can take, in Quick start and in the setup flow:
   email and the import need `channels:update`, AI drafts `ai_settings:update` and `ai_settings:read`
   (to read the AI settings), reply targets `workspace:update`, inviting `team:invite` and `team:read` (to list the invites and the roles), as in
   Settings. **Revoke** on a pending invite needs `team:revoke`.
-  Answering the first email is everyone's step.
+  Answering the first email and connecting an AI agent are everyone's steps: an app connected with OAuth
+  acts as you, with what your roles allow. **Use an agent token instead** shows only to someone who may
+  create tokens (`team:create_tokens`) or revoke them (`team:revoke`), or who holds a token already.
 - To hide Quick start for you only, open **Settings → Account → Preferences** and turn off **Show the setup guide**; turn
   it on to bring it back (with **Try more**, if this browser skipped it). Other team members keep their own choice.
 
@@ -139,9 +156,10 @@ The web app reports two [usage events](telemetry.md) about the setup guide: `onb
 
 - `GET /api/v1/workspace/setup` returns the steps with their names and states (`email`: `none`,
   `waiting`, `working`, `needs_attention`; `import`: `none`, `running`, `done`; `ai_drafts`: `none`,
-  `on`, `nothing_to_read`, `unavailable`; `reply_targets`: `none`, `on`; `invite`: `alone`, `invited`,
-  `joined`; `first_reply`: `none`, `sent`), `complete` (the four core steps only), the `recommended`
-  step, the reply targets presets (`reply_target_presets`, in business minutes), the hours they apply
+  `on`, `nothing_to_read`, `unavailable`; `reply_targets`: `none`, `on`; `agent`: `none`, `connected`;
+  `invite`: `alone`, `invited`, `joined`; `first_reply`: `none`, `sent`), `complete` (the four core steps
+  only: AI drafts, reply targets and an AI agent never hold it back), the `recommended` step (`agent` for
+  the AI agents sign-up goal), the reply targets presets (`reply_target_presets`, in business minutes), the hours they apply
   with (`reply_target_hours`: `kept` when they are the workspace's own, `day_minutes`, `hours`) and the
   one that fits (`reply_target_suggestion`). The suggestion is `null` when reply targets are on or the
   caller may not change them (`workspace:update`): the median is read only when someone can use it.

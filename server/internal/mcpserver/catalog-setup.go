@@ -25,12 +25,12 @@ func setupProgressGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_setup_progress_get",
 		Title: "Show how far the workspace's setup is",
-		Description: `Show the six getting-started steps, each with its name and where it stands: email (none, waiting, working, needs_attention), ` +
+		Description: `Show the seven getting-started steps, each with its name and where it stands: email (none, waiting, working, needs_attention), ` +
 			`import (none, running, done), ai_drafts (none, on, nothing_to_read: off with no import and no published article to draft from, ` +
 			`unavailable: off with no built-in AI on this server and no provider of the workspace's own), reply_targets (none, on), ` +
-			`invite (alone, invited, joined) and first_reply (none, sent; a delivered reply, never a note). The steps come in the order the sign-up goal suggests, ` +
+			`agent (none, connected), connected for a live agent token or an app connected with OAuth such as yours, invite (alone, invited, joined) and first_reply (none, sent; a delivered reply, never a note). The steps come in the order the sign-up goal suggests, ` +
 			`and recommended names the one it puts first while it is not done. complete counts email, import, invite and first_reply only: ` +
-			`ai_drafts and reply_targets are offers that never hold the setup back. ` +
+			`ai_drafts, reply_targets and agent are offers that never hold the setup back. ` +
 			`reply_target_presets lists the reply targets presets in business minutes, a day being reply_target_hours.day_minutes; ` +
 			`reply_target_suggestion names the one that fits the team (from the median first reply of the imported history), or is null when ` +
 			`reply targets are on or this token may not change them. ` +

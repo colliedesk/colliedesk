@@ -11,15 +11,14 @@ import { SettingsPage } from './settings-page';
 import { MentionEmailSetting } from './mention-email-setting';
 import { readSkipped, storeSkipped } from '../onboarding/setup-steps';
 import { confirmDiscardUnsavedSettings } from './unsaved-probe';
+import { useMCPAddress } from './use-mcp-address';
 
 // Settings → Account: the profile, this browser's preferences, the devices signed in and the AI apps
 // connected with OAuth. It asks for who is signed in and the sessions only.
 export function AccountRoute() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-  // Where an AI app signs in with OAuth: APP_ORIGIN's /mcp (on Cloud, one address for every workspace).
-  const mcpAddress = `${config.data?.app_origin || window.location.origin}/mcp`;
+  const mcpAddress = useMCPAddress()?.address;
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
   const refresh = (key: string) => client.invalidateQueries({ queryKey: [key] });
   // Revoking this device's own session is the person's Sign out: reloading me leads to the sign-in page, which

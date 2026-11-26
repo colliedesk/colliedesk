@@ -19,10 +19,10 @@ vi.mock('../../lib/product-analytics', () => ({ track: tracked }));
 
 afterEach(() => { tracked.mockReset(); });
 
-// The setup as the server gives it: AI drafts and reply targets between the import and the invites.
-const sixSteps = ['email', 'import', 'ai_drafts', 'reply_targets', 'invite', 'first_reply'];
-function progress(states: Record<string, string> = {}, order = sixSteps, recommended: string | null = null): SetupProgress {
-  const all = { email: 'none', import: 'none', ai_drafts: 'none', reply_targets: 'none', invite: 'alone', first_reply: 'none', ...states } as Record<string, string>;
+// The setup as the server gives it: AI drafts, reply targets and an AI agent between the import and the invites.
+const sevenSteps = ['email', 'import', 'ai_drafts', 'reply_targets', 'agent', 'invite', 'first_reply'];
+function progress(states: Record<string, string> = {}, order = sevenSteps, recommended: string | null = null): SetupProgress {
+  const all = { email: 'none', import: 'none', ai_drafts: 'none', reply_targets: 'none', agent: 'none', invite: 'alone', first_reply: 'none', ...states } as Record<string, string>;
   return { steps: order.map((key) => ({ key, state: all[key], detail: null })), complete: false, recommended } as unknown as SetupProgress;
 }
 
@@ -30,26 +30,27 @@ function progress(states: Record<string, string> = {}, order = sixSteps, recomme
 const keysOf = (name: string) => within(screen.getByRole('region', { name })).queryAllByRole('listitem').map((row) => row.getAttribute('data-step'));
 const row = (key: string) => document.querySelector(`[data-step="${key}"]`) as HTMLElement;
 
-test('Set up holds email, the import and the first reply; Try more the invite, AI drafts, reply targets and an AI agent', () => {
+test('Set up holds email, the import and the first reply; Try more AI drafts, reply targets, an AI agent and the invite', () => {
   render(<SetupChecklist progress={progress({ email: 'waiting' })} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
   expect(screen.getByRole('heading', { level: 2, name: 'Get Beta Desk ready' })).toBeInTheDocument();
   expect(keysOf('Set up')).toEqual(['email', 'import', 'first_reply']);
-  expect(keysOf('Try more')).toEqual(['ai_drafts', 'reply_targets', 'invite', 'mcp']);
-  expect(screen.getByText('0 of 6')).toBeInTheDocument();
+  expect(keysOf('Try more')).toEqual(['ai_drafts', 'reply_targets', 'agent', 'invite']);
+  expect(screen.getByText('0 of 7')).toBeInTheDocument();
   expect(row('email')).toHaveTextContent('Waiting for the first email');
   expect(row('import')).toHaveTextContent('Moves your history over');
   expect(row('invite')).toHaveTextContent('Just you so far');
   expect(row('first_reply')).toHaveTextContent('Not yet');
-  expect(row('mcp')).toHaveTextContent('Let Claude or Codex work the queue');
+  expect(row('agent')).toHaveTextContent('Connect your AI agent');
+  expect(row('agent')).toHaveTextContent('Let Claude, ChatGPT or Cursor work the queue');
 });
 
 test('finished steps are ticked and struck through, and the bar has one segment per step, the done ones first', () => {
   render(<SetupChecklist progress={progress({ email: 'working', import: 'done' })} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
-  expect(screen.getByText('2 of 6')).toBeInTheDocument();
+  expect(screen.getByText('2 of 7')).toBeInTheDocument();
   const bar = screen.getByRole('progressbar', { name: 'Setup progress' });
   expect(bar).toHaveAttribute('aria-valuenow', '2');
-  expect(bar).toHaveAttribute('aria-valuemax', '6');
-  expect([...bar.children].map((segment) => segment.getAttribute('data-done'))).toEqual(['true', 'true', null, null, null, null]);
+  expect(bar).toHaveAttribute('aria-valuemax', '7');
+  expect([...bar.children].map((segment) => segment.getAttribute('data-done'))).toEqual(['true', 'true', null, null, null, null, null]);
   expect(row('email')).toHaveAttribute('data-state', 'done');
   expect(row('email').querySelector('.setup-mark svg')).not.toBeNull();
   expect(row('email')).toHaveTextContent('Done');
@@ -63,7 +64,7 @@ test('each open step shows its minutes; a done one does not', () => {
   expect(row('import')).toHaveTextContent('10 min');
   expect(row('first_reply')).toHaveTextContent('2 min');
   expect(row('invite')).toHaveTextContent('1 min');
-  expect(row('mcp')).toHaveTextContent('3 min');
+  expect(row('agent')).toHaveTextContent('3 min');
 });
 
 test('every step links to its screen of the setup flow, with plain links', () => {
@@ -72,7 +73,7 @@ test('every step links to its screen of the setup flow, with plain links', () =>
   expect(screen.getByRole('link', { name: /Import from Freshdesk/ })).toHaveAttribute('href', '/setup/import');
   expect(screen.getByRole('link', { name: /Invite your team/ })).toHaveAttribute('href', '/setup/invite');
   expect(screen.getByRole('link', { name: /Answer your first email/ })).toHaveAttribute('href', '/setup/first_reply');
-  expect(screen.getByRole('link', { name: /Connect an AI agent/ })).toHaveAttribute('href', 'https://colliedesk.com/docs/mcp');
+  expect(screen.getByRole('link', { name: /Connect your AI agent/ })).toHaveAttribute('href', '/setup/agent');
 });
 
 test('only the next step to do is highlighted, Set up first', () => {
@@ -94,29 +95,47 @@ test('with Set up done, the next step is the first of Try more', () => {
 });
 
 test('the recommended step from the sign-up goal is marked and listed first', () => {
-  render(<SetupChecklist progress={progress({}, ['import', 'email', 'ai_drafts', 'reply_targets', 'invite', 'first_reply'], 'import')} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
+  render(<SetupChecklist progress={progress({}, ['import', 'email', 'ai_drafts', 'reply_targets', 'agent', 'invite', 'first_reply'], 'import')} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
   expect(keysOf('Set up')[0]).toBe('import');
   expect(row('import')).toHaveTextContent('Recommended');
   expect(row('email')).not.toHaveTextContent('Recommended');
 });
 
-test('a goal of inviting the team puts the invite first in Try more', () => {
-  render(<SetupChecklist progress={progress({}, ['invite', 'email', 'import', 'ai_drafts', 'reply_targets', 'first_reply'], 'invite')} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
+test('a goal of inviting the team puts the invite first in Try more, and email stays the highlighted step', () => {
+  render(<SetupChecklist progress={progress({}, ['invite', 'email', 'import', 'ai_drafts', 'reply_targets', 'agent', 'first_reply'], 'invite')} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
   expect(keysOf('Try more')[0]).toBe('invite');
   expect(row('invite')).toHaveTextContent('Recommended');
+  expect(screen.getAllByRole('link').filter((link) => link.classList.contains('primary-action')).map((link) => link.getAttribute('href'))).toEqual(['/setup/email']);
 });
 
 test('an agent who is not an admin sees only the steps they can take', () => {
   render(<SetupChecklist progress={progress()} me={agentMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
   expect(keysOf('Set up')).toEqual(['first_reply']);
-  expect(keysOf('Try more')).toEqual(['mcp']);
-  expect(screen.getByText('0 of 1')).toBeInTheDocument();
+  expect(keysOf('Try more')).toEqual(['agent']);
+  expect(screen.getByText('0 of 2')).toBeInTheDocument();
 });
 
-test('the goal ai_agents puts the AI agent guide first in Try more, and it is never counted', () => {
-  render(<SetupChecklist progress={progress({ email: 'working' })} me={adminMe} goal="ai_agents" workspaceName="Beta Desk" onSkip={vi.fn()} />);
-  expect(keysOf('Try more')[0]).toBe('mcp');
-  expect(screen.getByText('1 of 6')).toBeInTheDocument();
+test('the goal ai_agents puts connecting an AI agent first in Try more, recommended and highlighted while it is not done', () => {
+  const agentFirst = ['agent', 'email', 'import', 'ai_drafts', 'reply_targets', 'invite', 'first_reply'];
+  const { rerender } = render(<SetupChecklist progress={progress({ email: 'working' }, agentFirst, 'agent')} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
+  expect(keysOf('Try more')[0]).toBe('agent');
+  expect(row('agent')).toHaveTextContent('Recommended');
+  expect(screen.getByText('1 of 7')).toBeInTheDocument();
+  const highlighted = () => screen.getAllByRole('link').filter((link) => link.classList.contains('primary-action')).map((link) => link.getAttribute('href'));
+  expect(highlighted()).toEqual(['/setup/agent']);
+  // Connected, the step is done and counted, and the next step to do is highlighted instead.
+  rerender(<SetupChecklist progress={progress({ email: 'working', agent: 'connected' }, agentFirst, null)} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
+  expect(row('agent')).toHaveAttribute('data-state', 'done');
+  expect(screen.getByText('2 of 7')).toBeInTheDocument();
+  expect(highlighted()).toEqual(['/setup/import']);
+});
+
+test('connecting an AI agent flows through the step events with its key, as every step does', () => {
+  const { rerender } = render(<SetupChecklist progress={progress()} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
+  fireEvent.click(screen.getByRole('link', { name: /Connect your AI agent/ }));
+  expect(tracked).toHaveBeenCalledWith('onboarding_step_started', { step: 'agent' });
+  rerender(<SetupChecklist progress={progress({ agent: 'connected' })} me={adminMe} workspaceName="Beta Desk" onSkip={vi.fn()} />);
+  expect(tracked).toHaveBeenCalledWith('onboarding_step_completed', { step: 'agent' });
 });
 
 test('Skip these asks to skip Try more; skipped, the group keeps its heading and offers Show these', () => {
@@ -161,12 +180,12 @@ test('without built-in AI the drafts row has nothing to do and is not counted', 
   expect(row('ai_drafts')).toHaveTextContent('Nothing to do: no built-in AI on this server');
   expect(row('ai_drafts')).toHaveAttribute('data-state', 'none');
   expect(row('ai_drafts').querySelector('.setup-time')).toBeNull();
-  expect(screen.getByText('3 of 5')).toBeInTheDocument();
+  expect(screen.getByText('3 of 6')).toBeInTheDocument();
 });
 
 test('the count leaves out steps with nothing to do and, once skipped, Try more; the dot follows Set up only', () => {
-  expect(quickStartCount(progress({ ai_drafts: 'unavailable' }), adminMe, false)).toEqual({ done: 0, total: 5, left: 5, setUpLeft: true });
-  expect(quickStartCount(progress({ email: 'working', import: 'done', first_reply: 'sent' }), adminMe, false)).toEqual({ done: 3, total: 6, left: 3, setUpLeft: false });
+  expect(quickStartCount(progress({ ai_drafts: 'unavailable' }), adminMe, false)).toEqual({ done: 0, total: 6, left: 6, setUpLeft: true });
+  expect(quickStartCount(progress({ email: 'working', import: 'done', first_reply: 'sent' }), adminMe, false)).toEqual({ done: 3, total: 7, left: 4, setUpLeft: false });
   expect(quickStartCount(progress({ email: 'working', import: 'done', first_reply: 'sent' }), adminMe, true)).toEqual({ done: 3, total: 3, left: 0, setUpLeft: false });
 });
 
@@ -175,17 +194,17 @@ test('the count leaves out steps with nothing to do and, once skipped, Try more;
 test('a person sees AI drafts only with ai_settings:update and ai_settings:read, and reply targets only with workspace:update', () => {
   const without = (name: string) => ({ permissions: permissionsOf('admin').filter((item) => item !== name) });
   const { unmount } = render(<SetupChecklist progress={progress()} me={without('ai_settings:update')} workspaceName="Beta Desk" onSkip={vi.fn()} />);
-  expect(keysOf('Try more')).toEqual(['reply_targets', 'invite', 'mcp']);
+  expect(keysOf('Try more')).toEqual(['reply_targets', 'agent', 'invite']);
   unmount();
   const again = render(<SetupChecklist progress={progress()} me={without('workspace:update')} workspaceName="Beta Desk" onSkip={vi.fn()} />);
-  expect(keysOf('Try more')).toEqual(['ai_drafts', 'invite', 'mcp']);
+  expect(keysOf('Try more')).toEqual(['ai_drafts', 'agent', 'invite']);
   again.unmount();
   render(<SetupChecklist progress={progress()} me={without('ai_settings:read')} workspaceName="Beta Desk" onSkip={vi.fn()} />);
-  expect(keysOf('Try more')).toEqual(['reply_targets', 'invite', 'mcp']);
+  expect(keysOf('Try more')).toEqual(['reply_targets', 'agent', 'invite']);
 });
 
 test('an agent whose role may change AI settings and targets, but not channels, gets both offers', () => {
   render(<SetupChecklist progress={progress()} me={{ permissions: [...permissionsOf('agent'), 'ai_settings:update', 'workspace:update'] }} workspaceName="Beta Desk" onSkip={vi.fn()} />);
   expect(keysOf('Set up')).toEqual(['first_reply']);
-  expect(keysOf('Try more')).toEqual(['ai_drafts', 'reply_targets', 'mcp']);
+  expect(keysOf('Try more')).toEqual(['ai_drafts', 'reply_targets', 'agent']);
 });
