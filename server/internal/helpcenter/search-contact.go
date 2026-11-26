@@ -25,9 +25,9 @@ var searchContactTexts = map[string]searchContactText{
 	"zh-cn": {Title: "没有找到？", Contact: "联系 %s", Subject: "没有找到：%s"},
 	"ko":    {Title: "찾을 수 없나요?", Contact: "%s에 문의하기", Subject: "찾을 수 없음: %s"},
 	"vi":    {Title: "Không tìm thấy?", Contact: "Liên hệ %s", Subject: "Không tìm thấy: %s"},
-	"pl":    {Title: "Nie możesz znaleźć?", Contact: "Skontaktuj się z %s", Subject: "Nie znalazłem: %s"},
+	"pl":    {Title: "Nie możesz znaleźć?", Contact: "Skontaktuj się z %s", Subject: "Nie mogę znaleźć: %s"},
 	"sv":    {Title: "Hittar du inte?", Contact: "Kontakta %s", Subject: "Hittar inte: %s"},
-	"ru":    {Title: "Не нашли?", Contact: "Связаться с %s", Subject: "Не нашёл: %s"},
+	"ru":    {Title: "Не нашли?", Contact: "Связаться с %s", Subject: "Не могу найти: %s"},
 }
 
 func searchContactTextFor(locale string) searchContactText {
