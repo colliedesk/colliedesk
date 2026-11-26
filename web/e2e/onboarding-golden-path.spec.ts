@@ -56,7 +56,9 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     await expect(page.getByText(/Your import has no answered conversation from the last 30 days to learn from, so we suggest Same day/)).toBeVisible();
     await expect(page.getByRole('radio', { name: /Same day/ })).toBeChecked();
     await flow.getByRole('button', { name: 'Use Same day' }).click();
-    await expect(page).toHaveURL(`${baseURL}/setup/invite`);
+    // Connecting an AI agent comes next, before the invites; it can wait too.
+    await expect(page).toHaveURL(`${baseURL}/setup/agent`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Connect your AI agent' })).toBeVisible();
     const ai = await (await page.request.get(`${baseURL}/api/v1/ai`)).json() as { slots: Array<{ slot: string; source: string; enabled: boolean; default_level: string; consented_at: string | null }> };
     expect(ai.slots.find((slot) => slot.slot === 'draft')).toMatchObject({ source: 'server', enabled: true, default_level: 'suggest', consented_at: expect.any(String) as unknown });
     expect(ai.slots.find((slot) => slot.slot === 'triage')).toMatchObject({ enabled: false });
