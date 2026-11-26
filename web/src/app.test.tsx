@@ -12,6 +12,7 @@ import { presenceViewPart } from './features/inbox/presence-part';
 import { permissionsOf, rolesOf } from './test-roles';
 import { settingsOf } from './features/autofix/autofix.test.fixture';
 import { autofixPart } from './features/autofix/autofix-part';
+import { kbPart } from './features/kb/kb-part';
 
 // Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
 // Clerk draws its own sign-in form from the network; the page around it is what is under test here.
@@ -74,6 +75,11 @@ beforeAll(async () => {
   await import('./features/inbox/presence-view');
   autofixPart.preload();
   await import('./features/autofix/autofix-chunk');
+  // The knowledge base and the locked screen are chunks too; loading them cold on a busy CI runner can take
+  // longer than a findBy waits, so they are loaded here once, before any test opens them.
+  kbPart.preload();
+  await import('./features/kb/kb-chunk');
+  await import('./features/shell/locked-route');
 });
 
 test('a locked workspace sees the locked screen with the identity bar and an admin\'s plan choices', async () => {
