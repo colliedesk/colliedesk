@@ -1299,6 +1299,15 @@ center's own address, in the brand's style sheet, never inline in a page. Saving
 both `help_center:update` and `kb_articles:publish`, for a person and an agent token alike; without
 either it is refused and the public pages stay unchanged.
 
+Each topic name on the home page and on the Solutions page carries its number of published articles
+in `data-count`, which the default pages do not show. On the home page it counts the topic's sections
+too; on the Solutions page, which lists each section apart, it counts the topic's own articles. To show
+it beside the name, as a Freshdesk portal does:
+
+```css
+.card-tab a::after, .solutions-name a::after { content: attr(data-count); margin-left: 8px; color: #767676; }
+```
+
 **The contrast checks do not cover custom CSS.** A color or a hidden element it sets can make a page
 hard to read. Check the preview before you save, and clear the field to go back.
 

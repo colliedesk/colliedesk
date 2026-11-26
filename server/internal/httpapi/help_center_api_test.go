@@ -524,3 +524,28 @@ func TestEveryArticleAnswerCarriesTheAddressTheHelpCenterServesItAt(t *testing.T
 		})
 	}
 }
+
+// A topic's name carries how many published articles it holds, in data-count, so custom CSS can show
+// the number beside it (as a Freshdesk portal does) without changing the default pages. The home
+// card counts its sections too; the Solutions page lists each section apart, so it counts its own.
+func TestHelpCenterTopicNamesCarryTheirArticleCount(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Help Count", "admin@help-count.example.com")
+	slug := workspaceSlug(t, api, admin)
+	enableHelpCenter(t, api, admin, "Count Answers", true)
+	billing := kbCollection(t, api, admin, map[string]any{"name": "Billing"})
+	cards := kbCollection(t, api, admin, map[string]any{"name": "Cards", "parent_id": billing.ID})
+	kbArticle(t, api, admin, map[string]any{"collection_id": billing.ID, "title": "Read an invoice", "status": "published", "body_md": "a"})
+	kbArticle(t, api, admin, map[string]any{"collection_id": cards.ID, "title": "Pay by card", "status": "published", "body_md": "b"})
+	kbArticle(t, api, admin, map[string]any{"collection_id": cards.ID, "title": "Change a card", "status": "published", "body_md": "c"})
+	kbArticle(t, api, admin, map[string]any{"collection_id": cards.ID, "title": "Draft card", "body_md": "d"})
+
+	base := "/help/" + slug
+	wantPage(t, visit(site, base, "192.0.2.11"), http.StatusOK,
+		[]string{`<h3 class="card-tab"><a href="` + base + `/c/billing" data-count="3">Billing</a></h3>`}, nil)
+	wantPage(t, visit(site, base+"/c/", "192.0.2.11"), http.StatusOK, []string{
+		`<h2 class="solutions-name"><a href="` + base + `/c/billing" data-count="1">Billing</a></h2>`,
+		`<h3 class="solutions-name"><a href="` + base + `/c/billing/cards" data-count="2">Cards</a></h3>`,
+	}, nil)
+}

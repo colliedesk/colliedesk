@@ -12,7 +12,7 @@
 <ul class="cards">
 {{- range .Collections}}
 <li class="card">
-<h3 class="card-tab"><a href="{{.URL}}">{{.Name}}</a></h3>
+<h3 class="card-tab"><a href="{{.URL}}" data-count="{{.Count}}">{{.Name}}</a></h3>
 <div class="card-body">
 {{- with .Description}}<p class="card-desc">{{.}}</p>{{end}}
 {{- if .Articles}}
