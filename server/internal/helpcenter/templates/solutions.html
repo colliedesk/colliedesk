@@ -1,0 +1,22 @@
+{{define "content"}}
+<header class="page-head">
+<h1>{{.Heading}}</h1>
+</header>
+{{- if .Collections}}
+<ul class="solutions">
+{{- range .Collections}}
+<li class="solutions-item{{if .Sub}} solutions-sub{{end}}">
+{{if .Sub}}<h3 class="solutions-name"><a href="{{.URL}}">{{.Name}}</a></h3>{{else}}<h2 class="solutions-name"><a href="{{.URL}}">{{.Name}}</a></h2>{{end}}
+{{- if .Articles}}
+<ul class="index">{{range .Articles}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
+{{- end}}
+{{- if .More}}
+<a class="card-more" href="{{.URL}}">{{.MoreLabel}}<span aria-hidden="true"> →</span></a>
+{{- end}}
+</li>
+{{- end}}
+</ul>
+{{- else}}
+<p class="empty">{{.T.NothingPublished}}</p>
+{{- end}}
+{{end}}

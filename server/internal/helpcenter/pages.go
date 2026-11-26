@@ -33,7 +33,7 @@ type pages struct {
 	fingerprint string
 }
 
-var pageNames = []string{"home", "collection", "article", "print", "search", "missing", "busy"}
+var pageNames = []string{"home", "solutions", "collection", "article", "print", "search", "missing", "busy"}
 
 func parsePages() pages {
 	style, err := files.ReadFile("static/site.css")
@@ -82,6 +82,8 @@ type collectionCard struct {
 	Articles               []articleLink
 	Children               []link
 	More                   bool
+	// Sub is true for a collection inside another, on the Solutions page.
+	Sub bool
 	// The card's words in the page's language: how many articles, the link to all of them (or to the
 	// collection) and the name of its list of sections.
 	CountLabel, MoreLabel, SectionsLabel string
@@ -100,6 +102,9 @@ type searchResult struct {
 // page is what a template shows; each page fills its own part.
 type page struct {
 	Lang, Title, SiteTitle, Home, SearchURL, Style string
+	// SolutionsURL is the page of every collection and its articles, linked from the header beside Home;
+	// Tab is the header link of the page the reader is on: tabHome, tabSolutions or none.
+	SolutionsURL, Tab string
 	// T are the help center's own words in the page's language (ui-text.go).
 	T uiText
 	// Languages are the page in every language it exists in, for the menu; Alternates the same for
@@ -186,7 +191,7 @@ func (s *Site) page(v view, title string, crumbs []link) page {
 	if title != "" {
 		full = title + " · " + siteTitle
 	}
-	data := page{Lang: v.locale(), Title: full, SiteTitle: siteTitle, Home: v.home, SearchURL: v.root + "/search", T: v.text,
+	data := page{Lang: v.locale(), Title: full, SiteTitle: siteTitle, Home: v.home, SearchURL: v.root + "/search", SolutionsURL: v.root + CollectionPath(nil), T: v.text,
 		Style: v.base + stylePath + s.pages.styleName, NoIndex: v.site.Trial, Crumbs: crumbs,
 		GoogleVerification: v.site.SearchConsole.Google, BingVerification: v.site.SearchConsole.Bing}
 	v.brand.fill(&data, v)
@@ -413,7 +418,7 @@ func (s *Site) homeOf(v view, t tree, articles []domain.PublicKBArticle) page {
 		byCollection[article.CollectionID] = append(byCollection[article.CollectionID], v.articleLinks([]domain.PublicKBArticle{article}, 0)...)
 	}
 	data := s.page(v, "", nil)
-	data.HeroSearch, data.Canonical = true, v.homeURL()
+	data.HeroSearch, data.Canonical, data.Tab = true, v.homeURL(), tabHome
 	data.StructuredData = []template.JS{v.breadcrumbs(nil, link{Name: v.text.Home, URL: v.home})}
 	for _, root := range visible(t.roots) {
 		data.Collections = append(data.Collections, v.card(root, byCollection[root.ID]))
@@ -469,6 +474,10 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 		s.writeError(response, err)
 		return
 	}
+	if len(slugs) == 0 && pageNumber == 1 {
+		s.solutions(response, request, v, t)
+		return
+	}
 	current := t.find(slugs)
 	if len(slugs) > domain.MaxKBDepth || current == nil {
 		s.writeSiteNotFound(response, v)
@@ -486,6 +495,7 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 	}
 	crumbs := v.crumbs(current)
 	data := s.page(v, current.Name, crumbs[:len(crumbs)-1])
+	data.Tab = tabSolutions
 	data.StructuredData = []template.JS{v.breadcrumbs(crumbs[:len(crumbs)-1], crumbs[len(crumbs)-1])}
 	data.Heading, data.Description = current.Name, current.Description
 	data.Canonical = v.rootAddress + strings.TrimPrefix(v.collectionURL(current), v.root)
@@ -669,7 +679,7 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 	rendered := s.renders.article(v.site.WorkspaceID, article.Number, v.base, textKey(v.locale()), article.BodyMD, article.Videos...)
 	collection := t.byID[article.CollectionID]
 	data = s.page(v, article.Title, v.crumbs(collection))
-	data.Heading, data.Body = article.Title, rendered.body
+	data.Heading, data.Body, data.Tab = article.Title, rendered.body, tabSolutions
 	if article.ShowContents {
 		data.Contents = rendered.contents
 	}
