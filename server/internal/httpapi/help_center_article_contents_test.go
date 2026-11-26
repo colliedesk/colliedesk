@@ -145,3 +145,28 @@ func TestAContentsLinkShowsTheHeadingsWords(t *testing.T) {
 	wantPage(t, page, http.StatusOK, []string{`">Tom &amp; Jerry</a>`, `">Use *stars*</a>`, `">End &lt;/script&gt;&lt;b&gt;</a>`,
 		`<meta name="description" content="Tom &amp; Jerry a Use *stars* b End &lt;/script&gt;&lt;b&gt; c">`}, []string{`&amp;amp;`, `\\*`, `</script><b>`, `<b>`})
 }
+
+// TestTheContentsAboveAnArticleStartClosed: on a phone the list above the text is a closed <details>
+// whose summary (a button with its expanded state to a screen reader) names the list and its count, so
+// the first paragraph shows first; the rail list for wide screens stays an open list with no toggle.
+func TestTheContentsAboveAnArticleStartClosed(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Closed Contents", "admin@closed-contents.example.com")
+	slug := workspaceSlug(t, api, admin)
+	enableHelpCenter(t, api, admin, "Closed help", true)
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
+	var long contentsArticleView
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Long guide", "status": "published", "body_md": fourSections},
+		admin, http.StatusCreated, &long)
+	page := visit(site, fmt.Sprintf("/help/%s/a/%d-%s", slug, long.Number, long.Slug), "192.0.2.140")
+	wantPage(t, page, http.StatusOK, []string{
+		`<details class="contents contents-top">`,
+		`<summary id="contents-title" class="contents-summary">On this page (4)</summary>`,
+		`<nav class="contents contents-rail" aria-labelledby="rail-contents-title">`,
+	}, []string{`<details class="contents contents-top" open`, `<nav class="contents contents-top"`})
+	top := page.Body.String()[strings.Index(page.Body.String(), `<details class="contents contents-top">`):]
+	if end := strings.Index(top, "</details>"); end < 0 || !strings.Contains(top[:end], `<a href="#four">Four</a>`) {
+		t.Fatalf("the closed list does not hold the links:\n%s", top)
+	}
+}

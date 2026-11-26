@@ -9,10 +9,12 @@
 {{- end}}
 </header>
 {{- if .Contents}}
-<nav class="contents contents-top" aria-labelledby="contents-title">
-<h2 id="contents-title" class="section-label">{{.T.OnThisPage}}</h2>
+<details class="contents contents-top">
+<summary id="contents-title" class="contents-summary">{{.T.OnThisPage}} ({{len .Contents}})</summary>
+<nav aria-labelledby="contents-title">
 {{template "contents" .Contents}}
 </nav>
+</details>
 {{- end}}
 <div class="prose">
 {{.Body}}

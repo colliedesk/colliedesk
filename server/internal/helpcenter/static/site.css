@@ -475,8 +475,14 @@ a:hover { text-decoration-thickness: 2px; }
 .index-rail a { display: flex; align-items: center; min-height: 2.75rem; padding: 0.25rem 0 0.25rem 1rem; font-size: 0.9375rem; color: var(--muted); border-left: 3px solid transparent; margin-left: -2px; }
 .index-rail a[aria-current="page"] { color: var(--ink); font-weight: 600; border-left-color: var(--accent); text-decoration: none; }
 /* On this page: the article's headings, above the text on a narrow screen and in the rail on a wide one. */
-.contents-top { max-width: 42rem; margin-top: 1.5rem; padding: 0.75rem 1.125rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
-.contents-top .section-label { margin: 0 0 0.25rem; }
+.contents-top { max-width: 42rem; margin-top: 1.5rem; padding: 0 1.125rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+/* Closed on a phone, so the text comes first; the native summary is a button with its state, no script. */
+.contents-summary {
+  display: list-item; min-height: 2.75rem; padding: 0.625rem 0; cursor: pointer;
+  font: 600 0.8125rem/1.4 var(--font-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+}
+.contents-summary:hover { color: var(--ink); }
+.contents-top[open] { padding-bottom: 0.5rem; }
 .contents-list { list-style: none; margin: 0; padding: 0; }
 .contents-list a { display: flex; align-items: center; min-height: 2.75rem; padding: 0.25rem 0; font-size: 0.9375rem; color: var(--muted); }
 .contents-list a:hover { color: var(--ink); }
