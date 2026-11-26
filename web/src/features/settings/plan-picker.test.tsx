@@ -54,9 +54,57 @@ test('the agent count of the Freshdesk account is named as its source and beats 
   expect(within(card('Founding')).getByText('Up to 10 agents; you have 14.')).toBeInTheDocument();
 });
 
+test('a workspace of one whose Freshdesk lists more agents can still choose Solo, since only workspace seats are billed', () => {
+  const onChoose = vi.fn();
+  render(<PlanPicker sellable={foundingOpen} seats={1} freshdeskAgents={3} onChoose={onChoose} />);
+  expect(cardNames()).toEqual(['Founding', 'Solo', 'Team 25']);
+  expect(within(card('Founding')).getByText('Fits your team')).toBeInTheDocument();
+  expect(within(card('Solo')).queryByText(/you have 3/)).not.toBeInTheDocument();
+  fireEvent.click(within(card('Solo')).getByRole('button', { name: 'Choose Solo, $19 per month' }));
+  expect(onChoose).toHaveBeenCalledWith('solo_monthly');
+});
+
+test('a workspace of two sees no Solo, even when its Freshdesk lists one agent', () => {
+  render(<PlanPicker sellable={foundingOpen} seats={2} freshdeskAgents={1} onChoose={vi.fn()} />);
+  expect(cardNames()).toEqual(['Founding', 'Team 25']);
+});
+
+test('a team of one the server refuses Solo for (too much stored) sees it greyed with the reason and Founding still choosable', () => {
+  const reason = 'The Solo plan stores up to 10 GiB of attachments and this workspace stores 12 GiB, imported files included. Choose a plan with more storage.';
+  render(<PlanPicker sellable={foundingOpen} seats={1} refusals={[{ plan: 'solo_monthly', reason }, { plan: 'solo_yearly', reason }]} onChoose={vi.fn()} />);
+  expect(within(card('Solo')).getByText(reason)).toBeInTheDocument();
+  expect(within(card('Solo')).getByRole('button')).toBeDisabled();
+  expect(within(card('Founding')).getByRole('button')).toBeEnabled();
+});
+
+test('a visitor who chose Team 25 for a one-seat workspace with a larger Freshdesk sees Solo described by the seats', () => {
+  render(<PlanPicker sellable={foundingOpen} seats={1} freshdeskAgents={3} preferredPlan="team25" onChoose={vi.fn()} />);
+  expect(within(card('Solo')).getByText('You have 1 agent. Solo also fits.')).toBeInTheDocument();
+});
+
+test('on the ladder a workspace of three seats whose Freshdesk lists one agent is not led to Solo, which it cannot buy', () => {
+  render(<PlanPicker sellable={ladder} seats={3} freshdeskAgents={1} onChoose={vi.fn()} />);
+  expect(within(card('Small')).getByText('Fits your team')).toBeInTheDocument();
+  expect(primaries()[0]).toBe(within(card('Small')).getByRole('button'));
+});
+
 test('a small Freshdesk account says so beside what Founding covers', () => {
-  render(<PlanPicker sellable={foundingOpen} seats={1} freshdeskAgents={1} onChoose={vi.fn()} />);
-  expect(within(card('Founding')).getByText('Your Freshdesk has 1 agent. Founding covers up to 10.')).toBeInTheDocument();
+  render(<PlanPicker sellable={foundingOpen} seats={1} freshdeskAgents={2} onChoose={vi.fn()} />);
+  expect(within(card('Founding')).getByText('Your Freshdesk has 2 agents. Founding covers up to 10.')).toBeInTheDocument();
+});
+
+test('a team of one is offered Solo first, marked as fitting, and its billing period is chosen above the cards', () => {
+  const onChoose = vi.fn();
+  render(<PlanPicker sellable={foundingOpen} seats={1} placesLeft={10} onChoose={onChoose} />);
+  expect(cardNames()).toEqual(['Solo', 'Founding', 'Team 25']);
+  expect(within(card('Solo')).getByText('Fits your team')).toBeInTheDocument();
+  expect(primaries()).toHaveLength(1);
+  expect(primaries()[0]).toBe(within(card('Solo')).getByRole('button'));
+  expect(within(card('Founding')).getByRole('button')).toBeEnabled();
+  expect(screen.queryByText('Team 25 billed')).not.toBeInTheDocument();
+  fireEvent.click(within(screen.getByRole('group', { name: 'Billing interval' })).getByRole('radio', { name: 'Yearly, 2 months free' }));
+  fireEvent.click(within(card('Solo')).getByRole('button', { name: 'Choose Solo, $190 per year' }));
+  expect(onChoose).toHaveBeenCalledWith('solo_yearly');
 });
 
 test('a visitor who chose Team 25 on the website sees it first as their pick, and Founding still says that it also fits', () => {

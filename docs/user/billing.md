@@ -180,7 +180,8 @@ trial (or the subscription) has ended, instead of the inbox.
 2. Under **Choose a plan**, pick **Monthly** or **Yearly, 2 months free**. Each plan is a card with the team it is
    for, its price (a yearly plan also shows what is billed once a year; Founding shows its price every 3 months),
    its agents and attachment storage. While Founding is open the cards are Founding and Team 25, and
-   the Monthly or Yearly choice above them is for Team 25. Select **Choose Solo**, **Choose Small**, **Choose Team**, **Choose Team 25** or **Choose Founding**.
+   the Monthly or Yearly choice above them is for Team 25. A workspace with one seat (one agent, no pending
+   invite) also sees Solo, and the Monthly or Yearly choice is then for Solo and Team 25. Select **Choose Solo**, **Choose Small**, **Choose Team**, **Choose Team 25** or **Choose Founding**.
    The button reads **Opening checkout…** until the payment window is ready. If it does not open, the page says
    so, that nothing was charged, and offers **Try again**.
 3. Pay in the window that opens on top of Colliedesk. It is run by our payment provider, Polar;

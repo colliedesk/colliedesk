@@ -12,6 +12,16 @@ test('while Founding is open the cards are Founding and Team 25, and Solo, Small
   expect(names(foundingOpen)).toEqual(['Founding', 'Team 25']);
 });
 
+test('a team of one is also offered Solo, which leads, and a team of two is not', () => {
+  expect(planCardsFor(foundingOpen, [], undefined, 1).map((card) => card.name)).toEqual(['Solo', 'Founding', 'Team 25']);
+  expect(planCardsFor(foundingOpen, [], undefined, 2).map((card) => card.name)).toEqual(['Founding', 'Team 25']);
+  expect(isFoundingOffer(planCardsFor(foundingOpen, [], undefined, 1))).toBe(true);
+});
+
+test('Solo is offered to a team of one only when the server sells it', () => {
+  expect(planCardsFor(['team25_monthly', 'team25_yearly', 'founding'], [], undefined, 1).map((card) => card.name)).toEqual(['Founding', 'Team 25']);
+});
+
 test('Team 25 carries both its prices and Founding its one', () => {
   const [founding, team25] = planCardsFor(foundingOpen);
   expect(founding.prices.map((price) => price.plan)).toEqual(['founding']);
