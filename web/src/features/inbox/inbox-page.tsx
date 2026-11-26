@@ -21,6 +21,7 @@ import type { AIDraft } from './ai-draft-api';
 import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
+import { useResolveToast } from './resolve-toast';
 import { askableTeammates } from './mention-match';
 import { messageMovesPart } from './message-moves-part';
 import { articleRequestPart } from './article-request-part';
@@ -272,6 +273,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
       setBulkBusy(false);
     }
   };
+  const { setStatus, toast: resolveToast } = useResolveToast(selected, onSetStatus);
   const copied = useMemo(() => suggestedCc(timeline, { hosted }), [timeline, hosted]);
   // A refusal under a long timeline (a phone) is brought on screen with the reply drafts below it, whose
   // buttons are the next step, not left below the screen.
@@ -362,8 +364,9 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           messageMenu={selected && ((item) => item.kind === 'incoming' ? <Part part={messageMovesPart} render={(part) => <part.MessageMoveMenu conversation={selected} message={item} timeline={timeline} timezone={timezone} />} />
             : item.kind === 'outgoing' && !item.notice_kind && <Part part={articleRequestPart} render={(part) => <part.MakeArticleMenu conversation={selected} message={item} />} />)}
           headerActions={selected && <Part part={articleRequestPart} render={(part) => <part.RequestArticleButton key={selected.id} conversation={selected} timeline={timeline} />} />}
-          viewers={openViewers} onSetStatus={selected && onSetStatus ? (status, options) => onSetStatus(selected.id, status, options) : undefined}
+          viewers={openViewers} onSetStatus={setStatus}
           onSpam={selected && onSpam ? (spam) => applySpam([selected.id], spam) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
+        {resolveToast}
         {selected && <>
           {outboundNotice && <p role="status" className="composer-notice"><span className="composer-notice-text" title={outboundNotice}>{outboundNotice}</span>
             {canManageChannels && <> <a className="link-action" href={outboundLink}>{messages.openSettings}</a></>}</p>}
@@ -380,7 +383,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
             savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
             canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
             // Send and resolve is offered while there is something to resolve; a resolved or closed one is reopened from the header.
-            onResolve={onSetStatus && (selected.status === 'open' || selected.status === 'pending') ? () => onSetStatus(selected.id, 'resolved') : undefined}
+            onResolve={setStatus && (selected.status === 'open' || selected.status === 'pending') ? () => setStatus('resolved') : undefined}
             resolveTells={noticesOf(selected)?.includes('resolved') ? selected.channel_ref?.name ?? messages.theChannel : undefined}
             aiDraftsFor={aiDrafts ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId}
             findSent={onFindSent ? (key) => onFindSent(selected.id, key) : undefined} teammates={teammates} />

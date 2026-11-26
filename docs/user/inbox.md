@@ -473,7 +473,11 @@ the list's title names the view on screen.
 **Change the conversation**
 - **Resolve** above the thread sets an open or pending conversation to Resolved in one press, at any
   screen width, without opening the details. A resolved or closed conversation shows **Reopen** there
-  instead, which sets it back to Open. If the change fails, a message under the button says so. When the
+  instead, which sets it back to Open. If the change fails, a message under the button says so. Once it is
+  resolved (here or with **Send and resolve**), a note at the foot of the screen says **Conversation
+  resolved.** with **Undo**, which puts it back to Open or Pending, as it was, without telling the
+  customer. When a chat already told the customer, the note names that chat: Undo cannot take that
+  message back. Opening another conversation clears the note. When the
   change would tell the customer (below), the button reads **Resolve and tell** or **Reopen and tell**,
   and the arrow beside it offers **Resolve without telling the customer** or **Reopen without telling
   the customer** (to add a note or fix a detail).

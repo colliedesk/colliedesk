@@ -77,8 +77,12 @@ test('redeems a CLI pairing link and completes the inbox workflow', { tag: '@jou
   await expect.poll(async () => (await currentConversation()).status).toBe('open');
   await page.getByRole('button', { name: 'Resolve', exact: true }).click();
   await expect.poll(async () => (await currentConversation()).status).toBe('resolved');
-  await page.getByRole('button', { name: 'Reopen' }).click();
+  // Resolving says so, and Undo in the same note puts it back as it was.
+  const resolved = page.getByRole('status', { name: 'Resolved' });
+  await expect(resolved).toContainText('Conversation resolved.');
+  await resolved.getByRole('button', { name: 'Undo' }).click();
   await expect.poll(async () => (await currentConversation()).status).toBe('open');
+  await expect(resolved).toBeHidden();
 
   const meResponse = await page.request.get(`${baseURL}/api/v1/auth/me`);
   const me = await meResponse.json() as { agent: { id: string } };

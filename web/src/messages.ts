@@ -166,6 +166,7 @@ export const messages = {
     senders.length === 1 ? senders[0] : 'their senders'} reaches the inbox again.`,
   spamFailed: 'Spam could not be changed. Nothing was changed; try again.',
   undo: 'Undo',
+  conversationResolved: (told?: string) => `Conversation resolved.${told ? ` ${told} told the customer.` : ''}`,
   dismiss: 'Dismiss',
   // The header's Resolve / Reopen when the change would tell the customer in their chat.
   resolveAndTell: 'Resolve and tell',
