@@ -22,6 +22,15 @@ export function useResolveToast(selected: Conversation | undefined, onSetStatus:
   const [held, setHeld] = useState(false);
   const selectedId = selected?.id;
   useEffect(() => { setResolved(undefined); setFailed(false); setHeld(false); }, [selectedId]);
+  // Once it reads resolved, a later status (a customer's reply, a teammate, the details pane) ends the toast:
+  // Undo would otherwise override that change.
+  const status = selected?.status;
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    if (!resolved) { setSeen(false); return; }
+    if (status === 'resolved') setSeen(true);
+    else if (seen) { setResolved(undefined); setHeld(false); }
+  }, [resolved, status, seen]);
   useEffect(() => {
     if (!resolved || held) return;
     const timer = setTimeout(() => setResolved(undefined), toastMs);
@@ -33,8 +42,9 @@ export function useResolveToast(selected: Conversation | undefined, onSetStatus:
     const from: SettableStatus = conversation.status === 'pending' ? 'pending' : 'open';
     const result = await onSetStatus(conversation.id, status, options);
     setFailed(false);
-    if (status !== 'resolved') { setResolved(undefined); return result; }
+    if (status !== 'resolved') { setResolved(undefined); setHeld(false); return result; }
     const tells = options?.notify !== false && (noticesOf(conversation)?.includes('resolved') ?? false);
+    setHeld(false);
     setResolved({ id: conversation.id, from, told: tells ? conversation.channel_ref?.name ?? messages.theChannel : undefined });
     return result;
   };
@@ -42,7 +52,9 @@ export function useResolveToast(selected: Conversation | undefined, onSetStatus:
     if (busy) return;
     setBusy(true);
     setFailed(false);
-    onSetStatus(shown.id, shown.from, { notify: false }).then(() => { setResolved(undefined); setHeld(false); }, () => setFailed(true)).finally(() => setBusy(false));
+    // A slow Undo never clears the toast of a conversation resolved after it.
+    const clear = () => setResolved((now) => (now === shown ? undefined : now));
+    onSetStatus(shown.id, shown.from, { notify: false }).then(() => { clear(); setHeld(false); }, () => setFailed(true)).finally(() => setBusy(false));
   };
   const shown = resolved?.id === conversation.id ? resolved : undefined;
   const toast = shown && <div role="status" aria-label={messages.statuses.resolved} className="status-toast"

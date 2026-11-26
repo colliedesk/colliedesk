@@ -375,7 +375,8 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
           {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
             onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
-          <EarlierDrafts key={selected.id} drafts={earlierDrafts} timezone={timezone} onRestore={onRestoreDraft} nextBefore={earlierDraftsNext} onLoadOlder={onLoadOlderDrafts} />
+          {/* Its own key: the composer's falls back to the conversation id, and twins make React duplicate a node. */}
+          <EarlierDrafts key={`earlier:${selected.id}`} drafts={earlierDrafts} timezone={timezone} onRestore={onRestoreDraft} nextBefore={earlierDraftsNext} onLoadOlder={onLoadOlderDrafts} />
           {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
           <ReplyComposer key={draftKey ?? selected.id} noReplies={noReplies} draftKey={draftKey} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
             latestReplyNumber={!timelineLoading ? latestReply : undefined} timezone={timezone}

@@ -101,3 +101,44 @@ test('Resolve answers the press at once: the button reads Resolving… until the
   await act(async () => agree());
   expect(await screen.findByRole('status', { name: 'Resolved' })).toBeInTheDocument();
 });
+
+test('the button keeps reading Resolving… while the list reloads after the conversation already reads resolved', async () => {
+  let agree: () => void = () => undefined;
+  const onSetStatus = vi.fn(() => new Promise<void>((done) => { agree = done; }));
+  const { rerender } = render(<InboxPage conversations={[refund]} selected={refund} onSetStatus={onSetStatus} />);
+  fireEvent.click(header().getByRole('button', { name: 'Resolve' }));
+  rerender(<InboxPage conversations={[]} selected={{ ...refund, status: 'resolved' }} onSetStatus={onSetStatus} />);
+  expect(header().getByRole('button', { name: 'Resolving…' })).toBeInTheDocument();
+  await act(async () => agree());
+  expect(header().getByRole('button', { name: 'Reopen' })).toBeInTheDocument();
+});
+
+test('the toast goes once the conversation is no longer resolved (a reply or a teammate reopened it), so Undo never overrides that', async () => {
+  const onSetStatus = vi.fn().mockResolvedValue(undefined);
+  const { rerender } = render(<InboxPage conversations={[refund]} selected={refund} onSetStatus={onSetStatus} />);
+  fireEvent.click(header().getByRole('button', { name: 'Resolve' }));
+  rerender(<InboxPage conversations={[]} selected={{ ...refund, status: 'resolved' }} onSetStatus={onSetStatus} />);
+  expect(await screen.findByRole('status', { name: 'Resolved' })).toBeInTheDocument();
+  rerender(<InboxPage conversations={[refund]} selected={refund} onSetStatus={onSetStatus} />);
+  expect(screen.queryByRole('status', { name: 'Resolved' })).not.toBeInTheDocument();
+});
+
+test('a new toast leaves on time even when the pointer rested on the one before it', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const onSetStatus = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(<InboxPage conversations={[refund]} selected={refund} onSetStatus={onSetStatus} />);
+    fireEvent.click(header().getByRole('button', { name: 'Resolve' }));
+    rerender(<InboxPage conversations={[]} selected={{ ...refund, status: 'resolved' }} onSetStatus={onSetStatus} />);
+    fireEvent.mouseEnter(await screen.findByRole('status', { name: 'Resolved' }));
+    fireEvent.click(header().getByRole('button', { name: 'Reopen' }));
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Resolved' })).not.toBeInTheDocument());
+    rerender(<InboxPage conversations={[refund]} selected={refund} onSetStatus={onSetStatus} />);
+    fireEvent.click(header().getByRole('button', { name: 'Resolve' }));
+    await screen.findByRole('status', { name: 'Resolved' });
+    await act(() => vi.advanceTimersByTimeAsync(8500));
+    expect(screen.queryByRole('status', { name: 'Resolved' })).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
