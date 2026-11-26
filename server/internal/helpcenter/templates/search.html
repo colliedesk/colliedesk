@@ -18,6 +18,12 @@
 </ol>
 {{- else}}
 <p class="empty">{{.T.TryFewer}} <a href="{{.Home}}">{{.T.BrowseTopics}}</a>.</p>
+{{- with .SearchContact}}
+<section class="search-contact" aria-labelledby="search-contact-title">
+<h2 id="search-contact-title" class="search-contact-title">{{.Title}}</h2>
+<p><a class="search-contact-link" href="{{.URL}}">{{.Label}}</a></p>
+</section>
+{{- end}}
 {{- end}}
 </section>
 {{- end}}

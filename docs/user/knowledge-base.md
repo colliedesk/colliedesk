@@ -1532,6 +1532,10 @@ to serve on the domain again.
   is plain links and follows every change to the knowledge base at once.
 - **Search** works like the search in the editor: whole words and the start of words in titles and
   text, and any part of a title. It shows the best 25 matches.
+- A search that finds nothing shows **Can’t find it?** with **Contact <your workspace name>**, your
+  **Contact link** from the [brand](#brand). A `mailto:` link opens an email whose subject holds the
+  words searched for ("Can’t find: refund order"); another link opens as it is. With no contact link
+  there is no block. The footer of every page, a missing one included, has the contact link too.
 - Search also finds words in the text of an article's [files](#attach-files) (PDF, TXT, CSV).
 - Files listed under an article are offered for download below its text, while a published article lists them.
 - Images you added to an article are shown while a published article uses them. An image from
