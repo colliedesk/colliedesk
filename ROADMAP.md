@@ -66,6 +66,7 @@ uptime and self-hosted installs.
 - Slack notifications ([#102](https://github.com/colliedesk/colliedesk/issues/102)).
 - Simple rules on arrival: assign, tag, set priority ([#103](https://github.com/colliedesk/colliedesk/issues/103)).
 - AI drafts that look up customer data through your MCP servers, read-only ([#104](https://github.com/colliedesk/colliedesk/issues/104)).
+- Procedures: tell the AI how to handle each kind of request and which tools it may use; actions wait for a person's approval ([#825](https://github.com/colliedesk/colliedesk/issues/825)).
 - Macros: a saved reply plus actions in one step ([#117](https://github.com/colliedesk/colliedesk/issues/117)).
 - Log time on conversations and export it per company ([#119](https://github.com/colliedesk/colliedesk/issues/119)).
 - Customer satisfaction rating after a conversation is resolved ([#120](https://github.com/colliedesk/colliedesk/issues/120)).
