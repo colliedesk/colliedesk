@@ -4,7 +4,7 @@
 
 **The open-source alternative to Freshdesk, Zendesk and Help Scout** for small support teams
 ([compare](https://colliedesk.com/compare)).
-Leave Freshdesk with all your data. AI that actually answers tickets is included, not an add-on.
+Leave Freshdesk with all your data. AI reply drafts are included, not an add-on.
 Flat price, no per-agent fees ([pricing](https://colliedesk.com/pricing)).
 
 Think of Colliedesk as the sheepdog for your support queue: the AI herds every ticket home,
